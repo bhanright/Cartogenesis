@@ -31,6 +31,11 @@ jobs:
       - name: WebAssembly tests
         run: ./gradlew :worldgen:wasmJsNodeTest --console=plain
 
+      # The renderer is shared, so it has to keep compiling for the web target too even while
+      # only Android and desktop consume it today.
+      - name: Cartography builds for every target
+        run: ./gradlew :cartography:compileKotlinJvm :cartography:compileKotlinWasmJs --console=plain
+
       # The save format stores a seed rather than a world, so a world only travels between
       # platforms if every target generates it identically. Comparing the two fingerprints against
       # each other — rather than against a hardcoded value — catches a platform drifting without
@@ -63,6 +68,22 @@ jobs:
           name: engine-test-reports
           path: worldgen/build/reports/tests/
           retention-days: 7
+
+  desktop:
+    name: Desktop app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile
+        run: ./gradlew :desktop:compileKotlin --console=plain
 
   android:
     name: Android app

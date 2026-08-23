@@ -8,8 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.cartogenesis.app.export.ExportResolution
 import com.cartogenesis.app.export.HdExporter
 import com.cartogenesis.app.render.MapRenderer
-import com.cartogenesis.app.render.MapView
-import com.cartogenesis.app.render.RenderOptions
+import com.cartogenesis.cartography.MapView
+import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel

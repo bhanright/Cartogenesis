@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.app.export.ExportResolution
-import com.cartogenesis.app.render.MapView
+import com.cartogenesis.cartography.MapView
 import com.cartogenesis.app.ui.MapUiState
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig

@@ -10,9 +10,9 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import com.cartogenesis.app.render.MapPalette
+import com.cartogenesis.cartography.MapPalette
 import com.cartogenesis.app.render.MapRenderer
-import com.cartogenesis.app.render.RenderOptions
+import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel

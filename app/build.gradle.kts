@@ -61,7 +61,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":worldgen"))
+    implementation(project(":cartography"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

@@ -1,4 +1,4 @@
-package com.cartogenesis.app.render
+package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.pipeline.Biome
 

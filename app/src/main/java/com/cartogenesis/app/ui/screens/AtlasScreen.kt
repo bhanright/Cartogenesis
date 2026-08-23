@@ -31,7 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cartogenesis.app.render.MapPalette
+import com.cartogenesis.cartography.MapPalette
 import com.cartogenesis.app.world.LandmarkOverride
 import com.cartogenesis.app.world.NationOverride
 import com.cartogenesis.app.world.ResolvedLandmark

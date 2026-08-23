@@ -1,6 +1,9 @@
 # Cartogenesis
 
-An Android app that procedurally generates fantasy world maps.
+[![CI](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml)
+
+An Android app that procedurally generates fantasy world maps, built on a Kotlin Multiplatform
+generation engine that also runs in the browser.
 
 ## The pipeline
 
@@ -146,6 +149,15 @@ It also prints river-network statistics, and includes a parameter sweep for judg
 between terrain roughness and tectonic influence by eye.
 
 Since it runs as part of `:worldgen:jvmTest`, the maps refresh on every JVM test run.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and assembles
+the debug APK, on every push and pull request.
+
+The step worth knowing about compares the **JVM and Wasm fingerprints against each other** rather
+than against a hardcoded value. That catches a platform silently drifting — which would break save
+portability — without failing every time the pipeline is deliberately retuned.
 
 ## Multiplatform status
 

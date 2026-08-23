@@ -14,14 +14,14 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.app.world.LandmarkOverride
-import com.cartogenesis.app.world.NationOverride
-import com.cartogenesis.app.world.ResolvedLandmark
-import com.cartogenesis.app.world.ResolvedNation
-import com.cartogenesis.app.world.WorldDocument
-import com.cartogenesis.app.world.WorldOverrides
+import com.cartogenesis.cartography.LandmarkOverride
+import com.cartogenesis.cartography.NationOverride
+import com.cartogenesis.cartography.ResolvedLandmark
+import com.cartogenesis.cartography.ResolvedNation
+import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.app.world.WorldStore
-import com.cartogenesis.app.world.resolve
+import com.cartogenesis.cartography.resolve
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -187,7 +187,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 title = current.title.ifBlank { "Untitled world" },
                 config = current.config,
                 overrides = current.overrides,
-                labels = current.labels
+                labels = current.labels,
+                savedAt = System.currentTimeMillis()
             )
             withContext(Dispatchers.IO) { store.save(document) }
             _state.update { it.copy(saveMessage = "Saved \"${document.title}\"") }

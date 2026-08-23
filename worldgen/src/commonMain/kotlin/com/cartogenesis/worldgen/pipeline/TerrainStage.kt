@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.math.Fft2D
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
@@ -62,11 +63,21 @@ object TerrainStage {
         val sx = periodX.toFloat() / w
         val sy = periodY.toFloat() / h
 
-        val gx = FloatField.of(w, h) { x, y ->
-            t.gradientStrength * noiseX.fbm(x * sx, y * sy, t.octaves, periodX, periodY, t.lacunarity, t.gain)
-        }
-        val gy = FloatField.of(w, h) { x, y ->
-            t.gradientStrength * noiseY.fbm(x * sx, y * sy, t.octaves, periodX, periodY, t.lacunarity, t.gain)
+        // Filled row-band per core. fbm() keeps no state between calls, and each cell writes only
+        // its own index, so this produces exactly the same field as a sequential fill.
+        val gx = FloatField(w, h)
+        val gy = FloatField(w, h)
+        parallelChunks(0, h) { startY, endY ->
+            for (y in startY until endY) {
+                var i = y * w
+                for (x in 0 until w) {
+                    gx.data[i] = t.gradientStrength *
+                        noiseX.fbm(x * sx, y * sy, t.octaves, periodX, periodY, t.lacunarity, t.gain)
+                    gy.data[i] = t.gradientStrength *
+                        noiseY.fbm(x * sx, y * sy, t.octaves, periodX, periodY, t.lacunarity, t.gain)
+                    i++
+                }
+            }
         }
         return NormalField(gx, gy)
     }

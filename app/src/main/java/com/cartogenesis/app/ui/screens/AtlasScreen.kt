@@ -32,10 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.MapPalette
-import com.cartogenesis.app.world.LandmarkOverride
-import com.cartogenesis.app.world.NationOverride
-import com.cartogenesis.app.world.ResolvedLandmark
-import com.cartogenesis.app.world.ResolvedNation
+import com.cartogenesis.cartography.LandmarkOverride
+import com.cartogenesis.cartography.NationOverride
+import com.cartogenesis.cartography.ResolvedLandmark
+import com.cartogenesis.cartography.ResolvedNation
 import com.cartogenesis.worldgen.pipeline.Biome
 
 /**

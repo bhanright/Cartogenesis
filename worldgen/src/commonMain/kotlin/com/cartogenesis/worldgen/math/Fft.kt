@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.math
 
 import kotlin.math.PI
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -76,21 +77,35 @@ class Fft2D(private val width: Int, private val height: Int) {
     fun inverse(re: DoubleArray, im: DoubleArray) {
         run(re, im, inverse = true)
         val scale = 1.0 / (width.toDouble() * height.toDouble())
-        for (i in re.indices) {
-            re[i] *= scale
-            im[i] *= scale
+        parallelChunks(0, re.size) { start, end ->
+            for (i in start until end) {
+                re[i] *= scale
+                im[i] *= scale
+            }
         }
     }
 
+    /**
+     * A separable 2D transform: every row, then every column.
+     *
+     * Both passes are split across cores. Within a pass the lines are genuinely independent — each
+     * touches only its own offsets and stride, and the plans hold no mutable state — so the result
+     * is identical to running them in order. The two passes must stay sequential with respect to
+     * each other, since the columns read what the rows wrote.
+     */
     private fun run(re: DoubleArray, im: DoubleArray, inverse: Boolean) {
         require(re.size == width * height && im.size == width * height) {
             "buffers must be $width x $height"
         }
-        for (y in 0 until height) {
-            rowPlan.transform(re, im, offset = y * width, stride = 1, inverse = inverse)
+        parallelChunks(0, height) { start, end ->
+            for (y in start until end) {
+                rowPlan.transform(re, im, offset = y * width, stride = 1, inverse = inverse)
+            }
         }
-        for (x in 0 until width) {
-            colPlan.transform(re, im, offset = x, stride = width, inverse = inverse)
+        parallelChunks(0, width) { start, end ->
+            for (x in start until end) {
+                colPlan.transform(re, im, offset = x, stride = width, inverse = inverse)
+            }
         }
     }
 }

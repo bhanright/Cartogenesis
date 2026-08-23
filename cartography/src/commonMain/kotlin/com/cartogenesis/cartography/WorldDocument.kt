@@ -1,4 +1,4 @@
-package com.cartogenesis.app.world
+package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -116,12 +116,17 @@ fun Landmark.resolve(override: LandmarkOverride): ResolvedLandmark = ResolvedLan
     edited = !override.isEmpty
 )
 
-/** A saved world: how to rebuild it, plus everything the user changed about it. */
+/**
+ * A saved world: how to rebuild it, plus everything the user changed about it.
+ *
+ * [savedAt] is passed in rather than defaulted, because a wall clock is not something common
+ * Kotlin has — each platform supplies its own.
+ */
 data class WorldDocument(
     val id: String,
     val title: String,
     val config: WorldGenConfig,
     val overrides: WorldOverrides = WorldOverrides(),
     val labels: List<MapLabel> = emptyList(),
-    val savedAt: Long = System.currentTimeMillis()
+    val savedAt: Long
 )

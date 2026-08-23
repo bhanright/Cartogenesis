@@ -42,7 +42,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.cartogenesis.cartography.MapView
+import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.WorldOverrides
+import com.cartogenesis.cartography.resolve
 import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WildernessMode
@@ -80,6 +83,9 @@ private fun DesktopApp() {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
+    var overrides by remember { mutableStateOf(WorldOverrides()) }
+    var selectedNation by remember { mutableStateOf<Int?>(null) }
+    var showAtlas by remember { mutableStateOf(false) }
 
     // Regenerate whenever the settings change. No debounce: on desktop a generation is fast
     // enough that the settings panel uses explicit buttons rather than live-dragging sliders.
@@ -138,12 +144,33 @@ private fun DesktopApp() {
                 status = status,
                 onConfig = { config = it },
                 onOptions = { options = it },
-                onExport = { size -> pendingExport = size }
+                onExport = { size -> pendingExport = size },
+                showAtlas = showAtlas,
+                onToggleAtlas = { showAtlas = !showAtlas }
             )
         }
 
         Box(Modifier.fillMaxSize().background(Color(0xFF14171A))) {
-            MapView(image)
+            val current = world
+            if (showAtlas && current != null) {
+                AtlasPane(
+                    nations = current.nations.nations.map { it.resolve(overrides.forNation(it.id)) },
+                    landmarks = current.landmarks.landmarks.map {
+                        it.resolve(overrides.forLandmark(it.id))
+                    },
+                    selected = selectedNation,
+                    onSelect = { selectedNation = it },
+                    onEditNation = { id, transform ->
+                        overrides = overrides.withNation(id, transform(overrides.forNation(id)))
+                    },
+                    onResetNation = { id -> overrides = overrides.withNation(id, NationOverride()) },
+                    onEditLandmark = { id, transform ->
+                        overrides = overrides.withLandmark(id, transform(overrides.forLandmark(id)))
+                    }
+                )
+            } else {
+                MapView(image)
+            }
 
             if (busy) {
                 Surface(
@@ -203,7 +230,9 @@ private fun SettingsPanel(
     status: String,
     onConfig: (WorldGenConfig) -> Unit,
     onOptions: (RenderOptions) -> Unit,
-    onExport: (Int) -> Unit
+    onExport: (Int) -> Unit,
+    showAtlas: Boolean,
+    onToggleAtlas: () -> Unit
 ) {
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(18.dp),
@@ -223,11 +252,9 @@ private fun SettingsPanel(
                 onClick = { onConfig(config.copy(seed = Random.nextLong(1_000_000))) },
                 enabled = !busy
             ) { Text("New world") }
-            Text(
-                "seed ${config.seed}",
-                Modifier.align(Alignment.CenterVertically),
-                style = MaterialTheme.typography.bodySmall
-            )
+            OutlinedButton(onClick = onToggleAtlas, enabled = !busy) {
+                Text(if (showAtlas) "Show map" else "Atlas")
+            }
         }
 
         Labelled("Working resolution", "${config.width} px") {

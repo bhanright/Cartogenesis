@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.math
 
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
 
 /** Separable box blur with running sums: O(width * height) per pass regardless of radius. */

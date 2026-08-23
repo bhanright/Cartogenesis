@@ -20,7 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cartogenesis.app.world.WorldDocument
+import com.cartogenesis.cartography.WorldDocument
 import java.text.DateFormat
 import java.util.Date
 

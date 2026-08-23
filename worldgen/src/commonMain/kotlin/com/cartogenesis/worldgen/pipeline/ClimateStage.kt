@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -58,20 +59,23 @@ object ClimateStage {
         val noise = PerlinNoise(config.seed * 32452843 + 11)
         val field = FloatField(w, h)
 
-        for (y in 0 until h) {
-            val lat = latitudeOf(y, h)
-            val latFactor = (abs(lat) / 90f).pow(1.25f)
-            val base = cfg.equatorTemperatureC -
-                (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
+        // Temperature is a pure function of latitude and altitude, per cell.
+        parallelChunks(0, h) { start, end ->
+            for (y in start until end) {
+                val lat = latitudeOf(y, h)
+                val latFactor = (abs(lat) / 90f).pow(1.25f)
+                val base = cfg.equatorTemperatureC -
+                    (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
 
-            for (x in 0 until w) {
-                val i = y * w + x
-                val elevation = sea.relativeElevation.data[i]
-                val altitudeDrop = if (sea.isLand[i]) {
-                    elevation * cfg.maxAltitudeMetres / 1000f * cfg.lapseRateC
-                } else 0f
-                val variation = 3.5f * noise.fbm(x * 5f / w, y * 5f / h, 4, 5, 5)
-                field.data[i] = base - altitudeDrop + variation
+                for (x in 0 until w) {
+                    val i = y * w + x
+                    val elevation = sea.relativeElevation.data[i]
+                    val altitudeDrop = if (sea.isLand[i]) {
+                        elevation * cfg.maxAltitudeMetres / 1000f * cfg.lapseRateC
+                    } else 0f
+                    val variation = 3.5f * noise.fbm(x * 5f / w, y * 5f / h, 4, 5, 5)
+                    field.data[i] = base - altitudeDrop + variation
+                }
             }
         }
         return field
@@ -106,39 +110,42 @@ object ClimateStage {
         val cfg = config.climate
         val precip = FloatField(w, h)
 
-        for (y in 0 until h) {
-            val direction = wind[y * w]
-            var moisture = 0.5f
+        // Each row marches its own air mass along its own wind direction, carrying moisture state that never leaves the row.
+        parallelChunks(0, h) { start, end ->
+            for (y in start until end) {
+                val direction = wind[y * w]
+                var moisture = 0.5f
 
-            // Two laps around the cylinder: the first seeds a realistic moisture state, the
-            // second is the one that gets recorded, so the arbitrary starting value washes out.
-            for (lap in 0 until 2) {
-                for (step in 0 until w) {
-                    val x = if (direction > 0) step else w - 1 - step
-                    val i = y * w + x
+                // Two laps around the cylinder: the first seeds a realistic moisture state, the
+                // second is the one that gets recorded, so the arbitrary starting value washes out.
+                for (lap in 0 until 2) {
+                    for (step in 0 until w) {
+                        val x = if (direction > 0) step else w - 1 - step
+                        val i = y * w + x
 
-                    if (!sea.isLand[i]) {
-                        // Warm seas evaporate faster.
-                        val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
-                        moisture += cfg.evaporationRate * warmth * (1f - moisture)
-                        if (lap == 1) precip.data[i] = moisture * cfg.baseRainRate * 4f
-                        continue
+                        if (!sea.isLand[i]) {
+                            // Warm seas evaporate faster.
+                            val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
+                            moisture += cfg.evaporationRate * warmth * (1f - moisture)
+                            if (lap == 1) precip.data[i] = moisture * cfg.baseRainRate * 4f
+                            continue
+                        }
+
+                        var upwindX = x - direction
+                        upwindX = ((upwindX % w) + w) % w
+                        val rise = (sea.relativeElevation.data[i] -
+                            sea.relativeElevation.data[y * w + upwindX]).coerceAtLeast(0f)
+
+                        val rate = cfg.baseRainRate + cfg.orographicStrength * rise
+                        val rain = (moisture * rate).coerceAtMost(moisture)
+                        moisture -= rain
+
+                        // Cold air simply holds less water.
+                        val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
+                        moisture = moisture.coerceAtMost(coldCap)
+
+                        if (lap == 1) precip.data[i] = rain
                     }
-
-                    var upwindX = x - direction
-                    upwindX = ((upwindX % w) + w) % w
-                    val rise = (sea.relativeElevation.data[i] -
-                        sea.relativeElevation.data[y * w + upwindX]).coerceAtLeast(0f)
-
-                    val rate = cfg.baseRainRate + cfg.orographicStrength * rise
-                    val rain = (moisture * rate).coerceAtMost(moisture)
-                    moisture -= rain
-
-                    // Cold air simply holds less water.
-                    val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
-                    moisture = moisture.coerceAtMost(coldCap)
-
-                    if (lap == 1) precip.data[i] = rain
                 }
             }
         }
@@ -197,13 +204,16 @@ object ClimateStage {
 
     /** Wet equatorial convergence zone, dry horse latitudes around 30 degrees. */
     private fun applyLatitudeBands(precip: FloatField) {
-        for (y in 0 until precip.height) {
-            val lat = abs(latitudeOf(y, precip.height))
-            val itcz = 1f + 0.8f * cos((lat * 3.0).coerceAtMost(180.0) * PI / 180.0).toFloat()
-            val horseLatitudes = 1f - 0.45f * kotlin.math.exp(-((lat - 30f) * (lat - 30f)) / 200f)
-            val factor = (itcz * horseLatitudes).coerceAtLeast(0.05f)
-            for (x in 0 until precip.width) {
-                precip[x, y] = precip[x, y] * factor
+        // Latitude bands are a per-row multiplier.
+        parallelChunks(0, precip.height) { start, end ->
+            for (y in start until end) {
+                val lat = abs(latitudeOf(y, precip.height))
+                val itcz = 1f + 0.8f * cos((lat * 3.0).coerceAtMost(180.0) * PI / 180.0).toFloat()
+                val horseLatitudes = 1f - 0.45f * kotlin.math.exp(-((lat - 30f) * (lat - 30f)) / 200f)
+                val factor = (itcz * horseLatitudes).coerceAtLeast(0.05f)
+                for (x in 0 until precip.width) {
+                    precip[x, y] = precip[x, y] * factor
+                }
             }
         }
     }

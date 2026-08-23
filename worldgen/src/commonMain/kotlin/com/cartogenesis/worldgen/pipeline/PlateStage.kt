@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.math.DistanceTransform
 import com.cartogenesis.worldgen.model.FloatField
@@ -101,42 +102,45 @@ object PlateStage {
 
         if (hasBoundaries) {
             val range = cfg.boundaryFalloff
-            for (y in 0 until h) {
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    val boundary = boundaries[label[i]] ?: continue
-                    val interaction = boundary.interaction
-                    nearestType[i] = interaction.type.ordinal
+            // Each cell writes only its own uplift entry, and the roughness comes from position rather than a running RNG, so this splits cleanly across cores.
+            parallelChunks(0, h) { startY, endY ->
+                for (y in startY until endY) {
+                    for (x in 0 until w) {
+                        val i = y * w + x
+                        val boundary = boundaries[label[i]] ?: continue
+                        val interaction = boundary.interaction
+                        nearestType[i] = interaction.type.ordinal
 
-                    val d = dist[i]
-                    val wide = falloff(d, range)
-                    val narrow = falloff(d, range * 0.45f)
-                    if (wide <= 0f && narrow <= 0f) continue
+                        val d = dist[i]
+                        val wide = falloff(d, range)
+                        val narrow = falloff(d, range * 0.45f)
+                        if (wide <= 0f && narrow <= 0f) continue
 
-                    // Breaks up the otherwise uniform ridge profile into distinct peaks.
-                    val roughness =
-                        0.75f + 0.5f * ridgeNoise.fbm(x * 12f / w, y * 12f / h, 4, 12, 12)
+                        // Breaks up the otherwise uniform ridge profile into distinct peaks.
+                        val roughness =
+                            0.75f + 0.5f * ridgeNoise.fbm(x * 12f / w, y * 12f / h, 4, 12, 12)
 
-                    uplift.data[i] += when (interaction.type) {
-                        BoundaryType.CONVERGENT ->
-                            if (interaction.continentalCollision) {
-                                cfg.mountainHeight * interaction.strength * wide * roughness
-                            } else if (boundary.oceanicSide) {
-                                -cfg.trenchDepth * interaction.strength * narrow
-                            } else {
-                                cfg.mountainHeight * 0.8f * interaction.strength * wide * roughness
-                            }
+                        uplift.data[i] += when (interaction.type) {
+                            BoundaryType.CONVERGENT ->
+                                if (interaction.continentalCollision) {
+                                    cfg.mountainHeight * interaction.strength * wide * roughness
+                                } else if (boundary.oceanicSide) {
+                                    -cfg.trenchDepth * interaction.strength * narrow
+                                } else {
+                                    cfg.mountainHeight * 0.8f * interaction.strength * wide * roughness
+                                }
 
-                        BoundaryType.DIVERGENT ->
-                            if (boundary.oceanicSide) {
-                                cfg.mountainHeight * 0.22f * interaction.strength * narrow
-                            } else {
-                                -cfg.mountainHeight * 0.3f * interaction.strength * narrow
-                            }
+                            BoundaryType.DIVERGENT ->
+                                if (boundary.oceanicSide) {
+                                    cfg.mountainHeight * 0.22f * interaction.strength * narrow
+                                } else {
+                                    -cfg.mountainHeight * 0.3f * interaction.strength * narrow
+                                }
 
-                        BoundaryType.TRANSFORM ->
-                            cfg.mountainHeight * 0.12f * interaction.strength * narrow *
-                                (roughness - 0.75f)
+                            BoundaryType.TRANSFORM ->
+                                cfg.mountainHeight * 0.12f * interaction.strength * narrow *
+                                    (roughness - 0.75f)
+                        }
                     }
                 }
             }
@@ -153,19 +157,22 @@ object PlateStage {
         val detailNoise = PerlinNoise(config.seed * 7919 + 13)
         val detailFrequency = cfg.detailFrequency.toFloat()
 
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val i = y * w + x
-                val base = terrain.height.data[i] * (1f - weight) +
-                    (0.5f + plateBase.data[i]) * weight
-                val detail = cfg.detailAmplitude * detailNoise.fbm(
-                    x * detailFrequency / w,
-                    y * detailFrequency / h,
-                    4,
-                    cfg.detailFrequency,
-                    cfg.detailFrequency
-                )
-                result.data[i] = base + uplift.data[i] + detail
+        // Position-derived detail noise; every cell writes its own index.
+        parallelChunks(0, h) { startY, endY ->
+            for (y in startY until endY) {
+                for (x in 0 until w) {
+                    val i = y * w + x
+                    val base = terrain.height.data[i] * (1f - weight) +
+                        (0.5f + plateBase.data[i]) * weight
+                    val detail = cfg.detailAmplitude * detailNoise.fbm(
+                        x * detailFrequency / w,
+                        y * detailFrequency / h,
+                        4,
+                        cfg.detailFrequency,
+                        cfg.detailFrequency
+                    )
+                    result.data[i] = base + uplift.data[i] + detail
+                }
             }
         }
         result.normalize()
@@ -220,14 +227,17 @@ object PlateStage {
         val amplitude = config.tectonics.boundaryFalloff * 1.6f
 
         val warped = IntArray(w * h)
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val dx = amplitude * warpX.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
-                val dy = amplitude * warpY.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
-                var sx = (x + dx).roundToInt() % w
-                if (sx < 0) sx += w
-                val sy = (y + dy).roundToInt().coerceIn(0, h - 1)
-                warped[y * w + x] = raw[sy * w + sx]
+        // Reads `raw`, writes its own cell of `warped` — no overlap between rows.
+        parallelChunks(0, h) { startY, endY ->
+            for (y in startY until endY) {
+                for (x in 0 until w) {
+                    val dx = amplitude * warpX.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
+                    val dy = amplitude * warpY.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
+                    var sx = (x + dx).roundToInt() % w
+                    if (sx < 0) sx += w
+                    val sy = (y + dy).roundToInt().coerceIn(0, h - 1)
+                    warped[y * w + x] = raw[sy * w + sx]
+                }
             }
         }
         return warped

@@ -14,11 +14,11 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.worldforge.app"
+    namespace = "com.cartogenesis.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.worldforge.app"
+        applicationId = "com.cartogenesis.app"
         // API 29 lets MediaStore scoped storage handle gallery saves with no runtime permission.
         minSdk = 29
         targetSdk = 37

@@ -36,6 +36,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Worldforge"
+rootProject.name = "Cartogenesis"
 include(":app")
 include(":worldgen")

@@ -8,13 +8,13 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Worldforge">
+        android:theme="@style/Theme.Cartogenesis">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
-            android:theme="@style/Theme.Worldforge">
+            android:theme="@style/Theme.Cartogenesis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

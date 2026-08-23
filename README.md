@@ -1,4 +1,4 @@
-# Worldforge
+# Cartogenesis
 
 An Android app that procedurally generates fantasy world maps.
 
@@ -86,7 +86,7 @@ existing app if both were signed with the same key. Keep the `.jks` file and its
 backed up — losing them means future versions can only be installed by uninstalling first.
 
 ```bash
-keytool -genkeypair -v -keystore worldforge-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias worldforge
+keytool -genkeypair -v -keystore cartogenesis-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias cartogenesis
 ```
 
 `keytool` lives in Android Studio's JDK, so on this machine run it as
@@ -98,9 +98,9 @@ a few identity fields; only the password matters for a personal build.
 Create `keystore.properties` in the project root (it is gitignored, along with `*.jks`):
 
 ```properties
-storeFile=worldforge-release.jks
+storeFile=cartogenesis-release.jks
 storePassword=<the password you chose>
-keyAlias=worldforge
+keyAlias=cartogenesis
 keyPassword=<the same password, unless you set a separate key password>
 ```
 

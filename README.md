@@ -27,7 +27,34 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 
 - **`:worldgen`** — the whole generation pipeline as Kotlin Multiplatform, with no platform
   dependencies at all. Builds for the JVM, WebAssembly and JS; see **Multiplatform status**.
-- **`:app`** — Android: Compose UI, rendering, the atlas, saving, and HD export.
+- **`:cartography`** — turning a world into a picture, also with no graphics toolkit. The
+  per-pixel work is plain `IntArray` maths and the vector overlays are *described* as geometry
+  rather than drawn, so every platform makes identical decisions and implements only the drawing
+  calls. Builds for JVM and Wasm.
+- **`:app`** — Android: Compose UI, the atlas, saving, and export to the gallery.
+- **`:desktop`** — Compose Desktop. Same engine and renderer, a layout built for a large screen,
+  and a heap big enough for the resolutions a phone cannot attempt.
+
+## Desktop
+
+```bash
+./gradlew :desktop:run
+```
+
+The desktop build exists for headroom. Measured on this machine:
+
+| Export | Time | Peak heap |
+|---|---|---|
+| 2048 x 2048 | 14 s | 626 MB |
+| 4096 x 4096 | 53 s | 2.0 GB |
+
+That 2 GB is more than three times the entire ceiling a `largeHeap` Android process is given, which
+is why 4096 fails there and simply works here. The app requests `-Xmx12g`.
+
+Where the time goes, at 2048 (see `StageProfileTest`): terrain 52%, tectonics 17%, realms 16%,
+landmarks 7%, climate 4%, rivers 4%. Roughly three quarters of that is work over independent cells
+and would suit a GPU; realm expansion is a Dijkstra over a priority queue and would not. No GPU
+work has been done yet — these figures are single-threaded CPU.
 
 ## Building
 

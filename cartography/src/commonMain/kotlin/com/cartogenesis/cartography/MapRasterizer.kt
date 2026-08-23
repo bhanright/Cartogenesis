@@ -114,16 +114,23 @@ object MapRasterizer {
                     val to = river.cells[k + 1]
                     val x0 = from % w
                     val x1 = to % w
-                    // A river crossing the east-west seam would otherwise be drawn as a line
-                    // straight back across the whole map.
-                    if (abs(x1 - x0) > w / 2) continue
-                    rivers.add(
-                        RiverSegment(
-                            x0 + 0.5f, (from / w) + 0.5f,
-                            x1 + 0.5f, (to / w) + 0.5f,
-                            (river.widths[k] * options.riverScale).coerceAtLeast(0.9f)
-                        )
-                    )
+                    val y0 = (from / w) + 0.5f
+                    val y1 = (to / w) + 0.5f
+                    val width = (river.widths[k] * options.riverScale).coerceAtLeast(0.9f)
+
+                    if (abs(x1 - x0) > w / 2) {
+                        // The river crosses the east-west seam. Drawing it as-is would streak a
+                        // line back across the whole map, but dropping it leaves the river visibly
+                        // stopping dead at the edge. Draw it twice instead, shifted a map-width
+                        // each way, so it runs off one side and arrives on the other.
+                        val shifted = if (x1 > x0) x1 - w else x1 + w
+                        rivers.add(RiverSegment(x0 + 0.5f, y0, shifted + 0.5f, y1, width))
+                        val back = if (x1 > x0) x0 + w else x0 - w
+                        rivers.add(RiverSegment(back + 0.5f, y0, x1 + 0.5f, y1, width))
+                        continue
+                    }
+
+                    rivers.add(RiverSegment(x0 + 0.5f, y0, x1 + 0.5f, y1, width))
                 }
             }
         }

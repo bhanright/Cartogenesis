@@ -46,7 +46,17 @@ data class TectonicsConfig(
      */
     val detailAmplitude: Float = 0.012f,
     /** Cycles across the map for that fine relief; also its noise period, so it tiles in X. */
-    val detailFrequency: Int = 96
+    val detailFrequency: Int = 96,
+    /**
+     * How much a mountain belt's height varies along its own length.
+     *
+     * At 0 every convergent boundary rises uniformly for its whole run, which is the single thing
+     * that makes plate edges read as drawn on rather than grown. Higher values let belts swell,
+     * sag, and break into separate massifs with saddles between them.
+     */
+    val rangeVariation: Float = 0.7f,
+    /** Cycles across the map for that variation — lower means longer, smoother swells. */
+    val rangeVariationScale: Float = 5f
 )
 
 @Serializable

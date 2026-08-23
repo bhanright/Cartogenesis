@@ -97,6 +97,7 @@ object PlateStage {
         BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloff / 3f).roundToInt().coerceAtLeast(1))
 
         val ridgeNoise = PerlinNoise(config.seed * 104729 + 5)
+        val rangeNoise = PerlinNoise(config.seed * 104729 + 911)
         val uplift = FloatField(w, h)
         val nearestType = IntArray(w * h) { -1 }
 
@@ -120,14 +121,31 @@ object PlateStage {
                         val roughness =
                             0.75f + 0.5f * ridgeNoise.fbm(x * 12f / w, y * 12f / h, 4, 12, 12)
 
+                        // Slow variation along the length of a belt. Without it, every convergent
+                        // boundary rises to the same height for its entire run — which is the one
+                        // thing that makes plate edges read as drawn on rather than grown. Real
+                        // ranges swell, sag, and break into separate massifs.
+                        val amount = cfg.rangeVariation.coerceIn(0f, 1f)
+                        val period = cfg.rangeVariationScale.toInt().coerceAtLeast(1)
+                        val swell = rangeNoise.fbm(
+                            x * cfg.rangeVariationScale / w,
+                            y * cfg.rangeVariationScale / h,
+                            3,
+                            period,
+                            period
+                        )
+                        val alongRange =
+                            ((1f - amount) + amount * (0.5f + 0.5f * swell) * 1.7f)
+                                .coerceIn(0f, 1.7f)
+
                         uplift.data[i] += when (interaction.type) {
                             BoundaryType.CONVERGENT ->
                                 if (interaction.continentalCollision) {
-                                    cfg.mountainHeight * interaction.strength * wide * roughness
+                                    cfg.mountainHeight * interaction.strength * wide * roughness * alongRange
                                 } else if (boundary.oceanicSide) {
                                     -cfg.trenchDepth * interaction.strength * narrow
                                 } else {
-                                    cfg.mountainHeight * 0.8f * interaction.strength * wide * roughness
+                                    cfg.mountainHeight * 0.8f * interaction.strength * wide * roughness * alongRange
                                 }
 
                             BoundaryType.DIVERGENT ->

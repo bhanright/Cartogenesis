@@ -188,7 +188,13 @@ private fun DesktopApp() {
             )
         }
 
-        Box(Modifier.fillMaxSize().background(Color(0xFF14171A))) {
+        // Only the map gets the dark backdrop. The atlas and library are ordinary reading
+        // surfaces and must take their colour from the theme, or their (dark) text lands on
+        // near-black and becomes invisible.
+        val backdrop =
+            if (screen == Screen.MAP) Color(0xFF14171A) else MaterialTheme.colorScheme.background
+
+        Box(Modifier.fillMaxSize().background(backdrop)) {
             val current = world
             if (screen == Screen.LIBRARY) {
                 LibraryPane(

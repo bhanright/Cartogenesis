@@ -16,17 +16,23 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    convergent, divergent, or transform from the plates' relative motion, and elevation is deformed
    accordingly: mountain ranges where continents collide, volcanic arcs and trenches at subduction
    zones, ridges and rift valleys where plates separate.
-4. **Sea level** — everything below a chosen elevation percentile floods.
-5. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
+4. **Erosion** — rock does not stand at an arbitrary angle: past a critical slope it fails and
+   slides, and the debris piles against the foot until the pile reaches that angle too. Sweeping
+   that rule over the grid lowers crests and builds aprons around them, turning the walls the
+   uplift left into ridges with flanks. It conserves mass, which is the point — the debris is what
+   widens a belt's footprint. Runs before sea level, since eroding the terrain changes which
+   elevation the percentile lands on.
+5. **Sea level** — everything below a chosen elevation percentile floods.
+6. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
    that curl inside a closed basin *is* a gyre, so the currents are solved for rather than drawn.
    Water advects its temperature along them, giving warm poleward flow on western ocean margins
    and cold equatorward flow on eastern ones.
-6. **Climate** — temperature from latitude and altitude, then pulled toward the sea temperature
+7. **Climate** — temperature from latitude and altitude, then pulled toward the sea temperature
    offshore; rainfall by marching moist air along prevailing wind bands, so windward slopes soak
    and leeward slopes fall into rain shadow. This is what lets a high-latitude west coast be
    temperate and a coast beside a cold current be arid at the same latitude. Biomes come from the
    resulting temperature/rainfall pairing.
-7. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
+8. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
    Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
 
@@ -77,10 +83,11 @@ The desktop build exists for headroom. Measured on this machine:
 That 2 GB is more than three times the entire ceiling a `largeHeap` Android process is given, which
 is why 4096 fails there and simply works here. The app requests `-Xmx12g`.
 
-Where the time goes, at 2048 (see `StageProfileTest`): terrain 52%, tectonics 17%, realms 16%,
-landmarks 7%, climate 4%, rivers 4%. Roughly three quarters of that is work over independent cells
-and would suit a GPU; realm expansion is a Dijkstra over a priority queue and would not. No GPU
-work has been done yet — these figures are single-threaded CPU.
+Where the time goes, at 2048 (see `StageProfileTest`): erosion 52%, realms 17%, ocean currents 9%,
+landmarks 6%, tectonics 6%, terrain 4%, climate 4%, rivers 3%. Erosion dominates because material
+moves one cell per sweep, so covering the same distance across the map takes proportionally more
+sweeps on a finer grid — it is also almost entirely independent per cell and would suit a GPU well.
+Realm expansion is a Dijkstra over a priority queue and would not. No GPU work has been done yet.
 
 ## Building
 

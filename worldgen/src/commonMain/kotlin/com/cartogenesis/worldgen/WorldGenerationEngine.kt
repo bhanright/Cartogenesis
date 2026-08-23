@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
@@ -14,6 +15,7 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 enum class GenerationStage(val label: String) {
     TERRAIN("Shaping terrain"),
     TECTONICS("Drifting plates"),
+    EROSION("Wearing down the mountains"),
     SEA_LEVEL("Flooding oceans"),
     OCEAN("Turning the currents"),
     CLIMATE("Simulating climate"),
@@ -54,11 +56,17 @@ object WorldGenerationEngine {
             ?.plates
             ?: PlateStage.generate(config, terrain)
 
+        report(GenerationStage.EROSION)
+        val erosion = reusable
+            ?.takeIf { it.plates === plates && it.config.erosion == config.erosion }
+            ?.erosion
+            ?: ErosionStage.apply(config, plates.height)
+
         report(GenerationStage.SEA_LEVEL)
         val sea = reusable
-            ?.takeIf { it.plates === plates && it.config.seaLevel == config.seaLevel }
+            ?.takeIf { it.erosion === erosion && it.config.seaLevel == config.seaLevel }
             ?.sea
-            ?: SeaLevelStage.apply(plates.height, config.seaLevel)
+            ?: SeaLevelStage.apply(erosion.height, config.seaLevel)
 
         report(GenerationStage.OCEAN)
         val ocean = reusable
@@ -94,6 +102,7 @@ object WorldGenerationEngine {
             config = config,
             terrain = terrain,
             plates = plates,
+            erosion = erosion,
             sea = sea,
             ocean = ocean,
             climate = climate,

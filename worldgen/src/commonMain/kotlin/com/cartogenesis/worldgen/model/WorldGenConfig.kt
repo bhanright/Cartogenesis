@@ -141,6 +141,27 @@ data class OceanConfig(
     val coastalInfluence: Float = 0.85f
 )
 
+/** Wearing the uplift down: rock fails past a critical slope and piles at the foot. */
+@Serializable
+data class ErosionConfig(
+    val enabled: Boolean = true,
+    /**
+     * The critical slope, in elevation per unit of map width — the steepest a slope can stand
+     * before it fails. Held per map rather than per cell so the same terrain wears to the same
+     * shape at any resolution. Lower means a gentler, more worn world; high enough and only the
+     * knife edges left by uplift are touched.
+     */
+    val talus: Float = 9f,
+    /**
+     * How many times to sweep the grid. Material moves at most one cell per pass, so this sets how
+     * far debris can travel from where it came off — which is why [WorldGenConfig.atResolution]
+     * scales it with the grid.
+     */
+    val passes: Int = 18,
+    /** Share of the material above the critical slope that moves each pass. Above 0.5 it rings. */
+    val rate: Float = 0.25f
+)
+
 /** Standing fresh water in basins the terrain does not drain. */
 @Serializable
 data class LakesConfig(
@@ -235,6 +256,7 @@ data class WorldGenConfig(
     val height: Int = 512,
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
+    val erosion: ErosionConfig = ErosionConfig(),
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
     val climate: ClimateConfig = ClimateConfig(),
@@ -260,6 +282,9 @@ data class WorldGenConfig(
      *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
      *  - [ClimateConfig.baseRainRate] is charged per cell of wind travel, so a 4x wider grid
      *    depletes moisture four times over the same journey and parches every interior.
+     *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
+     *    across the map takes proportionally more sweeps on a finer grid. Left alone, a large map
+     *    would come out barely eroded at all.
      *  - [NationsConfig.slopeResistance] is charged against the climb between adjacent cells. That
      *    climb halves as cells halve, so the total cost of crossing a range stays flat while the
      *    expansion budget grows with the map â€” mountains would stop holding borders.
@@ -272,6 +297,7 @@ data class WorldGenConfig(
             width = newWidth,
             height = newHeight,
             tectonics = tectonics.copy(boundaryFalloff = tectonics.boundaryFalloff * scale),
+            erosion = erosion.copy(passes = (erosion.passes * scale).toInt()),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)
         )

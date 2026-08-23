@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
@@ -33,6 +34,7 @@ class StageProfileTest {
 
             var terrain: com.cartogenesis.worldgen.pipeline.TerrainResult? = null
             var plates: com.cartogenesis.worldgen.pipeline.PlateResult? = null
+            var erosion: com.cartogenesis.worldgen.pipeline.ErosionResult? = null
             var sea: com.cartogenesis.worldgen.pipeline.SeaLevelResult? = null
             var ocean: com.cartogenesis.worldgen.pipeline.OceanResult? = null
             var climate: com.cartogenesis.worldgen.pipeline.ClimateResult? = null
@@ -46,8 +48,11 @@ class StageProfileTest {
             timings["tectonics"] = measureTimeMillis {
                 plates = PlateStage.generate(config, terrain!!)
             }
+            timings["erosion"] = measureTimeMillis {
+                erosion = ErosionStage.apply(config, plates!!.height)
+            }
             timings["sea level"] = measureTimeMillis {
-                sea = SeaLevelStage.apply(plates!!.height, config.seaLevel)
+                sea = SeaLevelStage.apply(erosion!!.height, config.seaLevel)
             }
             timings["ocean currents"] = measureTimeMillis {
                 ocean = OceanStage.generate(config, sea!!)

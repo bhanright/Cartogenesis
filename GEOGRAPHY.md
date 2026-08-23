@@ -107,8 +107,13 @@ So a convergent belt is built from a flat-crested profile rather than one that p
 boundary line, its width swells and pinches along its length, and its height sags near to nothing
 between massifs so a long belt reads as a chain rather than a wall.
 
-What is still missing is erosion — see TODO.md. Nothing wears the belts down, so they keep the
-shape the uplift gave them, and thin strips still occur where a belt crosses shallow sea.
+The belts are then eroded, which is what gives them flanks. Thermal erosion cannot remove a strip
+where a belt crosses shallow sea — land above water stays above water — but by moving material off
+the crest and onto the flanks it widens the footprint until the strip stops reading as one. On the
+seed this was diagnosed from, it halves the land sitting in strips, from 0.4% to 0.2%.
+
+What is still missing is water. Nothing carves a valley, so the rivers find routes down terrain
+that was never shaped by them.
 
 ## Not modelled, and probably shouldn't be
 

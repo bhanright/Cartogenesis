@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * How much of the land is ribbon — long thin strips a couple of cells wide.
@@ -17,13 +18,13 @@ import kotlin.test.Test
 class RibbonLandTest {
 
     @Test
-    fun `report ribbon land`() {
+    fun `erosion widens the strips a belt leaves in shallow sea`() {
+        val base = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+            .atResolution(1024, 1024)
         listOf(
-            "app 1024 (raw copy)" to WorldGenConfig(seed = 234475L, width = 1024, height = 1024),
-            "rescaled 1024" to WorldGenConfig(seed = 234475L, width = 512, height = 512)
-                .atResolution(1024, 1024),
-            "base 512" to WorldGenConfig(seed = 234475L, width = 512, height = 512)
-        ).forEach { (name, config) ->
+            "no erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
+            "eroded" to base
+        ).map { (name, config) ->
             val world = WorldGenerationEngine.generate(config)
             val w = world.width
             val h = world.height
@@ -114,9 +115,19 @@ class RibbonLandTest {
                     if (area[id] > longest) longest = area[id]
                 }
             }
+            val share = ribbonArea * 100.0 / landCells
             println(
                 "RIBBON %-22s %d bodies, %d are strips (half-width <= %.0f) holding %.1f%% of land, largest strip %d cells"
-                    .format(name, components, ribbonCount, thin, ribbonArea * 100.0 / landCells, longest)
+                    .format(name, components, ribbonCount, thin, share, longest)
+            )
+            share
+        }.let { (withoutErosion, withErosion) ->
+            // Erosion cannot remove a strip, and is not meant to: a belt crossing shallow sea will
+            // always leave land above water. What it does is take material off the crest and pile
+            // it against the flanks, which widens the footprint until the strip stops being one.
+            assertTrue(
+                withErosion < withoutErosion,
+                "erosion left as much ribbon land as before: $withErosion% vs $withoutErosion%"
             )
         }
     }

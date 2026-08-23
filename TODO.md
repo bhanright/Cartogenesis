@@ -12,6 +12,11 @@
   cliffs. Both UIs now go through `atResolution`, whose contract `ResolutionScalingTest` pins.
   Mountain belts also got a flat-crested profile instead of a knife edge, a width that swells and
   pinches along their length, and deeper along-strike sag so a long belt breaks into massifs.
+- **Erosion** (2026-08-23) — thermal erosion, as its own pipeline stage between tectonics and sea
+  level. Halves the land sitting in thin strips on seed 234475, from 0.4% to 0.2%, and gives belts
+  flanks instead of walls. Critical slope is held per unit of map rather than per cell so terrain
+  wears to the same shape at any resolution, and the sweep count scales with the grid for the same
+  reason. It is now the most expensive stage in the pipeline at 52% of a 2048 generation.
 - **Ocean currents** (2026-08-23) — surface flow is solved for rather than drawn: wind stress has
   a curl, and the stream function satisfying that curl inside a closed basin *is* a gyre. Poleward
   flow arrives warm on 85% of samples and the anomaly reaches ±7°C, which is the right order for
@@ -30,15 +35,11 @@
   helped the spread, but the audit is still uneven: the share of desert falling in the 15-45 degree
   band is 97% and 75% on seeds 7 and 1234, and only 53% and 43% on seeds 42 and 99. The remaining
   cause looks like orographic strength rather than the bands themselves.
-- **Erosion.** Nothing erodes. Uplift is added and then left, so a mountain belt keeps the shape
-  the falloff gave it: no talus aprons, no dissected foothills, no crenulated coast where a range
-  meets the sea. The visible cost is long thin strips of land where a belt crosses submerged
-  ground, with a narrow strait either side — `RibbonLandTest` reports 3 such strips holding about
-  0.4% of land on seed 234475, unchanged by the belt-profile work, because the profile decides how
-  wide the strip is and not whether it is a strip. A thermal-erosion pass (slope-limited diffusion,
-  moving material from crest to flank) is the cheap version and would widen and dissect them;
-  hydraulic erosion would also carve valleys the rivers could then find, but it has to run before
-  depression filling and would change every world.
+- **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
+  valleys, because that needs water routed over the terrain. Rivers therefore find routes down
+  terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.
+  Routing happens after depression filling, two stages later, so this would mean either running a
+  provisional routing pass inside erosion or restructuring the pipeline.
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

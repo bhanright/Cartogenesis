@@ -102,8 +102,19 @@ a regeneration, so a new setting does not wipe out edits. Any new generated attr
 override path and a line in `WorldStore`, or it will not survive a save.
 
 A save records the seed, the settings and the overrides — not the world, which is rebuilt from
-them. A whole world is about 1.5KB. `WorldStore` reads forgivingly, falling back to current
-defaults for any missing field, so saves made before a setting existed still open.
+them. A whole world is a few kilobytes.
+
+**The format is shared.** `WorldCodec` in `:cartography` is the entire thing, built on
+kotlinx.serialization, so Android and desktop write files that open in either; each platform
+supplies only where the bytes go. Serializers are generated from the config classes themselves
+rather than hand-written mirrors — a parallel schema would need every new setting adding twice, and
+would silently drop from saves whenever someone forgot.
+
+`ignoreUnknownKeys` and `encodeDefaults` are what keep old saves opening: a field that no longer
+exists is skipped, and one that did not exist when the file was written falls back to today's
+default. `WorldCodecTest` covers that directly, along with the subtler property that untouched
+override fields stay null — if they came back populated, editing one field would pin a realm's
+whole entry to whatever the generator happened to produce at save time.
 
 ## Installing on a phone
 

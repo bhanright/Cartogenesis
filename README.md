@@ -83,11 +83,22 @@ The desktop build exists for headroom. Measured on this machine:
 That 2 GB is more than three times the entire ceiling a `largeHeap` Android process is given, which
 is why 4096 fails there and simply works here. The app requests `-Xmx12g`.
 
-Where the time goes, at 2048 (see `StageProfileTest`): erosion 52%, realms 17%, ocean currents 9%,
-landmarks 6%, tectonics 6%, terrain 4%, climate 4%, rivers 3%. Erosion dominates because material
-moves one cell per sweep, so covering the same distance across the map takes proportionally more
-sweeps on a finer grid — it is also almost entirely independent per cell and would suit a GPU well.
-Realm expansion is a Dijkstra over a priority queue and would not. No GPU work has been done yet.
+Where the time goes, at 2048 (see `StageProfileTest`): erosion 82%, realms 6%, ocean currents 4%,
+tectonics 2%, landmarks 2%, terrain 2%, rivers and climate 1% each. A 2048 world takes about 36
+seconds, of which erosion is 29.
+
+Erosion dominates for a structural reason. Material moves one cell per sweep, so covering a given
+distance across the map takes proportionally more sweeps on a finer grid, and the cost per doubling
+of resolution is therefore eightfold rather than fourfold. Tiles that have gone quiet are skipped,
+which is exact — `ErosionSkipTest` asserts bit-identical output — but only buys around 1.3x,
+because terrain roughness at cell scale rises with resolution and most of a fine grid is genuinely
+still moving.
+
+Erosion is also a pure stencil over independent cells and would map to a GPU almost perfectly. The
+reason none has been written is determinism: a saved world is a seed and a config, regenerated on
+whatever machine opens it, and GPU floating point would not reproduce the CPU's results bit for
+bit. The same consideration already cost this project Kotlin/JS as a web target. Realm expansion is
+a Dijkstra over a priority queue and would not suit a GPU regardless.
 
 ## Building
 

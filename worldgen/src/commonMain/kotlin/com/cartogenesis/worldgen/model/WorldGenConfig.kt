@@ -147,17 +147,38 @@ data class ErosionConfig(
     val enabled: Boolean = true,
     /**
      * The critical slope, in elevation per unit of map width — the steepest a slope can stand
-     * before it fails. Held per map rather than per cell so the same terrain wears to the same
-     * shape at any resolution. Lower means a gentler, more worn world; high enough and only the
-     * knife edges left by uplift are touched.
+     * before it fails. Held per map rather than per cell so that a belt of a given width on the
+     * map wears to the same profile whatever grid it is computed on.
+     *
+     * That keeps the large-scale shape stable across resolutions but not the fine detail, and the
+     * reason is worth knowing. Terrain comes from an fBm whose amplitude halves as its frequency
+     * doubles, so each finer octave is twice as steep as the one before it, and the steepest
+     * detail a grid can resolve gets steeper in proportion to the grid. A fixed critical slope
+     * therefore bites into progressively finer detail as the resolution rises: at 512 the finest
+     * octave sits near slope 4 and is left alone, at 1024 near 8 and is right at the threshold.
+     * This is defensible — real landscapes are erosion-limited at their finest scales too — but it
+     * does mean a high-resolution world is not merely a detailed version of a low-resolution one,
+     * and it is why this stage does not get cheaper per cell as the map grows.
+     *
+     * Lower means a gentler, more worn world; high enough and only the knife edges left by uplift
+     * are touched. Below about 5 it starts erasing the terrain noise itself and the land goes
+     * mushy.
      */
     val talus: Float = 9f,
     /**
      * How many times to sweep the grid. Material moves at most one cell per pass, so this sets how
      * far debris can travel from where it came off — which is why [WorldGenConfig.atResolution]
      * scales it with the grid.
+     *
+     * Thermal erosion approaches its equilibrium asymptotically, so this is a real question rather
+     * than a taste setting, and `ErosionConvergenceTest` reports the curve. Too low and the very
+     * feature this stage exists to remove survives: at 18 sweeps the steepest slope left on the map
+     * was still ten times the critical angle, meaning the knife edges had barely been touched. By
+     * 160 it is down to 1.6. Because the rule only ever moves material that sits above the critical
+     * slope, raising this cannot flatten terrain that was already at rest — gentler ground is
+     * untouched however long it runs, so the cost of a high count is time and not fidelity.
      */
-    val passes: Int = 18,
+    val passes: Int = 80,
     /** Share of the material above the critical slope that moves each pass. Above 0.5 it rings. */
     val rate: Float = 0.25f
 )

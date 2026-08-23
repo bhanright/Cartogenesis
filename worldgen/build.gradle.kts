@@ -51,3 +51,9 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
+
+// Erosion and the FFT both hold several grid-sized float buffers at once, and the profiling and
+// audit tests run the pipeline at export resolutions. The default test heap cannot take 2048.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "8g"
+}

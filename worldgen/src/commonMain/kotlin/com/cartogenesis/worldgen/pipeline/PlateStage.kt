@@ -98,6 +98,7 @@ object PlateStage {
 
         val ridgeNoise = PerlinNoise(config.seed * 104729 + 5)
         val rangeNoise = PerlinNoise(config.seed * 104729 + 911)
+        val widthNoise = PerlinNoise(config.seed * 104729 + 1733)
         val uplift = FloatField(w, h)
         val nearestType = IntArray(w * h) { -1 }
 
@@ -113,7 +114,13 @@ object PlateStage {
                         nearestType[i] = interaction.type.ordinal
 
                         val d = dist[i]
-                        val wide = falloff(d, range)
+                        // A belt that keeps the same width for its whole length reads as drawn on
+                        // even once its height varies, so the width swells and pinches too. The
+                        // noise is sampled on position, so neighbouring cells agree and the belt
+                        // stays continuous rather than dissolving into blotches.
+                        val widthScale = 0.55f + 0.85f *
+                            (0.5f + 0.5f * widthNoise.fbm(x * 7f / w, y * 7f / h, 3, 7, 7))
+                        val wide = beltFalloff(d, range * widthScale)
                         val narrow = falloff(d, range * 0.45f)
                         if (wide <= 0f && narrow <= 0f) continue
 
@@ -134,9 +141,13 @@ object PlateStage {
                             period,
                             period
                         )
+                        // Raised to a power so the belt spends more of its length low and rises
+                        // into discrete massifs, rather than undulating gently about its mean. A
+                        // belt that only ever sags to a third of its height stays a continuous
+                        // wall; one that sags near to nothing becomes a chain with gaps in it.
+                        val swollen = (0.5f + 0.5f * swell).coerceIn(0f, 1f).pow(1.6f)
                         val alongRange =
-                            ((1f - amount) + amount * (0.5f + 0.5f * swell) * 1.7f)
-                                .coerceIn(0f, 1.7f)
+                            ((1f - amount) + amount * swollen * 1.9f).coerceIn(0f, 1.9f)
 
                         uplift.data[i] += when (interaction.type) {
                             BoundaryType.CONVERGENT ->
@@ -333,8 +344,30 @@ object PlateStage {
         )
     }
 
+    /**
+     * Sharp-crested profile, for features that really are narrow: trenches, rifts, ridges at
+     * spreading centres.
+     */
     private fun falloff(distance: Float, range: Float): Float {
         if (distance >= range) return 0f
         return (1f - distance / range).pow(1.6f)
+    }
+
+    /**
+     * Broad, flat-crested profile, for mountain belts.
+     *
+     * The sharp profile peaks exactly on the boundary and falls away fastest right at the crest,
+     * which builds a knife-edge wall along the suture. Nothing on Earth looks like that: an orogen
+     * is hundreds of kilometres across, with the high ground spread over a wide axis and foothills
+     * grading into the forelands. Worse, where such a wall crosses a submerged region only its
+     * crest clears sea level, leaving a ruler-straight strip of land with a strait either side.
+     *
+     * This is 1 - smoothstep: flat at the crest, flat at the toe, steepest in between, so the belt
+     * has a broad high axis and a gradual outer slope.
+     */
+    private fun beltFalloff(distance: Float, range: Float): Float {
+        if (distance >= range) return 0f
+        val u = distance / range
+        return (1f - u) * (1f - u) * (1f + 2f * u)
     }
 }

@@ -83,7 +83,10 @@ fun main() = application {
 private fun DesktopApp() {
     var config by remember {
         // Desktop starts at a resolution the phone build could not attempt.
-        mutableStateOf(WorldGenConfig(seed = Random.nextLong(1_000_000), width = 1024, height = 1024))
+        mutableStateOf(
+            WorldGenConfig(seed = Random.nextLong(1_000_000), width = 512, height = 512)
+                .atResolution(1024, 1024)
+        )
     }
     var options by remember { mutableStateOf(RenderOptions()) }
     var world by remember { mutableStateOf<WorldMap?>(null) }
@@ -431,7 +434,11 @@ private fun SettingsPanel(
                 listOf(512, 1024, 2048, 4096).forEach { size ->
                     FilterChip(
                         selected = config.width == size,
-                        onClick = { onConfig(config.copy(width = size, height = size)) },
+                        // atResolution, not a raw copy: settings measured in cells have to be
+                        // rescaled with the grid or the world changes character instead of just
+                        // gaining detail. A raw copy leaves mountain belts a fraction of their
+                        // proper width, which surfaces plate edges as straight cliffs.
+                        onClick = { onConfig(config.atResolution(size, size)) },
                         label = { Text("$size", maxLines = 1) },
                         enabled = !busy
                     )

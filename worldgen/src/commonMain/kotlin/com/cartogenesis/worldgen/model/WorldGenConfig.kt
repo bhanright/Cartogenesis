@@ -54,9 +54,15 @@ data class TectonicsConfig(
      * that makes plate edges read as drawn on rather than grown. Higher values let belts swell,
      * sag, and break into separate massifs with saddles between them.
      */
-    val rangeVariation: Float = 0.7f,
-    /** Cycles across the map for that variation — lower means longer, smoother swells. */
-    val rangeVariationScale: Float = 5f
+    val rangeVariation: Float = 0.88f,
+    /**
+     * Cycles across the map for that variation — lower means longer, smoother swells.
+     *
+     * Kept high enough that a long belt breaks into a chain of separate massifs rather than
+     * running unbroken from one end to the other. Where such a belt crosses submerged ground that
+     * is the difference between a continuous ruler-straight strip of land and an island arc.
+     */
+    val rangeVariationScale: Float = 13f
 )
 
 @Serializable

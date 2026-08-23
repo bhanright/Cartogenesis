@@ -78,7 +78,8 @@ fun ControlsPanel(
             steps = 2
         ) { value ->
             val size = sliderToResolution(value)
-            onConfigChange { it.copy(width = size, height = size) }
+            // atResolution rather than a raw copy — see the note on WorldGenConfig.atResolution.
+            onConfigChange { it.atResolution(size, size) }
         }
 
         SectionHeader("Tectonics")

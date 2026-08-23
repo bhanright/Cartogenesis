@@ -95,6 +95,21 @@ Verified by `OceanCurrentTest`: poleward flow arrives warm on 85% of samples, th
 ±7°C, and warm coasts out-score cold ones at matched latitude on every seed tested. With the
 coastal term removed the last of those falls to zero and tips negative.
 
+## Mountain belts
+
+An orogen is hundreds of kilometres across, with its high ground spread over a wide axis and
+foothills grading into the forelands. It is not a wall along the suture, and the difference shows
+most where a belt crosses submerged ground: a knife-edge crest clears sea level as a ruler-straight
+strip of land with a strait either side, which is the single most recognisable tell of a generated
+map.
+
+So a convergent belt is built from a flat-crested profile rather than one that peaks on the
+boundary line, its width swells and pinches along its length, and its height sags near to nothing
+between massifs so a long belt reads as a chain rather than a wall.
+
+What is still missing is erosion — see TODO.md. Nothing wears the belts down, so they keep the
+shape the uplift gave them, and thin strips still occur where a belt crosses shallow sea.
+
 ## Not modelled, and probably shouldn't be
 
 Settlements below the capital, trade routes, and roads. The atlas invents exports and imports from

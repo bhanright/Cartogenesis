@@ -5,6 +5,13 @@
 - **Lakes** (2026-08-23) — basins the flood had to raise are now standing water, with rivers
   running in and one leaving at the outlet. Took uphill-looking river segments from 13-20% down to
   12-14%; what is left is shallow filled ground below the lake depth threshold.
+- **Straight plate-edge cliffs** (2026-08-23) — the resolution picker in both UIs changed the grid
+  with a plain `copy(width = ...)`, bypassing `atResolution`, so every setting measured in cells
+  stayed at its 512 value. At the desktop default of 1024 that made mountain belts half their
+  proper width and the plate-base blur half its radius, surfacing plate edges as ruler-straight
+  cliffs. Both UIs now go through `atResolution`, whose contract `ResolutionScalingTest` pins.
+  Mountain belts also got a flat-crested profile instead of a knife edge, a width that swells and
+  pinches along their length, and deeper along-strike sag so a long belt breaks into massifs.
 - **Ocean currents** (2026-08-23) — surface flow is solved for rather than drawn: wind stress has
   a curl, and the stream function satisfying that curl inside a closed basin *is* a gyre. Poleward
   flow arrives warm on 85% of samples and the anomaly reaches ±7°C, which is the right order for
@@ -23,6 +30,15 @@
   helped the spread, but the audit is still uneven: the share of desert falling in the 15-45 degree
   band is 97% and 75% on seeds 7 and 1234, and only 53% and 43% on seeds 42 and 99. The remaining
   cause looks like orographic strength rather than the bands themselves.
+- **Erosion.** Nothing erodes. Uplift is added and then left, so a mountain belt keeps the shape
+  the falloff gave it: no talus aprons, no dissected foothills, no crenulated coast where a range
+  meets the sea. The visible cost is long thin strips of land where a belt crosses submerged
+  ground, with a narrow strait either side — `RibbonLandTest` reports 3 such strips holding about
+  0.4% of land on seed 234475, unchanged by the belt-profile work, because the profile decides how
+  wide the strip is and not whether it is a strip. A thermal-erosion pass (slope-limited diffusion,
+  moving material from crest to flank) is the cheap version and would widen and dissect them;
+  hydraulic erosion would also carve valleys the rivers could then find, but it has to run before
+  depression filling and would change every world.
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

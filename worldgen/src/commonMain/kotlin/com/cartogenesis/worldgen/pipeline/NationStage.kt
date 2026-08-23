@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.NationsConfig
@@ -32,7 +33,7 @@ data class Nation(
     /**
      * The country its people actually occupy, weighted by habitability rather than raw area. A
      * realm can be mostly ice by the map and still be a temperate farming nation in every way that
-     * matters, so this â€” not [biomeShare] â€” is what the atlas describes it by.
+     * matters, so this - not [biomeShare] - is what the atlas describes it by.
      */
     val heartlandBiome: Biome,
     val government: String,
@@ -49,7 +50,7 @@ data class NationResult(
     /** Realm id per cell; [UNCLAIMED] for water and for wilderness beyond any realm's reach. */
     val nationId: IntArray,
     val nations: List<Nation>,
-    /** Habitability 0..1 per cell â€” also what the atlas uses to talk about arable land. */
+    /** Habitability 0..1 per cell - also what the atlas uses to talk about arable land. */
     val habitability: FloatField
 ) {
     companion object {
@@ -252,7 +253,7 @@ object NationStage {
             val entry = heap.pop()
             val cell = decodeIndex(entry)
             val cost = decodeCost(entry)
-            // Stale queue entry â€” this cell was already reached more cheaply.
+            // Stale queue entry - this cell was already reached more cheaply.
             if (cost > best[cell] + 1e-4f) continue
 
             val owner = nationId[cell]
@@ -329,6 +330,14 @@ object NationStage {
         val capacity = DoubleArray(origins.size)
         val biomes = Array(origins.size) { HashMap<Biome, Int>() }
         val neighbours = Array(origins.size) { HashSet<Int>() }
+        // Blurred copies, so a capital can be judged on the country around it rather than the
+        // single cell it stands on: how much food its hinterland could grow, and whether it sits
+        // above the surrounding ground or in a hollow.
+        val hinterland = habitability.copy()
+        BoxBlur.apply(hinterland, radius = (config.width / 64).coerceAtLeast(2), passes = 2)
+        val smoothedElevation = sea.relativeElevation.copy()
+        BoxBlur.apply(smoothedElevation, radius = (config.width / 96).coerceAtLeast(2), passes = 2)
+
         val bestCapital = FloatArray(origins.size) { -1f }
         val capitalCell = IntArray(origins.size) { -1 }
         // Biomes weighted by how liveable they are, so the heartland reflects where people are
@@ -360,10 +369,28 @@ object NationStage {
                 val onRiver = rivers.flowAccumulation.data[i] >= riverThreshold
                 if (onRiver) riverine[owner]++
 
-                // Capitals like fertile ground with water â€” a port or a river town.
-                var score = habitability.data[i]
-                if (touchesSea) score += 0.25f
-                if (onRiver) score += 0.3f
+                // Why a capital ends up somewhere, in roughly the order history cares about.
+                //
+                // Fresh water first: it is the one non-negotiable, and a river is worth more than
+                // a harbour. Then the hinterland, since a capital needs land around it that can
+                // feed the place. Then defensibility — high ground relative to its surroundings.
+                // A harbour counts, but modestly: an earlier version gave it a flat bonus large
+                // enough that every realm touching a coast put its capital on the shore, and the
+                // audit found 12 of 12 capitals coastal on every seed, which no real map shows.
+                var score = habitability.data[i] * 0.8f
+                if (onRiver) score += 0.45f
+                if (touchesSea) score += 0.18f
+                score += hinterland.data[i] * 0.6f
+
+                // The head of navigation, not the river mouth. Historically a capital sits where
+                // boats coming upriver have to stop and unload — inland enough to be defensible
+                // and out of the floodplain, but still reachable by water. Without this the best
+                // score is always the river mouth, which put nearly every capital on the shore.
+                if (onRiver && !touchesSea) score += 0.10f
+
+                val relief = sea.relativeElevation.data[i] - smoothedElevation.data[i]
+                score += relief.coerceIn(0f, 0.12f) * 2.5f
+
                 if (score > bestCapital[owner]) {
                     bestCapital[owner] = score
                     capitalCell[owner] = i

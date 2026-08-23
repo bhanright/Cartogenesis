@@ -17,11 +17,18 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    accordingly: mountain ranges where continents collide, volcanic arcs and trenches at subduction
    zones, ridges and rift valleys where plates separate.
 4. **Sea level** — everything below a chosen elevation percentile floods.
-5. **Climate** — temperature from latitude and altitude; rainfall by marching moist air along
-   prevailing wind bands, so windward slopes soak and leeward slopes fall into rain shadow. Biomes
-   come from the resulting temperature/rainfall pairing.
-6. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
+5. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
+   that curl inside a closed basin *is* a gyre, so the currents are solved for rather than drawn.
+   Water advects its temperature along them, giving warm poleward flow on western ocean margins
+   and cold equatorward flow on eastern ones.
+6. **Climate** — temperature from latitude and altitude, then pulled toward the sea temperature
+   offshore; rainfall by marching moist air along prevailing wind bands, so windward slopes soak
+   and leeward slopes fall into rain shadow. This is what lets a high-latitude west coast be
+   temperate and a coast beside a cold current be arid at the same latitude. Biomes come from the
+   resulting temperature/rainfall pairing.
+7. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
+   Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
 
 ## Modules
 
@@ -201,7 +208,8 @@ of heap even with `largeHeap`. Going higher needs the pipeline reworked to run i
 
 `DebugMapDump` in the `:worldgen` test source set renders worlds straight to PNGs under
 `worldgen/build/maps/`, so generation can be inspected without an emulator — one image per
-pipeline stage (normals, elevation, plates, biome, rainfall, temperature) plus the composed map.
+pipeline stage (normals, elevation, plates, biome, rainfall, temperature, ocean currents, winds)
+plus the composed map.
 It also prints river-network statistics, and includes a parameter sweep for judging the trade-off
 between terrain roughness and tectonic influence by eye.
 

@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
@@ -33,6 +34,7 @@ class StageProfileTest {
             var terrain: com.cartogenesis.worldgen.pipeline.TerrainResult? = null
             var plates: com.cartogenesis.worldgen.pipeline.PlateResult? = null
             var sea: com.cartogenesis.worldgen.pipeline.SeaLevelResult? = null
+            var ocean: com.cartogenesis.worldgen.pipeline.OceanResult? = null
             var climate: com.cartogenesis.worldgen.pipeline.ClimateResult? = null
             var rivers: com.cartogenesis.worldgen.pipeline.RiverResult? = null
             var nations: com.cartogenesis.worldgen.pipeline.NationResult? = null
@@ -47,14 +49,17 @@ class StageProfileTest {
             timings["sea level"] = measureTimeMillis {
                 sea = SeaLevelStage.apply(plates!!.height, config.seaLevel)
             }
+            timings["ocean currents"] = measureTimeMillis {
+                ocean = OceanStage.generate(config, sea!!)
+            }
             timings["climate"] = measureTimeMillis {
-                climate = ClimateStage.generate(config, sea!!)
+                climate = ClimateStage.generate(config, sea!!, ocean!!)
             }
             timings["rivers"] = measureTimeMillis {
                 rivers = RiverStage.generate(config, sea!!, climate!!)
             }
             timings["realms"] = measureTimeMillis {
-                nations = NationStage.generate(config, sea!!, climate!!, rivers!!)
+                nations = NationStage.generate(config, sea!!, climate!!, rivers!!, ocean!!)
             }
             timings["landmarks"] = measureTimeMillis {
                 LandmarkStage.generate(config, sea!!, climate!!, rivers!!, plates!!, nations!!)

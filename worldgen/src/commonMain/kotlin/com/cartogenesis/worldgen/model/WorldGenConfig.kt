@@ -98,6 +98,43 @@ enum class WildernessMode(val label: String) {
     CLAIM_ALL_LAND("Claim all land")
 }
 
+/** Wind-driven surface currents, and the sea temperature they carry. */
+@Serializable
+data class OceanConfig(
+    val enabled: Boolean = true,
+    /** Strength of the wind stress driving the gyres. */
+    val forcing: Float = 1.0f,
+    /**
+     * Grid the stream function is solved on. Gyres are basin-scale, and Jacobi spreads information
+     * about one cell per pass, so at full resolution closing a basin would take tens of thousands
+     * of passes. A small grid converges properly and costs far less.
+     */
+    val solveResolution: Int = 128,
+    /** Over-relaxation factor. Above 1 converges faster; at or above 2 it diverges. */
+    val overRelaxation: Float = 1.7f,
+    /**
+     * Jacobi sweeps used to solve for the stream function. Too few and basins do not close into
+     * gyres; the cost is linear and this stage is a small share of generation either way.
+     */
+    val relaxationPasses: Int = 3000,
+    /** Scales stream-function gradients into cells of travel per advection pass. */
+    val speed: Float = 1.6f,
+    val advectionPasses: Int = 200,
+    /** How much of the upstream temperature a cell takes each pass. */
+    val advectionRate: Float = 0.5f,
+    /**
+     * How strongly water is pulled back toward its latitude's own temperature each pass. Without
+     * it a current would carry tropical water all the way to the pole.
+     */
+    val relaxationRate: Float = 0.02f,
+    /**
+     * How far inland a coast feels its water, in cells, and how strongly. This is what makes a
+     * mild west coast at high latitude and an arid one beside a cold current.
+     */
+    val coastalReach: Int = 10,
+    val coastalInfluence: Float = 0.85f
+)
+
 /** Standing fresh water in basins the terrain does not drain. */
 @Serializable
 data class LakesConfig(
@@ -148,6 +185,18 @@ data class NationsConfig(
     val seaCrossingCost: Float = 9f,
     /** Water deeper than this is treated as open ocean and effectively impassable. */
     val navigableDepth: Float = 0.06f,
+    /**
+     * How much a warm current is worth to the coast it washes. Warm water means an ice-free port
+     * and a mild hinterland, which is why Bergen is a city and Labrador is not; a cold current
+     * takes the same amount back off.
+     */
+    val warmHarbourBonus: Float = 0.14f,
+    /**
+     * How much a cold upwelling on a shallow shelf is worth. Cold water rising over a shelf is
+     * where the great fisheries are — the Grand Banks, the Humboldt, the Benguela — so it feeds a
+     * coast that its own dry hinterland could not.
+     */
+    val upwellingFisheryBonus: Float = 0.16f,
     /** People per square kilometre of fully arable land. */
     val peoplePerArableKm2: Double = 38.0,
     /** How wide the world is taken to be, which is what turns cells into an area. */
@@ -185,6 +234,7 @@ data class WorldGenConfig(
     val climate: ClimateConfig = ClimateConfig(),
     val rivers: RiverConfig = RiverConfig(),
     val lakes: LakesConfig = LakesConfig(),
+    val ocean: OceanConfig = OceanConfig(),
     val nations: NationsConfig = NationsConfig(),
     val landmarks: LandmarksConfig = LandmarksConfig()
 ) {

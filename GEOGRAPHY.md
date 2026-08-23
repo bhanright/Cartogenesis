@@ -75,6 +75,26 @@ water, which is why London, Paris and Rome are where they are.
 
 After: 6–8 of 12 coastal, 6–9 of 12 on a river. A mix rather than a rule.
 
+## Coasts and the sea beside them
+
+Two coasts at the same latitude are not the same coast, and the usual fantasy-map mistake is to
+treat them as if they were. What separates them is the current offshore.
+
+- **A warm current makes a mild coast.** Bergen sits at 60°N and its harbour does not freeze,
+  because the water arriving there came from the tropics. Cartogenesis gets this by advecting sea
+  temperature along the solved currents and letting the coast take on the anomaly, so the same
+  latitude can be temperate on one shore and subarctic on another.
+- **A cold current makes a dry one.** Cold water offshore means little evaporation and a stable
+  air column, which is why the Namib and the Atacama are deserts on the sea. This falls out of the
+  same mechanism, since evaporation is charged against the local sea temperature.
+- **Fisheries sit on cold upwelling over a shelf**, not on the warmest water. The Grand Banks and
+  the Humboldt support far more people than their hinterlands could, so a cold shallow shelf raises
+  coastal habitability even as the harbour term lowers it.
+
+Verified by `OceanCurrentTest`: poleward flow arrives warm on 85% of samples, the anomaly reaches
+±7°C, and warm coasts out-score cold ones at matched latitude on every seed tested. With the
+coastal term removed the last of those falls to zero and tips negative.
+
 ## Not modelled, and probably shouldn't be
 
 Settlements below the capital, trade routes, and roads. The atlas invents exports and imports from

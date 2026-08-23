@@ -14,11 +14,20 @@ enum class MapView(val label: String) {
     TEMPERATURE("Temperature"),
     RAINFALL("Rainfall"),
     PLATES("Plates"),
+    CURRENTS("Ocean currents"),
+    WIND("Winds"),
     NORMALS("Normal map");
 
     /** Whether this view draws the land itself, and so should show standing water on it. */
     val showsTerrain: Boolean
         get() = this == FANTASY || this == POLITICAL || this == ELEVATION || this == BIOMES
+
+    /**
+     * Whether this view is about a flow field rather than the land. These carry direction arrows,
+     * and suppress rivers, which would otherwise be mistaken for more of the same arrows.
+     */
+    val showsFlow: Boolean
+        get() = this == CURRENTS || this == WIND
 }
 
 data class RenderOptions(
@@ -48,6 +57,18 @@ class RiverSegment(
 
 enum class GlyphShape { TRIANGLE, DIAMOND, SQUARE, CIRCLE }
 
+/** A direction arrow for a flow field, in cell coordinates. */
+class FlowArrow(
+    val x: Float,
+    val y: Float,
+    val dx: Float,
+    val dy: Float,
+    /** 0..1, so a platform can fade weak flow rather than drawing a forest of stubs. */
+    val strength: Float,
+    /** Per-arrow, because on the wind view the arrow colour is what distinguishes the belts. */
+    val color: Int
+)
+
 /** A landmark marker: where, what shape, what colour. Drawing it is the platform's job. */
 class LandmarkGlyph(
     val x: Float,
@@ -67,6 +88,10 @@ class LandmarkGlyph(
 class MapOverlay(
     val rivers: List<RiverSegment>,
     val landmarks: List<LandmarkGlyph>,
+    /** Ocean or wind arrows, on the views that show them. */
+    val flow: List<FlowArrow>,
+    /** Spacing of the arrow lattice in cells, so a platform can size arrows to fit between them. */
+    val flowScale: Float,
     val riverColor: Int,
     val glyphOutline: Int,
     val glyphOutlineWidth: Float
@@ -129,7 +154,7 @@ object MapRasterizer {
         val rivers = ArrayList<RiverSegment>()
         val skipInLakes = options.showLakes && options.view.showsTerrain
 
-        if (options.showRivers) {
+        if (options.showRivers && !options.view.showsFlow) {
             world.rivers.rivers.forEach { river ->
                 for (k in 0 until river.cells.size - 1) {
                     val from = river.cells[k]
@@ -164,8 +189,51 @@ object MapRasterizer {
             }
         }
 
+        // Flow arrows on a coarse lattice: one per `spacing` cells, so the density stays legible
+        // whatever the map resolution.
+        val flow = ArrayList<FlowArrow>()
+        var flowScale = 1f
+        if (options.view.showsFlow) {
+            val h = world.height
+            // Wind is a smooth zonal field, so it needs far fewer arrows than the currents to say
+            // the same thing — packed as tightly they turn into a carpet.
+            val divisor = if (options.view == MapView.WIND) 22 else 48
+            val spacing = (w / divisor).coerceAtLeast(6)
+            flowScale = spacing * 0.5f
+            var y = spacing / 2
+            while (y < h) {
+                var x = spacing / 2
+                while (x < w) {
+                    val i = y * w + x
+                    if (options.view == MapView.CURRENTS) {
+                        if (!world.sea.isLand[i]) {
+                            val dx = world.ocean.velocityX.data[i]
+                            val dy = world.ocean.velocityY.data[i]
+                            val speed = kotlin.math.sqrt(dx * dx + dy * dy)
+                            if (speed > 1e-3f) {
+                                flow.add(
+                                    FlowArrow(
+                                        x + 0.5f, y + 0.5f, dx / speed, dy / speed,
+                                        (speed / world.config.ocean.speed).coerceIn(0f, 1f),
+                                        0xFFF2F6FA.toInt()
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        // Wind is purely zonal in this model, so the arrow only has a direction.
+                        val direction = world.climate.windDirection[i].toFloat()
+                        val colour = if (direction > 0) 0xFF7FC0F0.toInt() else 0xFFF0A860.toInt()
+                        flow.add(FlowArrow(x + 0.5f, y + 0.5f, direction, 0f, 0.85f, colour))
+                    }
+                    x += spacing
+                }
+                y += spacing
+            }
+        }
+
         val glyphs = ArrayList<LandmarkGlyph>()
-        if (options.showLandmarks) {
+        if (options.showLandmarks && !options.view.showsFlow) {
             // Purely a fraction of the map, so a glyph covers the same share of the picture at
             // every size. It must NOT also take riverScale: rivers need that because their widths
             // are fixed in cells, but this radius already derives from the width, and applying
@@ -182,10 +250,13 @@ object MapRasterizer {
                     )
                 )
             }
-            return MapOverlay(rivers, glyphs, MapPalette.RIVER, 0xFF241C14.toInt(),
-                (radius * 0.28f).coerceAtLeast(1f))
+            return MapOverlay(
+                rivers, glyphs, flow, flowScale,
+                MapPalette.RIVER, 0xFF241C14.toInt(), (radius * 0.28f).coerceAtLeast(1f)
+            )
         }
-        return MapOverlay(rivers, glyphs, MapPalette.RIVER, 0xFF241C14.toInt(), 1f)
+        return MapOverlay(rivers, glyphs, flow, flowScale,
+            MapPalette.RIVER, 0xFF241C14.toInt(), 1f)
     }
 
     /** Shape carries the kind, so the map stays readable in greyscale and without a legend. */
@@ -251,6 +322,25 @@ object MapRasterizer {
                 // Darken toward the boundaries so plate edges are readable.
                 val edge = (world.plates.boundaryDistance.data[i] / 12f).coerceIn(0f, 1f)
                 MapPalette.blend(0xFF202020.toInt(), plateColor, edge)
+            }
+
+            MapView.CURRENTS ->
+                if (isLand) 0xFF3A3A32.toInt()
+                else MapPalette.temperatureAnomaly(world.ocean.anomaly.data[i])
+
+            MapView.WIND -> {
+                // Land and sea have to stay apart, or the arrows sit on undifferentiated ground.
+                val base = if (isLand) {
+                    MapPalette.blend(
+                        0xFF4A4638.toInt(), 0xFF9A9384.toInt(),
+                        world.sea.relativeElevation.data[i].coerceIn(0f, 1f)
+                    )
+                } else {
+                    0xFF16242F.toInt()
+                }
+                // The belts are carried by the arrow colours; tinting the ground as well only
+                // costs the land/sea contrast the arrows are read against.
+                base
             }
 
             MapView.NORMALS -> {

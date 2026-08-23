@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
@@ -14,6 +15,7 @@ enum class GenerationStage(val label: String) {
     TERRAIN("Shaping terrain"),
     TECTONICS("Drifting plates"),
     SEA_LEVEL("Flooding oceans"),
+    OCEAN("Turning the currents"),
     CLIMATE("Simulating climate"),
     RIVERS("Carving rivers"),
     NATIONS("Settling realms"),
@@ -58,11 +60,17 @@ object WorldGenerationEngine {
             ?.sea
             ?: SeaLevelStage.apply(plates.height, config.seaLevel)
 
+        report(GenerationStage.OCEAN)
+        val ocean = reusable
+            ?.takeIf { it.sea === sea && it.config.ocean == config.ocean }
+            ?.ocean
+            ?: OceanStage.generate(config, sea)
+
         report(GenerationStage.CLIMATE)
         val climate = reusable
-            ?.takeIf { it.sea === sea && it.config.climate == config.climate }
+            ?.takeIf { it.ocean === ocean && it.config.climate == config.climate }
             ?.climate
-            ?: ClimateStage.generate(config, sea)
+            ?: ClimateStage.generate(config, sea, ocean)
 
         report(GenerationStage.RIVERS)
         val rivers = reusable
@@ -74,7 +82,7 @@ object WorldGenerationEngine {
         val nations = reusable
             ?.takeIf { it.rivers === rivers && it.config.nations == config.nations }
             ?.nations
-            ?: NationStage.generate(config, sea, climate, rivers)
+            ?: NationStage.generate(config, sea, climate, rivers, ocean)
 
         report(GenerationStage.LANDMARKS)
         val landmarks = reusable
@@ -87,6 +95,7 @@ object WorldGenerationEngine {
             terrain = terrain,
             plates = plates,
             sea = sea,
+            ocean = ocean,
             climate = climate,
             rivers = rivers,
             nations = nations,

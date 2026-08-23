@@ -59,7 +59,7 @@ object DesktopRenderer {
 
     private fun drawOverlay(world: WorldMap, bitmap: Bitmap, options: RenderOptions) {
         val overlay = MapRasterizer.overlay(world, options)
-        if (overlay.rivers.isEmpty() && overlay.landmarks.isEmpty()) return
+        if (overlay.rivers.isEmpty() && overlay.landmarks.isEmpty() && overlay.flow.isEmpty()) return
 
         val canvas = Canvas(bitmap)
 
@@ -73,6 +73,29 @@ object DesktopRenderer {
             overlay.rivers.forEach { s ->
                 paint.strokeWidth = s.width
                 canvas.drawLine(s.x0, s.y0, s.x1, s.y1, paint)
+            }
+        }
+
+        if (overlay.flow.isNotEmpty()) {
+            val paint = Paint().apply {
+                isAntiAlias = true
+                mode = PaintMode.STROKE
+                strokeCap = PaintStrokeCap.ROUND
+            }
+            overlay.flow.forEach { arrow ->
+                val length = overlay.flowScale * (0.45f + 0.55f * arrow.strength)
+                val alpha = (70 + 150 * arrow.strength).toInt().coerceIn(0, 255)
+                paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
+                paint.strokeWidth = (overlay.flowScale * 0.15f).coerceAtLeast(1f)
+                val tipX = arrow.x + arrow.dx * length
+                val tipY = arrow.y + arrow.dy * length
+                canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)
+                val backX = tipX - arrow.dx * length * 0.42f
+                val backY = tipY - arrow.dy * length * 0.42f
+                val barbX = arrow.dy * length * 0.26f
+                val barbY = arrow.dx * length * 0.26f
+                canvas.drawLine(tipX, tipY, backX + barbX, backY - barbY, paint)
+                canvas.drawLine(tipX, tipY, backX - barbX, backY + barbY, paint)
             }
         }
 

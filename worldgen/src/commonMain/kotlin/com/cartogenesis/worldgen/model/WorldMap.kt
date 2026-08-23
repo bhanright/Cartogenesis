@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import com.cartogenesis.worldgen.pipeline.ClimateResult
 import com.cartogenesis.worldgen.pipeline.LandmarkResult
 import com.cartogenesis.worldgen.pipeline.NationResult
+import com.cartogenesis.worldgen.pipeline.OceanResult
 import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.RiverResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
@@ -29,6 +30,7 @@ data class WorldMap(
     val terrain: TerrainResult,
     val plates: PlateResult,
     val sea: SeaLevelResult,
+    val ocean: OceanResult,
     val climate: ClimateResult,
     val rivers: RiverResult,
     val nations: NationResult,

@@ -36,16 +36,61 @@ object ClimateStage {
     private const val WET_PERCENTILE = 0.88f
 
 
-    fun generate(config: WorldGenConfig, sea: SeaLevelResult): ClimateResult {
+    fun generate(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult): ClimateResult {
         val w = config.width
         val h = config.height
 
         val temperature = buildTemperature(config, sea)
+        applyMaritimeInfluence(config, sea, ocean, temperature)
         val wind = buildWind(w, h)
-        val precipitation = buildPrecipitation(config, sea, temperature, wind)
+        val precipitation = buildPrecipitation(config, sea, temperature, wind, ocean)
         val biome = classify(w, h, sea, temperature, precipitation)
 
         return ClimateResult(temperature, precipitation, wind, biome)
+    }
+
+    /**
+     * Lets a coast feel the water beside it.
+     *
+     * The sea anomaly is spread inland with a blur and added to land temperature, so a shore
+     * washed by warm water is milder than its latitude and one beside a cold current is colder.
+     * This is the difference between Bergen and Labrador, which sit at the same latitude.
+     */
+    private fun applyMaritimeInfluence(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult,
+        temperature: FloatField
+    ) {
+        val cfg = config.ocean
+        if (!cfg.enabled || cfg.coastalInfluence <= 0f) return
+        val w = config.width
+        val h = config.height
+
+        // Spread the offshore anomaly over the land it touches.
+        val spread = FloatField(w, h)
+        ocean.anomaly.data.copyInto(spread.data)
+        BoxBlur.apply(spread, radius = cfg.coastalReach.coerceAtLeast(1), passes = 2)
+
+        // The blur washes the anomaly out over open ocean too, so scale by how much water is
+        // actually nearby; an inland cell should feel almost nothing.
+        val water = FloatField(w, h)
+        for (i in 0 until w * h) water.data[i] = if (sea.isLand[i]) 0f else 1f
+        BoxBlur.apply(water, radius = cfg.coastalReach.coerceAtLeast(1), passes = 2)
+
+        parallelChunks(0, w * h) { start, end ->
+            for (i in start until end) {
+                if (!sea.isLand[i]) continue
+                val exposure = water.data[i].coerceIn(0f, 1f)
+                temperature.data[i] += spread.data[i] * exposure * cfg.coastalInfluence
+            }
+        }
+    }
+
+    /** A normalised bump centred on [centre] degrees, [width] degrees wide. */
+    private fun bell(latitude: Float, centre: Float, width: Float): Float {
+        val d = (latitude - centre) / width
+        return kotlin.math.exp(-(d * d).toDouble()).toFloat()
     }
 
     /** Latitude in degrees for a row: +90 at the top of the map, -90 at the bottom. */
@@ -103,7 +148,8 @@ object ClimateStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
-        wind: IntArray
+        wind: IntArray,
+        ocean: OceanResult
     ): FloatField {
         val w = config.width
         val h = config.height
@@ -124,8 +170,16 @@ object ClimateStage {
                         val i = y * w + x
 
                         if (!sea.isLand[i]) {
-                            // Warm seas evaporate faster.
-                            val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
+                            // Warm seas evaporate faster — and which seas are warm is a question
+                            // about currents, not latitude. Taking this from the ocean stage is
+                            // what lets a cold current starve a coast of rain while another at the
+                            // same latitude, on the warm side of a gyre, soaks it.
+                            val seaTemperature = if (config.ocean.enabled) {
+                                ocean.temperature.data[i]
+                            } else {
+                                temperature.data[i]
+                            }
+                            val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
                             moisture += cfg.evaporationRate * warmth * (1f - moisture)
                             if (lap == 1) precip.data[i] = moisture * cfg.baseRainRate * 4f
                             continue
@@ -208,9 +262,22 @@ object ClimateStage {
         parallelChunks(0, precip.height) { start, end ->
             for (y in start until end) {
                 val lat = abs(latitudeOf(y, precip.height))
-                val itcz = 1f + 0.8f * cos((lat * 3.0).coerceAtMost(180.0) * PI / 180.0).toFloat()
-                val horseLatitudes = 1f - 0.45f * kotlin.math.exp(-((lat - 30f) * (lat - 30f)) / 200f)
-                val factor = (itcz * horseLatitudes).coerceAtLeast(0.05f)
+
+                // Three bands, each a bump centred where the atmosphere actually puts it: the
+                // wet ITCZ at the equator, the dry descending air of the horse latitudes near 30,
+                // and the wet mid-latitude storm track near 55.
+                //
+                // The previous version multiplied a single cosine by a dip at 30, which made 60
+                // the driest latitude on the map — drier than the subtropics. That mostly hid
+                // behind the temperature test classifying those rows as tundra, but it was wrong,
+                // and it is what let deserts drift toward the equator.
+                val itcz = 1.0f * bell(lat, 0f, 12f)
+                val subtropicalHigh = -0.55f * bell(lat, 30f, 13f)
+                val stormTrack = 0.5f * bell(lat, 55f, 15f)
+                val polarDry = -0.35f * bell(lat, 90f, 18f)
+
+                val factor = (1f + itcz + subtropicalHigh + stormTrack + polarDry)
+                    .coerceAtLeast(0.05f)
                 for (x in 0 until precip.width) {
                     precip[x, y] = precip[x, y] * factor
                 }

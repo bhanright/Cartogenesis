@@ -94,6 +94,16 @@ object MapPalette {
     const val WILDERNESS = 0xFF6E6A5E.toInt()
     const val BORDER = 0xFF2A2118.toInt()
 
+    /**
+     * Diverging blue-to-red scale for how far the sea is from normal for its latitude.
+     * Deliberately not the same ramp as absolute temperature, which is a different question.
+     */
+    fun temperatureAnomaly(degrees: Float): Int {
+        val t = (degrees / 7f).coerceIn(-1f, 1f)
+        return if (t >= 0f) blend(0xFF20384C.toInt(), 0xFFC4442E.toInt(), t)
+        else blend(0xFF20384C.toInt(), 0xFF3E86C4.toInt(), -t)
+    }
+
     fun blend(a: Int, b: Int, t: Float): Int {
         val f = t.coerceIn(0f, 1f)
         val ar = (a shr 16) and 0xFF

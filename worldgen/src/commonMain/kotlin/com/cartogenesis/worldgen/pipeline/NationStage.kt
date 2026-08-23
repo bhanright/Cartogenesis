@@ -78,14 +78,15 @@ object NationStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult,
-        rivers: RiverResult
+        rivers: RiverResult,
+        ocean: OceanResult
     ): NationResult {
         val w = config.width
         val h = config.height
         val cfg = config.nations
         val cellCount = w * h
 
-        val habitability = habitability(config, sea, climate, rivers)
+        val habitability = habitability(config, sea, climate, rivers, ocean)
         val nationId = IntArray(cellCount) { NationResult.UNCLAIMED }
 
         if (sea.landCellCount == 0 || cfg.nationCount <= 0) {
@@ -100,14 +101,15 @@ object NationStage {
     }
 
     /**
-     * How well people could live on a cell, 0..1. Driven by biome, then nudged by fresh water and
-     * by how punishing the terrain is.
+     * How well people could live on a cell, 0..1. Driven by biome, then nudged by fresh water, by
+     * how punishing the terrain is, and — on the coast — by what the sea offshore is doing.
      */
     private fun habitability(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult,
-        rivers: RiverResult
+        rivers: RiverResult,
+        ocean: OceanResult
     ): FloatField {
         val w = config.width
         val h = config.height
@@ -140,7 +142,78 @@ object NationStage {
 
             field.data[i] = score.coerceIn(0f, 1f)
         }
+
+        if (config.ocean.enabled) applyCoastalValue(config, sea, field, ocean)
         return field
+    }
+
+    /**
+     * What the water offshore is worth to the coast beside it.
+     *
+     * Two separate things, pulling opposite ways on temperature. A warm current gives an ice-free
+     * harbour and a mild hinterland; a cold one gives fog and a short growing season. But cold
+     * water rising over a shallow shelf is where the fish are, and a fishery will support a coast
+     * whose own soil never could. So a warm coast is a better place to live and a cold shelf is a
+     * better place to eat, and both end up on the map.
+     *
+     * Only the seaward cells get this, and it is applied after the main loop so the biome score it
+     * modifies is already final.
+     */
+    private fun applyCoastalValue(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        field: FloatField,
+        ocean: OceanResult
+    ) {
+        val w = config.width
+        val h = config.height
+        val cfg = config.nations
+
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val i = y * w + x
+                if (!sea.isLand[i]) continue
+
+                var anomalySum = 0f
+                var shelfUpwelling = 0f
+                var waterNeighbours = 0
+                var landNeighbours = 0
+
+                for (dy in -1..1) {
+                    val ny = y + dy
+                    if (ny !in 0 until h) continue
+                    for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) continue
+                        val nx = (x + dx + w) % w
+                        val n = ny * w + nx
+                        if (sea.isLand[n]) {
+                            landNeighbours++
+                            continue
+                        }
+                        waterNeighbours++
+                        val anomaly = ocean.anomaly.data[n]
+                        anomalySum += anomaly
+                        // Shelf, not open ocean: depth below sea level, small means shallow.
+                        val depth = -sea.relativeElevation.data[n]
+                        if (anomaly < 0f && depth < cfg.navigableDepth) {
+                            shelfUpwelling += -anomaly
+                        }
+                    }
+                }
+                if (waterNeighbours == 0) continue
+
+                val meanAnomaly = anomalySum / waterNeighbours
+                // A bay ringed by land is sheltered; an exposed headland is not. Neighbouring land
+                // count is a crude stand-in for that, but it is the one the grid actually knows.
+                val shelter = (landNeighbours / 7f).coerceIn(0f, 1f)
+                val harbour = (meanAnomaly / 6f).coerceIn(-1f, 1f) *
+                    cfg.warmHarbourBonus * (0.45f + 0.55f * shelter)
+                val fishery = (shelfUpwelling / waterNeighbours / 6f).coerceIn(0f, 1f) *
+                    cfg.upwellingFisheryBonus
+
+                field.data[i] = (field.data[i] + harbour + fishery).coerceIn(0f, 1f)
+            }
+        }
     }
 
     /** Matches RiverStage's notion of "big enough to be drawn", without re-tracing anything. */

@@ -1,5 +1,17 @@
+import java.io.File
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+/** Common install locations for a full JDK, newest first. */
+fun javaHomeCandidates(): List<String> = listOf(
+    File("C:/Program Files/Eclipse Adoptium"),
+    File("C:/Program Files/Java"),
+    File("C:/Program Files/Microsoft"),
+    File("/usr/lib/jvm")
+).flatMap { dir -> dir.listFiles()?.toList().orEmpty() }
+    .filter { it.isDirectory && it.name.contains("jdk", ignoreCase = true) }
+    .sortedByDescending { it.name }
+    .map { it.absolutePath }
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -35,6 +47,16 @@ tasks.withType<Test>().configureEach {
 compose.desktop {
     application {
         mainClass = "com.cartogenesis.desktop.MainKt"
+
+        // Packaging needs jpackage, which the JetBrains Runtime that ships with Android Studio
+        // does not include. Point only the packaging step at a full JDK; the rest of the build
+        // carries on using whatever Gradle is running under.
+        // Override with -PjdkHome=/path/to/jdk if yours lives elsewhere.
+        javaHome = (findProperty("jdkHome") as String?)
+            ?: System.getenv("JPACKAGE_HOME")
+            ?: javaHomeCandidates().firstOrNull { File(it, "bin/jpackage.exe").exists() ||
+                File(it, "bin/jpackage").exists() }
+            ?: System.getProperty("java.home")
 
         // The whole point of the desktop build: generation at export resolutions needs gigabytes,
         // which is exactly what Android could not give it. 4096 wants roughly 2GB, 8192 four times

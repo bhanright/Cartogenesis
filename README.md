@@ -41,6 +41,25 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 ./gradlew :desktop:run
 ```
 
+### Packaging
+
+```bash
+./gradlew :desktop:createDistributable
+```
+
+Produces a self-contained folder at `desktop/build/compose/binaries/main/app/Cartogenesis` with
+its own bundled JRE — run `Cartogenesis.exe`, no install needed. `./gradlew :desktop:packageMsi`
+builds a Windows installer instead; `packageDeb` and `packageDmg` exist for the other platforms
+but only build on their own OS.
+
+Packaging needs `jpackage`, which the JetBrains Runtime bundled with Android Studio does **not**
+include, so the build looks for a full JDK in the usual install locations. Point it somewhere else
+with `-PjdkHome=/path/to/jdk` or the `JPACKAGE_HOME` environment variable. Only the packaging step
+uses it; the rest of the build carries on under whatever Gradle is running.
+
+The `-Xmx12g` from the application block is baked into the launcher, so a packaged build has the
+same headroom as running through Gradle.
+
 The desktop build exists for headroom. Measured on this machine:
 
 | Export | Time | Peak heap |

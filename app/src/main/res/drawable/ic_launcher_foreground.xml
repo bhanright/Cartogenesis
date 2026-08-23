@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Continent silhouette -->
+    <path
+        android:fillColor="#7BA05B"
+        android:pathData="M34,38 L44,31 L57,34 L66,29 L74,36 L71,47 L76,56 L68,66 L56,69 L45,64 L36,68 L31,58 L36,48 Z" />
+
+    <!-- Mountain range -->
+    <path
+        android:fillColor="#6B5B4A"
+        android:pathData="M45,52 L52,41 L58,50 L63,44 L70,55 Z" />
+
+    <!-- River -->
+    <path
+        android:strokeColor="#4A90C2"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M52,44 C50,52 55,56 52,62 C50,66 46,66 44,64" />
+</vector>

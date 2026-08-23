@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+*/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Signing material — never commit these.
+keystore.properties
+*.jks
+*.keystore
+
+# Kotlin compiler scratch output
+.kotlin/

@@ -1,0 +1,12 @@
+# Normalise line endings in the repository so the tree is identical on every platform.
+* text=auto eol=lf
+
+# Must stay LF or it will not run on macOS/Linux.
+gradlew text eol=lf
+
+*.bat text eol=crlf
+
+*.jar binary
+*.png binary
+*.jks binary
+*.keystore binary

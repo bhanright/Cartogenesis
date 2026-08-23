@@ -37,15 +37,11 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 
 ## Known deviations
 
-**Rivers cross depression-filled basins, which is uphill on the raw surface.** 13–20% of river
-segments rise rather than fall against unfilled elevation (worst single rise 0.055 of the elevation
-range). Priority-flood filling makes a basin drain by raising it, so the water is routed correctly
-but the ground beneath it does not slope. Visible only if you shade by elevation and follow a river
-through a basin.
-
-*The fix is lakes.* A filled basin that holds water should render as a lake, with the river entering
-it and leaving at the spill point. That removes the artefact and adds a feature the maps currently
-lack entirely.
+**Some river segments still run uphill on the raw surface.** 12–14% of drawn segments rise rather
+than fall against unfilled elevation, down from 13–20% before lakes. What remains is shallow filled
+ground that does not clear `LakesConfig.minDepth` — flats raised by a hair rather than basins deep
+enough to hold water. Dropping the threshold would catch more of them at the cost of flagging half a
+continent as lake.
 
 **Desert placement is only loosely tied to latitude.** Two of four seeds put desert mean latitude at
 16°, with under half of desert inside 15–45°. Rain shadow can dominate the latitude band and push
@@ -53,10 +49,6 @@ desert toward the equator, where rainforest belongs. The latitude model is also 
 latitudes: the ITCZ term makes 60° the driest band, when it should be moderately wet. It rarely
 shows because those latitudes are cold enough to classify as tundra or taiga on temperature, but the
 underlying curve is not right.
-
-**No lakes at all.** Depression filling removes every enclosed basin. The 17–31 "inland water
-bodies" the audit counts are enclosed *seas* — regions below sea level cut off from the ocean — not
-lakes fed by rivers. Real maps have both.
 
 **Nothing models ocean currents or continentality.** Biomes come from latitude, altitude and
 orographic rainfall. A warm current making a high-latitude west coast temperate, or a continental
@@ -67,6 +59,12 @@ deposition, no deltas, no fjords carved by ice, no meandering. It looks plausibl
 result of a process.
 
 ## Fixed by this audit
+
+**Lakes.** A basin the priority-flood had to raise is now recognised as standing water: 25–47 lakes
+per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
+run into it, and one river leaves at the outlet. River segments *inside* a lake are no longer drawn,
+since the river there is the lake — and those were precisely the segments that appeared to flow
+uphill. Depth is shaded from how far the water surface stands above the ground beneath it.
 
 **Capital siting.** Every capital was coastal — 12 of 12 on every seed, which no real map shows. The
 harbour bonus was large enough to outweigh everything else, and the best river cell is always the

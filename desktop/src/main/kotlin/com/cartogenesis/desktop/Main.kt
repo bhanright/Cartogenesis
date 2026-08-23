@@ -515,6 +515,7 @@ private fun SettingsPanel(
         Toggle("Relief shading", options.showHillshade) { onOptions(options.copy(showHillshade = it)) }
         Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
         Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
+        Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
 
         HorizontalDivider(Modifier.padding(vertical = 10.dp))
         Text("Export", style = MaterialTheme.typography.titleSmall)

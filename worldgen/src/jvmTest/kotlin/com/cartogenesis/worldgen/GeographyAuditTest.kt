@@ -48,6 +48,10 @@ class GeographyAuditTest {
             var worstRise = 0f
             world.rivers.rivers.forEach { river ->
                 for (k in 0 until river.cells.size - 1) {
+                    // A segment inside a lake is not drawn, so it cannot look like uphill flow.
+                    if (world.rivers.lakes.isLake(river.cells[k]) &&
+                        world.rivers.lakes.isLake(river.cells[k + 1])
+                    ) continue
                     val a = world.sea.relativeElevation.data[river.cells[k]]
                     val b = world.sea.relativeElevation.data[river.cells[k + 1]]
                     totalSegments++
@@ -113,7 +117,22 @@ class GeographyAuditTest {
             // 6. Lakes. Depression filling removes them entirely, so a basin with no outlet to the
             //    sea becomes flat land rather than water — worth stating plainly.
             val enclosedWater = countEnclosedWater(world, w, h)
-            println("AUDIT inland water bodies: $enclosedWater")
+            println("AUDIT enclosed seas: $enclosedWater")
+
+            val lakes = world.rivers.lakes.lakes
+            val lakeCells = world.rivers.lakes.lakeId.count { it != -1 }
+            println(
+                "AUDIT lakes: ${lakes.size} covering $lakeCells cells " +
+                    "(largest ${lakes.maxOfOrNull { it.cellCount } ?: 0})"
+            )
+            lakes.maxByOrNull { it.cellCount }?.let { biggest ->
+                val cells = world.rivers.lakes.lakeId.indices.filter {
+                    world.rivers.lakes.lakeId[it] == biggest.id
+                }
+                val cx = cells.map { it % w }.average().toInt()
+                val cy = cells.map { it / w }.average().toInt()
+                println("AUDIT largest lake centred at ($cx,$cy), ${biggest.cellCount} cells")
+            }
         }
     }
 

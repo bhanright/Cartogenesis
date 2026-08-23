@@ -14,6 +14,35 @@ data class River(
     val length: Int get() = cells.size
 }
 
+/**
+ * Standing fresh water in a basin the terrain never drains.
+ *
+ * These are exactly the depressions the priority-flood raises: the flood lifts them to their spill
+ * elevation so water can leave, which is hydrologically right but leaves the ground beneath a river
+ * not sloping downhill. Recognising them as lakes is what makes that honest — the river runs into
+ * the lake, the lake drains at its outlet, and nothing pretends to flow uphill.
+ */
+data class Lake(
+    val id: Int,
+    val cellCount: Int,
+    /** Elevation of the water surface, which is the basin's spill level. */
+    val surfaceElevation: Float,
+    /** Where the lake overflows toward the sea. */
+    val outletCell: Int
+)
+
+data class LakeResult(
+    /** Lake id per cell, or [NO_LAKE]. */
+    val lakeId: IntArray,
+    val lakes: List<Lake>
+) {
+    fun isLake(cell: Int): Boolean = lakeId[cell] != NO_LAKE
+
+    companion object {
+        const val NO_LAKE = -1
+    }
+}
+
 data class RiverResult(
     /** Depression-filled elevation — every land cell has a downhill path to the sea. */
     val filledElevation: FloatField,
@@ -24,7 +53,8 @@ data class RiverResult(
      * only happens on the polar rows where there is no further downhill cell.
      */
     val flowTarget: IntArray,
-    val rivers: List<River>
+    val rivers: List<River>,
+    val lakes: LakeResult
 )
 
 /**
@@ -54,9 +84,77 @@ object RiverStage {
         val filled = fillDepressions(w, h, sea)
         val flowTarget = computeFlowDirections(w, h, sea, filled)
         val flow = accumulateFlow(w, h, sea, climate, filled, flowTarget)
+        val lakes = findLakes(config, sea, filled, flowTarget)
         val rivers = traceRivers(config, sea, flow, flowTarget)
 
-        return RiverResult(filled, flow.accumulation, flowTarget, rivers)
+        return RiverResult(filled, flow.accumulation, flowTarget, rivers, lakes)
+    }
+
+    /**
+     * Finds the basins the flood had to raise, and calls them lakes.
+     *
+     * A cell is under water when the filled surface sits meaningfully above the real ground. The
+     * threshold matters: epsilon-filling nudges every cell along the flood path upward by a hair,
+     * and those increments accumulate over a long flat run, so a naive `filled > raw` test would
+     * flag half a continent. [LakesConfig.minDepth] has to clear that accumulated noise.
+     */
+    private fun findLakes(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        filled: FloatField,
+        flowTarget: IntArray
+    ): LakeResult {
+        val w = config.width
+        val h = config.height
+        val cfg = config.lakes
+        val lakeId = IntArray(w * h) { LakeResult.NO_LAKE }
+        if (!cfg.enabled) return LakeResult(lakeId, emptyList())
+
+        val submerged = BooleanArray(w * h) { i ->
+            sea.isLand[i] && (filled.data[i] - sea.relativeElevation.data[i]) >= cfg.minDepth
+        }
+
+        val lakes = ArrayList<Lake>()
+        val stack = ArrayDeque<Int>()
+        val member = ArrayList<Int>()
+
+        for (start in 0 until w * h) {
+            if (!submerged[start] || lakeId[start] != LakeResult.NO_LAKE) continue
+
+            member.clear()
+            stack.addLast(start)
+            lakeId[start] = lakes.size
+            while (stack.isNotEmpty()) {
+                val cell = stack.removeLast()
+                member.add(cell)
+                forEachNeighbour(w, h, cell % w, cell / w) { n ->
+                    if (submerged[n] && lakeId[n] == LakeResult.NO_LAKE) {
+                        lakeId[n] = lakes.size
+                        stack.addLast(n)
+                    }
+                }
+            }
+
+            if (member.size < cfg.minCells) {
+                // Too small to read as water; hand it back to the land.
+                member.forEach { lakeId[it] = LakeResult.NO_LAKE }
+                continue
+            }
+
+            // The surface is the spill level; the outlet is wherever it drains to dry ground.
+            val surface = member.maxOf { filled.data[it] }
+            var outlet = member[0]
+            for (cell in member) {
+                val target = flowTarget[cell]
+                if (target >= 0 && !submerged[target]) {
+                    outlet = cell
+                    break
+                }
+            }
+            lakes.add(Lake(lakes.size, member.size, surface, outlet))
+        }
+
+        return LakeResult(lakeId, lakes)
     }
 
     /**

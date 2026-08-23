@@ -98,6 +98,22 @@ enum class WildernessMode(val label: String) {
     CLAIM_ALL_LAND("Claim all land")
 }
 
+/** Standing fresh water in basins the terrain does not drain. */
+@Serializable
+data class LakesConfig(
+    val enabled: Boolean = true,
+    /**
+     * How far the filled surface must sit above real ground before a cell counts as under water.
+     *
+     * Epsilon-filling raises every cell along the flood path by a hair and those increments
+     * accumulate over long flats, so this has to clear that noise or most of a continent reads as
+     * lake.
+     */
+    val minDepth: Float = 0.004f,
+    /** Smallest lake worth drawing, in cells. Below this it is a puddle, not a feature. */
+    val minCells: Int = 12
+)
+
 /** Settlement. Everything here is a starting point the user can overrule per realm. */
 @Serializable
 data class NationsConfig(
@@ -168,6 +184,7 @@ data class WorldGenConfig(
     val seaLevel: Float = 0.62f,
     val climate: ClimateConfig = ClimateConfig(),
     val rivers: RiverConfig = RiverConfig(),
+    val lakes: LakesConfig = LakesConfig(),
     val nations: NationsConfig = NationsConfig(),
     val landmarks: LandmarksConfig = LandmarksConfig()
 ) {

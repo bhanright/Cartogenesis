@@ -227,6 +227,15 @@ class DebugMapDump {
                 val land = world.sea.isLand[i]
                 val rel = world.sea.relativeElevation.data[i]
 
+                // Standing fresh water sits on top of whatever the land would have been.
+                if (land && world.rivers.lakes.isLake(i) &&
+                    (mode == Mode.FANTASY || mode == Mode.ELEVATION)
+                ) {
+                    val depth = world.rivers.filledElevation.data[i] - rel
+                    image.setRGB(x, y, mix(0x4E92B4, 0x2F6B8C, (depth * 12f).coerceIn(0f, 1f)))
+                    continue
+                }
+
                 var rgb = when (mode) {
                     Mode.FANTASY ->
                         if (land) mix(landColor(rel), biomeColor(world.climate.biome[i]), 0.45f)

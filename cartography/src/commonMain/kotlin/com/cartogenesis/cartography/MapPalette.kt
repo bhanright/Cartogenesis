@@ -9,6 +9,10 @@ object MapPalette {
     const val COASTLINE = 0xFF3E4A52.toInt()
     const val RIVER = 0xFF3C7EA8.toInt()
 
+    /** Fresh water. Deliberately lighter and greener than the sea, so a lake never reads as ocean. */
+    const val LAKE = 0xFF4E92B4.toInt()
+    const val LAKE_DEEP = 0xFF2F6B8C.toInt()
+
     private val OCEAN_RAMP = intArrayOf(
         0xFF0B2239.toInt(), // abyss
         0xFF11395B.toInt(),

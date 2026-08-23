@@ -99,6 +99,7 @@ fun CartogenesisApp(viewModel: MapViewModel) {
                     onToggleHillshade = viewModel::toggleHillshade,
                     onToggleBorders = viewModel::toggleBorders,
                     onToggleLandmarks = viewModel::toggleLandmarks,
+                    onToggleLakes = viewModel::toggleLakes,
                     onExport = viewModel::export
                 )
             }

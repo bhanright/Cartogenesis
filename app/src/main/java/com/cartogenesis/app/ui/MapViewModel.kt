@@ -92,6 +92,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleLandmarks() = updateRenderOptions { it.copy(showLandmarks = !it.showLandmarks) }
 
+    fun toggleLakes() = updateRenderOptions { it.copy(showLakes = !it.showLakes) }
+
     fun addLabel(text: String, x: Float, y: Float, kind: LabelKind) {
         if (text.isBlank()) return
         val label = MapLabel(nextLabelId++, text.trim(), x.coerceIn(0f, 1f), y.coerceIn(0f, 1f), kind)

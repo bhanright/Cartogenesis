@@ -14,7 +14,11 @@ enum class MapView(val label: String) {
     TEMPERATURE("Temperature"),
     RAINFALL("Rainfall"),
     PLATES("Plates"),
-    NORMALS("Normal map")
+    NORMALS("Normal map");
+
+    /** Whether this view draws the land itself, and so should show standing water on it. */
+    val showsTerrain: Boolean
+        get() = this == FANTASY || this == POLITICAL || this == ELEVATION || this == BIOMES
 }
 
 data class RenderOptions(
@@ -25,6 +29,7 @@ data class RenderOptions(
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
     val showLandmarks: Boolean = true,
+    val showLakes: Boolean = true,
     /** Multiplies river widths; HD exports scale this up with resolution. */
     val riverScale: Float = 1f
 ) {
@@ -89,7 +94,23 @@ object MapRasterizer {
             computeHillshade(world)
         } else null
 
+        val lakes = world.rivers.lakes
+        val showLakes = options.showLakes && options.view.showsTerrain
+
         for (i in 0 until w * h) {
+            if (showLakes && lakes.isLake(i)) {
+                // Depth from how far the water surface sits above the ground beneath it, so a
+                // deep basin reads darker than a shallow flood.
+                val depth = world.rivers.filledElevation.data[i] -
+                    world.sea.relativeElevation.data[i]
+                pixels[i] = MapPalette.blend(
+                    MapPalette.LAKE,
+                    MapPalette.LAKE_DEEP,
+                    (depth * 12f).coerceIn(0f, 1f)
+                )
+                continue
+            }
+
             var color = baseColor(world, options.view, i)
             if (hillshade != null && world.sea.isLand[i]) {
                 color = MapPalette.shade(color, hillshade[i])
@@ -106,6 +127,7 @@ object MapRasterizer {
     fun overlay(world: WorldMap, options: RenderOptions = RenderOptions()): MapOverlay {
         val w = world.width
         val rivers = ArrayList<RiverSegment>()
+        val skipInLakes = options.showLakes && options.view.showsTerrain
 
         if (options.showRivers) {
             world.rivers.rivers.forEach { river ->
@@ -117,6 +139,13 @@ object MapRasterizer {
                     val y0 = (from / w) + 0.5f
                     val y1 = (to / w) + 0.5f
                     val width = (river.widths[k] * options.riverScale).coerceAtLeast(0.9f)
+
+                    // Inside a lake the river *is* the lake. Drawing it would put a channel across
+                    // open water — and these are exactly the segments that run uphill on raw
+                    // terrain, because the basin was raised to let the water out.
+                    if (skipInLakes && world.rivers.lakes.isLake(from) &&
+                        world.rivers.lakes.isLake(to)
+                    ) continue
 
                     if (abs(x1 - x0) > w / 2) {
                         // The river crosses the east-west seam. Drawing it as-is would streak a

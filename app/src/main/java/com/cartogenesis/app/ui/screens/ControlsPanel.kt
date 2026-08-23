@@ -40,6 +40,7 @@ fun ControlsPanel(
     onToggleHillshade: () -> Unit,
     onToggleBorders: () -> Unit,
     onToggleLandmarks: () -> Unit,
+    onToggleLakes: () -> Unit,
     onExport: (ExportResolution) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -303,6 +304,7 @@ fun ControlsPanel(
         ToggleRow("Relief shading", state.renderOptions.showHillshade, onToggleHillshade)
         ToggleRow("Realm borders", state.renderOptions.bordersVisible, onToggleBorders)
         ToggleRow("Landmarks", state.renderOptions.showLandmarks, onToggleLandmarks)
+        ToggleRow("Lakes", state.renderOptions.showLakes, onToggleLakes)
 
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
         SectionHeader("Export")

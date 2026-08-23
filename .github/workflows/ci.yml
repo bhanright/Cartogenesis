@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Generation engine (JVM + Wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: JVM tests
+        run: ./gradlew :worldgen:jvmTest --console=plain
+
+      - name: WebAssembly tests
+        run: ./gradlew :worldgen:wasmJsNodeTest --console=plain
+
+      # The save format stores a seed rather than a world, so a world only travels between
+      # platforms if every target generates it identically. Comparing the two fingerprints against
+      # each other — rather than against a hardcoded value — catches a platform drifting without
+      # failing every time the pipeline is deliberately retuned.
+      - name: JVM and Wasm must generate identical worlds
+        run: |
+          ./gradlew :worldgen:jvmTest --tests '*WorldFingerprintTest*' --rerun-tasks -i --console=plain \
+            | grep 'FINGERPRINT' | sed 's/^[[:space:]]*//' > jvm-fingerprint.txt
+          ./gradlew :worldgen:wasmJsNodeTest --rerun-tasks -i --console=plain \
+            | grep 'FINGERPRINT' | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
+          sort -u jvm-fingerprint.txt -o jvm-fingerprint.txt
+
+          echo "--- JVM ---";  cat jvm-fingerprint.txt
+          echo "--- Wasm ---"; cat wasm-fingerprint.txt
+
+          if [ ! -s jvm-fingerprint.txt ]; then
+            echo "::error::No fingerprint captured — the test did not run."
+            exit 1
+          fi
+          if ! diff -u jvm-fingerprint.txt wasm-fingerprint.txt; then
+            echo "::error::JVM and Wasm generate different worlds from the same seed. Saves are no longer portable between platforms."
+            exit 1
+          fi
+          echo "Fingerprints match."
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-test-reports
+          path: worldgen/build/reports/tests/
+          retention-days: 7
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --console=plain
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartogenesis-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14

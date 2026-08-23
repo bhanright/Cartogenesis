@@ -1,5 +1,7 @@
 package com.cartogenesis.worldgen.model
 
+import kotlinx.serialization.Serializable
+
 import com.cartogenesis.worldgen.pipeline.ClimateResult
 import com.cartogenesis.worldgen.pipeline.LandmarkResult
 import com.cartogenesis.worldgen.pipeline.NationResult
@@ -8,8 +10,10 @@ import com.cartogenesis.worldgen.pipeline.RiverResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.TerrainResult
 
+@Serializable
 enum class LabelKind { REGION, SETTLEMENT, MOUNTAIN, WATER, POINT_OF_INTEREST }
 
+@Serializable
 data class MapLabel(
     val id: Long,
     val text: String,

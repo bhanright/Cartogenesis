@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 /**
@@ -31,6 +32,12 @@ kotlin {
     }
 
     sourceSets {
+        commonMain.dependencies {
+            // Config classes carry @Serializable so the save format is derived from them directly.
+            // Mirroring them into hand-written DTOs would mean every new setting had to be added
+            // in two places, and would silently drop from saves when someone forgot.
+            api(libs.kotlinx.serialization.json)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

@@ -1,6 +1,9 @@
 package com.cartogenesis.worldgen.model
 
+import kotlinx.serialization.Serializable
+
 /** Base terrain: the random gradient ("normal map") field that gets integrated into elevation. */
+@Serializable
 data class TerrainConfig(
     val octaves: Int = 8,
     val baseFrequency: Int = 4,
@@ -17,6 +20,7 @@ data class TerrainConfig(
     val smoothing: Float = 0.05f
 )
 
+@Serializable
 data class TectonicsConfig(
     val plateCount: Int = 14,
     /** Fraction of plates that are oceanic (sit lower). */
@@ -45,6 +49,7 @@ data class TectonicsConfig(
     val detailFrequency: Int = 96
 )
 
+@Serializable
 data class ClimateConfig(
     val equatorTemperatureC: Float = 32f,
     val poleTemperatureC: Float = -28f,
@@ -63,6 +68,7 @@ data class ClimateConfig(
     val evaporationRate: Float = 0.06f
 )
 
+@Serializable
 data class RiverConfig(
     /**
      * Minimum upstream flow accumulation (as a fraction of total land cells) for a cell to
@@ -74,6 +80,7 @@ data class RiverConfig(
 )
 
 /** What happens to land no realm particularly wants. */
+@Serializable
 enum class WildernessMode(val label: String) {
     /** Realms stop where expansion gets expensive, leaving hostile country unclaimed. */
     LEAVE_WILDERNESS("Leave wilderness"),
@@ -82,6 +89,7 @@ enum class WildernessMode(val label: String) {
 }
 
 /** Settlement. Everything here is a starting point the user can overrule per realm. */
+@Serializable
 data class NationsConfig(
     val nationCount: Int = 12,
     /**
@@ -127,6 +135,7 @@ data class NationsConfig(
 }
 
 /** Monster lairs, ruins, hazards and the like, scattered through the wild places. */
+@Serializable
 data class LandmarksConfig(
     val count: Int = 28,
     /**
@@ -138,6 +147,7 @@ data class LandmarksConfig(
     val remotenessBias: Float = 1.6f
 )
 
+@Serializable
 data class WorldGenConfig(
     val seed: Long = 1L,
     val width: Int = 512,

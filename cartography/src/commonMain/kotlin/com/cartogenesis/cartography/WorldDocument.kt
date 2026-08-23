@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.MapLabel
+import kotlinx.serialization.Serializable
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Landmark
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
@@ -10,6 +11,7 @@ import com.cartogenesis.worldgen.pipeline.Nation
  * A user's edits to one realm. Every field is null until they change it, so anything they have not
  * touched keeps following the generator — including after a regeneration.
  */
+@Serializable
 data class NationOverride(
     val name: String? = null,
     val capitalName: String? = null,
@@ -24,6 +26,7 @@ data class NationOverride(
             population == null && exports == null && imports == null && lore == null
 }
 
+@Serializable
 data class LandmarkOverride(
     val name: String? = null,
     val detail: String? = null,
@@ -40,6 +43,7 @@ data class LandmarkOverride(
  * Kept apart from the generated data on purpose: the world itself is reproduced from its seed
  * rather than stored, so a save is a few kilobytes, and these edits are layered back over it.
  */
+@Serializable
 data class WorldOverrides(
     val nations: Map<Int, NationOverride> = emptyMap(),
     val landmarks: Map<Int, LandmarkOverride> = emptyMap(),
@@ -122,6 +126,7 @@ fun Landmark.resolve(override: LandmarkOverride): ResolvedLandmark = ResolvedLan
  * [savedAt] is passed in rather than defaulted, because a wall clock is not something common
  * Kotlin has — each platform supplies its own.
  */
+@Serializable
 data class WorldDocument(
     val id: String,
     val title: String,

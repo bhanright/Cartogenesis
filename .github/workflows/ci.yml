@@ -33,8 +33,10 @@ jobs:
 
       # The renderer is shared, so it has to keep compiling for the web target too even while
       # only Android and desktop consume it today.
-      - name: Cartography builds for every target
-        run: ./gradlew :cartography:compileKotlinJvm :cartography:compileKotlinWasmJs --console=plain
+      # The renderer and the save format are shared, so both have to keep working on every
+      # target — a save that only round-trips on one platform would be worse than none.
+      - name: Cartography tests (JVM + Wasm)
+        run: ./gradlew :cartography:jvmTest :cartography:wasmJsNodeTest --console=plain
 
       # The save format stores a seed rather than a world, so a world only travels between
       # platforms if every target generates it identically. Comparing the two fingerprints against

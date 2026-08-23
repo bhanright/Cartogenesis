@@ -5,7 +5,9 @@ import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.naming.NameKind
 import kotlin.math.abs
 import kotlin.random.Random
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class LandmarkKind(val label: String) {
     MONSTER_LAIR("Monster lair"),
     DUNGEON("Dungeon"),

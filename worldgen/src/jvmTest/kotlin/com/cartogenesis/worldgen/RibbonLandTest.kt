@@ -25,7 +25,7 @@ class RibbonLandTest {
             "no erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "eroded" to base
         ).map { (name, config) ->
-            val world = WorldGenerationEngine.generate(config)
+            val world = WorldGenerationEngine.generateBlocking(config)
             val w = world.width
             val h = world.height
             val land = world.sea.isLand

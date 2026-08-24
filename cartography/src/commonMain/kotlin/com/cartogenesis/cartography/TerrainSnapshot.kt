@@ -81,7 +81,7 @@ class StoredTerrain(private val snapshot: TerrainSnapshot) : ErosionAccelerator 
 
     override val name: String get() = "terrain stored in the save"
 
-    override fun erode(
+    override suspend fun erode(
         width: Int,
         height: Int,
         heights: FloatArray,

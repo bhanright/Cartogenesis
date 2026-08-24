@@ -2,6 +2,8 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.concurrent.parallelism
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.time.measureTime
 
@@ -17,7 +19,7 @@ import kotlin.time.measureTime
 class GenerationSpeedTest {
 
     @Test
-    fun `report generation time`() {
+    fun `report generation time`() = runTest(timeout = 10.minutes) {
         // Warm whatever compiler is underneath before the measurement that counts.
         WorldGenerationEngine.generate(WorldGenConfig(seed = 1L, width = 128, height = 128))
 

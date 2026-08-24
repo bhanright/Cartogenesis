@@ -2,6 +2,7 @@ package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
 import org.jetbrains.skia.EncodedImageFormat
@@ -55,7 +56,7 @@ object Exporter {
         val started = System.currentTimeMillis()
 
         val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(exportConfig)
+        val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
         val scale = size.toFloat() / config.width
         val bitmap = DesktopRenderer.toBitmap(

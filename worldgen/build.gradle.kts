@@ -33,6 +33,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api(libs.kotlinx.coroutines.core)
             // Config classes carry @Serializable so the save format is derived from them directly.
             // Mirroring them into hand-written DTOs would mean every new setting had to be added
             // in two places, and would silently drop from saves when someone forgot.
@@ -40,6 +41,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
         jvmTest.dependencies {
             implementation(kotlin("test-junit"))

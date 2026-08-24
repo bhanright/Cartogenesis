@@ -23,8 +23,12 @@ interface ErosionAccelerator {
      * back to the CPU. Returning null is a normal outcome, not an error path.
      *
      * [heights] must not be modified; the result is a separate array.
+     *
+     * Suspending, because the obvious second implementation cannot be anything else: WebGPU hands
+     * back promises for its device, its queue and every read of a buffer, and Kotlin/Wasm has no
+     * way to block on one. An accelerator that happens to be synchronous simply never suspends.
      */
-    fun erode(
+    suspend fun erode(
         width: Int,
         height: Int,
         heights: FloatArray,

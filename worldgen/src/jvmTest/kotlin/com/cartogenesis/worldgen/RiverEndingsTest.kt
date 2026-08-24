@@ -15,7 +15,7 @@ class RiverEndingsTest {
     /** Renders the map with every land-ending river mouth ringed, so they can be judged by eye. */
     @Test
     fun `mark land-ending river mouths`() {
-        val world = WorldGenerationEngine.generate(
+        val world = WorldGenerationEngine.generateBlocking(
             WorldGenConfig(seed = 42L, width = 1024, height = 1024)
         )
         val w = world.width
@@ -87,7 +87,7 @@ class RiverEndingsTest {
     @Test
     fun `report how rivers end`() {
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generate(
+            val world = WorldGenerationEngine.generateBlocking(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width

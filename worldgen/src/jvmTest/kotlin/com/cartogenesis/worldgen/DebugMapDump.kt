@@ -29,7 +29,7 @@ class DebugMapDump {
         outputDir.mkdirs()
 
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generate(
+            val world = WorldGenerationEngine.generateBlocking(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             write(render(world, Mode.FANTASY), "seed$seed-fantasy.png")
@@ -42,7 +42,7 @@ class DebugMapDump {
         }
 
         // One world in every view, to check each stage independently.
-        val world = WorldGenerationEngine.generate(WorldGenConfig(seed = 42L, width = 512, height = 512))
+        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = 512, height = 512))
         write(render(world, Mode.ELEVATION), "seed42-elevation.png")
         write(render(world, Mode.PLATES), "seed42-plates.png")
         write(render(world, Mode.BIOME), "seed42-biome.png")
@@ -92,7 +92,7 @@ class DebugMapDump {
                     terrain = base.terrain.copy(gain = gain),
                     tectonics = base.tectonics.copy(tectonicWeight = weight)
                 )
-                val world = WorldGenerationEngine.generate(config)
+                val world = WorldGenerationEngine.generateBlocking(config)
                 write(render(world, Mode.FANTASY), "sweep-w${weight}-g$gain.png")
             }
         }
@@ -105,7 +105,7 @@ class DebugMapDump {
         outputDir.mkdirs()
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
         WildernessMode.entries.forEach { mode ->
-            val world = WorldGenerationEngine.generate(
+            val world = WorldGenerationEngine.generateBlocking(
                 base.copy(nations = base.nations.copy(wilderness = mode))
             )
             write(render(world, Mode.NATIONS), "nations-$mode.png")
@@ -121,7 +121,7 @@ class DebugMapDump {
     @Test
     fun `report resolution consistency metrics`() {
         listOf(128, 256, 512).forEach { size ->
-            val world = WorldGenerationEngine.generate(
+            val world = WorldGenerationEngine.generateBlocking(
                 WorldGenConfig(seed = 42L, width = 128, height = 128).atResolution(size, size)
             )
             val e = world.sea.relativeElevation

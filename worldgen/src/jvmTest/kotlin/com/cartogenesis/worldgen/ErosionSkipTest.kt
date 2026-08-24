@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
@@ -24,8 +25,8 @@ class ErosionSkipTest {
         val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
-        val skipped = ErosionStage.apply(config, uplift, skipSettled = true).height.data
-        val full = ErosionStage.apply(config, uplift, skipSettled = false).height.data
+        val skipped = erodeBlocking(config, uplift, skipSettled = true).height.data
+        val full = erodeBlocking(config, uplift, skipSettled = false).height.data
 
         assertEquals(full.size, skipped.size)
         var differing = 0
@@ -49,10 +50,10 @@ class ErosionSkipTest {
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         // Warm the JIT, or the first measurement pays for compiling the inner loop.
-        ErosionStage.apply(config, uplift, skipSettled = true)
+        erodeBlocking(config, uplift, skipSettled = true)
 
-        val skipped = measureTimeMillis { ErosionStage.apply(config, uplift, skipSettled = true) }
-        val full = measureTimeMillis { ErosionStage.apply(config, uplift, skipSettled = false) }
+        val skipped = measureTimeMillis { erodeBlocking(config, uplift, skipSettled = true) }
+        val full = measureTimeMillis { erodeBlocking(config, uplift, skipSettled = false) }
         // Reported rather than asserted. The saving is real but modest and depends on how much of
         // the map has gone quiet, which depends on the seed and the resolution — a threshold here
         // would be measuring the machine and the seed more than the code.

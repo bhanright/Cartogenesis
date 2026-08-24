@@ -7,6 +7,8 @@ import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 class PipelineTest {
@@ -15,7 +17,7 @@ class PipelineTest {
         WorldGenConfig(seed = seed, width = size, height = size)
 
     @Test
-    fun `generation is deterministic for a given seed`() {
+    fun `generation is deterministic for a given seed`() = runTest(timeout = 10.minutes) {
         val a = WorldGenerationEngine.generate(config())
         val b = WorldGenerationEngine.generate(config())
         assertTrue(a.elevation.data.contentEquals(b.elevation.data))
@@ -24,7 +26,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `different seeds produce different worlds`() {
+    fun `different seeds produce different worlds`() = runTest(timeout = 10.minutes) {
         val a = WorldGenerationEngine.generate(config(seed = 1L))
         val b = WorldGenerationEngine.generate(config(seed = 2L))
         assertNotEquals(
@@ -34,7 +36,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `sea level slider controls the land fraction`() {
+    fun `sea level slider controls the land fraction`() = runTest(timeout = 10.minutes) {
         val low = WorldGenerationEngine.generate(config().copy(seaLevel = 0.3f))
         val high = WorldGenerationEngine.generate(config().copy(seaLevel = 0.8f))
         assertTrue(
@@ -46,7 +48,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `every plate boundary cell is assigned a boundary type`() {
+    fun `every plate boundary cell is assigned a boundary type`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val plateIds = world.plates.plateId.toSet()
         assertTrue(plateIds.size > 1, "expected several plates, got ${plateIds.size}")
@@ -58,7 +60,7 @@ class PipelineTest {
      * downhill path, so no river can dead-end in an inland pit.
      */
     @Test
-    fun `every river ends at the sea or joins another river`() {
+    fun `every river ends at the sea or joins another river`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         assertTrue(world.rivers.rivers.isNotEmpty(), "expected some rivers")
 
@@ -81,7 +83,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `every land cell drains downhill`() {
+    fun `every land cell drains downhill`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val filled = world.rivers.filledElevation
         val target = world.rivers.flowTarget
@@ -102,7 +104,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `poles are colder than the equator`() {
+    fun `poles are colder than the equator`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val temperature = world.climate.temperature
         val mid = world.height / 2
@@ -113,14 +115,14 @@ class PipelineTest {
     }
 
     @Test
-    fun `latitude mapping spans pole to pole`() {
+    fun `latitude mapping spans pole to pole`() = runTest(timeout = 10.minutes) {
         assertEquals(90f, ClimateStage.latitudeOf(0, 512), 0.5f)
         assertEquals(-90f, ClimateStage.latitudeOf(511, 512), 0.5f)
         assertTrue(abs(ClimateStage.latitudeOf(256, 512)) < 0.5f)
     }
 
     @Test
-    fun `ocean cells are classified as water biomes`() {
+    fun `ocean cells are classified as water biomes`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val waterBiomes = setOf(Biome.OCEAN, Biome.SHALLOW_OCEAN, Biome.ICE_SHEET)
         for (i in world.climate.biome.indices) {
@@ -139,7 +141,7 @@ class PipelineTest {
      * below the desert threshold and turns the whole world into a desert.
      */
     @Test
-    fun `land has a varied spread of biomes`() {
+    fun `land has a varied spread of biomes`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val counts = HashMap<Biome, Int>()
         var land = 0
@@ -168,7 +170,7 @@ class PipelineTest {
      * does not rescale them.
      */
     @Test
-    fun `world keeps its character when regenerated at a larger resolution`() {
+    fun `world keeps its character when regenerated at a larger resolution`() = runTest(timeout = 10.minutes) {
         val preview = WorldGenerationEngine.generate(config())
         val exported = WorldGenerationEngine.generate(config().atResolution(512, 512))
 
@@ -215,7 +217,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `changing only sea level reuses the terrain and plate stages`() {
+    fun `changing only sea level reuses the terrain and plate stages`() = runTest(timeout = 10.minutes) {
         val base = WorldGenerationEngine.generate(config())
         val adjusted = WorldGenerationEngine.generate(config().copy(seaLevel = 0.5f), previous = base)
         assertTrue(base.terrain === adjusted.terrain, "terrain should be reused")

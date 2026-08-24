@@ -30,14 +30,18 @@ fun interface GenerationProgress {
 }
 
 /**
- * Runs the generation pipeline. Generation is fully deterministic for a given config, which is
+ * Runs the generation pipeline.
+ *
+ * Suspending only because of [ErosionAccelerator]: everything here is ordinary blocking work, but
+ * a GPU accelerator has to await its device and its results, so the one call that might do so
+ * makes the whole chain suspend. Nothing suspends when generating on the CPU. Generation is fully deterministic for a given config, which is
  * what lets HD export re-run at a higher resolution instead of upscaling a preview bitmap.
  */
 object WorldGenerationEngine {
 
     private val NO_PROGRESS = GenerationProgress { _, _, _ -> }
 
-    fun generate(
+    suspend fun generate(
         config: WorldGenConfig,
         previous: WorldMap? = null,
         /**

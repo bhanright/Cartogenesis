@@ -3,7 +3,9 @@ package com.cartogenesis.desktop
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.pipeline.ErosionStage
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.math.abs
@@ -40,17 +42,17 @@ class GpuErosionTest {
 
         val onCpu: FloatArray
         val cpuMs = measureTimeMillis {
-            onCpu = ErosionStage.apply(config, uplift).height.data
+            onCpu = erodeBlocking(config, uplift).height.data
         }
 
         val gpuConfig = config.copy(
             erosion = config.erosion.copy(acceleration = Acceleration.GPU)
         )
         // Once to warm the driver, then the measurement.
-        ErosionStage.apply(gpuConfig, uplift, gpu)
+        erodeBlocking(gpuConfig, uplift, gpu)
         val onGpu: FloatArray
         val gpuMs = measureTimeMillis {
-            onGpu = ErosionStage.apply(gpuConfig, uplift, gpu).height.data
+            onGpu = erodeBlocking(gpuConfig, uplift, gpu).height.data
         }
 
         println("GPU ${gpuMs}ms vs CPU ${cpuMs}ms: ${"%.1f".format(cpuMs.toDouble() / gpuMs)}x")
@@ -89,8 +91,8 @@ class GpuErosionTest {
         // is what decides whether a GPU world can be saved as a seed or has to carry its terrain.
         val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
             .atResolution(1024, 1024)
-        val onCpu = WorldGenerationEngine.generate(config)
-        val onGpu = WorldGenerationEngine.generate(
+        val onCpu = WorldGenerationEngine.generateBlocking(config)
+        val onGpu = WorldGenerationEngine.generateBlocking(
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU)),
             accelerator = gpu
         )

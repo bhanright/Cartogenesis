@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.concurrent.parallelism
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
@@ -31,7 +32,7 @@ class ErosionConvergenceTest {
         listOf(18, 40, 80, 160, 320).forEach { passes ->
             val cfg = config.copy(erosion = config.erosion.copy(passes = passes, enabled = true))
             lateinit var result: com.cartogenesis.worldgen.pipeline.ErosionResult
-            val ms = measureTimeMillis { result = ErosionStage.apply(cfg, uplift) }
+            val ms = measureTimeMillis { result = erodeBlocking(cfg, uplift) }
             val (over, worst) = disequilibrium(cfg, result.height.data)
             println(
                 "EROSION passes=%3d  %5d ms  %.2f%% of cells still above the critical slope, worst %.1fx over"

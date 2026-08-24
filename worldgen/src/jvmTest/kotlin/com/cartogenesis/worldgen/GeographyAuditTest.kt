@@ -22,7 +22,7 @@ class GeographyAuditTest {
     @Test
     fun `audit worlds against real-world geography`() {
         seeds.forEach { seed ->
-            val world = WorldGenerationEngine.generate(
+            val world = WorldGenerationEngine.generateBlocking(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width

@@ -4,6 +4,7 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
 import kotlin.math.abs
@@ -27,7 +28,7 @@ class FlowLayerTest {
     @Test
     fun `flow layers render and point the right ways`() {
         outputDir.mkdirs()
-        val world = WorldGenerationEngine.generate(
+        val world = WorldGenerationEngine.generateBlocking(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
 

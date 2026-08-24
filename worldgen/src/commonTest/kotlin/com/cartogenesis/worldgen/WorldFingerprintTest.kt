@@ -1,6 +1,8 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -17,7 +19,7 @@ import kotlin.test.assertTrue
 class WorldFingerprintTest {
 
     @Test
-    fun `print a cross-platform fingerprint`() {
+    fun `print a cross-platform fingerprint`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(
             WorldGenConfig(seed = 42L, width = 128, height = 128)
         )

@@ -36,7 +36,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
     /** What probing this machine found: an accelerator, or the reason there is not one. */
     class Result(val accelerator: GpuErosion?, val unavailableBecause: String?)
 
-    override fun erode(
+    override suspend fun erode(
         width: Int,
         height: Int,
         heights: FloatArray,

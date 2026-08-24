@@ -24,7 +24,7 @@ class OceanCurrentTest {
 
     @Test
     fun `currents circulate and carry temperature`() {
-        val world = WorldGenerationEngine.generate(
+        val world = WorldGenerationEngine.generateBlocking(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val w = world.width
@@ -130,7 +130,7 @@ class OceanCurrentTest {
 
     private fun checkCoasts(seed: Long) {
         val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-        val world = WorldGenerationEngine.generate(config)
+        val world = WorldGenerationEngine.generateBlocking(config)
         val w = world.width
         val h = world.height
 

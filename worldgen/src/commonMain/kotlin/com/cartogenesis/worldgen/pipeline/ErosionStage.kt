@@ -40,7 +40,7 @@ object ErosionStage {
      */
     private const val TILE = 32
 
-    fun apply(
+    suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
         accelerator: ErosionAccelerator? = null

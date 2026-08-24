@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
@@ -26,7 +27,7 @@ class StageProfileTest {
     @Test
     fun `report per-stage timings`() {
         // Warm the JIT so the first size measured is not paying for compilation.
-        WorldGenerationEngine.generate(WorldGenConfig(seed = 1L, width = 256, height = 256))
+        WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 1L, width = 256, height = 256))
 
         listOf(512, 1024, 2048).forEach { size ->
             val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
@@ -49,7 +50,7 @@ class StageProfileTest {
                 plates = PlateStage.generate(config, terrain!!)
             }
             timings["erosion"] = measureTimeMillis {
-                erosion = ErosionStage.apply(config, plates!!.height)
+                erosion = erodeBlocking(config, plates!!.height)
             }
             timings["sea level"] = measureTimeMillis {
                 sea = SeaLevelStage.apply(erosion!!.height, config.seaLevel)

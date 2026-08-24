@@ -3,6 +3,8 @@ package com.cartogenesis.cartography
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -19,7 +21,7 @@ import kotlin.test.assertTrue
 class TerrainSnapshotTest {
 
     @Test
-    fun `every float survives the round trip`() {
+    fun `every float survives the round trip`() = runTest(timeout = 10.minutes) {
         // Includes the values most likely to be mangled by a careless encoding.
         val heights = floatArrayOf(
             0f, -0f, 1f, -1f, 0.5f, 1e-8f, -1e-8f, 3.4e38f, -3.4e38f,
@@ -39,7 +41,7 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `a stored terrain rebuilds the same world`() {
+    fun `a stored terrain rebuilds the same world`() = runTest(timeout = 10.minutes) {
         val config = WorldGenConfig(seed = 234475L, width = 256, height = 256)
             .let { it.copy(erosion = it.erosion.copy(acceleration = Acceleration.GPU)) }
 
@@ -71,7 +73,7 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `a stored terrain declines a grid it was not taken at`() {
+    fun `a stored terrain declines a grid it was not taken at`() = runTest(timeout = 10.minutes) {
         // Export re-runs at a larger size, where a snapshot of the working resolution has no
         // business being used. It must decline rather than stretch what it holds.
         val snapshot = TerrainSnapshot.of(4, 4, FloatArray(16))
@@ -82,7 +84,7 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `the snapshot travels in the save file`() {
+    fun `the snapshot travels in the save file`() = runTest(timeout = 10.minutes) {
         val config = WorldGenConfig(seed = 7L, width = 64, height = 64)
         val document = WorldDocument(
             id = "test",
@@ -102,7 +104,7 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `a world without acceleration stores no terrain`() {
+    fun `a world without acceleration stores no terrain`() = runTest(timeout = 10.minutes) {
         // The size of a save is the whole reason this is conditional, so it is worth pinning: a
         // CPU world reproduces from its seed and must stay a few kilobytes.
         val document = WorldDocument(

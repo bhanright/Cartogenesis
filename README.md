@@ -2,8 +2,13 @@
 
 [![CI](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml)
 
-An Android app that procedurally generates fantasy world maps, built on a Kotlin Multiplatform
+A desktop app that procedurally generates fantasy world maps, built on a Kotlin Multiplatform
 generation engine that also runs in the browser.
+
+There was an Android build. It was retired in favour of desktop and web: a phone's memory ceiling
+capped exports at a fraction of what the pipeline can produce, and the erosion stage in particular
+wants far more compute than a handset will give it. The engine itself never depended on Android and
+is unchanged by its removal — see **Multiplatform status**.
 
 ## The pipeline
 
@@ -44,9 +49,8 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
   per-pixel work is plain `IntArray` maths and the vector overlays are *described* as geometry
   rather than drawn, so every platform makes identical decisions and implements only the drawing
   calls. Builds for JVM and Wasm.
-- **`:app`** — Android: Compose UI, the atlas, saving, and export to the gallery.
-- **`:desktop`** — Compose Desktop. Same engine and renderer, a layout built for a large screen,
-  and a heap big enough for the resolutions a phone cannot attempt.
+- **`:desktop`** — Compose Desktop: the UI, the atlas, saving, and export. Same engine and
+  renderer as everything else, a layout built for a large screen, and a 12GB heap.
 
 ## Desktop
 
@@ -80,8 +84,13 @@ The desktop build exists for headroom. Measured on this machine:
 | 2048 x 2048 | 14 s | 626 MB |
 | 4096 x 4096 | 53 s | 2.0 GB |
 
-That 2 GB is more than three times the entire ceiling a `largeHeap` Android process is given, which
-is why 4096 fails there and simply works here. The app requests `-Xmx12g`.
+The app requests `-Xmx12g`, which is what makes those sizes reachable at all.
+
+Exports are written as PNG or WebP. PNG is lossless. WebP comes out around a quarter of the size,
+but Skia exposes no lossless WebP encoder, and the loss lands where a map can least afford it: the
+average pixel drifts about 3 of 255, while the worst 0.1% drift by nearly 60, and those are the
+river lines and borders, because that is where the sharp edges are. `ExportSmokeTest` measures
+both numbers so the description in the UI stays true.
 
 Where the time goes, at 2048 (see `StageProfileTest`): erosion 82%, realms 6%, ocean currents 4%,
 tectonics 2%, landmarks 2%, terrain 2%, rivers and climate 1% each. A 2048 world takes about 36
@@ -102,13 +111,8 @@ a Dijkstra over a priority queue and would not suit a GPU regardless.
 
 ## Building
 
-Built and verified against Android Studio 2026.1.3 (JDK 25), AGP 9.3.1, Kotlin 2.4.10,
-Gradle 9.7.1, compileSdk 37.
-
-Note that AGP 9 has **built-in Kotlin support**, so `:app` deliberately does not apply the
-`org.jetbrains.kotlin.android` plugin — applying it is now an error. `:worldgen` uses
-`kotlin.multiplatform`; the Android app consumes its `jvm` target, which resolves with no extra
-configuration.
+Built and verified against JDK 25, Kotlin 2.4.10, Gradle 9.7.1 and Compose Multiplatform 1.9.3.
+Any JDK 17 or newer will do; `:desktop` targets 17.
 
 ```bash
 ./gradlew :worldgen:jvmTest
@@ -149,8 +153,8 @@ A save records the seed, the settings and the overrides — not the world, which
 them. A whole world is a few kilobytes.
 
 **The format is shared.** `WorldCodec` in `:cartography` is the entire thing, built on
-kotlinx.serialization, so Android and desktop write files that open in either; each platform
-supplies only where the bytes go. Serializers are generated from the config classes themselves
+kotlinx.serialization, and it lives in shared code rather than in any one app, so every front end
+writes files that open in the others; each supplies only where the bytes go. Serializers are generated from the config classes themselves
 rather than hand-written mirrors — a parallel schema would need every new setting adding twice, and
 would silently drop from saves whenever someone forgot.
 
@@ -160,56 +164,6 @@ default. `WorldCodecTest` covers that directly, along with the subtler property 
 override fields stay null — if they came back populated, editing one field would pin a realm's
 whole entry to whatever the generator happened to produce at save time.
 
-## Installing on a phone
-
-Requires Android 10 (API 29) or newer. The APK is universal — one file covers every phone ABI.
-
-### 1. Create a signing key (once)
-
-This key is the app's permanent identity: Android only allows an update to install over an
-existing app if both were signed with the same key. Keep the `.jks` file and its password safe and
-backed up — losing them means future versions can only be installed by uninstalling first.
-
-```bash
-keytool -genkeypair -v -keystore cartogenesis-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias cartogenesis
-```
-
-`keytool` lives in Android Studio's JDK, so on this machine run it as
-`"C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe"`. It will prompt for a password and
-a few identity fields; only the password matters for a personal build.
-
-### 2. Point the build at it
-
-Create `keystore.properties` in the project root (it is gitignored, along with `*.jks`):
-
-```properties
-storeFile=cartogenesis-release.jks
-storePassword=<the password you chose>
-keyAlias=cartogenesis
-keyPassword=<the same password, unless you set a separate key password>
-```
-
-### 3. Build
-
-```bash
-./gradlew :app:assembleRelease
-```
-
-The signed APK lands at `app/build/outputs/apk/release/app-release.apk`, around 2.4MB. Without
-`keystore.properties` the same command still works but produces `app-release-unsigned.apk`, which
-phones will refuse to install.
-
-### 4. Get it onto the phone
-
-Over USB with developer options and USB debugging enabled:
-
-```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
-```
-
-Otherwise copy the APK across by any means — cable, Drive, email — open it in the phone's file
-manager, and allow install from unknown sources when prompted.
-
 ## Resolution
 
 Export re-runs the whole pipeline at the target size rather than upscaling the preview, so a
@@ -218,14 +172,14 @@ rescales the settings that are measured in cells — the mountain-belt falloff a
 rainfall rate. Anything new that is expressed in cells rather than as a frequency or a fraction of
 the map needs adding there, or exports will drift in character from what the preview showed.
 
-Export is capped at 2048. Generation holds a dozen or so full-resolution float fields plus the
-integrator's FFT buffers; at 4096 a single one of those buffers is 134MB and the process runs out
-of heap even with `largeHeap`. Going higher needs the pipeline reworked to run in tiles.
+Export offers 2048, 4096 and 8192. 4096 peaks around 2.6GB and takes about 50 seconds, most of it
+erosion. 8192 is offered but untested; it would want roughly four times that memory, and going
+much beyond it needs the pipeline reworked to run in tiles.
 
 ## Looking at the output
 
 `DebugMapDump` in the `:worldgen` test source set renders worlds straight to PNGs under
-`worldgen/build/maps/`, so generation can be inspected without an emulator — one image per
+`worldgen/build/maps/`, so generation can be inspected without launching anything — one image per
 pipeline stage (normals, elevation, plates, biome, rainfall, temperature, ocean currents, winds)
 plus the composed map.
 It also prints river-network statistics, and includes a parameter sweep for judging the trade-off
@@ -235,8 +189,8 @@ Since it runs as part of `:worldgen:jvmTest`, the maps refresh on every JVM test
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and assembles
-the debug APK, on every push and pull request.
+`.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and compiles
+and tests the desktop app, on every push and pull request.
 
 The step worth knowing about compares the **JVM and Wasm fingerprints against each other** rather
 than against a hardcoded value. That catches a platform silently drifting — which would break save
@@ -244,7 +198,7 @@ portability — without failing every time the pipeline is deliberately retuned.
 
 ## Multiplatform status
 
-`:worldgen` is a Kotlin Multiplatform module targeting **jvm** (what the Android app consumes),
+`:worldgen` is a Kotlin Multiplatform module targeting **jvm** (what the desktop app consumes),
 **wasmJs**, and **js**. The whole correctness suite lives in `commonTest` and runs on every target;
 `DebugMapDump` stays in `jvmTest` because it renders PNGs through `java.awt`.
 

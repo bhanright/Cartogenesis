@@ -12,6 +12,11 @@
   cliffs. Both UIs now go through `atResolution`, whose contract `ResolutionScalingTest` pins.
   Mountain belts also got a flat-crested profile instead of a knife edge, a width that swells and
   pinches along their length, and deeper along-strike sag so a long belt breaks into massifs.
+- **Android build retired** (2026-08-23) — a phone's memory ceiling capped exports at a fraction of
+  what the pipeline produces, and erosion wants far more compute than a handset gives. The engine
+  never depended on Android, so removing `:app` touched no generation code. Export now offers PNG
+  or WebP; WebP is a quarter the size but not lossless, and `ExportSmokeTest` records what that
+  costs.
 - **Erosion** (2026-08-23) — thermal erosion, as its own pipeline stage between tectonics and sea
   level. Halves the land sitting in thin strips on seed 234475, from 0.4% to 0.2%, and gives belts
   flanks instead of walls. Critical slope is held per unit of map rather than per cell so terrain
@@ -35,6 +40,19 @@
   helped the spread, but the audit is still uneven: the share of desert falling in the 15-45 degree
   band is 97% and 75% on seeds 7 and 1234, and only 53% and 43% on seeds 42 and 99. The remaining
   cause looks like orographic strength rather than the bands themselves.
+- **Web front end.** The engine and renderer already build for Wasm and are proven bit-identical to
+  the JVM, but there is no browser app — only library targets and Node tests. A real one means a
+  `:web` module and moving the Compose UI out of `:desktop` into shared code, since today the whole
+  UI lives in `desktop/src/main`. The renderer is the easy half: it already describes overlays as
+  geometry and draws through Skia, which Compose Multiplatform provides on both.
+- **GPU acceleration, as a toggle.** Erosion is 82% of a 2048 generation and is a pure stencil over
+  independent cells, so it would suit a GPU almost perfectly. The catch is determinism: a saved
+  world is a seed and a config regenerated on whatever machine opens it, and GPU floating point
+  will not match the CPU bit for bit — the same problem that already ruled out Kotlin/JS as a web
+  target. So it has to be opt-in, with the save recording that it was used and the UI saying plainly
+  that such a world will not reproduce exactly elsewhere. Desktop would need a compute API (LWJGL
+  against OpenGL compute or Vulkan); a web build would need WebGPU, which is a separate
+  implementation again.
 - **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
   valleys, because that needs water routed over the terrain. Rivers therefore find routes down
   terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.

@@ -95,6 +95,7 @@ private fun DesktopApp() {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
+    var exportFormat by remember { mutableStateOf(ExportFormat.PNG) }
     var overrides by remember { mutableStateOf(WorldOverrides()) }
     var selectedNation by remember { mutableStateOf<Int?>(null) }
     var screen by remember { mutableStateOf(Screen.MAP) }
@@ -136,7 +137,7 @@ private fun DesktopApp() {
     LaunchedEffect(pendingExport) {
         val size = pendingExport ?: return@LaunchedEffect
         // The file dialog is native and must run on the UI thread; the work must not.
-        val destination = chooseSaveFile(Exporter.defaultName(config, size))
+        val destination = chooseSaveFile(Exporter.defaultName(config, size, exportFormat))
         if (destination == null) {
             pendingExport = null
             return@LaunchedEffect
@@ -144,7 +145,9 @@ private fun DesktopApp() {
         busy = true
         stage = "Rendering ${size}x$size"
         status = runCatching {
-            withContext(Dispatchers.Default) { Exporter.export(config, options, size, destination) }
+            withContext(Dispatchers.Default) {
+                Exporter.export(config, options, size, destination, exportFormat)
+            }
         }.fold(
             onSuccess = { "Saved ${it.file.name} - ${it.bytes / 1024 / 1024} MB in ${it.millis / 1000}s" },
             onFailure = { "Export failed: ${it::class.simpleName} ${it.message.orEmpty()}" }
@@ -178,6 +181,8 @@ private fun DesktopApp() {
                 onConfig = { config = it },
                 onOptions = { options = it },
                 onExport = { size -> pendingExport = size },
+                exportFormat = exportFormat,
+                onExportFormat = { exportFormat = it },
                 atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                 libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
                 labelMode = labelMode,
@@ -396,6 +401,8 @@ private fun SettingsPanel(
     onConfig: (WorldGenConfig) -> Unit,
     onOptions: (RenderOptions) -> Unit,
     onExport: (Int) -> Unit,
+    exportFormat: ExportFormat,
+    onExportFormat: (ExportFormat) -> Unit,
     atlasLabel: String,
     libraryLabel: String,
     labelMode: Boolean,
@@ -527,9 +534,26 @@ private fun SettingsPanel(
         HorizontalDivider(Modifier.padding(vertical = 10.dp))
         Text("Export", style = MaterialTheme.typography.titleSmall)
         Text(
-            "Sizes the phone build could not reach — the heap here is 12GB.",
+            "The whole pipeline re-runs at the chosen size, so the detail is real rather " +
+                "than interpolated.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ExportFormat.entries.forEach { format ->
+                FilterChip(
+                    selected = exportFormat == format,
+                    onClick = { onExportFormat(format) },
+                    label = { Text(format.label, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Text(
+            exportFormat.detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
         )
         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(2048, 4096, 8192).forEach { size ->

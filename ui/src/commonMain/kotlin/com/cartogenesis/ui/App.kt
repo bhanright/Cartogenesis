@@ -114,11 +114,17 @@ fun CartogenesisApp(platform: Platform) {
     LaunchedEffect(config) {
         busy = true
         val started = epochMillis()
+        // The world we already have, so the engine can skip any stage whose settings did not
+        // change. Most of what this panel adjusts sits late in the pipeline - realm count,
+        // wilderness, landmarks - and erosion is over half the work, so handing the old world back
+        // is the difference between a redraw and a full regeneration. The engine drops it entirely
+        // if the seed or resolution moved, so there is nothing to guard here.
+        val reusable = world
         val generated = withContext(Dispatchers.Default) {
             // A stored terrain takes precedence: it is the world exactly as it was saved, and
             // recomputing it on this machine's hardware could only be a worse answer.
             val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: accelerator
-            WorldGenerationEngine.generate(config, accelerator = accelerator) {
+            WorldGenerationEngine.generate(config, reusable, accelerator) {
                 s: GenerationStage, _: Int, _: Int ->
                 stage = s.label
             }

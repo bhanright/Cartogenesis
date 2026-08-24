@@ -41,6 +41,20 @@ object WorldGenerationEngine {
 
     private val NO_PROGRESS = GenerationProgress { _, _, _ -> }
 
+    /*
+     * On reuse: passing [previous] lets a stage be skipped when nothing it depends on has changed,
+     * which is what keeps a change to a late setting - realm count, wilderness - from re-running
+     * erosion. Each stage below is guarded on two things: that its upstream result is the very
+     * same object (`===`, so a recomputed upstream forces everything after it), and that every
+     * config section the stage *reads* is unchanged.
+     *
+     * That second half is the easy one to get wrong, and three stages had it wrong: erosion reads
+     * `seaLevel`, ocean reads `climate`, and rivers read `lakes`, while each was guarded on its
+     * own section alone. If you add a stage, or make an existing one read a new section, add it
+     * here too - `IncrementalReuseTest` compares reuse against a fresh generation for a change to
+     * every section in turn and will catch you.
+     */
+
     suspend fun generate(
         config: WorldGenConfig,
         previous: WorldMap? = null,
@@ -69,7 +83,14 @@ object WorldGenerationEngine {
 
         report(GenerationStage.EROSION)
         val erosion = reusable
-            ?.takeIf { it.plates === plates && it.config.erosion == config.erosion }
+            ?.takeIf {
+                it.plates === plates &&
+                    it.config.erosion == config.erosion &&
+                    // Hydraulic erosion routes water against a provisional shoreline, so where the
+                    // sea sits changes what gets carved. Guarding on `erosion` alone reused a
+                    // stale height field whenever sea level moved.
+                    it.config.seaLevel == config.seaLevel
+            }
             ?.erosion
             ?: ErosionStage.apply(config, plates.height, accelerator)
 
@@ -81,7 +102,14 @@ object WorldGenerationEngine {
 
         report(GenerationStage.OCEAN)
         val ocean = reusable
-            ?.takeIf { it.sea === sea && it.config.ocean == config.ocean }
+            ?.takeIf {
+                it.sea === sea &&
+                    it.config.ocean == config.ocean &&
+                    // Currents are the stream function of the wind stress, and the wind belts are
+                    // a climate setting. Climate runs *after* this stage, so nothing downstream
+                    // would have caught the staleness for us.
+                    it.config.climate == config.climate
+            }
             ?.ocean
             ?: OceanStage.generate(config, sea)
 
@@ -93,7 +121,13 @@ object WorldGenerationEngine {
 
         report(GenerationStage.RIVERS)
         val rivers = reusable
-            ?.takeIf { it.climate === climate && it.config.rivers == config.rivers }
+            ?.takeIf {
+                it.climate === climate &&
+                    it.config.rivers == config.rivers &&
+                    // Lakes come out of the same depression fill and live on the river result, so
+                    // a lake setting is a river setting as far as reuse is concerned.
+                    it.config.lakes == config.lakes
+            }
             ?.rivers
             ?: RiverStage.generate(config, sea, climate)
 

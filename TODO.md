@@ -58,6 +58,20 @@
   `GeographyAuditTest` rather than assumed. Capital siting was the one clear violation and is
   fixed; the remaining deviations are recorded below.
 
+- **Stage reuse switched on** (2026-08-24) — `WorldGenerationEngine` could already skip any stage
+  whose settings had not changed, but no app ever passed it the previous world, so every slider
+  nudge re-ran erosion. The UI now hands the old world back: toggling wilderness at 512 went from
+  1375ms to 170ms, and the gap widens with resolution because erosion scales worst.
+
+  Switching it on first meant fixing it. A stage is guarded on its own config section, and three
+  stages read a section they were not guarded on — erosion reads `seaLevel` (hydraulic routing
+  needs a shoreline), ocean reads `climate` (the gyres are driven by the wind belts), rivers read
+  `lakes` (same depression fill). Each would have served a stale result. `IncrementalReuseTest`
+  compares reuse against a fresh generation for a change to every config section in turn and was
+  shown to fail on all three before the fix. Its first version passed the lakes case vacuously,
+  because the world it tested had no lakes — the base config now asserts it has lakes, rivers,
+  realms and landmarks to compare.
+
 - **Realms built from drainage catchments** (2026-08-24), replacing cell-by-cell expansion.
   Borders were near enough to arbitrary before — 1.14x as likely to follow a river as blank land,
   1.09x on ridge crests — and tuning could not fix it, because a cheapest-path border lands where

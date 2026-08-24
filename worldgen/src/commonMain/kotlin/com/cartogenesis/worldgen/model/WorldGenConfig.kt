@@ -364,6 +364,46 @@ data class LandmarksConfig(
     val remotenessBias: Float = 1.6f
 )
 
+/**
+ * The peoples of the world, as opposed to its states.
+ *
+ * Kept as its own section rather than folded into [NationsConfig] so that the two are independent:
+ * changing the realm count must not move every culture on the map, which it would if cultures were
+ * guarded on a political setting.
+ */
+@Serializable
+data class CulturesConfig(
+    val enabled: Boolean = true,
+    /**
+     * How many peoples. Fewer than there are realms, because a culture is the larger thing: it is
+     * normal for one to span several states and for a state to contain several.
+     */
+    val cultureCount: Int = 8,
+    /**
+     * How strongly a people prefers country like its homeland, against simple distance from it.
+     *
+     * This is the dial that decides whether the map reads as peoples or as pie slices. At zero a
+     * culture spreads evenly in all directions and the layer is a Voronoi diagram; turned up, it
+     * follows a grassland belt or a river system and stops where the climate turns.
+     */
+    val climateAffinity: Float = 7.0f,
+    /** Extra cost of settling across a strait, on the same scale as a step of unlike country. */
+    val seaCrossingCost: Float = 3.0f,
+    /** Country colder than this on average holds no settled people. */
+    val minTemperatureC: Float = -22f,
+    /**
+     * Extra cost of crossing country nobody settles, such as an ice cap.
+     *
+     * A cost rather than a wall. Treating hostile ground as impassable stranded everything behind
+     * it, which on one seed meant a third of the world's land.
+     */
+    val hostileCrossingCost: Float = 6.0f,
+    /** Largest catchment left whole when dividing land into cultural regions, as a share of land. */
+    val maxRegionShare: Float = 0.030f,
+    /** Smallest cultural region, as a share of land; anything under is merged into a neighbour. */
+    val minRegionShare: Float = 0.006f
+)
+
 @Serializable
 data class WorldGenConfig(
     val seed: Long = 1L,
@@ -379,6 +419,7 @@ data class WorldGenConfig(
     val lakes: LakesConfig = LakesConfig(),
     val ocean: OceanConfig = OceanConfig(),
     val nations: NationsConfig = NationsConfig(),
+    val cultures: CulturesConfig = CulturesConfig(),
     val landmarks: LandmarksConfig = LandmarksConfig()
 ) {
     init {

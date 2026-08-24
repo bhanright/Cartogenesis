@@ -58,6 +58,26 @@
   `GeographyAuditTest` rather than assumed. Capital siting was the one clear violation and is
   fixed; the remaining deviations are recorded below.
 
+- **A peoples layer** (2026-08-24) — a map of who lives where, separate from who rules where.
+  Realms are grown from catchments because a state's reach is about ground it can hold; a culture
+  spreads through country that *resembles the country it came from*, so it follows a grassland belt
+  or a river system and stops where the climate turns, not where a border was drawn. Cost is
+  measured against the hearth rather than the neighbour, since against the neighbour every step is
+  a small change and a chain of small changes walks a steppe people into a rainforest.
+
+  The point of the layer is that it disagrees with the political one, so `CultureRealmTest` measures
+  that rather than assuming it: peoples span 1.4-1.9 realms each, and 70-100% of cultural frontier
+  runs *inside* a country rather than along its border. Its mirror figure - peoples per realm - is
+  reported but deliberately not asserted, because cultures are roughly twice the size of realms and
+  most realms therefore sit inside one culture by simple geometry; on seed 7 it lands at 1.15, and
+  asserting on it would be fitting a threshold to the last run.
+
+  Two false readings on the way, both the same shape as the old WebP test. Hostile ground was
+  treated as impassable, which stranded everything behind it; it is now dear to cross and drawn
+  empty. And the coverage guard measured settled land against *all* land, which made a correct map
+  of a world that is a third ice sheet look like it had abandoned a third of the world - it now
+  measures against habitable land, where 97-98% is settled.
+
 - **Stage reuse switched on** (2026-08-24) — `WorldGenerationEngine` could already skip any stage
   whose settings had not changed, but no app ever passed it the previous world, so every slider
   nudge re-ran erosion. The UI now hands the old world back: toggling wilderness at 512 went from
@@ -110,17 +130,6 @@
   256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
   now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
   matters. A metric that discriminates the real bug would still be worth having.
-- **A cultural and national regions layer.** Requested 2026-08-24. A map view showing peoples
-  rather than states — the equivalent of "Slavic peoples", "Turkic peoples", "Han peoples" — which
-  may or may not line up with the realms drawn over them. A culture should be able to span several
-  realms and a realm to contain several cultures, since the mismatch between the two is where most
-  of a world's history comes from. The pieces are already there: `BasinPartition` gives geographic
-  units, `Nation.cultureSeed` already varies naming by realm, and climate gives the biomes a people
-  would have spread through. The open question is what a culture grows from — most likely a smaller
-  number of seeds than realms, grown over catchments with cost from climate similarity rather than
-  habitability, so a people follows a river system or a grassland belt across whatever borders
-  happen to cross it.
-
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

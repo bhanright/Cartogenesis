@@ -90,6 +90,19 @@ object MapPalette {
         return hsvToRgb(hue, 0.52f, value)
     }
 
+    /**
+     * A people's colour.
+     *
+     * Offset from [nation] by a different hue step and a lower saturation, so that flipping between
+     * the political and the peoples layer is obviously a change of subject rather than a reshuffle
+     * of the same countries.
+     */
+    fun culture(id: Int): Int {
+        val hue = (id * 73.5f + 200f) % 360f
+        val value = if (id % 2 == 0) 0.82f else 0.68f
+        return hsvToRgb(hue, 0.38f, value)
+    }
+
     /** Land no realm claims. Deliberately drab, so borders read as the thing with colour. */
     const val WILDERNESS = 0xFF6E6A5E.toInt()
     const val BORDER = 0xFF2A2118.toInt()

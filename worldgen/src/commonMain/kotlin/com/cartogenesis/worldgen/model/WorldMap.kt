@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.model
 import kotlinx.serialization.Serializable
 
 import com.cartogenesis.worldgen.pipeline.ClimateResult
+import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.ErosionResult
 import com.cartogenesis.worldgen.pipeline.LandmarkResult
 import com.cartogenesis.worldgen.pipeline.NationResult
@@ -36,6 +37,7 @@ data class WorldMap(
     val climate: ClimateResult,
     val rivers: RiverResult,
     val nations: NationResult,
+    val cultures: CultureResult,
     val landmarks: LandmarkResult,
     val labels: List<MapLabel> = emptyList()
 ) {

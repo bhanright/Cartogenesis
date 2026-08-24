@@ -285,6 +285,28 @@ a realm can be mostly polar waste and still be a temperate farming nation), impo
 staples it cannot supply. Names come from per-culture syllable inventories, so neighbouring realms
 sound like different peoples.
 
+## Peoples
+
+A second layer over the same ground: who lives there, as opposed to who governs there. It is
+generated from a different pressure than the realms are, which is the entire reason it exists.
+
+A realm takes catchments, because a state's reach is a question of ground it can hold. A people
+spreads through country that resembles the country it came from — so a culture grows outward from
+its hearth at a cost set by how *unlike home* the next piece of land is, and comes to rest where the
+climate turns rather than where a border was drawn. The cost is measured against the hearth and not
+against the neighbour: measured against the neighbour a people drifts, because every step is a small
+change and a chain of small changes walks a steppe people into a rainforest.
+
+There are fewer peoples than realms, because a culture is the larger unit. The result is that the
+two layers disagree — a people spans several states, a state holds several peoples, and the mismatch
+is where a world's history comes from. `CultureRealmTest` measures the disagreement rather than
+trusting it: peoples span 1.4–1.9 realms each, and 70–100% of cultural frontier runs inside a
+country rather than along its border. A layer that quietly reproduced the political map would be
+worse than no layer at all.
+
+Ice sheets are left empty, and are crossed rather than settled: treating them as impassable stranded
+everything behind them, which on one seed meant a third of the world's land.
+
 **All of it is a starting point.** Generated values sit under a `WorldOverrides` layer and every
 one can be replaced by the user. Anything untouched keeps following the generator, including after
 a regeneration, so a new setting does not wipe out edits. Any new generated attribute needs an

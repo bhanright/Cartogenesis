@@ -2,6 +2,7 @@ package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
+import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -9,6 +10,7 @@ import kotlin.math.sqrt
 enum class MapView(val label: String) {
     FANTASY("Fantasy"),
     POLITICAL("Political"),
+    CULTURES("Peoples"),
     ELEVATION("Elevation"),
     BIOMES("Biomes"),
     TEMPERATURE("Temperature"),
@@ -20,7 +22,8 @@ enum class MapView(val label: String) {
 
     /** Whether this view draws the land itself, and so should show standing water on it. */
     val showsTerrain: Boolean
-        get() = this == FANTASY || this == POLITICAL || this == ELEVATION || this == BIOMES
+        get() = this == FANTASY || this == POLITICAL || this == CULTURES ||
+            this == ELEVATION || this == BIOMES
 
     /**
      * Whether this view is about a flow field rather than the land. These carry direction arrows,
@@ -312,6 +315,19 @@ object MapRasterizer {
                     // Keep some relief showing through, so the political map still reads as a map
                     // of somewhere rather than a flat chart.
                     else -> MapPalette.blend(MapPalette.nation(owner), MapPalette.land(relative), 0.3f)
+                }
+            }
+
+            MapView.CULTURES -> {
+                val people = world.cultures.cultureId[i]
+                when {
+                    !isLand -> MapPalette.ocean(-relative)
+                    people == CultureResult.UNSETTLED -> style.wilderness
+                    // Same relief bleed as the political map, so the two read as the same world
+                    // seen two ways rather than as two unrelated charts.
+                    else -> MapPalette.blend(
+                        MapPalette.culture(people), MapPalette.land(relative), 0.3f
+                    )
                 }
             }
 

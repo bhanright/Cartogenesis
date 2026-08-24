@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.CultureStage
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
@@ -22,6 +23,7 @@ enum class GenerationStage(val label: String) {
     CLIMATE("Simulating climate"),
     RIVERS("Carving rivers"),
     NATIONS("Settling realms"),
+    CULTURES("Spreading peoples"),
     LANDMARKS("Stocking the wilds")
 }
 
@@ -137,6 +139,14 @@ object WorldGenerationEngine {
             ?.nations
             ?: NationStage.generate(config, sea, climate, rivers, ocean)
 
+        report(GenerationStage.CULTURES)
+        // Guarded on the rivers rather than on the realms: who lives where does not depend on who
+        // rules where, and tying the two would move every people whenever the realm count changed.
+        val cultures = reusable
+            ?.takeIf { it.rivers === rivers && it.config.cultures == config.cultures }
+            ?.cultures
+            ?: CultureStage.generate(config, sea, climate, rivers)
+
         report(GenerationStage.LANDMARKS)
         val landmarks = reusable
             ?.takeIf { it.nations === nations && it.config.landmarks == config.landmarks }
@@ -153,6 +163,7 @@ object WorldGenerationEngine {
             climate = climate,
             rivers = rivers,
             nations = nations,
+            cultures = cultures,
             landmarks = landmarks,
             labels = previous?.labels ?: emptyList()
         )

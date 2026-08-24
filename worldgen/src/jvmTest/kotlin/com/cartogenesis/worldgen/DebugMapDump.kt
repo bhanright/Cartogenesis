@@ -50,7 +50,12 @@ class DebugMapDump {
         write(render(world, Mode.TEMPERATURE), "seed42-temperature.png")
         write(render(world, Mode.NORMALS), "seed42-normals.png")
         write(render(world, Mode.NATIONS), "seed42-nations.png")
+        write(render(world, Mode.CULTURES), "seed42-cultures.png")
         write(render(world, Mode.HABITABILITY), "seed42-habitability.png")
+
+        world.cultures.cultures.sortedByDescending { it.cellCount }.forEach {
+            println("  ${it.name} - ${it.cellCount} cells, mostly ${it.dominantBiome}")
+        }
 
         world.nations.nations.sortedByDescending { it.cellCount }.take(3).forEach {
             println("  ${it.name} - ${it.government}, cap. ${it.capitalName}")
@@ -160,7 +165,8 @@ class DebugMapDump {
     }
 
     private enum class Mode {
-        FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, HABITABILITY
+        FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, CULTURES,
+        HABITABILITY
     }
 
     /** Mirrors RiverStage's threshold maths so the network can be inspected from outside. */
@@ -273,6 +279,15 @@ class DebugMapDump {
                         }
                     }
 
+                    Mode.CULTURES -> {
+                        val people = world.cultures.cultureId[i]
+                        when {
+                            !land -> 0x16405F
+                            people < 0 -> 0x6E6A5E // nobody lives here
+                            else -> mix(cultureColor(people), landColor(rel), 0.35f)
+                        }
+                    }
+
                     Mode.NORMALS -> {
                         val n = world.terrain.normals.normalAt(x, y)
                         rgbOf(
@@ -361,6 +376,27 @@ class DebugMapDump {
     private fun nationColor(id: Int): Int {
         val hue = (id * 47.5f + 15f) % 360f
         return Color.HSBtoRGB(hue / 360f, 0.55f, 0.9f) and 0xFFFFFF
+    }
+
+    /** Distinct from [nationColor], so the two layers cannot be confused at a glance. */
+    private fun cultureColor(id: Int): Int {
+        val hue = (id * 73.5f + 200f) % 360f
+        return hsvToRgbInt(hue, 0.42f, if (id % 2 == 0) 0.85f else 0.7f)
+    }
+
+    private fun hsvToRgbInt(hue: Float, s: Float, v: Float): Int {
+        val c = v * s
+        val x = c * (1f - kotlin.math.abs((hue / 60f) % 2f - 1f))
+        val m = v - c
+        val (r, g, b) = when {
+            hue < 60f -> Triple(c, x, 0f)
+            hue < 120f -> Triple(x, c, 0f)
+            hue < 180f -> Triple(0f, c, x)
+            hue < 240f -> Triple(0f, x, c)
+            hue < 300f -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+        return rgbOf(((r + m) * 255).toInt(), ((g + m) * 255).toInt(), ((b + m) * 255).toInt())
     }
 
     private fun plateColor(id: Int): Int {

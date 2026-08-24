@@ -180,40 +180,67 @@ class PipelineTest {
             "land fraction moved from ${preview.landFraction()} to ${exported.landFraction()}"
         )
 
-        // Terrain away from plate boundaries, measured as slope per unit of map width rather than
-        // per cell. This is the part of the world that should be pure scale-consistent noise, so
-        // it is the cleanest read on whether the larger grid is the same world in more detail.
-        // Leaving the mountain-belt falloff in absolute cells flattens it noticeably.
-        val previewSlope = meanSlopeAwayFromBoundaries(preview)
-        val exportedSlope = meanSlopeAwayFromBoundaries(exported)
-        val ratio = exportedSlope / previewSlope
+        // Mountain-belt reach is reported rather than asserted, and that is a deliberate
+        // retreat from a guard that stopped working.
+        //
+        // It began as mean slope away from the plate boundaries, on the reasoning that such
+        // terrain is pure scale-consistent noise. Erosion ended that reasoning: it shapes the
+        // ground everywhere and resolves finer channels on a finer grid, so the figure drifted on
+        // a perfectly correct world. Checking it against the bug it was written for -- the
+        // mountain-belt falloff left in absolute cells -- showed something worse: with that bug
+        // deliberately reintroduced the assertion still passed, because the bug moves the belts
+        // and the measure was looking away from them.
+        //
+        // Measuring the belts directly does not rescue it either. At 256 against 512 the reach
+        // differs by 1.7x on correct code, because a 256 grid is coarse enough that erosion has
+        // materially less to work with -- the two are not the same world at different detail, and
+        // pretending otherwise is what produced a guard nobody could trust.
+        //
+        // What actually pins the behaviour is ResolutionScalingTest, which asserts the contract of
+        // atResolution directly: every setting measured in cells scales with the grid, and the
+        // scaling round-trips exactly. That catches the bug this could not.
+        val previewReach = beltReach(preview)
+        val exportedReach = beltReach(exported)
+        println(
+            "RESOLUTION belt reach ${round2(previewReach)} at ${preview.width} " +
+                "against ${round2(exportedReach)} at ${exported.width}"
+        )
         assertTrue(
-            ratio in 0.78..1.3,
-            "slope away from plate boundaries changed ${round2(ratio)}x " +
-                "(${round2(previewSlope)} -> ${round2(exportedSlope)})"
+            previewReach > 0.0 && exportedReach > 0.0,
+            "one of the two worlds has no mountain belts at all"
         )
     }
 
     /** String.format is JVM-only, so shared tests round by hand. */
     private fun round2(value: Double): Double = kotlin.math.round(value * 100) / 100.0
 
-    private fun meanSlopeAwayFromBoundaries(world: com.cartogenesis.worldgen.model.WorldMap): Double {
+    /**
+     * How much higher the ground stands near a plate boundary than far from it, measuring "near"
+     * and "far" as fractions of the map rather than counts of cells.
+     *
+     * A belt that keeps its width on the map gives the same answer at any resolution. A belt whose
+     * falloff was left in cells is half as wide on a grid twice as fine, so much less of the near
+     * band is raised and the figure falls.
+     */
+    private fun beltReach(world: com.cartogenesis.worldgen.model.WorldMap): Double {
         val e = world.sea.relativeElevation
-        val nearRadius = world.width * 0.03f
-        var total = 0.0
-        var count = 0
-        for (y in 1 until world.height - 1) {
-            for (x in 1 until world.width - 1) {
-                val i = y * world.width + x
-                if (!world.sea.isLand[i]) continue
-                if (world.plates.boundaryDistance.data[i] < nearRadius) continue
-                val dx = e.sample(x + 1, y) - e.sample(x - 1, y)
-                val dy = e.sample(x, y + 1) - e.sample(x, y - 1)
-                total += kotlin.math.sqrt((dx * dx + dy * dy).toDouble()) * world.width
-                count++
+        val near = world.width * 0.035f
+        val far = world.width * 0.09f
+
+        var nearTotal = 0.0
+        var nearCount = 0
+        var farTotal = 0.0
+        var farCount = 0
+        for (i in 0 until world.width * world.height) {
+            if (!world.sea.isLand[i]) continue
+            val d = world.plates.boundaryDistance.data[i]
+            when {
+                d < near -> { nearTotal += e.data[i]; nearCount++ }
+                d > far -> { farTotal += e.data[i]; farCount++ }
             }
         }
-        return if (count == 0) 0.0 else total / count
+        if (nearCount == 0 || farCount == 0) return 0.0
+        return (nearTotal / nearCount) - (farTotal / farCount)
     }
 
     @Test

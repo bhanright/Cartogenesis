@@ -25,8 +25,17 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    slides, and the debris piles against the foot until the pile reaches that angle too. Sweeping
    that rule over the grid lowers crests and builds aprons around them, turning the walls the
    uplift left into ridges with flanks. It conserves mass, which is the point — the debris is what
-   widens a belt's footprint. Runs before sea level, since eroding the terrain changes which
-   elevation the percentile lands on.
+   widens a belt's footprint.
+
+   Then water. Stream-power incision lowers a cell in proportion to the square root of the area
+   draining through it times the slope it sits on, so a channel that cuts down gathers more water
+   and cuts deeper still — which is where dendritic drainage and sharp divides come from, and no
+   amount of smoothing produces them. The two are interleaved rather than run in sequence: alone,
+   incision cuts a slot one cell wide, and a one-cell slot is twice as steep on a grid twice as
+   fine. Letting the walls fail between rounds caps them at an angle that belongs to the map.
+
+   Runs before sea level, since eroding the terrain changes which elevation the percentile lands
+   on — and nothing cuts below that level, because it is the base level every river grades to.
 5. **Sea level** — everything below a chosen elevation percentile floods.
 6. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
    that curl inside a closed basin *is* a gyre, so the currents are solved for rather than drawn.

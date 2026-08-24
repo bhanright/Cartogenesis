@@ -220,7 +220,26 @@ data class ErosionConfig(
      */
     val passes: Int = 80,
     /** Share of the material above the critical slope that moves each pass. Above 0.5 it rings. */
-    val rate: Float = 0.25f
+    val rate: Float = 0.25f,
+    /**
+     * How many route-and-incise rounds of hydraulic erosion follow the thermal sweeps.
+     *
+     * Unlike [passes], this does not scale with the grid. Each round routes the water globally --
+     * filling every hollow, finding every downhill path, adding up everything upstream -- so one
+     * round already carries information from a watershed's head to its mouth however large the
+     * grid is. What more rounds buy is the feedback: a channel cut in one round gathers more water
+     * in the next and cuts deeper still, which is what turns a slope into a valley.
+     */
+    val hydraulicRounds: Int = 12,
+    /**
+     * How readily running water cuts down, per round.
+     *
+     * Stream power: incision goes as the square root of the upstream area times the slope, both
+     * expressed against the map rather than the grid so the result does not change with
+     * resolution. Raising it deepens valleys and sharpens divides; too high and the channels cut
+     * to the sea and the land between them is left as unconnected plateaux.
+     */
+    val erodibility: Float = 0.055f
 )
 
 /** Standing fresh water in basins the terrain does not drain. */
@@ -278,7 +297,7 @@ data class NationsConfig(
      * and a mild hinterland, which is why Bergen is a city and Labrador is not; a cold current
      * takes the same amount back off.
      */
-    val warmHarbourBonus: Float = 0.14f,
+    val warmHarbourBonus: Float = 0.20f,
     /**
      * How much a cold upwelling on a shallow shelf is worth. Cold water rising over a shelf is
      * where the great fisheries are — the Grand Banks, the Humboldt, the Benguela — so it feeds a

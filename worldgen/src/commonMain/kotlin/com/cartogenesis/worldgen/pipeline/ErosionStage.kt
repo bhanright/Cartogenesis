@@ -45,8 +45,40 @@ object ErosionStage {
         height: FloatField,
         accelerator: ErosionAccelerator? = null
     ): ErosionResult {
+        if (!config.erosion.enabled) return ErosionResult(height)
+
+        // Rock first, then water. The flanks have to exist before anything can cut into them, and
+        // the channels the water carves are the ones the river stage will later find and draw.
+        val weathered = thermal(config, height, accelerator)
+
+        // The relaxation between rounds is charged against the same sweep budget, so it scales
+        // with the grid exactly as the main thermal pass does -- material still moves one cell per
+        // sweep however fine the grid.
         val cfg = config.erosion
-        if (!cfg.enabled || cfg.passes <= 0) return ErosionResult(height)
+        // A full thermal budget again, spread across the rounds. Halving it to save nine seconds
+        // at 2048 was tried and put back: the resolution-consistency guard failed at 1.32x, because
+        // walls left short of the critical slope are steeper on a finer grid, which is the exact
+        // failure this relaxation exists to prevent. Correctness at the resolution the user exports
+        // at is worth more than the time.
+        val sweepsPerRound =
+            (cfg.passes / cfg.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
+        val relaxConfig = config.copy(erosion = cfg.copy(passes = sweepsPerRound))
+
+        return ErosionResult(
+            HydraulicErosion.apply(config, weathered.height, config.seaLevel) { field ->
+                thermal(relaxConfig, field, accelerator).height
+            }
+        )
+    }
+
+    /** Slope-limited failure: the sweeps that give a mountain its flanks. */
+    private suspend fun thermal(
+        config: WorldGenConfig,
+        height: FloatField,
+        accelerator: ErosionAccelerator?
+    ): ErosionResult {
+        val cfg = config.erosion
+        if (cfg.passes <= 0) return ErosionResult(height)
 
         if (cfg.acceleration == Acceleration.GPU && accelerator != null) {
             // A null result means the accelerator looked at the job and declined it, which is a

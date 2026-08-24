@@ -134,8 +134,24 @@ where a belt crosses shallow sea — land above water stays above water — but 
 the crest and onto the flanks it widens the footprint until the strip stops reading as one. On the
 seed this was diagnosed from, it halves the land sitting in strips, from 0.4% to 0.2%.
 
-What is still missing is water. Nothing carves a valley, so the rivers find routes down terrain
-that was never shaped by them.
+Water carves the rest. Thermal erosion answers a question about rock — how steeply it can stand —
+and gives mountains their flanks; it cannot make a valley, because a valley is cut by something
+that flows. Stream-power incision does that: a cell lowers in proportion to the square root of the
+area draining through it times the slope it sits on, so a channel that cuts down gathers more water
+and cuts deeper still, and the divides between channels sharpen as the channels fall away. That
+feedback is where dendritic drainage and ridge lines come from, and no amount of smoothing produces
+them.
+
+Two details matter more than they look. Incision is interleaved with the thermal sweeps rather than
+run after them, because on its own it cuts a slot one cell wide — and a one-cell slot is twice as
+steep on a grid twice as fine, so the world stops being the same world at different resolutions.
+Letting the walls fail between rounds caps them at the critical slope, which is a property of the
+map. And nothing cuts below sea level, because that is the base level every river grades to; without
+that limit the cells nearest the shore incise hardest, having a whole catchment behind them and open
+water in front, and the coastline shreds into drowned valleys.
+
+Verified by `ValleyIncisionTest`, which measures how far the banks stand above the channel across
+every drawn river: twice as high as without water.
 
 ## Not modelled, and probably shouldn't be
 

@@ -30,6 +30,11 @@
   its canvas inside a shadow root, so the page looked dead when it was working; and `target` is a
   reserved word in WGSL, so both shaders silently failed to compile and every dispatch was a no-op
   that returned a buffer of zeros as if it were terrain. Shader compilation is now checked.
+- **Hydraulic erosion** (2026-08-24) — stream-power incision, interleaved with the thermal sweeps.
+  Rivers now run in valleys they cut rather than in whatever hollows the noise left: measured, the
+  banks stand twice as high above the channel as before. Flow routing moved into `FlowRouting` and
+  is shared with the river stage, so the valleys erosion carves are the ones the rivers later find.
+  Costs about 10 seconds at 2048.
 - **Desert latitude** (2026-08-24) — deserts now sit where the horse latitudes are: 99-100% of
   desert falls in 15-45 degrees on all four audited seeds, against 43-97% before and 34% in
   aggregate. Two changes, both about mechanism rather than tuning. The latitude bands now scale the
@@ -55,11 +60,12 @@
 
 ## Open
 
-- **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
-  valleys, because that needs water routed over the terrain. Rivers therefore find routes down
-  terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.
-  Routing happens after depression filling, two stages later, so this would mean either running a
-  provisional routing pass inside erosion or restructuring the pipeline.
+- **The resolution-consistency guard no longer has a statistical form.** It began as mean slope
+  away from plate boundaries; erosion invalidated that, and reintroducing the bug it was written
+  for showed it no longer caught it. Measuring belt reach directly does not work either, because a
+  256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
+  now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
+  matters. A metric that discriminates the real bug would still be worth having.
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

@@ -162,6 +162,13 @@ object ClimateStage {
                 val direction = wind[y * w]
                 var moisture = 0.5f
 
+                // The circulation belt this row sits in, applied to the rain *rate* rather than to
+                // the finished total. Multiplying the result afterwards cannot make a rain shadow
+                // wet again -- twice nearly nothing is still nearly nothing -- whereas suppressing
+                // the rate is what descending subtropical air actually does, and boosting it is
+                // what the ITCZ does.
+                val band = latitudeBand(y, h, cfg.subtropicalDryness)
+
                 // Two laps around the cylinder: the first seeds a realistic moisture state, the
                 // second is the one that gets recorded, so the arbitrary starting value washes out.
                 for (lap in 0 until 2) {
@@ -190,9 +197,19 @@ object ClimateStage {
                         val rise = (sea.relativeElevation.data[i] -
                             sea.relativeElevation.data[y * w + upwindX]).coerceAtLeast(0f)
 
-                        val rate = cfg.baseRainRate + cfg.orographicStrength * rise
+                        val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * band
                         val rain = (moisture * rate).coerceAtMost(moisture)
                         moisture -= rain
+
+                        // Evapotranspiration: the land gives water back, and how readily is the
+                        // thing that decides where deserts sit. Scaled by the belt, because that
+                        // is the mechanism: descending subtropical air suppresses the convection
+                        // that would return moisture to the sky, while rising tropical air
+                        // encourages it. Take the belt out of this term and every latitude
+                        // re-moistens alike, at which point deserts stop preferring the horse
+                        // latitudes at all -- measured, placement falls from 90% to 34%.
+                        val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
+                        moisture += cfg.landRecoveryRate * warmth * band * (1f - moisture)
 
                         // Cold air simply holds less water.
                         val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
@@ -204,7 +221,6 @@ object ClimateStage {
             }
         }
 
-        applyLatitudeBands(precip)
         BoxBlur.apply(precip, radius = (config.width / 128).coerceAtLeast(1), passes = 2)
         normalizeByLandPercentile(precip, sea.isLand, WET_PERCENTILE)
         return precip
@@ -257,32 +273,29 @@ object ClimateStage {
     }
 
     /** Wet equatorial convergence zone, dry horse latitudes around 30 degrees. */
-    private fun applyLatitudeBands(precip: FloatField) {
-        // Latitude bands are a per-row multiplier.
-        parallelChunks(0, precip.height) { start, end ->
-            for (y in start until end) {
-                val lat = abs(latitudeOf(y, precip.height))
-
-                // Three bands, each a bump centred where the atmosphere actually puts it: the
-                // wet ITCZ at the equator, the dry descending air of the horse latitudes near 30,
-                // and the wet mid-latitude storm track near 55.
-                //
-                // The previous version multiplied a single cosine by a dip at 30, which made 60
-                // the driest latitude on the map — drier than the subtropics. That mostly hid
-                // behind the temperature test classifying those rows as tundra, but it was wrong,
-                // and it is what let deserts drift toward the equator.
-                val itcz = 1.0f * bell(lat, 0f, 12f)
-                val subtropicalHigh = -0.55f * bell(lat, 30f, 13f)
-                val stormTrack = 0.5f * bell(lat, 55f, 15f)
-                val polarDry = -0.35f * bell(lat, 90f, 18f)
-
-                val factor = (1f + itcz + subtropicalHigh + stormTrack + polarDry)
-                    .coerceAtLeast(0.05f)
-                for (x in 0 until precip.width) {
-                    precip[x, y] = precip[x, y] * factor
-                }
-            }
-        }
+    /**
+     * How much the circulation belt at this row encourages or suppresses rain.
+     *
+     * Three bands, each a bump centred where the atmosphere actually puts it: the wet ITCZ at the
+     * equator, the dry descending air of the horse latitudes near 30, and the wet mid-latitude
+     * storm track near 55.
+     *
+     * Applied to the rain rate during the march rather than to the finished totals afterwards. As
+     * a post-hoc multiplier it could not put rain back into air already wrung out crossing a
+     * mountain -- twice nearly nothing is still nearly nothing -- so a rain shadow stayed a rain
+     * shadow even on the wettest row of the map, which is how deserts were reaching the equator.
+     */
+    internal fun latitudeBand(y: Int, height: Int, subtropicalDryness: Float = 1.15f): Float {
+        val lat = abs(latitudeOf(y, height))
+        val itcz = 1.0f * bell(lat, 0f, 12f)
+        val subtropicalHigh = -subtropicalDryness * bell(lat, 30f, 13f)
+        val stormTrack = 0.5f * bell(lat, 55f, 15f)
+        val polarDry = -0.35f * bell(lat, 90f, 18f)
+        // The floor does real work rather than merely guarding against nonsense: at the default
+        // dryness the sum goes negative for roughly 25 to 35 degrees, so that span is clamped flat
+        // and maximally arid. That is a fair description of a subtropical desert belt, but it does
+        // mean raising the setting further widens the belt rather than deepening it.
+        return (1f + itcz + subtropicalHigh + stormTrack + polarDry).coerceAtLeast(0.05f)
     }
 
     private fun classify(

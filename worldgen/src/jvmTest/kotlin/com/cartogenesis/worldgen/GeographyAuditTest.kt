@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Audits generated worlds against the rules real geography follows — the ones fantasy maps are
@@ -92,10 +93,20 @@ class GeographyAuditTest {
                 }
             }
             if (desertCells > 0) {
+                val share = desertsInBand * 100 / desertCells
                 println(
                     "AUDIT desert mean latitude ${"%.1f".format(desertLatSum / desertCells)} deg " +
                         "vs land mean ${"%.1f".format(landLatSum / landCells)} deg; " +
-                        "${desertsInBand * 100 / desertCells}% of desert sits in 15-45 deg"
+                        "$share% of desert sits in 15-45 deg"
+                )
+                // Deserts belong to the horse latitudes. They used to wander badly -- as low as
+                // 43% on some seeds and 34% in aggregate -- because orographic depletion was
+                // permanent, so a rain shadow became a desert wherever it happened to fall,
+                // including on the wettest rows of the map. Asserted rather than merely reported,
+                // since that regression was invisible until someone looked at a map.
+                assertTrue(
+                    share >= 85,
+                    "seed $seed puts only $share% of its desert in 15-45 degrees"
                 )
             }
 

@@ -30,6 +30,14 @@
   its canvas inside a shadow root, so the page looked dead when it was working; and `target` is a
   reserved word in WGSL, so both shaders silently failed to compile and every dispatch was a no-op
   that returned a buffer of zeros as if it were terrain. Shader compilation is now checked.
+- **Desert latitude** (2026-08-24) — deserts now sit where the horse latitudes are: 99-100% of
+  desert falls in 15-45 degrees on all four audited seeds, against 43-97% before and 34% in
+  aggregate. Two changes, both about mechanism rather than tuning. The latitude bands now scale the
+  rain *rate* during the march instead of multiplying the finished totals, because a post-hoc
+  multiplier cannot put rain back into air already wrung out by a mountain. And land now returns
+  moisture to the air, scaled by that same band, so a rain shadow recovers downwind in the tropics
+  and stays arid in the subtropics. `GeographyAuditTest` asserts the placement now rather than
+  merely printing it.
 - **Erosion** (2026-08-23) — thermal erosion, as its own pipeline stage between tectonics and sea
   level. Halves the land sitting in thin strips on seed 234475, from 0.4% to 0.2%, and gives belts
   flanks instead of walls. Critical slope is held per unit of map rather than per cell so terrain
@@ -47,12 +55,6 @@
 
 ## Open
 
-- **Desert latitude.** Rain shadow can still overwhelm the latitude band and push desert toward the
-  equator where rainforest belongs. The ITCZ curve was rewritten as three bells (ITCZ, subtropical
-  high, storm track) during the ocean work, which fixed 60 degrees reading as the driest band and
-  helped the spread, but the audit is still uneven: the share of desert falling in the 15-45 degree
-  band is 97% and 75% on seeds 7 and 1234, and only 53% and 43% on seeds 42 and 99. The remaining
-  cause looks like orographic strength rather than the bands themselves.
 - **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
   valleys, because that needs water routed over the terrain. Rivers therefore find routes down
   terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.

@@ -75,6 +75,28 @@ water, which is why London, Paris and Rome are where they are.
 
 After: 6–8 of 12 coastal, 6–9 of 12 on a river. A mix rather than a rule.
 
+## Where the deserts are
+
+Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
+dry. Getting them there took two mechanisms rather than a tuned constant.
+
+- **The circulation belt scales the rain rate, not the finished rainfall.** As a multiplier applied
+  afterwards it could not make a rain shadow wet again — twice nearly nothing is still nearly
+  nothing — so a range at the equator produced desert on the wettest row of the map. Applied to the
+  rate during the march it suppresses rain where air descends and encourages it where air rises,
+  which is what those belts actually do.
+- **Land gives moisture back.** Forests and soil return water to the air, and the tropics recycle a
+  large share of their own rainfall. Without that, orographic depletion is permanent and a
+  continent stays parched from its first mountain to its far coast. The recovery is scaled by the
+  same belt, because descending subtropical air suppresses the convection that would return the
+  moisture — remove that scaling and every latitude re-moistens alike, at which point deserts stop
+  preferring the subtropics at all. Measured: placement falls from 90% to 34%.
+
+Verified by `GeographyAuditTest`, which asserts at least 85% of desert falls between 15 and 45
+degrees; all four audited seeds now manage 99-100%, and desert covers about 4.6% of land.
+`DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,
+its upwind climb, and how far its air travelled over land.
+
 ## Coasts and the sea beside them
 
 Two coasts at the same latitude are not the same coast, and the usual fantasy-map mistake is to

@@ -81,7 +81,28 @@ data class ClimateConfig(
     /** Baseline rainfall rate over flat land, per cell of travel. */
     val baseRainRate: Float = 0.02f,
     /** How fast air over ocean re-saturates. */
-    val evaporationRate: Float = 0.06f
+    val evaporationRate: Float = 0.06f,
+    /**
+     * How strongly the descending air of the horse latitudes suppresses rain, near 30 degrees.
+     *
+     * This is what decides how much desert a world has, once [landRecoveryRate] has decided where
+     * it sits. The two are close to independent: recovery governs whether a rain shadow stays a
+     * desert far from the subtropics, this governs how arid the subtropics themselves get.
+     */
+    val subtropicalDryness: Float = 1.15f,
+    /**
+     * How fast air over *land* re-moistens, as a share of the deficit per cell travelled.
+     *
+     * Land is not a desert simply for being downwind of a mountain. Forests and soil return water
+     * to the air, and in the warm tropics a large share of the rain that falls is rain that fell
+     * before and was given back — the Amazon recycles roughly a third of its own. Without that,
+     * orographic depletion is permanent: air wrung out by one range stays wrung out for the rest
+     * of the continent, and a rain shadow at the equator becomes a desert on the wettest row of
+     * the map.
+     *
+     * Smaller than [evaporationRate], because land gives back less water than an ocean does.
+     */
+    val landRecoveryRate: Float = 0.010f
 )
 
 @Serializable

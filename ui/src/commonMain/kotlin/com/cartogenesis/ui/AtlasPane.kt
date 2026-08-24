@@ -1,5 +1,6 @@
-package com.cartogenesis.desktop
+package com.cartogenesis.ui
 
+import kotlin.math.roundToLong
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -237,10 +238,17 @@ private fun Field(
 private fun splitList(raw: String): List<String> =
     raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
+// String.format is a JVM convenience and does not exist in the browser, so the rounding is
+// spelled out. Only ever a millions or thousands figure, so one decimal place is the lot.
 private fun people(population: Long): String = when {
-    population >= 1_000_000 -> "%.1fM".format(population / 1_000_000.0)
-    population >= 1_000 -> "%.0fk".format(population / 1_000.0)
+    population >= 1_000_000 -> oneDecimal(population / 1_000_000.0) + "M"
+    population >= 1_000 -> (population / 1_000.0).roundToLong().toString() + "k"
     else -> population.toString()
+}
+
+private fun oneDecimal(value: Double): String {
+    val tenths = (value * 10).roundToLong()
+    return "${tenths / 10}.${tenths % 10}"
 }
 
 private fun biomeLabel(biome: Biome): String =

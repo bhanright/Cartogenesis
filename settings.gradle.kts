@@ -39,4 +39,5 @@ dependencyResolutionManagement {
 rootProject.name = "Cartogenesis"
 include(":worldgen")
 include(":cartography")
+include(":ui")
 include(":desktop")

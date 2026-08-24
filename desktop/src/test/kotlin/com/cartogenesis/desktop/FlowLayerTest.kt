@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -68,7 +69,7 @@ class FlowLayerTest {
         assertTrue(badLength == 0, "$badLength current arrows are not unit vectors")
 
         listOf(MapView.CURRENTS to "currents", MapView.WIND to "wind").forEach { (view, name) ->
-            val bitmap = DesktopRenderer.toBitmap(world, RenderOptions(view = view))
+            val bitmap = MapImage.toBitmap(world, RenderOptions(view = view))
             val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!
             File(outputDir, "seed42-$name.png").writeBytes(data.bytes)
             bitmap.close()

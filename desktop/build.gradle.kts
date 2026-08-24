@@ -42,7 +42,7 @@ val lwjglNatives = when {
 
 dependencies {
     testImplementation(kotlin("test"))
-    implementation(project(":cartography"))
+    implementation(project(":ui"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing)

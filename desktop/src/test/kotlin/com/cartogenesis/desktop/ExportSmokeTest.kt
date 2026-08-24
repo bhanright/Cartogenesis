@@ -1,6 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
 import kotlin.test.Test

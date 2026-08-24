@@ -1,4 +1,4 @@
-package com.cartogenesis.desktop
+package com.cartogenesis.ui
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -18,19 +18,28 @@ import org.jetbrains.skia.Path
 import org.jetbrains.skia.Rect
 
 /**
- * The desktop half of rendering.
+ * The drawing half of rendering.
  *
- * Everything that decides what the map looks like lives in `:cartography`; this only executes the
+ * Everything that decides what the map *looks like* lives in `:cartography` — colours, relief
+ * shading, which river segments to draw, which glyph a landmark gets — so this only executes the
  * result through Skia. The pixel buffer arrives as ARGB ints, which Skia wants as BGRA bytes.
+ *
+ * Shared rather than written twice: Compose Multiplatform carries the same Skia on the desktop and
+ * in the browser, so a map drawn in a tab is drawn by exactly this code.
  */
-object DesktopRenderer {
+object MapImage {
 
     fun render(world: WorldMap, options: RenderOptions): ImageBitmap {
         val bitmap = toBitmap(world, options)
-        // Compose only converts from a Skia Image, not a Bitmap; the Image takes its own copy, so
-        // the bitmap can be released straight away rather than holding width*height*4 bytes twice.
-        return Image.makeFromBitmap(bitmap).use { it.toComposeImageBitmap() }
-            .also { bitmap.close() }
+        // Compose only converts from a Skia Image, not a Bitmap; the Image takes its own copy,
+        // so both can be released straight away rather than holding width*height*4 bytes twice.
+        // Closed by hand rather than with `use`, which in common code would resolve to the JVM
+        // Closeable extension and does not exist in the browser.
+        val image = Image.makeFromBitmap(bitmap)
+        val composed = image.toComposeImageBitmap()
+        image.close()
+        bitmap.close()
+        return composed
     }
 
     /** Kept separate from [render] so export can encode without going through Compose. */

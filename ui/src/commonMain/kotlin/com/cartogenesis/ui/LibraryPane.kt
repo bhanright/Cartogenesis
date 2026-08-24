@@ -1,4 +1,4 @@
-package com.cartogenesis.desktop
+package com.cartogenesis.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.WorldDocument
-import java.text.DateFormat
-import java.util.Date
 
 /**
  * Saving and reopening worlds.
@@ -89,8 +87,7 @@ fun LibraryPane(
                         Text(world.title, style = MaterialTheme.typography.titleSmall)
                         Text(
                             "seed ${world.config.seed} · ${world.config.width}px · " +
-                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                                    .format(Date(world.savedAt)),
+                                formatTimestamp(world.savedAt),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -31,16 +31,13 @@ class StyleGalleryTest {
         )
 
         val fingerprints = mutableMapOf<MapStyle, Int>()
-        // Symbols on, since they are half of what the drawn styles are for.
-        val withSymbols = true
         MapStyle.entries.forEach { style ->
             val bitmap = MapImage.toBitmap(
                 world,
-                RenderOptions(view = MapView.FANTASY, style = style, showSymbols = withSymbols)
+                RenderOptions(view = MapView.FANTASY, style = style)
             )
             val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!
-            val suffix = if (withSymbols) "-symbols" else ""
-            File(dir, "style-${style.name.lowercase()}$suffix.png").writeBytes(data.bytes)
+            File(dir, "style-${style.name.lowercase()}.png").writeBytes(data.bytes)
 
             // Cheap content hash: enough to tell two styles apart, and it costs nothing.
             val pixels = bitmap.readPixels()!!

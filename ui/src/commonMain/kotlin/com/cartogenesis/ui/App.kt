@@ -642,7 +642,6 @@ private fun WorldSettings(
     Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
     Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
     Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
-    Toggle("Terrain symbols", options.showSymbols) { onOptions(options.copy(showSymbols = it)) }
 }
 
 /** Which layer of the world is on screen, and how it is drawn. */

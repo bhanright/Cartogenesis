@@ -397,9 +397,6 @@ enum class MapStyle(
      * lines running across the slope rather than as a grey smear. The steeper the ground the lower
      * the bar, so a ridge fills solid, a hillside becomes stripes, and a plain stays blank.
      */
-    /** Terrain marks are drawn in the same hand as the coastline. */
-    internal val symbolInk: Int get() = coastline
-
     internal fun inked(x: Int, y: Int, shade: Float): Boolean {
         if (!lineArt) return false
         val steepness = (1f - shade).coerceAtLeast(0f)

@@ -32,6 +32,11 @@ enum class MapView(val label: String) {
 
 data class RenderOptions(
     val view: MapView = MapView.FANTASY,
+    /**
+     * How the finished map is drawn. Applies to the fantasy and political views; the diagnostic
+     * views ignore it, because their colours carry meaning and a prettier ramp would make them lie.
+     */
+    val style: MapStyle = MapStyle.ATLAS,
     val showRivers: Boolean = true,
     val showCoastline: Boolean = true,
     val showHillshade: Boolean = true,
@@ -115,6 +120,7 @@ object MapRasterizer {
         val h = world.height
         val pixels = IntArray(w * h)
 
+        val style = options.style
         val hillshade = if (options.showHillshade && options.view != MapView.NORMALS) {
             computeHillshade(world)
         } else null
@@ -129,22 +135,22 @@ object MapRasterizer {
                 val depth = world.rivers.filledElevation.data[i] -
                     world.sea.relativeElevation.data[i]
                 pixels[i] = MapPalette.blend(
-                    MapPalette.LAKE,
-                    MapPalette.LAKE_DEEP,
+                    style.lake,
+                    style.lakeDeep,
                     (depth * 12f).coerceIn(0f, 1f)
                 )
                 continue
             }
 
-            var color = baseColor(world, options.view, i)
+            var color = baseColor(world, options.view, style, i)
             if (hillshade != null && world.sea.isLand[i]) {
-                color = MapPalette.shade(color, hillshade[i])
+                color = MapPalette.shade(color, style.relief(hillshade[i]))
             }
             pixels[i] = color
         }
 
-        if (options.showCoastline) drawCoastline(world, pixels)
-        if (options.bordersVisible) drawBorders(world, pixels)
+        if (options.showCoastline) drawCoastline(world, style, pixels)
+        if (options.bordersVisible) drawBorders(world, style, pixels)
         return pixels
     }
 
@@ -246,17 +252,17 @@ object MapRasterizer {
                         y = (landmark.cell / w) + 0.5f,
                         radius = radius,
                         shape = shapeFor(landmark.kind),
-                        fill = colorFor(landmark.kind)
+                        fill = options.style.glyph(colorFor(landmark.kind))
                     )
                 )
             }
             return MapOverlay(
                 rivers, glyphs, flow, flowScale,
-                MapPalette.RIVER, 0xFF241C14.toInt(), (radius * 0.28f).coerceAtLeast(1f)
+                options.style.river, options.style.coastline, (radius * 0.28f).coerceAtLeast(1f)
             )
         }
         return MapOverlay(rivers, glyphs, flow, flowScale,
-            MapPalette.RIVER, 0xFF241C14.toInt(), 1f)
+            options.style.river, 0xFF241C14.toInt(), 1f)
     }
 
     /** Shape carries the kind, so the map stays readable in greyscale and without a legend. */
@@ -277,29 +283,26 @@ object MapRasterizer {
         LandmarkKind.SANCTUARY -> 0xFFE8E2D0.toInt()
     }
 
-    private fun baseColor(world: WorldMap, view: MapView, i: Int): Int {
+    private fun baseColor(world: WorldMap, view: MapView, style: MapStyle, i: Int): Int {
         val isLand = world.sea.isLand[i]
         val relative = world.sea.relativeElevation.data[i]
 
         return when (view) {
             MapView.FANTASY ->
                 if (!isLand) {
-                    MapPalette.ocean(-relative)
+                    style.ocean(-relative)
                 } else {
                     // Hypsometric tint carries the shape; a wash of biome colour carries the
-                    // climate, so both read at a glance.
-                    MapPalette.blend(
-                        MapPalette.land(relative),
-                        MapPalette.biome(world.climate.biome[i]),
-                        0.45f
-                    )
+                    // climate, so both read at a glance. How much of that wash gets through is
+                    // most of what separates one style from another.
+                    style.tint(style.land(relative), world.climate.biome[i])
                 }
 
             MapView.POLITICAL -> {
                 val owner = world.nations.nationId[i]
                 when {
                     !isLand -> MapPalette.ocean(-relative)
-                    owner == NationResult.UNCLAIMED -> MapPalette.WILDERNESS
+                    owner == NationResult.UNCLAIMED -> style.wilderness
                     // Keep some relief showing through, so the political map still reads as a map
                     // of somewhere rather than a flat chart.
                     else -> MapPalette.blend(MapPalette.nation(owner), MapPalette.land(relative), 0.3f)
@@ -381,7 +384,7 @@ object MapRasterizer {
         return shade
     }
 
-    private fun drawCoastline(world: WorldMap, pixels: IntArray) {
+    private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {
         val w = world.width
         val h = world.height
         val land = world.sea.isLand
@@ -392,7 +395,9 @@ object MapRasterizer {
                 val right = land[y * w + (x + 1) % w]
                 val down = if (y + 1 < h) land[(y + 1) * w + x] else true
                 if (!right || !down) {
-                    pixels[i] = MapPalette.blend(pixels[i], MapPalette.COASTLINE, 0.55f)
+                    pixels[i] = MapPalette.blend(
+                        pixels[i], style.coastline, style.coastlineStrength
+                    )
                 }
             }
         }
@@ -402,7 +407,7 @@ object MapRasterizer {
      * Marks a cell whenever the realm to its east or south differs. Only land-to-land transitions
      * count, so a realm's coastline is left to the coastline pass rather than being outlined twice.
      */
-    private fun drawBorders(world: WorldMap, pixels: IntArray) {
+    private fun drawBorders(world: WorldMap, style: MapStyle, pixels: IntArray) {
         val w = world.width
         val h = world.height
         val owner = world.nations.nationId
@@ -417,7 +422,7 @@ object MapRasterizer {
 
                 val differs = (land[right] && owner[right] != owner[i]) ||
                     (land[down] && owner[down] != owner[i])
-                if (differs) pixels[i] = MapPalette.blend(pixels[i], MapPalette.BORDER, 0.75f)
+                if (differs) pixels[i] = MapPalette.blend(pixels[i], style.border, 0.75f)
             }
         }
     }

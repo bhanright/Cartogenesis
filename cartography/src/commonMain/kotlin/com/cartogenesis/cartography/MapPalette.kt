@@ -127,7 +127,7 @@ object MapPalette {
         return argb(r.toInt(), g.toInt(), b.toInt())
     }
 
-    private fun ramp(colors: IntArray, t: Float): Int {
+    internal fun ramp(colors: IntArray, t: Float): Int {
         val clamped = t.coerceIn(0f, 1f)
         val scaled = clamped * (colors.size - 1)
         val index = scaled.toInt().coerceAtMost(colors.size - 2)

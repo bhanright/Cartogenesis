@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
@@ -205,7 +206,8 @@ fun CartogenesisApp(platform: Platform) {
         // surfaces and must take their colour from the theme, or their (dark) text lands on
         // near-black and becomes invisible.
         val backdrop =
-            if (screen == Screen.MAP) Color(0xFF14171A) else MaterialTheme.colorScheme.background
+            if (screen == Screen.MAP) Color(options.style.backdrop)
+            else MaterialTheme.colorScheme.background
 
         Box(
             Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp).background(backdrop)
@@ -642,9 +644,34 @@ private fun WorldSettings(
     Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
 }
 
-/** Which layer of the world is on screen. One per row, since these are read rather than scanned. */
+/** Which layer of the world is on screen, and how it is drawn. */
 @Composable
 private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
+    Text("Style", style = MaterialTheme.typography.titleSmall)
+    MapStyle.entries.forEach { style ->
+        FilterChip(
+            selected = options.style == style,
+            onClick = { onOptions(options.copy(style = style)) },
+            label = { Text(style.label, maxLines = 1) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    Text(
+        options.style.detail,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    // Only the fantasy and political views are drawn in a style; the rest carry meaning in their
+    // colours, so it would be a lie to restyle them.
+    if (!options.view.showsTerrain) {
+        Text(
+            "The ${options.view.label.lowercase()} view ignores the style, since its colours mean something.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    HorizontalDivider(Modifier.padding(vertical = 8.dp))
     Text("View", style = MaterialTheme.typography.titleSmall)
     MapView.entries.forEach { view ->
         FilterChip(

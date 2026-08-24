@@ -63,8 +63,17 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 For the browser build:
 
 ```bash
-./gradlew :web:wasmJsBrowserDevelopmentRun
+./gradlew :web:wasmJsBrowserProductionRun
 ```
+
+That serves the optimised bundle at http://localhost:8080. Use the *production* task rather than
+`wasmJsBrowserDevelopmentRun`: the development bundle is unoptimised Wasm and generates several
+times slower, which on a single-threaded target is the difference between a pause and a wait. To
+produce a folder to host rather than serve locally, `./gradlew :web:wasmJsBrowserDistribution`
+writes one to `web/build/dist/wasmJs/productionExecutable`.
+
+It has to be served over HTTP rather than opened as a file: Wasm will not load from `file://`, and
+WebGPU is only offered in a secure context, which `localhost` counts as.
 
 The two are the same application. `:ui` holds all of it, including the renderer — Compose
 Multiplatform carries the same Skia in both places, so a map drawn in a tab is drawn by exactly the

@@ -1,12 +1,9 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.math.BoxBlur
-import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
-import com.cartogenesis.worldgen.model.NationsConfig
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.ln
 import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.naming.NameKind
 import kotlin.math.abs
@@ -94,11 +91,170 @@ object NationStage {
             return NationResult(nationId, emptyList(), habitability)
         }
 
-        val origins = seedOrigins(config, sea, habitability)
+        // Territory is handed out in whole catchments rather than grown cell by cell, which is what
+        // puts borders on watersheds instead of wherever two expansions happened to meet.
+        val cfgN = config.nations
+        val land = sea.landCellCount
+        val catchments = BasinPartition.compute(
+            config, sea, rivers, (land * cfgN.maxBasinShare).toInt().coerceAtLeast(16)
+        )
+        // Cut the big ones along their trunk, so some frontiers are rivers and not only divides.
+        val banked = BasinPartition.splitAlongTrunks(
+            config, sea, rivers, catchments, rivers.flowAccumulation.data.max() * cfgN.riverBorderShare
+        )
+        val units = BasinPartition.mergeSmall(
+            config, sea, banked, (land * cfgN.minBasinShare).toInt().coerceAtLeast(4)
+        )
+        val assignment = BasinRealms.assign(
+            config, sea, units, habitability, Random(config.seed * 8191 + 17)
+        )
+        assignment.realmOf.copyInto(nationId)
+        val origins = assignment.origins
         if (origins.isEmpty()) return NationResult(nationId, emptyList(), habitability)
 
-        expand(config, sea, rivers, habitability, origins, nationId, riverThreshold(sea, climate))
+        dissolveEnclaves(config, sea, nationId, origins)
+
+        if (cfgN.wilderness != WildernessMode.CLAIM_ALL_LAND) {
+            leaveWilderness(config, sea, habitability, nationId, origins)
+        }
         return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, origins), habitability)
+    }
+
+
+    /**
+     * Gives away any pocket of a realm that is stranded inside its neighbours.
+     *
+     * Growth is a race between realms, and a race leaves debris: ground reached late by a realm
+     * whose route home was then taken by somebody else, or a fragment orphaned when a schism cut
+     * the land between it and its capital. Each one renders as a speck of the wrong colour in the
+     * middle of another country, and a map speckled with them reads as noise rather than history.
+     *
+     * Done on cells rather than on catchments, because that is where they actually appear: a
+     * catchment cut along its trunk river can leave a bank in two pieces, so a partition that looks
+     * whole at the unit level is not whole on the map. An earlier version worked on units and
+     * removed almost none of them.
+     *
+     * Only pieces you can *walk* out of are given away. A realm's overseas islands touch no other
+     * realm by land, and they stay — that is the difference between an accident and a colony. Nor
+     * is the piece holding a realm's capital ever given away, whatever its size.
+     */
+    private fun dissolveEnclaves(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        nationId: IntArray,
+        origins: List<Int>
+    ) {
+        val w = config.width
+        val h = config.height
+        val capitalPiece = HashSet<Int>()
+        origins.forEach { capitalPiece.add(it) }
+
+        // Repeated, because giving one pocket away can join two others into a piece worth keeping.
+        repeat(3) {
+            val piece = IntArray(w * h) { -1 }
+            val members = ArrayList<MutableList<Int>>()
+            for (start in 0 until w * h) {
+                if (piece[start] >= 0 || !sea.isLand[start]) continue
+                val realm = nationId[start]
+                if (realm == NationResult.UNCLAIMED) continue
+                val id = members.size
+                val group = ArrayList<Int>()
+                val stack = ArrayDeque<Int>()
+                stack.addLast(start)
+                piece[start] = id
+                while (stack.isNotEmpty()) {
+                    val c = stack.removeLast()
+                    group.add(c)
+                    val x = c % w
+                    val y = c / w
+                    for (dy in -1..1) {
+                        val ny = y + dy
+                        if (ny !in 0 until h) continue
+                        for (dx in -1..1) {
+                            val n = ny * w + ((x + dx + w) % w)
+                            if (piece[n] < 0 && sea.isLand[n] && nationId[n] == realm) {
+                                piece[n] = id
+                                stack.addLast(n)
+                            }
+                        }
+                    }
+                }
+                members.add(group)
+            }
+
+            // What each realm keeps: the piece holding its capital, or its largest if it has none.
+            val keep = HashMap<Int, Int>()
+            val keepArea = HashMap<Int, Int>()
+            members.forEachIndexed { id, group ->
+                val realm = nationId[group[0]]
+                if (group.any { it in capitalPiece }) {
+                    keep[realm] = id
+                    keepArea[realm] = Int.MAX_VALUE
+                } else if (group.size > (keepArea[realm] ?: -1)) {
+                    keepArea[realm] = group.size
+                    keep[realm] = id
+                }
+            }
+
+            var changed = false
+            members.forEachIndexed { id, group ->
+                val realm = nationId[group[0]]
+                if (keep[realm] == id) return@forEachIndexed
+
+                // Who is next door on foot, and how much of this pocket's edge each of them holds.
+                val pressure = HashMap<Int, Int>()
+                group.forEach { c ->
+                    val x = c % w
+                    val y = c / w
+                    for (dy in -1..1) {
+                        val ny = y + dy
+                        if (ny !in 0 until h) continue
+                        for (dx in -1..1) {
+                            val n = ny * w + ((x + dx + w) % w)
+                            if (!sea.isLand[n]) continue
+                            val other = nationId[n]
+                            if (other != NationResult.UNCLAIMED && other != realm) {
+                                pressure[other] = (pressure[other] ?: 0) + 1
+                            }
+                        }
+                    }
+                }
+                // No land neighbours at all means an island, not an enclave. Leave it be.
+                val host = pressure.entries.maxByOrNull { it.value }?.key ?: return@forEachIndexed
+                group.forEach { nationId[it] = host }
+                changed = true
+            }
+            if (!changed) return
+        }
+    }
+
+    /**
+     * Gives the worst country back to nobody.
+     *
+     * Under the basin model every catchment is claimed by somebody, because a catchment is a
+     * geographic fact rather than a statement about who lives there. That suits a map where the
+     * borders are meant to look complete, and not one where the ice cap and the deep desert are
+     * supposed to belong to no state — so when the user asks for wilderness, ground too poor to
+     * settle is released.
+     *
+     * Released by habitability rather than by distance from a capital, which is the honest reason
+     * such country is empty: nobody bothers with it, however near it happens to be.
+     */
+    private fun leaveWilderness(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        habitability: FloatField,
+        nationId: IntArray,
+        origins: List<Int>
+    ) {
+        val bar = config.nations.minSeedHabitability
+        val capitals = origins.toHashSet()
+        for (i in nationId.indices) {
+            if (!sea.isLand[i]) continue
+            // A capital is never wilderness, whatever the ground around it scores.
+            if (i in capitals) continue
+            if (habitability.data[i] < bar) nationId[i] = NationResult.UNCLAIMED
+        }
     }
 
     /**
@@ -288,114 +444,6 @@ object NationStage {
         return chosen
     }
 
-    /**
-     * Multi-source cheapest-path expansion. Every realm pushes outwards at once and each cell
-     * falls to whichever reaches it most cheaply, so the frontier stalls on exactly the terrain
-     * that is expensive to cross.
-     */
-    private fun expand(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        rivers: RiverResult,
-        habitability: FloatField,
-        origins: List<Int>,
-        nationId: IntArray,
-        riverThreshold: Float
-    ) {
-        val w = config.width
-        val h = config.height
-        val cfg = config.nations
-
-        val best = FloatArray(w * h) { Float.MAX_VALUE }
-        val heap = LongMinHeap(origins.size * 8 + 1024)
-
-        // Budget scales with the map so a realm covers a similar share of the world at any size.
-        // Claiming everything just lifts the cap: the frontier keeps going until it meets another
-        // realm rather than until it runs out of momentum.
-        val budget = if (cfg.wilderness == WildernessMode.CLAIM_ALL_LAND) {
-            Float.MAX_VALUE
-        } else {
-            cfg.reach * kotlin.math.sqrt(w.toFloat() * h / config.nations.nationCount)
-        }
-
-        origins.forEachIndexed { index, cell ->
-            best[cell] = 0f
-            nationId[cell] = index
-            heap.push(encode(0f, cell))
-        }
-
-        while (!heap.isEmpty()) {
-            val entry = heap.pop()
-            val cell = decodeIndex(entry)
-            val cost = decodeCost(entry)
-            // Stale queue entry - this cell was already reached more cheaply.
-            if (cost > best[cell] + 1e-4f) continue
-
-            val owner = nationId[cell]
-            val x = cell % w
-            val y = cell / w
-
-            forEachNeighbour(w, h, x, y) { next, distance ->
-                val step = stepCost(sea, rivers, habitability, cell, next, cfg, riverThreshold) * distance
-                val total = cost + step
-                if (total < best[next] && total <= budget) {
-                    best[next] = total
-                    nationId[next] = owner
-                    heap.push(encode(total, next))
-                }
-            }
-        }
-
-        // Water was only ever a way to reach the far shore; it is not territory.
-        for (i in nationId.indices) {
-            if (!sea.isLand[i]) nationId[i] = NationResult.UNCLAIMED
-        }
-    }
-
-    /** What it costs to push settlement from [from] into [to]. */
-    private fun stepCost(
-        sea: SeaLevelResult,
-        rivers: RiverResult,
-        habitability: FloatField,
-        from: Int,
-        to: Int,
-        cfg: NationsConfig,
-        riverThreshold: Float
-    ): Float {
-        if (!sea.isLand[to]) {
-            // Crossing water is possible but dear, and only worth it over a narrow strait. Deep
-            // ocean is effectively a wall.
-            val depth = -sea.relativeElevation.data[to]
-            return if (depth > cfg.navigableDepth) cfg.seaCrossingCost * 8f else cfg.seaCrossingCost
-        }
-
-        // Poor land is slow to settle; good land is quick.
-        var cost = 1f + (1f - habitability.data[to]) * cfg.terrainResistance
-
-        // Climbing is what really stops an expanding realm, so borders find the ridgelines.
-        val climb = sea.relativeElevation.data[to] - sea.relativeElevation.data[from]
-        if (climb > 0f) cost += climb * cfg.slopeResistance
-
-        // A river is a natural line to stop at as well as a prize to hold, and how strong a line
-        // depends on how much water is in it: a realm will step over a stream and will think hard
-        // about the Rhine.
-        //
-        // The first version compared the two cells' accumulation and charged when it quadrupled.
-        // That was close to backwards. The ratio leaps in the headwaters, where a trickle meets a
-        // slightly larger trickle, and barely moves along a great river, where both banks already
-        // carry an enormous figure — so it taxed the streams nobody would stop at and waved the
-        // realms across the rivers they would. Measured, borders followed rivers 0.89 times as
-        // often as blank land: they were avoiding them slightly.
-        val flow = rivers.flowAccumulation.data[to]
-        if (flow >= riverThreshold) {
-            // Doubling the flow adds one more step of cost, so tributaries cost a little and trunk
-            // rivers a lot, without any single crossing becoming impossible.
-            val magnitude = ln(flow / riverThreshold + 1f) / LN2
-            cost += cfg.riverBorderCost * magnitude
-        }
-        return cost
-    }
-
     private fun describe(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -575,5 +623,3 @@ object NationStage {
     }
 }
 
-/** Cached, since it is used per step of every realm's expansion. */
-private val LN2 = ln(2f)

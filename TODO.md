@@ -58,6 +58,36 @@
   `GeographyAuditTest` rather than assumed. Capital siting was the one clear violation and is
   fixed; the remaining deviations are recorded below.
 
+- **Realms built from drainage catchments** (2026-08-24), replacing cell-by-cell expansion.
+  Borders were near enough to arbitrary before — 1.14x as likely to follow a river as blank land,
+  1.09x on ridge crests — and tuning could not fix it, because a cheapest-path border lands where
+  two cost fields meet and expense shifts that meeting point without ever making a line *follow* a
+  feature. A local relaxation pass was written and thrown away for the same reason: 352 flips in
+  three rounds, 421 in ten, ratios unmoved.
+
+  Building from catchments answers it by construction. The edge of a catchment is a watershed and a
+  watershed is a ridge, so a border between two units runs along high ground because there is
+  nowhere else for it to run. Three things had to be added on top of the basic idea:
+
+  - **Trunk splitting.** A catchment contains its river, so on the first version every frontier was
+    a divide and rivers became *interior* — the river ratio fell to 0.60, meaning borders started
+    avoiding them. Cutting large catchments along their trunk, left bank from right, restores the
+    other kind of border. Real frontiers are both: the Pyrenees are a divide, the Rio Grande is a
+    river.
+  - **Strait crossing.** Catchments only border their neighbours on the same landmass, so realms
+    could not reach an island or a second continent at all and rendered them blank. Coastal cells
+    now look a short way straight out across water for a far bank. Crossing costs something, because
+    at no cost one realm island-hopped an entire archipelago and held most of the world.
+  - **Enclave dissolution.** A race between realms leaves debris — ground reached late by a realm
+    whose route home was then taken by someone else. Pockets you can walk out of are given to
+    whichever neighbour surrounds them most; overseas islands, which you cannot walk out of, stay.
+    Done on cells rather than catchments, because a catchment cut along its trunk can leave a bank
+    in two pieces: a unit-level version removed almost none of them.
+
+  Measured now: borders follow rivers 1.38-2.09x and ridge crests 1.23-1.53x, all land is settled,
+  realm sizes span roughly 40:1 largest to median, and inland enclaves are down from 16 to 0-1 per
+  world. `RealmSpreadTest` and `BorderRealismTest` hold the figures.
+
 ## Open
 
 - **The resolution-consistency guard no longer has a statistical form.** It began as mean slope
@@ -66,27 +96,17 @@
   256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
   now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
   matters. A metric that discriminates the real bug would still be worth having.
-- **Borders barely follow the land, and the mechanism cannot fix it.** Realm expansion charges for
-  climbing and for crossing rivers, on the theory that borders then settle onto ridges and rivers by
-  themselves. `BorderRealismTest` measures that against a null model and it does not hold: borders
-  sit on ground 1.06 to 1.21 times the average slope, and follow rivers 1.14 times as often as blank
-  land does. Near enough to arbitrary.
+- **A cultural and national regions layer.** Requested 2026-08-24. A map view showing peoples
+  rather than states — the equivalent of "Slavic peoples", "Turkic peoples", "Han peoples" — which
+  may or may not line up with the realms drawn over them. A culture should be able to span several
+  realms and a realm to contain several cultures, since the mismatch between the two is where most
+  of a world's history comes from. The pieces are already there: `BasinPartition` gives geographic
+  units, `Nation.cultureSeed` already varies naming by realm, and climate gives the biomes a people
+  would have spread through. The open question is what a culture grows from — most likely a smaller
+  number of seeds than realms, grown over catchments with cost from climate similarity rather than
+  habitability, so a people follows a river system or a grassland belt across whatever borders
+  happen to cross it.
 
-  Tuning will not close it, which is the useful part of the finding. At a hundredfold climb penalty
-  the slope figure reaches only 1.31, and a twelvefold river penalty changes nothing at all. A
-  cheapest-path border lands where two cost fields meet, roughly equidistant from two capitals, and
-  a ridge is a few cells against a journey of hundreds — expense shifts that meeting point slightly
-  and can never make a line *follow* a feature.
-
-  A local relaxation pass was written and thrown away: greedy per-cell flips smooth a seam but reach
-  a local minimum in one round and cannot march a border toward a line a few cells off. Measured 352
-  flips in three rounds and 421 in ten, with the ratios unmoved.
-
-  The mechanism that would work is a different partition. Assign realms whole **drainage basins**
-  rather than growing them cell by cell: basin divides are watersheds, watersheds are ridges by
-  construction, and a river inside a basin stays internal rather than being cut in half — which is
-  also how real polities sit on real land. It would change every world, so it is a decision rather
-  than a fix.
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

@@ -47,9 +47,11 @@ class BorderRealismTest {
             var borderCells = 0
             var borderOnRiver = 0
             var borderSlope = 0.0
+            var borderCrest = 0.0
             var landCells = 0
             var landOnRiver = 0
             var landSlope = 0.0
+            var landCrest = 0.0
 
             for (y in 1 until h - 1) {
                 for (x in 0 until w) {
@@ -74,12 +76,32 @@ class BorderRealismTest {
                     }
                     val slope = steepest.toDouble() * w
 
+                    // Ridge-ness, which is not the same thing as steepness and is the thing a
+                    // watershed actually has. A divide stands higher than the ground on both
+                    // sides of it; steepness peaks on the flanks below, so measuring slope alone
+                    // looks for a ridge everywhere except on top of it.
+                    var crest = 0f
+                    for (axis in 0 until 2) {
+                        val ax = if (axis == 0) 1 else 0
+                        val ay = if (axis == 0) 0 else 1
+                        val upY = y - ay
+                        val downY = y + ay
+                        if (upY < 0 || downY >= h) continue
+                        val a = elevation[upY * w + ((x - ax + w) % w)]
+                        val b = elevation[downY * w + ((x + ax) % w)]
+                        val rise = minOf(elevation[i] - a, elevation[i] - b)
+                        if (rise > crest) crest = rise
+                    }
+                    val ridge = crest.toDouble() * w
+
                     landCells++
                     landSlope += slope
+                    landCrest += ridge
                     if (nearRiver[i]) landOnRiver++
                     if (isBorder) {
                         borderCells++
                         borderSlope += slope
+                        borderCrest += ridge
                         if (nearRiver[i]) borderOnRiver++
                     }
                 }
@@ -90,15 +112,17 @@ class BorderRealismTest {
             val riverBase = landOnRiver.toDouble() / landCells
             val slopeShare = borderSlope / borderCells
             val slopeBase = landSlope / landCells
+            val crestShare = borderCrest / borderCells
+            val crestBase = landCrest / landCells
 
             // Parenthesised: format binds to the literal it touches, so without these the
             // arguments land on the second half of the message alone.
             println(
-                ("BORDER seed %s: on a river %.1f%% against %.1f%% of land (%.2fx), " +
-                    "slope %.1f against %.1f (%.2fx)").format(
+                ("BORDER seed %s: river %.2fx, slope %.2fx, ridge %.2fx " +
+                    "(on a river %.1f%% against %.1f%% of land)").format(
                     seed,
-                    riverShare * 100, riverBase * 100, riverShare / riverBase,
-                    slopeShare, slopeBase, slopeShare / slopeBase
+                    riverShare / riverBase, slopeShare / slopeBase, crestShare / crestBase,
+                    riverShare * 100, riverBase * 100
                 )
             )
         }

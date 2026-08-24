@@ -246,12 +246,35 @@ Any JDK 17 or newer will do; `:desktop` targets 17.
 
 ## Realms, the atlas, and saving
 
-After the physical world is generated, realms are settled on it. Origins are seeded on the most
-liveable ground and grown outwards by cheapest-cost expansion, where mountains, deserts, ice and
-open water all cost more to cross than farmland — so borders end up on ranges, rivers and coasts
-without ever being told to follow them. `WildernessMode` decides whether the leftovers get carved
-up too (`CLAIM_ALL_LAND`) or stay unclaimed (`LEAVE_WILDERNESS`); it only changes the leftovers,
-since cheapest-path assignment gives the same borders between settled regions either way.
+After the physical world is generated, realms are settled on it — not cell by cell, but by handing
+out whole **drainage catchments**. A realm takes a catchment or it does not, never half of one, and
+that single rule is what puts its borders on the ground: the edge of a catchment *is* a watershed,
+and a watershed *is* a ridge, so a frontier runs along high country because there is nowhere else
+for it to run. This replaced cheapest-cost cell expansion, which sounded as though it would settle
+borders onto ridges and rivers and measurably did not — a cheapest-path border lands where two cost
+fields meet, and no amount of making mountains expensive moves that meeting point onto a feature.
+
+Three things sit on top of the basic idea, each because the plain version was wrong in a way you
+could see:
+
+- Large catchments are **cut along their trunk river**, left bank from right. Without it a river is
+  always *interior* to somebody's territory and borders start avoiding water; with it a world has
+  both kinds of frontier, the way the Pyrenees and the Rio Grande are both borders.
+- Coastal ground looks a short way out to sea for a **far bank**, so realms can cross a strait to an
+  island or a second continent. Crossing costs something — free crossings let one realm island-hop
+  an archipelago and hold most of the world.
+- **Enclaves are dissolved**: a pocket you can walk out of goes to whichever neighbour surrounds it
+  most, while overseas islands, which you cannot walk out of, stay put.
+
+Realm sizes are deliberately uneven. Each realm draws an appetite from a long-tailed distribution,
+so a world gets a couple of great powers, several middling states and a scattering of small ones;
+and a realm holding several catchments may **schism** along one of its own internal watersheds,
+which is where the interesting borders come from — a line drawn inside what is geographically one
+region because the people either side of it stopped agreeing.
+
+`WildernessMode` decides whether hostile leftovers get carved up too (`CLAIM_ALL_LAND`) or stay
+unclaimed (`LEAVE_WILDERNESS`); it only changes the leftovers, not the borders between settled
+regions.
 
 Landmarks — monster lairs, ruins, hazards, resources — are then placed on terrain that suits them
 and biased hard toward country no realm claims, which is what gives unclaimed wilderness a point.

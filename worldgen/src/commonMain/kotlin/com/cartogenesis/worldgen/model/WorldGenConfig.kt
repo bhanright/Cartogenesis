@@ -287,9 +287,6 @@ data class NationsConfig(
     /** How much a climb costs. This is what pins borders onto mountain ranges. */
     val slopeResistance: Float = 26f,
     /** Extra cost to cross a major river, so realms tend to stop at the near bank. */
-    val riverBorderCost: Float = 2.5f,
-    /** Cost per cell of crossing water, letting realms reach over a narrow strait. */
-    val seaCrossingCost: Float = 9f,
     /** Water deeper than this is treated as open ocean and effectively impassable. */
     val navigableDepth: Float = 0.06f,
     /**
@@ -304,6 +301,44 @@ data class NationsConfig(
      * coast that its own dry hinterland could not.
      */
     val upwellingFisheryBonus: Float = 0.16f,
+    /**
+     * Largest catchment left whole, as a share of all land. Anything draining more than this is
+     * cut at its confluences, so the pieces are its tributaries.
+     *
+     * A single river basin can be a fifth of a continent. Left whole, every realm would be
+     * enormous and shaped alike; cut too fine and realms become mosaics of scraps with no
+     * geography to them.
+     */
+    val maxBasinShare: Float = 0.020f,
+    /** Smallest catchment worth keeping, as a share of all land. Below this it joins a neighbour. */
+    val minBasinShare: Float = 0.0035f,
+    /**
+     * What it costs a realm to take a catchment on the far side of a strait, on the same scale as
+     * the quality and appetite terms — so crossing is roughly as dear as claiming poor ground.
+     *
+     * Realms do settle across narrow water and the model has to let them, or an island never
+     * belongs to anyone. But at no cost at all one realm island-hops an entire archipelago.
+     */
+    val straitCrossingCost: Float = 3.5f,
+    /**
+     * How much water a river needs before a catchment is cut in two along it, as a share of all
+     * land draining through.
+     *
+     * This is what gives the world its river borders. Without it every frontier is a watershed,
+     * because a catchment contains its own river and the water is therefore interior. Real borders
+     * are both kinds — the Pyrenees are a divide, the Rio Grande is a river — and a world with only
+     * divides is as one-note as a world with neither.
+     */
+    val riverBorderShare: Float = 0.045f,
+    /**
+     * Chance that a realm holding several catchments splits in two along one of its own
+     * watersheds.
+     *
+     * A geographic border is drawn by the land; this is the other kind, drawn because the people
+     * either side of it stopped agreeing. Most interesting real borders are that kind, and the
+     * divide it follows is already there, so it costs nothing to place.
+     */
+    val schismChance: Float = 0.3f,
     /** People per square kilometre of fully arable land. */
     val peoplePerArableKm2: Double = 38.0,
     /** How wide the world is taken to be, which is what turns cells into an area. */

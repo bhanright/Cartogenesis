@@ -98,6 +98,20 @@ its own bundled JRE — run `Cartogenesis.exe`, no install needed. `./gradlew :d
 builds a Windows installer instead; `packageDeb` and `packageDmg` exist for the other platforms
 but only build on their own OS.
 
+A packaged build runs on a different runtime from the one the tests use: `jpackage` runs `jlink`,
+which bundles only the modules it can prove are needed. It cannot see through LWJGL's reflection,
+so the first packaged build shipped without `jdk.unsupported` — the module holding
+`sun.misc.Unsafe` — and reported the GPU as unavailable with a `NoClassDefFoundError`, while
+everything in development worked. `nativeDistributions` now asks for that module explicitly.
+
+Because no test can catch that class of problem, the packaged app answers for itself:
+
+```bash
+Cartogenesis.exe --gpu-check
+```
+
+which prints the device it found, or why it found none, and exits without opening a window.
+
 Packaging needs `jpackage`, which the JetBrains Runtime bundled with Android Studio does **not**
 include, so the build looks for a full JDK in the usual install locations. Point it somewhere else
 with `-PjdkHome=/path/to/jdk` or the `JPACKAGE_HOME` environment variable. Only the packaging step

@@ -87,6 +87,14 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Cartogenesis"
             packageVersion = "1.0.0"
+
+            // jpackage runs jlink, which bundles only the modules it can prove are needed -- and
+            // it cannot see through LWJGL's reflection, so it left out jdk.unsupported. That is
+            // the module holding sun.misc.Unsafe, which LWJGL uses for native memory, so the
+            // packaged build could not start a GL context at all and reported the GPU as
+            // unavailable with a NoClassDefFoundError. Nothing was wrong in development, where the
+            // full JDK is on hand; only the trimmed runtime was short.
+            modules("jdk.unsupported")
         }
     }
 }

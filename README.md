@@ -50,6 +50,27 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
    Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
 
+## Styles
+
+Five ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+parchment and sepia ink), **Ink wash** (sumi-e, grey ink on pale paper), **Nautical** (an admiralty
+chart with depth-banded water) and **Midnight** (moonlit, rivers left luminous).
+
+A style changes appearance and nothing else — the same seed gives the same world in all five — and
+the diagnostic views ignore styles entirely, because their colours mean something and a prettier
+ramp would make them lie.
+
+Most of the difference between them is three numbers rather than five separate repaints. How much
+vegetation colour is let through decides whether a map reads as terrain seen from above or as
+something drawn. How far each biome colour is dragged toward the paper first is what stops an aged
+chart looking like a modern one with a filter over it — old inks are earths, not dimmed greens. And
+how hard the hillshade is exaggerated is why the ink style works at all: with the colour gone,
+relief is the only thing left describing the mountains.
+
+`StyleGalleryTest` writes all five out to be looked at, since no number says whether something
+resembles vellum. What it does assert is that they differ from one another — a style quietly
+falling back to the default would pass any test that only asked whether rendering succeeded.
+
 ## Modules
 
 - **`:worldgen`** — the whole generation pipeline as Kotlin Multiplatform, with no platform

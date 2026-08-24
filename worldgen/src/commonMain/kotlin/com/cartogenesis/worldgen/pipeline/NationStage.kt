@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.NationsConfig
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.math.ln
 import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.naming.NameKind
 import kotlin.math.abs
@@ -96,7 +97,7 @@ object NationStage {
         val origins = seedOrigins(config, sea, habitability)
         if (origins.isEmpty()) return NationResult(nationId, emptyList(), habitability)
 
-        expand(config, sea, rivers, habitability, origins, nationId)
+        expand(config, sea, rivers, habitability, origins, nationId, riverThreshold(sea, climate))
         return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, origins), habitability)
     }
 
@@ -298,7 +299,8 @@ object NationStage {
         rivers: RiverResult,
         habitability: FloatField,
         origins: List<Int>,
-        nationId: IntArray
+        nationId: IntArray,
+        riverThreshold: Float
     ) {
         val w = config.width
         val h = config.height
@@ -334,7 +336,7 @@ object NationStage {
             val y = cell / w
 
             forEachNeighbour(w, h, x, y) { next, distance ->
-                val step = stepCost(sea, rivers, habitability, cell, next, cfg) * distance
+                val step = stepCost(sea, rivers, habitability, cell, next, cfg, riverThreshold) * distance
                 val total = cost + step
                 if (total < best[next] && total <= budget) {
                     best[next] = total
@@ -357,7 +359,8 @@ object NationStage {
         habitability: FloatField,
         from: Int,
         to: Int,
-        cfg: NationsConfig
+        cfg: NationsConfig,
+        riverThreshold: Float
     ): Float {
         if (!sea.isLand[to]) {
             // Crossing water is possible but dear, and only worth it over a narrow strait. Deep
@@ -373,9 +376,22 @@ object NationStage {
         val climb = sea.relativeElevation.data[to] - sea.relativeElevation.data[from]
         if (climb > 0f) cost += climb * cfg.slopeResistance
 
-        // A river is a natural line to stop at as well as a prize to hold.
-        if (rivers.flowAccumulation.data[to] > rivers.flowAccumulation.data[from] * 4f) {
-            cost += cfg.riverBorderCost
+        // A river is a natural line to stop at as well as a prize to hold, and how strong a line
+        // depends on how much water is in it: a realm will step over a stream and will think hard
+        // about the Rhine.
+        //
+        // The first version compared the two cells' accumulation and charged when it quadrupled.
+        // That was close to backwards. The ratio leaps in the headwaters, where a trickle meets a
+        // slightly larger trickle, and barely moves along a great river, where both banks already
+        // carry an enormous figure — so it taxed the streams nobody would stop at and waved the
+        // realms across the rivers they would. Measured, borders followed rivers 0.89 times as
+        // often as blank land: they were avoiding them slightly.
+        val flow = rivers.flowAccumulation.data[to]
+        if (flow >= riverThreshold) {
+            // Doubling the flow adds one more step of cost, so tributaries cost a little and trunk
+            // rivers a lot, without any single crossing becoming impossible.
+            val magnitude = ln(flow / riverThreshold + 1f) / LN2
+            cost += cfg.riverBorderCost * magnitude
         }
         return cost
     }
@@ -558,3 +574,6 @@ object NationStage {
         }
     }
 }
+
+/** Cached, since it is used per step of every realm's expansion. */
+private val LN2 = ln(2f)

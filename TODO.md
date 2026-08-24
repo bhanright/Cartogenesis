@@ -66,6 +66,27 @@
   256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
   now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
   matters. A metric that discriminates the real bug would still be worth having.
+- **Borders barely follow the land, and the mechanism cannot fix it.** Realm expansion charges for
+  climbing and for crossing rivers, on the theory that borders then settle onto ridges and rivers by
+  themselves. `BorderRealismTest` measures that against a null model and it does not hold: borders
+  sit on ground 1.06 to 1.21 times the average slope, and follow rivers 1.14 times as often as blank
+  land does. Near enough to arbitrary.
+
+  Tuning will not close it, which is the useful part of the finding. At a hundredfold climb penalty
+  the slope figure reaches only 1.31, and a twelvefold river penalty changes nothing at all. A
+  cheapest-path border lands where two cost fields meet, roughly equidistant from two capitals, and
+  a ridge is a few cells against a journey of hundreds — expense shifts that meeting point slightly
+  and can never make a line *follow* a feature.
+
+  A local relaxation pass was written and thrown away: greedy per-cell flips smooth a seam but reach
+  a local minimum in one round and cannot march a border toward a line a few cells off. Measured 352
+  flips in three rounds and 421 in ten, with the ratios unmoved.
+
+  The mechanism that would work is a different partition. Assign realms whole **drainage basins**
+  rather than growing them cell by cell: basin divides are watersheds, watersheds are ridges by
+  construction, and a river inside a basin stays internal rather than being cut in half — which is
+  also how real polities sit on real land. It would change every world, so it is a decision rather
+  than a fix.
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

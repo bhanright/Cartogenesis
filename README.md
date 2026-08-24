@@ -114,6 +114,28 @@ writes one to `web/build/dist/wasmJs/productionExecutable`.
 It has to be served over HTTP rather than opened as a file: Wasm will not load from `file://`, and
 WebGPU is only offered in a secure context, which `localhost` counts as.
 
+### Putting it somewhere
+
+`:web:wasmJsBrowserDistribution` writes a complete static site to
+`web/build/dist/wasmJs/productionExecutable`. Upload the contents of that folder to any static host
+— Netlify, Cloudflare Pages, GitHub Pages, itch.io, a directory on a web server. There is no server
+side to it.
+
+Four things worth knowing before choosing a host, all of them checked rather than assumed:
+
+- **Size.** About 13MB of files, of which 12MB is the two `.wasm` blobs, but roughly **4.3MB** once
+  gzipped, which every static host does by default. Skia is the bulk of it.
+- **The `.wasm` MIME type does not matter.** The build instantiates from a buffer rather than
+  streaming, so a host serving `application/octet-stream` still works. This is the usual reason a
+  Wasm site fails to start elsewhere, and it does not apply here.
+- **Paths are relative**, so a subfolder is fine — `example.com/maps/` works without rebuilding.
+- **Use HTTPS.** WebGPU is only offered in a secure context; over plain `http` the page still works
+  but silently falls back to the processor, which at 512 is the difference between a pause and a
+  wait.
+
+`cartogenesis.js.map` is a 1.7MB source map. Browsers only fetch it when devtools are open, so it
+is harmless, but it is also of no use to anyone but you and can be deleted from the upload.
+
 The two are the same application. `:ui` holds all of it, including the renderer — Compose
 Multiplatform carries the same Skia in both places, so a map drawn in a tab is drawn by exactly the
 code that draws it on the desktop. What each front end supplies is the short list in `Platform`:

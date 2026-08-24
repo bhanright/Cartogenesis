@@ -23,6 +23,13 @@
   never depended on Android, so removing `:app` touched no generation code. Export now offers PNG
   or WebP; WebP is a quarter the size but not lossless, and `ExportSmokeTest` records what that
   costs.
+- **Web front end and WebGPU** (2026-08-24) — the interface moved into a shared `:ui` module and
+  `:web` runs it in a browser: local storage for saves, downloads for export, WGSL compute for
+  erosion. 70x on the erosion sweeps against the browser's single thread, agreeing with the CPU to
+  seven parts in a million. Bringing it up cost two false starts worth remembering: Compose puts
+  its canvas inside a shadow root, so the page looked dead when it was working; and `target` is a
+  reserved word in WGSL, so both shaders silently failed to compile and every dispatch was a no-op
+  that returned a buffer of zeros as if it were terrain. Shader compilation is now checked.
 - **Erosion** (2026-08-23) — thermal erosion, as its own pipeline stage between tectonics and sea
   level. Halves the land sitting in thin strips on seed 234475, from 0.4% to 0.2%, and gives belts
   flanks instead of walls. Critical slope is held per unit of map rather than per cell so terrain
@@ -46,11 +53,6 @@
   helped the spread, but the audit is still uneven: the share of desert falling in the 15-45 degree
   band is 97% and 75% on seeds 7 and 1234, and only 53% and 43% on seeds 42 and 99. The remaining
   cause looks like orographic strength rather than the bands themselves.
-- **Web front end.** The engine and renderer already build for Wasm and are proven bit-identical to
-  the JVM, but there is no browser app — only library targets and Node tests. A real one means a
-  `:web` module and moving the Compose UI out of `:desktop` into shared code, since today the whole
-  UI lives in `desktop/src/main`. The renderer is the easy half: it already describes overlays as
-  geometry and draws through Skia, which Compose Multiplatform provides on both.
 - **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
   valleys, because that needs water routed over the terrain. Rivers therefore find routes down
   terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.

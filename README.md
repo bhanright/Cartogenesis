@@ -49,14 +49,34 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
   per-pixel work is plain `IntArray` maths and the vector overlays are *described* as geometry
   rather than drawn, so every platform makes identical decisions and implements only the drawing
   calls. Builds for JVM and Wasm.
-- **`:desktop`** — Compose Desktop: the UI, the atlas, saving, and export. Same engine and
-  renderer as everything else, a layout built for a large screen, and a 12GB heap.
+- **`:ui`** — the interface, once, as Compose Multiplatform. Builds for the JVM and Wasm and knows
+  nothing about where it is running; what genuinely differs arrives as a `Platform`.
+- **`:desktop`** — a window, a native save dialog, files on disk, and OpenGL. Around forty lines.
+- **`:web`** — a page, local storage, downloads, and WebGPU. Around the same.
 
-## Desktop
+## Running it
 
 ```bash
 ./gradlew :desktop:run
 ```
+
+For the browser build:
+
+```bash
+./gradlew :web:wasmJsBrowserDevelopmentRun
+```
+
+The two are the same application. `:ui` holds all of it, including the renderer — Compose
+Multiplatform carries the same Skia in both places, so a map drawn in a tab is drawn by exactly the
+code that draws it on the desktop. What each front end supplies is the short list in `Platform`:
+where saved worlds live, what export means, and whether there is a graphics device.
+
+The browser starts at a working resolution of 512 against the desktop's 1024, and that is a
+platform decision rather than a preference. A tab has one thread, and `Dispatchers.Default` there
+is that same thread, so generating does not merely take longer — it stops the page answering until
+it finishes. Measured, 512 takes about 1.6 seconds of CPU work in Wasm against 1.4 on the JVM's
+fifteen threads; 1024 would be over a minute and would read as a hang. With WebGPU enabled the
+erosion part of that drops to about 23 milliseconds.
 
 ### Packaging
 
@@ -105,8 +125,14 @@ still moving.
 
 Erosion is a pure stencil over independent cells, so it is also the one stage worth running on a
 graphics card, and there is an opt-in toggle for it. On an RTX 3070 Ti the sweeps that take 1.3
-seconds on fifteen CPU threads take 22 milliseconds — around 55x. Realm expansion is a Dijkstra
-over a priority queue and would not suit a GPU regardless.
+seconds on fifteen CPU threads take 22 milliseconds — around 55x — through OpenGL compute shaders
+on the desktop, and about 70x through WGSL in the browser. Realm expansion is a Dijkstra over a
+priority queue and would not suit a GPU regardless.
+
+Both paths run the same algorithm and agree with the CPU to about seven parts in a million. The
+browser one can be checked on any machine by loading the web build with `?selftest` in the URL,
+which erodes a terrain both ways and reports the timings and the difference — a browser's device
+cannot be reached from an ordinary test, so that is where its test lives.
 
 The catch is arithmetic. Graphics hardware fuses multiplies and adds and need not sum in any
 particular order, so the terrain it returns is not bit-identical to the CPU's, which breaks the

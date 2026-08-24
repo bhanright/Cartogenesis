@@ -68,3 +68,9 @@ internal fun downloadBytes(name: String, bytes: ByteArray, mime: String) {
 
 @JsFun("() => { const el = document.getElementById('loading'); if (el) el.remove(); }")
 internal external fun hideLoadingMessage()
+
+@JsFun("() => location.search.indexOf('selftest') >= 0")
+internal external fun selfTestRequested(): Boolean
+
+@JsFun("(text) => { window.__selftest = text; console.log(text); }")
+internal external fun publishSelfTest(text: String)

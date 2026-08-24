@@ -34,6 +34,11 @@ fun main() {
             // bundle is large enough that the gap is noticeable.
             hideLoadingMessage()
             val gpu = WebGpuErosion.createOrNull()
+            if (selfTestRequested()) {
+                // ?selftest in the URL checks the WebGPU path against the CPU and reports, since
+                // a browser's device cannot be reached from an ordinary test.
+                publishSelfTest(runSelfTest(gpu.accelerator))
+            }
             platform = WebPlatform(gpu.accelerator, gpu.unavailableBecause)
         }
 

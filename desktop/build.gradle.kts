@@ -30,12 +30,32 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+// LWJGL ships its native libraries as classifier artifacts, one set per platform, so the host has
+// to be named explicitly. Only the running platform's natives are pulled in.
+val lwjglNatives = when {
+    org.gradle.internal.os.OperatingSystem.current().isWindows -> "natives-windows"
+    org.gradle.internal.os.OperatingSystem.current().isMacOsX ->
+        if (System.getProperty("os.arch").startsWith("aarch64")) "natives-macos-arm64"
+        else "natives-macos"
+    else -> "natives-linux"
+}
+
 dependencies {
     testImplementation(kotlin("test"))
     implementation(project(":cartography"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing)
+
+    // GPU-accelerated erosion, offered as an opt-in. GLFW is here only to obtain an offscreen
+    // OpenGL context; no window is ever shown.
+    implementation(platform(libs.lwjgl.bom))
+    implementation(libs.lwjgl.core)
+    implementation(libs.lwjgl.opengl)
+    implementation(libs.lwjgl.glfw)
+    runtimeOnly(variantOf(libs.lwjgl.core) { classifier(lwjglNatives) })
+    runtimeOnly(variantOf(libs.lwjgl.opengl) { classifier(lwjglNatives) })
+    runtimeOnly(variantOf(libs.lwjgl.glfw) { classifier(lwjglNatives) })
 }
 
 // Exports at 4096 and beyond are the point of this module, so the tests need room to prove it.

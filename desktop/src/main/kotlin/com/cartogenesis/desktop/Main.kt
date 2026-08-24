@@ -58,6 +58,9 @@ import com.cartogenesis.cartography.resolve
 import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WildernessMode
+import com.cartogenesis.cartography.StoredTerrain
+import com.cartogenesis.cartography.TerrainSnapshot
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import java.awt.FileDialog
@@ -96,6 +99,13 @@ private fun DesktopApp() {
     var status by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
     var exportFormat by remember { mutableStateOf(ExportFormat.PNG) }
+
+    // Probed once. A machine with no usable device gets the toggle disabled and told why, rather
+    // than a switch that silently does nothing.
+    val gpu = remember { GpuErosion.createOrNull() }
+    // Set when a world is opened from a save that carried its terrain, and cleared as soon as the
+    // settings change, since a stored terrain only answers for the config it was stored under.
+    var storedTerrain by remember { mutableStateOf<TerrainSnapshot?>(null) }
     var overrides by remember { mutableStateOf(WorldOverrides()) }
     var selectedNation by remember { mutableStateOf<Int?>(null) }
     var screen by remember { mutableStateOf(Screen.MAP) }
@@ -116,7 +126,11 @@ private fun DesktopApp() {
         busy = true
         val started = System.currentTimeMillis()
         val generated = withContext(Dispatchers.Default) {
-            WorldGenerationEngine.generate(config) { s: GenerationStage, _: Int, _: Int ->
+            // A stored terrain takes precedence: it is the world exactly as it was saved, and
+            // recomputing it on this machine's hardware could only be a worse answer.
+            val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: gpu.accelerator
+            WorldGenerationEngine.generate(config, accelerator = accelerator) {
+                s: GenerationStage, _: Int, _: Int ->
                 stage = s.label
             }
         }
@@ -181,6 +195,7 @@ private fun DesktopApp() {
                 onConfig = { config = it },
                 onOptions = { options = it },
                 onExport = { size -> pendingExport = size },
+                gpu = gpu,
                 exportFormat = exportFormat,
                 onExportFormat = { exportFormat = it },
                 atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
@@ -218,6 +233,15 @@ private fun DesktopApp() {
                                 config = config,
                                 overrides = overrides,
                                 labels = labels,
+                                // Only a GPU world needs its terrain preserved; a CPU world
+                                // regenerates from the seed exactly, on any machine.
+                                terrain = current
+                                    ?.takeIf { config.erosion.acceleration == Acceleration.GPU }
+                                    ?.let {
+                                        TerrainSnapshot.of(
+                                            it.width, it.height, it.erosion.height.data
+                                        )
+                                    },
                                 savedAt = System.currentTimeMillis()
                             )
                         )
@@ -231,6 +255,7 @@ private fun DesktopApp() {
                             overrides = doc.overrides
                             labels = doc.labels
                             nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
+                            storedTerrain = doc.terrain
                             config = doc.config
                             screen = Screen.MAP
                         }
@@ -401,6 +426,7 @@ private fun SettingsPanel(
     onConfig: (WorldGenConfig) -> Unit,
     onOptions: (RenderOptions) -> Unit,
     onExport: (Int) -> Unit,
+    gpu: GpuErosion.Result,
     exportFormat: ExportFormat,
     onExportFormat: (ExportFormat) -> Unit,
     atlasLabel: String,
@@ -532,6 +558,45 @@ private fun SettingsPanel(
         Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
 
         HorizontalDivider(Modifier.padding(vertical = 10.dp))
+        Text("Acceleration", style = MaterialTheme.typography.titleSmall)
+        val onGpu = config.erosion.acceleration == Acceleration.GPU
+        Toggle(
+            "Use the graphics card",
+            onGpu,
+            enabled = gpu.accelerator != null
+        ) { wanted ->
+            onConfig(
+                config.copy(
+                    erosion = config.erosion.copy(
+                        acceleration = if (wanted) Acceleration.GPU else Acceleration.CPU
+                    )
+                )
+            )
+        }
+        val acceleratorNote = when {
+            gpu.accelerator == null ->
+                "Unavailable on this machine: ${gpu.unavailableBecause}."
+            onGpu ->
+                "Wearing the mountains down runs on ${gpu.accelerator.name}. Graphics hardware " +
+                    "rounds differently from the processor, so the seed alone no longer pins the " +
+                    "terrain down exactly — saves therefore carry the terrain itself and open " +
+                    "identically anywhere, at the cost of being a good deal larger. The " +
+                    "difference is far below anything visible: generated both ways, the same " +
+                    "seed gave the same coastline, the same rivers and the same borders."
+            else ->
+                "${gpu.accelerator.name} is available, and is many times faster at this than the " +
+                    "processor. Worlds made with it save their terrain rather than relying on " +
+                    "the seed, so the files are larger."
+        }
+        Text(
+            acceleratorNote,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (onGpu) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
         Text("Export", style = MaterialTheme.typography.titleSmall)
         Text(
             "The whole pipeline re-runs at the chosen size, so the detail is real rather " +
@@ -577,14 +642,24 @@ private fun Labelled(label: String, value: String, content: @Composable () -> Un
 }
 
 @Composable
-private fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun Toggle(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit
+) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onChange)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 

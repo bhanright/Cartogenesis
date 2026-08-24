@@ -12,6 +12,12 @@
   cliffs. Both UIs now go through `atResolution`, whose contract `ResolutionScalingTest` pins.
   Mountain belts also got a flat-crested profile instead of a knife edge, a width that swells and
   pinches along their length, and deeper along-strike sag so a long belt breaks into massifs.
+- **GPU acceleration** (2026-08-23) — erosion runs on the graphics card behind an opt-in toggle,
+  through a single `ErosionAccelerator` seam so the engine still knows nothing about hardware. 55x
+  on an RTX 3070 Ti. The terrain differs from the CPU's by about six parts in a million, which
+  changed no coastline cell, river or border on the seed tested — but a guarantee is not an
+  observation, so a GPU world saves its terrain rather than its seed alone. The same seam replays
+  that stored terrain on load, so the file opens identically on a machine with no GPU at all.
 - **Android build retired** (2026-08-23) — a phone's memory ceiling capped exports at a fraction of
   what the pipeline produces, and erosion wants far more compute than a handset gives. The engine
   never depended on Android, so removing `:app` touched no generation code. Export now offers PNG
@@ -45,14 +51,6 @@
   `:web` module and moving the Compose UI out of `:desktop` into shared code, since today the whole
   UI lives in `desktop/src/main`. The renderer is the easy half: it already describes overlays as
   geometry and draws through Skia, which Compose Multiplatform provides on both.
-- **GPU acceleration, as a toggle.** Erosion is 82% of a 2048 generation and is a pure stencil over
-  independent cells, so it would suit a GPU almost perfectly. The catch is determinism: a saved
-  world is a seed and a config regenerated on whatever machine opens it, and GPU floating point
-  will not match the CPU bit for bit — the same problem that already ruled out Kotlin/JS as a web
-  target. So it has to be opt-in, with the save recording that it was used and the UI saying plainly
-  that such a world will not reproduce exactly elsewhere. Desktop would need a compute API (LWJGL
-  against OpenGL compute or Vulkan); a web build would need WebGPU, which is a separate
-  implementation again.
 - **Hydraulic erosion.** Thermal erosion moves material down the steepest slope; it does not carve
   valleys, because that needs water routed over the terrain. Rivers therefore find routes down
   terrain their own flow never shaped, which is why valleys are noise-shaped rather than V-shaped.

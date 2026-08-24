@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
@@ -39,6 +40,12 @@ object WorldGenerationEngine {
     fun generate(
         config: WorldGenConfig,
         previous: WorldMap? = null,
+        /**
+         * Used only when the config asks for it, and only for erosion. Declared before [progress]
+         * rather than after so that a trailing lambda at a call site still binds to the progress
+         * callback, which is what every caller means by it.
+         */
+        accelerator: ErosionAccelerator? = null,
         progress: GenerationProgress = NO_PROGRESS
     ): WorldMap {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
@@ -60,7 +67,7 @@ object WorldGenerationEngine {
         val erosion = reusable
             ?.takeIf { it.plates === plates && it.config.erosion == config.erosion }
             ?.erosion
-            ?: ErosionStage.apply(config, plates.height)
+            ?: ErosionStage.apply(config, plates.height, accelerator)
 
         report(GenerationStage.SEA_LEVEL)
         val sea = reusable

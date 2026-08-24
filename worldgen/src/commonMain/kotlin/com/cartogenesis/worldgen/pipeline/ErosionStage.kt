@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
 
@@ -39,8 +40,26 @@ object ErosionStage {
      */
     private const val TILE = 32
 
-    fun apply(config: WorldGenConfig, height: FloatField): ErosionResult =
-        apply(config, height, skipSettled = true)
+    fun apply(
+        config: WorldGenConfig,
+        height: FloatField,
+        accelerator: ErosionAccelerator? = null
+    ): ErosionResult {
+        val cfg = config.erosion
+        if (!cfg.enabled || cfg.passes <= 0) return ErosionResult(height)
+
+        if (cfg.acceleration == Acceleration.GPU && accelerator != null) {
+            // A null result means the accelerator looked at the job and declined it, which is a
+            // normal outcome rather than a failure, so the CPU simply picks it up.
+            val accelerated = accelerator.erode(
+                config.width, config.height, height.data, cfg.talus, cfg.passes, cfg.rate
+            )
+            if (accelerated != null) {
+                return ErosionResult(FloatField(config.width, config.height, accelerated))
+            }
+        }
+        return apply(config, height, skipSettled = true)
+    }
 
     /**
      * @param skipSettled leave the settled parts of the map alone instead of re-scanning them.

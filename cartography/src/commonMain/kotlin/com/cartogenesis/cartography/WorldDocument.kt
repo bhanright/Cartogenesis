@@ -133,5 +133,10 @@ data class WorldDocument(
     val config: WorldGenConfig,
     val overrides: WorldOverrides = WorldOverrides(),
     val labels: List<MapLabel> = emptyList(),
+    /**
+     * Present only for worlds whose erosion ran on the graphics card, where the seed alone
+     * no longer pins the terrain down. See [TerrainSnapshot].
+     */
+    val terrain: TerrainSnapshot? = null,
     val savedAt: Long
 )

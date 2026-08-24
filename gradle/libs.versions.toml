@@ -4,9 +4,14 @@ composeMultiplatform = "1.9.3"
 junit = "4.13.2"
 coroutines = "1.11.0"
 serialization = "1.11.0"
+lwjgl = "3.3.6"
 
 [libraries]
 kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "coroutines" }
+lwjgl-bom = { group = "org.lwjgl", name = "lwjgl-bom", version.ref = "lwjgl" }
+lwjgl-core = { group = "org.lwjgl", name = "lwjgl" }
+lwjgl-opengl = { group = "org.lwjgl", name = "lwjgl-opengl" }
+lwjgl-glfw = { group = "org.lwjgl", name = "lwjgl-glfw" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 

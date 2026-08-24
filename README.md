@@ -103,11 +103,19 @@ which is exact — `ErosionSkipTest` asserts bit-identical output — but only b
 because terrain roughness at cell scale rises with resolution and most of a fine grid is genuinely
 still moving.
 
-Erosion is also a pure stencil over independent cells and would map to a GPU almost perfectly. The
-reason none has been written is determinism: a saved world is a seed and a config, regenerated on
-whatever machine opens it, and GPU floating point would not reproduce the CPU's results bit for
-bit. The same consideration already cost this project Kotlin/JS as a web target. Realm expansion is
-a Dijkstra over a priority queue and would not suit a GPU regardless.
+Erosion is a pure stencil over independent cells, so it is also the one stage worth running on a
+graphics card, and there is an opt-in toggle for it. On an RTX 3070 Ti the sweeps that take 1.3
+seconds on fifteen CPU threads take 22 milliseconds — around 55x. Realm expansion is a Dijkstra
+over a priority queue and would not suit a GPU regardless.
+
+The catch is arithmetic. Graphics hardware fuses multiplies and adds and need not sum in any
+particular order, so the terrain it returns is not bit-identical to the CPU's, which breaks the
+assumption that a seed and a config are enough to reproduce a world. Measured, the gap is six parts
+in a million of the elevation range, and it survived the rest of the pipeline without changing a
+single coastline cell, river or border on the seed it was tested against. But "did not differ this
+time" is not a guarantee, so a world generated this way stores its terrain in the save rather than
+relying on being regenerated — see `TerrainSnapshot`. Worlds generated on the CPU store nothing
+extra, because for them the seed really is enough.
 
 ## Building
 

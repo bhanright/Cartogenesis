@@ -41,20 +41,31 @@ class ErosionConvergenceTest {
     }
 
     @Test
-    fun `the sweep loop really does spread across threads`() {
-        // Erosion is the most expensive stage in the pipeline, so if its sweeps were running on
-        // one thread that would be the largest thing left on the table. This checks the primitive
-        // the stage uses, since the stage itself has nowhere to hang an observation.
-        val threads = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-        com.cartogenesis.worldgen.concurrent.parallelChunks(0, 1024) { start, end ->
-            threads.add(Thread.currentThread().name)
-            // Enough work that the pool cannot finish one chunk before the next is submitted.
-            var sink = 0.0
-            for (i in start until end) sink += sqrt(i.toDouble())
-            check(sink >= 0)
+    fun `the sweep loop is split into one chunk per worker`() {
+        // Erosion is the most expensive stage, so if its sweeps were not being divided up that
+        // would be the largest thing left on the table.
+        //
+        // This checks the division rather than the threads. Counting distinct thread names looked
+        // like the more direct test and was written first, but it fails intermittently: waiting on
+        // a ForkJoinPool task lets the waiting thread help run the queue, so short chunks can all
+        // end up on one thread quite legitimately. How the work is partitioned is the part that is
+        // actually under this code's control, and it is deterministic.
+        val ranges = java.util.Collections.synchronizedList(mutableListOf<Pair<Int, Int>>())
+        val cells = 4096
+        com.cartogenesis.worldgen.concurrent.parallelChunks(0, cells) { start, end ->
+            ranges.add(start to end)
         }
-        println("EROSION sweeps ran across ${threads.size} threads of ${parallelism()}")
-        assertTrue(threads.size > 1, "parallelChunks ran everything on one thread")
+
+        println("EROSION sweep split into ${ranges.size} chunks across ${parallelism()} workers")
+        assertTrue(ranges.size > 1, "parallelChunks did not divide the work at all")
+
+        // The chunks must tile the range exactly: no cell done twice, none missed.
+        val ordered = ranges.sortedBy { it.first }
+        assertTrue(ordered.first().first == 0, "chunks did not start at the beginning")
+        assertTrue(ordered.last().second == cells, "chunks did not reach the end")
+        ordered.zipWithNext().forEach { (a, b) ->
+            assertTrue(a.second == b.first, "chunks ${a} and ${b} do not meet")
+        }
     }
 
     /** Fraction of cells whose steepest drop still exceeds the critical slope, and by how much. */

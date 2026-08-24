@@ -141,10 +141,29 @@ data class OceanConfig(
     val coastalInfluence: Float = 0.85f
 )
 
+/** Where the erosion sweeps run. */
+@Serializable
+enum class Acceleration(val label: String) {
+    /** Every machine agrees, so a seed and a config are enough to reproduce the world anywhere. */
+    CPU("CPU"),
+    /**
+     * Far faster, and not bit-for-bit reproducible. Graphics hardware rounds differently, fuses
+     * multiplies and adds, and may reorder a sum, so the same seed yields terrain that is visually
+     * the same world but not numerically the same one. A world generated this way therefore has to
+     * carry its terrain in the save rather than rely on being regenerated.
+     */
+    GPU("GPU")
+}
+
 /** Wearing the uplift down: rock fails past a critical slope and piles at the foot. */
 @Serializable
 data class ErosionConfig(
     val enabled: Boolean = true,
+    /**
+     * Where the sweeps run. Off the CPU this stage is many times faster, at the cost of the world
+     * no longer being reproducible from its seed alone — see [Acceleration].
+     */
+    val acceleration: Acceleration = Acceleration.CPU,
     /**
      * The critical slope, in elevation per unit of map width — the steepest a slope can stand
      * before it fails. Held per map rather than per cell so that a belt of a given width on the

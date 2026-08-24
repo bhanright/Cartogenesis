@@ -160,6 +160,19 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         }
 
         private fun initialise(): Result {
+            // macOS is refused before GLFW is touched, for two separate reasons and neither is
+            // fixable here. Apple deprecated OpenGL at 4.1, and compute shaders arrived in 4.3, so
+            // the context this needs cannot exist there. And GLFW must be initialised on the main
+            // thread on macOS, while this runs on a thread of its own — so the attempt would not
+            // fail politely, it would take the process with it.
+            val os = System.getProperty("os.name").orEmpty().lowercase()
+            if (os.contains("mac") || os.contains("darwin")) {
+                return Result(
+                    null,
+                    "macOS caps OpenGL at 4.1 and compute shaders need 4.3. Generation runs on the " +
+                        "processor here; the browser build offers WebGPU instead."
+                )
+            }
             if (!GLFW.glfwInit()) return Result(null, "GLFW could not start")
             GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE)
             GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4)

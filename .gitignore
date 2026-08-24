@@ -17,3 +17,7 @@ keystore.properties
 
 # Kotlin compiler scratch output
 .kotlin/
+
+# Packaged builds for distribution. Regenerate with :desktop:createDistributable
+# and :desktop:packageMsi; a hundred megabytes of bundled JVM does not belong in git.
+/dist/

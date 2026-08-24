@@ -52,9 +52,25 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 
 ## Styles
 
-Five ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+Nine ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
 parchment and sepia ink), **Ink wash** (sumi-e, grey ink on pale paper), **Nautical** (an admiralty
-chart with depth-banded water) and **Midnight** (moonlit, rivers left luminous).
+chart with depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (the
+saturated pull-down physical map from a classroom wall), **Verdant** (illustrated fantasy: teal sea,
+cream land, deep woods), **Scroll** (painted parchment with a jade sea and vermilion marks) and
+**Pen and ink** (line art: no fill at all, relief hatched, borders in red).
+
+**Terrain symbols** are an option on top of any of them — little mountains, hills, conifers,
+broadleaves, dunes and waves, scattered on a jittered lattice and chosen from what is actually
+there: mountains where the ground is high, conifers where the forest is cold, waves on the shelf
+but not over the deep. They say a second time what the colour already says, which is exactly what a
+drawn map does and why they read as description rather than ornament. Off by default, since on the
+atlas style they would be clutter over information the colour gives plainly.
+
+Pen and ink is the one that is a different *way* of drawing rather than a different palette:
+nothing is tinted by height, the paper shows through everywhere, and relief is hatched — diagonal
+strokes laid where the ground is steep and left off where it is flat. It stops short of what it
+imitates, in one honest respect: a hand-drawn map draws each range as a little picture shaded by
+eye, where this hatches by slope, so the texture is right and the pictograms are not there.
 
 A style changes appearance and nothing else — the same seed gives the same world in all five — and
 the diagnostic views ignore styles entirely, because their colours mean something and a prettier

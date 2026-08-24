@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.math.abs
@@ -43,6 +44,13 @@ data class RenderOptions(
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
     val showLandmarks: Boolean = true,
+    /**
+     * Draw terrain marks — little mountains, woods, dunes and waves — over the ground.
+     *
+     * Off by default, because on the atlas style they would be clutter over information the colour
+     * already gives plainly. On the drawn styles they are most of what makes a map look drawn.
+     */
+    val showSymbols: Boolean = false,
     val showLakes: Boolean = true,
     /** Multiplies river widths; HD exports scale this up with resolution. */
     val riverScale: Float = 1f
@@ -90,6 +98,23 @@ class LandmarkGlyph(
  * to skip, how wide a river runs and which glyph a landmark gets — and differ only in which
  * drawing API executes it.
  */
+/** The little drawn things a cartographer scatters over the ground. */
+enum class SymbolShape { MOUNTAIN, HILL, CONIFER, BROADLEAF, DUNE, WAVE }
+
+/**
+ * One hand-drawn mark, in cell coordinates.
+ *
+ * Described rather than drawn, like everything else in the overlay, so the decision about *what*
+ * belongs where is made once and every front end merely executes it.
+ */
+class MapSymbol(
+    val x: Float,
+    val y: Float,
+    /** Height of the mark in cells; a platform scales its drawing to this. */
+    val size: Float,
+    val shape: SymbolShape
+)
+
 class MapOverlay(
     val rivers: List<RiverSegment>,
     val landmarks: List<LandmarkGlyph>,
@@ -97,6 +122,9 @@ class MapOverlay(
     val flow: List<FlowArrow>,
     /** Spacing of the arrow lattice in cells, so a platform can size arrows to fit between them. */
     val flowScale: Float,
+    /** Terrain marks: mountains, woods, dunes, waves. Empty unless the style asks for them. */
+    val symbols: List<MapSymbol>,
+    val symbolColor: Int,
     val riverColor: Int,
     val glyphOutline: Int,
     val glyphOutlineWidth: Float
@@ -144,7 +172,13 @@ object MapRasterizer {
 
             var color = baseColor(world, options.view, style, i)
             if (hillshade != null && world.sea.isLand[i]) {
-                color = MapPalette.shade(color, style.relief(hillshade[i]))
+                if (style.lineArt) {
+                    // Ink rather than shading: the paper is left alone and strokes are laid on
+                    // where the ground is steep, which is how a pen draws a mountain.
+                    if (style.inked(i % w, i / w, style.relief(hillshade[i]))) color = style.coastline
+                } else {
+                    color = MapPalette.shade(color, style.relief(hillshade[i]))
+                }
             }
             pixels[i] = color
         }
@@ -238,6 +272,37 @@ object MapRasterizer {
             }
         }
 
+        // Terrain marks on a jittered lattice. The jitter matters more than it looks: on a plain
+        // grid the eye reads the rows before it reads the mountains, and the map stops looking
+        // drawn and starts looking printed. The offsets come from the cell position rather than a
+        // random source, so the same world always gets the same marks.
+        val symbols = ArrayList<MapSymbol>()
+        if (options.showSymbols && options.view.showsTerrain) {
+            val h = world.height
+            // Sparse. The first version put a mark every fourteen cells and the result was a
+            // peppered map rather than an annotated one: at that density the marks stop being
+            // things standing in a landscape and become a texture laid over it.
+            val spacing = (w / 38).coerceAtLeast(8)
+            val size = spacing * 0.62f
+            var y = spacing
+            while (y < h - spacing) {
+                var x = spacing
+                while (x < w - spacing) {
+                    val jx = x + (hash(x, y) % spacing) - spacing / 2
+                    val jy = y + (hash(y, x) % spacing) - spacing / 2
+                    val cx = ((jx % w) + w) % w
+                    val cy = jy.coerceIn(0, h - 1)
+                    val i = cy * w + cx
+                    val shape = symbolFor(world, i)
+                    if (shape != null) {
+                        symbols.add(MapSymbol(cx + 0.5f, cy + 0.5f, size, shape))
+                    }
+                    x += spacing
+                }
+                y += spacing
+            }
+        }
+
         val glyphs = ArrayList<LandmarkGlyph>()
         if (options.showLandmarks && !options.view.showsFlow) {
             // Purely a fraction of the map, so a glyph covers the same share of the picture at
@@ -257,11 +322,11 @@ object MapRasterizer {
                 )
             }
             return MapOverlay(
-                rivers, glyphs, flow, flowScale,
+                rivers, glyphs, flow, flowScale, symbols, options.style.symbolInk,
                 options.style.river, options.style.coastline, (radius * 0.28f).coerceAtLeast(1f)
             )
         }
-        return MapOverlay(rivers, glyphs, flow, flowScale,
+        return MapOverlay(rivers, glyphs, flow, flowScale, symbols, options.style.symbolInk,
             options.style.river, 0xFF241C14.toInt(), 1f)
     }
 
@@ -271,6 +336,40 @@ object MapRasterizer {
         LandmarkKind.RESOURCE -> GlyphShape.DIAMOND
         LandmarkKind.DUNGEON, LandmarkKind.RUIN -> GlyphShape.SQUARE
         LandmarkKind.WONDER, LandmarkKind.SANCTUARY -> GlyphShape.CIRCLE
+    }
+
+    /**
+     * Which mark, if any, belongs on this cell.
+     *
+     * Read straight off the world rather than scattered decoratively: mountains where the ground is
+     * high, conifers where the forest is cold, dunes in the sand, and a few waves on the shelf. It
+     * is the same information the colour already carries, said a second way — which is exactly what
+     * a drawn map does, and why these read as description rather than ornament.
+     */
+    private fun symbolFor(world: WorldMap, i: Int): SymbolShape? {
+        val elevation = world.sea.relativeElevation.data[i]
+        if (!world.sea.isLand[i]) {
+            // Only on the shelf. Waves over the deep ocean would be wallpaper.
+            return if (elevation > -0.05f && elevation < -0.01f) SymbolShape.WAVE else null
+        }
+        if (world.rivers.lakes.isLake(i)) return null
+        if (elevation > 0.52f) return SymbolShape.MOUNTAIN
+        if (elevation > 0.30f) return SymbolShape.HILL
+        return when (world.climate.biome[i]) {
+            Biome.TAIGA, Biome.TEMPERATE_RAINFOREST -> SymbolShape.CONIFER
+            Biome.TEMPERATE_FOREST, Biome.TROPICAL_RAINFOREST,
+            Biome.TROPICAL_SEASONAL_FOREST -> SymbolShape.BROADLEAF
+            Biome.DESERT -> SymbolShape.DUNE
+            else -> null
+        }
+    }
+
+    /** Deterministic jitter. Any cheap hash will do; this one only has to look unpatterned. */
+    private fun hash(a: Int, b: Int): Int {
+        var x = a * 73856093 xor b * 19349663
+        x = x xor (x shr 13)
+        x *= 1274126177
+        return (x xor (x shr 16)) and 0x7FFFFFFF
     }
 
     private fun colorFor(kind: LandmarkKind): Int = when (kind) {

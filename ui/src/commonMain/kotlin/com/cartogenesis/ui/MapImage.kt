@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.cartogenesis.cartography.GlyphShape
 import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSymbol
+import com.cartogenesis.cartography.SymbolShape
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.model.WorldMap
 import org.jetbrains.skia.Bitmap
@@ -68,7 +70,11 @@ object MapImage {
 
     private fun drawOverlay(world: WorldMap, bitmap: Bitmap, options: RenderOptions) {
         val overlay = MapRasterizer.overlay(world, options)
-        if (overlay.rivers.isEmpty() && overlay.landmarks.isEmpty() && overlay.flow.isEmpty()) return
+        if (overlay.rivers.isEmpty() && overlay.landmarks.isEmpty() &&
+            overlay.flow.isEmpty() && overlay.symbols.isEmpty()
+        ) {
+            return
+        }
 
         val canvas = Canvas(bitmap)
 
@@ -83,6 +89,18 @@ object MapImage {
                 paint.strokeWidth = s.width
                 canvas.drawLine(s.x0, s.y0, s.x1, s.y1, paint)
             }
+        }
+
+        // Terrain marks go under the rivers and the borders: on a drawn map the water is inked
+        // over the hills, not around them.
+        if (overlay.symbols.isNotEmpty()) {
+            val paint = Paint().apply {
+                isAntiAlias = true
+                mode = PaintMode.STROKE
+                color = overlay.symbolColor
+                strokeCap = PaintStrokeCap.ROUND
+            }
+            overlay.symbols.forEach { drawSymbol(canvas, it, paint) }
         }
 
         if (overlay.flow.isNotEmpty()) {
@@ -155,6 +173,75 @@ object MapImage {
                     canvas.drawCircle(glyph.x, glyph.y, r, fill)
                     canvas.drawCircle(glyph.x, glyph.y, r, outline)
                 }
+            }
+        }
+    }
+
+    /**
+     * One terrain mark.
+     *
+     * Deliberately crude: a few strokes each, at a size where detail would not survive anyway. The
+     * point is the texture a field of them makes, not any single one — which is also why they are
+     * stroked rather than filled, so overlapping marks read as a range rather than a blob.
+     */
+    private fun drawSymbol(canvas: Canvas, symbol: MapSymbol, paint: Paint) {
+        val x = symbol.x
+        val y = symbol.y
+        val s = symbol.size
+        paint.strokeWidth = (s * 0.16f).coerceAtLeast(0.6f)
+
+        when (symbol.shape) {
+            // A peak with one shaded face, the way they are drawn by hand.
+            SymbolShape.MOUNTAIN -> {
+                val path = Path().apply {
+                    moveTo(x - s * 0.6f, y + s * 0.35f)
+                    lineTo(x, y - s * 0.5f)
+                    lineTo(x + s * 0.6f, y + s * 0.35f)
+                }
+                canvas.drawPath(path, paint)
+                canvas.drawLine(x, y - s * 0.5f, x - s * 0.18f, y + s * 0.35f, paint)
+            }
+
+            SymbolShape.HILL -> {
+                val path = Path().apply {
+                    moveTo(x - s * 0.5f, y + s * 0.2f)
+                    quadTo(x, y - s * 0.45f, x + s * 0.5f, y + s * 0.2f)
+                }
+                canvas.drawPath(path, paint)
+            }
+
+            SymbolShape.CONIFER -> {
+                val path = Path().apply {
+                    moveTo(x - s * 0.32f, y + s * 0.25f)
+                    lineTo(x, y - s * 0.45f)
+                    lineTo(x + s * 0.32f, y + s * 0.25f)
+                }
+                canvas.drawPath(path, paint)
+                canvas.drawLine(x, y + s * 0.25f, x, y + s * 0.45f, paint)
+            }
+
+            SymbolShape.BROADLEAF -> {
+                canvas.drawCircle(x, y - s * 0.12f, s * 0.3f, paint)
+                canvas.drawLine(x, y + s * 0.18f, x, y + s * 0.45f, paint)
+            }
+
+            // A low dune and the smaller one behind it.
+            SymbolShape.DUNE -> {
+                val path = Path().apply {
+                    moveTo(x - s * 0.5f, y + s * 0.15f)
+                    quadTo(x - s * 0.1f, y - s * 0.25f, x + s * 0.5f, y + s * 0.15f)
+                }
+                canvas.drawPath(path, paint)
+            }
+
+            // Two short crests, as water is drawn on every chart that bothers to draw it.
+            SymbolShape.WAVE -> {
+                val path = Path().apply {
+                    moveTo(x - s * 0.45f, y)
+                    quadTo(x - s * 0.22f, y - s * 0.3f, x, y)
+                    quadTo(x + s * 0.22f, y + s * 0.3f, x + s * 0.45f, y)
+                }
+                canvas.drawPath(path, paint)
             }
         }
     }

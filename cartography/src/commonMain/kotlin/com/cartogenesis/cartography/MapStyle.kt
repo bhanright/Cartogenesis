@@ -51,6 +51,22 @@ enum class MapStyle(
      * them.
      */
     internal val glyphMuting: Float,
+    /**
+     * Draw the land as ink on blank paper rather than as filled colour.
+     *
+     * A different way of drawing rather than a different palette. Nothing is tinted by height at
+     * all: the paper shows through everywhere, and relief is expressed by hatching — short diagonal
+     * strokes laid down where the ground is steep and left off where it is flat, which is how a
+     * pen describes a mountain when it has no colour to describe it with. Ridges come out dense,
+     * plains blank, and the shape reads from the density alone.
+     *
+     * It stops short of the thing it is imitating. A hand-drawn map draws each range as a little
+     * picture of a mountain, repeated and shaded by eye; this hatches by slope, so the texture is
+     * right and the pictograms are not there.
+     */
+    internal val lineArt: Boolean,
+    /** How readily the hatching darkens as the ground steepens. Only used when [lineArt]. */
+    internal val inkGain: Float,
     /** Drawn behind the map, and used by a front end for the surround. */
     val backdrop: Int
 ) {
@@ -77,6 +93,8 @@ enum class MapStyle(
         wilderness = 0xFF6E6A5E.toInt(),
         reliefStrength = 1f,
         glyphMuting = 0f,
+        lineArt = false,
+        inkGain = 0f,
         backdrop = 0xFF14171A.toInt()
     ),
 
@@ -111,6 +129,8 @@ enum class MapStyle(
         wilderness = 0xFFBCAE8C.toInt(),
         reliefStrength = 0.75f,
         glyphMuting = 0.55f,
+        lineArt = false,
+        inkGain = 0f,
         backdrop = 0xFF2A2318.toInt()
     ),
 
@@ -143,6 +163,8 @@ enum class MapStyle(
         wilderness = 0xFFC9C4B8.toInt(),
         reliefStrength = 1.8f,
         glyphMuting = 0.70f,
+        lineArt = false,
+        inkGain = 0f,
         backdrop = 0xFF1D1F21.toInt()
     ),
 
@@ -174,6 +196,8 @@ enum class MapStyle(
         wilderness = 0xFFD8CBA9.toInt(),
         reliefStrength = 0.5f,
         glyphMuting = 0.40f,
+        lineArt = false,
+        inkGain = 0f,
         backdrop = 0xFF16232C.toInt()
     ),
 
@@ -204,7 +228,144 @@ enum class MapStyle(
         wilderness = 0xFF39424F.toInt(),
         reliefStrength = 1.3f,
         glyphMuting = 0f,
+        lineArt = false,
+        inkGain = 0f,
         backdrop = 0xFF080B12.toInt()
+    ),
+
+    /**
+     * The pull-down physical map from a schoolroom wall. Saturated hypsometric tints stepping
+     * green to yellow to orange to brown, a flat pale sea, and none of the restraint of a
+     * cartographer's chart — these were printed to be legible from the back of a classroom.
+     */
+    SCHOOLROOM(
+        label = "Schoolroom",
+        detail = "Pull-down classroom wall map",
+        oceanRamp = intArrayOf(
+            0xFF6FB6CE.toInt(), 0xFF7FC0D5.toInt(), 0xFF92CDDE.toInt(),
+            0xFFA8D9E6.toInt(), 0xFFBFE5EE.toInt()
+        ),
+        landRamp = intArrayOf(
+            0xFF4E9B4A.toInt(), 0xFF77B356.toInt(), 0xFFAFC85E.toInt(), 0xFFE0CE66.toInt(),
+            0xFFE8A94A.toInt(), 0xFFD97B34.toInt(), 0xFFB4552A.toInt(), 0xFFF0E6DC.toInt()
+        ),
+        paper = 0xFFF3EEE2.toInt(),
+        biomeWash = 0.12f,
+        biomeMuting = 0.35f,
+        river = 0xFF2F6FA0.toInt(),
+        lake = 0xFF7FC0D5.toInt(),
+        lakeDeep = 0xFF4E9AB8.toInt(),
+        coastline = 0xFF2E3B44.toInt(),
+        coastlineStrength = 0.6f,
+        border = 0xFFB03A3A.toInt(),
+        wilderness = 0xFFBFB9A8.toInt(),
+        reliefStrength = 0.45f,
+        glyphMuting = 0.2f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF20262B.toInt()
+    ),
+
+    /**
+     * The modern illustrated fantasy map: deep teal water, warm cream land, and forest laid on
+     * heavily in dark green. The vegetation wash runs high here, because on these maps the woods
+     * are a *place* with a name rather than a shade of the terrain.
+     */
+    VERDANT(
+        label = "Verdant",
+        detail = "Illustrated fantasy: teal sea, deep woods",
+        oceanRamp = intArrayOf(
+            0xFF10454F.toInt(), 0xFF14555F.toInt(), 0xFF1A6873.toInt(),
+            0xFF238089.toInt(), 0xFF3E9DA4.toInt()
+        ),
+        landRamp = intArrayOf(
+            0xFFE4D5A8.toInt(), 0xFFDDCB99.toInt(), 0xFFD3BE88.toInt(), 0xFFC6AE78.toInt(),
+            0xFFB59A68.toInt(), 0xFF9E8258.toInt(), 0xFF836A49.toInt(), 0xFFEDE6D4.toInt()
+        ),
+        paper = 0xFFEFE3C0.toInt(),
+        biomeWash = 0.62f,
+        // Barely muted, unlike the aged styles: on these maps the forest is a named place and is
+        // meant to read as forest, not as a shade the terrain happens to take.
+        biomeMuting = 0.08f,
+        river = 0xFF2C7A86.toInt(),
+        lake = 0xFF3E9DA4.toInt(),
+        lakeDeep = 0xFF1A6873.toInt(),
+        coastline = 0xFF123C44.toInt(),
+        coastlineStrength = 0.8f,
+        border = 0xFF7A4A22.toInt(),
+        wilderness = 0xFFC9BC95.toInt(),
+        reliefStrength = 0.9f,
+        glyphMuting = 0.15f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF0A2A31.toInt()
+    ),
+
+    /**
+     * Painted parchment, after the illustrated maps of maritime South-East Asia: sage and ochre
+     * land on a stained page, a muted jade sea, and vermilion for anything a person made.
+     */
+    SCROLL(
+        label = "Scroll",
+        detail = "Painted parchment, jade sea, vermilion marks",
+        oceanRamp = intArrayOf(
+            0xFF7E9A92.toInt(), 0xFF8DA79E.toInt(), 0xFF9DB4AB.toInt(),
+            0xFFAFC2B9.toInt(), 0xFFC3D1C8.toInt()
+        ),
+        landRamp = intArrayOf(
+            0xFFDCD9AE.toInt(), 0xFFD2D1A2.toInt(), 0xFFC6C795.toInt(), 0xFFBCBB88.toInt(),
+            0xFFAEA97A.toInt(), 0xFF9C9469.toInt(), 0xFF87805A.toInt(), 0xFFE8E3CC.toInt()
+        ),
+        paper = 0xFFE9E2C4.toInt(),
+        biomeWash = 0.30f,
+        biomeMuting = 0.45f,
+        river = 0xFF5F7A72.toInt(),
+        lake = 0xFF9DB4AB.toInt(),
+        lakeDeep = 0xFF7E9A92.toInt(),
+        coastline = 0xFF4A4632.toInt(),
+        coastlineStrength = 0.72f,
+        border = 0xFFA32F26.toInt(),
+        wilderness = 0xFFC8C4A2.toInt(),
+        reliefStrength = 1.15f,
+        glyphMuting = 0.25f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF2B2A20.toInt()
+    ),
+
+    /**
+     * Pen and ink on blank paper, after the maps drawn for high fantasy. No fill anywhere: the
+     * coast is a line, the rivers are lines, and the mountains are hatching laid on where the
+     * ground is steep. Borders are the one thing in colour, as they often are on those maps.
+     */
+    PEN_AND_INK(
+        label = "Pen and ink",
+        detail = "Line art: hatched relief, red borders",
+        oceanRamp = intArrayOf(
+            0xFFF6F2E8.toInt(), 0xFFF6F2E8.toInt(), 0xFFF7F3EA.toInt(),
+            0xFFF8F4EC.toInt(), 0xFFF9F6EF.toInt()
+        ),
+        landRamp = intArrayOf(
+            0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(),
+            0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt()
+        ),
+        paper = 0xFFFBF8F0.toInt(),
+        biomeWash = 0f,
+        biomeMuting = 1f,
+        river = 0xFF1E1A16.toInt(),
+        lake = 0xFFDCD8CE.toInt(),
+        lakeDeep = 0xFFC6C2B8.toInt(),
+        coastline = 0xFF17130F.toInt(),
+        coastlineStrength = 0.95f,
+        border = 0xFFA82820.toInt(),
+        wilderness = 0xFFF1EDE3.toInt(),
+        reliefStrength = 1f,
+        glyphMuting = 0.5f,
+        lineArt = true,
+        // Low enough that only a genuinely steep face fills solid. At 3.2 anything with a slope at
+        // all crossed the threshold on every hatch line, and whole ranges came out as black mass.
+        inkGain = 1.15f,
+        backdrop = 0xFF262320.toInt()
     );
 
     internal fun ocean(depth: Float): Int =
@@ -221,8 +382,30 @@ enum class MapStyle(
     }
 
     /** A landmark marker as this style would ink it. */
-    internal fun glyph(color: Int): Int =
-        if (glyphMuting <= 0f) color else MapPalette.blend(color, paper, glyphMuting)
+    internal fun glyph(color: Int): Int = when {
+        // A pen has one colour. Keeping the marker key would leave the only coloured things on
+        // the page sitting over an otherwise entirely monochrome drawing.
+        lineArt -> coastline
+        glyphMuting <= 0f -> color
+        else -> MapPalette.blend(color, paper, glyphMuting)
+    }
+
+    /**
+     * Whether this cell takes ink, for a line-art style.
+     *
+     * The hatch is a diagonal comb: a cell's threshold depends on where it sits, so ink lands in
+     * lines running across the slope rather than as a grey smear. The steeper the ground the lower
+     * the bar, so a ridge fills solid, a hillside becomes stripes, and a plain stays blank.
+     */
+    /** Terrain marks are drawn in the same hand as the coastline. */
+    internal val symbolInk: Int get() = coastline
+
+    internal fun inked(x: Int, y: Int, shade: Float): Boolean {
+        if (!lineArt) return false
+        val steepness = (1f - shade).coerceAtLeast(0f)
+        val hatch = (((x + y) % 5) + 1) / 6f
+        return steepness * inkGain > hatch
+    }
 
     /** Relief, exaggerated or softened. 1 leaves the hillshade exactly as computed. */
     internal fun relief(shade: Float): Float = 1f + (shade - 1f) * reliefStrength

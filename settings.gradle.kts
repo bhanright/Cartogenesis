@@ -27,6 +27,16 @@ dependencyResolutionManagement {
             metadataSources { artifact() }
             content { includeModule("org.nodejs", "node") }
         }
+        // Kotlin/Wasm optimises its output with Binaryen, which the plugin fetches from GitHub
+        // releases. Declared here for the same reason as Node and Yarn above.
+        ivy("https://github.com/WebAssembly/binaryen/releases/download") {
+            name = "Binaryen distributions"
+            patternLayout {
+                artifact("version_[revision]/[artifact]-version_[revision]-[classifier].[ext]")
+            }
+            metadataSources { artifact() }
+            content { includeModule("com.github.webassembly", "binaryen") }
+        }
         ivy("https://github.com/yarnpkg/yarn/releases/download") {
             name = "Yarn distributions"
             patternLayout { artifact("v[revision]/[artifact](-v[revision]).[ext]") }
@@ -41,3 +51,4 @@ include(":worldgen")
 include(":cartography")
 include(":ui")
 include(":desktop")
+include(":web")

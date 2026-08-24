@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cartogenesis</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #14171a;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        }
+        /* Shown until the wasm module takes over, and replaced by the canvas. */
+        #composeTarget {
+            position: absolute;
+            inset: 0;
+            display: block;
+            outline: none;
+        }
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #8a9199;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div id="composeTarget"></div>
+<div id="loading">Loading the generator…</div>
+<script src="cartogenesis.js"></script>
+</body>
+</html>

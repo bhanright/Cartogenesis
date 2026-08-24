@@ -70,10 +70,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun CartogenesisApp(platform: Platform) {
     var config by remember {
-        // Desktop starts at a resolution the phone build could not attempt.
         mutableStateOf(
             WorldGenConfig(seed = Random.nextLong(1_000_000), width = 512, height = 512)
-                .atResolution(1024, 1024)
+                .atResolution(platform.defaultResolution, platform.defaultResolution)
         )
     }
     var options by remember { mutableStateOf(RenderOptions()) }

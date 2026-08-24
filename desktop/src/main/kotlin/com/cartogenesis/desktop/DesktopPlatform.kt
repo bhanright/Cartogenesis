@@ -19,6 +19,9 @@ import kotlinx.coroutines.withContext
  */
 class DesktopPlatform : Platform {
 
+    // Every core available and a 12GB heap, so there is no reason to start small.
+    override val defaultResolution: Int = 1024
+
     override val library: WorldLibrary = DesktopWorldStore()
 
     override val libraryLocation: String get() = (library as DesktopWorldStore).location

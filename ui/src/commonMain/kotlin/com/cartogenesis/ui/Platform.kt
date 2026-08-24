@@ -32,6 +32,17 @@ class ExportOutcome(val description: String, val millis: Long, val bytes: Long)
  */
 interface Platform {
 
+    /**
+     * The working resolution to start at.
+     *
+     * A platform decision rather than a preference. The JVM spreads generation across every core
+     * and can reach for a GPU; a browser tab has one thread, and `Dispatchers.Default` there is
+     * that same thread, so generating does not merely take longer — it stops the page answering
+     * until it finishes. Starting the web build smaller is the difference between a wait and an
+     * apparent hang.
+     */
+    val defaultResolution: Int
+
     /** Where saved worlds are kept. */
     val library: WorldLibrary
 

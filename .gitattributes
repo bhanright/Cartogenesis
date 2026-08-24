@@ -1,12 +1,14 @@
-# Normalise line endings in the repository so the tree is identical on every platform.
+# Normalise line endings in the repository.
+#
+# Files here were a mix of CRLF and LF, sometimes within a single file, which repeatedly broke
+# tooling that splits text into lines: a pattern written with one ending silently matches nothing,
+# or matches a chunk spanning two lines and deletes both. Storing everything as LF removes the
+# whole class of problem; Windows editors handle LF fine.
 * text=auto eol=lf
 
-# Must stay LF or it will not run on macOS/Linux.
-gradlew text eol=lf
-
-*.bat text eol=crlf
-
-*.jar binary
+# Binary, and must not be touched.
 *.png binary
-*.jks binary
+*.jpg binary
+*.webp binary
+*.jar binary
 *.keystore binary

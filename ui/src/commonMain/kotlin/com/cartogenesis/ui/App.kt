@@ -2,6 +2,9 @@ package com.cartogenesis.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +45,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.MapView
@@ -161,33 +165,40 @@ fun CartogenesisApp(platform: Platform) {
         )
     }
 
-    Row(Modifier.fillMaxSize()) {
-        Surface(
-            modifier = Modifier.width(360.dp).fillMaxHeight(),
-            tonalElevation = 2.dp
+    // The map is the point, so it takes the middle and the whole height, and the controls are
+    // split either side of it rather than stacked in one long column. Grouping is by what a
+    // control does: choosing what to look at on the left, choosing how to look at it on the right.
+    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(10.dp)) {
+
+        Column(
+            Modifier.width(320.dp).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            SettingsPanel(
-                config = config,
-                options = options,
-                busy = busy,
-                status = status,
-                onConfig = { config = it },
-                onOptions = { options = it },
-                onExport = { size -> pendingExport = size },
-                platform = platform,
-                exportFormat = exportFormat,
-                onExportFormat = { exportFormat = it },
-                atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
-                libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
-                labelMode = labelMode,
-                onToggleAtlas = {
-                    screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
-                },
-                onToggleLibrary = {
-                    screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
-                },
-                onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
-            )
+            Panel {
+                WorldActions(
+                    busy = busy,
+                    status = status,
+                    labelMode = labelMode,
+                    atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
+                    libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
+                    onNewWorld = { config = config.copy(seed = Random.nextLong(1_000_000)) },
+                    onToggleAtlas = {
+                        screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
+                    },
+                    onToggleLibrary = {
+                        screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
+                    },
+                    onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
+                )
+            }
+
+            Panel { ResolutionPicker(config, busy) { config = it } }
+
+            // The tallest panel, and the one that will keep growing: roads and trade routes will
+            // land here beside the rivers and the borders.
+            Panel(Modifier.weight(1f)) {
+                WorldSettings(config, options, busy, { config = it }, { options = it })
+            }
         }
 
         // Only the map gets the dark backdrop. The atlas and library are ordinary reading
@@ -196,7 +207,9 @@ fun CartogenesisApp(platform: Platform) {
         val backdrop =
             if (screen == Screen.MAP) Color(0xFF14171A) else MaterialTheme.colorScheme.background
 
-        Box(Modifier.fillMaxSize().background(backdrop)) {
+        Box(
+            Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp).background(backdrop)
+        ) {
             val current = world
             if (screen == Screen.LIBRARY) {
                 LibraryPane(
@@ -294,8 +307,34 @@ fun CartogenesisApp(platform: Platform) {
                 }
             }
         }
+
+        Column(
+            Modifier.width(250.dp).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Panel(Modifier.weight(1f)) { ViewOptions(options) { options = it } }
+            Panel { OutputOptions(config, busy, platform, exportFormat, { config = it }, { exportFormat = it }) { pendingExport = it } }
+        }
     }
 }
+
+/** One of the boxes the interface is built from: a bordered surface with room to breathe. */
+@Composable
+private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(6.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            content = content
+        )
+    }
+}
+
 
 /**
  * Pan and zoom over the rendered map, with labels drawn on top.
@@ -314,13 +353,35 @@ private fun MapView(
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
 
+    // Zooming about a point rather than about the origin: whatever is under the cursor, or between
+    // the fingers, has to stay under it, or the map slides away from whatever is being examined.
+    fun zoomAbout(anchor: Offset, factor: Float, panChange: Offset = Offset.Zero) {
+        val next = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        pan = (pan - anchor) * (next / zoom) + anchor + panChange
+        zoom = next
+    }
+
     Canvas(
         Modifier.fillMaxSize()
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                    val next = (zoom * zoomChange).coerceIn(0.2f, 40f)
-                    pan = (pan - centroid) * (next / zoom) + centroid + panChange
-                    zoom = next
+                    zoomAbout(centroid, zoomChange, panChange)
+                }
+            }
+            .pointerInput(Unit) {
+                // A wheel is not a gesture, so detectTransformGestures never sees it, and a mouse
+                // is how most of this will be driven.
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type != PointerEventType.Scroll) continue
+                        val change = event.changes.firstOrNull() ?: continue
+                        val scrolled = change.scrollDelta.y
+                        if (scrolled == 0f) continue
+                        // Scrolling down is positive, and should zoom out.
+                        zoomAbout(change.position, if (scrolled < 0f) WHEEL_STEP else 1f / WHEEL_STEP)
+                        change.consume()
+                    }
                 }
             }
             .pointerInput(labelMode, labels, image) {
@@ -377,7 +438,50 @@ private fun MapView(
             LabelChip(label)
         }
     }
+
+    // The wheel and the pinch are both invisible, so the same thing is offered where it can be
+    // seen. Zooming from here uses the middle of the view as the anchor, there being no cursor
+    // position to work from.
+    Box(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.align(Alignment.BottomEnd).padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${(zoom * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xCCFFFFFF)
+            )
+            ZoomButton("-") { zoom = (zoom / WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
+            ZoomButton("+") { zoom = (zoom * WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
+            ZoomButton("Fit") { zoom = 1f; pan = Offset.Zero }
+        }
+    }
 }
+
+/** Deliberately plain: these sit over the map and should not compete with it. */
+@Composable
+private fun ZoomButton(label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        color = Color(0x99000000),
+        contentColor = Color.White
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    }
+}
+
+private const val MIN_ZOOM = 0.2f
+private const val MAX_ZOOM = 40f
+
+/** One wheel notch, or one press of a button. Compounds, so it should be a modest step. */
+private const val WHEEL_STEP = 1.15f
 
 @Composable
 private fun LabelChip(label: MapLabel) {
@@ -397,217 +501,230 @@ private fun LabelChip(label: MapLabel) {
 }
 
 @Composable
-private fun SettingsPanel(
-    config: WorldGenConfig,
-    options: RenderOptions,
+private fun WorldActions(
     busy: Boolean,
     status: String,
-    onConfig: (WorldGenConfig) -> Unit,
-    onOptions: (RenderOptions) -> Unit,
-    onExport: (Int) -> Unit,
-    platform: Platform,
-    exportFormat: ExportFormat,
-    onExportFormat: (ExportFormat) -> Unit,
+    labelMode: Boolean,
     atlasLabel: String,
     libraryLabel: String,
-    labelMode: Boolean,
+    onNewWorld: () -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit,
     onToggleLabels: () -> Unit
 ) {
-    Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text("Cartogenesis", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            status.ifBlank { "Generating the first world…" },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        HorizontalDivider(Modifier.padding(vertical = 10.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { onConfig(config.copy(seed = Random.nextLong(1_000_000))) },
-                enabled = !busy
-            ) { Text("New world") }
-            OutlinedButton(onClick = onToggleAtlas, enabled = !busy) { Text(atlasLabel) }
-            OutlinedButton(onClick = onToggleLibrary, enabled = !busy) { Text(libraryLabel) }
-            OutlinedButton(onClick = onToggleLabels, enabled = !busy) {
-                Text(if (labelMode) "Done" else "Label")
-            }
+    Text("Cartogenesis", style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedButton(onClick = onNewWorld, enabled = !busy, contentPadding = TIGHT) {
+            Text("New world", maxLines = 1)
         }
-
-        Labelled("Working resolution", "${config.width} px") {
-            // Powers of two, because the terrain integrator is FFT-based.
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(512, 1024, 2048, 4096).forEach { size ->
-                    FilterChip(
-                        selected = config.width == size,
-                        // atResolution, not a raw copy: settings measured in cells have to be
-                        // rescaled with the grid or the world changes character instead of just
-                        // gaining detail. A raw copy leaves mountain belts a fraction of their
-                        // proper width, which surfaces plate edges as straight cliffs.
-                        onClick = { onConfig(config.atResolution(size, size)) },
-                        label = { Text("$size", maxLines = 1) },
-                        enabled = !busy
-                    )
-                }
-            }
+        OutlinedButton(onClick = onToggleAtlas, enabled = !busy, contentPadding = TIGHT) {
+            Text(atlasLabel, maxLines = 1)
         }
-
-        Labelled("Ocean coverage", "${(config.seaLevel * 100).roundToInt()}%") {
-            Slider(
-                value = config.seaLevel,
-                onValueChange = { onConfig(config.copy(seaLevel = it)) },
-                valueRange = 0.05f..0.95f,
-                enabled = !busy
-            )
+        OutlinedButton(onClick = onToggleLibrary, enabled = !busy, contentPadding = TIGHT) {
+            Text(libraryLabel, maxLines = 1)
         }
+    }
+    OutlinedButton(onClick = onToggleLabels, enabled = !busy, contentPadding = TIGHT) {
+        Text(if (labelMode) "Done labelling" else "Place a label", maxLines = 1)
+    }
+    Text(
+        status.ifBlank { "Generating the first world…" },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2
+    )
+}
 
-        Labelled("Plates", "${config.tectonics.plateCount}") {
-            Slider(
-                value = config.tectonics.plateCount.toFloat(),
-                onValueChange = {
-                    onConfig(config.copy(tectonics = config.tectonics.copy(plateCount = it.roundToInt())))
-                },
-                valueRange = 3f..40f,
-                enabled = !busy
-            )
-        }
-
-        Labelled("Realms", "${config.nations.nationCount}") {
-            Slider(
-                value = config.nations.nationCount.toFloat(),
-                onValueChange = {
-                    onConfig(config.copy(nations = config.nations.copy(nationCount = it.roundToInt())))
-                },
-                valueRange = 0f..40f,
-                enabled = !busy
-            )
-        }
-
-        Labelled("Points of interest", "${config.landmarks.count}") {
-            Slider(
-                value = config.landmarks.count.toFloat(),
-                onValueChange = {
-                    onConfig(config.copy(landmarks = config.landmarks.copy(count = it.roundToInt())))
-                },
-                valueRange = 0f..200f,
-                enabled = !busy
-            )
-        }
-
+@Composable
+private fun ResolutionPicker(
+    config: WorldGenConfig,
+    busy: Boolean,
+    onConfig: (WorldGenConfig) -> Unit
+) {
+    Labelled("Working resolution", "${config.width} px") {
+        // Powers of two, because the terrain integrator is FFT-based.
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            WildernessMode.entries.forEach { mode ->
+            listOf(512, 1024, 2048, 4096).forEach { size ->
                 FilterChip(
-                    selected = config.nations.wilderness == mode,
-                    onClick = { onConfig(config.copy(nations = config.nations.copy(wilderness = mode))) },
-                    label = { Text(mode.label, maxLines = 1) },
-                    enabled = !busy
-                )
-            }
-        }
-
-        HorizontalDivider(Modifier.padding(vertical = 10.dp))
-        Text("View", style = MaterialTheme.typography.titleSmall)
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            MapView.entries.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { view ->
-                        FilterChip(
-                            selected = options.view == view,
-                            onClick = { onOptions(options.copy(view = view)) },
-                            label = { Text(view.label, maxLines = 1) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    repeat(2 - row.size) { Box(Modifier.weight(1f)) }
-                }
-            }
-        }
-
-        Toggle("Rivers", options.showRivers) { onOptions(options.copy(showRivers = it)) }
-        Toggle("Relief shading", options.showHillshade) { onOptions(options.copy(showHillshade = it)) }
-        Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
-        Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
-        Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
-
-        HorizontalDivider(Modifier.padding(vertical = 10.dp))
-        Text("Acceleration", style = MaterialTheme.typography.titleSmall)
-        val onGpu = config.erosion.acceleration == Acceleration.GPU
-        Toggle(
-            "Use the graphics card",
-            onGpu,
-            enabled = platform.accelerator != null
-        ) { wanted ->
-            onConfig(
-                config.copy(
-                    erosion = config.erosion.copy(
-                        acceleration = if (wanted) Acceleration.GPU else Acceleration.CPU
-                    )
-                )
-            )
-        }
-        val acceleratorNote = when {
-            platform.accelerator == null ->
-                "Unavailable on this machine: ${platform.accelerationUnavailableBecause}."
-            onGpu ->
-                "Wearing the mountains down runs on ${platform.accelerator?.name}. Graphics hardware " +
-                    "rounds differently from the processor, so the seed alone no longer pins the " +
-                    "terrain down exactly — saves therefore carry the terrain itself and open " +
-                    "identically anywhere, at the cost of being a good deal larger. The " +
-                    "difference is far below anything visible: generated both ways, the same " +
-                    "seed gave the same coastline, the same rivers and the same borders."
-            else ->
-                "${platform.accelerator?.name} is available, and is many times faster at this than the " +
-                    "processor. Worlds made with it save their terrain rather than relying on " +
-                    "the seed, so the files are larger."
-        }
-        Text(
-            acceleratorNote,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (onGpu) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-
-        HorizontalDivider(Modifier.padding(vertical = 10.dp))
-        Text("Export", style = MaterialTheme.typography.titleSmall)
-        Text(
-            "The whole pipeline re-runs at the chosen size, so the detail is real rather " +
-                "than interpolated.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ExportFormat.entries.forEach { format ->
-                FilterChip(
-                    selected = exportFormat == format,
-                    onClick = { onExportFormat(format) },
-                    label = { Text(format.label, maxLines = 1) },
+                    selected = config.width == size,
+                    // atResolution, not a raw copy: settings measured in cells have to be
+                    // rescaled with the grid or the world changes character instead of just
+                    // gaining detail. A raw copy leaves mountain belts a fraction of their
+                    // proper width, which surfaces plate edges as straight cliffs.
+                    onClick = { onConfig(config.atResolution(size, size)) },
+                    label = { Text("$size", maxLines = 1) },
+                    enabled = !busy,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
-        Text(
-            exportFormat.detail,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp)
+    }
+}
+
+/**
+ * What the world is made of, and which of its features are drawn.
+ *
+ * The two belong together: changing the number of realms and deciding whether to draw their
+ * borders are the same question asked twice, and separating them would mean hunting in two places
+ * for one answer.
+ */
+@Composable
+private fun WorldSettings(
+    config: WorldGenConfig,
+    options: RenderOptions,
+    busy: Boolean,
+    onConfig: (WorldGenConfig) -> Unit,
+    onOptions: (RenderOptions) -> Unit
+) {
+    Text("World", style = MaterialTheme.typography.titleSmall)
+
+    Labelled("Ocean coverage", "${(config.seaLevel * 100).roundToInt()}%") {
+        Slider(
+            value = config.seaLevel,
+            onValueChange = { onConfig(config.copy(seaLevel = it)) },
+            valueRange = 0.05f..0.95f,
+            enabled = !busy
         )
-        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(2048, 4096, 8192).forEach { size ->
-                Button(onClick = { onExport(size) }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                    Text("$size", maxLines = 1)
-                }
-            }
+    }
+
+    Labelled("Plates", "${config.tectonics.plateCount}") {
+        Slider(
+            value = config.tectonics.plateCount.toFloat(),
+            onValueChange = {
+                onConfig(config.copy(tectonics = config.tectonics.copy(plateCount = it.roundToInt())))
+            },
+            valueRange = 3f..40f,
+            enabled = !busy
+        )
+    }
+
+    Labelled("Realms", "${config.nations.nationCount}") {
+        Slider(
+            value = config.nations.nationCount.toFloat(),
+            onValueChange = {
+                onConfig(config.copy(nations = config.nations.copy(nationCount = it.roundToInt())))
+            },
+            valueRange = 0f..40f,
+            enabled = !busy
+        )
+    }
+
+    Labelled("Points of interest", "${config.landmarks.count}") {
+        Slider(
+            value = config.landmarks.count.toFloat(),
+            onValueChange = {
+                onConfig(config.copy(landmarks = config.landmarks.copy(count = it.roundToInt())))
+            },
+            valueRange = 0f..200f,
+            enabled = !busy
+        )
+    }
+
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        WildernessMode.entries.forEach { mode ->
+            FilterChip(
+                selected = config.nations.wilderness == mode,
+                onClick = { onConfig(config.copy(nations = config.nations.copy(wilderness = mode))) },
+                label = { Text(mode.label, maxLines = 1) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+
+    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+    Text("Features", style = MaterialTheme.typography.titleSmall)
+
+    Toggle("Rivers", options.showRivers) { onOptions(options.copy(showRivers = it)) }
+    Toggle("Relief shading", options.showHillshade) { onOptions(options.copy(showHillshade = it)) }
+    Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
+    Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
+    Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
+}
+
+/** Which layer of the world is on screen. One per row, since these are read rather than scanned. */
+@Composable
+private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
+    Text("View", style = MaterialTheme.typography.titleSmall)
+    MapView.entries.forEach { view ->
+        FilterChip(
+            selected = options.view == view,
+            onClick = { onOptions(options.copy(view = view)) },
+            label = { Text(view.label, maxLines = 1) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/** Where the work happens, and where the result goes. */
+@Composable
+private fun OutputOptions(
+    config: WorldGenConfig,
+    busy: Boolean,
+    platform: Platform,
+    exportFormat: ExportFormat,
+    onConfig: (WorldGenConfig) -> Unit,
+    onExportFormat: (ExportFormat) -> Unit,
+    onExport: (Int) -> Unit
+) {
+    Text("Acceleration", style = MaterialTheme.typography.titleSmall)
+    val onGpu = config.erosion.acceleration == Acceleration.GPU
+    Toggle("Graphics card", onGpu, enabled = platform.accelerator != null) { wanted ->
+        onConfig(
+            config.copy(
+                erosion = config.erosion.copy(
+                    acceleration = if (wanted) Acceleration.GPU else Acceleration.CPU
+                )
+            )
+        )
+    }
+    val acceleratorNote = when {
+        platform.accelerator == null ->
+            "Unavailable here: ${platform.accelerationUnavailableBecause}"
+        onGpu ->
+            "Erosion runs on ${platform.accelerator?.name}. Graphics hardware rounds differently, " +
+                "so saves carry their terrain rather than relying on the seed, and are larger."
+        else ->
+            "${platform.accelerator?.name} is available, and is many times faster at this."
+    }
+    Text(
+        acceleratorNote,
+        style = MaterialTheme.typography.labelSmall,
+        color = if (onGpu) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+    Text("Export", style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ExportFormat.entries.forEach { format ->
+            FilterChip(
+                selected = exportFormat == format,
+                onClick = { onExportFormat(format) },
+                label = { Text(format.label, maxLines = 1) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+    Text(
+        exportFormat.detail,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(2048, 4096, 8192).forEach { size ->
+            Button(
+                onClick = { onExport(size) },
+                enabled = !busy,
+                contentPadding = TIGHT,
+                modifier = Modifier.weight(1f)
+            ) { Text("$size", maxLines = 1) }
         }
     }
 }
+
+/** Buttons here carry longer words than Material assumes, in narrower panels than it assumes. */
+private val TIGHT = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
 
 @Composable
 private fun Labelled(label: String, value: String, content: @Composable () -> Unit) {

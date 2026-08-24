@@ -1,6 +1,5 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.pow
@@ -127,7 +126,7 @@ object RiverStage {
             while (stack.isNotEmpty()) {
                 val cell = stack.removeLast()
                 member.add(cell)
-                forEachNeighbour(w, h, cell % w, cell / w) { n ->
+                FlowRouting.forEachNeighbour(w, h, cell % w, cell / w) { n ->
                     if (submerged[n] && lakeId[n] == LakeResult.NO_LAKE) {
                         lakeId[n] = lakes.size
                         stack.addLast(n)
@@ -161,88 +160,16 @@ object RiverStage {
      * Priority-flood (Barnes et al.): grow inland from the coast, raising any cell that sits below
      * the lowest path already reached so it drains rather than ponding.
      */
-    private fun fillDepressions(width: Int, height: Int, sea: SeaLevelResult): FloatField {
-        val elevation = sea.relativeElevation
-        val filled = elevation.copy()
-        val visited = BooleanArray(width * height)
-        val heap = LongMinHeap(width * 4)
-
-        for (i in visited.indices) {
-            if (!sea.isLand[i]) visited[i] = true
-        }
-
-        fun seed(i: Int) {
-            if (visited[i]) return
-            visited[i] = true
-            heap.push(encode(filled.data[i], i))
-        }
-
-        // Outlets: land touching the sea, plus land running off the top and bottom edges.
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!sea.isLand[i]) continue
-                if (y == 0 || y == height - 1) {
-                    seed(i)
-                    continue
-                }
-                forEachNeighbour(width, height, x, y) { n ->
-                    if (!sea.isLand[n]) seed(i)
-                }
-            }
-        }
-
-        while (!heap.isEmpty()) {
-            val current = heap.pop()
-            val ci = decodeIndex(current)
-            val cElevation = filled.data[ci]
-            val cx = ci % width
-            val cy = ci / width
-
-            forEachNeighbour(width, height, cx, cy) { n ->
-                if (!visited[n]) {
-                    visited[n] = true
-                    if (filled.data[n] <= cElevation) {
-                        filled.data[n] = cElevation + EPSILON
-                    }
-                    heap.push(encode(filled.data[n], n))
-                }
-            }
-        }
-        return filled
-    }
+    private fun fillDepressions(width: Int, height: Int, sea: SeaLevelResult): FloatField =
+        FlowRouting.fillDepressions(width, height, sea.isLand, sea.relativeElevation)
 
     private fun computeFlowDirections(
         width: Int,
         height: Int,
         sea: SeaLevelResult,
         filled: FloatField
-    ): IntArray {
-        val target = IntArray(width * height) { -1 }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!sea.isLand[i]) continue
-
-                var best = -1
-                var bestDrop = 0f
-                val here = filled.data[i]
-                forEachNeighbourWithDistance(width, height, x, y) { n, distance ->
-                    // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-                    val there = if (sea.isLand[n]) filled.data[n] else sea.relativeElevation.data[n]
-                    val drop = (here - there) / distance
-                    if (drop > bestDrop) {
-                        bestDrop = drop
-                        best = n
-                    }
-                }
-                // Interior cells always have a lower neighbour after depression filling; only the
-                // polar rows, which drain off the map, can legitimately come up empty.
-                target[i] = best
-            }
-        }
-        return target
-    }
+    ): IntArray =
+        FlowRouting.flowDirections(width, height, sea.isLand, sea.relativeElevation, filled)
 
     /**
      * @param totalRunoff sum of the per-cell rainfall *inputs*. Not the sum of the accumulation
@@ -262,27 +189,13 @@ object RiverStage {
         filled: FloatField,
         flowTarget: IntArray
     ): FlowResult {
-        val accumulation = FloatField(width, height)
         var totalRunoff = 0f
-        // Elevation packed above the cell index so a plain primitive sort orders cells by height.
-        val ordered = LongArray(sea.landCellCount)
-        var n = 0
-        for (i in 0 until width * height) {
-            if (!sea.isLand[i]) continue
+        val accumulation = FlowRouting.accumulate(
+            width, height, sea.isLand, filled, flowTarget, sea.landCellCount
+        ) { i ->
             val weight = runoffWeight(climate.precipitation.data[i])
-            accumulation.data[i] = weight
             totalRunoff += weight
-            ordered[n++] = encode(filled.data[i], i)
-        }
-
-        ordered.sort()
-        // Highest first, so a cell's own total is final before it passes water downstream.
-        for (k in ordered.indices.reversed()) {
-            val i = decodeIndex(ordered[k])
-            val t = flowTarget[i]
-            if (t >= 0 && sea.isLand[t]) {
-                accumulation.data[t] += accumulation.data[i]
-            }
+            weight
         }
         return FlowResult(accumulation, totalRunoff)
     }
@@ -332,7 +245,7 @@ object RiverStage {
 
         for (k in sources.indices.reversed()) {
             if (rivers.size >= cfg.maxRivers) break
-            val source = decodeIndex(sources[k])
+            val source = FlowRouting.decodeIndex(sources[k])
 
             val path = ArrayList<Int>()
             var claimedByThisRiver = 0
@@ -374,49 +287,4 @@ object RiverStage {
         return rivers
     }
 
-    private inline fun forEachNeighbour(
-        width: Int,
-        height: Int,
-        x: Int,
-        y: Int,
-        action: (index: Int) -> Unit
-    ) {
-        for (dy in -1..1) {
-            val ny = y + dy
-            if (ny < 0 || ny >= height) continue
-            for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                var nx = (x + dx) % width
-                if (nx < 0) nx += width
-                action(ny * width + nx)
-            }
-        }
-    }
-
-    private inline fun forEachNeighbourWithDistance(
-        width: Int,
-        height: Int,
-        x: Int,
-        y: Int,
-        action: (index: Int, distance: Float) -> Unit
-    ) {
-        for (dy in -1..1) {
-            val ny = y + dy
-            if (ny < 0 || ny >= height) continue
-            for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                var nx = (x + dx) % width
-                if (nx < 0) nx += width
-                val distance = if (dx != 0 && dy != 0) 1.41421356f else 1f
-                action(ny * width + nx, distance)
-            }
-        }
-    }
-
-    private fun encode(elevation: Float, index: Int): Long {
-        val bits = (elevation + ELEVATION_BIAS).toRawBits()
-        return (bits.toLong() shl 32) or index.toLong()
-    }
-
-    private fun decodeIndex(encoded: Long): Int = (encoded and 0xFFFFFFFFL).toInt()
 }

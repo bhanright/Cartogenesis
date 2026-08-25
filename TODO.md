@@ -133,8 +133,17 @@
 - **Skia is two thirds of the web payload** — 8.4 MB of 12.4 MB raw, 3.2 MB of 4.4 MB on the wire.
   Nothing the website can do moves the first-visit cost as much as shrinking this would. No obvious
   lever: it is Compose's renderer, not ours.
-- **Mobile is still untested.** The site warns small touch screens off rather than blocking them,
-  but nobody has actually loaded the app on a phone.
+- **The web app does not display properly at mobile resolutions.** Confirmed by the author on a
+  real device 2026-08-25, no longer merely untested. Accepted for now — the site warns small touch
+  screens off rather than blocking them. The interface was laid out for a desktop window: a fixed
+  320px control column either side of the map does not fit a phone, so a real fix is a layout that
+  collapses the panels rather than a tweak.
+- **Match the visual style to bfunk.online.** Requested 2026-08-25 for the next version. The app
+  currently uses stock Material 3 colours, which sit oddly next to the site it is embedded in. The
+  theme is set in one place — `MaterialTheme` in the web and desktop entry points — so this is a
+  colour scheme rather than a rewrite. Worth taking the palette from the site's own CSS rather than
+  eyeballing it, and worth checking it against the nine map styles, which carry their own colours
+  and should probably stay as they are.
 
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean

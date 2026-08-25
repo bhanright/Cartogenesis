@@ -86,7 +86,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Cartogenesis"
-            packageVersion = "1.0.0"
+            // Declared in gradle.properties so the build is the single source of truth for the
+            // version, rather than something to be kept in step by hand at release time.
+            packageVersion = providers.gradleProperty("cartogenesisVersion").get()
 
             // jpackage runs jlink, which bundles only the modules it can prove are needed -- and
             // it cannot see through LWJGL's reflection, so it left out jdk.unsupported. That is
@@ -97,4 +99,16 @@ compose.desktop {
             modules("jdk.unsupported")
         }
     }
+}
+
+/*
+ * `WebDeploymentContractTest` reads the web module's sources, which Gradle has no way to know
+ * about: without declaring them, the test task stays up to date when they change, and the build
+ * cache cheerfully restores the previous *passing* result. Caught exactly that way - the id was
+ * renamed to prove the guard bites, and the guard reported success from cache.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(rootProject.fileTree("web/src/wasmJsMain/kotlin"))
+        .withPropertyName("webSourcesReadByDeploymentContractTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

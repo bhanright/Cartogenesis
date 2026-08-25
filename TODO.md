@@ -130,6 +130,12 @@
   256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
   now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
   matters. A metric that discriminates the real bug would still be worth having.
+- **Skia is two thirds of the web payload** — 8.4 MB of 12.4 MB raw, 3.2 MB of 4.4 MB on the wire.
+  Nothing the website can do moves the first-visit cost as much as shrinking this would. No obvious
+  lever: it is Compose's renderer, not ours.
+- **Mobile is still untested.** The site warns small touch screens off rather than blocking them,
+  but nobody has actually loaded the app on a phone.
+
 - **Tectonic drift.** Requested 2026-08-23 as a stretch goal and not started. Plates already carry
   a drift vector, but it only classifies boundaries — nothing moves. Simulating it would mean
   stepping plates across several frames and accumulating the terrain each step, so a range records

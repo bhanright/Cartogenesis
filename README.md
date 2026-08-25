@@ -285,6 +285,36 @@ a realm can be mostly polar waste and still be a temperate farming nation), impo
 staples it cannot supply. Names come from per-culture syllable inventories, so neighbouring realms
 sound like different peoples.
 
+## Deploying the web build
+
+The browser build is live at <https://cartogenesis.bfunk.online>, served as static files from
+Porkbun. It is deployed by copying `web/build/dist/wasmJs/productionExecutable` and discarding the
+source map, the empty `composeResources/` directories, and the emitted `index.html` — the site
+supplies its own shell so it can show a loading screen while 4.4 MB of compressed WebAssembly
+arrives.
+
+**That shell depends on two names in this repo, and breaking either fails silently** — the
+application keeps working and the page around it never finds out:
+
+- `VIEWPORT_ID` in `web/.../Main.kt` must stay `composeTarget`. The site creates the div; Compose
+  mounts into it.
+- `hideLoadingMessage()` in `web/.../Browser.kt` must keep removing `#loading`, and must keep being
+  called on startup. The site keeps an empty div with that id purely so this can delete it, and
+  treats the deletion as its "app is ready" signal.
+
+The second one exists because **Compose does not put its canvas in the page.** It attaches a shadow
+root to the viewport div, so from outside `document.querySelector("canvas")` is null, the div
+reports no children, and a MutationObserver on it never fires — all while a live canvas is
+generating a world. There is no other exact readiness signal to watch.
+
+`WebDeploymentContractTest` pins both, and was shown to fail on each in turn. It reads the web
+module's source text, since the contract is an id inside a `@JsFun` body that no type system sees;
+`desktop/build.gradle.kts` declares those sources as test inputs, because without that Gradle keeps
+the task up to date and the build cache restores a stale pass.
+
+The host must serve `.wasm` as `application/wasm` or the browser's streaming compiler refuses it.
+Compression is worth turning on: 12.4 MB raw is 4.4 MB gzipped, and Skia is two thirds of it.
+
 ## Peoples
 
 A second layer over the same ground: who lives there, as opposed to who governs there. It is

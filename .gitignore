@@ -21,3 +21,8 @@ keystore.properties
 # Packaged builds for distribution. Regenerate with :desktop:createDistributable
 # and :desktop:packageMsi; a hundred megabytes of bundled JVM does not belong in git.
 /dist/
+
+# Local notes about where and how this is deployed. Deliberately not published: the repo is public
+# and these describe private infrastructure rather than the program. Ignored rather than merely
+# left untracked, so a `git add -A` cannot sweep them in by accident.
+/HOSTING.md

@@ -40,6 +40,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -134,8 +140,9 @@ fun CartogenesisApp(platform: Platform) {
         image = rendered
         stage = null
         busy = false
-        status = "${config.width}x${config.height} in ${epochMillis() - started} ms · " +
-            "${generated.nations.nations.size} realms · ${generated.rivers.rivers.size} rivers"
+        status = "Seed ${config.seed} · ${config.width}x${config.height} in " +
+            "${epochMillis() - started} ms · ${generated.nations.nations.size} realms · " +
+            "${generated.rivers.rivers.size} rivers"
     }
 
     LaunchedEffect(options) {
@@ -188,6 +195,8 @@ fun CartogenesisApp(platform: Platform) {
                     labelMode = labelMode,
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
+                    seed = config.seed,
+                    onSeed = { config = config.copy(seed = it) },
                     onNewWorld = { config = config.copy(seed = Random.nextLong(1_000_000)) },
                     onToggleAtlas = {
                         screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
@@ -508,6 +517,63 @@ private fun LabelChip(label: MapLabel) {
     }
 }
 
+
+/**
+ * The seed, shown and editable.
+ *
+ * Every world is a pure function of its seed, so the seed *is* the world: it is how you come back
+ * to one, and how you tell someone else which one you mean. Until now the only way to change it was
+ * "New world", which rolls a fresh one, and the only place it was ever displayed was the library
+ * listing for worlds already saved - so a world you were looking at could not be named or returned
+ * to without saving it first.
+ *
+ * Typed text is held locally and only applied on Enter or on losing focus, rather than on every
+ * keystroke: regenerating is expensive, and applying as you type would kick off a generation for
+ * each digit of a six-digit number.
+ */
+@Composable
+private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
+    var text by remember(seed) { mutableStateOf(seed.toString()) }
+    val parsed = text.trim().toLongOrNull()
+    val changed = parsed != null && parsed != seed
+
+    fun apply() {
+        val value = text.trim().toLongOrNull() ?: return
+        if (value != seed) onSeed(value)
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = text,
+            // Digits only, and a minus sign, since the seed is a Long. Filtering here rather than
+            // rejecting on submit means the field cannot be put into a state it will not accept.
+            onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '-' }.take(19) },
+            label = { Text("Seed") },
+            singleLine = true,
+            enabled = !busy,
+            isError = text.isNotBlank() && parsed == null,
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { if (!it.isFocused) apply() }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                        apply()
+                        true
+                    } else {
+                        false
+                    }
+                }
+        )
+        OutlinedButton(onClick = { apply() }, enabled = !busy && changed, contentPadding = TIGHT) {
+            Text("Go", maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun WorldActions(
     busy: Boolean,
@@ -515,12 +581,15 @@ private fun WorldActions(
     labelMode: Boolean,
     atlasLabel: String,
     libraryLabel: String,
+    seed: Long,
+    onSeed: (Long) -> Unit,
     onNewWorld: () -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit,
     onToggleLabels: () -> Unit
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleMedium)
+    SeedField(seed = seed, busy = busy, onSeed = onSeed)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(onClick = onNewWorld, enabled = !busy, contentPadding = TIGHT) {
             Text("New world", maxLines = 1)

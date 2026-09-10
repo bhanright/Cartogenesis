@@ -4,6 +4,21 @@
 project. Everything in the "Facts" sections was measured on the actual build, not recalled — the
 verification steps are given so they can be repeated.*
 
+> **This brief has been answered and the app is deployed** at
+> <https://cartogenesis.bfunk.online>, in a subdirectory served by a subdomain, behind a
+> description page. Kept as written rather than rewritten, because the measurements below are still
+> the ones a future host would need, and because the six questions at the end record what was
+> actually undecided at the time.
+>
+> Three things it did not anticipate, all learned in the doing:
+>
+> - The site replaces the emitted `index.html` with its own loading shell, which made
+>   `VIEWPORT_ID` and `hideLoadingMessage()` load-bearing across two repositories. Both are now
+>   pinned by `WebDeploymentContractTest`. See **Deploying the web build** in `README.md`.
+> - `cartogenesis.js` is not content-hashed while the `.wasm` files are, so a returning visitor
+>   with a cached loader 404s after a deploy. The site now versions the loader URL.
+> - Mobile was listed below as untested. It is now confirmed broken and accepted; see `TODO.md`.
+
 ---
 
 ## What I'm asking for

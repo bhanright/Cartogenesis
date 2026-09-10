@@ -312,6 +312,14 @@ module's source text, since the contract is an id inside a `@JsFun` body that no
 `desktop/build.gradle.kts` declares those sources as test inputs, because without that Gradle keeps
 the task up to date and the build cache restores a stale pass.
 
+One more thing the site has to do, which is this repo's fault rather than the host's: **the two
+`.wasm` files carry content hashes but `cartogenesis.js` does not.** A new build therefore lands
+under new wasm names while the loader keeps its old URL, so a returning visitor with a cached loader
+asks for a wasm hash the deploy has just deleted — a 404 and a dead app, not a stale one. The site
+works around it by loading `cartogenesis.js?v=<stamp>` and stamping it on every deploy. If this
+build is ever hosted somewhere else, that host needs the same trick, or cache headers that make it
+unnecessary.
+
 The host must serve `.wasm` as `application/wasm` or the browser's streaming compiler refuses it.
 Compression is worth turning on: 12.4 MB raw is 4.4 MB gzipped, and Skia is two thirds of it.
 

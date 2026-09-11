@@ -61,6 +61,7 @@ class IncrementalReuseTest {
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
+            "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
             "climate" to base.copy(
                 climate = base.climate.copy(
                     equatorTemperatureC = base.climate.equatorTemperatureC + 4f
@@ -78,6 +79,9 @@ class IncrementalReuseTest {
             // question: it changes the wind, and the ocean stage is driven by the wind.
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
+            ),
+            "continentality" to base.copy(
+                climate = base.climate.copy(continentality = base.climate.continentality + 0.4f)
             ),
             "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),

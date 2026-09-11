@@ -65,6 +65,38 @@ data class TectonicsConfig(
     val rangeVariationScale: Float = 13f
 )
 
+/**
+ * The continental shelf: a remap of the ocean floor, applied in [SeaLevelStage] *after* the
+ * percentile sea-level cut rather than in the tectonics that feed it.
+ *
+ * An earlier version of this shaped the shelf as an extra depression in [PlateStage], before sea
+ * level was chosen. That moved the percentile threshold itself, so any depth large enough to read
+ * on the map also reshuffled which cells were land — closing straits into land bridges and merging
+ * landmasses that should have stayed apart, visible downstream as a realm or a people swallowing a
+ * neighbour it used to be cut off from. Remapping the ocean floor afterward, keyed on distance to
+ * the coastline that sea level already chose, gets the same shallow margin without moving a single
+ * `isLand` bit or a single land [SeaLevelResult.relativeElevation] value.
+ */
+@Serializable
+data class SeaConfig(
+    /**
+     * Width, in cells, of the shelf plateau; a further band of the same width blends the plateau
+     * back down to the natural sea floor, so the whole remap reaches `2 * shelfWidth` from the
+     * coast. Measured in cells, so [WorldGenConfig.atResolution] rescales it like
+     * [TectonicsConfig.boundaryFalloff] — left alone, a larger grid would shrink the shelf to a
+     * sliver and coastlines would drop straight into deep water again.
+     */
+    val shelfWidth: Float = 20f,
+    /**
+     * Depth of the shelf plateau at its outer edge, in the same normalized units as
+     * [SeaLevelResult.relativeElevation]. Kept shallower than the -0.12 cut [ClimateStage] uses
+     * for `SHALLOW_OCEAN`, so the entire plateau reads as shallow water; the coast itself sits
+     * shallower still, at a fixed -0.02, so there is a genuine (if gentle) slope across the shelf
+     * rather than a dead-flat plain right up to the shore.
+     */
+    val shelfDepth: Float = 0.10f
+)
+
 @Serializable
 data class ClimateConfig(
     val equatorTemperatureC: Float = 32f,
@@ -136,7 +168,26 @@ data class ClimateConfig(
      * 0.3 the air crosses a row every three or four cells, so it traverses ten degrees of latitude
      * over a continent's width — about what it takes for a coast to feel a sea it does not face.
      */
-    val meridionalWind: Float = 0.3f
+    val meridionalWind: Float = 0.3f,
+    /**
+     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
+     *
+     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
+     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
+     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
+     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
+     * applied to the seasonal departure from the annual mean is `1 + continentality *
+     * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
+     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReach] — a shoreline cell
+     * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
+     * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
+     * field here instead, on the theory that "exposed to water" and "close to water" were the same
+     * question; they were not at this radius — two box-blur passes read barely 0.3 exposure right
+     * at the edge of a single `coastalReach`, so a coast measured that way was already most of the
+     * way to fully continental. Zero reproduces the world from before this setting existed, bit
+     * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
+     */
+    val continentality: Float = 0.6f
 )
 
 @Serializable
@@ -458,6 +509,7 @@ data class WorldGenConfig(
     val erosion: ErosionConfig = ErosionConfig(),
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
+    val sea: SeaConfig = SeaConfig(),
     val climate: ClimateConfig = ClimateConfig(),
     val rivers: RiverConfig = RiverConfig(),
     val lakes: LakesConfig = LakesConfig(),
@@ -480,6 +532,9 @@ data class WorldGenConfig(
      *  - [TectonicsConfig.boundaryFalloff] is the width of a mountain belt and of the blur that
      *    softens the plate base. Left alone, a 4x larger grid makes both four times narrower in
      *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
+     *  - [SeaConfig.shelfWidth] is the width of the continental shelf, in the same cell terms as
+     *    [TectonicsConfig.boundaryFalloff] and for the same reason: left alone, a larger grid
+     *    would shrink it to nothing and every coast would drop straight into deep water again.
      *  - [ClimateConfig.baseRainRate] is charged per cell of wind travel, so a 4x wider grid
      *    depletes moisture four times over the same journey and parches every interior.
      *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
@@ -497,6 +552,7 @@ data class WorldGenConfig(
             width = newWidth,
             height = newHeight,
             tectonics = tectonics.copy(boundaryFalloff = tectonics.boundaryFalloff * scale),
+            sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
             erosion = erosion.copy(passes = (erosion.passes * scale).toInt()),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)

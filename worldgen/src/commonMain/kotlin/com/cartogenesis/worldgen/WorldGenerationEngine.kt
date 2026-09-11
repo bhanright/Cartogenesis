@@ -98,9 +98,15 @@ object WorldGenerationEngine {
 
         report(GenerationStage.SEA_LEVEL)
         val sea = reusable
-            ?.takeIf { it.erosion === erosion && it.config.seaLevel == config.seaLevel }
+            ?.takeIf {
+                it.erosion === erosion &&
+                    it.config.seaLevel == config.seaLevel &&
+                    // The continental shelf is a post-percentile remap of the ocean floor, not a
+                    // tectonics setting, so a shelf-only change must not reuse a stale sea stage.
+                    it.config.sea == config.sea
+            }
             ?.sea
-            ?: SeaLevelStage.apply(erosion.height, config.seaLevel)
+            ?: SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
 
         report(GenerationStage.OCEAN)
         val ocean = reusable

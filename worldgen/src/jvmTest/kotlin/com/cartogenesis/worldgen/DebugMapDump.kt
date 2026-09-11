@@ -40,6 +40,10 @@ class DebugMapDump {
             write(render(world, Mode.WINTER_RAINFALL), "seed$seed-rainfall-winter.png")
             write(render(world, Mode.SEASON_CONTRAST), "seed$seed-rainfall-contrast.png")
             write(render(world, Mode.WIND), "seed$seed-wind.png")
+            // Continentality's payoff, per seed: an interior at a given latitude should read
+            // hotter in summer and colder in winter than a coast at the same latitude.
+            write(render(world, Mode.SUMMER_TEMPERATURE), "seed$seed-temperature-summer.png")
+            write(render(world, Mode.WINTER_TEMPERATURE), "seed$seed-temperature-winter.png")
             println(
                 "seed $seed: ${(world.landFraction() * 100).toInt()}% land, " +
                     "${world.rivers.rivers.size} rivers, " +

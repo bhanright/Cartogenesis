@@ -30,9 +30,16 @@ These are the habits that have found every substantive bug in this project. They
    list in `IncrementalReuseTest`, which compares reuse against fresh generation for every section.
 5. **Measure, do not tune.** Report the number before and after. Never move a threshold to make a
    guard green; if a guard cannot discriminate, say so and fall back to the render.
-6. **Windows file locks.** Gradle on this machine locks `build/` subdirectories between runs. The
-   cure is `gradlew --stop`, then delete the module's `build` directory in a *separate* command
-   from any that mentions the JDK path (the sandbox misreads the two together), then run.
+6. **Windows file locks, and never `gradlew --stop`.** Gradle on this machine locks `build/`
+   subdirectories between runs. The cure is to delete the affected module's `build` directory
+   *inside your own worktree* (`Remove-Item -LiteralPath <module>uild -Recurse -Force`, in a
+   separate command from any that mentions the JDK path — the sandbox misreads the two together)
+   and rerun. Run every Gradle command with `--no-daemon`, so your build lives in its own JVM.
+   Do **not** run `gradlew --stop`: it kills every Gradle daemon on the machine, including a
+   parallel agent's build in progress. On 2026-09-11 two agents each followed the old version of
+   this rule and spent a quarter of an hour killing each other's builds — five daemons ended
+   "stop command received". If a build dies with "daemon disappeared" or "build cancelled", it was
+   stopped from outside; rerun it.
 7. **Reports carry numbers.** A subagent's final report says what changed, the before/after
    figures its guard measured, what the render showed, and anything it could not verify. The
    orchestrator decides from the report; the diff is there if the report raises a question.

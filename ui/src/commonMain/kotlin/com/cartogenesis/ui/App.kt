@@ -98,8 +98,10 @@ fun CartogenesisApp(platform: Platform) {
     // Probed once. A machine with no usable device gets the toggle disabled and told why, rather
     // than a switch that silently does nothing.
     val accelerator = platform.accelerator
-    // Set when a world is opened from a save that carried its terrain, and cleared as soon as the
-    // settings change, since a stored terrain only answers for the config it was stored under.
+    // Only ever set by opening a version-2 save made on the graphics card, which carried its
+    // eroded terrain because the seed alone did not pin it down. A version-3 save carries every
+    // stage instead and is handed straight to the engine as a world to reuse, so nothing written
+    // by this build ever takes this path.
     var storedTerrain by remember { mutableStateOf<TerrainSnapshot?>(null) }
     var overrides by remember { mutableStateOf(WorldOverrides()) }
     var selectedNation by remember { mutableStateOf<Int?>(null) }
@@ -127,8 +129,8 @@ fun CartogenesisApp(platform: Platform) {
         // if the seed or resolution moved, so there is nothing to guard here.
         val reusable = world
         val generated = withContext(Dispatchers.Default) {
-            // A stored terrain takes precedence: it is the world exactly as it was saved, and
-            // recomputing it on this machine's hardware could only be a worse answer.
+            // A version-2 GPU save's terrain takes precedence: it is the world as it was saved,
+            // and recomputing it on this machine's hardware could only be a worse answer.
             val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: accelerator
             WorldGenerationEngine.generate(config, reusable, accelerator) {
                 s: GenerationStage, _: Int, _: Int ->
@@ -235,36 +237,41 @@ fun CartogenesisApp(platform: Platform) {
                     location = platform.libraryLocation,
                     onTitleChange = { title = it },
                     onSave = {
-                        store.save(
-                            WorldDocument(
-                                id = documentId,
-                                title = title.ifBlank { "Untitled world" },
-                                config = config,
-                                overrides = overrides,
-                                labels = labels,
-                                // Only a GPU world needs its terrain preserved; a CPU world
-                                // regenerates from the seed exactly, on any machine.
-                                terrain = current
-                                    ?.takeIf { config.erosion.acceleration == Acceleration.GPU }
-                                    ?.let {
-                                        TerrainSnapshot.of(
-                                            it.width, it.height, it.erosion.height.data
-                                        )
-                                    },
-                                savedAt = epochMillis()
+                        // The world goes in the file, not the recipe for it. Nothing here depends
+                        // on this machine reproducing the same world from the same seed, which is
+                        // what the whole format was changed for.
+                        //
+                        // A save is tens of megabytes now, so it can fail where it never used to —
+                        // a browser's storage quota, a full disk. That is a message, not a crash.
+                        status = runCatching {
+                            store.save(
+                                WorldDocument(
+                                    id = documentId,
+                                    title = title.ifBlank { "Untitled world" },
+                                    config = config,
+                                    overrides = overrides,
+                                    labels = labels,
+                                    savedAt = epochMillis()
+                                ),
+                                current
                             )
-                        )
-                        saved = store.list()
-                        status = "Saved \"$title\""
+                            saved = store.list()
+                            "Saved \"$title\""
+                        }.getOrElse { "Could not save \"$title\": ${it.message ?: it::class.simpleName}" }
                     },
                     onOpen = { id ->
-                        store.load(id)?.let { doc ->
+                        store.load(id)?.let { save ->
+                            val doc = save.document
                             documentId = doc.id
                             title = doc.title
                             overrides = doc.overrides
                             labels = doc.labels
                             nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
                             storedTerrain = doc.terrain
+                            // Handing the saved world back as the world to reuse is the whole of
+                            // opening it: the generation the settings change kicks off finds every
+                            // stage already matching its config and computes none of them.
+                            world = save.world
                             config = doc.config
                             screen = Screen.MAP
                         }
@@ -784,8 +791,7 @@ private fun OutputOptions(
         platform.accelerator == null ->
             "Unavailable here: ${platform.accelerationUnavailableBecause}"
         onGpu ->
-            "Erosion runs on ${platform.accelerator?.name}. Graphics hardware rounds differently, " +
-                "so saves carry their terrain rather than relying on the seed, and are larger."
+            "Erosion runs on ${platform.accelerator?.name}, which is many times faster at it."
         else ->
             "${platform.accelerator?.name} is available, and is many times faster at this."
     }

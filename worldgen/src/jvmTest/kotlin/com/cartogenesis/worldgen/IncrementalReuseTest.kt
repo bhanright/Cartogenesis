@@ -1,10 +1,24 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.ClimateResult
+import com.cartogenesis.worldgen.pipeline.CultureResult
+import com.cartogenesis.worldgen.pipeline.ErosionResult
+import com.cartogenesis.worldgen.pipeline.LakeResult
+import com.cartogenesis.worldgen.pipeline.LandmarkResult
+import com.cartogenesis.worldgen.pipeline.NationResult
+import com.cartogenesis.worldgen.pipeline.NormalField
+import com.cartogenesis.worldgen.pipeline.OceanResult
+import com.cartogenesis.worldgen.pipeline.PlateResult
+import com.cartogenesis.worldgen.pipeline.RiverResult
+import com.cartogenesis.worldgen.pipeline.SeaLevelResult
+import com.cartogenesis.worldgen.pipeline.TerrainResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -76,6 +90,90 @@ class IncrementalReuseTest {
         assertEquals(
             emptyList(), disagreed,
             "reusing the previous world changed the result for: $disagreed"
+        )
+    }
+
+    @Test
+    fun `a world rebuilt from its parts reuses every stage and generates nothing`() {
+        // What opening a save is: the world arrives as freshly built objects holding freshly
+        // allocated arrays — nothing in it came from this engine — and is handed back as the world
+        // to reuse. Every stage should match its config and none should run. Identity rather than
+        // equality, because a stage that recomputed the same answer would pass an equality check
+        // while costing exactly what reuse exists to avoid.
+        //
+        // The codec's own version of this lives in `:cartography`, where a save can actually be
+        // written; this pins the engine half of the contract, which is where it can break.
+        val generated = WorldGenerationEngine.generateBlocking(base)
+        val loaded = rebuiltAsIfLoaded(generated)
+
+        val opened = WorldGenerationEngine.generateBlocking(base, previous = loaded)
+
+        assertSame(loaded.terrain, opened.terrain, "terrain was regenerated")
+        assertSame(loaded.plates, opened.plates, "plates were regenerated")
+        assertSame(loaded.erosion, opened.erosion, "erosion was regenerated")
+        assertSame(loaded.sea, opened.sea, "sea level was regenerated")
+        assertSame(loaded.ocean, opened.ocean, "ocean was regenerated")
+        assertSame(loaded.climate, opened.climate, "climate was regenerated")
+        assertSame(loaded.rivers, opened.rivers, "rivers were regenerated")
+        assertSame(loaded.nations, opened.nations, "realms were regenerated")
+        assertSame(loaded.cultures, opened.cultures, "peoples were regenerated")
+        assertSame(loaded.landmarks, opened.landmarks, "landmarks were regenerated")
+        assertEquals(fingerprint(generated), fingerprint(opened))
+    }
+
+    /** Every stage result rebuilt around copied arrays, which is what a decoder hands back. */
+    private fun rebuiltAsIfLoaded(world: WorldMap): WorldMap {
+        fun field(source: FloatField) = FloatField(source.width, source.height, source.data.copyOf())
+        return WorldMap(
+            config = world.config,
+            terrain = TerrainResult(
+                normals = NormalField(field(world.terrain.normals.gx), field(world.terrain.normals.gy)),
+                height = field(world.terrain.height)
+            ),
+            plates = PlateResult(
+                plates = world.plates.plates.toList(),
+                plateId = world.plates.plateId.copyOf(),
+                boundaryDistance = field(world.plates.boundaryDistance),
+                nearestBoundaryType = world.plates.nearestBoundaryType.copyOf(),
+                height = field(world.plates.height)
+            ),
+            erosion = ErosionResult(height = field(world.erosion.height)),
+            sea = SeaLevelResult(
+                threshold = world.sea.threshold,
+                isLand = world.sea.isLand.copyOf(),
+                relativeElevation = field(world.sea.relativeElevation),
+                landCellCount = world.sea.landCellCount
+            ),
+            ocean = OceanResult(
+                velocityX = field(world.ocean.velocityX),
+                velocityY = field(world.ocean.velocityY),
+                temperature = field(world.ocean.temperature),
+                anomaly = field(world.ocean.anomaly)
+            ),
+            climate = ClimateResult(
+                temperature = field(world.climate.temperature),
+                precipitation = field(world.climate.precipitation),
+                windDirection = world.climate.windDirection.copyOf(),
+                biome = world.climate.biome.copyOf()
+            ),
+            rivers = RiverResult(
+                filledElevation = field(world.rivers.filledElevation),
+                flowAccumulation = field(world.rivers.flowAccumulation),
+                flowTarget = world.rivers.flowTarget.copyOf(),
+                rivers = world.rivers.rivers.toList(),
+                lakes = LakeResult(world.rivers.lakes.lakeId.copyOf(), world.rivers.lakes.lakes.toList())
+            ),
+            nations = NationResult(
+                nationId = world.nations.nationId.copyOf(),
+                nations = world.nations.nations.toList(),
+                habitability = field(world.nations.habitability)
+            ),
+            cultures = CultureResult(
+                cultureId = world.cultures.cultureId.copyOf(),
+                cultures = world.cultures.cultures.toList()
+            ),
+            landmarks = LandmarkResult(world.landmarks.landmarks.toList()),
+            labels = world.labels.toList()
         )
     }
 

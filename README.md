@@ -359,12 +359,39 @@ one can be replaced by the user. Anything untouched keeps following the generato
 a regeneration, so a new setting does not wipe out edits. Any new generated attribute needs an
 override path and a line in `WorldStore`, or it will not survive a save.
 
-A save records the seed, the settings and the overrides — not the world, which is rebuilt from
-them. A whole world is a few kilobytes.
+**A save carries the world, not the recipe for it.** It used to record the seed, the settings and
+the overrides, and rebuild the world on open — which made a file a few kilobytes and made
+bit-identical generation on every platform a hard requirement, since a world saved in a browser
+had to come back the same on the desktop. The GPU toggle broke that rule outright and had to
+smuggle its eroded terrain into the file to get round it.
+
+So a version-3 save is a container: an uncompressed JSON header — format version, settings,
+overrides, labels, title, which front end wrote it, and a directory of what follows — then one
+binary section per per-cell array, gzipped. Binary because the arrays *are* the file: 1024x1024 is
+fifteen float fields, seven id maps and two byte maps, 94 MB before compression and roughly three
+times that as JSON. Little-endian `float32` for anything that must round-trip exactly, `int32` for
+cell ids, a byte per cell for land and biome; the small lists — rivers, lakes, realms, peoples,
+landmarks — stay in the JSON header, where a tool can read them without knowing the layout.
+
+Gzip takes a 1024 save to about 38 MB and a 512 save to about 10 MB, roughly 2.5:1. The spread is
+the interesting part: the id maps are long runs of the same integer and compress 100:1 or better,
+while the height fields are noise by construction and barely move at 1.1:1. Compression is a seam
+on `Platform`, because the JVM has `java.util.zip` and a browser has `CompressionStream` and
+common code has neither; a platform that cannot compress stores the payload raw and says `none` in
+the header, so the file still opens anywhere.
+
+Opening a save is deserialisation followed by a generation pass that reuses every stage and
+computes none — the same reuse chain live editing runs on, so editing a setting after opening
+recomputes only what lies downstream of it.
+
+**Version-2 saves still open.** They are JSON text with no world in them, so they are regenerated
+from the seed exactly as before, and the next save writes them out in full. Nothing has to be
+migrated by hand.
 
 **The format is shared.** `WorldCodec` in `:cartography` is the entire thing, built on
-kotlinx.serialization, and it lives in shared code rather than in any one app, so every front end
-writes files that open in the others; each supplies only where the bytes go. Serializers are generated from the config classes themselves
+kotlinx.serialization for the header, and it lives in shared code rather than in any one app, so
+every front end writes files that open in the others; each supplies only where the bytes go, and
+what it can compress with. Serializers are generated from the config classes themselves
 rather than hand-written mirrors — a parallel schema would need every new setting adding twice, and
 would silently drop from saves whenever someone forgot.
 

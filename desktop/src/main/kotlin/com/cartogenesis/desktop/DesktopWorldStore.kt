@@ -1,17 +1,23 @@
 package com.cartogenesis.desktop
 
-import com.cartogenesis.cartography.TextWorldLibrary
+import com.cartogenesis.cartography.ByteWorldLibrary
+import com.cartogenesis.cartography.Compressor
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Saved worlds under the user's home directory, in a place they can find and back up.
  *
- * Format comes from `:cartography`, so a world saved on a phone opens here and vice versa — the
- * file is a few kilobytes of seed and settings, small enough to move by any means.
+ * Format comes from `:cartography`, so a world saved in a browser opens here and vice versa. A
+ * file is no longer a few kilobytes of seed and settings: it carries the world itself, which at
+ * 1024 is tens of megabytes gzipped — the price of a save that does not depend on this machine
+ * generating the same world as the one that wrote it.
  */
 class DesktopWorldStore(
-    private val directory: File = File(System.getProperty("user.home"), ".cartogenesis/worlds")
-) : TextWorldLibrary() {
+    private val directory: File = File(System.getProperty("user.home"), ".cartogenesis/worlds"),
+    compressor: Compressor = GzipCompressor,
+    writtenBy: String = desktopSignature()
+) : ByteWorldLibrary(compressor, writtenBy) {
 
     init {
         directory.mkdirs()
@@ -20,16 +26,43 @@ class DesktopWorldStore(
     val location: String get() = directory.absolutePath
 
     override fun names(): List<String> =
-        directory.listFiles { file -> file.extension == "json" }?.map { it.name } ?: emptyList()
+        directory.listFiles { file ->
+            file.name.endsWith(EXTENSION) || file.name.endsWith(LEGACY_EXTENSION)
+        }?.map { it.name } ?: emptyList()
 
-    override fun read(name: String): String? =
-        File(directory, name).takeIf { it.exists() }?.readText()
+    override fun read(name: String): ByteArray? =
+        File(directory, name).takeIf { it.exists() }?.readBytes()
 
-    override fun write(name: String, text: String) {
-        File(directory, name).writeText(text)
+    /**
+     * The front of a file, which is where the header is.
+     *
+     * Without this, listing a library of 1024 worlds would read every array in every one of them
+     * to put a title and a date on screen.
+     */
+    override fun readPrefix(name: String, limit: Int): ByteArray? {
+        val file = File(directory, name).takeIf { it.exists() } ?: return null
+        val wanted = minOf(limit.toLong(), file.length()).toInt()
+        return RandomAccessFile(file, "r").use { handle ->
+            ByteArray(wanted).also { handle.readFully(it) }
+        }
+    }
+
+    override fun write(name: String, bytes: ByteArray) {
+        File(directory, name).writeBytes(bytes)
     }
 
     override fun remove(name: String) {
         File(directory, name).delete()
     }
+}
+
+/**
+ * Which build wrote a save, for the header.
+ *
+ * The packaged build carries its version in the jar manifest; a development run has none, and
+ * says so rather than inventing one.
+ */
+private fun desktopSignature(): String {
+    val version = DesktopWorldStore::class.java.`package`?.implementationVersion ?: "dev"
+    return "desktop $version"
 }

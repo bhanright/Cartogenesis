@@ -1,7 +1,9 @@
 package com.cartogenesis.web
 
+import com.cartogenesis.cartography.ByteWorldLibrary
+import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
-import com.cartogenesis.cartography.TextWorldLibrary
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
@@ -10,6 +12,8 @@ import com.cartogenesis.ui.Platform
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
@@ -30,6 +34,17 @@ class WebPlatform(
     override val defaultResolution: Int = 512
 
     override val library: WorldLibrary = LocalStorageLibrary()
+
+    /**
+     * No compression here yet.
+     *
+     * A browser's `CompressionStream` is asynchronous and works in streams, which does not fit a
+     * library that saves and loads in a single call, and handing it tens of megabytes of Kotlin
+     * bytes means copying them across the JS boundary one at a time. So the payload is stored raw
+     * and the header says `none`, which every reader honours. Moving web storage to IndexedDB is
+     * asynchronous throughout and is the natural place to revisit this.
+     */
+    override val compressor: Compressor = NoCompression
 
     override val libraryLocation: String =
         "This browser's local storage. Clearing site data will remove them, so export anything worth keeping."
@@ -71,15 +86,15 @@ class WebPlatform(
 /**
  * Saved worlds in `localStorage`.
  *
- * The shared [TextWorldLibrary] already knows how to turn a world into text and back, so this only
- * has to say where named blobs live. Keys are prefixed so the library can be listed without
- * disturbing anything else the page keeps.
+ * The shared [ByteWorldLibrary] knows the format; this only has to say where named blobs live.
+ * Keys are prefixed so the library can be listed without disturbing anything else the page keeps.
+ * Local storage holds text, so the container is base64'd on the way in and back on the way out.
  *
- * A caveat worth being honest about: local storage is a few megabytes, and a world generated on
- * the GPU carries its terrain, which is several. Such a world may simply not fit, so a failed
- * write is reported rather than swallowed.
+ * The caveat, stated plainly: local storage is a few megabytes per origin and a save now carries
+ * the world, which at 512 is tens of megabytes. Most will not fit, and a failed write says so
+ * rather than being swallowed. IndexedDB is where this belongs, and is the next piece of work.
  */
-private class LocalStorageLibrary : TextWorldLibrary() {
+private class LocalStorageLibrary : ByteWorldLibrary(NoCompression, "web") {
 
     private val prefix = "cartogenesis/"
 
@@ -88,11 +103,22 @@ private class LocalStorageLibrary : TextWorldLibrary() {
             .filter { it.startsWith(prefix) }
             .map { it.removePrefix(prefix) }
 
-    override fun read(name: String): String? = storageGet(prefix + name)
+    @OptIn(ExperimentalEncodingApi::class)
+    override fun read(name: String): ByteArray? {
+        val text = storageGet(prefix + name) ?: return null
+        // A version-2 entry is the JSON itself rather than base64 of a container, told apart by
+        // the one character JSON must start with and base64 never does.
+        if (text.startsWith("{")) return text.encodeToByteArray()
+        return runCatching { Base64.decode(text) }.getOrNull()
+    }
 
-    override fun write(name: String, text: String) {
-        if (!storageSet(prefix + name, text)) {
-            error("This browser's storage is full. Worlds made on the GPU carry their terrain and can be several megabytes.")
+    @OptIn(ExperimentalEncodingApi::class)
+    override fun write(name: String, bytes: ByteArray) {
+        if (!storageSet(prefix + name, Base64.encode(bytes))) {
+            error(
+                "This browser's storage is full. A saved world now carries the world itself, " +
+                    "which is more than local storage will hold."
+            )
         }
     }
 

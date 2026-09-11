@@ -3,7 +3,9 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.pow
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class River(
     /** Cell indices from source to mouth. */
     val cells: IntArray,
@@ -21,6 +23,7 @@ data class River(
  * not sloping downhill. Recognising them as lakes is what makes that honest — the river runs into
  * the lake, the lake drains at its outlet, and nothing pretends to flow uphill.
  */
+@Serializable
 data class Lake(
     val id: Int,
     val cellCount: Int,

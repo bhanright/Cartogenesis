@@ -15,11 +15,14 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class PlateType { OCEANIC, CONTINENTAL }
 
 enum class BoundaryType { CONVERGENT, DIVERGENT, TRANSFORM }
 
+@Serializable
 data class Plate(
     val id: Int,
     val seedX: Int,

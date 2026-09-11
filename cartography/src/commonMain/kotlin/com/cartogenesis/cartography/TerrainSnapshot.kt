@@ -6,12 +6,17 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.Serializable
 
 /**
- * The terrain itself, stored in a save.
+ * The terrain itself, stored in a version-2 save.
  *
- * Normally a world is a seed and a config: every stage is deterministic, so the file needs to
- * record only what to generate and the terrain follows. That stops being true when the erosion
- * sweeps run on the graphics card, which rounds differently from the CPU and differently again
- * from another card. The difference is very small — measured at six parts in a million of the
+ * **Legacy.** A version-3 save carries every stage of the world, so this has nothing left to do
+ * for anything written today; it stays because the saves the author already has are read by it,
+ * and one made on the graphics card would otherwise come back very slightly different. Nothing
+ * writes one any more.
+ *
+ * The reasoning, as it stood: a world was a seed and a config: every stage is deterministic, so
+ * the file needed to record only what to generate and the terrain followed. That stops being true
+ * when the erosion sweeps run on the graphics card, which rounds differently from the CPU and
+ * differently again from another card. The difference is very small — measured at six parts in a million of the
  * elevation range, and on the machine it was measured on it changed no coastline cell, no river
  * and no border — but "very small" is not "none", and a saved world should not depend on the
  * hardware that happens to open it.

@@ -22,6 +22,7 @@ enum class LandmarkKind(val label: String) {
  * Somewhere worth putting on a map for reasons other than politics. Generated, and every field is
  * meant to be overridable by the user.
  */
+@Serializable
 data class Landmark(
     val id: Int,
     val cell: Int,

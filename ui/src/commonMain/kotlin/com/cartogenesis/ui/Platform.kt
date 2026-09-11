@@ -1,5 +1,6 @@
 package com.cartogenesis.ui
 
+import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -45,6 +46,16 @@ interface Platform {
 
     /** Where saved worlds are kept. */
     val library: WorldLibrary
+
+    /**
+     * How a save's payload is squeezed on the way out, and expanded on the way in.
+     *
+     * A save carries the world now, which is tens of megabytes of arrays, and neither the zip
+     * code the JVM has nor the `CompressionStream` a browser has exists in common code. A
+     * platform with neither returns [com.cartogenesis.cartography.NoCompression] and its files
+     * say so in their header, so they still open anywhere.
+     */
+    val compressor: Compressor
 
     /** Shown in the library so someone can find their files. */
     val libraryLocation: String

@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.ExportFormat
@@ -23,6 +24,8 @@ class DesktopPlatform : Platform {
     override val defaultResolution: Int = 1024
 
     override val library: WorldLibrary = DesktopWorldStore()
+
+    override val compressor: Compressor = GzipCompressor
 
     override val libraryLocation: String get() = (library as DesktopWorldStore).location
 

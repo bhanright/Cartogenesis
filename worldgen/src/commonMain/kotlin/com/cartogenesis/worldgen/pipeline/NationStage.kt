@@ -9,8 +9,10 @@ import com.cartogenesis.worldgen.naming.NameKind
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.random.Random
+import kotlinx.serialization.Serializable
 
 /** A generated realm. Everything here is a starting point the user is free to overrule. */
+@Serializable
 data class Nation(
     val id: Int,
     val name: String,

@@ -6,8 +6,10 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.naming.NameForge
 import kotlin.math.abs
 import kotlin.random.Random
+import kotlinx.serialization.Serializable
 
 /** A people, as distinct from a state. */
+@Serializable
 data class Culture(
     val id: Int,
     /** What they are called collectively, as in "the Verrin peoples". */

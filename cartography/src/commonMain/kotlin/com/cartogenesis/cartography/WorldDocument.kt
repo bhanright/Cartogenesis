@@ -40,8 +40,9 @@ data class LandmarkOverride(
 /**
  * Everything the user has changed about a generated world.
  *
- * Kept apart from the generated data on purpose: the world itself is reproduced from its seed
- * rather than stored, so a save is a few kilobytes, and these edits are layered back over it.
+ * Kept apart from the generated data on purpose: these are the decisions, and the world they sit
+ * over is whatever the settings currently produce. They survive a regeneration because of it — an
+ * edit is a layer, not a value baked into the world it was made against.
  */
 @Serializable
 data class WorldOverrides(
@@ -121,7 +122,11 @@ fun Landmark.resolve(override: LandmarkOverride): ResolvedLandmark = ResolvedLan
 )
 
 /**
- * A saved world: how to rebuild it, plus everything the user changed about it.
+ * The text half of a save: the settings, the edits, the labels and the title.
+ *
+ * The world itself travels beside this as binary sections — see [WorldCodec] — so this is what a
+ * library listing reads and what the app needs to know before it has a map to draw. It is also
+ * the whole of a version-2 save, which is why one still opens: no world, so it is regenerated.
  *
  * [savedAt] is passed in rather than defaulted, because a wall clock is not something common
  * Kotlin has — each platform supplies its own.
@@ -134,8 +139,10 @@ data class WorldDocument(
     val overrides: WorldOverrides = WorldOverrides(),
     val labels: List<MapLabel> = emptyList(),
     /**
-     * Present only for worlds whose erosion ran on the graphics card, where the seed alone
-     * no longer pins the terrain down. See [TerrainSnapshot].
+     * Version 2 only, and never written any more: the eroded terrain of a world made on the
+     * graphics card, which the seed alone did not pin down. A version-3 save carries every stage,
+     * so this has nothing left to say — but an existing GPU save still has it, and replaying it
+     * through [StoredTerrain] is what keeps that save opening as the world it was.
      */
     val terrain: TerrainSnapshot? = null,
     val savedAt: Long

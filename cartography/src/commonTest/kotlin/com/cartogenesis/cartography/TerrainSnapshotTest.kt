@@ -14,9 +14,9 @@ import kotlin.test.assertTrue
 /**
  * A stored terrain has to come back exactly, and has to rebuild exactly the world it came from.
  *
- * This is the guarantee that lets a world generated on the graphics card be saved at all: the
- * hardware need not agree with anything, because the file carries the answer rather than the
- * instructions for finding it again.
+ * This was the guarantee that let a world generated on the graphics card be saved at all. A
+ * version-3 save carries every stage, so nothing written today needs it — but the saves the
+ * author already has do, and replaying one through the accelerator seam is still how they open.
  */
 class TerrainSnapshotTest {
 
@@ -84,39 +84,26 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `the snapshot travels in the save file`() = runTest(timeout = 10.minutes) {
-        val config = WorldGenConfig(seed = 7L, width = 64, height = 64)
-        val document = WorldDocument(
-            id = "test",
-            title = "Stored",
-            config = config,
-            terrain = TerrainSnapshot.of(64, 64, FloatArray(64 * 64) { it * 0.001f }),
-            savedAt = 0L
-        )
+    fun `a version 2 save's snapshot still comes back out of the file`() = runTest(timeout = 10.minutes) {
+        // Written by the previous build: JSON, with the terrain base64'd into it. Nothing writes
+        // one any more, and an existing one has to keep opening as the world it was.
+        val heights = FloatArray(16) { it * 0.001f }
+        val encoded = TerrainSnapshot.of(4, 4, heights)
+        val older = """
+            {
+              "id": "old", "title": "Stored", "savedAt": 1,
+              "config": { "seed": 7, "width": 4, "height": 4 },
+              "terrain": { "width": 4, "height": 4, "data": "${encoded.data}" }
+            }
+        """.trimIndent()
 
-        val restored = WorldCodec.decode(WorldCodec.encode(document))
-        val terrain = assertNotNull(restored.terrain)
-        assertEquals(64, terrain.width)
+        val save = assertNotNull(WorldCodec.decodeOrNull(older.encodeToByteArray()))
+        assertNull(save.world, "a version-2 save carries no world of its own")
+        val terrain = assertNotNull(save.document.terrain)
+        assertEquals(4, terrain.width)
         val values = terrain.decode()
         for (i in values.indices) {
-            assertEquals((i * 0.001f).toRawBits(), values[i].toRawBits())
+            assertEquals(heights[i].toRawBits(), values[i].toRawBits())
         }
-    }
-
-    @Test
-    fun `a world without acceleration stores no terrain`() = runTest(timeout = 10.minutes) {
-        // The size of a save is the whole reason this is conditional, so it is worth pinning: a
-        // CPU world reproduces from its seed and must stay a few kilobytes.
-        val document = WorldDocument(
-            id = "test",
-            title = "Plain",
-            config = WorldGenConfig(seed = 7L, width = 64, height = 64),
-            savedAt = 0L
-        )
-        assertNull(document.terrain)
-        assertTrue(
-            WorldCodec.encode(document).length < 8000,
-            "a seed-only save should be small, was ${WorldCodec.encode(document).length} chars"
-        )
     }
 }

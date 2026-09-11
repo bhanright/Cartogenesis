@@ -18,9 +18,14 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 2. **Height map** — the gradient field is integrated into elevation using
    [Frankot–Chellappa](https://doi.org/10.1109/34.3909) least-squares integration via a 2D FFT.
 3. **Tectonics** — the world is divided into drifting Voronoi plates. Boundaries are classified as
-   convergent, divergent, or transform from the plates' relative motion, and elevation is deformed
-   accordingly: mountain ranges where continents collide, volcanic arcs and trenches at subduction
-   zones, ridges and rift valleys where plates separate.
+   convergent, divergent, or transform from the plates' relative motion, and a convergent boundary
+   is then refined by which crusts are meeting: ocean under continent raises a narrow coastal range
+   with a volcanic arc inland of its trench (the Andes), continent against continent raises a
+   broad flat-topped plateau instead of a line (Tibet), and ocean under ocean raises a trench and a
+   chain of volcanic islands. Divergent boundaries under continental crust open a rift valley
+   between rebounding shoulders; under oceanic crust they stay a spreading ridge. A few oceanic
+   plates also carry a hotspot, a fixed point the plate drifts over, leaving a decaying line of
+   seamounts along its path — the only islands the pipeline places away from a boundary.
 4. **Erosion** — rock does not stand at an arbitrary angle: past a critical slope it fails and
    slides, and the debris piles against the foot until the pile reaches that angle too. Sweeping
    that rule over the grid lowers crests and builds aprons around them, turning the walls the
@@ -44,19 +49,36 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 
    Runs before sea level, since eroding the terrain changes which elevation the percentile lands
    on — and nothing cuts below that level, because it is the base level every river grades to.
-5. **Sea level** — everything below a chosen elevation percentile floods.
+5. **Sea level** — everything below a chosen elevation percentile floods. The sea floor near a
+   coast is then remapped onto a shallow continental shelf that falls away to the abyss beyond it,
+   so a coastline reads as bathymetry rather than a cliff underwater. In the same step, wherever
+   the provisional annual temperature sits below freezing, ice takes the valleys the rivers already
+   cut: it widens and flattens them into a U-shaped trough, bites a cirque out of every head, and
+   dams a staircase of over-deepened basins behind moraines — which is where cold-country lake
+   country comes from. Nothing here moves the coastline; it only reshapes what is already land or
+   already sea.
 6. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
    that curl inside a closed basin *is* a gyre, so the currents are solved for rather than drawn.
    Water advects its temperature along them, giving warm poleward flow on western ocean margins
    and cold equatorward flow on eastern ones.
 7. **Climate** — temperature from latitude and altitude, then pulled toward the sea temperature
    offshore; rainfall by marching moist air along prevailing wind bands, so windward slopes soak
-   and leeward slopes fall into rain shadow. This is what lets a high-latitude west coast be
-   temperate and a coast beside a cold current be arid at the same latitude. All of it runs twice,
-   for the warm season and the cold one, with the thermal equator — and the wind and rain belts
-   riding on it — migrating toward whichever hemisphere is in summer. Biomes come from the four
-   resulting numbers rather than two, which is what tells a Mediterranean coast from a temperate
-   forest of the same annual rainfall.
+   and leeward slopes fall into rain shadow. The wind is not purely zonal: trades carry toward the
+   thermal equator and westerlies toward the pole as well as around it, so the march runs
+   diagonally rather than along rows, and a ridge running east-west is no longer invisible to the
+   rain. This is what lets a high-latitude west coast be temperate and a coast beside a cold
+   current be arid at the same latitude. All of it runs twice, for the warm season and the cold
+   one, with the thermal equator — and the wind and rain belts riding on it — migrating toward
+   whichever hemisphere is in summer; where that carries onshore flow over a tropical coast, it is
+   the monsoon. The swing between the two seasons is damped over open water and amplified with
+   distance from it, so an interior climbs and drops further through the year than a coast at the
+   same latitude does. Rainfall is calibrated to approximate millimetres per year rather than
+   rescaled per world, so an arid world actually classifies as drier than a lush one. Biomes come
+   from the four seasonal numbers, Köppen-style: the temperate/continental/tundra boundary reads
+   the coldest and warmest month rather than the annual mean, which is what lets a mild-winter
+   maritime coast forest over while its interior at the same latitude stays taiga. The result tells
+   a Mediterranean coast (wet winter, dry summer) and a monsoon forest (dry winter, drenching
+   summer) apart from a temperate forest of the same annual rainfall.
 8. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
    Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
@@ -252,7 +274,11 @@ Any JDK 17 or newer will do; `:desktop` targets 17.
 ```
 
 ```bash
-./gradlew :app:assembleDebug
+./gradlew :cartography:jvmTest :cartography:wasmJsNodeTest
+```
+
+```bash
+./gradlew :desktop:test
 ```
 
 ## Realms, the atlas, and saving
@@ -355,6 +381,14 @@ climate turns rather than where a border was drawn. The cost is measured against
 against the neighbour: measured against the neighbour a people drifts, because every step is a small
 change and a chain of small changes walks a steppe people into a rainforest.
 
+Hearths are seeded once, before any spreading starts, and are shared out between landmasses in
+proportion to each one's *habitable* area rather than scored globally — otherwise the few
+best-scoring sites crowd onto whichever landmass is largest, and the hearths left over for
+everywhere else split too little ground between too many competitors. Which cells end up settled
+is then decided per cell against that cell's own biome rather than by a vote across the larger unit
+it belongs to, so a catchment straddling a retreating ice margin can end up half tundra and settled,
+half ice sheet and not, instead of the ice vote stranding the whole thing.
+
 There are fewer peoples than realms, because a culture is the larger unit. The result is that the
 two layers disagree — a people spans several states, a state holds several peoples, and the mismatch
 is where a world's history comes from. `CultureRealmTest` measures the disagreement rather than
@@ -399,6 +433,15 @@ recomputes only what lies downstream of it.
 from the seed exactly as before, and the next save writes them out in full. Nothing has to be
 migrated by hand.
 
+**A save missing a section regenerates rather than refuses.** Sections are grouped by the stage
+that produced them, and every future field added to a stage is a new section — which would
+otherwise make each such change unable to open a save written before it. Instead a stage with any
+section missing comes back `null` and the same reuse chain that skips an unchanged stage on a live
+edit regenerates a missing one and everything downstream of it; a corrupt section — the wrong
+length, a bad type code — still throws, because that is a different problem than an old file. The
+header records which stages are present, so the library pane can say a save "opens with
+regeneration" without reading a single array.
+
 **The format is shared.** `WorldCodec` in `:cartography` is the entire thing, built on
 kotlinx.serialization for the header, and it lives in shared code rather than in any one app, so
 every front end writes files that open in the others; each supplies only where the bytes go, and
@@ -428,18 +471,26 @@ much beyond it needs the pipeline reworked to run in tiles.
 
 `DebugMapDump` in the `:worldgen` test source set renders worlds straight to PNGs under
 `worldgen/build/maps/`, so generation can be inspected without launching anything — one image per
-pipeline stage (normals, elevation, plates, biome, rainfall, temperature, ocean currents, winds)
-plus the composed map. Rainfall and temperature are each dumped three times — annual, warm season,
-cold season — since the seasonal fields are the only place the belts can be seen to migrate.
-It also prints river-network statistics, and includes a parameter sweep for judging the trade-off
-between terrain roughness and tectonic influence by eye.
+view: normals, elevation, plates, biome, rainfall, temperature, realms, peoples, habitability, a
+coarse wind-vector field, and a boundary-class view coloured by crust pair (Andean margin,
+collision plateau, island arc, ridge, rift, transform), plus the composed fantasy map. Rainfall and
+temperature are each dumped three times — annual, warm season, cold season — and a fourth
+season-contrast view shows which half of the year the rain falls in, since the seasonal fields are
+the only place the belts can be seen to migrate. `OceanCurrentTest` writes its own current-vector
+image to the same directory. Glaciated coasts also get a four-times close-up, with and without ice,
+since a trough or a tarn is a few cells wide and disappears at whole-map scale. It also prints
+river-network statistics, and includes a parameter sweep for judging the trade-off between terrain
+roughness and tectonic influence by eye.
 
 Since it runs as part of `:worldgen:jvmTest`, the maps refresh on every JVM test run.
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and compiles
-and tests the desktop app, on every push and pull request.
+and tests the desktop app, on every push and pull request. Measured on this build: `:worldgen:jvmTest`
+runs 79 tests across 29 suites and `:desktop:test` runs 8 across 5, all passing; both also run on
+Wasm, where the shared suite (`:worldgen:wasmJsNodeTest`, `:cartography:wasmJsNodeTest`) is a
+subset of the JVM one, since JVM-only tests such as `DebugMapDump` render through `java.awt`.
 
 The step worth knowing about compares the **JVM and Wasm fingerprints** to detect platform drift.
 A divergence is informational — usually worth a glance to catch a platform-dependent bug — but does

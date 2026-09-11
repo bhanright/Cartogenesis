@@ -228,7 +228,7 @@ internal object WorldSections {
         GenerationStage.CLIMATE to listOf(
             "climate.temperature", "climate.summerTemperature", "climate.winterTemperature",
             "climate.precipitation", "climate.summerPrecipitation", "climate.winterPrecipitation",
-            "climate.windDirection", "climate.biome"
+            "climate.windDirection", "climate.windMeridional", "climate.biome"
         ),
         GenerationStage.RIVERS to listOf(
             "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget", "rivers.lakeId"

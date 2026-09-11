@@ -209,6 +209,7 @@ class IncrementalReuseTest {
                 plateId = world.plates.plateId.copyOf(),
                 boundaryDistance = field(world.plates.boundaryDistance),
                 nearestBoundaryType = world.plates.nearestBoundaryType.copyOf(),
+                nearestBoundaryClass = world.plates.nearestBoundaryClass.copyOf(),
                 height = field(world.plates.height)
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),

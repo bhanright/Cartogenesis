@@ -30,8 +30,16 @@ class DepositionTest {
     private val seaLevel = WorldGenConfig().seaLevel
 
     /**
-     * The fingerprint of the world this branch started from, measured on the merge base 04001f5 at
-     * the size and seed `WorldFingerprintTest` uses.
+     * The fingerprint of the world without deposition, at the size and seed
+     * `WorldFingerprintTest` uses.
+     *
+     * First measured on the merge base 04001f5, and re-recorded when B2 merged: the crust-pair
+     * boundary profiles are a terrain change, so the world this pins is a different one and the
+     * land count moved from 6354 to 6226. The assertion below is unchanged in meaning — with the
+     * switch off, the hydraulic pass must produce the same rock it did before deposition existed —
+     * and the two assertions after it, which prove no deposition knob leaks and that running the
+     * pass while laying nothing down leaves the rock bit-identical, are what carry that claim
+     * structurally rather than by memory of a number.
      *
      * `deposition = false` has to reproduce it exactly. Deposition adds arithmetic to the hydraulic
      * pass but must add none of it when the switch is off, and "nearly the same world" would not
@@ -42,8 +50,8 @@ class DepositionTest {
      * glaciation) will move these legitimately, and is expected to re-record them and say so in its
      * report. Nothing but a terrain change should touch them.
      */
-    private val startingPointElevation = 1272114868745578089L
-    private val startingPointLand = 6354
+    private val startingPointElevation = 7450875979753259226L
+    private val startingPointLand = 6226
 
     @Test
     fun `every round conserves mass`() {

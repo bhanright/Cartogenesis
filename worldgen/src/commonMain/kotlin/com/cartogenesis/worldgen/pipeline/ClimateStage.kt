@@ -59,6 +59,19 @@ data class ClimateResult(
     val winterPrecipitation: FloatField,
     /** Prevailing wind direction along X: +1 blows east, -1 blows west. */
     val windDirection: IntArray,
+    /**
+     * Prevailing wind along Y, in rows per cell of zonal travel: positive blows toward the bottom
+     * of the map, negative toward the top — the same sense as [windDirection]'s, and the same
+     * sense the map's own coordinates use, so the pair is a vector an arrow can be drawn from.
+     *
+     * Held as a field rather than folded into [windDirection] because the zonal part is a
+     * direction and this is a slope; and stored per cell rather than per row because every other
+     * field of this stage is per cell and a save's sections are per-cell arrays.
+     *
+     * This is the annual wind, as [windDirection] is: each season marches along belts of its own
+     * that live only as long as the march does.
+     */
+    val windMeridional: FloatField,
     val biome: Array<Biome>
 )
 
@@ -119,15 +132,16 @@ object ClimateStage {
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
         // which live only as long as the march does.
-        val wind = buildWind(w, h, tilt = 0f, warm = true)
+        val slant = cfg.meridionalWind
+        val wind = buildWind(w, h, tilt = 0f, warm = true, slant = slant)
 
         val summerPrecipitation = buildPrecipitation(
-            config, sea, summerTemperature, buildWind(w, h, tilt, warm = true), ocean,
-            bands(h, cfg, warm = true)
+            config, sea, summerTemperature, buildWind(w, h, tilt, warm = true, slant = slant),
+            ocean, bands(h, cfg, warm = true)
         )
         val winterPrecipitation = buildPrecipitation(
-            config, sea, winterTemperature, buildWind(w, h, tilt, warm = false), ocean,
-            bands(h, cfg, warm = false)
+            config, sea, winterTemperature, buildWind(w, h, tilt, warm = false, slant = slant),
+            ocean, bands(h, cfg, warm = false)
         )
 
         // The annual field is the mean of the two marches rather than a third march of its own, so
@@ -158,7 +172,8 @@ object ClimateStage {
             precipitation = precipitation,
             summerPrecipitation = summerPrecipitation,
             winterPrecipitation = winterPrecipitation,
-            windDirection = wind,
+            windDirection = wind.zonal,
+            windMeridional = FloatField(w, h, wind.meridional),
             biome = biome
         )
     }
@@ -300,27 +315,63 @@ object ClimateStage {
         return field
     }
 
+    /** The prevailing wind as a vector: a zonal direction of ±1, and a slant in rows per cell. */
+    private class WindField(val zonal: IntArray, val meridional: FloatArray)
+
     /**
      * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
-     * trade winds blowing east to west.
+     * trade winds blowing east to west — each of them slanted across the latitude lines.
      *
      * The belts ride the thermal equator, so in summer they sit [tilt] degrees poleward of their
      * annual position and in winter [tilt] degrees equatorward. That migration is what puts a
      * west coast at 35 degrees under the westerlies in winter and under the trades in summer,
      * which is the Mediterranean climate in one sentence.
+     *
+     * The slant is the other half of a circulation cell, and the half that makes a monsoon. Each
+     * cell has air rising at one edge and sinking at the other, and the surface leg runs between
+     * them: the trades spiral in toward the thermal equator, the westerlies carry poleward toward
+     * the polar front, the polar easterlies run back down. Which way that is has to be measured
+     * from the *thermal* equator and not the geographic one, because in summer the thermal equator
+     * migrates over the tropics, and a row it has crossed finds its trades reversed — blowing away
+     * from the equator, up onto whatever land lies poleward of it. That reversal is the monsoon,
+     * and it is not available to a belt model that reads its direction off `|latitude|`.
      */
-    private fun buildWind(width: Int, height: Int, tilt: Float, warm: Boolean): IntArray {
-        val wind = IntArray(width * height)
+    private fun buildWind(
+        width: Int,
+        height: Int,
+        tilt: Float,
+        warm: Boolean,
+        slant: Float
+    ): WindField {
+        val zonal = IntArray(width * height)
+        val meridional = FloatArray(width * height)
         for (y in 0 until height) {
-            val lat = seasonalLatitude(y, height, tilt, warm)
+            val signed = latitudeOf(y, height)
+            // Which way "poleward" points for this row, as a step in map coordinates: y grows
+            // southward, so the northern hemisphere's pole is at smaller y.
+            val poleward = if (signed < 0f) 1f else -1f
+            // Signed distance from the thermal equator, positive poleward. Negative means the
+            // thermal equator has migrated past this row, into its own hemisphere.
+            val offset = if (warm) abs(signed) - tilt else abs(signed) + tilt
+            val belt = abs(offset)
+            // Away from the thermal equator, again as a step in map coordinates.
+            val outward = if (offset < 0f) -poleward else poleward
             val direction = when {
-                lat < 30f -> -1   // trade winds
-                lat < 60f -> 1    // westerlies
-                else -> -1        // polar easterlies
+                belt < 30f -> -1   // trade winds
+                belt < 60f -> 1    // westerlies
+                else -> -1         // polar easterlies
             }
-            for (x in 0 until width) wind[y * width + x] = direction
+            val drift = when {
+                belt < 30f -> -outward   // the Hadley cell's surface leg, in toward the ITCZ
+                belt < 60f -> outward    // the Ferrel cell's, out toward the polar front
+                else -> -outward         // the polar cell's, back down toward it
+            } * slant
+            for (x in 0 until width) {
+                zonal[y * width + x] = direction
+                meridional[y * width + x] = drift
+            }
         }
-        return wind
+        return WindField(zonal, meridional)
     }
 
     /** The circulation belt each row sits in for a season, precomputed per row. */
@@ -374,11 +425,45 @@ object ClimateStage {
         return (annual / seasonal).coerceIn(1f, 4f)
     }
 
+    /**
+     * Rainfall, by marching air masses along the wind and recording what they drop.
+     *
+     * # How the diagonal march is arranged
+     *
+     * The march used to be one air mass per row, scanning along X with moisture state that never
+     * left the row. A slanted wind breaks that: the air arriving at a cell came from the row
+     * beside it as well as from the column behind it, so rows are no longer independent.
+     *
+     * The scheme here is semi-Lagrangian, which is what the shape of the dependency asks for.
+     * Every cell in column `x` takes its moisture from the point one cell upwind — `(x - dx,
+     * y - dy)` — which, since `dx` is a whole cell and `dy` a fraction of a row, is a bilinear
+     * blend of two cells that both sit in column `x - dx`. So the whole of column `x` depends on
+     * the whole of column `x - dx` and on nothing else, and the march is a wavefront sweeping
+     * column by column with every row of a column independent of every other.
+     *
+     * That wavefront is walked *in lock step across rows* rather than row by row: the outer loop
+     * is the step along X and the inner loop runs over the rows, reading the previous column's
+     * moisture out of a snapshot taken before the column began. Reading a snapshot rather than
+     * live neighbours is what makes the result independent of the order the rows are visited in,
+     * and therefore of thread scheduling — the property the whole pipeline is built on.
+     *
+     * The work is split for parallelism by *run* — a maximal block of adjacent rows that march the
+     * same way round the cylinder — rather than by row, because two rows marching opposite ways
+     * are at opposite ends of the map at the same step and have no business exchanging air. A run
+     * is a circulation belt, its edges are the boundaries between Hadley, Ferrel and polar cells,
+     * and air genuinely does not cross those at the surface: at 30 degrees the two cells' surface
+     * legs diverge. There are only ever five or so runs, so this parallelises less finely than one
+     * chunk of rows per core did — but the whole stage is a couple of passes over the grid against
+     * erosion's eighty, and correctness here is worth more than the cores.
+     *
+     * At `meridionalWind = 0` every row's blend weight is zero, the branch below is not taken, and
+     * what remains is the old scan, arithmetic for arithmetic, in the same order per row.
+     */
     private fun buildPrecipitation(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
-        wind: IntArray,
+        wind: WindField,
         ocean: OceanResult,
         bandOfRow: FloatArray
     ): FloatField {
@@ -387,75 +472,133 @@ object ClimateStage {
         val cfg = config.climate
         val precip = FloatField(w, h)
 
-        // Each row marches its own air mass along its own wind direction, carrying moisture state that never leaves the row.
-        parallelChunks(0, h) { start, end ->
-            for (y in start until end) {
-                val direction = wind[y * w]
-                var moisture = 0.5f
+        // Where each run of same-direction rows begins. Built by scanning, so it is the same list
+        // on every platform and in every thread.
+        val runStarts = ArrayList<Int>()
+        for (y in 0 until h) {
+            if (y == 0 || wind.zonal[y * w] != wind.zonal[(y - 1) * w]) runStarts.add(y)
+        }
+        runStarts.add(h)
 
-                // The circulation belt this row sits in, applied to the rain *rate* rather than to
-                // the finished total. Multiplying the result afterwards cannot make a rain shadow
-                // wet again -- twice nearly nothing is still nearly nothing -- whereas suppressing
-                // the rate is what descending subtropical air actually does, and boosting it is
-                // what the ITCZ does. In a season this belt is the shifted one, so the same row is
-                // under the dry descending limb in one half of the year and under the storm track
-                // in the other.
-                val band = bandOfRow[y]
-
-                // Two laps around the cylinder: the first seeds a realistic moisture state, the
-                // second is the one that gets recorded, so the arbitrary starting value washes out.
-                for (lap in 0 until 2) {
-                    for (step in 0 until w) {
-                        val x = if (direction > 0) step else w - 1 - step
-                        val i = y * w + x
-
-                        if (!sea.isLand[i]) {
-                            // Warm seas evaporate faster — and which seas are warm is a question
-                            // about currents, not latitude. Taking this from the ocean stage is
-                            // what lets a cold current starve a coast of rain while another at the
-                            // same latitude, on the warm side of a gyre, soaks it.
-                            val seaTemperature = if (config.ocean.enabled) {
-                                ocean.temperature.data[i]
-                            } else {
-                                temperature.data[i]
-                            }
-                            val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
-                            moisture += cfg.evaporationRate * warmth * (1f - moisture)
-                            if (lap == 1) precip.data[i] = moisture * cfg.baseRainRate * 4f
-                            continue
-                        }
-
-                        var upwindX = x - direction
-                        upwindX = ((upwindX % w) + w) % w
-                        val rise = (sea.relativeElevation.data[i] -
-                            sea.relativeElevation.data[y * w + upwindX]).coerceAtLeast(0f)
-
-                        val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * band
-                        val rain = (moisture * rate).coerceAtMost(moisture)
-                        moisture -= rain
-
-                        // Evapotranspiration: the land gives water back, and how readily is the
-                        // thing that decides where deserts sit. Scaled by the belt, because that
-                        // is the mechanism: descending subtropical air suppresses the convection
-                        // that would return moisture to the sky, while rising tropical air
-                        // encourages it. Take the belt out of this term and every latitude
-                        // re-moistens alike, at which point deserts stop preferring the horse
-                        // latitudes at all -- measured, placement falls from 90% to 34%.
-                        val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
-                        moisture += cfg.landRecoveryRate * warmth * band * (1f - moisture)
-
-                        // Cold air simply holds less water.
-                        val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
-                        moisture = moisture.coerceAtMost(coldCap)
-
-                        if (lap == 1) precip.data[i] = rain
-                    }
-                }
+        parallelChunks(0, runStarts.size - 1) { first, last ->
+            for (run in first until last) {
+                marchRun(
+                    config, sea, temperature, wind, ocean, bandOfRow, precip,
+                    firstRow = runStarts[run], lastRow = runStarts[run + 1]
+                )
             }
         }
 
         BoxBlur.apply(precip, radius = (config.width / 128).coerceAtLeast(1), passes = 2)
         return precip
+    }
+
+    /** One circulation belt's worth of rows, marched together. See [buildPrecipitation]. */
+    private fun marchRun(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        temperature: FloatField,
+        wind: WindField,
+        ocean: OceanResult,
+        bandOfRow: FloatArray,
+        precip: FloatField,
+        firstRow: Int,
+        lastRow: Int
+    ) {
+        val w = config.width
+        val cfg = config.climate
+        val rows = lastRow - firstRow
+        val direction = wind.zonal[firstRow * w]
+
+        // One air mass per row, as before — but now they trade moisture sideways as they go.
+        val moisture = FloatArray(rows) { 0.5f }
+        val previousColumn = FloatArray(rows)
+
+        // Two laps around the cylinder: the first seeds a realistic moisture state, the second is
+        // the one that gets recorded, so the arbitrary starting value washes out.
+        for (lap in 0 until 2) {
+            for (step in 0 until w) {
+                val x = if (direction > 0) step else w - 1 - step
+                var upwindX = x - direction
+                upwindX = ((upwindX % w) + w) % w
+                moisture.copyInto(previousColumn)
+
+                for (r in 0 until rows) {
+                    val y = firstRow + r
+                    val i = y * w + x
+
+                    // The circulation belt this row sits in, applied to the rain *rate* rather
+                    // than to the finished total. Multiplying the result afterwards cannot make a
+                    // rain shadow wet again -- twice nearly nothing is still nearly nothing --
+                    // whereas suppressing the rate is what descending subtropical air actually
+                    // does, and boosting it is what the ITCZ does. In a season this belt is the
+                    // shifted one, so the same row is under the dry descending limb in one half of
+                    // the year and under the storm track in the other.
+                    val band = bandOfRow[y]
+
+                    // The upwind point, one cell back along the wind vector. The zonal part is a
+                    // whole cell; the meridional part is a fraction of a row, so the sample is a
+                    // blend of this row and the one the air drifted in from. A neighbour outside
+                    // this run is not sampled: that edge is a boundary between circulation cells,
+                    // and air does not cross it at the surface.
+                    val drift = wind.meridional[y * w]
+                    val neighbour = if (drift > 0f) r - 1 else r + 1
+                    val blend = if (drift != 0f && neighbour in 0 until rows) abs(drift) else 0f
+                    if (blend != 0f) {
+                        moisture[r] = previousColumn[r] +
+                            (previousColumn[neighbour] - previousColumn[r]) * blend
+                    }
+
+                    if (!sea.isLand[i]) {
+                        // Warm seas evaporate faster — and which seas are warm is a question
+                        // about currents, not latitude. Taking this from the ocean stage is
+                        // what lets a cold current starve a coast of rain while another at the
+                        // same latitude, on the warm side of a gyre, soaks it.
+                        val seaTemperature = if (config.ocean.enabled) {
+                            ocean.temperature.data[i]
+                        } else {
+                            temperature.data[i]
+                        }
+                        val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
+                        moisture[r] += cfg.evaporationRate * warmth * (1f - moisture[r])
+                        if (lap == 1) precip.data[i] = moisture[r] * cfg.baseRainRate * 4f
+                        continue
+                    }
+
+                    // Orographic lift is the climb the air made getting here, so it is measured
+                    // from the same blended upwind point rather than from due upwind along the row
+                    // — otherwise a range a slanting wind climbs obliquely would read as flat.
+                    val here = sea.relativeElevation.data[y * w + upwindX]
+                    val upwindElevation = if (blend != 0f) {
+                        here + (sea.relativeElevation.data[(firstRow + neighbour) * w + upwindX] -
+                            here) * blend
+                    } else {
+                        here
+                    }
+                    val rise = (sea.relativeElevation.data[i] - upwindElevation).coerceAtLeast(0f)
+
+                    val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * band
+                    val rain = (moisture[r] * rate).coerceAtMost(moisture[r])
+                    moisture[r] -= rain
+
+                    // Evapotranspiration: the land gives water back, and how readily is the
+                    // thing that decides where deserts sit. Scaled by the belt, because that
+                    // is the mechanism: descending subtropical air suppresses the convection
+                    // that would return moisture to the sky, while rising tropical air
+                    // encourages it. Take the belt out of this term and every latitude
+                    // re-moistens alike, at which point deserts stop preferring the horse
+                    // latitudes at all -- measured, placement falls from 90% to 34%.
+                    val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
+                    moisture[r] += cfg.landRecoveryRate * warmth * band * (1f - moisture[r])
+
+                    // Cold air simply holds less water.
+                    val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
+                    moisture[r] = moisture[r].coerceAtMost(coldCap)
+
+                    if (lap == 1) precip.data[i] = rain
+                }
+            }
+        }
     }
 
     /**

@@ -44,7 +44,7 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 
 **No continentality.** A continental interior swings no more between seasons than a coast at the same latitude. The seasonal departure is damped over water and applied at full strength over every land cell alike, so a shore and an interior at the same latitude swing equally. Addressed in [A2 Continentality](REALISM_PLAN.md#a2-continentality--sonnet).
 
-**Winds are purely zonal.** Wind direction varies only with latitude (±1 per row) and has no meridional component. This prevents monsoons, where seasonal motion of the ITCZ pulls ocean air onto tropical landmasses. Addressed in [A3 Meridional wind and the monsoon](REALISM_PLAN.md#a3-meridional-wind-and-the-monsoon--opus).
+**The monsoon is weaker than it should be, and lands on the wrong coast.** The wind now slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. Its effect on rainfall is small besides, because rainfall is still normalized and clamped at 1 and tropical coasts sit against that clamp in the warm season — the wet half of a monsoon year has no room left to get wetter. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) removes the clamp; letting the thermal equator run further over land than over sea is not yet planned.
 
 **Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
 
@@ -93,7 +93,7 @@ dry. Getting them there took two mechanisms rather than a tuned constant.
   preferring the subtropics at all. Measured: placement falls from 90% to 34%.
 
 Verified by `GeographyAuditTest`, which asserts at least 85% of desert falls between 15 and 45
-degrees; all four audited seeds manage 98-100%. Desert covers about 4.6% of land without seasons
+degrees; all four audited seeds manage 100%. Desert covers about 4.6% of land without seasons
 and about 2% with them — see "The year has two halves" below for why, and for the third mechanism
 seasons made necessary.
 `DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,
@@ -138,8 +138,41 @@ the wind belts, and the rain belts alike.
 
 Verified by `SeasonsTest`, which asserts the land/sea swing above and that a Mediterranean band of
 at least 40 cells sits on a west-facing coast between 30° and 45° on at least two of three seeds
-(measured: 211, 517 and 494 cells on seeds 7, 42 and 1234). The same measurement with
+(measured: 222, 537 and 504 cells on seeds 7, 42 and 1234). The same measurement with
 `seasons = false` returns zero on every seed, which is what gives the guard its meaning.
+
+## Which way the wind blows
+
+The three-cell circulation is not a set of stripes running due east and west. Each cell has air
+rising at one edge and sinking at the other, and the surface leg runs between them: the trades
+spiral in toward the thermal equator, the westerlies carry poleward toward the polar front, the
+polar easterlies run back down. `ClimateConfig.meridionalWind` is how far that leg carries the air
+across the latitude lines per cell of zonal travel — 0.3 rows, so the air crosses a row every three
+or four cells.
+
+- **Direction is measured from the *thermal* equator, not the geographic one.** In summer the
+  thermal equator migrates `seasonalTilt` degrees into the hemisphere, and a tropical row it has
+  crossed finds its trades reversed: blowing away from the equator rather than toward it. That
+  reversal between the halves of the year is the monsoon wind, and a belt model that reads its
+  direction off `|latitude|` cannot have it.
+- **The rain march became an advection.** It used to be one air mass per row scanning along X with
+  moisture that never left the row. Now each cell takes its moisture from the point one cell
+  upwind, `(x - dx, y - dy)`, as a bilinear blend of the two cells in the column behind it — so a
+  whole column depends only on the column behind it, and the march is a wavefront walked in lock
+  step across rows. Rows are grouped into *runs* of the same zonal direction, which are the
+  circulation belts; air is not carried across a belt edge, because at 30 degrees the two cells'
+  surface legs diverge.
+- **A ridge running east-west used to be invisible to the rain.** Stepping along X, the only climb
+  the march could see was a climb along X. Measured as a paired difference — the same world
+  generated with the slant on and off — land climbing along the meridional leg gains 0.031, 0.030
+  and 0.013 of normalised rainfall on seeds 7, 42 and 1234 while land descending along it gains
+  0.020, 0.010 and 0.006. `MeridionalWindTest` asserts the sign, which is exactly zero with the
+  slant off.
+- **At `meridionalWind = 0` the march is the old zonal scan, bit for bit.** Pinned by checksum
+  against the build before the change.
+
+The deserts survived it: `GeographyAuditTest` reads 100% in band on all four seeds, up from
+100/99/100/98.
 
 ## Coasts and the sea beside them
 

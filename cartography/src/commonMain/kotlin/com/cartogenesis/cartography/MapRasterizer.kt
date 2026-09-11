@@ -242,10 +242,17 @@ object MapRasterizer {
                             }
                         }
                     } else {
-                        // Wind is purely zonal in this model, so the arrow only has a direction.
-                        val direction = world.climate.windDirection[i].toFloat()
-                        val colour = if (direction > 0) 0xFF7FC0F0.toInt() else 0xFFF0A860.toInt()
-                        flow.add(FlowArrow(x + 0.5f, y + 0.5f, direction, 0f, 0.85f, colour))
+                        // The wind is a vector: a zonal direction and a slant across the latitude
+                        // lines. Drawn as one arrow, so the three circulation cells read as the
+                        // cells they are — trades spiralling in toward the equator, westerlies
+                        // carrying poleward — rather than as three stripes of east and west.
+                        val dx = world.climate.windDirection[i].toFloat()
+                        val dy = world.climate.windMeridional.data[i]
+                        val length = kotlin.math.sqrt(dx * dx + dy * dy)
+                        val colour = if (dx > 0) 0xFF7FC0F0.toInt() else 0xFFF0A860.toInt()
+                        flow.add(
+                            FlowArrow(x + 0.5f, y + 0.5f, dx / length, dy / length, 0.85f, colour)
+                        )
                     }
                     x += spacing
                 }

@@ -14,7 +14,13 @@ enum class MapView(val label: String) {
     ELEVATION("Elevation"),
     BIOMES("Biomes"),
     TEMPERATURE("Temperature"),
+    // The warm and cold season of the cell's own hemisphere, not July and January, so the two
+    // halves of the map can be read against each other rather than against the calendar.
+    SUMMER_TEMPERATURE("Temperature, summer"),
+    WINTER_TEMPERATURE("Temperature, winter"),
     RAINFALL("Rainfall"),
+    SUMMER_RAINFALL("Rainfall, summer"),
+    WINTER_RAINFALL("Rainfall, winter"),
     PLATES("Plates"),
     CURRENTS("Ocean currents"),
     WIND("Winds"),
@@ -338,8 +344,22 @@ object MapRasterizer {
 
             MapView.TEMPERATURE -> MapPalette.temperature(world.climate.temperature.data[i])
 
+            MapView.SUMMER_TEMPERATURE ->
+                MapPalette.temperature(world.climate.summerTemperature.data[i])
+
+            MapView.WINTER_TEMPERATURE ->
+                MapPalette.temperature(world.climate.winterTemperature.data[i])
+
             MapView.RAINFALL ->
                 if (isLand) MapPalette.precipitation(world.climate.precipitation.data[i])
+                else 0xFF20303C.toInt()
+
+            MapView.SUMMER_RAINFALL ->
+                if (isLand) MapPalette.precipitation(world.climate.summerPrecipitation.data[i])
+                else 0xFF20303C.toInt()
+
+            MapView.WINTER_RAINFALL ->
+                if (isLand) MapPalette.precipitation(world.climate.winterPrecipitation.data[i])
                 else 0xFF20303C.toInt()
 
             MapView.PLATES -> {

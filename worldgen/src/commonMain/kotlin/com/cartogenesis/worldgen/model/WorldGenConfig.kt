@@ -102,7 +102,26 @@ data class ClimateConfig(
      *
      * Smaller than [evaporationRate], because land gives back less water than an ocean does.
      */
-    val landRecoveryRate: Float = 0.010f
+    val landRecoveryRate: Float = 0.010f,
+    /**
+     * How far the thermal equator migrates toward the summer hemisphere, in degrees.
+     *
+     * Everything seasonal follows from this one number: it is what the latitude term of the
+     * temperature curve is offset by, and it is what carries the wind belts and the rain belts
+     * with it, so the horse latitudes and the ITCZ march up and down the map over the year the
+     * way they do on Earth. Ten degrees is the modest, oceanic figure; the great continents swing
+     * further than that, which is continentality's business rather than this one's.
+     */
+    val seasonalTilt: Float = 10f,
+    /**
+     * Whether the year has seasons at all.
+     *
+     * Off is exactly a tilt of zero: every seasonal field collapses onto the annual mean and the
+     * world is bit for bit the one this generator made before seasons existed. Kept as a setting
+     * rather than left to `seasonalTilt = 0` so that `SeasonsTest` can state plainly what it is
+     * turning off, and so the guard that needs seasons can be shown to fail without them.
+     */
+    val seasons: Boolean = true
 )
 
 @Serializable

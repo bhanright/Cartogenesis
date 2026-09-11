@@ -2,26 +2,61 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
+import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 @Serializable
 enum class Biome {
     OCEAN, SHALLOW_OCEAN, ICE_SHEET, TUNDRA, TAIGA, TEMPERATE_FOREST, TEMPERATE_RAINFOREST,
-    GRASSLAND, SHRUBLAND, DESERT, SAVANNA, TROPICAL_SEASONAL_FOREST, TROPICAL_RAINFOREST, ALPINE
+    GRASSLAND, SHRUBLAND, DESERT, SAVANNA, TROPICAL_SEASONAL_FOREST, TROPICAL_RAINFOREST, ALPINE,
+
+    // Appended rather than slotted in beside their relatives, because a biome's ordinal is what a
+    // save stores for it — one byte per cell — and reordering this list would silently repaint
+    // every world already written to disk.
+
+    /**
+     * Dry-summer temperate country: the rain falls in the cold half of the year and the warm half
+     * is parched. Olive, vine and cork country, and the reason a west coast at 35 degrees is not
+     * the same place as an east coast at 35 degrees.
+     */
+    MEDITERRANEAN,
+
+    /**
+     * Tropical forest fed almost entirely by one drenching wet season, with a dry winter that a
+     * rainforest would not survive.
+     */
+    MONSOON_FOREST
 }
 
 data class ClimateResult(
-    /** Mean temperature in degrees Celsius. */
+    /** Mean annual temperature in degrees Celsius. */
     val temperature: FloatField,
+    /**
+     * Temperature in the local warm and cold seasons, in degrees Celsius.
+     *
+     * These are not July and January. "Summer" is whichever half of the year the cell's *own*
+     * hemisphere is warm in, so northern July and southern January both land in
+     * [summerTemperature]. Storing the local season rather than the calendar month is what lets
+     * [ClimateStage.classify] apply one rule to the whole map instead of branching on the sign of
+     * the latitude — a Mediterranean coast is a Mediterranean coast either side of the equator.
+     */
+    val summerTemperature: FloatField,
+    val winterTemperature: FloatField,
     /** Rainfall, normalized to 0..1 across the world. */
     val precipitation: FloatField,
+    /**
+     * Warm- and cold-season rainfall, on the same scale as [precipitation] — the same normalising
+     * factor is applied to all three, so the three fields can be compared against each other and
+     * against the biome thresholds. [precipitation] is their mean, except where the clamp at 1
+     * bites on a season.
+     */
+    val summerPrecipitation: FloatField,
+    val winterPrecipitation: FloatField,
     /** Prevailing wind direction along X: +1 blows east, -1 blows west. */
     val windDirection: IntArray,
     val biome: Array<Biome>
@@ -31,24 +66,101 @@ data class ClimateResult(
  * Step 4: temperature from latitude and altitude, then rainfall by marching moist air along
  * prevailing wind bands so that windward slopes get soaked and leeward slopes fall into rain
  * shadow.
+ *
+ * Run twice over, for the warm season and the cold one. The whole of the seasonal machinery is one
+ * number — [ClimateConfig.seasonalTilt], the distance the thermal equator migrates toward whichever
+ * hemisphere is in summer — applied to the latitude that the temperature curve, the wind belts and
+ * the rain belts are all read off. The annual fields are kept as they were, so every stage
+ * downstream of this one sees exactly what it saw before seasons existed.
  */
 object ClimateStage {
 
     /** Land wetter than this fraction of land is treated as fully saturated when normalizing. */
     private const val WET_PERCENTILE = 0.88f
 
+    /**
+     * How much of the land's seasonal swing the open sea takes.
+     *
+     * Water has an enormous heat capacity and mixes to depth, so the ocean surface barely notices
+     * a season that moves the land beside it by twenty degrees. Without this the sea would swing
+     * exactly as far as the continent, which would be wrong on its own terms and would also hand
+     * every coastal march a wildly seasonal evaporation rate it has no business having.
+     *
+     * A constant rather than a setting: how far the damping reaches *inland* is the interesting
+     * question and it belongs to continentality, which has the water-exposure field to answer it
+     * with. This only has to separate water from land.
+     */
+    private const val OCEAN_SEASONAL_AMPLITUDE = 0.22f
+
+    /**
+     * Rain a cell has to be getting before the ratio between its seasons means anything.
+     *
+     * Added to both halves of every seasonal ratio below. Two nearly rainless seasons can differ
+     * by a factor of fifty on noise alone, and without a floor the driest cells on the map would
+     * be the ones most confidently classed as strongly seasonal.
+     */
+    private const val SEASON_FLOOR = 0.02f
 
     fun generate(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult): ClimateResult {
         val w = config.width
         val h = config.height
+        val cfg = config.climate
+
+        // One knob, used everywhere below. Switching seasons off is exactly a tilt of zero: every
+        // seasonal field then collapses onto the annual one, bit for bit, and the world is the one
+        // this generator made before this stage knew about seasons at all.
+        val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
 
         val temperature = buildTemperature(config, sea)
         applyMaritimeInfluence(config, sea, ocean, temperature)
-        val wind = buildWind(w, h)
-        val precipitation = buildPrecipitation(config, sea, temperature, wind, ocean)
-        val biome = classify(w, h, sea, temperature, precipitation)
+        val summerTemperature = seasonalTemperature(config, sea, temperature, tilt, warm = true)
+        val winterTemperature = seasonalTemperature(config, sea, temperature, tilt, warm = false)
 
-        return ClimateResult(temperature, precipitation, wind, biome)
+        // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
+        // the wind view mean by "the prevailing wind". Each season marches along its own belts,
+        // which live only as long as the march does.
+        val wind = buildWind(w, h, tilt = 0f, warm = true)
+
+        val summerPrecipitation = buildPrecipitation(
+            config, sea, summerTemperature, buildWind(w, h, tilt, warm = true), ocean,
+            bands(h, cfg, warm = true)
+        )
+        val winterPrecipitation = buildPrecipitation(
+            config, sea, winterTemperature, buildWind(w, h, tilt, warm = false), ocean,
+            bands(h, cfg, warm = false)
+        )
+
+        // The annual field is the mean of the two marches rather than a third march of its own, so
+        // that turning seasons off leaves it identical to the single march it replaced.
+        val precipitation = FloatField(w, h)
+        for (i in 0 until w * h) {
+            precipitation.data[i] =
+                (summerPrecipitation.data[i] + winterPrecipitation.data[i]) * 0.5f
+        }
+
+        // One scale for all three, taken from the annual field, because a season measured against
+        // its own percentile would lose the very thing the seasons are here to express: that the
+        // wet half of the year is wetter than the dry half.
+        val reference = landPercentile(precipitation, sea.isLand, WET_PERCENTILE)
+        scaleAndClamp(precipitation, reference)
+        scaleAndClamp(summerPrecipitation, reference)
+        scaleAndClamp(winterPrecipitation, reference)
+
+        val biome = classify(
+            w, h, sea, temperature, winterTemperature,
+            precipitation, summerPrecipitation, winterPrecipitation
+        )
+
+        return ClimateResult(
+            temperature = temperature,
+            summerTemperature = summerTemperature,
+            winterTemperature = winterTemperature,
+            precipitation = precipitation,
+            summerPrecipitation = summerPrecipitation,
+            winterPrecipitation = winterPrecipitation,
+            windDirection = wind,
+            biome = biome
+        )
     }
 
     /**
@@ -99,6 +211,29 @@ object ClimateStage {
     fun latitudeOf(y: Int, height: Int): Float =
         90f - 180f * (y + 0.5f) / height
 
+    /**
+     * How far a row sits from the thermal equator in a given season, in degrees.
+     *
+     * The thermal equator migrates [tilt] degrees toward whichever hemisphere is in summer, so in
+     * the warm season a cell is that much closer to it and in the cold season that much further.
+     * Measured from `|lat|`, which is what makes both hemispheres get their own summer rather than
+     * sharing July: a row at 35 south is as close to the thermal equator in *its* summer as a row
+     * at 35 north is in *its* own.
+     *
+     * The warm case takes an absolute value again, because a tropical row can find the thermal
+     * equator has crossed over it — which is the whole mechanism behind the monsoon.
+     */
+    private fun seasonalLatitude(y: Int, height: Int, tilt: Float, warm: Boolean): Float {
+        val lat = abs(latitudeOf(y, height))
+        return if (warm) abs(lat - tilt) else lat + tilt
+    }
+
+    /** The latitude term of the temperature curve, on its own, so a season can re-read it. */
+    private fun latitudeTemperature(cfg: ClimateConfig, absoluteLatitude: Float): Float {
+        val latFactor = (absoluteLatitude / 90f).pow(1.25f)
+        return cfg.equatorTemperatureC - (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
+    }
+
     private fun buildTemperature(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val w = config.width
         val h = config.height
@@ -110,9 +245,7 @@ object ClimateStage {
         parallelChunks(0, h) { start, end ->
             for (y in start until end) {
                 val lat = latitudeOf(y, h)
-                val latFactor = (abs(lat) / 90f).pow(1.25f)
-                val base = cfg.equatorTemperatureC -
-                    (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
+                val base = latitudeTemperature(cfg, abs(lat))
 
                 for (x in 0 until w) {
                     val i = y * w + x
@@ -129,13 +262,57 @@ object ClimateStage {
     }
 
     /**
+     * The warm- or cold-season temperature, as a departure from the annual mean.
+     *
+     * Everything a season shares with the annual field — the altitude lapse, the maritime term,
+     * the noise — is already in [annual], so only the latitude term is recomputed, at the
+     * season's own distance from the thermal equator. What is added is therefore the *difference*
+     * the migrating equator makes, which is the honest way round: a mountain is no more seasonal
+     * than the valley below it, it is simply colder all year.
+     *
+     * Over water the departure is damped to [OCEAN_SEASONAL_AMPLITUDE] of itself. A maritime
+     * climate has a small annual range at a latitude where a continental one swings thirty
+     * degrees, and that is the sea's heat capacity, not anything about the latitude.
+     */
+    private fun seasonalTemperature(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        annual: FloatField,
+        tilt: Float,
+        warm: Boolean
+    ): FloatField {
+        val w = config.width
+        val h = config.height
+        val cfg = config.climate
+        val field = FloatField(w, h)
+
+        parallelChunks(0, h) { start, end ->
+            for (y in start until end) {
+                val departure = latitudeTemperature(cfg, seasonalLatitude(y, h, tilt, warm)) -
+                    latitudeTemperature(cfg, abs(latitudeOf(y, h)))
+                for (x in 0 until w) {
+                    val i = y * w + x
+                    val amplitude = if (sea.isLand[i]) 1f else OCEAN_SEASONAL_AMPLITUDE
+                    field.data[i] = annual.data[i] + departure * amplitude
+                }
+            }
+        }
+        return field
+    }
+
+    /**
      * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
      * trade winds blowing east to west.
+     *
+     * The belts ride the thermal equator, so in summer they sit [tilt] degrees poleward of their
+     * annual position and in winter [tilt] degrees equatorward. That migration is what puts a
+     * west coast at 35 degrees under the westerlies in winter and under the trades in summer,
+     * which is the Mediterranean climate in one sentence.
      */
-    private fun buildWind(width: Int, height: Int): IntArray {
+    private fun buildWind(width: Int, height: Int, tilt: Float, warm: Boolean): IntArray {
         val wind = IntArray(width * height)
         for (y in 0 until height) {
-            val lat = abs(latitudeOf(y, height))
+            val lat = seasonalLatitude(y, height, tilt, warm)
             val direction = when {
                 lat < 30f -> -1   // trade winds
                 lat < 60f -> 1    // westerlies
@@ -146,12 +323,64 @@ object ClimateStage {
         return wind
     }
 
+    /** The circulation belt each row sits in for a season, precomputed per row. */
+    private fun bands(height: Int, climate: ClimateConfig, warm: Boolean): FloatArray =
+        FloatArray(height) { y -> seasonalBand(latitudeOf(y, height), climate, warm) }
+
+    /**
+     * The belt factor the march applies at a latitude in one season — shifted and sharpened.
+     *
+     * Exposed so a diagnostic can report the number that was actually applied rather than a copy
+     * of the formula that drifts away from it, which is what `DesertCauseTest`'s own copy had
+     * already done before seasons made the question harder.
+     */
+    internal fun seasonalBand(latitude: Float, climate: ClimateConfig, warm: Boolean): Float {
+        val tilt = if (climate.seasons) climate.seasonalTilt else 0f
+        val lat = abs(latitude)
+        val effective = if (warm) abs(lat - tilt) else lat + tilt
+        return latitudeBandAt(
+            effective,
+            climate.subtropicalDryness,
+            seasonalBandSharpness(tilt, climate.subtropicalDryness)
+        )
+    }
+
+    /**
+     * How much sharper an instantaneous circulation belt is than the annual mean of the belts.
+     *
+     * [latitudeBandAt]'s constants were measured against *annual* desert placement in a world that
+     * had no seasons, which makes them a description of the annual mean rather than of any moment
+     * in the year. Migrating the belts and averaging two marches computes that annual mean a
+     * second time, and two offset bells average to a profile roughly half as sharp as either: at
+     * the subtropical high's centre the anomaly falls from -1.12 to -0.51, which lifts the horse
+     * latitudes out of the clamped, maximally arid span their deserts come from. Measured, that
+     * cost seed 42 three quarters of its desert and dropped desert placement from 100% to 74% in
+     * 15-45 degrees, with rain-shadow deserts reappearing at the equator — precisely the
+     * regression the belt mechanism was introduced to prevent.
+     *
+     * So each season's anomaly is scaled by the factor that restores the annual mean at the
+     * subtropical high's own centre, which is the belt the deserts depend on. It is derived rather
+     * than chosen: at a tilt of zero it is exactly 1 and every band is the number it always was,
+     * which is what keeps `seasons = false` identical to the pre-seasons world down to the bit.
+     */
+    private fun seasonalBandSharpness(tilt: Float, dryness: Float): Float {
+        val centre = 30f
+        val annual = bandAnomaly(centre, dryness)
+        val seasonal =
+            (bandAnomaly(centre - tilt, dryness) + bandAnomaly(centre + tilt, dryness)) * 0.5f
+        // Both are negative under any sane setting — the subtropics suppress rain. If a setting
+        // ever made them otherwise, leave the belts alone rather than invent a correction.
+        if (annual >= 0f || seasonal >= 0f) return 1f
+        return (annual / seasonal).coerceIn(1f, 4f)
+    }
+
     private fun buildPrecipitation(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
         wind: IntArray,
-        ocean: OceanResult
+        ocean: OceanResult,
+        bandOfRow: FloatArray
     ): FloatField {
         val w = config.width
         val h = config.height
@@ -168,8 +397,10 @@ object ClimateStage {
                 // the finished total. Multiplying the result afterwards cannot make a rain shadow
                 // wet again -- twice nearly nothing is still nearly nothing -- whereas suppressing
                 // the rate is what descending subtropical air actually does, and boosting it is
-                // what the ITCZ does.
-                val band = latitudeBand(y, h, cfg.subtropicalDryness)
+                // what the ITCZ does. In a season this belt is the shifted one, so the same row is
+                // under the dry descending limb in one half of the year and under the storm track
+                // in the other.
+                val band = bandOfRow[y]
 
                 // Two laps around the cylinder: the first seeds a realistic moisture state, the
                 // second is the one that gets recorded, so the arbitrary starting value washes out.
@@ -224,22 +455,23 @@ object ClimateStage {
         }
 
         BoxBlur.apply(precip, radius = (config.width / 128).coerceAtLeast(1), passes = 2)
-        normalizeByLandPercentile(precip, sea.isLand, WET_PERCENTILE)
         return precip
     }
 
     /**
-     * Scales rainfall so that a high percentile of *land* values maps to 1, then clamps.
+     * The rainfall a high percentile of *land* receives, which is what 1.0 comes to mean.
      *
      * Normalizing by the absolute maximum instead would let the handful of extreme windward
      * mountain cells — which receive an order of magnitude more rain than anywhere flat — set the
      * scale, squashing every ordinary land cell below the desert threshold.
+     *
+     * Returns 0 when there is nothing to measure, which [scaleAndClamp] reads as "leave it alone".
      */
-    private fun normalizeByLandPercentile(
+    private fun landPercentile(
         precip: FloatField,
         isLand: BooleanArray,
         percentile: Float
-    ) {
+    ): Float {
         val bins = 2048
         var maximum = 0f
         var landCells = 0
@@ -248,7 +480,7 @@ object ClimateStage {
             landCells++
             if (precip.data[i] > maximum) maximum = precip.data[i]
         }
-        if (landCells == 0 || maximum <= 0f) return
+        if (landCells == 0 || maximum <= 0f) return 0f
 
         val histogram = IntArray(bins)
         val scale = (bins - 1) / maximum
@@ -267,28 +499,42 @@ object ClimateStage {
             }
         }
         if (reference <= 0f) reference = maximum
+        return reference
+    }
 
+    /** Scales a rainfall field so [reference] maps to 1, then clamps. */
+    private fun scaleAndClamp(precip: FloatField, reference: Float) {
+        if (reference <= 0f) return
         val inverse = 1f / reference
         for (i in precip.data.indices) {
             precip.data[i] = (precip.data[i] * inverse).coerceIn(0f, 1f)
         }
     }
 
-    /** Wet equatorial convergence zone, dry horse latitudes around 30 degrees. */
     /**
-     * How much the circulation belt at this row encourages or suppresses rain.
+     * How much the circulation belt encourages or suppresses rain, at a given distance from the
+     * thermal equator.
      *
      * Three bands, each a bump centred where the atmosphere actually puts it: the wet ITCZ at the
      * equator, the dry descending air of the horse latitudes near 30, and the wet mid-latitude
      * storm track near 55.
+     *
+     * Taken from the *thermal* equator rather than the geographic one, which is what lets the
+     * whole system migrate with the season: the same row sits under the dry descending limb in
+     * one half of the year and under the storm track in the other, and that is the Mediterranean
+     * climate and the monsoon both.
      *
      * Applied to the rain rate during the march rather than to the finished totals afterwards. As
      * a post-hoc multiplier it could not put rain back into air already wrung out crossing a
      * mountain -- twice nearly nothing is still nearly nothing -- so a rain shadow stayed a rain
      * shadow even on the wettest row of the map, which is how deserts were reaching the equator.
      */
-    internal fun latitudeBand(y: Int, height: Int, subtropicalDryness: Float = 1.15f): Float {
-        val lat = abs(latitudeOf(y, height))
+    internal fun latitudeBandAt(
+        lat: Float,
+        subtropicalDryness: Float = 1.15f,
+        /** See [seasonalBandSharpness]. One leaves every band exactly as it was. */
+        sharpness: Float = 1f
+    ): Float {
         val itcz = 1.0f * bell(lat, 0f, 12f)
         val subtropicalHigh = -subtropicalDryness * bell(lat, 30f, 13f)
         val stormTrack = 0.5f * bell(lat, 55f, 15f)
@@ -297,15 +543,45 @@ object ClimateStage {
         // dryness the sum goes negative for roughly 25 to 35 degrees, so that span is clamped flat
         // and maximally arid. That is a fair description of a subtropical desert belt, but it does
         // mean raising the setting further widens the belt rather than deepening it.
-        return (1f + itcz + subtropicalHigh + stormTrack + polarDry).coerceAtLeast(0.05f)
+        //
+        // Each term is scaled separately rather than the sum being scaled afterwards, so that a
+        // sharpness of one multiplies each by exactly 1 and adds them in exactly the order this
+        // expression always added them. Float addition does not associate, and a reassociated sum
+        // would be a last-bit difference — which is the whole of what `seasons = false` promises
+        // not to be.
+        return (1f + sharpness * itcz + sharpness * subtropicalHigh +
+            sharpness * stormTrack + sharpness * polarDry).coerceAtLeast(0.05f)
     }
 
+    /** The belts' departure from an unremarkable rain rate, which is what a season sharpens. */
+    private fun bandAnomaly(lat: Float, subtropicalDryness: Float): Float =
+        1.0f * bell(lat, 0f, 12f) -
+            subtropicalDryness * bell(lat, 30f, 13f) +
+            0.5f * bell(lat, 55f, 15f) -
+            0.35f * bell(lat, 90f, 18f)
+
+    /**
+     * Biomes from four numbers rather than two.
+     *
+     * Annual temperature and annual rainfall still lay out the broad zones — they are what a
+     * Whittaker diagram uses, and they were right about most of the map. What they cannot see is
+     * the *shape* of the year, and three of the world's most distinctive land classes are shapes
+     * rather than totals: a Mediterranean coast and a temperate forest can receive the same
+     * rainfall and look nothing alike, and so can a savanna and a seasonal forest. Those three
+     * are decided on the ratio between the seasons; everything else is as it was.
+     *
+     * With seasons off the two seasonal fields are the annual field, every ratio is exactly 1, and
+     * every seasonal test below falls through to the rule it replaced.
+     */
     private fun classify(
         width: Int,
         height: Int,
         sea: SeaLevelResult,
         temperature: FloatField,
-        precipitation: FloatField
+        winterTemperature: FloatField,
+        precipitation: FloatField,
+        summerPrecipitation: FloatField,
+        winterPrecipitation: FloatField
     ): Array<Biome> {
         return Array(width * height) { i ->
             if (!sea.isLand[i]) {
@@ -315,6 +591,13 @@ object ClimateStage {
             } else {
                 val t = temperature.data[i]
                 val p = precipitation.data[i]
+                val summerRain = summerPrecipitation.data[i]
+                val winterRain = winterPrecipitation.data[i]
+                // How lopsided the year is, in each direction. One number rather than a pair of
+                // thresholds, because what separates a savanna from a seasonal forest of the same
+                // annual total is the shape of the year and not its size.
+                val summerShare = (summerRain + SEASON_FLOOR) / (winterRain + SEASON_FLOOR)
+                val winterShare = (winterRain + SEASON_FLOOR) / (summerRain + SEASON_FLOOR)
                 val elevation = sea.relativeElevation.data[i]
                 when {
                     t < -8f -> Biome.ICE_SHEET
@@ -323,6 +606,13 @@ object ClimateStage {
                     t < 7f -> if (p < 0.18f) Biome.TUNDRA else Biome.TAIGA
                     t < 20f -> when {
                         p < 0.14f -> Biome.DESERT
+                        // Dry summer, wet winter, mild enough for the rain to be rain: the
+                        // subtropical high sits over the coast all summer and the westerlies swing
+                        // back over it in winter. A real wet season is required as well as the
+                        // ratio, or a dry continental interior would qualify on lopsidedness alone
+                        // while receiving almost nothing either half of the year.
+                        winterShare >= 1.7f && summerRain < 0.30f && winterRain >= 0.30f &&
+                            winterTemperature.data[i] > 2f -> Biome.MEDITERRANEAN
                         p < 0.28f -> Biome.GRASSLAND
                         p < 0.42f -> Biome.SHRUBLAND
                         p < 0.68f -> Biome.TEMPERATE_FOREST
@@ -330,8 +620,16 @@ object ClimateStage {
                     }
                     else -> when {
                         p < 0.14f -> Biome.DESERT
-                        p < 0.3f -> Biome.SAVANNA
-                        p < 0.58f -> Biome.TROPICAL_SEASONAL_FOREST
+                        // One drenching wet season doing nearly all the year's work.
+                        summerShare >= 2.5f && summerRain >= 0.50f -> Biome.MONSOON_FOREST
+                        // Savanna is a seasonality rather than a total: grass where the dry half
+                        // of the year is long enough to burn, forest where it is not. The dry
+                        // cases stay savanna as they were, and a wetter cell now joins them if
+                        // its rain all arrives at once.
+                        p < 0.30f -> Biome.SAVANNA
+                        p < 0.58f ->
+                            if (summerShare >= 1.6f) Biome.SAVANNA
+                            else Biome.TROPICAL_SEASONAL_FOREST
                         else -> Biome.TROPICAL_RAINFOREST
                     }
                 }

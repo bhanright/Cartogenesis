@@ -49,6 +49,8 @@ internal object Atlas {
                     Biome.TROPICAL_RAINFOREST -> listOf("spices", "hardwood", "dyestuffs")
                     Biome.TROPICAL_SEASONAL_FOREST, Biome.SAVANNA -> listOf("cotton", "ivory", "cattle")
                     Biome.SHRUBLAND -> listOf("olives", "wine", "goats")
+                    Biome.MEDITERRANEAN -> listOf("olive oil", "wine", "citrus")
+                    Biome.MONSOON_FOREST -> listOf("rice", "tea", "lacquer")
                     Biome.DESERT -> listOf("salt", "glass", "incense")
                     Biome.TUNDRA, Biome.ICE_SHEET -> listOf("furs", "whale oil", "walrus ivory")
                     Biome.ALPINE -> listOf("stone", "slate")
@@ -111,6 +113,8 @@ internal object Atlas {
             Biome.DESERT -> "burning desert"
             Biome.SAVANNA -> "dry savanna"
             Biome.SHRUBLAND -> "sun-scrubbed hills"
+            Biome.MEDITERRANEAN -> "olive country"
+            Biome.MONSOON_FOREST -> "rain-fed forest"
             Biome.TROPICAL_RAINFOREST -> "steaming jungle"
             Biome.TROPICAL_SEASONAL_FOREST -> "monsoon forest"
             Biome.ALPINE -> "high stone country"

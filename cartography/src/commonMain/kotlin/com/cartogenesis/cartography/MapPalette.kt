@@ -46,7 +46,12 @@ object MapPalette {
         Biome.SAVANNA to 0xFFC6B95F.toInt(),
         Biome.TROPICAL_SEASONAL_FOREST to 0xFF5E8F3E.toInt(),
         Biome.TROPICAL_RAINFOREST to 0xFF2C6B33.toInt(),
-        Biome.ALPINE to 0xFFA9A29B.toInt()
+        Biome.ALPINE to 0xFFA9A29B.toInt(),
+        // Olive against the yellower savanna and the greener shrubland it sits between, so a
+        // dry-summer coast reads as its own country rather than as a variant of either.
+        Biome.MEDITERRANEAN to 0xFFA89A4E.toInt(),
+        // Greener and cooler than the seasonal forest, short of the rainforest's near-black.
+        Biome.MONSOON_FOREST to 0xFF3E8C5E.toInt()
     )
 
     fun biome(biome: Biome): Int = BIOME_COLORS[biome] ?: PARCHMENT

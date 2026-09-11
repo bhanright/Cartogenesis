@@ -44,8 +44,11 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 7. **Climate** — temperature from latitude and altitude, then pulled toward the sea temperature
    offshore; rainfall by marching moist air along prevailing wind bands, so windward slopes soak
    and leeward slopes fall into rain shadow. This is what lets a high-latitude west coast be
-   temperate and a coast beside a cold current be arid at the same latitude. Biomes come from the
-   resulting temperature/rainfall pairing.
+   temperate and a coast beside a cold current be arid at the same latitude. All of it runs twice,
+   for the warm season and the cold one, with the thermal equator — and the wind and rain belts
+   riding on it — migrating toward whichever hemisphere is in summer. Biomes come from the four
+   resulting numbers rather than two, which is what tells a Mediterranean coast from a temperate
+   forest of the same annual rainfall.
 8. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
    Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
@@ -418,7 +421,8 @@ much beyond it needs the pipeline reworked to run in tiles.
 `DebugMapDump` in the `:worldgen` test source set renders worlds straight to PNGs under
 `worldgen/build/maps/`, so generation can be inspected without launching anything — one image per
 pipeline stage (normals, elevation, plates, biome, rainfall, temperature, ocean currents, winds)
-plus the composed map.
+plus the composed map. Rainfall and temperature are each dumped three times — annual, warm season,
+cold season — since the seasonal fields are the only place the belts can be seen to migrate.
 It also prints river-network statistics, and includes a parameter sweep for judging the trade-off
 between terrain roughness and tectonic influence by eye.
 

@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 
@@ -82,7 +83,7 @@ class DesertCauseTest {
 
             for (y in 0 until h) {
                 val lat = abs(latitudeOfRow(y, h))
-                val band = bandFactor(lat)
+                val band = bandFactor(lat, world.config)
                 for (x in 0 until w) {
                     val i = y * w + x
                     if (!world.sea.isLand[i]) continue
@@ -103,13 +104,15 @@ class DesertCauseTest {
     private fun latitudeOfRow(y: Int, height: Int): Float =
         90f - 180f * (y + 0.5f) / height
 
-    /** Mirrors ClimateStage's bands, so the reported factor is the one actually applied. */
-    private fun bandFactor(lat: Float): Float {
-        fun bell(centre: Float, width: Float): Float {
-            val t = (lat - centre) / width
-            return kotlin.math.exp(-t * t)
-        }
-        return (1f + 1.0f * bell(0f, 12f) - 0.55f * bell(30f, 13f) +
-            0.5f * bell(55f, 15f) - 0.35f * bell(90f, 18f)).coerceAtLeast(0.05f)
-    }
+    /**
+     * The belt factor a cell's rain actually saw, averaged over the year.
+     *
+     * Calls the stage's own function rather than restating it. The copy that used to live here
+     * had drifted — it still carried a subtropical dryness of 0.55 against the 1.15 the stage
+     * uses — and a diagnostic that reports a number the pipeline never applied is worse than no
+     * diagnostic, since the misplaced deserts were diagnosed against it.
+     */
+    private fun bandFactor(lat: Float, config: WorldGenConfig): Float =
+        (ClimateStage.seasonalBand(lat, config.climate, warm = true) +
+            ClimateStage.seasonalBand(lat, config.climate, warm = false)) * 0.5f
 }

@@ -309,6 +309,11 @@ object NationStage {
 
             var score = when (climate.biome[i]) {
                 Biome.TEMPERATE_FOREST, Biome.GRASSLAND -> 1.0f
+                // Wheat, olive and vine country, and the densest wet-rice country there is: two
+                // of the most thickly settled landscapes on Earth, so neither may fall through to
+                // the "some other biome" rate.
+                Biome.MEDITERRANEAN -> 0.95f
+                Biome.MONSOON_FOREST -> 0.9f
                 Biome.TROPICAL_SEASONAL_FOREST, Biome.SAVANNA -> 0.85f
                 Biome.TEMPERATE_RAINFOREST -> 0.75f
                 Biome.SHRUBLAND -> 0.6f

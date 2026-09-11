@@ -66,6 +66,14 @@ class IncrementalReuseTest {
                     equatorTemperatureC = base.climate.equatorTemperatureC + 4f
                 )
             ),
+            // The seasonal knobs live in the same section as the rest of the climate, so the guard
+            // above already covers them — but only if a case actually moves one. A change to the
+            // tilt has to reach the ocean stage too, since the currents are driven by the wind
+            // belts, which is exactly the kind of cross-stage staleness this test exists for.
+            "seasonalTilt" to base.copy(
+                climate = base.climate.copy(seasonalTilt = base.climate.seasonalTilt + 6f)
+            ),
+            "seasons" to base.copy(climate = base.climate.copy(seasons = false)),
             "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
@@ -152,7 +160,11 @@ class IncrementalReuseTest {
             ),
             climate = ClimateResult(
                 temperature = field(world.climate.temperature),
+                summerTemperature = field(world.climate.summerTemperature),
+                winterTemperature = field(world.climate.winterTemperature),
                 precipitation = field(world.climate.precipitation),
+                summerPrecipitation = field(world.climate.summerPrecipitation),
+                winterPrecipitation = field(world.climate.winterPrecipitation),
                 windDirection = world.climate.windDirection.copyOf(),
                 biome = world.climate.biome.copyOf()
             ),
@@ -226,6 +238,12 @@ class IncrementalReuseTest {
             "sea=${sum(world.sea.relativeElevation.data)}",
             "ocean=${sum(world.ocean.velocityX.data)},${sum(world.ocean.velocityY.data)}",
             "climate=${sum(world.climate.temperature.data)},${sum(world.climate.precipitation.data)}",
+            // The seasonal fields separately: they are what a seasonal setting moves, and a
+            // checksum of the annual mean alone would be blind to a season going stale.
+            "seasons=${sum(world.climate.summerTemperature.data)}," +
+                "${sum(world.climate.winterTemperature.data)}," +
+                "${sum(world.climate.summerPrecipitation.data)}," +
+                "${sum(world.climate.winterPrecipitation.data)}",
             "rivers=${world.rivers.rivers.size},${sum(world.rivers.flowAccumulation.data)}",
             // Lakes are their own result hanging off the river stage. Leaving them out made
             // the `lakes` case pass while reusing a stale river stage — the check went

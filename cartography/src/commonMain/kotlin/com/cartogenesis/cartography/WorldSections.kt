@@ -168,7 +168,23 @@ internal object WorldSections {
         Section("ocean.temperature", SectionType.F32, floats = world.ocean.temperature.data),
         Section("ocean.anomaly", SectionType.F32, floats = world.ocean.anomaly.data),
         Section("climate.temperature", SectionType.F32, floats = world.climate.temperature.data),
+        Section(
+            "climate.summerTemperature", SectionType.F32,
+            floats = world.climate.summerTemperature.data
+        ),
+        Section(
+            "climate.winterTemperature", SectionType.F32,
+            floats = world.climate.winterTemperature.data
+        ),
         Section("climate.precipitation", SectionType.F32, floats = world.climate.precipitation.data),
+        Section(
+            "climate.summerPrecipitation", SectionType.F32,
+            floats = world.climate.summerPrecipitation.data
+        ),
+        Section(
+            "climate.winterPrecipitation", SectionType.F32,
+            floats = world.climate.winterPrecipitation.data
+        ),
         Section("climate.windDirection", SectionType.I32, ints = world.climate.windDirection),
         Section("climate.biome", SectionType.U8, raw = ByteArray(world.climate.biome.size) {
             world.climate.biome[it].ordinal.toByte()
@@ -313,7 +329,11 @@ internal object WorldSections {
             ),
             climate = ClimateResult(
                 temperature = field("climate.temperature"),
+                summerTemperature = field("climate.summerTemperature"),
+                winterTemperature = field("climate.winterTemperature"),
                 precipitation = field("climate.precipitation"),
+                summerPrecipitation = field("climate.summerPrecipitation"),
+                winterPrecipitation = field("climate.winterPrecipitation"),
                 windDirection = ints("climate.windDirection"),
                 biome = Array(cells) { i ->
                     val ordinal = biomeBytes[i].toInt() and 0xFF

@@ -33,6 +33,11 @@ class DebugMapDump {
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             write(render(world, Mode.FANTASY), "seed$seed-fantasy.png")
+            // Seasons are invisible in the annual maps by construction, so every seed gets the
+            // two rainfall halves and the biome map that is drawn from them.
+            write(render(world, Mode.BIOME), "seed$seed-biome.png")
+            write(render(world, Mode.SUMMER_RAINFALL), "seed$seed-rainfall-summer.png")
+            write(render(world, Mode.WINTER_RAINFALL), "seed$seed-rainfall-winter.png")
             println(
                 "seed $seed: ${(world.landFraction() * 100).toInt()}% land, " +
                     "${world.rivers.rivers.size} rivers, " +
@@ -48,6 +53,9 @@ class DebugMapDump {
         write(render(world, Mode.BIOME), "seed42-biome.png")
         write(render(world, Mode.RAINFALL), "seed42-rainfall.png")
         write(render(world, Mode.TEMPERATURE), "seed42-temperature.png")
+        write(render(world, Mode.SUMMER_TEMPERATURE), "seed42-temperature-summer.png")
+        write(render(world, Mode.WINTER_TEMPERATURE), "seed42-temperature-winter.png")
+        reportBiomeShares(world)
         write(render(world, Mode.NORMALS), "seed42-normals.png")
         write(render(world, Mode.NATIONS), "seed42-nations.png")
         write(render(world, Mode.CULTURES), "seed42-cultures.png")
@@ -166,7 +174,11 @@ class DebugMapDump {
 
     private enum class Mode {
         FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, CULTURES,
-        HABITABILITY
+        HABITABILITY,
+        // The local warm and cold season, not July and January. Side by side these are where the
+        // subtropical dry belt's migration shows: it sits some ten degrees poleward in the summer
+        // map and the same distance equatorward in the winter one.
+        SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE
     }
 
     /** Mirrors RiverStage's threshold maths so the network can be inspected from outside. */
@@ -217,6 +229,28 @@ class DebugMapDump {
             )
     }
 
+    /** What the land is made of, in order, so a new biome class can be seen to have arrived. */
+    private fun reportBiomeShares(world: WorldMap) {
+        // A sorted array rather than a map, because the printed order should be the same on every
+        // run and a hash map's is not.
+        val counts = IntArray(Biome.entries.size)
+        var land = 0
+        for (i in world.climate.biome.indices) {
+            if (!world.sea.isLand[i]) continue
+            land++
+            counts[world.climate.biome[i].ordinal]++
+        }
+        Biome.entries
+            .filter { counts[it.ordinal] > 0 }
+            .sortedByDescending { counts[it.ordinal] }
+            .forEach {
+                println(
+                    "  BIOME ${it.name}: ${counts[it.ordinal]} cells, " +
+                        "${"%.1f".format(counts[it.ordinal] * 100.0 / land.coerceAtLeast(1))}% of land"
+                )
+            }
+    }
+
     private fun write(image: BufferedImage, name: String) {
         ImageIO.write(image, "png", File(outputDir, name))
     }
@@ -263,6 +297,26 @@ class DebugMapDump {
                     Mode.TEMPERATURE ->
                         grad(
                             ((world.climate.temperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            0x3B4CC0, 0xB40426
+                        )
+
+                    Mode.SUMMER_RAINFALL ->
+                        if (land) grad(world.climate.summerPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        else 0x20303C
+
+                    Mode.WINTER_RAINFALL ->
+                        if (land) grad(world.climate.winterPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        else 0x20303C
+
+                    Mode.SUMMER_TEMPERATURE ->
+                        grad(
+                            ((world.climate.summerTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            0x3B4CC0, 0xB40426
+                        )
+
+                    Mode.WINTER_TEMPERATURE ->
+                        grad(
+                            ((world.climate.winterTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
                             0x3B4CC0, 0xB40426
                         )
 
@@ -371,6 +425,8 @@ class DebugMapDump {
         Biome.TROPICAL_SEASONAL_FOREST -> 0x5E8F3E
         Biome.TROPICAL_RAINFOREST -> 0x2C6B33
         Biome.ALPINE -> 0xA9A29B
+        Biome.MEDITERRANEAN -> 0xA89A4E
+        Biome.MONSOON_FOREST -> 0x3E8C5E
     }
 
     private fun nationColor(id: Int): Int {

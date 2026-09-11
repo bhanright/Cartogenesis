@@ -3,6 +3,8 @@
 What fantasy maps are commonly caught getting wrong, and what this generator actually does about
 each. Measured with `GeographyAuditTest` on four seeds at 512×512, not asserted.
 
+Once saves carry the world (Track D), cross-platform generation bit-identity stops being a requirement and this document's realism gaps become the focus.
+
 Sources for the rules: [Inkwell Ideas, "Top 10 Mistakes of Fantasy Map
 Making"](https://inkwellideas.com/2026/05/top-10-mistakes-of-fantasy-map-making/), [Map Effects,
 "River Sins"](https://www.mapeffects.co/tutorials/river-sins), [Mythcreants, "How to Color Your Map
@@ -37,26 +39,25 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 
 ## Known deviations
 
-**Some river segments still run uphill on the raw surface.** 12–14% of drawn segments rise rather
-than fall against unfilled elevation, down from 13–20% before lakes. What remains is shallow filled
-ground that does not clear `LakesConfig.minDepth` — flats raised by a hair rather than basins deep
-enough to hold water. Dropping the threshold would catch more of them at the cost of flagging half a
-continent as lake.
+**Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 
-**Desert placement is only loosely tied to latitude.** Two of four seeds put desert mean latitude at
-16°, with under half of desert inside 15–45°. Rain shadow can dominate the latitude band and push
-desert toward the equator, where rainforest belongs. The latitude model is also wrong at high
-latitudes: the ITCZ term makes 60° the driest band, when it should be moderately wet. It rarely
-shows because those latitudes are cold enough to classify as tundra or taiga on temperature, but the
-underlying curve is not right.
+**No seasons.** Temperature and rainfall are single annual means. Summer and winter are not modelled separately, and neither are the seasonal migrations of climate belts. Addressed in [A1 Seasons](REALISM_PLAN.md#a1-seasons--opus).
 
-**Nothing models ocean currents or continentality.** Biomes come from latitude, altitude and
-orographic rainfall. A warm current making a high-latitude west coast temperate, or a continental
-interior swinging further between seasons than a coast at the same latitude, are not represented.
+**No continentality.** A continental interior swings no more between seasons than a coast at the same latitude. The maritime term spreads the ocean-current anomaly inland but does not amplify seasonal departure from the annual mean. Addressed in [A2 Continentality](REALISM_PLAN.md#a2-continentality--sonnet).
 
-**No erosion.** Coastlines come from a sea-level cut through the height field. There is no
-deposition, no deltas, no fjords carved by ice, no meandering. It looks plausible; it is not the
-result of a process.
+**Winds are purely zonal.** Wind direction varies only with latitude (±1 per row) and has no meridional component. This prevents monsoons, where seasonal motion of the ITCZ pulls ocean air onto tropical landmasses. Addressed in [A3 Meridional wind and the monsoon](REALISM_PLAN.md#a3-meridional-wind-and-the-monsoon--opus).
+
+**Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
+
+**The cold-air moisture cap may leave high latitudes uniformly dry.** The `coldCap` clamps moisture by temperature and may starve temperate rainforest on high-latitude west coasts, as on the Bergen case. Measured for [A5 Cold-air moisture cap](REALISM_PLAN.md#a5-cold-air-moisture-cap--haiku-report-only).
+
+**No deposition.** The hydraulic erosion stage removes material and never returns it. No deltas build at river mouths, no floodplains or alluvial fans form along lower channels, and no mass is laid down as rivers flatten. Addressed in [B3 Deposition](REALISM_PLAN.md#b3-deposition--opus).
+
+**No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
+
+**Convergent boundaries do not distinguish crust pairs.** All convergent boundaries use one profile regardless of whether the collision is oceanic–continental (Andes), continental–continental (Tibet), or oceanic–oceanic (arcs). Addressed in [B2 Crust-pair boundary types](REALISM_PLAN.md#b2-crust-pair-boundary-types--opus).
+
+**No glaciation.** Ice sheets and alpine glaciers are not carved where mean annual temperature falls below freezing. No U-shaped valleys, cirques, or fjords carved by ice exist. Addressed in [B4 Glaciation](REALISM_PLAN.md#b4-glaciation--opus).
 
 ## Fixed by this audit
 

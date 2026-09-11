@@ -432,6 +432,22 @@ centre and a spine down the north-east) where a real arc bows convex toward the 
 Worth a curvature term along strike when someone next opens `PlateStage`. The chamfer faceting B2
 reported on the widest plateau edges is visible if looked for and invisible otherwise.
 
+### Render review after A4 (2026-09-11, later still)
+
+Looked at biomes on seeds 7, 42 and 1234 and rainfall on 42 and 1234. Verdict: believable.
+Deserts sit in the subtropical interiors and nowhere else: seed 7 runs ice, tundra, boreal, a
+desert-and-savanna belt at 25-35 N, then wet tropical coasts, and seed 1234's southern continents
+are dry through the interior at 30-45 S with green coasts, which is Australia and closes the
+"seed 1234 dry interior" follow-up from the first review. Seed 42's central plateau reads as
+alpine grey, its west coasts are forested to high latitude, and the horse-latitude dry blocks at
+30-45 N are patchy rather than a belt.
+
+Two follow-ups, neither a blocker: seed 42's annual rainfall carries faint horizontal banding
+across the northern continent where circulation belts meet (a wind-band seam, worth a look when
+`buildWind` is next opened); and the WebP export bound in `ExportSmokeTest` had to move from 64
+to 72 because the busier September worlds put more sharp edges on the same seed (99.9th percentile
+drift 58 -> 67 with the encoder untouched; README figures updated to match).
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

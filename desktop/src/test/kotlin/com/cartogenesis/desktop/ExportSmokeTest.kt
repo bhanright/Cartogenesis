@@ -20,11 +20,13 @@ class ExportSmokeTest {
     /**
      * How far a colour channel may drift, at the 99.9th percentile, before the description of WebP
      * in the UI stops being honest. Skia exposes no lossless WebP encoder, so this is not zero and
-     * cannot be: the bound records what the encoder actually does today, currently 58, so that a
-     * change for the worse is caught rather than shipped.
+     * cannot be: the bound records what the encoder actually does today so that a change for the
+     * worse is caught rather than shipped. It measured 58 on the August 2026 worlds; the September
+     * realism work (crust-pair belts, deltas, Koppen biomes) put more sharp edges on the same seed
+     * and it now measures 67 with the encoder untouched, so the bound and the README moved with it.
      */
     private companion object {
-        const val MAX_CHANNEL_DRIFT = 64
+        const val MAX_CHANNEL_DRIFT = 72
     }
 
 

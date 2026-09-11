@@ -203,7 +203,7 @@ The app requests `-Xmx12g`, which is what makes those sizes reachable at all.
 
 Exports are written as PNG or WebP. PNG is lossless. WebP comes out around a quarter of the size,
 but Skia exposes no lossless WebP encoder, and the loss lands where a map can least afford it: the
-average pixel drifts about 3 of 255, while the worst 0.1% drift by nearly 60, and those are the
+average pixel drifts about 4 of 255, while the worst 0.1% drift by nearly 70, and those are the
 river lines and borders, because that is where the sharp edges are. `ExportSmokeTest` measures
 both numbers so the description in the UI stays true.
 

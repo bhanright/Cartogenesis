@@ -433,9 +433,9 @@ Since it runs as part of `:worldgen:jvmTest`, the maps refresh on every JVM test
 `.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and compiles
 and tests the desktop app, on every push and pull request.
 
-The step worth knowing about compares the **JVM and Wasm fingerprints against each other** rather
-than against a hardcoded value. That catches a platform silently drifting — which would break save
-portability — without failing every time the pipeline is deliberately retuned.
+The step worth knowing about compares the **JVM and Wasm fingerprints** to detect platform drift.
+A divergence is informational — usually worth a glance to catch a platform-dependent bug — but does
+not fail the build, since a save carries the world and platforms may generate differently.
 
 ## Multiplatform status
 
@@ -444,8 +444,8 @@ portability — without failing every time the pipeline is deliberately retuned.
 `DebugMapDump` stays in `jvmTest` because it renders PNGs through `java.awt`.
 
 `WorldFingerprintTest` prints a checksum of a generated world, built from raw float bits so it
-catches a difference in the last bit. Run it on two targets and compare — it is the check that says
-whether a world saved on one platform reopens identically on another.
+catches a difference in the last bit. Run it on two targets and compare to detect platform-dependent
+divergence; a difference is informational but not a blocker, since saves carry the world.
 
 Measured on 2026-08-23, seed 42 at 128x128:
 
@@ -458,5 +458,5 @@ Measured on 2026-08-23, seed 42 at 128x128:
 **Wasm is bit-identical to the JVM. Kotlin/JS is not.** JS routes `sin`/`cos`/`pow` through
 JavaScript's `Math`, which differs from the JVM in the last bit; the FFT compounds that, and the
 same seed produces a different world — different enough to fail the resolution-consistency guard.
-Since a save stores a seed rather than a world, **Wasm is the target that keeps saves portable**,
-and that matters more here than the usual performance argument.
+A save carries the world, so all platforms are equally portable; Wasm is chosen for the web build
+because its bit-identity with the JVM keeps the fingerprint comparison and reasoning simpler.

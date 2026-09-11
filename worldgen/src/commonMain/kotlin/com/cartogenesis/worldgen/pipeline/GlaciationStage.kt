@@ -20,6 +20,10 @@ internal data class GlacialMass(
     /** Frozen cells with enough local relief for the ice to be channelled into a valley. */
     val channelledCells: Int,
     val glacierCells: Int,
+    /** Separate glaciers left, and how many cells were dropped for running parallel to a stronger
+     * one's trough. */
+    val trunks: Int,
+    val parallelCellsDropped: Int,
     /** Frozen cells handed to the sheet regime instead: flat ground, scoured rather than grooved. */
     val sheetCells: Int,
     /** Cells cut into a scour basin, and how many separate basins they form. */
@@ -183,6 +187,17 @@ object GlaciationStage {
         // not one cell further.
         val runOut = IntArray(size) { Int.MAX_VALUE }
 
+        // Which ice field each cell's ice came out of, and how big that field is. A glacier has to
+        // be one of the few paths draining *its own* ice field, not merely a large number against
+        // the planet's total: see [GlaciationConfig.trunkCatchment].
+        val field = frozenFields(w, h, frozen)
+        val fieldOf = IntArray(size) { field.id[it] }
+        for (k in order.indices) {
+            val i = order[k]
+            val t = directions[i]
+            if (fieldOf[i] >= 0 && t >= 0 && isLand[t] && fieldOf[t] < 0) fieldOf[t] = fieldOf[i]
+        }
+
         // Everything that could carry a trough: enough ice, close enough to the frozen ground, and
         // standing in channelled country. Whether it actually does is the length test below.
         val candidate = BooleanArray(size)
@@ -190,7 +205,11 @@ object GlaciationStage {
             val i = order[k]
             if (frozen[i]) runOut[i] = 0
             val share = ice[i] / frozenLand
-            if (share >= cfg.minCatchment && runOut[i] <= cfg.runOut && channelled[i]) {
+            val f = fieldOf[i]
+            val fieldShare = if (f >= 0) ice[i] / field.size[f].toFloat() else 0f
+            if (share >= cfg.minCatchment && fieldShare >= cfg.trunkCatchment &&
+                runOut[i] <= cfg.runOut && channelled[i]
+            ) {
                 candidate[i] = true
             }
             // Propagated for every cell that the ice has reached rather than only for the ones
@@ -206,22 +225,43 @@ object GlaciationStage {
         // How long the channelled path through each candidate is, head to snout. A trough is a long
         // landform; twenty cells of upstream ice in a hollow on a plain is not one, and before this
         // test existed every such hollow was carved a full U-valley and dammed at both ends.
+        //
+        // Their *shape* is carried along with them, because a length alone cannot tell a valley
+        // from a ruled line: the head the longest upstream chain starts at, the snout it ends at,
+        // and the ground distance walked between them. A path that runs dead straight at one of the
+        // eight D8 bearings has walked exactly the straight-line distance, and that is the comb of
+        // parallel gullies down a range front — see [GlaciationConfig.minSinuosity].
         val upstream = IntArray(size)
+        val upLength = FloatArray(size)
+        val head = IntArray(size) { -1 }
         for (k in order.indices) {
             val i = order[k]
             if (!candidate[i]) continue
-            if (upstream[i] == 0) upstream[i] = 1
+            if (upstream[i] == 0) {
+                upstream[i] = 1
+                head[i] = i
+            }
             val t = directions[i]
-            if (t >= 0 && candidate[t] && upstream[i] + 1 > upstream[t]) upstream[t] = upstream[i] + 1
+            if (t >= 0 && candidate[t] && upstream[i] + 1 > upstream[t]) {
+                upstream[t] = upstream[i] + 1
+                upLength[t] = upLength[i] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
+                head[t] = head[i]
+            }
         }
         val downstream = IntArray(size)
+        val downLength = FloatArray(size)
+        val snout = IntArray(size) { -1 }
         for (k in order.indices.reversed()) {
             val i = order[k]
             if (!candidate[i]) continue
             downstream[i] = 1
+            downLength[i] = 0f
+            snout[i] = i
             val t = directions[i]
             if (t >= 0 && candidate[t] && downstream[t] + 1 > downstream[i]) {
                 downstream[i] = downstream[t] + 1
+                downLength[i] = downLength[t] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
+                snout[i] = snout[t]
             }
         }
 
@@ -229,6 +269,9 @@ object GlaciationStage {
         for (i in 0 until size) {
             if (!candidate[i]) continue
             if (upstream[i] + downstream[i] - 1 < cfg.minTroughLength) continue
+            if (sinuosity(head[i], snout[i], upLength[i] + downLength[i], w) < cfg.minSinuosity) {
+                continue
+            }
             glacier[i] = true
             glacierCells++
             // Ice thickness, as a proxy: a glacier draining twenty times the ground is not twenty
@@ -240,6 +283,11 @@ object GlaciationStage {
             // stage will not see as a lake, on a glacier that was carved anyway.
             strength[i] = sqrt((ice[i] / frozenLand) / cfg.fullCatchment).coerceIn(MIN_THICKNESS, 1f)
         }
+
+        // No two glaciers of the same bearing within a trough of each other. Ice that close together
+        // is one glacier, and a rank of them is the comb.
+        val suppressed = suppressParallel(cfg, w, h, glacier, directions, ice, strength, order)
+        glacierCells -= suppressed.cells
 
         // How far down the staircase each cell is.
         //
@@ -450,6 +498,8 @@ object GlaciationStage {
                 frozenCells = frozenCount,
                 channelledCells = channelledCells,
                 glacierCells = glacierCells,
+                trunks = suppressed.trunks,
+                parallelCellsDropped = suppressed.cells,
                 sheetCells = sheetCells,
                 scourCells = scourCells,
                 scourBasins = scourBasins,
@@ -467,6 +517,270 @@ object GlaciationStage {
 
     /** What the scour did, for the tally. */
     private class ScourTally(val cells: Int, val basins: Int)
+
+    /** The connected fields of frozen ground, and how many cells each holds. */
+    private class FrozenFields(val id: IntArray, val size: IntArray, val count: Int)
+
+    /** What the parallel rule threw away, for the tally. */
+    private class Suppression(val cells: Int, val trunks: Int, val kept: Int)
+
+    /**
+     * Connected regions of frozen ground, eight-connected, so an ice cap and a cold massif on the
+     * far side of the world are told apart. Eight rather than four, because a snowfield joined only
+     * at a corner is still one snowfield.
+     */
+    private fun frozenFields(w: Int, h: Int, frozen: BooleanArray): FrozenFields {
+        val size = w * h
+        val id = IntArray(size) { -1 }
+        val sizes = ArrayList<Int>()
+        val queue = IntArray(size)
+        for (start in 0 until size) {
+            if (!frozen[start] || id[start] >= 0) continue
+            val label = sizes.size
+            var headIdx = 0
+            var tail = 0
+            queue[tail++] = start
+            id[start] = label
+            var count = 0
+            while (headIdx < tail) {
+                val c = queue[headIdx++]
+                count++
+                val cx = c % w
+                val cy = c / w
+                FlowRouting.forEachNeighbour(w, h, cx, cy) { n ->
+                    if (frozen[n] && id[n] < 0) {
+                        id[n] = label
+                        queue[tail++] = n
+                    }
+                }
+            }
+            sizes.add(count)
+        }
+        return FrozenFields(id, sizes.toIntArray(), sizes.size)
+    }
+
+    /**
+     * How far a path wandered, against the straight line between its ends.
+     *
+     * One means it did not wander at all, which on this grid means it repeated the same D8 step
+     * from beginning to end. That is not a valley.
+     */
+    private fun sinuosity(head: Int, snout: Int, length: Float, w: Int): Float {
+        if (head < 0 || snout < 0 || length <= 0f) return 0f
+        var dx = (snout % w) - (head % w)
+        if (dx > w / 2) dx -= w
+        if (dx < -w / 2) dx += w
+        val dy = (snout / w) - (head / w)
+        val straight = sqrt((dx * dx + dy * dy).toFloat())
+        if (straight < 1e-3f) return Float.MAX_VALUE
+        return length / straight
+    }
+
+    /**
+     * Drops ice that runs beside a stronger glacier at the same bearing.
+     *
+     * The ground is offered to the ice in order of how much of it there is: the cell carrying the
+     * most claims its trough first, and a cell that finds itself already inside a stronger glacier's
+     * trough, pointing the same way, is not a second glacier. It is the same one, or it is a gully
+     * that would have been swallowed.
+     *
+     * Cell by cell, and that is the correction rather than the first instinct. Grouping the ice into
+     * flow-connected chains and suppressing whole chains does nothing at all, because a comb of
+     * gullies down a range front all drain into the same channel at the bottom: the comb and its
+     * trunk are one connected chain, so there is never a second chain to drop. What has to be
+     * compared is the ground each part of the ice occupies.
+     *
+     * Orientation rather than direction: the bearings are compared as doubled angles, so two
+     * troughs on opposite sides of a divide flowing apart down the same lineament count as
+     * parallel, which they are.
+     */
+    private fun suppressParallel(
+        cfg: GlaciationConfig,
+        w: Int,
+        h: Int,
+        glacier: BooleanArray,
+        directions: IntArray,
+        ice: FloatArray,
+        strength: FloatArray,
+        order: IntArray
+    ): Suppression {
+        val size = w * h
+        if (cfg.parallelSpacing <= 0f) return Suppression(0, countTrunks(w, h, glacier, directions), 0)
+
+        // Every bearing read once, before anything is dropped, so that what one cell is compared
+        // against cannot depend on which cells were dropped before it.
+        val orientX = FloatArray(size)
+        val orientY = FloatArray(size)
+        var n = 0
+        for (i in 0 until size) {
+            if (!glacier[i]) continue
+            n++
+            val flow = flowOf(i, directions, glacier, w, h)
+            val ox = unpackX(flow)
+            val oy = unpackY(flow)
+            // Doubled angle: (x, y) -> (x^2 - y^2, 2xy), so a bearing and its reverse agree and a
+            // dot product of 0.707 between two of them is 22.5 degrees between the originals.
+            orientX[i] = ox * ox - oy * oy
+            orientY[i] = 2f * ox * oy
+        }
+        if (n == 0) return Suppression(0, 0, 0)
+
+        // The branches. At every confluence the feeder carrying the most ice continues the branch it
+        // was already on and the others begin their own, which is the ordinary main-stem
+        // decomposition of a river network — so a branch is one gully from its head to the point
+        // where it gives itself up to something larger.
+        //
+        // Branches rather than cells, and that too is a correction rather than a first instinct.
+        // Dropping individual cells cuts holes in the middle of troughs, and a trough with holes in
+        // it is a *chain* of short bars where there was one long lake: measured on seed 718106 at
+        // 1024, suppressing by cell took the count of parallel bars of water from 114 up to 281. A
+        // gully dropped from its head to its confluence leaves nothing behind to fragment.
+        val dominant = IntArray(size) { -1 }
+        for (i in 0 until size) {
+            if (!glacier[i]) continue
+            var best = -1
+            var bestIce = -1f
+            FlowRouting.forEachNeighbour(w, h, i % w, i / w) { nb ->
+                if (glacier[nb] && directions[nb] == i && ice[nb] > bestIce) {
+                    bestIce = ice[nb]
+                    best = nb
+                }
+            }
+            dominant[i] = best
+        }
+        val branch = IntArray(size) { -1 }
+        val branchIce = ArrayList<Float>()
+        val branchStart = ArrayList<Int>()
+        val branchCount = ArrayList<Int>()
+        for (k in order.indices) {
+            val i = order[k]
+            if (!glacier[i]) continue
+            val d = dominant[i]
+            val b = if (d >= 0 && branch[d] >= 0) {
+                branch[d]
+            } else {
+                branchIce.add(0f)
+                branchStart.add(i)
+                branchCount.add(0)
+                branchIce.size - 1
+            }
+            branch[i] = b
+            branchCount[b] = branchCount[b] + 1
+            if (ice[i] > branchIce[b]) branchIce[b] = ice[i]
+        }
+
+        // Cells of each branch, laid out contiguously so no per-branch allocation is needed.
+        val offset = IntArray(branchCount.size + 1)
+        for (b in branchCount.indices) offset[b + 1] = offset[b] + branchCount[b]
+        val fill = IntArray(branchCount.size)
+        val packed = IntArray(n)
+        for (i in 0 until size) {
+            val b = branch[i]
+            if (b < 0) continue
+            packed[offset[b] + fill[b]] = i
+            fill[b] = fill[b] + 1
+        }
+
+        // Strongest first, and the branch's first cell breaks a tie, so nothing here depends on the
+        // order the grid happened to be walked in.
+        val ranked = Array(branchCount.size) { it }
+        ranked.sortWith(compareByDescending<Int> { branchIce[it] }.thenBy { branchStart[it] })
+
+        val claimed = BooleanArray(size)
+        val claimX = FloatArray(size)
+        val claimY = FloatArray(size)
+        var dropped = 0
+        for (b in ranked) {
+            val from = offset[b]
+            val until = offset[b + 1]
+            var conflict = 0
+            for (k in from until until) {
+                val c = packed[k]
+                if (!claimed[c]) continue
+                if (orientX[c] * claimX[c] + orientY[c] * claimY[c] >= PARALLEL_COS) conflict++
+            }
+            if (conflict * 3 > until - from) {
+                for (k in from until until) glacier[packed[k]] = false
+                dropped += until - from
+                continue
+            }
+            for (k in from until until) {
+                val c = packed[k]
+                stampClaim(
+                    w, h, c, valleyHalfWidth(cfg, strength[c]) * cfg.parallelSpacing,
+                    orientX[c], orientY[c], claimed, claimX, claimY
+                )
+            }
+        }
+        return Suppression(dropped, countTrunks(w, h, glacier, directions), 0)
+    }
+
+    /** How many separate glaciers are left, counting a chain and its feeders as one. */
+    private fun countTrunks(w: Int, h: Int, glacier: BooleanArray, directions: IntArray): Int {
+        val size = w * h
+        val seen = BooleanArray(size)
+        val queue = IntArray(size)
+        var trunks = 0
+        for (start in 0 until size) {
+            if (!glacier[start] || seen[start]) continue
+            trunks++
+            var head = 0
+            var tail = 0
+            queue[tail++] = start
+            seen[start] = true
+            while (head < tail) {
+                val c = queue[head++]
+                val t = directions[c]
+                if (t >= 0 && glacier[t] && !seen[t]) {
+                    seen[t] = true
+                    queue[tail++] = t
+                }
+                FlowRouting.forEachNeighbour(w, h, c % w, c / w) { nb ->
+                    if (glacier[nb] && !seen[nb] && directions[nb] == c) {
+                        seen[nb] = true
+                        queue[tail++] = nb
+                    }
+                }
+            }
+        }
+        return trunks
+    }
+
+    /** Marks the ground a glacier occupies, with the orientation it occupies it at. */
+    private fun stampClaim(
+        w: Int,
+        h: Int,
+        centre: Int,
+        radius: Float,
+        orientX: Float,
+        orientY: Float,
+        claimed: BooleanArray,
+        claimX: FloatArray,
+        claimY: FloatArray
+    ) {
+        val cx = centre % w
+        val cy = centre / w
+        val span = radius.toInt() + 1
+        val r2 = radius * radius
+        for (dy in -span..span) {
+            val ny = cy + dy
+            if (ny < 0 || ny >= h) continue
+            for (dx in -span..span) {
+                if ((dx * dx + dy * dy).toFloat() > r2) continue
+                var nx = (cx + dx) % w
+                if (nx < 0) nx += w
+                val c = ny * w + nx
+                // First claim stands, and the strongest trunk claims first.
+                if (claimed[c]) continue
+                claimed[c] = true
+                claimX[c] = orientX
+                claimY[c] = orientY
+            }
+        }
+    }
+
+    /** Twenty-two and a half degrees, as a dot product of doubled-angle orientations. */
+    private const val PARALLEL_COS = 0.7071f
 
     /**
      * The span of the land, so every depth in [GlaciationConfig] can be a fraction of it.

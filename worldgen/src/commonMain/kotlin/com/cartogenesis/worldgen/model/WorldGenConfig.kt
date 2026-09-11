@@ -659,6 +659,40 @@ data class GlaciationConfig(
      */
     val minTroughLength: Int = 14,
     /**
+     * The catchment a trough needs as a share of *its own ice field's* frozen ground.
+     *
+     * [minCatchment] asks whether there is enough ice in the world to make a glacier; this asks
+     * whether this particular path is one of the few that drain the ice field it belongs to. The
+     * difference is the comb. A straight range front carries a rank of parallel gullies, every one
+     * of which clears a world-wide threshold at much the same time, so the stage cut a trough down
+     * every one of them and left five to fifteen short bars of water side by side at exactly 45
+     * degrees — the lattice again, at the scale of a mountain flank. A real range carries a handful
+     * of glaciers, in its trunk valleys. Measured against the connected frozen region rather than
+     * against all frozen ground so that a small cold massif gets its own few glaciers instead of
+     * none, and a continental ice field does not get hundreds.
+     */
+    val trunkCatchment: Float = 0.05f,
+    /**
+     * How much a trough's path must wander before it counts as a valley, as the ratio of its length
+     * to the straight line between its head and its snout.
+     *
+     * A valley is cut by water that had to find its way around things. A D8 path that runs dead
+     * straight at one of eight bearings for its whole length is not a valley the ice found, it is
+     * the grid: on a uniform slope every flow line takes the same step over and over, and a trough
+     * carved along one is a ruled line on the map. One is perfectly straight; this asks for a few
+     * percent of wander, which any path down real ground has and a ruled line does not.
+     */
+    val minSinuosity: Float = 1.25f,
+    /**
+     * How close two troughs of the same bearing may run, as a multiple of the trough's half-width.
+     *
+     * Neighbouring trunk valleys are not parallel straight lines a few cells apart; ice that close
+     * together is one glacier, not two. Where two qualify, the one draining less ice is dropped —
+     * the greater first, so the choice does not depend on the order cells happen to be visited in.
+     * Zero turns the rule off, which is how its own guard is shown to have teeth.
+     */
+    val parallelSpacing: Float = 1f,
+    /**
      * Whether flat frozen ground is scoured by an ice sheet instead of being left alone.
      *
      * The other half of the regime split. Off, low-relief frozen ground is simply not glaciated,
@@ -747,8 +781,16 @@ data class GlaciationConfig(
      * is the same everywhere, which is also what glaciated valleys look like: a steep trough is a
      * short-stepped staircase of small rock basins, a gentle one a long flat reach with a single
      * broad lake in it.
+     *
+     * Doubled when the comb was dealt with. On a steep flank this term ends the reach long before
+     * [basinSpacing] does, so a trough down a mountainside was a staircase of a dozen or more short
+     * basins, and a dozen basins across a trough running at 45 degrees is a dozen straight bars of
+     * water lying parallel — a paternoster chain drawn with a ruler. At twice the descent per step
+     * the same trough carries three or four basins instead, each broad enough to read as a lake:
+     * measured on seed 42 at 1024, the share of standing water in parallel grid-bearing bars fell
+     * from 2.3% to 0.8%, and the count of separate lakes from 37 to 30.
      */
-    val basinDrop: Float = 0.030f,
+    val basinDrop: Float = 0.060f,
     /**
      * The most cells one reach may run before the next basin starts, whatever the descent.
      *

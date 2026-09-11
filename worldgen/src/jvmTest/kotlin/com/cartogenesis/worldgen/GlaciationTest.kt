@@ -165,6 +165,10 @@ class GlaciationTest {
             val work = measureIceWork(bare, iced, config)
             results[label] = work
             println(
+                "FILAMENT seed 718106 $label: ${work.filaments} lakes lying entirely on one D8" +
+                    " line, of ${work.lakeCount} lakes in all"
+            )
+            println(
                 "LATTICE seed 718106 $label: coldFlat=${work.coldFlat}" +
                     " deepCut=${"%.4f".format(work.deepCut)} till=${"%.4f".format(work.till)}" +
                     " meanCut=${"%.5f".format(work.meanCut)}" +
@@ -222,7 +226,10 @@ class GlaciationTest {
         val addedWater: Int,
         val addedAxial: Float,
         /** Standing fresh water as a share of all land: the resolution-invariant figure. */
-        val lakeShareOfLand: Float
+        val lakeShareOfLand: Float,
+        /** Lakes every cell of which lies on a single D8 line, one cell wide. */
+        val filaments: Int,
+        val lakeCount: Int
     )
 
     /**
@@ -265,8 +272,187 @@ class GlaciationTest {
             meanCut = (sum / n).toFloat(),
             addedWater = added.count { it },
             addedAxial = axialRunShare(added, w, h),
-            lakeShareOfLand = lakeCells.toFloat() / iced.sea.landCellCount.coerceAtLeast(1)
+            lakeShareOfLand = lakeCells.toFloat() / iced.sea.landCellCount.coerceAtLeast(1),
+            filaments = countFilaments(iced),
+            lakeCount = iced.rivers.lakes.lakes.size
         )
+    }
+
+    /**
+     * The comb guard: a mountain flank carries a few trunk glaciers, not one glacier per gully.
+     *
+     * The residual the sheet-versus-valley split left behind, and the reason for a second pass. With
+     * flat country handed to the ice sheet, the range fronts still showed the lattice at their own
+     * scale: groups of five to fifteen short bars of water, one cell wide, lying parallel at exactly
+     * 45 degrees down the flank of the central range on seed 718106 and in the cold uplands of seeds
+     * 7 and 42. A straight range front carries a rank of parallel gullies; the old selection asked
+     * only whether a path drained enough frozen ground against the *world's* total, and every gully
+     * in the rank passed at once, so every gully got a trough, a basin staircase and a moraine bar.
+     * Real ranges carry a handful of glaciers, in their trunk valleys, and no two trunk valleys are
+     * parallel straight lines a few cells apart.
+     *
+     * Two figures, both at 1024, which is the resolution the desktop opens at and the one the comb
+     * showed up in:
+     *
+     *  - **filaments**: lake bodies every cell of which lies on one D8 line, one cell wide, four
+     *    cells or longer. A body of water that is a line along a flow path is not a lake in a
+     *    valley.
+     *  - **parallel bars**: the share of lake water lying in a thin bar at a grid bearing that has
+     *    another such bar of the *same* bearing three to ten cells off to the side. That is the comb
+     *    itself: not one straight lake, which a trough may legitimately leave, but a rank of them.
+     *
+     * Measured on the code as it stood after the first pass, and after this one:
+     *
+     * | seed (1024) | filaments | parallel bars | lake cells |
+     * |---|---|---|---|
+     * | 718106 | 1 -> 0 | 4.1% -> 1.7% | 8404 -> 6632 |
+     * | 42 | 6 -> 0 | 7.1% -> 2.3% | 4797 -> 3436 |
+     * | 7 | 1 -> 0 | 3.0% -> 1.6% | 17500 -> 14946 |
+     */
+    @Test
+    fun `mountain flanks carry a few trunk glaciers, not a comb of them`() {
+        listOf(718106L, 42L, 7L).forEach { seed ->
+            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+                .atResolution(1024, 1024)
+            val world = WorldGenerationEngine.generateBlocking(config)
+            val filaments = countFilaments(world)
+            val comb = combShare(world)
+            println(
+                "COMB seed $seed at 1024: filaments=$filaments of ${world.rivers.lakes.lakes.size}" +
+                    " lakes, parallel bars ${"%.3f".format(comb)} of" +
+                    " ${world.rivers.lakes.lakeId.count { it >= 0 }} lake cells"
+            )
+            assertTrue(
+                "seed $seed at 1024 has $filaments lakes that are a straight one-cell line along a" +
+                    " D8 bearing — a trough is a valley the ice found, not a line drawn down a" +
+                    " flow path",
+                filaments == 0
+            )
+            assertTrue(
+                "seed $seed at 1024 has ${"%.1f".format(comb * 100)}% of its standing water in thin" +
+                    " grid-bearing bars that run parallel to another such bar within ten cells:" +
+                    " that is a comb of gullies, not a handful of trunk glaciers",
+                comb < 0.035f
+            )
+        }
+    }
+
+    /**
+     * The share of lake water in a thin bar at a grid bearing that has a parallel twin beside it.
+     *
+     * One straight lake is a trough. Several of them side by side at the same bearing is the grid.
+     */
+    private fun combShare(world: WorldMap): Float {
+        val w = world.width
+        val h = world.height
+        val lake = world.rivers.lakes.lakeId
+        fun at(x: Int, y: Int): Boolean {
+            if (y < 0 || y >= h) return false
+            var nx = x % w
+            if (nx < 0) nx += w
+            return lake[y * w + nx] >= 0
+        }
+        val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
+        val barAxis = IntArray(w * h) { -1 }
+        var lakeCells = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (!at(x, y)) continue
+                lakeCells++
+                for ((k, a) in axes.withIndex()) {
+                    var run = 1
+                    var s = 1
+                    while (run < 64 && at(x + a[0] * s, y + a[1] * s)) { run++; s++ }
+                    s = 1
+                    while (run < 64 && at(x - a[0] * s, y - a[1] * s)) { run++; s++ }
+                    if (run < 4) continue
+                    var thick = 1
+                    s = 1
+                    while (thick <= 2 && at(x - a[1] * s, y + a[0] * s)) { thick++; s++ }
+                    s = 1
+                    while (thick <= 2 && at(x + a[1] * s, y - a[0] * s)) { thick++; s++ }
+                    if (thick <= 2) { barAxis[y * w + x] = k; break }
+                }
+            }
+        }
+        var paired = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val k = barAxis[y * w + x]
+                if (k < 0) continue
+                val a = axes[k]
+                var found = false
+                for (sign in intArrayOf(1, -1)) {
+                    for (d in 3..10) {
+                        val ny = y + a[0] * d * sign
+                        if (ny < 0 || ny >= h) continue
+                        var nx = (x - a[1] * d * sign) % w
+                        if (nx < 0) nx += w
+                        if (barAxis[ny * w + nx] == k) { found = true; break }
+                    }
+                    if (found) break
+                }
+                if (found) paired++
+            }
+        }
+        return if (lakeCells == 0) 0f else paired.toFloat() / lakeCells
+    }
+
+    /**
+     * Lakes that are filaments: every cell of the body on one D8 line, one cell wide, four cells or
+     * more long.
+     *
+     * This is the residual the sheet-versus-valley split on its own did not reach. A range front
+     * carries a comb of parallel gullies, and the valley machinery run down every one of them
+     * leaves a group of short one-cell bars of water, all at exactly the same grid bearing — the
+     * lattice again, at the scale of a mountain flank instead of a continent. A real range has a
+     * handful of glaciers, in its trunk valleys, and no two trunk valleys are parallel straight
+     * lines. A body of water that is one cell wide for its whole length is not a lake in a valley;
+     * it is a line drawn along a flow path.
+     */
+    private fun countFilaments(world: WorldMap): Int {
+        val w = world.width
+        val h = world.height
+        val lake = world.rivers.lakes.lakeId
+        val n = world.rivers.lakes.lakes.size
+        if (n == 0) return 0
+        val count = IntArray(n)
+        val anchorX = IntArray(n) { Int.MIN_VALUE }
+        // Four collinearity invariants, one per grid bearing: same row, same column, same
+        // difference and same sum. A body is a filament when all its cells agree on any one of
+        // them, which for a one-cell-wide run is exactly what "on a single D8 line" means.
+        val sameRow = BooleanArray(n) { true }
+        val sameCol = BooleanArray(n) { true }
+        val sameDiff = BooleanArray(n) { true }
+        val sameSum = BooleanArray(n) { true }
+        val firstY = IntArray(n)
+        val firstX = IntArray(n)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val id = lake[y * w + x]
+                if (id < 0) continue
+                if (anchorX[id] == Int.MIN_VALUE) {
+                    anchorX[id] = x
+                    firstX[id] = x
+                    firstY[id] = y
+                }
+                var dx = x - anchorX[id]
+                if (dx > w / 2) dx -= w
+                if (dx < -w / 2) dx += w
+                val ux = anchorX[id] + dx
+                count[id]++
+                if (y != firstY[id]) sameRow[id] = false
+                if (ux != firstX[id]) sameCol[id] = false
+                if (ux - y != firstX[id] - firstY[id]) sameDiff[id] = false
+                if (ux + y != firstX[id] + firstY[id]) sameSum[id] = false
+            }
+        }
+        var filaments = 0
+        for (id in 0 until n) {
+            if (count[id] < 4) continue
+            if (sameRow[id] || sameCol[id] || sameDiff[id] || sameSum[id]) filaments++
+        }
+        return filaments
     }
 
     /** Land whose elevation range within [radius] cells is under [limit] of the land's range. */
@@ -363,6 +549,7 @@ class GlaciationTest {
             println(
                 "GLACIATION budget frozen=${mass.frozenCells}" +
                     " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
+                    " trunks=${mass.trunks} parallelDropped=${mass.parallelCellsDropped}" +
                     " sheet=${mass.sheetCells} scour=${mass.scourCells}/${mass.scourBasins}" +
                     " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
                     " excavated=${"%.2f".format(mass.excavated)}" +

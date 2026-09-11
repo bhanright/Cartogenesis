@@ -189,6 +189,14 @@
 
 ## Open
 
+- **Over-large filled basins.** At 2048 the largest lake on a typical world is a tectonic basin
+  filled by the river stage to its spill point, at 0.12% of the map - bigger than the Caspian's share
+  of Earth. Glacial lakes are budgeted since 1.1.2; these are not. The principled fix is outlet
+  incision: a basin's spill point erodes down over the hydraulic rounds and the lake drains to a
+  smaller one or a river. Raised 2026-09-11.
+- **Hotspot cones on land are eight-sided.** At low ocean coverage an oceanic plate's hotspot chain
+  surfaces as volcanoes, and the chamfer distance transform gives each a faceted cone. Seen on seed
+  718106 at 62% ocean, 2048. Same root as the plateau-edge faceting above.
 - **The resolution-consistency guard no longer has a statistical form.** It began as mean slope
   away from plate boundaries; erosion invalidated that, and reintroducing the bug it was written
   for showed it no longer caught it. Measuring belt reach directly does not work either, because a

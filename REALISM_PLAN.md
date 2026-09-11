@@ -519,6 +519,14 @@ old code); resolution contract to 2048 on the ice's own share (0.20/0.42/0.26% a
 lake-density guard 3.0 -> 2.5 (measures 2.87) because the stage puts less water down;
 DepositionTest pin re-recorded, land 6226 unchanged.
 
+Released as v1.1.2 on 48b3850 (CI green): portable zip 96 MB, MSI 96 MB, web zip 4.4 MB;
+packaged exe passes --gpu-check; web build deployed (site 0600b86, loader stamp 202609111702,
+app wasm a0d98d4e). Orchestrator's own 2048 render of William's world after the third pass: no
+bars anywhere, three rounded lakes at the range foot where the comb was, irregular shield lakes.
+Open, raised with William and not started: outlet incision so that a filled tectonic basin larger
+than the Caspian drains down (the largest lakes at 2048 are not glacial); and the hotspot cones,
+which surface on land at 62% ocean and show the chamfer faceting as eight-sided volcanoes.
+
 Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
 a seed chosen to have the terrain the chunk acts on.
 

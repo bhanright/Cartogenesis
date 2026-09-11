@@ -377,6 +377,69 @@ documented in `README.md` under Deploying and in the site repo's `CLAUDE.md`.
 
 ---
 
+## Track E — lakes sized by physics, not by basins
+
+*Added 2026-09-11 evening after 1.1.2. The river stage fills every closed depression to its spill
+level in every climate, and the hydraulic pass routes on that filled surface so it never touches
+the lip. At 2048 the largest lake on a typical world is a filled tectonic basin at 0.12% of the
+map, bigger than the Caspian's share of Earth. Real basins are drained by outlet incision in wet
+country and held far below the rim by evaporation in dry country.*
+
+### E1. Outlet incision — Opus
+
+*Dependencies: B3. Files: `HydraulicErosion.kt`, `ErosionStage.kt`, `FlowRouting.kt` if a basin
+walk is needed, `ErosionConfig`, tests.*
+
+- Each hydraulic round already fills depressions to route. For each filled basin, find its spill
+  cell (the rim cell through which the filled surface exits). Treat it as a knickpoint: lower the
+  spill cell and the channel below it by an amount set by the stream power of the outflow (the
+  discharge through the outlet is the basin's whole catchment; slope is the downstream channel's),
+  never below the basin's true floor at that point, so the notch deepens toward grade and the next
+  round's fill is shallower. Material removed goes into B3's sediment load, so the mass budget
+  stays exact.
+- Glacial basins are untouched by construction: glaciation runs after erosion, inside the sea-level
+  step. Only tectonic basins drain.
+- Guard: on seed 718106 at 512 with `seaLevel = 0.62`, and on seeds 7/42/1234, the largest filled
+  basin's fill depth at its spill falls monotonically across rounds and the largest lake's area
+  falls by at least half against `outletIncision = false`; shown failing with it off. Lakes must
+  still exist (count > 0) and `RiverEndingsTest`/`DepositionTest` must hold (the budget to 0.0000%).
+- Render and look: seed 718106 at 1024 and 2048 with the author's settings (ocean 62%, 14 plates,
+  12 realms), through `MapRasterizer`: the big basins should become river valleys or small lakes
+  with a river leaving through a notch; nothing else should move.
+
+### E2. Lake water balance — Opus
+
+*Dependencies: A4 (rainfall in mm). Files: `RiverStage.kt` lake step, `LakesConfig`, tests.*
+
+- After depression filling gives each basin its spill level, set the lake surface where inflow
+  equals evaporation times lake area, capped at the spill. Inflow is the catchment's runoff from
+  `precipitationMm` (a runoff fraction of rainfall, not all of it). Evaporation is a potential rate
+  in mm per year from the seasonal temperature fields (a simple published curve; state which and
+  calibrate so hot deserts sit near 2000 mm and cool temperate near 500). Area at a level is the
+  basin's hypsometry; solve by bisection over the basin's cells.
+- A lake below its spill is endorheic: no outlet river, rivers end in it, and if the balance level
+  is under `minDepth` there is no lake at all, only a playa (record the playa cells so a later
+  chunk can draw salt flats). A lake at its spill overflows as today.
+- Guard: find a seed with a large basin in dry country (search seeds; report which) and one in wet
+  country: the dry basin's lake area at balance is under 30% of its spill-level area, the wet one
+  sits at spill; shown failing with `waterBalance = false`. Rivers still reach water or the sea.
+- Render and look: the dry-basin seed and seed 718106 at 1024; deserts should show small lakes or
+  none inside large basins, wet country unchanged.
+
+### E3. Round hotspot cones — Sonnet
+
+*Dependencies: B2. Files: `PlateStage.stampHotspotChains`, tests.*
+
+- The cone profile measures distance from the vent with the chamfer transform, which knows eight
+  directions, so every volcano is an eight-sided pyramid; visible at 2048 on seed 718106 at 62%
+  ocean where the chain surfaces on land. Stamp the cone with true Euclidean distance (the stamp is
+  a few cells across; cost is nothing) and modulate the rim with seeded noise so no two cones are
+  the same. Guard: the radius of the cone's half-height contour measured at sixteen bearings has a
+  coefficient of variation under 0.05 for the eight-fold component; shown failing on the current
+  code. Render the chain at 2048.
+
+---
+
 ## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
 
 Looked at, not measured: seeds 7, 42, 1234 — fantasy, biome, summer and winter rainfall, winter
@@ -553,6 +616,9 @@ guard reported, so the next chunk knows its baseline.
 | B3 Deposition | Opus | done | 2026-09-11 | 91d5048 (merge 83bacfa) | sediment routed in topological drainage order (the height-key sort lost load handed to already-walked cells - 3% short at round three); capacity = transportCapacity*sqrt(area)*slope, depositionRate=0.06; deltas breadth-first from mouths draining >= deltaMinCatchment, lake fans stop 2x pond depth short of the surface; spoil laid once before the final relaxation (feeding it back made GPU-vs-CPU worst cell swing 0.006-0.034 and a seed-42 people 29%->49%); mass balance 0.0000% by tallies and by summed heights; 68 mouths gain land within 4 cells vs 0 control; GpuErosionTest worst cell 0.007131 unchanged; render review: fans one to three cells wide at mouths, coasts bulge slightly into bays - believable. Moved coastlines left MeridionalWindTest pins stale (A4 replaces them with an in-test reference march) and seed 7's largest people at 46%. Fix-up 18db41a (merge f608ad9): chooseHearths scored candidates globally, so seed 7's main landmass (83-86% of habitable land) drew 3 of 7 hearths while one went to a landmass under 0.1%; hearths now allocated per landmass by largest remainder as BasinRealms.chooseSeeds does; new CultureHearthLandmassTest shown failing pre-fix (entitled to 6 of 8, got 5); seed 7 41%->34%, 42 38%->38%, 1234 31%->30%; realms-per-people 1.63-2.13, frontier-inside-country 68-84%; render: peoples follow landmasses |
 | B4 Glaciation | Opus | done | 2026-09-11 | d3c6191 (merge 1ed02d2) | GlaciationStage inside the SEA_LEVEL step after the shelf remap, returning a SeaLevelResult (no new section or field); mask = provisional annual mean <= 0C from ClimateStage.buildTemperature (made internal - the only climate change); U cross-section across the flow, staircase reaches measured in descent, recessional moraine per reach, cirque per head, terminal moraine per land snout, sea-floor trough per marine snout, bounded to mask + 8 cells; never touches isLand (land 6226 unchanged); guard seed 42: 12.36 lakes per 10k cold cells vs 0.99 temperate = 12.47x, 0.00x with glaciation=false (shown failing); off reproduces the base fingerprint exactly; lakes 5/4/1 -> 73/56/20; cultures largest 29/30/32%, ice 17/41/25%; desert-in-band and deposition budget unchanged; shelf land-invariance case and ValleyIncisionTest's control now run with glaciation off because they measured it; DepositionTest pin re-recorded; unverified: fjord bathymetry exists (109 units of sea floor) but the coastline cannot indent because isLand is fixed first - recorded in GEOGRAPHY.md as a deviation replacing 'No glaciation' |
 | C1 Docs and release | Sonnet | done | 2026-09-11 | ccba6d7 (merge 6b6d8c6) | README pipeline, saving, peoples, views and CI sections rewritten against the code; TODO.md gained three done entries and five open items from the render reviews; GEOGRAPHY.md and the atlas copy needed nothing; cartogenesisVersion 1.1.0; checkout and setup-java to v5; tag v1.1.0 on 6b6d8c6 (CI green), release with portable zip 96 MB, MSI 96 MB, web zip 4.4 MB; packaged exe passes --gpu-check; web build deployed to cartogenesis.bfunk.online (site aa04a5d, loader stamp 202609110610, new wasm served as application/wasm); site CLAUDE.md updated |
+| E1 Outlet incision | Opus | not started | | | |
+| E2 Lake water balance | Opus | not started | | | |
+| E3 Round hotspot cones | Sonnet | not started | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

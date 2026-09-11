@@ -30,6 +30,12 @@ boundaries — convergent belts, subduction trenches, divergent ridges — rathe
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole
 run is what makes plate edges read as drawn on.
 
+**A collision builds what its crusts allow.** Convergence is classified by the pair of crusts as
+well as by the relative motion, so an ocean going under a continent builds a narrow coastal range
+with a volcanic arc behind it and a trench in front, two continents meeting build a broad
+flat-topped plateau ringed by mountains, and two oceans meeting build a chain of volcanic islands.
+See "Three kinds of collision" below.
+
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
 bands follow Earth: trades easterly below 30°, westerlies 30–60°, polar easterlies above — and those
@@ -57,8 +63,6 @@ the ground draining into it, so deposition cannot invent an uphill river.
 **Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
-
-**Convergent boundaries do not distinguish crust pairs.** All convergent boundaries use one profile regardless of whether the collision is oceanic–continental (Andes), continental–continental (Tibet), or oceanic–oceanic (arcs). Addressed in [B2 Crust-pair boundary types](REALISM_PLAN.md#b2-crust-pair-boundary-types--opus).
 
 **No glaciation.** Ice sheets and alpine glaciers are not carved where mean annual temperature falls below freezing. No U-shaped valleys, cirques, or fjords carved by ice exist. Addressed in [B4 Glaciation](REALISM_PLAN.md#b4-glaciation--opus).
 
@@ -295,6 +299,46 @@ water in front, and the coastline shreds into drowned valleys.
 
 Verified by `ValleyIncisionTest`, which measures how far the banks stand above the channel across
 every drawn river: twice as high as without water.
+
+## Three kinds of collision
+
+Convergence says two plates are closing; it does not say what the closing builds. Oceanic crust is
+dense and goes under, continental crust is buoyant and will not, so which crusts meet decides the
+landform — and for a long time this generator raised the same belt for all three cases, which is
+why every range on its maps was the same range.
+
+- **Ocean under continent is the Andes.** A trench offshore on the subducting plate, a narrow range
+  along the coast of the overriding one, and a line of volcanoes a fixed distance inland of it,
+  because a slab melts once it is deep enough rather than where it goes under. That offset is the
+  reason the profile had to become a signed one: nothing built out of distance-to-the-boundary
+  alone can put a crest anywhere but on the boundary.
+- **Continent against continent is Tibet.** Nothing subducts, so the crust thickens over a wide
+  area instead of piling onto a line: a plateau three times the width of the coastal range and
+  lower than its peaks, flat across most of its span, with rim ranges around the edge. The
+  along-strike sag that turns a long belt into a chain of massifs is damped to a seventh here,
+  because a plateau that breaks into massifs is a chain again — uniform height over a very wide
+  area is the striking thing about Tibet and the thing worth reproducing.
+- **Ocean under ocean is an island arc.** The same trench, and behind it a narrow volcanic ridge on
+  the overriding plate — chosen as the lower plate id, since between two plates of the same kind
+  the choice is arbitrary and has to be made by something that cannot vary between cells. It is
+  built on oceanic crust, so most of it stays under water and only the swells of `rangeVariation`
+  break the surface, which is what makes an arc a chain of islands rather than a ridge of land.
+- **Divergence under continental crust is a rift valley.** A trough on the axis between two
+  rebounding shoulders, rather than the simple groove it was; under oceanic crust it stays a
+  spreading ridge.
+- **A few oceanic plates carry a hotspot**, a point that stays put while the plate drifts over it,
+  leaving a line of seamounts along the drift vector that subside with age. It is the only thing
+  in the pipeline that puts islands somewhere other than a plate boundary. Measured on seeds 7, 42
+  and 1234: 0.10–0.21% of the map raised, of which roughly three fifths is clear of every belt.
+
+Verified by `BoundaryPairTest`, which measures each class's mean radial profile away from its
+boundary, takes the height as the peak above the plate interior and the width as the full width at
+half that height, and asserts the plateau is at least twice as broad for its height as the coastal
+range. Pooled over six seeds that carry all three convergent pairs it measures 3.3x, and the same
+measurement with `crustPairProfiles` off — one belt profile for every convergent boundary, as
+before — returns 0.6x, the margin then being the broader of the two because the old code gave an
+oceanic-continental boundary four fifths of the height at the same width. Per seed the plateau is
+68–72 cells across at half height against the margin's 10–16.
 
 ## Not modelled, and probably shouldn't be
 

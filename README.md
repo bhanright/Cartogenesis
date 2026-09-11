@@ -52,11 +52,13 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 5. **Sea level** — everything below a chosen elevation percentile floods. The sea floor near a
    coast is then remapped onto a shallow continental shelf that falls away to the abyss beyond it,
    so a coastline reads as bathymetry rather than a cliff underwater. In the same step, wherever
-   the provisional annual temperature sits below freezing, ice takes the valleys the rivers already
-   cut: it widens and flattens them into a U-shaped trough, bites a cirque out of every head, and
-   dams a staircase of over-deepened basins behind moraines — which is where cold-country lake
-   country comes from. Nothing here moves the coastline; it only reshapes what is already land or
-   already sea.
+   the provisional annual temperature sits below freezing, ice takes over, in one of two ways
+   decided by local relief. In channelled ground valley glaciers take the valleys the rivers already
+   cut: they widen and flatten them into U-shaped troughs, bite a cirque out of every head, and dam
+   a staircase of over-deepened basins behind moraines. On flat ground an ice sheet scours instead,
+   planing the surface down and leaving irregular closed basins that owe nothing to the drainage
+   grid — which is where shield lake country comes from. Nothing here moves the coastline; it only
+   reshapes what is already land or already sea.
 6. **Ocean currents** — wind dragging on the sea has a curl, and the stream function satisfying
    that curl inside a closed basin *is* a gyre, so the currents are solved for rather than drawn.
    Water advects its temperature along them, giving warm poleward flow on western ocean margins

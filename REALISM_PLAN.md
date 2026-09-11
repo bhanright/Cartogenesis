@@ -458,6 +458,31 @@ Canadian Shield, a belt of lakes threaded by rivers that still reach the sea. No
 freezing line changed, and the fantasy views at map scale are the same worlds with more water in
 the cold country. Fjord bathymetry is there in the data and faint in the picture, as B4 said.
 
+### Regression after release: the lake lattice (2026-09-11, evening)
+
+William opened seed 718106 at 2048 in the desktop app and found the cold north covered in a
+cross-hatched mesh of straight lakes at 0, 45 and 90 degrees. Reproduced at 1024 through
+`MapRasterizer` with the app's own config: 57 lakes at 512 became 518 at 1024 and 4.5% of the
+land. Cause: B4 called every D8 path draining `minCatchment` of *all land* a glacier and cut each
+one a trough, a basin staircase and a moraine bar; on a flat plain those paths are straight,
+parallel and 45 degrees apart, and the threshold as a share of all land admits four times the paths
+per unit area when the grid doubles while `atResolution` keeps each trough one cell wide. The B4
+review at 512 on seeds 7 and 42 (no flat cold plain) could not see it.
+
+Fix (3df9c5e, merge de6e7fe): two regimes on local relief. Channelled ground keeps the valley
+machinery, gated by catchment as a share of *frozen* ground and a minimum trough length; flat
+ground gets ice-sheet scour that never reads the flow field (noise-modulated lowering, basins
+thresholded from a seeded fBm with a wavelength in map fractions, pulled toward existing hollows,
+closed by construction). Guard on seed 718106 at 1024: flat cold country cut to trough depth
+36.8% -> 2.9%, till on flat ground 3.05% -> 0.00%, shown failing on the old code; resolution
+contract: lake share of land 512->1024 grew 2.8x, now 1.3x. Lake-density ratio 12.47 -> 8.14
+(guard >= 3). `sheetLowering` 0.012 was set where the culture guard allowed (0.004 put a people at
+53%): a knob chosen against a downstream guard, recorded here as such. 2048 could not be generated
+in a test worker (OOM); the author's own 2048 view is the check for that size.
+
+Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
+a seed chosen to have the terrain the chunk acts on.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

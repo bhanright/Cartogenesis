@@ -594,15 +594,125 @@ data class GlaciationConfig(
      */
     val freezingC: Float = 0f,
     /**
-     * Smallest frozen catchment that carries a glacier, as a share of all land.
+     * Smallest frozen catchment that carries a valley glacier, as a share of *the frozen ground*.
      *
      * The equivalent of [ErosionConfig.deltaMinCatchment], and there for the same reason: without
      * it every frozen cell is its own little glacier and the whole ice cap is stippled with troughs
      * instead of drained by a few of them.
+     *
+     * Measured against the frozen cells rather than against all land, which is the correction the
+     * lattice forced. A share of all land makes the same trough appear or not depending on how much
+     * *warm* ground the world happens to have: on a world that is a tenth frozen the threshold asks
+     * for ten times the snowfield it asks for on a world that is frozen through. What feeds a
+     * glacier is the snow that falls on frozen ground above it, so that is the denominator. It is
+     * also the half of the resolution bug: a share of *all land* is a share of a number that
+     * quadruples with the grid, so at 1024 the same setting admitted four times as many parallel
+     * flow paths per unit of map as at 512 while `atResolution` kept each trough the same fraction
+     * of the map wide — which is why the mesh appeared at the desktop's default resolution and not
+     * in the 512 crops this stage was reviewed on. At the default it asks for a quarter of a
+     * percent of the world's frozen ground before any ice is called a glacier at all: some eighty
+     * cells of snowfield on seed 718106 at 512, and the same fraction of the world at any grid.
      */
-    val minCatchment: Float = 0.00012f,
-    /** Frozen catchment at which a glacier is at full width and cuts its full depth. */
-    val fullCatchment: Float = 0.02f,
+    val minCatchment: Float = 0.0025f,
+    /** Frozen catchment, in the same share-of-frozen-ground units, at which a glacier is at full
+     * width and cuts its full depth. */
+    val fullCatchment: Float = 0.06f,
+    /**
+     * How much local relief the ground must have before valley-glacier machinery runs on it, as a
+     * fraction of the land's elevation range.
+     *
+     * The whole distinction between the two regimes, and the reason this stage was rewritten. A
+     * valley glacier is ice *confined by a valley*: it is thick, it is channelled, and it planes a
+     * U across the section it is squeezed into. Ground with no valley in it has no such ice on it —
+     * it is under a sheet, which is not steered by the drainage network at all. The first version
+     * of this stage did not make the distinction, so on a flat cold plain it ran the trough, the
+     * staircase and the recessional moraine along every D8 path; the paths on a plain are straight
+     * and parallel and meet at 45 degrees, and the result was a wire mesh of straight lakes at 0,
+     * 45 and 90 degrees over the whole lowland. Relief is measured as the elevation range within
+     * [reliefWindow] valley-widths of the cell, so it asks the only question that matters: is there
+     * a valley here for the ice to be channelled by?
+     *
+     * The value is a reading off the terrain rather than a guess. Sampled over land on seeds 42, 7
+     * and 718106 at 512, the elevation range inside that window has a median of 0.23 to 0.41 of the
+     * land's own range — this generator's ground is rugged at cell scale almost everywhere — so a
+     * threshold near a tenth, which is what it looked like it ought to be, left 92% of the frozen
+     * ground "channelled" and the mesh untouched. At 0.35 the channelled share is a fifth of the
+     * frozen ground on seed 42 and two fifths on 718106, which is the mountainous part of each.
+     */
+    val valleyRelief: Float = 0.35f,
+    /**
+     * The radius over which [valleyRelief] is measured, in multiples of [valleyWidth].
+     *
+     * About twice the trough the ice would cut: wide enough to take in both walls of the valley
+     * and the interfluves beyond, narrow enough that a continental slope hundreds of cells across
+     * does not read as a valley.
+     */
+    val reliefWindow: Float = 2f,
+    /**
+     * The shortest channelled flow path that may become a trough, in cells.
+     *
+     * A catchment threshold alone cannot tell a glacier from a gully: twenty cells of upstream
+     * frozen ground is twenty cells whether they lie in a mountain valley or in a hollow on a
+     * plain. A trough is a *long* landform, so this asks for a run of channelled ground — measured
+     * from the furthest head above the cell to the furthest snout below it — before any of it is
+     * carved.
+     */
+    val minTroughLength: Int = 14,
+    /**
+     * Whether flat frozen ground is scoured by an ice sheet instead of being left alone.
+     *
+     * The other half of the regime split. Off, low-relief frozen ground is simply not glaciated,
+     * which is the honest control for the scour's own guard.
+     */
+    val sheetScour: Boolean = true,
+    /**
+     * How far sheet ice planes the ground down away from its basins, as a fraction of the range.
+     *
+     * Modulated by noise rather than by the flow network, because that is what sheet scour does: it
+     * strips a whole province to bedrock and leaves it hummocky, not grooved.
+     *
+     * Not small, and the reason is a measurement rather than a preference. The stage this replaced
+     * cut a third of every cold lowland to trough depth, and that removal was doing real work in the
+     * world downstream: it lowered the frozen interiors, which warmed them, which kept the ice caps
+     * from closing over and walling the habitable ground into one region. At a token 0.004 the cold
+     * interiors stayed high and icy and seed 42's largest people held 53% of the habitable world
+     * against `CultureRealmTest`'s 45% ceiling — the same failure mode
+     * [TectonicsConfig.plateauFlatShare] records. At 0.012 the mean rock removed from flat cold
+     * country is 0.0072 against the old stage's 0.0118, the largest people holds 35%, and the ice
+     * shares are 18/42/26% on seeds 42, 7 and 1234 against 17/41/25% before. The point of the
+     * regime split was never that the ice should do less; it was that it should not do it in
+     * channels.
+     */
+    val sheetLowering: Float = 0.012f,
+    /** How deep a scour basin is cut below its own rim, as a fraction of the elevation range. */
+    val sheetBasinDepth: Float = 0.026f,
+    /**
+     * What share of the scoured ground is put into basins.
+     *
+     * Resolved as a quantile of the basin score rather than as a fixed cut through the noise, so
+     * the lake country is equally lake-ridden on every seed instead of depending on where a
+     * particular noise field happens to sit. Not all of it becomes a basin: a blob under
+     * [sheetBasinMinCells] is left alone, which takes about a third of it on the seeds measured.
+     * Finland is a tenth water; this asks for a little more before that loss.
+     */
+    val sheetBasinCover: Float = 0.13f,
+    /**
+     * The size of the basins, as the number of noise periods across the map.
+     *
+     * A fraction of the world rather than a count of cells, so the same world gains detail rather
+     * than changing character when it is generated at export resolution.
+     */
+    val sheetBasinScale: Float = 26f,
+    /**
+     * How much a cell's own hollowness counts toward being chosen as a basin, against the noise.
+     *
+     * Zero would put the lakes wherever the noise fell; this pulls them into the hollows the
+     * terrain already has, which is what makes them look like they belong to the ground rather
+     * than like a pattern laid over it. It is still the noise that decides their shape.
+     */
+    val sheetConcavity: Float = 0.8f,
+    /** The smallest scour basin that is cut at all, in cells; below this it is not a lake. */
+    val sheetBasinMinCells: Int = 14,
     /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
     val valleyWidth: Float = 6.5f,
     /**
@@ -952,7 +1062,14 @@ data class WorldGenConfig(
                 basinSpacing = glaciation.basinSpacing * scale,
                 cirqueRadius = glaciation.cirqueRadius * scale,
                 runOut = (glaciation.runOut * scale).toInt().coerceAtLeast(1),
-                fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1)
+                fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1),
+                // A trough is a length on the ground, so it is more cells on a finer grid; a basin
+                // is an area, so it is the square of the scale. `reliefWindow` is a multiple of
+                // `valleyWidth` and `sheetBasinScale` a count of periods across the whole map, so
+                // both already scale and neither is touched.
+                minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2),
+                sheetBasinMinCells =
+                    (glaciation.sheetBasinMinCells * scale * scale).toInt().coerceAtLeast(4)
             ),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)

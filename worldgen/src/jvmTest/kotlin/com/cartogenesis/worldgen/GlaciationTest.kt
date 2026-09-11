@@ -86,12 +86,284 @@ class GlaciationTest {
         )
     }
 
+    /**
+     * The lattice guard: on flat frozen country, the ice must not behave like a valley glacier.
+     *
+     * What the author saw on seed 718106 was a cross-hatched mesh of straight one- and two-cell
+     * lines of water at 0, 45 and 90 degrees over the whole cold lowland — the eight directions of
+     * the D8 flow grid, showing through. The cause was that the stage ran the valley machinery
+     * everywhere the ice was: on a plain, every flow path was given a U-trough, a staircase of
+     * over-deepened basins and a recessional moraine bar at the end of every reach, and the flow
+     * paths on a plain are straight, parallel and meet at 45 degrees.
+     *
+     * So the two things measured here are the two machines that built the mesh, and both are
+     * measured on flat cold ground only, which is where sheet ice belongs:
+     *
+     *  - **the trough**: what share of that ground the ice excavates by a trough's depth. Sheet ice
+     *    planes a province and gouges basins in it; it does not cut a valley down every flow line.
+     *  - **the bar**: what share of it the ice lays till across. A recessional moraine is a dam
+     *    *across a valley*, and a plain has no valleys to dam — every one of those bars on a plain
+     *    was a straight line of the mesh.
+     *
+     * Both are measured from outside the stage, as the difference between the world with the ice
+     * and the same world without it, so the same measurement runs against any version of the code.
+     *
+     * Two worlds, at two sea levels and two grid sizes, because the defect scales with how much
+     * flat cold lowland there is and the sea-level slider is the one control the desktop app gives
+     * the author over that: the world he reported carried far more land than the default. The 1024
+     * case is the desktop's own default resolution, where every length in
+     * [com.cartogenesis.worldgen.model.GlaciationConfig] is doubled by `atResolution` and the mesh
+     * was at its worst.
+     *
+     * Measured, before the regime split and after, on seed 718106:
+     *
+     * | | 512 at sea 0.50 | 1024 at sea 0.70 |
+     * |---|---|---|
+     * | flat cold cells | 9036 | 52317 |
+     * | cut to trough depth | 23.3% -> 3.3% | 36.8% -> 2.9% |
+     * | till laid | 2.91% -> 0.03% | 3.05% -> 0.00% |
+     * | mean cut | 0.0118 -> 0.0072 | 0.0175 -> 0.0071 |
+     *
+     * The mean cut barely falls, and that is the point rather than a disappointment: sheet ice does
+     * remove a great deal of rock from a shield, it just removes it *broadly*. What changes is not
+     * how much comes off but whether it comes off in channels.
+     *
+     * What the shape of the water itself says is reported but *not* asserted, and the reason is
+     * worth recording for whoever measures this next. The obvious statistics — the share of lake
+     * cells lying in runs of six or more along a grid axis at a width of one or two, the bearing
+     * anisotropy of lake-cell pairs, the grid-alignment of the bearings between separate lakes,
+     * lake perimeter over area — all move far less than the eye does, and one of them moves the
+     * wrong way. The run statistic on the water the ice adds to flat cold ground goes 0.271 -> 0.109
+     * at 1024 but 0.111 -> 0.194 at 512, where after the fix there are only a couple of hundred
+     * such cells and a handful of scour basins decide the figure. The reason none of them
+     * discriminates is that the
+     * pre-fix carving was never a set of lines: it was a *blanket*, a quarter to a third of the cold
+     * lowland cut to trough depth, and the mesh the eye saw was the un-cut ridges left standing
+     * between overlapping troughs, with the till bars ponding water along them. So the guard
+     * measures the two machines rather than the pattern they left, and the pattern is checked by
+     * looking at the render, which is what found it in the first place.
+     */
+    @Test
+    fun `flat frozen country is scoured, not grooved along the flow grid`() {
+        // 1024 first, and deliberately: it is the resolution the desktop app opens at, it is where
+        // the author saw the mesh, and it is the case that discriminates. The 512 world at the same
+        // sea level is the one the crops in `DebugMapDump` have always shown — mild enough that the
+        // defect got through review there — and the low sea level is the flat-lowland case.
+        val results = LinkedHashMap<String, IceWork>()
+        listOf(
+            Triple(1024, 0.70f, "1024 at sea 0.70, the desktop default"),
+            Triple(512, 0.70f, "512 at sea 0.70"),
+            Triple(512, 0.50f, "512 at sea 0.50")
+        ).forEach { (size, level, label) ->
+            val config = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+                .copy(seaLevel = level)
+                .atResolution(size, size)
+            val iced = WorldGenerationEngine.generateBlocking(config)
+            val bare = WorldGenerationEngine.generateBlocking(
+                config.copy(glaciation = config.glaciation.copy(enabled = false))
+            )
+            val work = measureIceWork(bare, iced, config)
+            results[label] = work
+            println(
+                "LATTICE seed 718106 $label: coldFlat=${work.coldFlat}" +
+                    " deepCut=${"%.4f".format(work.deepCut)} till=${"%.4f".format(work.till)}" +
+                    " meanCut=${"%.5f".format(work.meanCut)}" +
+                    " lakeShareOfLand=${"%.4f".format(work.lakeShareOfLand)}" +
+                    " addedWater=${work.addedWater} of which in straight grid runs" +
+                    " ${"%.3f".format(work.addedAxial)}"
+            )
+        }
+
+        results.forEach { (label, work) ->
+            assertTrue("no flat cold country to measure on $label", work.coldFlat > 5000)
+            assertTrue(
+                "on $label the ice cut a trough's depth into" +
+                    " ${"%.1f".format(work.deepCut * 100)}% of the flat frozen country" +
+                    " (${work.coldFlat} cells, mean cut ${"%.5f".format(work.meanCut)}): flat" +
+                    " ground is under a sheet, and a sheet does not drive a valley down every" +
+                    " line of the flow grid",
+                work.deepCut < 0.15f
+            )
+            assertTrue(
+                "on $label the ice laid till on ${"%.2f".format(work.till * 100)}% of the flat" +
+                    " frozen country — a recessional moraine is a bar across a valley, and every" +
+                    " one of them on a plain is a straight line of the lattice",
+                work.till < 0.01f
+            )
+        }
+
+        // Resolution invariance, which is half the defect. Every length this stage uses is in cells
+        // and is doubled by `atResolution`, so a threshold expressed per *cell* admits four times as
+        // many parallel flow paths per unit of map at 1024 as at 512 while each trough stays as
+        // narrow a fraction of the map as before — which is exactly why the mesh appeared at the
+        // desktop's own default resolution and not in the 512 crops this stage was reviewed on. The
+        // contract, in the spirit of `ResolutionScalingTest`: the same world at twice the grid is
+        // the same world with more detail in it, so the water covers roughly the same share of the
+        // land. Before the regime split that share went 1.4% -> 3.8% from 512 to 1024, a factor of
+        // 2.8; after it, 1.5% -> 1.9%.
+        val fine = results.getValue("1024 at sea 0.70, the desktop default").lakeShareOfLand
+        val coarse = results.getValue("512 at sea 0.70").lakeShareOfLand
+        assertTrue("no water to compare across resolutions", coarse > 0.002f && fine > 0.002f)
+        val growth = fine / coarse
+        assertTrue(
+            "doubling the grid multiplies the lake share of land by" +
+                " ${"%.2f".format(growth)} (512: ${"%.4f".format(coarse)}," +
+                " 1024: ${"%.4f".format(fine)}) — glacial features are being selected per cell" +
+                " rather than per unit of map, so a finer grid grows more of them",
+            growth < 1.7f
+        )
+    }
+
+    private class IceWork(
+        val coldFlat: Int,
+        val deepCut: Float,
+        val till: Float,
+        val meanCut: Float,
+        val addedWater: Int,
+        val addedAxial: Float,
+        /** Standing fresh water as a share of all land: the resolution-invariant figure. */
+        val lakeShareOfLand: Float
+    )
+
+    /**
+     * What the ice did to the flat cold country, as the difference between two worlds that differ
+     * only by [com.cartogenesis.worldgen.model.GlaciationConfig.enabled].
+     */
+    private fun measureIceWork(bare: WorldMap, iced: WorldMap, config: WorldGenConfig): IceWork {
+        val w = bare.width
+        val h = bare.height
+        // Flat is measured on the untouched world, at the scale of the trough the ice would cut
+        // there — two trough-widths, written out rather than read from
+        // [com.cartogenesis.worldgen.model.GlaciationConfig.reliefWindow], so that the region the
+        // guard looks at cannot be moved by the settings it is guarding.
+        val radius = (2f * config.glaciation.valleyWidth).toInt()
+        val flat = flatGround(bare, radius, FLAT_RELIEF)
+        val before = bare.sea.relativeElevation.data
+        val after = iced.sea.relativeElevation.data
+
+        var coldFlat = 0
+        var deep = 0
+        var laid = 0
+        var sum = 0.0
+        val added = BooleanArray(w * h)
+        for (i in 0 until w * h) {
+            if (!flat[i] || !glaciatedZone(bare.climate.biome[i])) continue
+            coldFlat++
+            val cut = before[i] - after[i]
+            sum += cut.toDouble()
+            if (cut >= TROUGH_DEPTH) deep++
+            if (cut <= -TILL) laid++
+            if (iced.rivers.lakes.lakeId[i] >= 0 && bare.rivers.lakes.lakeId[i] < 0) added[i] = true
+        }
+        val n = coldFlat.coerceAtLeast(1)
+        var lakeCells = 0
+        for (i in 0 until w * h) if (iced.rivers.lakes.lakeId[i] >= 0) lakeCells++
+        return IceWork(
+            coldFlat = coldFlat,
+            deepCut = deep.toFloat() / n,
+            till = laid.toFloat() / n,
+            meanCut = (sum / n).toFloat(),
+            addedWater = added.count { it },
+            addedAxial = axialRunShare(added, w, h),
+            lakeShareOfLand = lakeCells.toFloat() / iced.sea.landCellCount.coerceAtLeast(1)
+        )
+    }
+
+    /** Land whose elevation range within [radius] cells is under [limit] of the land's range. */
+    private fun flatGround(world: WorldMap, radius: Int, limit: Float): BooleanArray {
+        val w = world.width
+        val h = world.height
+        val rel = world.sea.relativeElevation.data
+        val isLand = world.sea.isLand
+        val surface = FloatArray(w * h) { rel[it].coerceAtLeast(0f) }
+        val out = BooleanArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val i = y * w + x
+                if (!isLand[i]) continue
+                var lo = Float.MAX_VALUE
+                var hi = -Float.MAX_VALUE
+                for (dy in -radius..radius) {
+                    val ny = (y + dy).coerceIn(0, h - 1)
+                    for (dx in -radius..radius) {
+                        var nx = (x + dx) % w
+                        if (nx < 0) nx += w
+                        val v = surface[ny * w + nx]
+                        if (v < lo) lo = v
+                        if (v > hi) hi = v
+                    }
+                }
+                out[i] = hi - lo < limit
+            }
+        }
+        return out
+    }
+
+    /**
+     * The share of a water mask lying in a straight run of six or more cells along one of the four
+     * grid directions at a width of one or two — the shape the author described, reported rather
+     * than asserted for the reason given on the guard above.
+     */
+    private fun axialRunShare(water: BooleanArray, w: Int, h: Int): Float {
+        fun at(x: Int, y: Int): Boolean {
+            if (y < 0 || y >= h) return false
+            var nx = x % w
+            if (nx < 0) nx += w
+            return water[y * w + nx]
+        }
+        val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
+        var total = 0
+        var lines = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (!at(x, y)) continue
+                total++
+                for (a in axes) {
+                    var run = 1
+                    var s = 1
+                    while (run < 64 && at(x + a[0] * s, y + a[1] * s)) { run++; s++ }
+                    s = 1
+                    while (run < 64 && at(x - a[0] * s, y - a[1] * s)) { run++; s++ }
+                    if (run < 6) continue
+                    var thick = 1
+                    s = 1
+                    while (thick <= 2 && at(x - a[1] * s, y + a[0] * s)) { thick++; s++ }
+                    s = 1
+                    while (thick <= 2 && at(x + a[1] * s, y - a[0] * s)) { thick++; s++ }
+                    if (thick <= 2) { lines++; break }
+                }
+            }
+        }
+        return if (total == 0) 0f else lines.toFloat() / total
+    }
+
+    private companion object {
+        /**
+         * The elevation range, as a fraction of the land's own, under which ground counts as flat
+         * for this guard.
+         *
+         * Deliberately *tighter* than [com.cartogenesis.worldgen.model.GlaciationConfig.valleyRelief],
+         * so the ground measured is unambiguously flat rather than merely whatever the stage
+         * decided to call a sheet. A guard whose region is defined by the setting it is guarding
+         * moves with that setting and proves nothing.
+         */
+        const val FLAT_RELIEF = 0.25f
+
+        /** A trough's depth: what a full glacier cuts, over-deepening included. */
+        const val TROUGH_DEPTH = 0.02f
+
+        /** Enough till to be a bar rather than float rounding. */
+        const val TILL = 0.001f
+    }
+
     /** The stage's own tally, which is not required to balance but is required to be looked at. */
     private fun reportBudget(config: WorldGenConfig, world: WorldMap) {
         val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
         GlaciationStage.apply(config, sea) { mass ->
             println(
-                "GLACIATION budget frozen=${mass.frozenCells} ice=${mass.glacierCells}" +
+                "GLACIATION budget frozen=${mass.frozenCells}" +
+                    " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
+                    " sheet=${mass.sheetCells} scour=${mass.scourCells}/${mass.scourBasins}" +
                     " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
                     " excavated=${"%.2f".format(mass.excavated)}" +
                     " deposited=${"%.2f".format(mass.deposited)}" +

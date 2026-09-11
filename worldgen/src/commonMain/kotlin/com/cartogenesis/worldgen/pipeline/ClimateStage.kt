@@ -153,7 +153,7 @@ object ClimateStage {
      * `PipelineTest`'s mean-land-rainfall guard, both of which read this field and neither of
      * which A4 is to retune.
      */
-    private const val REFERENCE_MM = 1200f
+    internal const val REFERENCE_MM = 1200f
 
     // The moisture table [classify] reads above the aridity line, documented together because
     // they are one table split across two thermal groups rather than unrelated numbers. See the
@@ -856,9 +856,9 @@ object ClimateStage {
                         } else {
                             temperature.data[i]
                         }
-                        val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
-                        moisture[r] += cfg.evaporationRate * warmth * (1f - moisture[r])
-                        if (lap == 1) precip.data[i] = moisture[r] * cfg.baseRainRate * 4f
+                        val step = marchSeaStep(cfg, moisture[r], seaTemperature)
+                        moisture[r] = step.moisture
+                        if (lap == 1) precip.data[i] = step.rain
                         continue
                     }
 
@@ -872,30 +872,73 @@ object ClimateStage {
                     } else {
                         here
                     }
-                    val rise = (sea.relativeElevation.data[i] - upwindElevation).coerceAtLeast(0f)
-
-                    val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * band
-                    val rain = (moisture[r] * rate).coerceAtMost(moisture[r])
-                    moisture[r] -= rain
-
-                    // Evapotranspiration: the land gives water back, and how readily is the
-                    // thing that decides where deserts sit. Scaled by the belt, because that
-                    // is the mechanism: descending subtropical air suppresses the convection
-                    // that would return moisture to the sky, while rising tropical air
-                    // encourages it. Take the belt out of this term and every latitude
-                    // re-moistens alike, at which point deserts stop preferring the horse
-                    // latitudes at all -- measured, placement falls from 90% to 34%.
-                    val warmth = ((temperature.data[i] + 10f) / 40f).coerceIn(0f, 1.4f)
-                    moisture[r] += cfg.landRecoveryRate * warmth * band * (1f - moisture[r])
-
-                    // Cold air simply holds less water.
-                    val coldCap = ((temperature.data[i] + 25f) / 45f).coerceIn(0.15f, 1f)
-                    moisture[r] = moisture[r].coerceAtMost(coldCap)
-
-                    if (lap == 1) precip.data[i] = rain
+                    val step = marchLandStep(
+                        cfg, moisture[r], sea.relativeElevation.data[i], upwindElevation, band,
+                        temperature.data[i]
+                    )
+                    moisture[r] = step.moisture
+                    if (lap == 1) precip.data[i] = step.rain
                 }
             }
         }
+    }
+
+    /** What the march does to one cell's air mass and the rain it records: see [marchRun]. */
+    internal class MarchStep(val moisture: Float, val rain: Float)
+
+    /**
+     * One cell of open sea: evaporation only. Split out of [marchRun] so `MeridionalWindTest`'s
+     * from-scratch reference implementation of the pre-A3 zonal march can call the identical
+     * physics the production march uses instead of restating it — the two cannot drift apart from
+     * each other by construction, which is the property the checksums this replaces used to give
+     * only until the next chunk that touched anything upstream of the march.
+     */
+    internal fun marchSeaStep(cfg: ClimateConfig, incomingMoisture: Float, seaTemperature: Float): MarchStep {
+        // Warm seas evaporate faster — and which seas are warm is a question about currents, not
+        // latitude. Taking this from the ocean stage is what lets a cold current starve a coast of
+        // rain while another at the same latitude, on the warm side of a gyre, soaks it.
+        val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
+        val moisture = incomingMoisture + cfg.evaporationRate * warmth * (1f - incomingMoisture)
+        return MarchStep(moisture, moisture * cfg.baseRainRate * 4f)
+    }
+
+    /**
+     * One cell of land: orographic lift, rain, evapotranspiration recovery, the cold-air moisture
+     * cap. [upwindElevation] is the elevation the air last saw — the same row for the zonal march,
+     * a blend of two rows once the wind carries a meridional component — so this function does not
+     * need to know which; it is the physics after that question has already been answered. See
+     * [marchSeaStep]'s comment for why this is shared with `MeridionalWindTest` rather than
+     * restated there.
+     */
+    internal fun marchLandStep(
+        cfg: ClimateConfig,
+        incomingMoisture: Float,
+        elevationHere: Float,
+        upwindElevation: Float,
+        band: Float,
+        landTemperature: Float
+    ): MarchStep {
+        // Orographic lift is the climb the air made getting here.
+        val rise = (elevationHere - upwindElevation).coerceAtLeast(0f)
+
+        val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * band
+        val rain = (incomingMoisture * rate).coerceAtMost(incomingMoisture)
+        var moisture = incomingMoisture - rain
+
+        // Evapotranspiration: the land gives water back, and how readily is the thing that
+        // decides where deserts sit. Scaled by the belt, because that is the mechanism:
+        // descending subtropical air suppresses the convection that would return moisture to the
+        // sky, while rising tropical air encourages it. Take the belt out of this term and every
+        // latitude re-moistens alike, at which point deserts stop preferring the horse latitudes
+        // at all -- measured, placement falls from 90% to 34%.
+        val warmth = ((landTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
+        moisture += cfg.landRecoveryRate * warmth * band * (1f - moisture)
+
+        // Cold air simply holds less water.
+        val coldCap = ((landTemperature + 25f) / 45f).coerceIn(0.15f, 1f)
+        moisture = moisture.coerceAtMost(coldCap)
+
+        return MarchStep(moisture, rain)
     }
 
     /**

@@ -26,17 +26,24 @@ import com.cartogenesis.cartography.WorldDocument
 /**
  * Saving and reopening worlds.
  *
- * A file holds the seed, the settings and the user's edits — not the map, which is rebuilt from
- * them. That keeps a whole world at a few kilobytes, and because the format is shared with the
- * Android build, a file written on either opens on the other.
+ * A save carries the world itself, not just the seed and settings it took to generate one, and
+ * the format is shared between every front end - so a file written on one opens on the other.
+ * [supportsFileTransfer] is what makes that literal rather than theoretical: where it is true,
+ * this offers a download of the current world and an upload of one, which is currently the only
+ * way a save crosses between a browser tab (library in IndexedDB, invisible outside the page) and
+ * the desktop (library as ordinary files, which a user can already move by hand and so does not
+ * need the button).
  */
 @Composable
 fun LibraryPane(
     title: String,
     worlds: List<WorldDocument>,
     location: String,
+    supportsFileTransfer: Boolean,
     onTitleChange: (String) -> Unit,
     onSave: () -> Unit,
+    onDownload: () -> Unit,
+    onUpload: () -> Unit,
     onOpen: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -61,6 +68,10 @@ fun LibraryPane(
                     modifier = Modifier.width(420.dp)
                 )
                 Button(onClick = onSave) { Text("Save") }
+                if (supportsFileTransfer) {
+                    TextButton(onClick = onDownload) { Text("Download") }
+                    TextButton(onClick = onUpload) { Text("Upload a file") }
+                }
             }
             Text(
                 "Saving under the same name updates it in place. Files live in $location",
@@ -68,6 +79,15 @@ fun LibraryPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp, bottom = 10.dp)
             )
+            if (supportsFileTransfer) {
+                Text(
+                    "Download saves the current world as a .cgw file you can move to the desktop " +
+                        "build, or keep as a backup outside this browser. Upload opens one back up.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+            }
         }
 
         item {

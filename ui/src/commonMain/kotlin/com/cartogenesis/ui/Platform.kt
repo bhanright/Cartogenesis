@@ -2,8 +2,11 @@ package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
+import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 
 /**
@@ -59,6 +62,32 @@ interface Platform {
 
     /** Shown in the library so someone can find their files. */
     val libraryLocation: String
+
+    /**
+     * Whether the library pane's download/upload buttons appear.
+     *
+     * The desktop's library already lives on disk as ordinary `.cgw` files a user can move by
+     * hand, so it declines this rather than duplicating a file dialog the OS already gives them.
+     * The browser's library lives in IndexedDB, invisible to anything outside the page, so a
+     * download and a file picker are the only way a save moves in or out of it — which is also
+     * the only way a world crosses between the two front ends, since the format is shared.
+     *
+     * A runtime flag rather than an `expect`/`actual` split: the pane is shared code, and what it
+     * draws should depend on what this platform can do, not on which target compiled it.
+     */
+    val supportsFileTransfer: Boolean get() = false
+
+    /**
+     * Hands [world] to the user as a `.cgw` file, exactly as [library] would have written it. A
+     * no-op where [supportsFileTransfer] is false.
+     */
+    suspend fun downloadWorld(document: WorldDocument, world: WorldMap?) {}
+
+    /**
+     * Opens a file picker and decodes whatever the user chose, or returns null if they cancelled,
+     * the file did not parse, or this platform offers no such picker.
+     */
+    suspend fun uploadWorld(): WorldSave? = null
 
     /**
      * The accelerator to offer, or null if this machine cannot provide one — in which case

@@ -292,7 +292,41 @@ data class ClimateConfig(
      * rather than left to `seasonalTilt = 0` so that `SeasonsTest` can state plainly what it is
      * turning off, and so the guard that needs seasons can be shown to fail without them.
      */
-    val seasons: Boolean = true
+    val seasons: Boolean = true,
+    /**
+     * How far the wind slants across the latitude lines, in rows per cell of eastward travel.
+     *
+     * The three-cell circulation is not purely zonal: the trades spiral in toward the thermal
+     * equator, the westerlies carry poleward, and the polar easterlies run back down. Giving the
+     * march that component is what turns a row-by-row scan into a diagonal one, and with the belts
+     * migrating over the year it is the whole of the monsoon — in summer the thermal equator
+     * crosses over a tropical coast, the trades there reverse, and air that spent the winter
+     * blowing out to sea spends the summer coming in off it.
+     *
+     * Zero is exactly the zonal march this generator used before, arithmetic for arithmetic. At
+     * 0.3 the air crosses a row every three or four cells, so it traverses ten degrees of latitude
+     * over a continent's width — about what it takes for a coast to feel a sea it does not face.
+     */
+    val meridionalWind: Float = 0.3f,
+    /**
+     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
+     *
+     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
+     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
+     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
+     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
+     * applied to the seasonal departure from the annual mean is `1 + continentality *
+     * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
+     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReach] — a shoreline cell
+     * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
+     * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
+     * field here instead, on the theory that "exposed to water" and "close to water" were the same
+     * question; they were not at this radius — two box-blur passes read barely 0.3 exposure right
+     * at the edge of a single `coastalReach`, so a coast measured that way was already most of the
+     * way to fully continental. Zero reproduces the world from before this setting existed, bit
+     * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
+     */
+    val continentality: Float = 0.6f
 )
 
 @Serializable
@@ -429,7 +463,103 @@ data class ErosionConfig(
      * resolution. Raising it deepens valleys and sharpens divides; too high and the channels cut
      * to the sea and the land between them is left as unconnected plateaux.
      */
-    val erodibility: Float = 0.055f
+    val erodibility: Float = 0.055f,
+    /**
+     * Whether rivers put material back down as well as taking it away.
+     *
+     * Off, the hydraulic pass is detachment-limited: everything it cuts leaves the model, no delta
+     * builds at a mouth and no floodplain aggrades. That was the behaviour for the whole life of
+     * this project, so this switch is also the control the deposition guard needs — with it off the
+     * world is reproduced bit for bit, which is what makes the guard's "before" honest.
+     */
+    val deposition: Boolean = true,
+    /**
+     * How much sediment a channel can carry, as a coefficient on `sqrt(area) * slope` — the same
+     * stream-power form [erodibility] uses for incision, because carrying capacity and cutting
+     * power come from the same quantity.
+     *
+     * Transport-limited deposition: a cell carrying more than this lays the excess down instead of
+     * cutting. Both terms are held against the map rather than the grid, so the scheme survives a
+     * change of resolution for the same reason incision does.
+     *
+     * Note the ratio to [erodibility] rather than the absolute value. At 20 against 0.055 a cell
+     * can carry some three hundred times what it could cut on its own, so the upper catchment never
+     * reaches capacity and settles nothing, and aggradation only begins once a trunk has gathered
+     * the yield of a large basin. Measured across 4, 20 and 60 the valley-incision figure moved by
+     * less than the sea-level histogram's own quantisation, so this is a middle value rather than a
+     * fitted one.
+     */
+    val transportCapacity: Float = 20f,
+    /**
+     * How much of the shortfall settles per cell, per round — of the surplus over capacity, or of
+     * the room below the cell that feeds this one, whichever is smaller.
+     *
+     * The second of those is nearly always the binding one, so read this as the speed at which an
+     * overloaded channel creeps up toward grade over the twelve rounds. It cannot fill a valley in:
+     * the room above a cell is measured against the finished surface, spoil included, so the margin
+     * closes as the spoil accumulates.
+     *
+     * Measured at 0.008, 0.01, 0.03, 0.04, 0.06 and 0.10 against every downstream guard on seeds 7,
+     * 42 and 1234. The figures wander — 0.01 put 44% of seed 7 under one realm where 0.008 and 0.03
+     * put 36% and 29%, against a bar of 40% — and they wander because the realm and culture stages
+     * are chaotic in the coastline, not because the deposition is. This value has the widest margin
+     * of the six on the tightest of those figures.
+     */
+    val depositionRate: Float = 0.06f,
+    /**
+     * The share of what a river still carries when it reaches the sea that builds a delta, rather
+     * than dispersing offshore and leaving the model.
+     *
+     * Real rivers lose most of their load to the shelf and the deep; what stays is what makes the
+     * Nile's fan or the Mississippi's bird's foot. Raising it pushes deltas further out to sea.
+     *
+     * Low, because sea level is an *area*. A fixed share of the world is under water, so every cell
+     * a delta lifts above the line pushes a cell somewhere else below it — and the cells nearest the
+     * line are the low coastal ground people live on, which is why `CultureRealmTest` is the guard
+     * that feels this setting first. See [deltaFreeboard] for the measurements.
+     */
+    val deltaShare: Float = 0.15f,
+    /** The same, for a river reaching a lake: how much of its load the basin traps at the inflow. */
+    val lakeShare: Float = 0.1f,
+    /**
+     * How much land a watercourse must drain, as a share of all land, before it builds anything at
+     * its mouth. Below it, everything the flow carries disperses into the sea.
+     *
+     * Without this the result is not deltas but a prograded coast: every rill reaching the water
+     * carries enough to lift the cell in front of it over a shoreline that is, by construction,
+     * right there — so the whole coastline creeps out by a few cells and nothing stands out as a
+     * landform. Deltas are made by rivers, and a third of a percent of a continent is a river.
+     */
+    val deltaMinCatchment: Float = 0.003f,
+    /**
+     * How far from a mouth, in cells, sediment may be laid — the radius of a delta or a lacustrine
+     * fan. In cells rather than against the map, and so rescaled by
+     * [WorldGenConfig.atResolution] along with everything else measured that way.
+     */
+    val deltaReach: Int = 6,
+    /**
+     * How high above the shoreline a delta cell is built, as a fraction of the land's elevation
+     * range.
+     *
+     * A delta that stops exactly at the waterline is not visible: the sea-level percentile is taken
+     * again from the whole field afterwards and would drown it. A small freeboard is what lets new
+     * land actually clear the water, which is the entire point of the feature.
+     *
+     * Higher than one would guess, and for a reason that is easy to get backwards. A given budget
+     * of sediment either makes a small delta standing a little proud of the water or a wide one
+     * lying flat on it, and the wide one converts *more* sea into land. Since sea level is an area,
+     * more new land means more old land drowned somewhere else, so the thin delta is the disruptive
+     * one. Thicker and smaller is both gentler on the rest of the map and closer to what a delta is
+     * — Mississippi lobes stand a few metres above the Gulf.
+     *
+     * The evidence, measured across twelve combinations of this, [deltaShare] and
+     * [deltaMinCatchment] on seeds 7, 42 and 1234: at 0.004 the culture guard's three figures ran
+     * as poor as 47% of habitable land under one people (the bar is 45%) and 1.20 realms per people
+     * (the bar is 1.3), while at 0.008 the same settings gave 38% and 1.43. That guard is the
+     * sharpest instrument the pipeline has for "did the coastline move", and it is worth reading
+     * its numbers as a measure of disturbance rather than only as pass or fail.
+     */
+    val deltaFreeboard: Float = 0.008f
 )
 
 /** Standing fresh water in basins the terrain does not drain. */
@@ -589,8 +719,6 @@ data class CulturesConfig(
     val climateAffinity: Float = 7.0f,
     /** Extra cost of settling across a strait, on the same scale as a step of unlike country. */
     val seaCrossingCost: Float = 3.0f,
-    /** Country colder than this on average holds no settled people. */
-    val minTemperatureC: Float = -22f,
     /**
      * Extra cost of crossing country nobody settles, such as an ice cap.
      *
@@ -654,6 +782,8 @@ data class WorldGenConfig(
      *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
      *    across the map takes proportionally more sweeps on a finer grid. Left alone, a large map
      *    would come out barely eroded at all.
+     *  - [ErosionConfig.deltaReach] is the radius of a delta, in cells, so a finer grid would
+     *    otherwise shrink every delta to a speck.
      *  - [NationsConfig.slopeResistance] is charged against the climb between adjacent cells. That
      *    climb halves as cells halve, so the total cost of crossing a range stays flat while the
      *    expansion budget grows with the map â€” mountains would stop holding borders.
@@ -681,7 +811,10 @@ data class WorldGenConfig(
                 hotspotRadius = tectonics.hotspotRadius * scale
             ),
             sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
-            erosion = erosion.copy(passes = (erosion.passes * scale).toInt()),
+            erosion = erosion.copy(
+                passes = (erosion.passes * scale).toInt(),
+                deltaReach = (erosion.deltaReach * scale).toInt().coerceAtLeast(1)
+            ),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)
         )

@@ -22,3 +22,10 @@ internal fun erodeBlocking(
     height: FloatField,
     skipSettled: Boolean
 ): ErosionResult = ErosionStage.apply(config, height, skipSettled)
+
+/** As above, reporting each hydraulic round's mass budget to the deposition guard. */
+internal fun erodeBlocking(
+    config: WorldGenConfig,
+    height: FloatField,
+    onRound: (RoundMass) -> Unit
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, onRound) }

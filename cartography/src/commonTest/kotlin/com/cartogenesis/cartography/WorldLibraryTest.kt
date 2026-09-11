@@ -72,9 +72,10 @@ class WorldLibraryTest {
         val listed = library.list()
 
         assertEquals(0, library.fullReadCount, "listing a save should never read its full payload")
-        val entry = assertNotNull(listed.singleOrNull { it.id == "large-world" })
-        assertEquals("A 1024 world", entry.title)
-        assertEquals(1_700_000_000_000L, entry.savedAt)
+        val entry = assertNotNull(listed.singleOrNull { it.document.id == "large-world" })
+        assertEquals("A 1024 world", entry.document.title)
+        assertEquals(1_700_000_000_000L, entry.document.savedAt)
+        assertEquals("complete", entry.status, "a save this build just wrote should need nothing")
     }
 
     @Test
@@ -87,7 +88,7 @@ class WorldLibraryTest {
         library.save(doc, world)
 
         val listed = library.list()
-        assertEquals(listOf("Alpha"), listed.map { it.title })
+        assertEquals(listOf("Alpha"), listed.map { it.document.title })
 
         val loaded = assertNotNull(library.load("a"))
         assertEquals("Alpha", loaded.document.title)

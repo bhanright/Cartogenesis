@@ -34,6 +34,14 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    incision cuts a slot one cell wide, and a one-cell slot is twice as steep on a grid twice as
    fine. Letting the walls fail between rounds caps them at an angle that belongs to the map.
 
+   A river is a conveyor rather than a drain, so the water pass also carries what it cuts. Each
+   cell's sediment load travels down the same flow network, and wherever the load exceeds what the
+   local gradient can hold, the surplus settles: floodplains along the lower trunks, alluvial fans
+   where a range front meets the plain, fans at lake inflows, and deltas where the big rivers reach
+   the sea. Mass balances round by round — everything taken off the land is either laid down again
+   or carried out to sea — and no cell is ever raised as high as the ground feeding it, so nothing
+   ends up running uphill.
+
    Runs before sea level, since eroding the terrain changes which elevation the percentile lands
    on — and nothing cuts below that level, because it is the base level every river grades to.
 5. **Sea level** — everything below a chosen elevation percentile floods.

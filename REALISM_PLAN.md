@@ -417,6 +417,21 @@ Seed 1234 has a few orange specks inside its equatorial rainforest (rain-shadow 
 small ranges; the audit keeps ≥95% of desert in band) and its south-western interior is dry from
 30° to 55°S — the Patagonia note from the first review, now larger. Re-check both after A4.
 
+### Render review after B3 and B2 (2026-09-11, later still)
+
+Looked at seeds 7, 42 and 1234 fantasy views, seed 42 elevation and plates, the B3 delta close-ups
+and the B2 single-profile-versus-pairs comparison. Verdict: believable. Deltas are fans one to
+three cells wide at river mouths, bulging the coast slightly into bays and nowhere else. Seed 42's
+central block now reads as a broad, flat-topped plateau with abrupt edges against a long narrow
+belt along its northern coast, which is exactly Tibet against the Andes, and the single-profile
+render of the same seed shows why it mattered: one ridge shape everywhere. Hotspot islands (seed
+1234, bottom centre) read as a Hawaii-style cone with its own shelf.
+
+One follow-up, not a blocker: seed 1234's island-arc ridges run dead straight (a bar across the
+centre and a spine down the north-east) where a real arc bows convex toward the subducting plate.
+Worth a curvature term along strike when someone next opens `PlateStage`. The chamfer faceting B2
+reported on the widest plateau edges is visible if looked for and invisible otherwise.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the
@@ -436,7 +451,7 @@ guard reported, so the next chunk knows its baseline.
 | A5 Cold-cap report | Haiku | done | 2026-09-11 | e0c3081 (merge a1014ae) | 0% of 50-60deg west coasts forested on all 3 seeds despite 1.9-3.8x latitudinal-mean rain (precip 0.83-0.99): cap is NOT the cause; classify gates on annual mean (<7C -> taiga) and the curve puts 55deg near 0C. Opened A6 |
 | A6 Temperate by coldest month | Sonnet | done | 2026-09-11 | 463e6f9 (merge 357a923) | Koppen thermal gates on the seasonal fields (warmest<10 ET; coldest<=-3 D; coldest>=18 A; else C); LATITUDE_EXPONENT 1.25->1.8 was necessary (gate alone left 55deg coasts at 6.8C in summer); 50-60deg warm west coasts 0/0/0.1% -> 65/53/59% forested, interior taiga 100/97/96%; ice share fell (seed 42 32%->19%, seed 7 56%->43%); a PROVISIONAL t>=13 desert gate holds the audit and suppresses cold deserts - A4 replaces it with Koppen aridity; culture settlement now decided per cell (a unit straddling the ice margin no longer strands its non-ice cells): 100% settled on all seeds |
 | B1 Continental shelves | Sonnet | done | 2026-09-11 | d2d9d0a (merge 7e1384a) | redesigned as a post-sea-level floor remap after the pre-sea-level depression moved coastlines and its guard could not discriminate; near-coast shallow 100/100/100% vs 60.3% control, far 2.5/1.3/0.0%; 0 land cells differ on any seed; new SeaConfig (shelfWidth=20, shelfDepth=0.10) in the SEA_LEVEL reuse guard; largest realm 28/26/26%; seed-7 culture 38% (was 48% failing) |
-| B2 Crust-pair boundaries | Opus | not started | | | |
+| B2 Crust-pair boundaries | Opus | done | 2026-09-11 | f72ecf7 + 3205447 (merge ac2305a) | five profiles in TectonicsConfig, cell widths through atResolution: Andean margin 14 / 0.52 asymmetric with a volcanic arc 13 cells inland; collision plateau 26 / 0.34 flat over 60% with rim ranges; island arc trench-both-sides, ridge on the lower-id plate; rift trough 7 / 0.25 with shoulders; hotspot chains on 35% of oceanic plates; guard BoundaryPairTest on six seeds: plateau 3.47x broader for its height (per seed 1.97-4.97x) vs 0.72x with one profile, shown failing on the control; SeaLevelStage.percentile now cuts exactly (the histogram bin held 2-5% of the map, so land fraction was 0.708 for a 0.700 setting); plateauAlongVariation 0.5 because a uniform plateau read as one ice cap; new plates.nearestBoundaryClass section joins TECTONICS (32 sections, fixture regenerated); DepositionTest pin re-recorded (land 6226); after the re-merge: ribbon 0.1%, incision 1.7x, desert-in-band 100/96/91/98, seed-7 largest people 41%, realm spread 28/23/24%, Mediterranean 271/927/1316; unverified: faint chamfer faceting on the widest plateau edges |
 | B3 Deposition | Opus | done | 2026-09-11 | 91d5048 (merge 83bacfa) | sediment routed in topological drainage order (the height-key sort lost load handed to already-walked cells - 3% short at round three); capacity = transportCapacity*sqrt(area)*slope, depositionRate=0.06; deltas breadth-first from mouths draining >= deltaMinCatchment, lake fans stop 2x pond depth short of the surface; spoil laid once before the final relaxation (feeding it back made GPU-vs-CPU worst cell swing 0.006-0.034 and a seed-42 people 29%->49%); mass balance 0.0000% by tallies and by summed heights; 68 mouths gain land within 4 cells vs 0 control; GpuErosionTest worst cell 0.007131 unchanged; render review: fans one to three cells wide at mouths, coasts bulge slightly into bays - believable. Moved coastlines left MeridionalWindTest pins stale (A4 replaces them with an in-test reference march) and seed 7's largest people at 46% (fix-up agent, mechanism not threshold) |
 | B4 Glaciation | Opus | not started | | | |
 | C1 Docs and release | Haiku | not started | | | |

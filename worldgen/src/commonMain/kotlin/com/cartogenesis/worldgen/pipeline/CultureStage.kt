@@ -140,9 +140,27 @@ object CultureStage {
             // Only the ice cap is genuinely empty. Tundra is bleak and has held people for as
             // long as there have been people, so the bar is deliberately low — this is not a
             // judgement about how pleasant the ground is.
-            habitable[u] = counts[u] > 0 &&
-                biome[u] != Biome.ICE_SHEET &&
-                temperature[u] > config.cultures.minTemperatureC
+            //
+            // The temperature clause this comment used to justify (`temperature[u] >
+            // minTemperatureC`) is gone: `Biome.ICE_SHEET` is already the temperature test
+            // (`ClimateStage.classify`'s `t < -8f`), so a second, looser one here was redundant
+            // by construction, and worse, a second *place* for "empty" to be defined that could
+            // silently disagree with the first. Measured on seeds 7/42/1234 it never actually
+            // fired — no unit's mean stayed below -22 C while classifying as non-ice — so it was
+            // not the cause of `CultureRealmTest`'s seed-7 shortfall, only a latent bug the
+            // comment above had already promised not to have.
+            //
+            // That shortfall's real cause is still open: `biome[u]` above is a *majority* vote
+            // over every cell in the unit, so a unit straddling a retreating ice margin can vote
+            // ICE_SHEET while containing a large minority of individually non-ice cells —
+            // measured, 11144 such cells on seed 7 alone. Those cells read as habitable to a
+            // per-cell test (as `CultureRealmTest` and `GeographyAuditTest` both are) and as
+            // uninhabitable here, and unlike the clause above this is not a redundancy to delete:
+            // the unit is the level culture spreads over, and there is no obviously correct
+            // vote-share to switch to without changing what a unit's climate means everywhere
+            // else it is read (`climateDistance`, hearth scoring). Left for whoever picks this up
+            // next rather than changed unreviewed.
+            habitable[u] = counts[u] > 0 && biome[u] != Biome.ICE_SHEET
         }
         return Profile(temperature, rainfall, elevation, habitable, biome)
     }

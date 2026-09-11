@@ -223,17 +223,34 @@ mean of at least 13°C, distinguishing an actual hot subtropical desert from a b
 interior that only just cleared the thermal gate. With that in place desert-in-band is 100/100/99/98%
 on seeds 7/42/1234/99, matching the 98–100% measured before this chunk.
 
+That 13°C gate is provisional and known to be wrong in one direction: it abolishes cold deserts. The
+Gobi's annual mean is about 2°C and Patagonia's is under 10, and both are currently gated to
+grassland alongside the false positives the check exists to stop. The real fix is a Köppen B (arid)
+test — rainfall in mm against a temperature-dependent threshold, BW/BS — which [A4 Absolute
+rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) is expected to add and subsume this gate
+into.
+
 Verified by `ColdCapReportTest`, extended from A5's report into an assertion: on seeds 7/42/1234,
 the share of 50–60° west-facing coast cells with a positive current anomaly classing as temperate
 forest or rainforest is 66.7/57.9/56.7% (up from 0.0/0.0/0.1% on the classifier before this chunk),
 while the interior at the same latitudes — too far from any coast for a current to reach — stays
 96.6/87.4/95.6% taiga or tundra. Siberia stays taiga.
 
-One guard moved the wrong way and was not chased down: `CultureRealmTest` fails on seed 7 (86% of
-habitable land settled against a 90% floor), because shrinking the ICE_SHEET cap from 56% to 43% of
-that seed's land exposed a ring of barely-habitable tundra at the margin that the settlement
-algorithm has not caught up with. Left for a follow-up rather than tuned around, per the rule
-against moving a threshold to force a guard green.
+One guard still fails and was traced further than first reported: `CultureRealmTest` on seed 7 (86%
+of habitable land settled against a 90% floor). It is not the settlement algorithm running out of
+reach — culture spread has no cost cap and claims every unit it can reach — and it is not
+`CulturesConfig.minTemperatureC` either, a second, looser habitability test alongside
+`Biome.ICE_SHEET` that `CultureStage.profile` no longer applies (it never actually excluded a unit
+on any of seeds 7/42/1234, so removing it changed nothing; kept regardless, since a redundant
+definition of "empty" that could silently disagree with the first was a latent bug on its own
+terms). The real cause: `CultureStage` decides habitability per drainage-basin *unit*, voting the
+majority biome across every cell in it, while `CultureRealmTest` and `GeographyAuditTest` both
+measure per *cell*. A unit straddling a retreating ice margin can vote `ICE_SHEET` while a large
+minority of its individual cells are not — measured, 11,144 such cells on seed 7 alone — and those
+cells read as habitable land to the per-cell guards and as empty to the stage that settles it. Fixing
+it means deciding what a unit's climate means when its cells disagree, which touches hearth siting
+and `climateDistance` everywhere else a unit's climate is read, not just this one gate — left open
+rather than changed without review.
 
 ## Mountain belts
 

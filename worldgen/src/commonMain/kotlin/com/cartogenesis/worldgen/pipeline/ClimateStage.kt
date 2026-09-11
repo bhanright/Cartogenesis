@@ -892,15 +892,21 @@ object ClimateStage {
                     }
                     // C: a real winter above -3 C and a real summer — everything in between.
                     else -> when {
-                        // Desert here means the hot subtropical kind this belt was measured
-                        // against (`GeographyAuditTest`'s 15-45 degree band): an annual mean under
-                        // 10 C is a place that only just cleared the continental gate above, not a
-                        // Sahara. Moving the D/C boundary poleward to fix the high-latitude coast
-                        // (A6) also exposes marginal, barely-C interior at 46-58 degrees whose dry
-                        // patches were taiga before and would otherwise read as desert now purely
-                        // for having crossed a thermal line by a couple of degrees — measured on
-                        // seed 42, that alone dropped desert-in-band from 98% to 48%. Colder, dry
-                        // C country instead falls to grassland below, same as a cold steppe.
+                        // PROVISIONAL, and known to be wrong in one direction: this abolishes cold
+                        // deserts. The Gobi's annual mean is about 2 C and Patagonia's is under 10,
+                        // and both would be gated out below alongside the false positives this was
+                        // added to stop. A real fix is a Koppen B (arid) test on rainfall in mm
+                        // against a temperature-dependent aridity threshold — BW/BS — which A4's
+                        // absolute-rainfall chunk is expected to add and subsume this into.
+                        //
+                        // What it stops: moving the D/C boundary poleward to fix the high-latitude
+                        // coast (A6) also exposes marginal, barely-C interior at 46-58 degrees whose
+                        // dry patches were taiga before and would otherwise read as desert now
+                        // purely for having crossed a thermal line by a couple of degrees — measured
+                        // on seed 42, that alone dropped desert-in-band from 98% to 48%. Until A4,
+                        // an annual mean under 13 C is treated as that marginal case rather than a
+                        // true hot subtropical desert, and falls to grassland below instead, same as
+                        // a cold steppe would.
                         p < 0.14f && t >= 13f -> Biome.DESERT
                         // Dry summer, wet winter, mild enough for the rain to be rain: the
                         // subtropical high sits over the coast all summer and the westerlies swing

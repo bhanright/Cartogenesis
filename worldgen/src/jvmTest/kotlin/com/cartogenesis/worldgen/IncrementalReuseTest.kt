@@ -232,6 +232,7 @@ class IncrementalReuseTest {
                 precipitation = field(world.climate.precipitation),
                 summerPrecipitation = field(world.climate.summerPrecipitation),
                 winterPrecipitation = field(world.climate.winterPrecipitation),
+                precipitationMm = field(world.climate.precipitationMm),
                 windDirection = world.climate.windDirection.copyOf(),
                 windMeridional = field(world.climate.windMeridional),
                 biome = world.climate.biome.copyOf()

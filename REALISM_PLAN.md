@@ -327,7 +327,7 @@ guard reported, so the next chunk knows its baseline.
 
 | Chunk | Model | Status | Date | Commit | Numbers |
 |---|---|---|---|---|---|
-| D1 Full-world save format | Opus | not started | | | |
+| D1 Full-world save format | Opus | done | 2026-09-11 | 09eb31f (merge 424b34a) | gzip whole-file 2.36-2.57x (512: 24.7->10.4 MB; 1024: 98.7->38-40 MB); heights 1.1x, id maps 136-1010x; round-trip guard failed with a section dropped, then passed; v2 saves open and re-save as v3; all 10 stages reused by assertSame; web stores raw (compression deferred to D2) |
 | D2 Web storage | Sonnet | not started | | | |
 | D3 Retire the determinism gate | Haiku | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |

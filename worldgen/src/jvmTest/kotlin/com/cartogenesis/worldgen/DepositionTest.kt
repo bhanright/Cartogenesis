@@ -46,11 +46,17 @@ class DepositionTest {
      * prove that — a single changed float in the incision expression shows up here as a completely
      * different number.
      *
-     * A later chunk that changes what the terrain stages produce (B2's boundary profiles, B4's
-     * glaciation) will move these legitimately, and is expected to re-record them and say so in its
-     * report. Nothing but a terrain change should touch them.
+     * Re-recorded once more by B4, as the note left for it here said it would be: glaciation
+     * carves the height field between the sea-level cut and everything downstream, so the rock the
+     * hydraulic pass hands on is no longer the rock this pinned. The land count did *not* move —
+     * `GlaciationStage` never touches `isLand`, by construction — which is itself worth reading as
+     * a check on that claim, at a seed and size nothing else in B4 measures.
+     *
+     * A later chunk that changes what the terrain stages produce will move these legitimately, and
+     * is expected to re-record them and say so in its report. Nothing but a terrain change should
+     * touch them.
      */
-    private val startingPointElevation = 7450875979753259226L
+    private val startingPointElevation = 8099398527141345154L
     private val startingPointLand = 6226
 
     @Test

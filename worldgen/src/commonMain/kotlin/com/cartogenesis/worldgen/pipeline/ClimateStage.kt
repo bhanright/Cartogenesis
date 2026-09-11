@@ -531,7 +531,23 @@ object ClimateStage {
         return cfg.equatorTemperatureC - (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
     }
 
-    private fun buildTemperature(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+    /**
+     * Mean annual temperature from latitude and altitude alone, before the sea has its say.
+     *
+     * Internal rather than private because [GlaciationStage] needs the same answer two stages
+     * earlier than this one runs. Ice has to be carved into the terrain that climate is computed
+     * *from*, so glaciation cannot wait for this stage — but it must agree with it about where the
+     * freezing line falls, or the troughs would end up somewhere the map never shows as frozen.
+     * Sharing the function rather than copying the formula is what guarantees that: the latitude
+     * curve, [LATITUDE_EXPONENT] and all, and the lapse rate are read once, here.
+     *
+     * What glaciation therefore does not see is everything added after this call — the maritime and
+     * current anomalies, and the seasonal split. That is the honest limit of a provisional field
+     * and not a bug: a warm current can lift a coast above freezing that this function calls
+     * frozen, so the mask is very slightly generous on west-facing coasts, which is where real
+     * tidewater glaciers are anyway.
+     */
+    internal fun buildTemperature(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val w = config.width
         val h = config.height
         val cfg = config.climate

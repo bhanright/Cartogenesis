@@ -52,6 +52,16 @@ measures material incised against material deposited plus material carried out t
 twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
 the ground draining into it, so deposition cannot invent an uphill river.
 
+**Cold country is lake country.** Where the provisional mean annual temperature — latitude and
+altitude, from the same curve `ClimateStage` later uses — falls to freezing, ice takes over the
+valleys the water cut: a flat-floored U-shaped trough across the flow instead of a V, a cirque
+bitten out of every head, a staircase of over-deepened basins whose spacing is set by descent
+rather than distance, a recessional moraine barring the valley at the lower end of each reach and a
+terminal moraine at the snout. The signature is the standing water that leaves behind, because a
+river network cannot leave a hollow in its own bed and ice does nothing else: on seed 42
+`GlaciationTest` measures 52 lakes per 42,000 cells of ice, tundra and taiga against 3 per 30,000
+cells of temperate country — 12.5 times the density, against 0.0 times with the ice switched off.
+
 ## Known deviations
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
@@ -64,7 +74,7 @@ the ground draining into it, so deposition cannot invent an uphill river.
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
 
-**No glaciation.** Ice sheets and alpine glaciers are not carved where mean annual temperature falls below freezing. No U-shaped valleys, cirques, or fjords carved by ice exist. Addressed in [B4 Glaciation](REALISM_PLAN.md#b4-glaciation--opus).
+**The sea never drowns a glacial trough.** A fjord is a trough the sea has flooded, and flooding one means re-cutting the sea-level percentile, which moves every other coastline on the map. `GlaciationStage` therefore grades its marine troughs down to the waterline and carves the over-deepened basin on the sea floor beyond the mouth, leaving the shelf as a sill — fjord bathymetry without a fjord's coastline. The high-latitude coasts gain depth and islands, not the long narrow inlets of Norway.
 
 ## Fixed by this audit
 

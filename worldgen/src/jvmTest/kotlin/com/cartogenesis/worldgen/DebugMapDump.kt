@@ -271,6 +271,62 @@ class DebugMapDump {
         BOUNDARY_CLASS
     }
 
+    /**
+     * The high-latitude coasts, close enough to see a trough, magnified four times.
+     *
+     * Glaciation is the one stage whose work is invisible at whole-world scale: a trough is five
+     * cells wide and a tarn is twenty cells, so on a 512-pixel map of the world they are two pixels
+     * and a speck. Everything else in this file renders the world; this renders a corner of it.
+     */
+    @Test
+    fun `dump the glaciated coasts`() {
+        outputDir.mkdirs()
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val world = WorldGenerationEngine.generateBlocking(config)
+            val bare = WorldGenerationEngine.generateBlocking(
+                config.copy(glaciation = config.glaciation.copy(enabled = false))
+            )
+            // The northern and southern cold belts, full width, top and bottom eighth of the map.
+            listOf("north" to 0, "south" to world.height * 7 / 8).forEach { (half, top) ->
+                write(
+                    crop(render(world, Mode.FANTASY), 0, top, world.width, world.height / 8, 4),
+                    "seed$seed-glacier-$half.png"
+                )
+                write(
+                    crop(render(bare, Mode.FANTASY), 0, top, world.width, world.height / 8, 4),
+                    "seed$seed-glacier-$half-off.png"
+                )
+            }
+            println(
+                "GLACIER seed $seed: ${world.rivers.lakes.lakes.size} lakes " +
+                    "(${bare.rivers.lakes.lakes.size} without ice), " +
+                    "${world.rivers.rivers.size} rivers (${bare.rivers.rivers.size})"
+            )
+        }
+        println("Glacier crops written to ${outputDir.absolutePath}")
+    }
+
+    /** A rectangle of an image, blown up by [zoom] with no smoothing, so cells stay cells. */
+    private fun crop(
+        source: BufferedImage,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        zoom: Int
+    ): BufferedImage {
+        val out = BufferedImage(width * zoom, height * zoom, BufferedImage.TYPE_INT_RGB)
+        for (oy in 0 until height * zoom) {
+            for (ox in 0 until width * zoom) {
+                val sx = (x + ox / zoom).coerceIn(0, source.width - 1)
+                val sy = (y + oy / zoom).coerceIn(0, source.height - 1)
+                out.setRGB(ox, oy, source.getRGB(sx, sy))
+            }
+        }
+        return out
+    }
+
     /** The wind vector field, drawn over whichever ground [render] laid down. */
     private fun drawWind(world: WorldMap, image: BufferedImage) {
         val g = image.createGraphics()

@@ -65,6 +65,12 @@ class IncrementalReuseTest {
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
             "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
+            // Glaciation carves the sea stage's own field, in the same step, so its guard is the
+            // sea stage's guard. Turning it off rather than nudging a number, because off is the
+            // largest change the section can make and so the loudest failure if it went stale.
+            "glaciation" to base.copy(
+                glaciation = base.glaciation.copy(enabled = !base.glaciation.enabled)
+            ),
             "climate" to base.copy(
                 climate = base.climate.copy(
                     equatorTemperatureC = base.climate.equatorTemperatureC + 4f

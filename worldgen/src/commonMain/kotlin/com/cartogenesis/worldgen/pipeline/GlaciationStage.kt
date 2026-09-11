@@ -19,6 +19,7 @@ internal data class GlacialMass(
     val glacierCells: Int,
     val cirques: Int,
     val moraines: Int,
+    val riegels: Int,
     /** Rock taken off the land: troughs, cirques and all. */
     val excavated: Double,
     /** Till laid back down at the snouts. */
@@ -232,9 +233,17 @@ object GlaciationStage {
         for (i in 0 until size) {
             if (!glacier[i]) continue
             // Wall to wall: the ice lowers the whole cross-section toward its bed on a parabola,
-            // untouched at the rim and at the floor at the bottom of it. That parabola is the U.
-            bowl(
-                w, h, i, valleyHalfWidth(cfg, strength[i]), cfg.floorShare, floor[i],
+            // untouched at the rim and flat at the floor. That parabola is the U.
+            //
+            // *Across* the flow and one cell thick along it, which is not a detail. Stamped as a
+            // disc instead — the obvious thing, and what this did first — a basin's flat floor
+            // reaches a valley-width in every direction, including forward over the step that is
+            // supposed to hold its water in, and quietly planes it off. The staircase was there in
+            // the long profile and the map had no lakes: seven where there should have been two
+            // thousand closed basins. A cross-section is a cross-section.
+            swath(
+                w, h, i, flowOf(i, directions, glacier, w, h),
+                valleyHalfWidth(cfg, strength[i]), cfg.floorShare, floor[i],
                 isLand, relative, carved
             )
         }
@@ -269,17 +278,37 @@ object GlaciationStage {
         // depend on the order they were laid in.
         val moraine = FloatArray(size)
         var moraines = 0
+        var riegels = 0
         for (i in 0 until size) {
             if (!glacier[i]) continue
             val t = directions[i]
             val ends = t < 0 || !glacier[t]
-            if (!ends) continue
-            // A snout in the sea leaves no ridge: the till goes straight into the water. Only a
-            // glacier that melts on land builds a dam.
-            if (t >= 0 && !isLand[t]) continue
-            moraines++
-            ridge(w, h, i, valleyHalfWidth(cfg, strength[i]) * 1.15f,
-                cfg.moraineHeight * strength[i], isLand, moraine)
+            if (ends) {
+                // A snout in the sea leaves no ridge: the till goes straight into the water. Only
+                // a glacier that melts on land builds a dam.
+                if (t >= 0 && !isLand[t]) continue
+                moraines++
+                bar(
+                    w, h, i, flowOf(i, directions, glacier, w, h),
+                    valleyHalfWidth(cfg, strength[i]) * 1.15f,
+                    till(cfg.moraineHeight, strength[i]), isLand, moraine
+                )
+            } else if (reach[t] != reach[i]) {
+                // A recessional moraine, at the lower end of every reach: the ridge a retreating
+                // snout leaves each time it pauses, and what a valley full of them looks like is
+                // a chain of lakes. The over-deepening alone does not reliably make one — measured
+                // on seed 42, it left a hundred closed basins of which sixty were one or two cells,
+                // because how far a basin can spread before the ground rises out of it is a
+                // question about the slope and not about the ice. A dam of a known height ponds a
+                // known depth whatever the slope, which is why real glaciated valleys owe more of
+                // their water to till than to scour.
+                riegels++
+                bar(
+                    w, h, i, flowOf(i, directions, glacier, w, h),
+                    valleyHalfWidth(cfg, strength[i]),
+                    till(cfg.riegelHeight, strength[i]), isLand, moraine
+                )
+            }
         }
         var deposited = 0.0
         for (i in 0 until size) {
@@ -318,6 +347,7 @@ object GlaciationStage {
                 glacierCells = glacierCells,
                 cirques = cirques,
                 moraines = moraines,
+                riegels = riegels,
                 excavated = excavated,
                 deposited = deposited,
                 submarine = submarine
@@ -328,11 +358,116 @@ object GlaciationStage {
     }
 
     /**
+     * How high a bar of till stands, given the ice that left it.
+     *
+     * Only half of it scales with the glacier, which is not the same rule the scouring follows and
+     * is deliberate. A dam's job is to hold water back, and the water it holds is the height it
+     * stands *above* the bed — so a bar scaled the whole way down with the ice stands a thousandth
+     * of the elevation range, which is a quarter of [LakesConfig.minDepth] and therefore no lake at
+     * all. Measured on seed 42 before this: four and a half thousand recessional moraines and a
+     * hundred and fifty of the resulting ponds one or two cells across. Till supply does not fall
+     * away with ice volume the way erosive power does; a small glacier in a small valley leaves a
+     * small valley's worth of moraine, which is plenty to dam it.
+     */
+    private fun till(height: Float, strength: Float): Float = height * (0.5f + 0.5f * strength)
+
+    /**
      * How far up the sides the ice reaches, in cells. Wider for a bigger glacier, but slowly — the
      * root again, since a trough draining four times the ground is about twice the valley.
      */
     private fun valleyHalfWidth(cfg: GlaciationConfig, strength: Float): Float =
         (cfg.valleyWidth * sqrt(strength)).coerceAtLeast(1f)
+
+    /**
+     * The flow direction at a glacier cell, as a unit vector, for orienting its cross-section.
+     *
+     * Downstream where there is a downstream; at a snout, the direction the ice arrived from, so
+     * the terminal cross-section lies the same way as the one before it rather than collapsing.
+     */
+    private fun flowOf(
+        i: Int,
+        directions: IntArray,
+        glacier: BooleanArray,
+        w: Int,
+        h: Int
+    ): Long {
+        val t = directions[i]
+        if (t >= 0) return step(i, t, w)
+        var from = -1
+        FlowRouting.forEachNeighbour(w, h, i % w, i / w) { n ->
+            if (from < 0 && glacier[n] && directions[n] == i) from = n
+        }
+        return if (from >= 0) step(from, i, w) else pack(1f, 0f)
+    }
+
+    /** The unit vector from [from] to [to], packed into a long so no object is allocated. */
+    private fun step(from: Int, to: Int, w: Int): Long {
+        var dx = (to % w) - (from % w)
+        if (dx > w / 2) dx -= w
+        if (dx < -w / 2) dx += w
+        val dy = (to / w) - (from / w)
+        val length = sqrt((dx * dx + dy * dy).toFloat()).coerceAtLeast(1e-6f)
+        return pack(dx / length, dy / length)
+    }
+
+    private fun pack(x: Float, y: Float): Long =
+        (x.toRawBits().toLong() shl 32) or (y.toRawBits().toLong() and 0xFFFFFFFFL)
+
+    private fun unpackX(v: Long): Float = Float.fromBits((v ushr 32).toInt())
+
+    private fun unpackY(v: Long): Float = Float.fromBits(v.toInt())
+
+    /**
+     * Lowers the line of cells *across* the flow toward [floorValue] on a parabola: flat over the
+     * middle [flatShare] of the half-width, climbing to the untouched ground at the rim.
+     *
+     * One cell thick along the flow — [ALONG_REACH] either side of the perpendicular — so that what
+     * a cell writes is its own cross-section and nothing of its neighbours'. Every glacier cell
+     * stamps one, and consecutive stamps tile the trough between them.
+     */
+    private fun swath(
+        w: Int,
+        h: Int,
+        centre: Int,
+        flow: Long,
+        radius: Float,
+        flatShare: Float,
+        floorValue: Float,
+        isLand: BooleanArray,
+        original: FloatArray,
+        carved: FloatArray
+    ) {
+        val fx = unpackX(flow)
+        val fy = unpackY(flow)
+        val cx = centre % w
+        val cy = centre / w
+        val span = radius.toInt() + 1
+        val flat = radius * flatShare.coerceIn(0f, 0.9f)
+        val wall = (radius - flat).coerceAtLeast(1e-4f)
+        for (dy in -span..span) {
+            val ny = cy + dy
+            if (ny < 0 || ny >= h) continue
+            for (dx in -span..span) {
+                val along = dx * fx + dy * fy
+                if (along > ALONG_REACH || along < -ALONG_REACH) continue
+                val across = kotlin.math.abs(dx * -fy + dy * fx)
+                if (across > radius) continue
+                var nx = (cx + dx) % w
+                if (nx < 0) nx += w
+                val c = ny * w + nx
+                if (!isLand[c]) continue
+                val here = original[c]
+                if (here <= floorValue) continue
+                val target = if (across <= flat) {
+                    floorValue
+                } else {
+                    val t = (across - flat) / wall
+                    floorValue + (here - floorValue) * t * t
+                }
+                if (target < carved[c]) carved[c] = target
+            }
+        }
+    }
 
     /**
      * Lowers a disc toward [floorValue] on a parabola: the floor at the centre, the original ground
@@ -386,16 +521,28 @@ object GlaciationStage {
         }
     }
 
-    /** A lens of till, thickest at the centre, thinning to nothing at the rim. */
-    private fun ridge(
+    /**
+     * A bar of till laid *across* the valley, thickest on the axis and thinning to nothing at the
+     * valley sides.
+     *
+     * Across, for the same reason the cross-section is: a round heap of the same radius reaches
+     * back up the trough as far as it reaches sideways, and fills in the basin it was supposed to
+     * dam. Taken as a maximum where two bars overlap rather than a sum, so nothing depends on the
+     * order they were laid in.
+     */
+    private fun bar(
         w: Int,
         h: Int,
         centre: Int,
+        flow: Long,
         radius: Float,
         height: Float,
         isLand: BooleanArray,
         moraine: FloatArray
     ) {
+        if (height <= 0f) return
+        val fx = unpackX(flow)
+        val fy = unpackY(flow)
         val cx = centre % w
         val cy = centre / w
         val span = radius.toInt() + 1
@@ -403,13 +550,15 @@ object GlaciationStage {
             val ny = cy + dy
             if (ny < 0 || ny >= h) continue
             for (dx in -span..span) {
-                val distance = sqrt((dx * dx + dy * dy).toFloat())
-                if (distance > radius) continue
+                val along = dx * fx + dy * fy
+                if (along > ALONG_REACH || along < -ALONG_REACH) continue
+                val across = kotlin.math.abs(dx * -fy + dy * fx)
+                if (across > radius) continue
                 var nx = (cx + dx) % w
                 if (nx < 0) nx += w
                 val c = ny * w + nx
                 if (!isLand[c]) continue
-                val t = distance / radius
+                val t = across / radius
                 val thickness = height * (1f - t * t)
                 if (thickness > moraine[c]) moraine[c] = thickness
             }
@@ -483,7 +632,16 @@ object GlaciationStage {
     }
 
     /** The least thickness any glacier is credited with. See where [GlacialMass] is filled in. */
-    private const val MIN_THICKNESS = 0.35f
+    private const val MIN_THICKNESS = 0.5f
+
+    /**
+     * How far along the flow a cross-section reaches, in cells.
+     *
+     * Wide enough that a diagonal step's section still meets its neighbour's — the perpendicular to
+     * a diagonal passes between cells — and narrow enough that a basin cannot write over the step
+     * below it, which is the whole reason the section is oriented at all.
+     */
+    private const val ALONG_REACH = 0.75f
 
     private const val DIAGONAL = 1.41421356f
 

@@ -92,7 +92,7 @@ class GlaciationTest {
         GlaciationStage.apply(config, sea) { mass ->
             println(
                 "GLACIATION budget frozen=${mass.frozenCells} ice=${mass.glacierCells}" +
-                    " cirques=${mass.cirques} moraines=${mass.moraines}" +
+                    " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
                     " excavated=${"%.2f".format(mass.excavated)}" +
                     " deposited=${"%.2f".format(mass.deposited)}" +
                     " seafloor=${"%.2f".format(mass.submarine)}"

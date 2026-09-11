@@ -24,7 +24,14 @@ class ValleyIncisionTest {
         var withoutTotal = 0.0
 
         seeds.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            // Glaciation off on both sides. It is the other stage that cuts valleys, it cuts them
+            // along the same trunks, and it does not care whether the hydraulic rounds ran — so
+            // left on it lands in the control as well as in the measurement and flatters the
+            // control by more than it flatters the measurement. Measured with it on: 1.5x, against
+            // 1.7x with it off, for no change in how much water moved.
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512).let {
+                it.copy(glaciation = it.glaciation.copy(enabled = false))
+            }
             val eroded = incision(base)
             val bare = incision(
                 base.copy(erosion = base.erosion.copy(hydraulicRounds = 0))

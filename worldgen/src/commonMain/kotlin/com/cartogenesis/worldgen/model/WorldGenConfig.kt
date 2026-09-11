@@ -600,11 +600,11 @@ data class GlaciationConfig(
      * it every frozen cell is its own little glacier and the whole ice cap is stippled with troughs
      * instead of drained by a few of them.
      */
-    val minCatchment: Float = 0.0001f,
+    val minCatchment: Float = 0.00005f,
     /** Frozen catchment at which a glacier is at full width and cuts its full depth. */
     val fullCatchment: Float = 0.02f,
     /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
-    val valleyWidth: Float = 5.5f,
+    val valleyWidth: Float = 6.5f,
     /**
      * How much of that half-width is flat floor before the walls start to climb.
      *
@@ -615,9 +615,9 @@ data class GlaciationConfig(
      * wide leaves a lake one cell wide, which [LakesConfig.minCells] rightly refuses to call a
      * lake at all.
      */
-    val floorShare: Float = 0.5f,
+    val floorShare: Float = 0.65f,
     /** How far a full glacier lowers its bed, as a fraction of the land's elevation range. */
-    val deepening: Float = 0.005f,
+    val deepening: Float = 0.004f,
     /**
      * The extra cut in the over-deepened reaches between the steps, in the same units.
      *
@@ -625,7 +625,7 @@ data class GlaciationConfig(
      * step downstream of it, and the difference between the two is exactly this — so it has to
      * clear [LakesConfig.minDepth] with room to spare, at a glacier well short of full strength.
      */
-    val overDeepening: Float = 0.020f,
+    val overDeepening: Float = 0.024f,
     /**
      * How much descent ends a reach and starts the next basin, as a fraction of the range.
      *
@@ -638,7 +638,7 @@ data class GlaciationConfig(
      * short-stepped staircase of small rock basins, a gentle one a long flat reach with a single
      * broad lake in it.
      */
-    val basinDrop: Float = 0.035f,
+    val basinDrop: Float = 0.015f,
     /**
      * The most cells one reach may run before the next basin starts, whatever the descent.
      *
@@ -646,9 +646,9 @@ data class GlaciationConfig(
      * inside the ice would be one reach a thousand cells long. The two terms simply add, so a
      * reach ends when it has fallen [basinDrop] *or* run this far, whichever happens first.
      */
-    val basinSpacing: Float = 13f,
+    val basinSpacing: Float = 8f,
     /** Share of a reach the basin occupies; the rest is the step at its lower end. */
-    val basinShare: Float = 0.72f,
+    val basinShare: Float = 0.75f,
     /** Radius of the bowl bitten out of a glacier's head, in cells. */
     val cirqueRadius: Float = 3f,
     /** How deep that bowl is cut below the headwall, as a fraction of the elevation range. */
@@ -662,7 +662,18 @@ data class GlaciationConfig(
      */
     val runOut: Int = 8,
     /** Height of the ridge of spoil left at a land terminus, as a fraction of the range. */
-    val moraineHeight: Float = 0.016f,
+    val moraineHeight: Float = 0.045f,
+    /**
+     * Height of the recessional moraine laid across the valley at the lower end of every reach.
+     *
+     * The other kind of dam, and the one that does most of the work. A retreating snout pauses,
+     * dumps a bar of till across the trough, and moves on; a valley that has been deglaciated
+     * slowly is a chain of them, with a lake behind each. The scour on its own is not enough,
+     * because how far water spreads behind a rock lip is a question about the slope of the ground,
+     * and on anything but a plain the answer is "two cells" — measured on seed 42, sixty of a
+     * hundred closed basins. A bar of a known height ponds a known depth on any slope.
+     */
+    val riegelHeight: Float = 0.030f,
     /**
      * Whether a glacier that ends in the sea leaves a trough on the sea floor.
      *

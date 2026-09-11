@@ -185,6 +185,10 @@ internal object WorldSections {
             "climate.winterPrecipitation", SectionType.F32,
             floats = world.climate.winterPrecipitation.data
         ),
+        Section(
+            "climate.precipitationMm", SectionType.F32,
+            floats = world.climate.precipitationMm.data
+        ),
         Section("climate.windDirection", SectionType.I32, ints = world.climate.windDirection),
         Section(
             "climate.windMeridional", SectionType.F32,
@@ -338,6 +342,7 @@ internal object WorldSections {
                 precipitation = field("climate.precipitation"),
                 summerPrecipitation = field("climate.summerPrecipitation"),
                 winterPrecipitation = field("climate.winterPrecipitation"),
+                precipitationMm = field("climate.precipitationMm"),
                 windDirection = ints("climate.windDirection"),
                 windMeridional = field("climate.windMeridional"),
                 biome = Array(cells) { i ->

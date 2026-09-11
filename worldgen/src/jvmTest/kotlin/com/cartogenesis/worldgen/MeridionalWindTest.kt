@@ -64,11 +64,21 @@ class MeridionalWindTest {
          * march. If a future chunk changes anything upstream of `buildPrecipitation` these have to
          * be re-derived the same way — from a build without the slant — rather than updated to
          * whatever this test prints.
+         *
+         * Re-derived a second time for A4: [ClimateStage.classify] is no longer the only thing
+         * that changed — [precipitation][com.cartogenesis.worldgen.pipeline.ClimateResult.precipitation]
+         * itself stopped being each world's own 88th-land-percentile rescaled to 1 and became
+         * millimetres divided by a fixed reference and clamped, so its bits changed for every
+         * world, slant or no slant, and the old checksums no longer mean "the same march produced
+         * the same field." What is pinned here is still exactly the zonal-march claim and nothing
+         * about the slant: read off a `meridionalWind = 0` build under A4's own normalisation,
+         * which at zero slant is still the same per-row scan as before, arithmetic for arithmetic
+         * — only the number the scan's output is divided by has changed.
          */
         val ZONAL_MARCH = mapOf(
-            7L to Triple(-504786442719540233L, -8391930670586529367L, -6913976028233525423L),
-            42L to Triple(-7658335890232693450L, -5893222121490264951L, -7606470182263391022L),
-            1234L to Triple(-4852718701338356609L, -8615306492837767303L, 5875874845689984946L)
+            7L to Triple(-5537485857409123946L, -7303646362523522147L, 1080907361357579262L),
+            42L to Triple(-6963979501748780766L, -1789976601917314827L, 925045017579956933L),
+            1234L to Triple(-7393318927521527634L, 832780948521735966L, 4852898906016615229L)
         )
     }
 

@@ -331,7 +331,7 @@ guard reported, so the next chunk knows its baseline.
 | D2 Web storage | Sonnet | not started | | | |
 | D3 Retire the determinism gate | Haiku | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |
-| A1 Seasons | Opus | not started | | | |
+| A1 Seasons | Opus | done | 2026-09-11 | 1aa12ee | 35deg swing: land 13.1C / sea 2.9C; Mediterranean west-coast cells 211/517/494 (seeds 7/42/1234), 0/0/0 with seasons=false; seasons=false reproduces all six fingerprint lines; desert-in-band 100/99/100/98% (belt rescaled to restore the annual mean, no threshold moved); desert AREA fell 5.1%->1.9% on seed 42 (for A4); border-on-river 2.08/2.12/2.16/1.04 (seed 99 down from 1.46); default fingerprint rivers=26 realms=14 |
 | A2 Continentality | Sonnet | not started | | | |
 | A3 Meridional wind / monsoon | Opus | not started | | | |
 | A4 Absolute rainfall | Sonnet | not started | | | |

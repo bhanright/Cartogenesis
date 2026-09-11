@@ -617,7 +617,7 @@ data class GlaciationConfig(
      */
     val floorShare: Float = 0.5f,
     /** How far a full glacier lowers its bed, as a fraction of the land's elevation range. */
-    val deepening: Float = 0.010f,
+    val deepening: Float = 0.005f,
     /**
      * The extra cut in the over-deepened reaches between the steps, in the same units.
      *
@@ -625,25 +625,34 @@ data class GlaciationConfig(
      * step downstream of it, and the difference between the two is exactly this — so it has to
      * clear [LakesConfig.minDepth] with room to spare, at a glacier well short of full strength.
      */
-    val overDeepening: Float = 0.026f,
-    /** Distance from one over-deepened basin to the next along a trough, in cells. */
-    val basinSpacing: Float = 11f,
-    /** Share of that spacing the basin occupies; the rest is the step at its lower end. */
-    val basinShare: Float = 0.72f,
+    val overDeepening: Float = 0.020f,
     /**
-     * How much deeper than [deepening] + [overDeepening] the bed may be cut where flattening the
-     * long profile asks for it, as a multiple.
+     * How much descent ends a reach and starts the next basin, as a fraction of the range.
      *
-     * Flattening a reach means cutting its upper end down to the level of its lower end, and on a
-     * steep reach that is an arbitrarily large amount of rock. Ice does over-deepen against the
-     * grain of the old profile, but not without limit, and an uncapped version simply gouged the
-     * mountains away.
+     * The staircase's rise per step, and the reason a basin can be cut to a level floor at all.
+     * Flattening a reach costs whatever that reach descends, so a reach measured in *cells* costs
+     * nothing on a plain and costs a mountainside in a mountain valley — and an earlier version of
+     * this, spaced purely by distance, either failed to close its basins on any slope worth the
+     * name or removed a tenth of every continent trying to. Measured in descent instead, the cost
+     * is the same everywhere, which is also what glaciated valleys look like: a steep trough is a
+     * short-stepped staircase of small rock basins, a gentle one a long flat reach with a single
+     * broad lake in it.
      */
-    val flatteningCap: Float = 4f,
+    val basinDrop: Float = 0.035f,
+    /**
+     * The most cells one reach may run before the next basin starts, whatever the descent.
+     *
+     * The other half of the same rule, for ground with no descent to speak of: without it a plain
+     * inside the ice would be one reach a thousand cells long. The two terms simply add, so a
+     * reach ends when it has fallen [basinDrop] *or* run this far, whichever happens first.
+     */
+    val basinSpacing: Float = 13f,
+    /** Share of a reach the basin occupies; the rest is the step at its lower end. */
+    val basinShare: Float = 0.72f,
     /** Radius of the bowl bitten out of a glacier's head, in cells. */
-    val cirqueRadius: Float = 4f,
+    val cirqueRadius: Float = 3f,
     /** How deep that bowl is cut below the headwall, as a fraction of the elevation range. */
-    val cirqueDepth: Float = 0.026f,
+    val cirqueDepth: Float = 0.014f,
     /**
      * How far a glacier runs on past the freezing line before it melts, in cells.
      *

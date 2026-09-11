@@ -158,28 +158,35 @@ object GlaciationStage {
         }
         if (glacierCells == 0) return sea
 
-        // Distance from the head, along the ice. The longest way round rather than the shortest, so
-        // a trunk's profile is measured from the head of its longest feeder and a tributary joining
-        // halfway down does not restart the count.
-        val alongIce = FloatArray(size)
+        // How far down the staircase each cell is.
+        //
+        // Two things advance it, and they simply add: how far the ice has run (in cells, over
+        // [GlaciationConfig.basinSpacing]) and how far it has fallen (in elevation, over
+        // [GlaciationConfig.basinDrop]). A reach ends when the sum passes the next whole number, so
+        // whichever runs out first ends it — a long flat reach on a plain, a short one on a
+        // mountainside. Measured from the head of the longest feeder rather than the nearest, so a
+        // tributary joining halfway down does not restart the count.
+        val spacing = cfg.basinSpacing.coerceAtLeast(2f)
+        val drop = cfg.basinDrop.coerceAtLeast(1e-4f)
+        val progress = FloatArray(size)
         for (k in order.indices) {
             val i = order[k]
             if (!glacier[i]) continue
             val t = directions[i]
             if (t >= 0 && glacier[t]) {
-                val step = alongIce[i] + if (isDiagonal(i, t, w)) DIAGONAL else 1f
-                if (step > alongIce[t]) alongIce[t] = step
+                val step = progress[i] +
+                    (if (isDiagonal(i, t, w)) DIAGONAL else 1f) / spacing +
+                    (relative[i] - relative[t]).coerceAtLeast(0f) / drop
+                if (step > progress[t]) progress[t] = step
             }
         }
 
-        // The long profile, in reaches: each [GlaciationConfig.basinSpacing] of ice is an
-        // over-deepened basin followed by a step. Real troughs are stepped like this — the ice
-        // scours hardest where it is confined and thickest, and rides over the harder bars between
-        // — and it is the step at the lower end of a reach that makes the basin a lake rather than
-        // merely a dip.
-        val spacing = cfg.basinSpacing.coerceAtLeast(2f)
+        // The long profile, in reaches: each one an over-deepened basin followed by a step. Real
+        // troughs are stepped like this — the ice scours hardest where it is confined and thickest
+        // and rides over the harder bars between — and it is the step at the lower end of a reach
+        // that makes the basin a lake rather than merely a dip.
         val reach = IntArray(size)
-        for (i in 0 until size) if (glacier[i]) reach[i] = (alongIce[i] / spacing).toInt()
+        for (i in 0 until size) if (glacier[i]) reach[i] = progress[i].toInt()
 
         // The lowest ground the flow meets before this reach ends, which is the level a flattened
         // floor is cut down to. Walked mouths-first, so a cell reads an answer its own downstream
@@ -199,15 +206,16 @@ object GlaciationStage {
         for (i in 0 until size) {
             if (!glacier[i]) continue
             val st = strength[i]
-            val phase = alongIce[i] / spacing - reach[i]
+            val phase = progress[i] - reach[i]
             val target = if (phase < cfg.basinShare) {
                 // The basin: floor flattened to the lowest ground in the reach and then cut below
-                // it. Capped, because flattening a steep reach means removing the whole mountain
-                // between its ends, and ice over-deepens against the old profile but not without
-                // limit. Where the cap binds — a steep glacier — no basin forms, and a steep
-                // glacier is not where lakes are.
+                // it. The limit needs no setting of its own, which is the point of measuring a
+                // reach in descent: a reach falls at most [GlaciationConfig.basinDrop], so
+                // flattening one costs at most that plus the over-deepening, wherever it is and
+                // however steep the ground. The only case that reaches the limit is a cliff inside
+                // a single cell, and there it stops the ice gouging a canyon out of it.
                 val basinCut = (cfg.deepening + cfg.overDeepening) * st
-                maxOf(reachFloor[i] - basinCut, relative[i] - basinCut * cfg.flatteningCap)
+                maxOf(reachFloor[i] - basinCut, relative[i] - basinCut - cfg.basinDrop)
             } else {
                 // The step: the bed follows the ground down, cut only by the ordinary amount, so it
                 // stands proud of the basin above it by the over-deepening.

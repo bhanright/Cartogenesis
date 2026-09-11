@@ -407,6 +407,16 @@ walk is needed, `ErosionConfig`, tests.*
   12 realms), through `MapRasterizer`: the big basins should become river valleys or small lakes
   with a river leaving through a notch; nothing else should move.
 
+**E1 addition (2026-09-11, evening): deltas strand their rivers.** On seed 59758 at 2048 (ocean
+62%, 14 plates, 12 realms) William saw a river dead-end short of the sea. Measured: every chain ends
+at a sea cell, but in 42 of 152 mouths that cell is a one-or-two-cell pocket of sea enclosed by
+land, and 44 more touch the sea by one cell. B3's delta grows breadth-first around the old mouth,
+raises those cells to land, leaves the mouth below sea level, and cuts no channel across the lobe to
+the new shore; the lobe is exactly flat and nearly rectangular. Folded into E1 because it is the
+same code: the trunk must continue across its delta to the open sea along a low distributary path,
+the old pocket fills, the lobe slopes seaward with an irregular outline. Guard: zero enclosed-pocket
+mouths at 2048 on 59758 and at 512 on 42, shown failing on the current code.
+
 ### E2. Lake water balance — Opus
 
 *Dependencies: A4 (rainfall in mm). Files: `RiverStage.kt` lake step, `LakesConfig`, tests.*

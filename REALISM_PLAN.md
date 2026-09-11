@@ -241,6 +241,32 @@ temperate rainforest on high-latitude west coasts (the Bergen case). Render seed
 report the share of 50-60° west coasts classed rainforest or temperate forest. No code change in
 this chunk — if the number is low, open a follow-up in the ledger with the figure.
 
+### A6. Temperate climates by coldest month — Sonnet
+
+*Dependencies: A1, A5. Opened by A5's measurement.*
+
+A5 found that 0% of west-facing coasts at 50-60° classify as forest on any seed, despite carrying
+1.9-3.8x their latitude's mean rainfall. The rain is there; the cold cap is not the cause. The
+cause is that `classify` gates temperate against taiga on the *annual mean* (`t < 7 → TAIGA`),
+and the latitude curve puts 55° near 0 °C, so even a +2 °C warm-current anomaly cannot lift a
+mild-winter maritime coast into temperate forest. Bergen is temperate at an 8 °C mean because its
+coldest month is about 2 °C.
+
+- Classify the temperate / continental / polar boundary Köppen-style on the seasonal fields A1
+  added: coldest month above -3 °C and warmest above 10 °C is temperate (C); warmest above 10 °C
+  with coldest at or below -3 °C is continental, which is where taiga lives (D); warmest below
+  10 °C is tundra (ET). Keep the moisture axis as it is; only the thermal gate changes.
+- Check the latitude curve itself against reality at 45-60°: London is 11 °C at 51°, Bergen 8 °C
+  at 60°, Winnipeg 3 °C at 50° (continental). If the curve runs several degrees cold across that
+  band, adjust the exponent or the pole value and re-verify `SeasonsTest` and the desert audit -
+  but change the curve only if the Köppen gate alone does not fix the coasts, and say which.
+- Guard: extend `ColdCapReportTest` into an assertion - on at least two of three seeds, the share
+  of 50-60° west-facing coast cells with a positive current anomaly that classify as temperate
+  forest or temperate rainforest exceeds 50%. Show it fails on the pre-A6 classifier (0%), then
+  passes. Report the figure per seed, and the taiga/tundra shares of *interior* cells at the same
+  latitudes, which must not collapse - Siberia stays taiga.
+- Render biomes for seeds 7, 42, 1234: forested Norway-type coasts, taiga inland, tundra beyond.
+
 ## Track B — terrain
 
 Track B is independent of Track A. Interleave: if a climate chunk stalls, land a terrain chunk.
@@ -336,6 +362,7 @@ guard reported, so the next chunk knows its baseline.
 | A3 Meridional wind / monsoon | Opus | not started | | | |
 | A4 Absolute rainfall | Sonnet | not started | | | |
 | A5 Cold-cap report | Haiku | not started | | | |
+| A6 Temperate by coldest month | Sonnet | not started | | | |
 | B1 Continental shelves | Sonnet | not started | | | |
 | B2 Crust-pair boundaries | Opus | not started | | | |
 | B3 Deposition | Opus | not started | | | |
@@ -345,5 +372,5 @@ guard reported, so the next chunk knows its baseline.
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1
 in parallel** (three independent chunks, three worktrees). Then D3, and from there the two tracks
-run side by side in dependency order: **A1 → A2 → A3 → A4 → A5** alongside **B2 → B3**, with
+run side by side in dependency order: **A1 → A2 → A3 → A4 → A5 → A6** alongside **B2 → B3**, with
 **B4** after both A1 and B3, and **C1** last.

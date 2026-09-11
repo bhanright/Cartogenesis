@@ -64,11 +64,19 @@ class MeridionalWindTest {
          * march. If a future chunk changes anything upstream of `buildPrecipitation` these have to
          * be re-derived the same way — from a build without the slant — rather than updated to
          * whatever this test prints.
+         *
+         * Re-derived again by A6 (`meridionalWind = 0f`, everything else at its default): the
+         * latitude curve's exponent moved from 1.25 to
+         * [com.cartogenesis.worldgen.pipeline.ClimateStage.LATITUDE_EXPONENT] to make the new
+         * Koppen thermal gate in `classify` reachable on a real maritime coast (see that constant's
+         * comment for why). That sits upstream of `buildPrecipitation`'s `coldCap` and warmth
+         * terms, so the temperature field the march reads is not the field these were last taken
+         * against, even though the march itself is untouched by A6.
          */
         val ZONAL_MARCH = mapOf(
-            7L to Triple(-504786442719540233L, -8391930670586529367L, -6913976028233525423L),
-            42L to Triple(-7658335890232693450L, -5893222121490264951L, -7606470182263391022L),
-            1234L to Triple(-4852718701338356609L, -8615306492837767303L, 5875874845689984946L)
+            7L to Triple(-5578868080312437754L, 277456964480873017L, 5097945176916378938L),
+            42L to Triple(-3999165463826341470L, -910534057167861536L, -8490406401199561509L),
+            1234L to Triple(2701610681097685820L, 463965894206218816L, 9114447820422796006L)
         )
     }
 

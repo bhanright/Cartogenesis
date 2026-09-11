@@ -113,6 +113,7 @@ object CultureStage {
         val rainfall = FloatArray(n)
         val elevation = FloatArray(n)
         val counts = IntArray(n)
+        val nonIceCells = IntArray(n)
         val biomeTally = Array(n) { HashMap<Biome, Int>() }
 
         for (i in units.unitOf.indices) {
@@ -124,6 +125,7 @@ object CultureStage {
             counts[u]++
             val b = climate.biome[i]
             biomeTally[u][b] = (biomeTally[u][b] ?: 0) + 1
+            if (b != Biome.ICE_SHEET) nonIceCells[u]++
         }
 
         val biome = Array(n) { Biome.GRASSLAND }
@@ -140,9 +142,22 @@ object CultureStage {
             // Only the ice cap is genuinely empty. Tundra is bleak and has held people for as
             // long as there have been people, so the bar is deliberately low — this is not a
             // judgement about how pleasant the ground is.
-            habitable[u] = counts[u] > 0 &&
-                biome[u] != Biome.ICE_SHEET &&
-                temperature[u] > config.cultures.minTemperatureC
+            //
+            // The temperature clause this comment used to justify (`temperature[u] >
+            // minTemperatureC`) is gone: `Biome.ICE_SHEET` is already the temperature test
+            // (`ClimateStage.classify`'s `t < -8f`), so a second, looser one here was redundant
+            // by construction, and worse, a second *place* for "empty" to be defined that could
+            // silently disagree with the first.
+            //
+            // `habitable[u]` asks "does this unit have anywhere to live", which is a has-any
+            // question, not the majority-vote question `biome[u]` answers for hearth scoring and
+            // `climateDistance`. A unit straddling a retreating ice margin can vote ICE_SHEET by
+            // majority while a large minority of its cells individually are not — so gating
+            // reachability on `biome[u]` stranded that minority behind a "no people live here"
+            // decision the spread could not cross. `nonIceCells[u] > 0` reaches the unit whenever
+            // any of it is livable; which of its cells actually get settled is then decided per
+            // cell in `describe`, against each cell's own biome rather than the unit's vote.
+            habitable[u] = nonIceCells[u] > 0
         }
         return Profile(temperature, rainfall, elevation, habitable, biome)
     }
@@ -286,8 +301,15 @@ object CultureStage {
         for (i in 0 until cells) {
             val u = units.unitOf[i]
             // Hostile country was claimed only so the spread could pass through it. Nobody lives
-            // there, so it is drawn empty.
-            if (u != BasinUnits.NONE && sea.isLand[i] && profile.habitable[u]) cultureId[i] = owner[u]
+            // there, so it is drawn empty. Gated per cell against that cell's own biome, not the
+            // unit's majority vote: a mixed unit at the ice margin is reachable as soon as any of
+            // it is livable (see `habitable[u]` above), but the ice half of it still is not, and
+            // people live on the tundra half of a catchment even when the other half is ice.
+            if (u != BasinUnits.NONE && sea.isLand[i] && profile.habitable[u] &&
+                climate.biome[i] != Biome.ICE_SHEET
+            ) {
+                cultureId[i] = owner[u]
+            }
         }
 
         val counts = HashMap<Int, Int>()

@@ -172,7 +172,7 @@ object ClimateStage {
         scaleAndClamp(winterPrecipitation, reference)
 
         val biome = classify(
-            w, h, sea, temperature, winterTemperature,
+            w, h, sea, temperature, summerTemperature, winterTemperature,
             precipitation, summerPrecipitation, winterPrecipitation
         )
 
@@ -305,9 +305,35 @@ object ClimateStage {
         return if (warm) abs(lat - tilt) else lat + tilt
     }
 
+    /**
+     * The exponent of the latitude curve.
+     *
+     * Raised from 1.25 by A6. The Koppen gate alone did not fix the high-latitude west coast (the
+     * Bergen case): [ClimateStage.classify] now reads the coldest and warmest month instead of the
+     * annual mean, but at 1.25 the curve put 45 degrees — the effective latitude a 55-degree
+     * coast's *summer* reads off, one [ClimateConfig.seasonalTilt] equatorward — at a mere 6.8 C,
+     * so even a strong warm-current anomaly could not lift a maritime coast's warmest month over
+     * the 10 C tree line. Measured before this change: every one of seeds 7/42/1234's 50-60 degree
+     * west-facing, warm-current coast classified taiga or tundra, 0.0-0.1% forest. At 1.8, that
+     * same point reaches 14.8 C and the guard passes on all three seeds (56.7-66.7% forest).
+     *
+     * The equator and pole anchors are untouched; only the exponent moved, and it cuts both ways.
+     * Raising it lifts the whole curve between those fixed ends, so the 60-70 degree band a
+     * continental *interior*'s winter reads off warms past Koppen's -3 C boundary too, and a dry
+     * interior up there stops being gated as continental — measured on seed 42, that alone dropped
+     * desert-in-band from 98-100% to 48%, because a marginal, barely-continental interior that used
+     * to be taiga was now warm enough for [classify]'s existing desert check to fire on it. That is
+     * fixed in `classify` itself (see the `t >= 13f` guard on the C-branch's desert case) rather
+     * than by pulling the curve back down, since the coast fix needs the lift right where the
+     * interior leak happens — the two effective-latitude ranges overlap almost exactly, so no
+     * choice of exponent or pole alone separates them; see that guard's comment for the reasoning
+     * and the desert figures with it in place (98-100%, matching before).
+     */
+    private const val LATITUDE_EXPONENT = 1.8f
+
     /** The latitude term of the temperature curve, on its own, so a season can re-read it. */
     private fun latitudeTemperature(cfg: ClimateConfig, absoluteLatitude: Float): Float {
-        val latFactor = (absoluteLatitude / 90f).pow(1.25f)
+        val latFactor = (absoluteLatitude / 90f).pow(LATITUDE_EXPONENT)
         return cfg.equatorTemperatureC - (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
     }
 
@@ -785,19 +811,36 @@ object ClimateStage {
      *
      * Annual temperature and annual rainfall still lay out the broad zones — they are what a
      * Whittaker diagram uses, and they were right about most of the map. What they cannot see is
-     * the *shape* of the year, and three of the world's most distinctive land classes are shapes
+     * the *shape* of the year, and four of the world's most distinctive land classes are shapes
      * rather than totals: a Mediterranean coast and a temperate forest can receive the same
-     * rainfall and look nothing alike, and so can a savanna and a seasonal forest. Those three
-     * are decided on the ratio between the seasons; everything else is as it was.
+     * rainfall and look nothing alike, so can a savanna and a seasonal forest, and so can a
+     * maritime coast and a continental interior at the same latitude and the same annual mean.
+     * Those four are decided on the seasons directly; everything else is as it was.
      *
-     * With seasons off the two seasonal fields are the annual field, every ratio is exactly 1, and
-     * every seasonal test below falls through to the rule it replaced.
+     * The temperate/continental/polar thermal gate is Koppen's own: the coldest month decides
+     * whether a place has a real winter, not the average of a year that blends one. A place with
+     * [summerTemperature] below 10 C never has a growing season and is tundra (ET) whatever its
+     * annual mean. Above that, [winterTemperature] at or below -3 C means a real winter with secure
+     * snow cover and is continental (D), where taiga lives; above -3 C is temperate (C). The
+     * tropical line is Koppen's A: a coldest month at or above 18 C, meaning there is no winter at
+     * all — taken verbatim rather than invented, since nothing here argues for a different number.
+     *
+     * This is what fixes the high-latitude west coast (A5's Bergen case, A6 in the realism plan):
+     * annual mean alone put 55 degrees within a couple of degrees of freezing, so even a strong
+     * warm-current anomaly could not lift a mild-winter coast over the old `t < 7` bar. Bergen is
+     * temperate at an 8 C annual mean because its *coldest month* is about 2 C — a fact the annual
+     * mean cannot see and the coldest month states directly.
+     *
+     * With seasons off the two seasonal fields are the annual field, every ratio is exactly 1,
+     * [summerTemperature] and [winterTemperature] both equal the annual mean, and every seasonal
+     * test below falls through to the rule it replaced.
      */
     private fun classify(
         width: Int,
         height: Int,
         sea: SeaLevelResult,
         temperature: FloatField,
+        summerTemperature: FloatField,
         winterTemperature: FloatField,
         precipitation: FloatField,
         summerPrecipitation: FloatField,
@@ -810,6 +853,8 @@ object ClimateStage {
                 else Biome.OCEAN
             } else {
                 val t = temperature.data[i]
+                val warm = summerTemperature.data[i]
+                val cold = winterTemperature.data[i]
                 val p = precipitation.data[i]
                 val summerRain = summerPrecipitation.data[i]
                 val winterRain = winterPrecipitation.data[i]
@@ -822,23 +867,16 @@ object ClimateStage {
                 when {
                     t < -8f -> Biome.ICE_SHEET
                     elevation > 0.72f -> Biome.ALPINE
-                    t < 0f -> Biome.TUNDRA
-                    t < 7f -> if (p < 0.18f) Biome.TUNDRA else Biome.TAIGA
-                    t < 20f -> when {
-                        p < 0.14f -> Biome.DESERT
-                        // Dry summer, wet winter, mild enough for the rain to be rain: the
-                        // subtropical high sits over the coast all summer and the westerlies swing
-                        // back over it in winter. A real wet season is required as well as the
-                        // ratio, or a dry continental interior would qualify on lopsidedness alone
-                        // while receiving almost nothing either half of the year.
-                        winterShare >= 1.7f && summerRain < 0.30f && winterRain >= 0.30f &&
-                            winterTemperature.data[i] > 2f -> Biome.MEDITERRANEAN
-                        p < 0.28f -> Biome.GRASSLAND
-                        p < 0.42f -> Biome.SHRUBLAND
-                        p < 0.68f -> Biome.TEMPERATE_FOREST
-                        else -> Biome.TEMPERATE_RAINFOREST
-                    }
-                    else -> when {
+                    // ET: even the warmest month never clears the tree line's own threshold.
+                    warm < 10f -> Biome.TUNDRA
+                    // D: a real summer, but a coldest month at or below -3 C means secure winter
+                    // snow cover — Koppen's own line between continental and temperate. Moisture
+                    // still decides taiga from the dry cold exactly as the old annual `t < 7`
+                    // branch did; there is no separate steppe biome to give the dry case its own
+                    // name.
+                    cold <= -3f -> if (p < 0.18f) Biome.TUNDRA else Biome.TAIGA
+                    // A: coldest month at or above 18 C — no winter at all.
+                    cold >= 18f -> when {
                         p < 0.14f -> Biome.DESERT
                         // One drenching wet season doing nearly all the year's work.
                         summerShare >= 2.5f && summerRain >= 0.50f -> Biome.MONSOON_FOREST
@@ -851,6 +889,36 @@ object ClimateStage {
                             if (summerShare >= 1.6f) Biome.SAVANNA
                             else Biome.TROPICAL_SEASONAL_FOREST
                         else -> Biome.TROPICAL_RAINFOREST
+                    }
+                    // C: a real winter above -3 C and a real summer — everything in between.
+                    else -> when {
+                        // PROVISIONAL, and known to be wrong in one direction: this abolishes cold
+                        // deserts. The Gobi's annual mean is about 2 C and Patagonia's is under 10,
+                        // and both would be gated out below alongside the false positives this was
+                        // added to stop. A real fix is a Koppen B (arid) test on rainfall in mm
+                        // against a temperature-dependent aridity threshold — BW/BS — which A4's
+                        // absolute-rainfall chunk is expected to add and subsume this into.
+                        //
+                        // What it stops: moving the D/C boundary poleward to fix the high-latitude
+                        // coast (A6) also exposes marginal, barely-C interior at 46-58 degrees whose
+                        // dry patches were taiga before and would otherwise read as desert now
+                        // purely for having crossed a thermal line by a couple of degrees — measured
+                        // on seed 42, that alone dropped desert-in-band from 98% to 48%. Until A4,
+                        // an annual mean under 13 C is treated as that marginal case rather than a
+                        // true hot subtropical desert, and falls to grassland below instead, same as
+                        // a cold steppe would.
+                        p < 0.14f && t >= 13f -> Biome.DESERT
+                        // Dry summer, wet winter, mild enough for the rain to be rain: the
+                        // subtropical high sits over the coast all summer and the westerlies swing
+                        // back over it in winter. A real wet season is required as well as the
+                        // ratio, or a dry continental interior would qualify on lopsidedness alone
+                        // while receiving almost nothing either half of the year.
+                        winterShare >= 1.7f && summerRain < 0.30f && winterRain >= 0.30f &&
+                            cold > 2f -> Biome.MEDITERRANEAN
+                        p < 0.28f -> Biome.GRASSLAND
+                        p < 0.42f -> Biome.SHRUBLAND
+                        p < 0.68f -> Biome.TEMPERATE_FOREST
+                        else -> Biome.TEMPERATE_RAINFOREST
                     }
                 }
             }

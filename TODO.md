@@ -58,6 +58,51 @@
   `GeographyAuditTest` rather than assumed. Capital siting was the one clear violation and is
   fixed; the remaining deviations are recorded below.
 
+- **Full-world saves** (2026-09-11) — a save now stores the finished world rather than the recipe
+  for it: an uncompressed JSON header (format version, config, overrides, labels, which front end
+  wrote it) followed by one gzipped binary section per stage's result, laid out by `WorldCodec` in
+  `:cartography` so every front end reads and writes the same bytes. Gzip takes a 1024 save from
+  98.7 to 38-40 MB and a 512 save from 24.7 to 10.4 MB (2.36-2.57x); id maps compress 136-1010x,
+  height fields barely move at 1.1x because they are noise by construction. The web library moved
+  off `localStorage`, which cannot hold a full save, onto IndexedDB with a headers store so the
+  listing never deserialises an array; a round-trip through it comes back byte-identical at 729 KB,
+  85ms to write and 61ms to read. A version-2 seed-only save still opens and regenerates from its
+  seed exactly as before, and — since A1 added four climate sections and broke every save written
+  before it — a save missing a section a later build added now regenerates that stage and
+  everything downstream instead of refusing to open. Cross-platform bit-identity between JVM and
+  Wasm is no longer required for a save to be portable, so CI's JVM-vs-Wasm fingerprint comparison
+  is informational now (`continue-on-error`, printed as a warning annotation) rather than a gate.
+
+- **Climate realism** (2026-09-11) — temperature and rainfall now run twice, for the local warm
+  season and the local cold one, with the thermal equator migrating `seasonalTilt` (10°) toward
+  whichever hemisphere is in summer: at 35°, land swings 13.1°C through the year against 2.9°C over
+  open sea. Seasonal amplitude scales with distance from water — a 50° interior swings 7.5°C more
+  than a coast at the default `continentality`, 0.2°C more with it off. Wind gained a meridional
+  component, trades toward the equator and westerlies toward the pole, so the rain march advects
+  along a vector instead of scanning rows; riding the migrating thermal equator, that is the
+  monsoon, measured unclamped at 4.07% of land on seed 26 (was 2.93% under the old rainfall clamp).
+  Rainfall is calibrated to approximate mm/year — seed 42's wettest windward coast lands near
+  3000mm, its desert cores at 89-190mm — instead of rescaled per world, so deserts genuinely differ
+  by seed: 0.99-6.14% of land, a 6.2x driest-to-wettest spread. The temperate/continental/tundra
+  boundary now reads the coldest and warmest month, Köppen-style, instead of the annual mean: 50-60°
+  west-facing coasts went from 0/0/0.1% forested to 65/53/59%, while interior taiga at the same
+  latitudes held at 100/97/96%. Two new biomes, Mediterranean and monsoon forest, come out of the
+  seasonal contrast rather than the annual total.
+
+- **Terrain realism** (2026-09-11) — oceanic crust now carries a continental shelf: after the
+  sea-level cut, near-coast sea floor remaps onto a shallow platform, measured at 100% shallow
+  within `shelfWidth` of a coast against 60.3% unremapped, falling to 0-2.5% beyond twice that
+  distance, with zero land cells moved on any seed. Convergent boundaries are classified by crust
+  pair instead of sharing one profile: an Andean margin (narrow coastal range, volcanic arc inland
+  of its trench), a collision plateau (broad and flat, 3.47x broader for its height than a margin,
+  against 0.72x with one shared profile), an island arc, plus continental rift valleys and hotspot
+  seamount chains on over a third of oceanic plates. Hydraulic erosion now deposits what it carries
+  instead of only removing it — floodplains, alluvial fans, and deltas at 68 river mouths on
+  seed 42 — with incision balancing deposition plus sediment lost to the sea to the last float
+  (0.0000% off). Where the provisional annual mean sits below freezing, ice carves U-shaped
+  troughs, cirques and moraine-dammed basins into the valleys the rivers already cut: 12.36 lakes
+  per 10k cold cells against 0.99 per 10k temperate ones (12.47x), 0.00x with glaciation off.
+
 - **JVM and Wasm had drifted apart, and CI said so for two weeks** (2026-09-10). Every
   commit since the basin rework failed the cross-platform fingerprint check: terrain, land and
   rivers identical, but 14 realms on the JVM against 13 on Wasm. Nobody looked at CI. The cause
@@ -179,5 +224,21 @@
   change which sites a given seed produces.
 - **The chamfer distance transform leaves faint octagonal streaks** in terrain near plate
   boundaries. An exact Euclidean transform would remove them.
-- **`WorldCodec.FORMAT_VERSION` is 2 but nothing reads it.** Fine until the format changes
-  incompatibly, at which point a migration needs somewhere to hook in.
+- **Island-arc ridges run dead straight** where a real arc bows convex toward the subducting
+  plate — seen on seed 1234 as a bar across the centre and a spine down the north-east. Worth a
+  curvature term along strike when someone next opens `PlateStage`.
+- **Faint rainfall banding at circulation-belt seams.** Seed 42's annual rainfall carries a visible
+  horizontal band across the northern continent where two belts meet. A wind-band seam, worth a
+  look when `buildWind` is next opened.
+- **The sea never drowns a glacial trough.** A fjord is a trough the sea has flooded, and flooding
+  one means re-cutting the sea-level percentile, which moves every other coastline on the map. So
+  `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
+  islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
+  are. See GEOGRAPHY.md's "Known deviations".
+- **Chamfer faceting on the widest plateau edges.** B2's collision plateaus show a faint faceted
+  edge where the chamfer distance transform approximates the boundary distance. Visible if looked
+  for, invisible otherwise; the same underlying approximation as the octagonal streaks above.
+- **The latitude curve runs a few degrees off at its anchors.** Checked arithmetically after A6:
+  the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
+  anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
+  render; worth revisiting if a future chunk touches `buildTemperature` for another reason.

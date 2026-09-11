@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.GenerationStage
+import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Culture
 import com.cartogenesis.worldgen.pipeline.Lake
@@ -66,6 +68,22 @@ data class SaveHeader(
 
 /** A save as it comes off the shelf: the document, and the world itself if the file carried one. */
 class WorldSave(val document: WorldDocument, val world: WorldMap?)
+
+/**
+ * One line for the library listing: "complete", or which stage opening this save will have to
+ * recompute first (everything after it follows, by the same reuse-chain rule that makes opening
+ * one at all safe rather than a refusal).
+ *
+ * Reads only [SaveHeader.sections] — names already sitting in the header — never the payload, so a
+ * listing of any number of saves costs nothing more than it already did.
+ */
+val SaveHeader.openStatus: String
+    get() {
+        if (world == null) return "regenerates everything"
+        val present = WorldSections.presentStages(sections.mapTo(HashSet()) { it.name })
+        val firstMissing = GenerationStage.entries.firstOrNull { it !in present }
+        return if (firstMissing == null) "complete" else "regenerates ${firstMissing.shortLabel}…"
+    }
 
 /**
  * The save format: a JSON header, then one binary section per per-cell array.
@@ -194,8 +212,14 @@ object WorldCodec {
      * The whole thing.
      *
      * A version-2 save comes back with a null world, which the caller regenerates from the config
-     * — the behaviour that build had. A container missing a section throws, because a save that
-     * has lost an array is a file this build cannot open rather than a world with a hole in it.
+     * — the behaviour that build had. A container missing a *whole stage's* sections does not
+     * throw: [WorldSections.rebuild] hands back the stages it could build and `null` for the rest,
+     * and the reuse chain in [WorldGenerationEngine.generate] regenerates a missing stage and
+     * everything downstream of it, the same way it already regenerates anything whose settings
+     * changed. So this always hands the caller a complete [WorldMap] — never a partial one — with
+     * an old save simply costing the recompute of whatever it could not carry forward, once, here,
+     * rather than every place that ever asks for `save.world` having to know the difference. A
+     * corrupt section (wrong length, bad magic) still throws — see [WorldSections.rebuild].
      */
     suspend fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave {
         val header = decodeHeader(bytes)
@@ -223,12 +247,13 @@ object WorldCodec {
             )
         }
 
-        val world = WorldSections.rebuild(
+        val partial = WorldSections.rebuild(
             config = header.document.config,
             lists = header.world,
             labels = header.document.labels,
             sections = WorldSections.read(payload)
         )
+        val world = WorldGenerationEngine.generate(header.document.config, previous = partial)
         return WorldSave(header.document, world)
     }
 

@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.NationOverride
@@ -115,7 +116,7 @@ fun CartogenesisApp(platform: Platform) {
     var labelMode by remember { mutableStateOf(false) }
     var documentId by remember { mutableStateOf(randomId()) }
     var title by remember { mutableStateOf("Untitled world") }
-    var saved by remember { mutableStateOf(listOf<WorldDocument>()) }
+    var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
     val store = platform.library
     // Click handlers are plain callbacks, not suspend functions, but the library now is - it
     // lives in IndexedDB on the web build, which is asynchronous throughout. This is how a

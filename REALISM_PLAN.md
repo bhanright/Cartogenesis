@@ -323,7 +323,7 @@ guard reported, so the next chunk knows its baseline.
 | D1 Full-world save format | Opus | not started | | | |
 | D2 Web storage | Sonnet | not started | | | |
 | D3 Retire the determinism gate | Haiku | not started | | | |
-| A0 GEOGRAPHY.md reconcile | Haiku | not started | | | |
+| A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |
 | A1 Seasons | Opus | not started | | | |
 | A2 Continentality | Sonnet | not started | | | |
 | A3 Meridional wind / monsoon | Opus | not started | | | |

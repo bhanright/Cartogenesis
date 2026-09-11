@@ -208,6 +208,12 @@ internal object WorldSections {
         Section("rivers.flowAccumulation", SectionType.F32, floats = world.rivers.flowAccumulation.data),
         Section("rivers.flowTarget", SectionType.I32, ints = world.rivers.flowTarget),
         Section("rivers.lakeId", SectionType.I32, ints = world.rivers.lakes.lakeId),
+        // E2. A byte per cell rather than a list of indices, because a playa is a per-cell fact
+        // exactly as a lake is, and the salt flats a later chunk draws will be read the same way
+        // the lake ids are.
+        Section("rivers.playa", SectionType.U8, raw = ByteArray(world.rivers.lakes.playa.size) {
+            if (world.rivers.lakes.playa[it]) 1 else 0
+        }),
         Section("nations.nationId", SectionType.I32, ints = world.nations.nationId),
         Section("nations.habitability", SectionType.F32, floats = world.nations.habitability.data),
         Section("cultures.cultureId", SectionType.I32, ints = world.cultures.cultureId)
@@ -244,7 +250,11 @@ internal object WorldSections {
             "climate.windDirection", "climate.windMeridional", "climate.biome"
         ),
         GenerationStage.RIVERS to listOf(
-            "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget", "rivers.lakeId"
+            "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget",
+            // Added by E2, and listed here for the same reason B2's boundary class is: a save
+            // written before it knows nothing of endorheic basins, so its river stage is absent
+            // rather than partially present, and is regenerated on open.
+            "rivers.lakeId", "rivers.playa"
         ),
         GenerationStage.NATIONS to listOf("nations.nationId", "nations.habitability"),
         GenerationStage.CULTURES to listOf("cultures.cultureId")
@@ -439,7 +449,11 @@ internal object WorldSections {
                 flowAccumulation = field("rivers.flowAccumulation"),
                 flowTarget = ints("rivers.flowTarget"),
                 rivers = lists.rivers,
-                lakes = LakeResult(lakeId = ints("rivers.lakeId"), lakes = lists.lakes)
+                lakes = LakeResult(
+                    lakeId = ints("rivers.lakeId"),
+                    lakes = lists.lakes,
+                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } }
+                )
             )
         } else null
 

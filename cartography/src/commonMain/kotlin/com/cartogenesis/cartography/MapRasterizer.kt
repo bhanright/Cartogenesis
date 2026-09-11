@@ -140,9 +140,11 @@ object MapRasterizer {
         for (i in 0 until w * h) {
             if (showLakes && lakes.isLake(i)) {
                 // Depth from how far the water surface sits above the ground beneath it, so a
-                // deep basin reads darker than a shallow flood.
-                val depth = world.rivers.filledElevation.data[i] -
-                    world.sea.relativeElevation.data[i]
+                // deep basin reads darker than a shallow flood. The surface is the lake's own,
+                // not the filled elevation: an endorheic lake stands below the brim the fill
+                // raised its basin to, and reading the depth off the fill would draw a shallow
+                // desert lake as if it were full to the rim.
+                val depth = lakes.surfaceAt(i) - world.sea.relativeElevation.data[i]
                 pixels[i] = MapPalette.blend(
                     style.lake,
                     style.lakeDeep,

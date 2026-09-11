@@ -102,13 +102,19 @@ class RiverEndingsTest {
             var polarEdge = 0
             var noOutflow = 0
             var stranded = 0
+            // E2: a river that ends in an endorheic lake or on its playa has reached water, and is
+            // not a river stopping in the middle of a continent. Before the water balance every
+            // basin overflowed, so this case could not arise and was not counted.
+            var endedInLake = 0
 
+            val lakes = world.rivers.lakes
             world.rivers.rivers.forEach { river ->
                 val mouth = river.cells.last()
                 val y = mouth / w
                 val target = world.rivers.flowTarget[mouth]
                 when {
                     !world.sea.isLand[mouth] -> reachedSea++
+                    lakes.isLake(mouth) || lakes.isPlaya(mouth) -> endedInLake++
                     target < 0 && (y == 0 || y == h - 1) -> polarEdge++
                     target < 0 -> noOutflow++
                     // Continues into a cell some other drawn river occupies: visually connected.
@@ -125,6 +131,7 @@ class RiverEndingsTest {
                 var cell = river.cells.last()
                 var steps = 0
                 while (world.sea.isLand[cell] && steps++ < w * h) {
+                    if (lakes.isLake(cell) || lakes.isPlaya(cell)) break
                     val next = world.rivers.flowTarget[cell]
                     if (next < 0) break
                     if (!onRiver.contains(next) && world.sea.isLand[next]) {
@@ -141,14 +148,15 @@ class RiverEndingsTest {
 
             println(
                 "ENDINGS seed=$seed rivers=${world.rivers.rivers.size} sea=$reachedSea " +
-                    "joined=$joined polarEdge=$polarEdge noOutflow=$noOutflow stranded=$stranded"
+                    "lake=$endedInLake joined=$joined polarEdge=$polarEdge " +
+                    "noOutflow=$noOutflow stranded=$stranded"
             )
 
             // How far a land-ending river sits from open water. A river that "joins" another one
             // right beside the coast reads fine; one that stops deep inland is what looks wrong.
             val inlandDistances = world.rivers.rivers
                 .map { it.cells.last() }
-                .filter { world.sea.isLand[it] }
+                .filter { world.sea.isLand[it] && !lakes.isLake(it) && !lakes.isPlaya(it) }
                 .map { cell -> distanceToWater(world, cell) }
                 .sorted()
             if (inlandDistances.isNotEmpty()) {

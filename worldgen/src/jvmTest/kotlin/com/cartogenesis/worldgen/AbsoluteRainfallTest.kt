@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
@@ -20,6 +21,17 @@ import kotlin.test.assertTrue
 class AbsoluteRainfallTest {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
+
+    private companion object {
+        /** MeridionalWindTest's own figures for the monsoon re-measurement, restated in mm terms. */
+        const val WET_SEASON_FRACTION = 0.25f
+        const val MONSOON_RATIO = 3f
+        const val MONSOON_REQUIRED_SHARE = 0.02
+
+        /** How far out to sea a coast may look, and how far the land must run behind it. */
+        const val SEA_REACH = 30
+        const val LAND_BEHIND = 8
+    }
 
     /**
      * The figures the report asks for: seed 42's calibration targets, and every audited seed's
@@ -146,6 +158,116 @@ class AbsoluteRainfallTest {
             "absolute mm should tell the arid config from the lush one, but measured only " +
                 "%.2fx (arid %.2f%%, lush %.2f%%)".format(newRatio, newArid, newLush)
         )
+    }
+
+    /**
+     * The monsoon note A3 left open (see `MeridionalWindTest`'s "a tropical coast has a wet season
+     * and a dry one"): with rainfall normalised and clamped at 1, tropical coasts sat against that
+     * clamp in the warm season, so a monsoon year's wet half had no room left to get wetter —
+     * measured there at 0.94 to 1.00 across five seeds, pinned against the ceiling. Re-measured on
+     * A3's own seed (26) with the same mask, the same [MONSOON_RATIO] and a millimetre floor
+     * equivalent to the old [WET_SEASON_FRACTION] of the old clamp, but reading
+     * [ClimateStage.generateWithSeasonalMm]'s unclamped seasonal fields instead — the same 3x /
+     * 2%-of-land claim the plan originally asked for, without the ceiling that kept it from being
+     * tested honestly.
+     *
+     * Not a guard: `MeridionalWindTest`'s own guard is left exactly as it was (it asserts the
+     * weaker claim, deliberately, and says why). This reports whether removing the clamp changes
+     * the answer, and says so either way.
+     */
+    @Test
+    fun `the monsoon claim, re-measured without the clamp`() {
+        val seed = 26L
+        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val world = WorldGenerationEngine.generateBlocking(base)
+        val generated = ClimateStage.generateWithSeasonalMm(base, world.sea, world.ocean)
+        val w = world.width
+        val h = world.height
+        val wetSeasonMm = WET_SEASON_FRACTION * ClimateStage.REFERENCE_MM
+
+        val mask = BooleanArray(w * h)
+        for (y in 0 until h) {
+            val lat = ClimateStage.latitudeOf(y, h)
+            if (abs(lat) < 12f || abs(lat) > 32f) continue
+            // Poleward, matching MeridionalWindTest's own mask: the coast this world actually
+            // grew a monsoon on faces poleward, not equatorward — see that test's comment on why.
+            val seaward = if (lat > 0f) -1 else 1
+            for (x in 0 until w) {
+                val i = y * w + x
+                if (!world.sea.isLand[i]) continue
+                val summerMm = generated.summerPrecipitationMm.data[i]
+                val winterMm = generated.winterPrecipitationMm.data[i]
+                if (summerMm < wetSeasonMm || summerMm <= MONSOON_RATIO * winterMm) continue
+                if (!facesSea(world, x, y, seaward)) continue
+                mask[i] = true
+            }
+        }
+        val region = largestRegionOf(world, mask)
+        val share = region / world.sea.landCellCount.toDouble()
+        println(
+            "ABSRAIN monsoon seed $seed re-measured without the clamp: largest contiguous " +
+                "region with a %.0fx summer/winter split ".format(MONSOON_RATIO) +
+                "covers %.2f%% of land (was 2.93%% clamped, needs %.0f%%)".format(
+                    share * 100, MONSOON_REQUIRED_SHARE * 100
+                )
+        )
+        if (share >= MONSOON_REQUIRED_SHARE) {
+            println("ABSRAIN monsoon claim: HOLDS without the clamp")
+        } else {
+            println("ABSRAIN monsoon claim: still does not hold without the clamp")
+        }
+    }
+
+    /** Open water within [SEA_REACH] cells that way, and land for [LAND_BEHIND] cells the other. */
+    private fun facesSea(world: WorldMap, x: Int, y: Int, seaward: Int): Boolean {
+        val w = world.width
+        val h = world.height
+        var found = false
+        for (step in 1..SEA_REACH) {
+            val ny = y + seaward * step
+            if (ny !in 0 until h) break
+            if (!world.sea.isLand[ny * w + x]) { found = true; break }
+        }
+        if (!found) return false
+        for (step in 1..LAND_BEHIND) {
+            val ny = y - seaward * step
+            if (ny !in 0 until h || !world.sea.isLand[ny * w + x]) return false
+        }
+        return true
+    }
+
+    /** The largest four-connected block of the mask, in cells. X wraps; Y does not. */
+    private fun largestRegionOf(world: WorldMap, mask: BooleanArray): Int {
+        val w = world.width
+        val h = world.height
+        val seen = BooleanArray(w * h)
+        var largest = 0
+        val stack = ArrayDeque<Int>()
+        for (start in 0 until w * h) {
+            if (!mask[start] || seen[start]) continue
+            var size = 0
+            stack.addLast(start)
+            seen[start] = true
+            while (stack.isNotEmpty()) {
+                val cell = stack.removeLast()
+                size++
+                val cx = cell % w
+                val cy = cell / w
+                val around = intArrayOf(
+                    cy * w + ((cx + 1) % w),
+                    cy * w + ((cx - 1 + w) % w),
+                    if (cy > 0) (cy - 1) * w + cx else -1,
+                    if (cy < h - 1) (cy + 1) * w + cx else -1
+                )
+                for (n in around) {
+                    if (n < 0 || seen[n] || !mask[n]) continue
+                    seen[n] = true
+                    stack.addLast(n)
+                }
+            }
+            if (size > largest) largest = size
+        }
+        return largest
     }
 
     private fun assertRatioAtLeast(shares: Map<Long, Float>, minRatio: Float, message: String) {

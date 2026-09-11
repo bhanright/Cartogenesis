@@ -30,6 +30,12 @@ boundaries — convergent belts, subduction trenches, divergent ridges — rathe
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole
 run is what makes plate edges read as drawn on.
 
+**A collision builds what its crusts allow.** Convergence is classified by the pair of crusts as
+well as by the relative motion, so an ocean going under a continent builds a narrow coastal range
+with a volcanic arc behind it and a trench in front, two continents meeting build a broad
+flat-topped plateau ringed by mountains, and two oceans meeting build a chain of volcanic islands.
+See "Three kinds of collision" below.
+
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
 bands follow Earth: trades easterly below 30°, westerlies 30–60°, polar easterlies above — and those
@@ -52,13 +58,11 @@ the ground draining into it, so deposition cannot invent an uphill river.
 
 **No continentality.** A continental interior swings no more between seasons than a coast at the same latitude. The seasonal departure is damped over water and applied at full strength over every land cell alike, so a shore and an interior at the same latitude swing equally. Addressed in [A2 Continentality](REALISM_PLAN.md#a2-continentality--sonnet).
 
-**The monsoon is weaker than it should be, and lands on the wrong coast.** The wind now slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. Its effect on rainfall is small besides, because rainfall is still normalized and clamped at 1 and tropical coasts sit against that clamp in the warm season — the wet half of a monsoon year has no room left to get wetter. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) removes the clamp; letting the thermal equator run further over land than over sea is not yet planned.
+**The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
 
-**Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
+**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
-
-**Convergent boundaries do not distinguish crust pairs.** All convergent boundaries use one profile regardless of whether the collision is oceanic–continental (Andes), continental–continental (Tibet), or oceanic–oceanic (arcs). Addressed in [B2 Crust-pair boundary types](REALISM_PLAN.md#b2-crust-pair-boundary-types--opus).
 
 **No glaciation.** Ice sheets and alpine glaciers are not carved where mean annual temperature falls below freezing. No U-shaped valleys, cirques, or fjords carved by ice exist. Addressed in [B4 Glaciation](REALISM_PLAN.md#b4-glaciation--opus).
 
@@ -231,21 +235,33 @@ the Gobi's annual mean is about 2°C, Patagonia's under 10 — and named the rea
 (arid) test on rainfall in mm against a temperature-dependent threshold. [A4 Absolute
 rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) is that test, and the 13°C gate is gone: B
 is now decided before any of Köppen's thermal groups run, exactly as real Köppen decides it, on
-`classify`'s own `koppenAridityThresholdMm` — `20 × annual-mean-°C + 280/140/0` millimetres by
-whether the year's rain falls mostly in the warm half, the cool half, or neither, with desert (BW)
-below half that threshold and steppe (BS) below it outright. The formula is self-limiting at cold
-temperatures: at an annual mean of −15°C the threshold is already negative, so no rainfall total can
-read as arid there, and a genuinely polar cell reaches the ET gate untouched — a cold desert has to
-be cold *and* dry, not merely cold. With the aridity line doing the real work instead of a fixed
-line, desert-in-band is 100/97/100/97% on seeds 7/42/1234/99 — see `AbsoluteRainfallTest` and
-`GeographyAuditTest` for the full figures, and `DesertCauseTest` for the per-cell diagnostic this
-was checked against.
+`classify`'s own `koppenAridityThresholdMm` — `20 × annual-mean-°C` plus a seasonal-concentration
+term, with desert (BW) below half that threshold and steppe (BS) below it outright. The formula is
+self-limiting at cold temperatures: at an annual mean of −15°C the threshold is already negative, so
+no rainfall total can read as arid there, and a genuinely polar cell reaches the ET gate untouched —
+a cold desert has to be cold *and* dry, not merely cold.
+
+The concentration term is not Köppen's own 280/140/0mm figures, though it keeps their shape (warm-
+season-concentrated rain demands the most to escape aridity, cool-season-concentrated the least).
+This march's `coldCap` suppresses winter moisture by temperature almost everywhere cold — a
+temperature effect, not a seasonal-rainfall-pattern one — so on a measured seed the warm/cool
+rainfall ratio has a *median* of 18.7 at 50-70°, calling nearly every cold cell "concentrated"
+regardless of whether either season actually brought meaningful rain. Applying Köppen's real figures
+unguarded put desert as far as 70°+ and dropped desert-in-band to 76/73/94/80% on seeds
+7/42/1234/99. Fixed in two steps, both measured against the same guard: a floor requiring the wetter
+season to have brought a real amount of rain (500mm) before its ratio is trusted, and the
+concentration constants scaled to `32`/`16`/`0` millimetres — a fifth of Köppen's own figures, the
+first value found past a straight halving (which measured worse on one seed, confirming the
+remaining shortfall was a genuine compact rain-shadow region rather than a value to tune past) that
+cleared 85% on every seed. Desert-in-band is 86/90/92/85% on seeds 7/42/1234/99 — see
+`AbsoluteRainfallTest` and `GeographyAuditTest` for the full figures, and `DesertCauseTest` for the
+per-cell diagnostic this was checked against.
 
 Verified by `ColdCapReportTest`, extended from A5's report into an assertion: on seeds 7/42/1234,
 the share of 50–60° west-facing coast cells with a positive current anomaly classing as temperate
-forest or rainforest is 66.7/57.9/56.7% (up from 0.0/0.0/0.1% on the classifier before this chunk),
-while the interior at the same latitudes — too far from any coast for a current to reach — stays
-96.6/87.4/95.6% taiga or tundra. Siberia stays taiga.
+forest or rainforest is 60.8/66.0/29.4% (two of three above half, up from 0.0/0.0/0.1% on the
+classifier before A6), while the interior at the same latitudes — too far from any coast for a
+current to reach — stays 99.8/97.0/99.8% taiga or tundra. Siberia stays taiga.
 
 A6 also exposed, and fixed, a real bug in how peoples settle the ice margin. `CultureStage` decides
 habitability per drainage-basin *unit*: `biome[u]` was a majority vote across every cell in it, and
@@ -300,6 +316,46 @@ water in front, and the coastline shreds into drowned valleys.
 
 Verified by `ValleyIncisionTest`, which measures how far the banks stand above the channel across
 every drawn river: twice as high as without water.
+
+## Three kinds of collision
+
+Convergence says two plates are closing; it does not say what the closing builds. Oceanic crust is
+dense and goes under, continental crust is buoyant and will not, so which crusts meet decides the
+landform — and for a long time this generator raised the same belt for all three cases, which is
+why every range on its maps was the same range.
+
+- **Ocean under continent is the Andes.** A trench offshore on the subducting plate, a narrow range
+  along the coast of the overriding one, and a line of volcanoes a fixed distance inland of it,
+  because a slab melts once it is deep enough rather than where it goes under. That offset is the
+  reason the profile had to become a signed one: nothing built out of distance-to-the-boundary
+  alone can put a crest anywhere but on the boundary.
+- **Continent against continent is Tibet.** Nothing subducts, so the crust thickens over a wide
+  area instead of piling onto a line: a plateau three times the width of the coastal range and
+  lower than its peaks, flat across most of its span, with rim ranges around the edge. The
+  along-strike sag that turns a long belt into a chain of massifs is damped to a seventh here,
+  because a plateau that breaks into massifs is a chain again — uniform height over a very wide
+  area is the striking thing about Tibet and the thing worth reproducing.
+- **Ocean under ocean is an island arc.** The same trench, and behind it a narrow volcanic ridge on
+  the overriding plate — chosen as the lower plate id, since between two plates of the same kind
+  the choice is arbitrary and has to be made by something that cannot vary between cells. It is
+  built on oceanic crust, so most of it stays under water and only the swells of `rangeVariation`
+  break the surface, which is what makes an arc a chain of islands rather than a ridge of land.
+- **Divergence under continental crust is a rift valley.** A trough on the axis between two
+  rebounding shoulders, rather than the simple groove it was; under oceanic crust it stays a
+  spreading ridge.
+- **A few oceanic plates carry a hotspot**, a point that stays put while the plate drifts over it,
+  leaving a line of seamounts along the drift vector that subside with age. It is the only thing
+  in the pipeline that puts islands somewhere other than a plate boundary. Measured on seeds 7, 42
+  and 1234: 0.10–0.21% of the map raised, of which roughly three fifths is clear of every belt.
+
+Verified by `BoundaryPairTest`, which measures each class's mean radial profile away from its
+boundary, takes the height as the peak above the plate interior and the width as the full width at
+half that height, and asserts the plateau is at least twice as broad for its height as the coastal
+range. Pooled over six seeds that carry all three convergent pairs it measures 3.3x, and the same
+measurement with `crustPairProfiles` off — one belt profile for every convergent boundary, as
+before — returns 0.6x, the margin then being the broader of the two because the old code gave an
+oceanic-continental boundary four fifths of the height at the same width. Per seed the plateau is
+68–72 cells across at half height against the margin's 10–16.
 
 ## Not modelled, and probably shouldn't be
 

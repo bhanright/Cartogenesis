@@ -97,6 +97,57 @@ class DebugMapDump {
     }
 
     /**
+     * The three convergent pairs, side by side against the world that could not tell them apart.
+     *
+     * Every seed is rendered twice, once with
+     * [com.cartogenesis.worldgen.model.TectonicsConfig.crustPairProfiles] on and once off, so the
+     * Andes-versus-Tibet claim can be checked against the belt it replaced rather than against a
+     * memory of it. The boundary-class view says which pair built which piece of ground; the point
+     * of the elevation view is that it should not be needed to see the difference.
+     */
+    @Test
+    fun `dump crust-pair boundary renders`() {
+        outputDir.mkdirs()
+
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            listOf(true, false).forEach { pairs ->
+                val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                val config = base.copy(
+                    tectonics = base.tectonics.copy(crustPairProfiles = pairs)
+                )
+                val world = WorldGenerationEngine.generateBlocking(config)
+                val tag = if (pairs) "pairs" else "single"
+                write(render(world, Mode.ELEVATION), "pairs-seed$seed-$tag-elevation.png")
+                write(render(world, Mode.FANTASY), "pairs-seed$seed-$tag-fantasy.png")
+                if (pairs) {
+                    write(render(world, Mode.BOUNDARY_CLASS), "pairs-seed$seed-boundaries.png")
+                    write(render(world, Mode.PLATES), "pairs-seed$seed-plates.png")
+                }
+
+                // How much of the land each pair built, which is the tally behind the renders.
+                val counts = IntArray(6)
+                var land = 0
+                for (i in world.sea.isLand.indices) {
+                    if (!world.sea.isLand[i]) continue
+                    land++
+                    val cls = world.plates.nearestBoundaryClass[i]
+                    if (cls in counts.indices) counts[cls]++
+                }
+                println(
+                    "PAIRSMAP seed $seed $tag: ${(world.landFraction() * 100).toInt()}% land, " +
+                        counts.mapIndexed { cls, n ->
+                            "${boundaryClassName(cls)}=${n * 100 / land.coerceAtLeast(1)}%"
+                        }.joinToString(" ")
+                )
+            }
+        }
+        println("Crust-pair maps written to ${outputDir.absolutePath}")
+    }
+
+    private fun boundaryClassName(ordinal: Int): String =
+        com.cartogenesis.worldgen.pipeline.BoundaryClass.entries.getOrNull(ordinal)?.name ?: "none"
+
+    /**
      * The two seasons' rainfall with the wind slanted and with it purely zonal, side by side.
      *
      * The whole of the monsoon is the difference between these two sets, and it is a difference no
@@ -213,7 +264,11 @@ class DebugMapDump {
         // map and the same distance equatorward in the winter one.
         SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE,
         // Which half of the year the rain arrives in, and the wind vector that decides it.
-        SEASON_CONTRAST, WIND
+        SEASON_CONTRAST, WIND,
+
+        // What each plate boundary is building, by crust pair: an Andean margin, a collision
+        // plateau, an island arc, a spreading ridge, a continental rift or a transform fault.
+        BOUNDARY_CLASS
     }
 
     /** The wind vector field, drawn over whichever ground [render] laid down. */
@@ -362,7 +417,23 @@ class DebugMapDump {
 
                     Mode.PLATES -> {
                         val edge = (world.plates.boundaryDistance.data[i] / 12f).coerceIn(0f, 1f)
-                        mix(0x202020, plateColor(world.plates.plateId[i]), edge)
+                        mix(
+                            boundaryClassColor(world.plates.nearestBoundaryClass[i]),
+                            plateColor(world.plates.plateId[i]),
+                            edge
+                        )
+                    }
+
+                    Mode.BOUNDARY_CLASS -> {
+                        // Saturated on the boundary and washing out into the plate interiors, with
+                        // the land/sea split kept so the relief can be matched against its cause.
+                        val fade = (world.plates.boundaryDistance.data[i] /
+                            (world.width * 0.11f)).coerceIn(0f, 1f)
+                        mix(
+                            boundaryClassColor(world.plates.nearestBoundaryClass[i]),
+                            if (land) 0xF2EFE6 else 0xB6C6D2,
+                            fade
+                        )
                     }
 
                     Mode.BIOME -> biomeColor(world.climate.biome[i])
@@ -556,6 +627,17 @@ class DebugMapDump {
     private fun plateColor(id: Int): Int {
         val hue = (id * 137.508f) % 360f
         return Color.HSBtoRGB(hue / 360f, 0.45f, 0.85f) and 0xFFFFFF
+    }
+
+    /** Mirrors `MapPalette.boundaryClass`; see [com.cartogenesis.worldgen.pipeline.BoundaryClass]. */
+    private fun boundaryClassColor(ordinal: Int): Int = when (ordinal) {
+        0 -> 0xD9683A // Andean margin
+        1 -> 0xE0B33C // collision plateau
+        2 -> 0xC94F7C // island arc
+        3 -> 0x3FA9A0 // ocean ridge
+        4 -> 0x6D7FD6 // continental rift
+        5 -> 0x8C8F99 // transform fault
+        else -> 0x404040
     }
 
     private fun ramp(t: Float, colors: IntArray): Int {

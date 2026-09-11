@@ -87,6 +87,22 @@ object MapPalette {
         return hsvToRgb(hue, 0.45f, 0.85f)
     }
 
+    /**
+     * What a plate boundary builds, by [com.cartogenesis.worldgen.pipeline.BoundaryClass] ordinal.
+     *
+     * Warm for the convergent pairs and cool for the rest, so the three kinds of collision read as
+     * a family on the plates view while a rift or a ridge does not get mistaken for one.
+     */
+    fun boundaryClass(ordinal: Int): Int = when (ordinal) {
+        0 -> 0xFFD9683A.toInt() // Andean margin
+        1 -> 0xFFE0B33C.toInt() // collision plateau
+        2 -> 0xFFC94F7C.toInt() // island arc
+        3 -> 0xFF3FA9A0.toInt() // ocean ridge
+        4 -> 0xFF6D7FD6.toInt() // continental rift
+        5 -> 0xFF8C8F99.toInt() // transform fault
+        else -> 0xFF404040.toInt()
+    }
+
     /** Realm colours. A different hue step from plates so the two views never look alike. */
     fun nation(id: Int): Int {
         val hue = (id * 47.5f + 15f) % 360f

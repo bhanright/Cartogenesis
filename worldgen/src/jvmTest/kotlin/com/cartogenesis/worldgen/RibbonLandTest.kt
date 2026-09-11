@@ -108,12 +108,36 @@ class RibbonLandTest {
             var ribbonArea = 0
             var ribbonCount = 0
             var longest = 0
+            val strip = BooleanArray(components)
             for (id in 0 until components) {
                 if (halfWidth[id] <= thin && area[id] >= longEnough) {
+                    strip[id] = true
                     ribbonCount++
                     ribbonArea += area[id]
                     if (area[id] > longest) longest = area[id]
                 }
+            }
+
+            // What kind of boundary each strip sits on. A strip of land along a mountain belt is
+            // the failure this test exists for; an island arc is thin by nature and a chain of
+            // volcanoes really is what an oceanic-oceanic margin builds, so the two want telling
+            // apart in the report rather than averaging together in the figure.
+            val classNames = com.cartogenesis.worldgen.pipeline.BoundaryClass.entries
+            for (id in 0 until components) {
+                if (!strip[id]) continue
+                val tally = IntArray(classNames.size)
+                for (i in 0 until w * h) {
+                    if (component[i] != id) continue
+                    val cls = world.plates.nearestBoundaryClass[i]
+                    if (cls in tally.indices) tally[cls]++
+                }
+                val dominant = tally.indices.maxByOrNull { tally[it] } ?: 0
+                println(
+                    "RIBBON   strip of %d cells, mostly %s (%d%% of it)".format(
+                        area[id], classNames[dominant].name,
+                        tally[dominant] * 100 / area[id].coerceAtLeast(1)
+                    )
+                )
             }
             val share = ribbonArea * 100.0 / landCells
             println(

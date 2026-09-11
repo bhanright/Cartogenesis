@@ -22,6 +22,40 @@ enum class PlateType { OCEANIC, CONTINENTAL }
 
 enum class BoundaryType { CONVERGENT, DIVERGENT, TRANSFORM }
 
+/**
+ * A boundary refined by the crusts either side of it.
+ *
+ * Convergence alone does not say what a collision builds. Oceanic crust is dense and subducts;
+ * continental crust is buoyant and does not. So an ocean meeting a continent gives a trench and a
+ * narrow volcanic range along the coast, two continents meeting give a broad thickened plateau
+ * with nothing to subduct and nowhere for the crust to go but up, and two oceans meeting give a
+ * trench and a chain of volcanic islands. Those are three different shapes, not three labels on
+ * one shape, which is why this exists alongside [BoundaryType].
+ *
+ * The class is a property of the plate *pair*, exactly as [BoundaryType] is. Which side of the
+ * pair a given cell sits on is a separate question, and it is what makes these profiles
+ * asymmetric: the trench belongs to the subducting plate and the range to the overriding one.
+ */
+enum class BoundaryClass {
+    /** Oceanic under continental: trench offshore, coastal range and volcanic arc inland. */
+    ANDEAN_MARGIN,
+
+    /** Continental against continental: a broad, high, flat-topped plateau. */
+    COLLISION_PLATEAU,
+
+    /** Oceanic under oceanic: trench, and an arc of volcanic islands on the overriding plate. */
+    ISLAND_ARC,
+
+    /** Divergent, both sides oceanic: a spreading ridge. */
+    OCEAN_RIDGE,
+
+    /** Divergent with continental crust on at least one side: a rift valley between shoulders. */
+    CONTINENTAL_RIFT,
+
+    /** Plates sliding past one another; little relief either way. */
+    TRANSFORM_FAULT
+}
+
 @Serializable
 data class Plate(
     val id: Int,
@@ -40,6 +74,12 @@ data class PlateResult(
     val boundaryDistance: FloatField,
     /** [BoundaryType] ordinal of the nearest boundary, per cell. */
     val nearestBoundaryType: IntArray,
+    /**
+     * [BoundaryClass] ordinal of the nearest boundary, per cell — the crust pair that built
+     * whatever relief this cell carries, and what tells an Andean margin from a Tibetan plateau
+     * without measuring either.
+     */
+    val nearestBoundaryClass: IntArray,
     /** Terrain height with tectonic uplift applied, normalized to 0..1. */
     val height: FloatField
 )
@@ -61,13 +101,24 @@ object PlateStage {
         val type: BoundaryType,
         /** Convergence magnitude, 0..1. */
         val strength: Float,
-        val continentalCollision: Boolean
+        val continentalCollision: Boolean,
+        /** The crust pair, which is what decides the profile. */
+        val pairClass: BoundaryClass,
+        /**
+         * Which plate of the pair overrides the other — the one that keeps its surface while the
+         * other goes under. Continental crust always overrides oceanic; between two plates of the
+         * same kind the choice is arbitrary and is made by the lower id, a total order on the
+         * pair, so that it never depends on which cell asked or on any hash order.
+         */
+        val overridingId: Int
     )
 
     private class Boundary(
         val interaction: PairInteraction,
         /** Whether this particular cell sits on the oceanic plate of the pair. */
-        val oceanicSide: Boolean
+        val oceanicSide: Boolean,
+        /** Whether this particular cell sits on the pair's overriding plate. */
+        val overridingSide: Boolean
     )
 
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
@@ -102,11 +153,25 @@ object PlateStage {
         val ridgeNoise = PerlinNoise(config.seed * 104729 + 5)
         val rangeNoise = PerlinNoise(config.seed * 104729 + 911)
         val widthNoise = PerlinNoise(config.seed * 104729 + 1733)
+        val arcNoise = PerlinNoise(config.seed * 104729 + 2477)
         val uplift = FloatField(w, h)
         val nearestType = IntArray(w * h) { -1 }
+        val nearestClass = IntArray(w * h) { -1 }
 
         if (hasBoundaries) {
             val range = cfg.boundaryFalloff
+            // The farthest any profile below reaches from its boundary, so a cell out in a plate
+            // interior can be skipped before any of the noise is sampled. The widest is whichever
+            // of the belts is broadest once the along-strike width swell is at its maximum.
+            val widest = MAX_WIDTH_SCALE * MAX_EDGE_JITTER
+            val maxReach = maxOf(
+                range * MAX_WIDTH_SCALE,
+                cfg.andeanWidth * widest,
+                cfg.collisionWidth * widest,
+                cfg.arcOffset + cfg.arcWidth,
+                cfg.islandArcOffset + cfg.islandArcWidth * widest,
+                cfg.riftShoulderOffset + cfg.riftShoulderWidth
+            )
             // Each cell writes only its own uplift entry, and the roughness comes from position rather than a running RNG, so this splits cleanly across cores.
             parallelChunks(0, h) { startY, endY ->
                 for (y in startY until endY) {
@@ -115,17 +180,17 @@ object PlateStage {
                         val boundary = boundaries[label[i]] ?: continue
                         val interaction = boundary.interaction
                         nearestType[i] = interaction.type.ordinal
+                        nearestClass[i] = interaction.pairClass.ordinal
 
                         val d = dist[i]
+                        if (d >= maxReach) continue
                         // A belt that keeps the same width for its whole length reads as drawn on
                         // even once its height varies, so the width swells and pinches too. The
                         // noise is sampled on position, so neighbouring cells agree and the belt
                         // stays continuous rather than dissolving into blotches.
                         val widthScale = 0.55f + 0.85f *
                             (0.5f + 0.5f * widthNoise.fbm(x * 7f / w, y * 7f / h, 3, 7, 7))
-                        val wide = beltFalloff(d, range * widthScale)
                         val narrow = falloff(d, range * 0.45f)
-                        if (wide <= 0f && narrow <= 0f) continue
 
                         // Breaks up the otherwise uniform ridge profile into distinct peaks.
                         val roughness =
@@ -152,31 +217,147 @@ object PlateStage {
                         val alongRange =
                             ((1f - amount) + amount * swollen * 1.9f).coerceIn(0f, 1.9f)
 
-                        uplift.data[i] += when (interaction.type) {
-                            BoundaryType.CONVERGENT ->
-                                if (interaction.continentalCollision) {
-                                    cfg.mountainHeight * interaction.strength * wide * roughness * alongRange
-                                } else if (boundary.oceanicSide) {
-                                    -cfg.trenchDepth * interaction.strength * narrow
+                        val strength = interaction.strength
+                        if (!cfg.crustPairProfiles) {
+                            // The pre-B2 generator: one belt profile for every convergent pair,
+                            // whatever the crusts. Kept so `BoundaryPairTest` can measure the
+                            // world this chunk replaced rather than take its word for it.
+                            val wide = beltFalloff(d, range * widthScale)
+                            if (wide <= 0f && narrow <= 0f) continue
+                            uplift.data[i] += when (interaction.type) {
+                                BoundaryType.CONVERGENT ->
+                                    if (interaction.continentalCollision) {
+                                        cfg.mountainHeight * strength * wide * roughness * alongRange
+                                    } else if (boundary.oceanicSide) {
+                                        -cfg.trenchDepth * strength * narrow
+                                    } else {
+                                        cfg.mountainHeight * 0.8f * strength * wide * roughness * alongRange
+                                    }
+
+                                BoundaryType.DIVERGENT ->
+                                    if (boundary.oceanicSide) {
+                                        cfg.mountainHeight * 0.22f * strength * narrow
+                                    } else {
+                                        -cfg.mountainHeight * 0.3f * strength * narrow
+                                    }
+
+                                BoundaryType.TRANSFORM ->
+                                    cfg.mountainHeight * 0.12f * strength * narrow *
+                                        (roughness - 0.75f)
+                            }
+                            continue
+                        }
+
+                        // A plateau that sagged to nothing between massifs would be a chain again,
+                        // so it feels only a fraction of the along-strike variation; an island arc
+                        // wants the opposite, sagging hard so that only its swells clear the water.
+                        val plateauAmount = (amount * cfg.plateauAlongVariation).coerceIn(0f, 1f)
+                        val alongPlateau =
+                            ((1f - plateauAmount) + plateauAmount * swollen * 1.9f).coerceIn(0f, 1.9f)
+                        val sagged = (0.5f + 0.5f * swell).coerceIn(0f, 1f).pow(3f)
+                        val alongArc = ((1f - amount) + amount * sagged * 1.9f).coerceIn(0f, 1.9f)
+
+                        // A second, finer swell of the width, on top of `widthScale`.
+                        //
+                        // The distance transform is a chamfer approximation, so its contours are
+                        // octagons rather than circles. At the old belt width nobody could see
+                        // that; a collision plateau is more than twice as wide, and its edge came
+                        // out as a visible faceted polygon — `widthScale` varies too slowly to
+                        // break up an outline that size. This is sampled three times finer, so the
+                        // rim meanders within itself and the octagon disappears.
+                        val edgeJitter = 0.72f + 0.56f *
+                            (0.5f + 0.5f * widthNoise.fbm(x * 17f / w, y * 17f / h, 3, 17, 17))
+                                .coerceIn(0f, 1f)
+
+                        uplift.data[i] += when (interaction.pairClass) {
+                            // Oceanic under continental. The trench is the subducting plate's and
+                            // the range the overriding one's, so the two sides of the same
+                            // boundary get quite different ground — which is the asymmetry a
+                            // symmetric distance profile could not express.
+                            BoundaryClass.ANDEAN_MARGIN ->
+                                if (!boundary.overridingSide) {
+                                    -cfg.trenchDepth * strength * narrow
                                 } else {
-                                    cfg.mountainHeight * 0.8f * interaction.strength * wide * roughness * alongRange
+                                    cfg.andeanHeight * strength *
+                                        beltFalloff(d, cfg.andeanWidth * widthScale * edgeJitter) *
+                                        roughness * alongRange +
+                                        cfg.arcHeight * strength *
+                                        ridgeAt(d, cfg.arcOffset, cfg.arcWidth) *
+                                        volcanicChain(arcNoise, x, y, w, h) * alongRange
                                 }
 
-                            BoundaryType.DIVERGENT ->
+                            // Continental against continental. Neither side will go under, so the
+                            // crust thickens over a wide area instead of piling onto a line: broad,
+                            // high, flat-topped and very nearly symmetric.
+                            BoundaryClass.COLLISION_PLATEAU -> {
+                                val plateauWidth = cfg.collisionWidth * widthScale * edgeJitter
+                                val rimShare = cfg.plateauRimShare.coerceIn(0.1f, 0.95f)
+                                cfg.collisionHeight * strength *
+                                    plateauFalloff(d, plateauWidth, cfg.plateauFlatShare) *
+                                    // Damped roughness: a plateau is a plain at altitude, and the
+                                    // full ridge noise would make it a mountain range again.
+                                    (1f + (roughness - 1f) * 0.7f) * alongPlateau +
+                                    // The rim ranges, which stand on the edge rather than in it.
+                                    cfg.plateauRimHeight * strength *
+                                    ridgeAt(
+                                        d,
+                                        plateauWidth * rimShare,
+                                        plateauWidth * (1f - rimShare)
+                                    ) * roughness * alongRange
+                            }
+
+                            // Oceanic under oceanic. Same trench, but what rises behind it is a
+                            // line of volcanoes on oceanic crust, most of which never reaches the
+                            // surface. The overriding plate is the lower id (see [overridingId]).
+                            BoundaryClass.ISLAND_ARC ->
+                                // The trench stays on both sides, as it was before this chunk: an
+                                // oceanic pair has deep water either side of it, and the arc is a
+                                // ridge rising out of that rather than instead of it. Keeping it
+                                // is what holds the arc mostly under water — only where
+                                // `rangeVariation` swells does a volcano clear the surface — and it
+                                // is also what keeps this boundary's share of the world's uplift
+                                // close to what the single profile gave it, so the sea-level
+                                // percentile does not move out from under every other coastline.
+                                -cfg.trenchDepth * strength * narrow +
+                                    if (boundary.overridingSide) {
+                                        cfg.islandArcHeight * strength *
+                                            ridgeAt(
+                                                d,
+                                                cfg.islandArcOffset,
+                                                cfg.islandArcWidth * widthScale * edgeJitter
+                                            ) * roughness * alongArc
+                                    } else {
+                                        0f
+                                    }
+
+                            BoundaryClass.OCEAN_RIDGE ->
+                                cfg.mountainHeight * 0.22f * strength * narrow
+
+                            // Continental crust being pulled apart: the floor drops between two
+                            // rebounding shoulders. Where such a pair has ocean on one side, that
+                            // side is a spreading ridge as before — the rift is what the
+                            // continental crust does.
+                            BoundaryClass.CONTINENTAL_RIFT ->
                                 if (boundary.oceanicSide) {
-                                    cfg.mountainHeight * 0.22f * interaction.strength * narrow
+                                    cfg.mountainHeight * 0.22f * strength * narrow
                                 } else {
-                                    -cfg.mountainHeight * 0.3f * interaction.strength * narrow
+                                    -cfg.riftDepth * strength *
+                                        plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
+                                        cfg.riftShoulderHeight * strength *
+                                        ridgeAt(d, cfg.riftShoulderOffset, cfg.riftShoulderWidth) *
+                                        roughness * alongRange
                                 }
 
-                            BoundaryType.TRANSFORM ->
-                                cfg.mountainHeight * 0.12f * interaction.strength * narrow *
+                            BoundaryClass.TRANSFORM_FAULT ->
+                                cfg.mountainHeight * 0.12f * strength * narrow *
                                     (roughness - 0.75f)
                         }
                     }
                 }
             }
         }
+
+        stampHotspotChains(config, plates, plateId, uplift)
 
         val weight = cfg.tectonicWeight.coerceIn(0f, 1f)
         val result = FloatField(w, h)
@@ -209,7 +390,104 @@ object PlateStage {
         }
         result.normalize()
 
-        return PlateResult(plates, plateId, FloatField(w, h, dist), nearestType, result)
+        return PlateResult(
+            plates, plateId, FloatField(w, h, dist), nearestType, nearestClass, result
+        )
+    }
+
+    /**
+     * Hotspots: a point fixed in the mantle that a plate drifts over, leaving its volcanoes behind
+     * it as a line of seamounts that subside with age. Hawaii, the Emperor chain, Réunion.
+     *
+     * Nearly free, and it puts islands somewhere other than a plate boundary — which is otherwise
+     * the only place this generator has anything to offer the open ocean.
+     *
+     * Restricted to oceanic plates, so what comes out is island chains in deep water rather than
+     * volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
+     * instead of running on across a neighbour that never passed over the hotspot.
+     *
+     * Determinism: the plates are walked in id order and all three draws are taken for every plate
+     * whether or not it ends up carrying one, so the sequence does not depend on the outcome of any
+     * test — and never on a hash order.
+     */
+    private fun stampHotspotChains(
+        config: WorldGenConfig,
+        plates: List<Plate>,
+        plateId: IntArray,
+        uplift: FloatField
+    ) {
+        val cfg = config.tectonics
+        if (cfg.hotspotPlateFraction <= 0f || cfg.hotspotHeight == 0f) return
+        if (cfg.hotspotRadius <= 0f || cfg.hotspotSpacing <= 0f) return
+
+        val w = uplift.width
+        val h = uplift.height
+        val rnd = Random(config.seed * 31337 + 7)
+        val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
+
+        plates.forEach { plate ->
+            val roll = rnd.nextFloat()
+            // Offset from the plate's own seed point, not a free point on the map. A hotspot
+            // placed anywhere at all lands on some other plate nineteen times in twenty, and the
+            // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
+            // exactly what the first version of this did, on every seed tried.
+            val spread = cfg.hotspotChainLength * 0.3f
+            val originX = plate.seedX + (rnd.nextFloat() - 0.5f) * spread
+            val originY = plate.seedY + (rnd.nextFloat() - 0.5f) * spread
+            if (plate.type != PlateType.OCEANIC) return@forEach
+            if (roll >= cfg.hotspotPlateFraction) return@forEach
+
+            var travelled = 0f
+            while (travelled <= cfg.hotspotChainLength) {
+                // The hotspot stays put and the plate slides over it, so the volcano it built a
+                // while ago has since been carried a while along the drift vector. Older means
+                // further along, and lower: the crust cools and the seamount subsides with it.
+                val cx = originX + plate.driftX * travelled
+                val cy = originY + plate.driftY * travelled
+                val age = travelled / cfg.hotspotChainLength
+                val jitter = 0.6f + 0.8f *
+                    (0.5f + 0.5f * sizeNoise.fbm(cx * 9f / w, cy * 9f / h, 2, 9, 9))
+                        .coerceIn(0f, 1f)
+                stampSeamount(
+                    uplift, plateId, plate.id, cx, cy,
+                    cfg.hotspotRadius, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter
+                )
+                travelled += cfg.hotspotSpacing
+            }
+        }
+    }
+
+    /** One seamount: a smooth cone of [radius] cells, wrapping in x and clipped in y. */
+    private fun stampSeamount(
+        uplift: FloatField,
+        plateId: IntArray,
+        plate: Int,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        amplitude: Float
+    ) {
+        if (amplitude <= 0f) return
+        val w = uplift.width
+        val h = uplift.height
+        val r = radius.toInt() + 1
+        for (yy in (cy.toInt() - r)..(cy.toInt() + r)) {
+            if (yy < 0 || yy >= h) continue
+            for (xx in (cx.toInt() - r)..(cx.toInt() + r)) {
+                var wrapped = xx % w
+                if (wrapped < 0) wrapped += w
+                val i = yy * w + wrapped
+                if (plateId[i] != plate) continue
+                var dx = xx - cx
+                if (dx > w / 2f) dx -= w
+                if (dx < -w / 2f) dx += w
+                val dy = yy - cy
+                val distance = sqrt(dx * dx + dy * dy)
+                if (distance >= radius) continue
+                val u = 1f - distance / radius
+                uplift.data[i] += amplitude * u * u * (3f - 2f * u)
+            }
+        }
     }
 
     private fun createPlates(
@@ -311,7 +589,11 @@ object PlateStage {
                 val interaction = interactions.getOrPut(key) {
                     interactionOf(plates[key / plates.size], plates[key % plates.size], width)
                 }
-                boundaries[i] = Boundary(interaction, oceanicSide = a.type == PlateType.OCEANIC)
+                boundaries[i] = Boundary(
+                    interaction,
+                    oceanicSide = a.type == PlateType.OCEANIC,
+                    overridingSide = a.id == interaction.overridingId
+                )
             }
         }
         return boundaries
@@ -339,11 +621,36 @@ object PlateStage {
             convergence < -0.15f -> BoundaryType.DIVERGENT
             else -> BoundaryType.TRANSFORM
         }
+        val bothContinental = a.type == PlateType.CONTINENTAL && b.type == PlateType.CONTINENTAL
+        val bothOceanic = a.type == PlateType.OCEANIC && b.type == PlateType.OCEANIC
+
+        // Dense oceanic crust goes under buoyant continental crust, so where the pair is mixed the
+        // continent overrides and there is nothing to choose. Where both are the same, the choice
+        // is genuinely arbitrary and has to be made by something that cannot vary between cells or
+        // between runs: the lower id, a total order on the pair.
+        val overridingId = when {
+            a.type == b.type -> if (a.id < b.id) a.id else b.id
+            a.type == PlateType.CONTINENTAL -> a.id
+            else -> b.id
+        }
+
+        val pairClass = when (type) {
+            BoundaryType.CONVERGENT -> when {
+                bothContinental -> BoundaryClass.COLLISION_PLATEAU
+                bothOceanic -> BoundaryClass.ISLAND_ARC
+                else -> BoundaryClass.ANDEAN_MARGIN
+            }
+            BoundaryType.DIVERGENT ->
+                if (bothOceanic) BoundaryClass.OCEAN_RIDGE else BoundaryClass.CONTINENTAL_RIFT
+            BoundaryType.TRANSFORM -> BoundaryClass.TRANSFORM_FAULT
+        }
+
         return PairInteraction(
             type = type,
             strength = abs(convergence).coerceIn(0.12f, 1f),
-            continentalCollision = a.type == PlateType.CONTINENTAL &&
-                b.type == PlateType.CONTINENTAL
+            continentalCollision = bothContinental,
+            pairClass = pairClass,
+            overridingId = overridingId
         )
     }
 
@@ -373,4 +680,52 @@ object PlateStage {
         val u = distance / range
         return (1f - u) * (1f - u) * (1f + 2f * u)
     }
+
+    /**
+     * Flat-topped plateau: dead flat across the inner [flatShare] of the half-width, then
+     * [beltFalloff]'s shoulder out to nothing.
+     *
+     * A continental collision does not build a ridge, it thickens the crust over a wide area — the
+     * Tibetan plateau is a plain at five kilometres, with its ranges around the rim. Even
+     * [beltFalloff], broad as it is, still peaks on the suture and falls away from it everywhere;
+     * this is what makes the difference between a very wide mountain and a plateau.
+     */
+    private fun plateauFalloff(distance: Float, range: Float, flatShare: Float): Float {
+        if (distance >= range) return 0f
+        val flat = range * flatShare.coerceIn(0f, 0.95f)
+        if (distance <= flat) return 1f
+        val u = (distance - flat) / (range - flat)
+        return (1f - u) * (1f - u) * (1f + 2f * u)
+    }
+
+    /**
+     * A ridge whose crest stands [offset] cells from the boundary rather than on it, [halfWidth]
+     * either side of its own axis.
+     *
+     * This is what makes a margin asymmetric in the way that matters. A subducting slab melts once
+     * it is deep enough, not where it goes under, so the volcanoes sit a fixed distance behind the
+     * trench — and nothing built out of distance-to-the-boundary alone, however shaped, can put a
+     * crest anywhere but on the line itself.
+     */
+    private fun ridgeAt(distance: Float, offset: Float, halfWidth: Float): Float {
+        if (halfWidth <= 0f) return 0f
+        val u = abs(distance - offset) / halfWidth
+        if (u >= 1f) return 0f
+        return (1f - u) * (1f - u) * (1f + 2f * u)
+    }
+
+    /**
+     * Along-strike modulation for a volcanic arc: sampled fine and raised to a power, so the arc
+     * is a row of separate cones rather than a continuous wall of the same height.
+     */
+    private fun volcanicChain(noise: PerlinNoise, x: Int, y: Int, w: Int, h: Int): Float {
+        val n = 0.5f + 0.5f * noise.fbm(x * 26f / w, y * 26f / h, 2, 26, 26)
+        return n.coerceIn(0f, 1f).pow(2.5f) * 1.6f
+    }
+
+    /** The largest value the along-strike width swell can take; see `widthScale` in [generate]. */
+    private const val MAX_WIDTH_SCALE = 1.4f
+
+    /** The largest value the finer width jitter can take; see `edgeJitter` in [generate]. */
+    private const val MAX_EDGE_JITTER = 1.28f
 }

@@ -23,6 +23,11 @@ data class SeaLevelResult(
  */
 object SeaLevelStage {
 
+    /**
+     * Bins used to *bracket* the sea-level percentile before it is resolved exactly; see
+     * [percentile]. The width of a bin no longer decides the answer, only how many cells the
+     * second pass has to look at.
+     */
     private const val BINS = 4096
 
     fun apply(height: FloatField, seaLevel: Float): SeaLevelResult {
@@ -121,25 +126,57 @@ object SeaLevelStage {
         return base.copy(relativeElevation = remapped)
     }
 
+    /**
+     * The height below which [fraction] of the world lies — resolved exactly, not to the nearest
+     * histogram bin.
+     *
+     * The histogram only brackets the answer. Taking the bracketing bin's lower edge as the
+     * threshold, as this did before, floods only the cells below that bin and leaves every cell
+     * *inside* it above water, so the land fraction overshoots by whatever share of the map the bin
+     * holds — and that share is not small. Measured on seed 42 at 128, the bin the sea level falls
+     * in holds 2.4% of the map with crust-pair profiles and 4.8% without: a lump of ocean floor at
+     * a near-uniform depth, which is exactly the sort of place a sea-level cut lands. Whether the
+     * slider came out accurate was therefore luck of where the target fell inside that lump —
+     * `PipelineTest` asks it to be good to 2% of the map and had been passing on 0.708 against
+     * 0.700 — and with the crust-pair profiles the luck ran out at 0.721. A second pass over the
+     * few hundred cells of the one bracketing bin picks the cut that puts exactly the right number
+     * of cells below it: one extra scan, an array a few thousand floats long, and 0.700 on the
+     * nose with the profiles on or off.
+     */
     private fun percentile(height: FloatField, fraction: Float): Float {
         val lo = height.min()
         val hi = height.max()
         if (hi - lo <= 0f) return lo
 
-        val histogram = IntArray(BINS)
         val scale = (BINS - 1) / (hi - lo)
-        for (v in height.data) {
-            histogram[((v - lo) * scale).toInt().coerceIn(0, BINS - 1)]++
-        }
+        fun binOf(value: Float) = ((value - lo) * scale).toInt().coerceIn(0, BINS - 1)
+
+        val histogram = IntArray(BINS)
+        for (v in height.data) histogram[binOf(v)]++
 
         val target = (height.data.size * fraction).toLong()
-        var cumulative = 0L
+        if (target <= 0L) return lo
+
+        var below = 0L
+        var bracket = BINS - 1
         for (bin in 0 until BINS) {
-            cumulative += histogram[bin]
-            if (cumulative >= target) {
-                return lo + bin / scale
+            if (below + histogram[bin] >= target) {
+                bracket = bin
+                break
             }
+            below += histogram[bin]
         }
-        return hi
+
+        val bucket = FloatArray(histogram[bracket])
+        if (bucket.isEmpty()) return hi
+        var n = 0
+        for (v in height.data) {
+            if (binOf(v) == bracket) bucket[n++] = v
+        }
+        bucket.sort()
+        // Everything strictly below the returned value is sea, so the value wanted is the one with
+        // exactly `target` cells beneath it: `below` of them under the bracket, the rest inside it.
+        val index = (target - below).toInt().coerceIn(0, bucket.size - 1)
+        return bucket[index]
     }
 }

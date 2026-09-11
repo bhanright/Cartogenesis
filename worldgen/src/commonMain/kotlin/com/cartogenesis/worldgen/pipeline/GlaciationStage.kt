@@ -26,6 +26,16 @@ internal data class GlacialMass(
     val parallelCellsDropped: Int,
     /** Frozen cells handed to the sheet regime instead: flat ground, scoured rather than grooved. */
     val sheetCells: Int,
+    /** The stage's whole allowance of standing water, in cells, and what each regime spent. */
+    val lakeBudget: Int,
+    /** Cells cut into a valley basin, and how many separate basins they form. */
+    val basinCells: Int,
+    val basins: Int,
+    /** Candidate basins refused: too narrow, too straight, too small, or the budget was spent. */
+    val basinsTooNarrow: Int,
+    val basinsTooStraight: Int,
+    val basinsTooSmall: Int,
+    val basinsOverBudget: Int,
     /** Cells cut into a scour basin, and how many separate basins they form. */
     val scourCells: Int,
     val scourBasins: Int,
@@ -93,6 +103,25 @@ internal data class GlacialMass(
  * low-frequency noise field pulled toward the hollows the ground already has. The result is blobs
  * of varied size and orientation, which is what glaciated shield country looks like, and there is
  * no direction in it for the grid to line up with.
+ *
+ * ### Basins are regions, not lines
+ *
+ * The split above was reviewed at 1024 and shipped, and at 2048 the author found the comb again one
+ * level down: clusters of five to fifteen parallel bars of water at 0 and 45 degrees on the
+ * piedmont at the foot of a range, and a fan of them radiating from a confluence. The relief test
+ * calls a piedmont channelled, because a mountain stands inside its window; the flow paths across a
+ * piedmont are straight and parallel; and the over-deepened basins were cut *per cell along the
+ * flow path*, so each of those paths got a hollow exactly as wide as itself.
+ *
+ * That is not a threshold that was set too low, it is the wrong shape of thing. A hollow drawn
+ * along a line inherits the line's shape, so every guard that passes a few more paths brings the
+ * comb back. So a basin is now a **region**: the ground within a trough half-width of the ice's
+ * path, opened — eroded by a cell and dilated back — so that what survives is a union of
+ * three-by-three blocks and is three cells wide everywhere it exists; refused outright if it has no
+ * such block in it, if the ice walked a straight D8 line to make it, or if the finished shape is a
+ * bar; peeled inward if it is larger than any lake on Earth in proportion; and paid for out of a
+ * fixed allowance of standing water shared with the sheet. The trough itself is still cut cell by
+ * cell — a valley *is* a line — but nothing that holds water is. See [cutBasins].
  *
  * ### What it does not touch
  *
@@ -289,6 +318,35 @@ object GlaciationStage {
         val suppressed = suppressParallel(cfg, w, h, glacier, directions, ice, strength, order)
         glacierCells -= suppressed.cells
 
+        // The other regime's ground, settled here rather than after the carving because the water
+        // budget below is measured against it. Everything frozen that the valley machinery was not
+        // allowed to touch is under sheet ice, and sheet ice does not follow the drainage net — so
+        // nothing the scour reads is `directions`, `order` or `ice`. That is the whole point: there
+        // is no flow grid in it to show through.
+        var sheetCells = 0
+        val sheet = BooleanArray(size)
+        for (i in 0 until size) {
+            if (frozen[i] && !channelled[i] && !glacier[i]) {
+                sheet[i] = true
+                sheetCells++
+            }
+        }
+
+        // How much standing water this world's ice is allowed, in cells, and how small and how
+        // large one body of it may be. All three are map fractions, so the same world at 512, 1024
+        // and 2048 is offered the same lake country rather than four times as much of it each time
+        // the grid doubles — see [GlaciationConfig.sheetLakeShare] and its two neighbours.
+        //
+        // One budget for both regimes. The valley basins are taken out of it first and the sheet
+        // gets the remainder, which is what stops the two of them each spending a full allowance on
+        // the same world. The denominator is the frozen flat ground, with a floor at a quarter of
+        // all frozen ground so that an ice field which is nothing but mountains still has an
+        // allowance to spend on its valley floors.
+        val minBasinCells = (cfg.minLakeShareOfMap * size).toInt().coerceAtLeast(4)
+        val maxBasinCells = (cfg.maxLakeShareOfMap * size).toInt().coerceAtLeast(minBasinCells)
+        val lakeBudget =
+            (cfg.sheetLakeShare * maxOf(sheetCells, frozenCount / 4).toFloat()).toInt()
+
         // How far down the staircase each cell is.
         //
         // Two things advance it, and they simply add: how far the ice has run (in cells, over
@@ -319,61 +377,32 @@ object GlaciationStage {
         val reach = IntArray(size)
         for (i in 0 until size) if (glacier[i]) reach[i] = progress[i].toInt()
 
-        // The lowest ground the flow meets before this reach ends, which is the level a flattened
-        // floor is cut down to. Walked mouths-first, so a cell reads an answer its own downstream
-        // neighbour has already finished.
-        val reachFloor = FloatArray(size)
-        for (i in 0 until size) if (glacier[i]) reachFloor[i] = relative[i]
-        for (k in order.indices.reversed()) {
-            val i = order[k]
-            if (!glacier[i]) continue
-            val t = directions[i]
-            if (t >= 0 && glacier[t] && reach[t] == reach[i] && reachFloor[t] < reachFloor[i]) {
-                reachFloor[i] = reachFloor[t]
-            }
-        }
-
-        val floor = FloatArray(size)
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
-            val st = strength[i]
-            val phase = progress[i] - reach[i]
-            val target = if (phase < cfg.basinShare) {
-                // The basin: floor flattened to the lowest ground in the reach and then cut below
-                // it. The limit needs no setting of its own, which is the point of measuring a
-                // reach in descent: a reach falls at most [GlaciationConfig.basinDrop], so
-                // flattening one costs at most that plus the over-deepening, wherever it is and
-                // however steep the ground. The only case that reaches the limit is a cliff inside
-                // a single cell, and there it stops the ice gouging a canyon out of it.
-                val basinCut = (cfg.deepening + cfg.overDeepening) * st
-                maxOf(reachFloor[i] - basinCut, relative[i] - basinCut - cfg.basinDrop)
-            } else {
-                // The step: the bed follows the ground down, cut only by the ordinary amount, so it
-                // stands proud of the basin above it by the over-deepening.
-                relative[i] - cfg.deepening * st
-            }
-            floor[i] = target.coerceIn(0f, relative[i])
-        }
-
         // Carving proper. Every stamp is computed from the *original* surface and combined with a
         // minimum, so overlapping glaciers compose in any order and the result does not depend on
         // which cell was visited first.
         val carved = relative.copyOf()
 
+        // The trough, and *only* the trough: a graded U following the ground down, cut by the
+        // ordinary amount. The over-deepened basins used to be cut here too, cell by cell along the
+        // flow path, each reach's floor flattened to the lowest ground in it — and that is what
+        // built the comb. A basin cut per cell along a D8 path is exactly as wide as the path is,
+        // which on a rank of parallel gullies down a piedmont is a rank of parallel straight bars
+        // of water. Basins are now regions, cut below, and they are the only thing that holds
+        // water.
         for (i in 0 until size) {
             if (!glacier[i]) continue
             // Wall to wall: the ice lowers the whole cross-section toward its bed on a parabola,
             // untouched at the rim and flat at the floor. That parabola is the U.
             //
             // *Across* the flow and one cell thick along it, which is not a detail. Stamped as a
-            // disc instead — the obvious thing, and what this did first — a basin's flat floor
-            // reaches a valley-width in every direction, including forward over the step that is
-            // supposed to hold its water in, and quietly planes it off. The staircase was there in
-            // the long profile and the map had no lakes: seven where there should have been two
-            // thousand closed basins. A cross-section is a cross-section.
+            // disc instead — the obvious thing, and what this did first — the floor reaches a
+            // valley-width in every direction, including forward down the long profile, and
+            // quietly planes off whatever it was supposed to stand above. A cross-section is a
+            // cross-section.
+            val bed = (relative[i] - cfg.deepening * strength[i]).coerceAtLeast(0f)
             swath(
                 w, h, i, flowOf(i, directions, glacier, w, h),
-                valleyHalfWidth(cfg, strength[i]), cfg.floorShare, floor[i],
+                valleyHalfWidth(cfg, strength[i]), cfg.floorShare, bed,
                 isLand, relative, carved
             )
         }
@@ -397,22 +426,21 @@ object GlaciationStage {
             )
         }
 
-        // The other regime. Everything frozen that the valley machinery was not allowed to touch is
-        // under sheet ice, and sheet ice does not follow the drainage net — so nothing below reads
-        // `directions`, `order` or `ice` at all. That is the whole point: there is no flow grid in
-        // it to show through.
-        var sheetCells = 0
-        val sheet = BooleanArray(size)
-        for (i in 0 until size) {
-            if (frozen[i] && !channelled[i] && !glacier[i]) {
-                sheet[i] = true
-                sheetCells++
-            }
-        }
+        // The over-deepened basins, as regions rather than as cells along a line. See [cutBasins].
+        val basins = cutBasins(
+            cfg, w, h, isLand, frozen, glacier, directions, order, reach, progress,
+            strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget
+        )
+
+        // The sheet's basins get whatever the valleys left of the allowance.
         var scourCells = 0
         var scourBasins = 0
-        if (cfg.sheetScour && sheetCells >= cfg.sheetBasinMinCells) {
-            val tally = scour(config, cfg, w, h, sheet, sheetCells, relative, landRange, carved)
+        val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
+        if (cfg.sheetScour && sheetCells >= minBasinCells) {
+            val tally = scour(
+                config, cfg, w, h, sheet, sheetCells, isLand, relative, landRange, carved,
+                minBasinCells, maxBasinCells, sheetBudget
+            )
             scourCells = tally.cells
             scourBasins = tally.basins
         }
@@ -445,15 +473,10 @@ object GlaciationStage {
                     valleyHalfWidth(cfg, strength[i]) * 1.15f,
                     till(cfg.moraineHeight, strength[i]), isLand, moraine
                 )
-            } else if (reach[t] != reach[i]) {
-                // A recessional moraine, at the lower end of every reach: the ridge a retreating
-                // snout leaves each time it pauses, and what a valley full of them looks like is
-                // a chain of lakes. The over-deepening alone does not reliably make one — measured
-                // on seed 42, it left a hundred closed basins of which sixty were one or two cells,
-                // because how far a basin can spread before the ground rises out of it is a
-                // question about the slope and not about the ice. A dam of a known height ponds a
-                // known depth whatever the slope, which is why real glaciated valleys owe more of
-                // their water to till than to scour.
+            } else if (reach[t] != reach[i] && cfg.riegelHeight > 0f) {
+                // A recessional moraine, at the lower end of every reach. Off by default now that a
+                // basin is a region closed by its own rim: see [GlaciationConfig.riegelHeight] for
+                // why a bar of till one cell thick across the flow could only add straight water.
                 riegels++
                 bar(
                     w, h, i, flowOf(i, directions, glacier, w, h),
@@ -501,6 +524,13 @@ object GlaciationStage {
                 trunks = suppressed.trunks,
                 parallelCellsDropped = suppressed.cells,
                 sheetCells = sheetCells,
+                lakeBudget = lakeBudget,
+                basinCells = basins.cells,
+                basins = basins.basins,
+                basinsTooNarrow = basins.tooNarrow,
+                basinsTooStraight = basins.tooStraight,
+                basinsTooSmall = basins.tooSmall,
+                basinsOverBudget = basins.overBudget,
                 scourCells = scourCells,
                 scourBasins = scourBasins,
                 cirques = cirques,
@@ -517,6 +547,462 @@ object GlaciationStage {
 
     /** What the scour did, for the tally. */
     private class ScourTally(val cells: Int, val basins: Int)
+
+    /** What the valley regime's basins came to, for the tally. */
+    private class BasinTally(
+        val cells: Int,
+        val basins: Int,
+        val tooNarrow: Int,
+        val tooStraight: Int,
+        val tooSmall: Int,
+        val overBudget: Int
+    )
+
+    /**
+     * The over-deepened basins of the valley regime, cut as *regions* rather than cell by cell
+     * along the flow path.
+     *
+     * This is the fix the 2048 render forced, and it is a change of kind rather than of degree.
+     * Cutting a basin per cell down a D8 path makes a hollow exactly as wide as the path, and a
+     * rank of parallel paths — which is what a piedmont at the foot of a range carries, and what
+     * the whole flat world carries — makes a rank of parallel straight hollows. No threshold on the
+     * paths can fix that, because the hollow inherits its shape from the line it was drawn along.
+     * A region cannot: it has a shape of its own, and the shape is checked before anything is cut.
+     *
+     * For each stretch of ice that shares a reach:
+     *
+     *  1. **Frozen ground only.** Nothing is hollowed out in the run-out past the snowline. A snout
+     *     below its own snowline leaves a terminal moraine and an outwash plain, not a staircase of
+     *     rock basins — and the run-out is exactly the flat piedmont where the flow paths run
+     *     straight and parallel.
+     *  2. **Straightness.** If the ice walked the straight-line distance from the head of the
+     *     stretch to its lip it repeated one D8 step the whole way. That is the grid, not a valley.
+     *  3. **The footprint**, everything within the trough's half-width of the path that no stronger
+     *     basin has already claimed — so two basins never share ground and a weak one beside a
+     *     strong one simply does not exist.
+     *  4. **Opened**: eroded by one cell and dilated back. Whatever survives is a union of three-by-
+     *     three blocks, so it is nowhere narrower than three cells *by construction* rather than by
+     *     a threshold that could be argued with. A one-cell filament off the side of a trough has
+     *     no such block in it and vanishes; a basin that is nothing but filament has no core at all
+     *     and is refused.
+     *  5. **Sized**: under [GlaciationConfig.minLakeShareOfMap] of the map it is not worth cutting;
+     *     over [GlaciationConfig.maxLakeShareOfMap] it is peeled inward ring by ring until it fits.
+     *  6. **Not a bar**, as a last check on the finished shape: nothing two cells or less across and
+     *     four or more long on any grid bearing survives. After the opening this cannot fire, which
+     *     is the point of asserting it — a shape guard that can only be satisfied by construction.
+     *  7. **Within budget**, shared with the sheet: see [GlaciationConfig.sheetLakeShare].
+     *
+     * The floor is then cut from the lowest cell of the region *and its rim*, so the basin is
+     * closed the same way a scour basin is, and saucered by distance from the rim so it is not a
+     * slab. No till is needed to dam it, which is why [GlaciationConfig.riegelHeight] is now zero.
+     */
+    private fun cutBasins(
+        cfg: GlaciationConfig,
+        w: Int,
+        h: Int,
+        isLand: BooleanArray,
+        frozen: BooleanArray,
+        glacier: BooleanArray,
+        directions: IntArray,
+        order: IntArray,
+        reach: IntArray,
+        progress: FloatArray,
+        strength: FloatArray,
+        ice: FloatArray,
+        carved: FloatArray,
+        minCells: Int,
+        maxCells: Int,
+        budget: Int
+    ): BasinTally {
+        val size = w * h
+        if (budget < minCells) return BasinTally(0, 0, 0, 0, 0, 0)
+
+        val seed = BooleanArray(size)
+        for (i in 0 until size) {
+            if (!glacier[i] || !frozen[i]) continue
+            if (progress[i] - reach[i] < cfg.basinShare) seed[i] = true
+        }
+
+        // One stretch of ice per reach, tributaries included, joined along the flow.
+        val segment = IntArray(size) { -1 }
+        val queue = IntArray(size)
+        val segIce = ArrayList<Float>()
+        val segCount = ArrayList<Int>()
+        val segFirst = ArrayList<Int>()
+        for (start in 0 until size) {
+            if (!seed[start] || segment[start] >= 0) continue
+            val id = segCount.size
+            var head = 0
+            var tail = 0
+            queue[tail++] = start
+            segment[start] = id
+            var count = 0
+            var maxIce = 0f
+            while (head < tail) {
+                val c = queue[head++]
+                count++
+                if (ice[c] > maxIce) maxIce = ice[c]
+                val t = directions[c]
+                if (t >= 0 && seed[t] && segment[t] < 0 && reach[t] == reach[c]) {
+                    segment[t] = id
+                    queue[tail++] = t
+                }
+                FlowRouting.forEachNeighbour(w, h, c % w, c / w) { nb ->
+                    if (seed[nb] && segment[nb] < 0 && directions[nb] == c &&
+                        reach[nb] == reach[c]
+                    ) {
+                        segment[nb] = id
+                        queue[tail++] = nb
+                    }
+                }
+            }
+            segIce.add(maxIce)
+            segCount.add(count)
+            segFirst.add(start)
+        }
+        if (segCount.isEmpty()) return BasinTally(0, 0, 0, 0, 0, 0)
+
+        val offset = IntArray(segCount.size + 1)
+        for (b in segCount.indices) offset[b + 1] = offset[b] + segCount[b]
+        val fill = IntArray(segCount.size)
+        val packed = IntArray(offset[segCount.size])
+        for (i in 0 until size) {
+            val s = segment[i]
+            if (s < 0) continue
+            packed[offset[s] + fill[s]] = i
+            fill[s] = fill[s] + 1
+        }
+
+        // How far the ice walked inside its own stretch, and where it started, so the straightness
+        // of the stretch can be asked the same question [GlaciationConfig.minSinuosity] asks of a
+        // whole trough. Accumulated along the drainage order, which runs heads first.
+        val chain = FloatArray(size)
+        val chainHead = IntArray(size) { -1 }
+        for (k in order.indices) {
+            val i = order[k]
+            val s = segment[i]
+            if (s < 0) continue
+            if (chainHead[i] < 0) chainHead[i] = i
+            val t = directions[i]
+            if (t >= 0 && segment[t] == s) {
+                val d = chain[i] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
+                if (d > chain[t]) {
+                    chain[t] = d
+                    chainHead[t] = chainHead[i]
+                }
+            }
+        }
+
+        // Strongest first, so the ground goes to the glacier that carries the most ice and the
+        // tie is broken by position rather than by the order the grid was walked in.
+        val ranked = Array(segCount.size) { it }
+        ranked.sortWith(compareByDescending<Int> { segIce[it] }.thenBy { segFirst[it] })
+
+        val own = IntArray(size) { -1 }
+        val core = IntArray(size) { -1 }
+        val region = IntArray(size) { -1 }
+        val inset = IntArray(size)
+        val footList = IntArray(size)
+        val regionList = IntArray(size)
+
+        var spent = 0
+        var basins = 0
+        var tooNarrow = 0
+        var tooStraight = 0
+        var tooSmall = 0
+        var overBudget = 0
+
+        for (s in ranked) {
+            if (budget - spent < minCells) {
+                overBudget++
+                continue
+            }
+            val from = offset[s]
+            val until = offset[s + 1]
+
+            var outlet = packed[from]
+            for (k in from until until) if (chain[packed[k]] > chain[outlet]) outlet = packed[k]
+            if (sinuosity(chainHead[outlet], outlet, chain[outlet], w) < cfg.minSinuosity) {
+                tooStraight++
+                continue
+            }
+
+            var footCount = 0
+            for (k in from until until) {
+                val c = packed[k]
+                val radius = valleyHalfWidth(cfg, strength[c])
+                val cx = c % w
+                val cy = c / w
+                val span = radius.toInt() + 1
+                val r2 = radius * radius
+                for (dy in -span..span) {
+                    val ny = cy + dy
+                    if (ny < 0 || ny >= h) continue
+                    for (dx in -span..span) {
+                        if ((dx * dx + dy * dy).toFloat() > r2) continue
+                        var nx = (cx + dx) % w
+                        if (nx < 0) nx += w
+                        val n = ny * w + nx
+                        if (!isLand[n] || own[n] >= 0) continue
+                        own[n] = s
+                        footList[footCount++] = n
+                    }
+                }
+            }
+
+            // Eroded by one: the cells whose whole three-by-three block is inside the footprint.
+            var coreCount = 0
+            for (k in 0 until footCount) {
+                val c = footList[k]
+                val cy = c / w
+                if (cy == 0 || cy == h - 1) continue
+                val cx = c % w
+                var solid = true
+                for (dy in -1..1) {
+                    for (dx in -1..1) {
+                        var nx = (cx + dx) % w
+                        if (nx < 0) nx += w
+                        if (own[(cy + dy) * w + nx] != s) solid = false
+                    }
+                }
+                if (solid) {
+                    core[c] = s
+                    coreCount++
+                }
+            }
+            if (coreCount == 0) {
+                for (k in 0 until footCount) own[footList[k]] = -1
+                tooNarrow++
+                continue
+            }
+
+            // Dilated back: the union of those blocks, which is three cells wide everywhere.
+            var regionCount = 0
+            for (k in 0 until footCount) {
+                val c = footList[k]
+                if (core[c] != s) continue
+                val cx = c % w
+                val cy = c / w
+                for (dy in -1..1) {
+                    for (dx in -1..1) {
+                        var nx = (cx + dx) % w
+                        if (nx < 0) nx += w
+                        val n = (cy + dy) * w + nx
+                        if (region[n] != s) {
+                            region[n] = s
+                            regionList[regionCount++] = n
+                        }
+                    }
+                }
+            }
+
+            if (regionCount < minCells) {
+                for (k in 0 until footCount) own[footList[k]] = -1
+                tooSmall++
+                continue
+            }
+            regionCount =
+                peelToCap(w, h, regionList, regionCount, region, s, inset, queue, maxCells)
+            if (regionCount < minCells) {
+                for (k in 0 until footCount) own[footList[k]] = -1
+                tooSmall++
+                continue
+            }
+            if (isStraightBar(regionList, regionCount, w)) {
+                for (k in 0 until footCount) own[footList[k]] = -1
+                tooStraight++
+                continue
+            }
+            if (spent + regionCount > budget) {
+                for (k in 0 until footCount) own[footList[k]] = -1
+                overBudget++
+                continue
+            }
+
+            var thickness = 0f
+            for (k in from until until) thickness += strength[packed[k]]
+            thickness /= (until - from).toFloat()
+            val depth = (cfg.deepening + cfg.overDeepening) * thickness
+            cutSaucer(w, h, regionList, regionCount, region, s, depth, isLand, carved, inset)
+            spent += regionCount
+            basins++
+        }
+        return BasinTally(spent, basins, tooNarrow, tooStraight, tooSmall, overBudget)
+    }
+
+    /**
+     * Whether a body of cells is a narrow straight run along one of the four grid bearings.
+     *
+     * The shape the author has now reported three times: a bar of water a cell or two across and
+     * five to fifteen long, lying at exactly 0, 45 or 90 degrees, in ranks. Measured as the extent
+     * of the body along and across each bearing, so a bar is caught whatever its length and a blob
+     * that merely happens to be elongated is not.
+     */
+    private fun isStraightBar(cells: IntArray, count: Int, w: Int): Boolean {
+        if (count < BAR_LENGTH) return false
+        val anchor = cells[0] % w
+        val uMin = IntArray(4) { Int.MAX_VALUE }
+        val uMax = IntArray(4) { Int.MIN_VALUE }
+        val vMin = IntArray(4) { Int.MAX_VALUE }
+        val vMax = IntArray(4) { Int.MIN_VALUE }
+        for (k in 0 until count) {
+            val c = cells[k]
+            val y = c / w
+            var dx = (c % w) - anchor
+            if (dx > w / 2) dx -= w
+            if (dx < -w / 2) dx += w
+            val x = anchor + dx
+            // East, south-east, south, north-east: the along coordinate and the across coordinate
+            // of each. On a diagonal the along coordinate steps by two per cell, which is why the
+            // length is halved and the width is not.
+            val u = intArrayOf(x, x + y, y, x - y)
+            val v = intArrayOf(y, x - y, x, x + y)
+            for (a in 0 until 4) {
+                if (u[a] < uMin[a]) uMin[a] = u[a]
+                if (u[a] > uMax[a]) uMax[a] = u[a]
+                if (v[a] < vMin[a]) vMin[a] = v[a]
+                if (v[a] > vMax[a]) vMax[a] = v[a]
+            }
+        }
+        for (a in 0 until 4) {
+            val diagonal = a == 1 || a == 3
+            val length =
+                if (diagonal) (uMax[a] - uMin[a]) / 2 + 1 else uMax[a] - uMin[a] + 1
+            val across = vMax[a] - vMin[a] + 1
+            if (across <= BAR_WIDTH && length >= BAR_LENGTH) return true
+        }
+        return false
+    }
+
+    /**
+     * How far inside the region each of its cells lies, as a breadth-first walk inward from the
+     * rim: the distance transform the saucered floor and the peeling both read.
+     */
+    private fun insetDistance(
+        w: Int,
+        h: Int,
+        cells: IntArray,
+        count: Int,
+        stamp: IntArray,
+        marker: Int,
+        inset: IntArray,
+        queue: IntArray
+    ) {
+        var tail = 0
+        for (k in 0 until count) {
+            val c = cells[k]
+            var edge = false
+            forEachOrthogonal(w, h, c % w, c / w) { n -> if (stamp[n] != marker) edge = true }
+            if (edge) {
+                inset[c] = 0
+                queue[tail++] = c
+            } else {
+                inset[c] = -1
+            }
+        }
+        var head = 0
+        while (head < tail) {
+            val c = queue[head++]
+            val d = inset[c] + 1
+            forEachOrthogonal(w, h, c % w, c / w) { n ->
+                if (stamp[n] == marker && inset[n] < 0) {
+                    inset[n] = d
+                    queue[tail++] = n
+                }
+            }
+        }
+    }
+
+    /**
+     * Shrinks a basin to at most [cap] cells by peeling whole rings off its rim, and leaves the
+     * distance transform of whatever is left behind it.
+     *
+     * Rings rather than a truncation, because what has to survive is a *basin*: taking the first
+     * `cap` cells of a list would leave a ragged half of one. What the peeling models is real
+     * enough — the ice scoured the whole hollow, and the water stands only in the deepest part of
+     * it — so the ground outside the cap keeps its scour and loses its lake.
+     */
+    private fun peelToCap(
+        w: Int,
+        h: Int,
+        cells: IntArray,
+        count: Int,
+        stamp: IntArray,
+        marker: Int,
+        inset: IntArray,
+        queue: IntArray,
+        cap: Int
+    ): Int {
+        insetDistance(w, h, cells, count, stamp, marker, inset, queue)
+        if (count <= cap) return count
+        var ring = 0
+        var kept = count
+        while (kept > cap) {
+            val next = ring + 1
+            var n = 0
+            for (k in 0 until count) if (inset[cells[k]] >= next) n++
+            if (n == 0) break
+            ring = next
+            kept = n
+        }
+        if (ring == 0) return count
+        var n = 0
+        for (k in 0 until count) {
+            val c = cells[k]
+            if (inset[c] >= ring) cells[n++] = c else stamp[c] = -1
+        }
+        insetDistance(w, h, cells, n, stamp, marker, inset, queue)
+        return n
+    }
+
+    /**
+     * Cuts a basin floor out of a region: level below the lowest cell of the region *and its rim*,
+     * so no cell around it can drain it, and saucered by distance from that rim so the floor is a
+     * bowl rather than a slab dropped into the ground.
+     *
+     * @return how many cells the cut actually lowered.
+     */
+    private fun cutSaucer(
+        w: Int,
+        h: Int,
+        cells: IntArray,
+        count: Int,
+        stamp: IntArray,
+        marker: Int,
+        depth: Float,
+        isLand: BooleanArray,
+        carved: FloatArray,
+        inset: IntArray
+    ): Int {
+        var base = Float.MAX_VALUE
+        for (k in 0 until count) {
+            val c = cells[k]
+            if (carved[c] < base) base = carved[c]
+            // Land only. A basin that reaches the coast has the sea for a neighbour, and reading
+            // the sea floor as its rim would say the floor has to be cut below the ocean — which,
+            // clamped at the waterline, plates the whole basin flat at sea level.
+            forEachOrthogonal(w, h, c % w, c / w) { n ->
+                if (stamp[n] != marker && isLand[n] && carved[n] < base) base = carved[n]
+            }
+        }
+        var lowered = 0
+        for (k in 0 until count) {
+            val c = cells[k]
+            val f = (inset[c].coerceAtLeast(0) / 2f).coerceIn(0f, 1f)
+            val target = (base - depth * (0.45f + 0.55f * f)).coerceAtLeast(0f)
+            if (target < carved[c]) {
+                carved[c] = target
+                lowered++
+            }
+        }
+        return lowered
+    }
+
+    /** Widest a body of water may be and still count as a bar, in cells. */
+    private const val BAR_WIDTH = 2
+
+    /** Shortest run along one bearing that makes a narrow body a bar rather than a blob. */
+    private const val BAR_LENGTH = 4
 
     /** The connected fields of frozen ground, and how many cells each holds. */
     private class FrozenFields(val id: IntArray, val size: IntArray, val count: Int)
@@ -882,17 +1368,22 @@ object GlaciationStage {
      * The first is a gentle, noisy lowering of the whole province — sheet ice strips a shield to
      * bedrock and leaves it hummocky. The second is the basins, and they are the lakes. A
      * low-frequency seeded fBm decides where they go, nudged toward ground that is already concave
-     * by [GlaciationConfig.sheetConcavity], and the cut is taken at the quantile that puts
-     * [GlaciationConfig.sheetBasinCover] of the scoured ground inside a basin. What that leaves is
-     * blobs: irregular, of varied size, of varied orientation, with nothing in their shape that
-     * refers to the grid, because nothing that made them did.
+     * by [GlaciationConfig.sheetConcavity], and the candidates are taken at a quantile of that
+     * score. What that leaves is blobs: irregular, of varied size, of varied orientation, with
+     * nothing in their shape that refers to the grid, because nothing that made them did.
+     *
+     * Which candidates become lakes is then a matter of the allowance rather than of the quantile.
+     * The blobs are ranked by how strongly the score chose them and taken in that order until the
+     * budget [GlaciationConfig.sheetLakeShare] sets is spent; one under
+     * [GlaciationConfig.minLakeShareOfMap] of the map is passed over, and one over
+     * [GlaciationConfig.maxLakeShareOfMap] is peeled inward until it fits, because a world map has
+     * no business carrying a lake several times the size of Superior.
      *
      * Every basin is closed *by construction*. Its floor is cut from the lowest ground in the blob
      * **and its one-cell rim**, so no cell on the rim can be lower than the floor and the river
      * stage is guaranteed to find a depression rather than a channel. Even the shallowest part of
      * the floor stands [GlaciationConfig.sheetBasinDepth] × 0.45 below that rim, comfortably clear
-     * of [LakesConfig.minDepth], and no basin smaller than [GlaciationConfig.sheetBasinMinCells] is
-     * cut at all, which is the same question [LakesConfig.minCells] asks.
+     * of [LakesConfig.minDepth].
      */
     private fun scour(
         config: WorldGenConfig,
@@ -901,9 +1392,13 @@ object GlaciationStage {
         h: Int,
         sheet: BooleanArray,
         sheetCells: Int,
+        isLand: BooleanArray,
         relative: FloatArray,
         landRange: Float,
-        carved: FloatArray
+        carved: FloatArray,
+        minCells: Int,
+        maxCells: Int,
+        budget: Int
     ): ScourTally {
         val size = w * h
         // Seeded off the world seed, so the pattern is this world's and is reproduced exactly on
@@ -930,7 +1425,7 @@ object GlaciationStage {
         }
 
         val depth = cfg.sheetBasinDepth * landRange
-        if (depth <= 0f || cfg.sheetBasinCover <= 0f) return ScourTally(0, 0)
+        if (depth <= 0f || budget < minCells) return ScourTally(0, 0)
 
         // How hollow each cell is against the ground around it, and the scale of that hollowness
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
@@ -960,8 +1455,8 @@ object GlaciationStage {
         }
         val concavityNorm = (3.0 * concavityScale / sheetCells).toFloat().coerceAtLeast(1e-6f)
 
-        // The basin score, and the cut through it that puts `sheetBasinCover` of the province
-        // inside a basin. A quantile from a histogram rather than a fixed threshold on the noise:
+        // The basin score, and the quantile that nominates the candidate hollows.
+        // A quantile from a histogram rather than a fixed threshold on the noise:
         // a fixed one makes one seed a lake district and the next one bare, for no reason anybody
         // could point at on the map.
         val raw = FloatArray(size)
@@ -974,7 +1469,7 @@ object GlaciationStage {
         }
         // Smoothed before it is cut, and this is not cosmetic. The concavity of eroded ground
         // varies cell to cell, so an unsmoothed score threshold shatters every blob into a spray
-        // of three- and four-cell fragments, all of them below [GlaciationConfig.sheetBasinMinCells]
+        // of three- and four-cell fragments, all of them below [GlaciationConfig.minLakeShareOfMap]
         // and none of them a lake — measured on seed 718106, a fifth of the cells the quantile
         // chose survived into a basin. A basin is a landform, so the field that chooses it is read
         // at a landform's scale.
@@ -1006,8 +1501,11 @@ object GlaciationStage {
             val bin = (((score[i] + 1f) / 3f) * SCORE_BINS).toInt().coerceIn(0, SCORE_BINS - 1)
             histogram[bin]++
         }
-        val wanted = (sheetCells * cfg.sheetBasinCover).toInt()
-        if (wanted < cfg.sheetBasinMinCells) return ScourTally(0, 0)
+        // The quantile is asked for more ground than the budget will pay for — the candidates, not
+        // the answer. Which of them actually becomes a lake is settled below, by how strongly the
+        // score chose them and by what is left of the allowance, so that the knob means the share
+        // of the province that ends up *under water* rather than the share that was considered.
+        val wanted = (budget * SELECTION_HEADROOM).toInt().coerceIn(minCells, sheetCells)
         var bin = SCORE_BINS - 1
         var running = 0
         while (bin > 0 && running + histogram[bin] <= wanted) {
@@ -1021,83 +1519,80 @@ object GlaciationStage {
         // this stage is being rid of.
         val blob = IntArray(size) { -1 }
         val queue = IntArray(size)
-        val members = IntArray(size)
-        val inset = IntArray(size)
-        var cells = 0
-        var basins = 0
+        val blobFirst = ArrayList<Int>()
+        val blobCount = ArrayList<Int>()
+        val blobScore = ArrayList<Float>()
         for (start in 0 until size) {
             if (!sheet[start] || blob[start] >= 0 || score[start] < cut) continue
+            val id = blobCount.size
             var head = 0
             var tail = 0
             queue[tail++] = start
-            blob[start] = start
+            blob[start] = id
             var count = 0
+            var sum = 0.0
             while (head < tail) {
                 val c = queue[head++]
-                members[count++] = c
-                val cx = c % w
-                val cy = c / w
-                forEachOrthogonal(w, h, cx, cy) { n ->
+                count++
+                sum += score[c].toDouble()
+                forEachOrthogonal(w, h, c % w, c / w) { n ->
                     if (blob[n] < 0 && sheet[n] && score[n] >= cut) {
-                        blob[n] = start
+                        blob[n] = id
                         queue[tail++] = n
                     }
                 }
             }
-            if (count < cfg.sheetBasinMinCells) continue
+            blobFirst.add(start)
+            blobCount.add(count)
+            blobScore.add((sum / count).toFloat())
+        }
+        if (blobCount.isEmpty()) return ScourTally(0, 0)
 
-            // The rim as well as the blob, so the floor is guaranteed to lie under every cell that
-            // could otherwise drain it.
-            var base = Float.MAX_VALUE
-            for (k in 0 until count) {
-                val c = members[k]
-                if (carved[c] < base) base = carved[c]
-                forEachOrthogonal(w, h, c % w, c / w) { n ->
-                    if (blob[n] != start && carved[n] < base) base = carved[n]
-                }
-            }
+        val offset = IntArray(blobCount.size + 1)
+        for (b in blobCount.indices) offset[b + 1] = offset[b] + blobCount[b]
+        val fill = IntArray(blobCount.size)
+        val packed = IntArray(offset[blobCount.size])
+        for (i in 0 until size) {
+            val b = blob[i]
+            if (b < 0) continue
+            packed[offset[b] + fill[b]] = i
+            fill[b] = fill[b] + 1
+        }
 
-            // How far inside the blob each cell is, so the floor saucers rather than dropping as a
-            // slab: the outermost ring is cut least, and by the third ring in it is cut in full.
-            // A breadth-first walk inwards from the rim, which is a distance transform and so runs
-            // in one pass over the blob however large it is.
-            var tail2 = 0
-            for (k in 0 until count) {
-                val c = members[k]
-                var edge = false
-                forEachOrthogonal(w, h, c % w, c / w) { n -> if (blob[n] != start) edge = true }
-                if (edge) {
-                    inset[c] = 0
-                    queue[tail2++] = c
-                } else {
-                    inset[c] = -1
-                }
-            }
-            var head2 = 0
-            while (head2 < tail2) {
-                val c = queue[head2++]
-                val d = inset[c] + 1
-                forEachOrthogonal(w, h, c % w, c / w) { n ->
-                    if (blob[n] == start && inset[n] < 0) {
-                        inset[n] = d
-                        queue[tail2++] = n
-                    }
-                }
-            }
+        // The strongest hollows first, so that what the allowance buys is the lake country the
+        // score is surest about rather than whichever blob the grid was walked into first. The
+        // blob's own starting cell breaks a tie, so nothing here depends on the walk order either.
+        val ranked = Array(blobCount.size) { it }
+        ranked.sortWith(compareByDescending<Int> { blobScore[it] }.thenBy { blobFirst[it] })
 
+        val members = IntArray(size)
+        val inset = IntArray(size)
+        var spent = 0
+        var cells = 0
+        var basins = 0
+        for (b in ranked) {
+            if (budget - spent < minCells) break
+            var count = offset[b + 1] - offset[b]
+            if (count < minCells) continue
+            for (k in 0 until count) members[k] = packed[offset[b] + k]
+            count = peelToCap(w, h, members, count, blob, b, inset, queue, maxCells)
+            if (count < minCells || spent + count > budget) continue
+            cells += cutSaucer(w, h, members, count, blob, b, depth, isLand, carved, inset)
+            spent += count
             basins++
-            for (k in 0 until count) {
-                val c = members[k]
-                val f = (inset[c].coerceAtLeast(0) / 2f).coerceIn(0f, 1f)
-                val target = (base - depth * (0.45f + 0.55f * f)).coerceAtLeast(0f)
-                if (target < carved[c]) {
-                    carved[c] = target
-                    cells++
-                }
-            }
         }
         return ScourTally(cells, basins)
     }
+
+    /**
+     * How much more ground the basin score is allowed to nominate than the budget can pay for.
+     *
+     * The quantile has to offer a choice or the ranking below it has nothing to choose between;
+     * offer too much and the cut sinks into ground the score never really liked. Two and a half
+     * times the allowance is enough that the lakes are the hollows the noise and the terrain agree
+     * on.
+     */
+    private const val SELECTION_HEADROOM = 2.5f
 
     /** The four orthogonal neighbours, wrapping east-west and stopping at the poles. */
     private inline fun forEachOrthogonal(w: Int, h: Int, x: Int, y: Int, body: (Int) -> Unit) {

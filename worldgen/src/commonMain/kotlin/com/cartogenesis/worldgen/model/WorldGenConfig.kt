@@ -690,8 +690,19 @@ data class GlaciationConfig(
      * together is one glacier, not two. Where two qualify, the one draining less ice is dropped —
      * the greater first, so the choice does not depend on the order cells happen to be visited in.
      * Zero turns the rule off, which is how its own guard is shown to have teeth.
+     *
+     * Four half-widths, which is *two trough-widths*. At one half-width the rule only merged ice
+     * that already overlapped, which is a tautology rather than a rule; two trough-widths is the
+     * distance at which two glaciers are plainly two glaciers rather than one braided one.
+     *
+     * Honestly reported: on seed 718106 at 2048, the world the widening was asked for, it drops
+     * nothing at all — that world's comb was twenty *reaches* of three trunks, not twenty trunks,
+     * and what removed it was the refusal to cut a basin along a straight D8 path (see
+     * [minSinuosity] and `GlaciationStage.cutBasins`). The wider spacing is kept because the rule
+     * as it stood could only ever have caught ice that was already the same glacier, not because
+     * it was measured doing the work here.
      */
-    val parallelSpacing: Float = 1f,
+    val parallelSpacing: Float = 4f,
     /**
      * Whether flat frozen ground is scoured by an ice sheet instead of being left alone.
      *
@@ -721,15 +732,57 @@ data class GlaciationConfig(
     /** How deep a scour basin is cut below its own rim, as a fraction of the elevation range. */
     val sheetBasinDepth: Float = 0.026f,
     /**
-     * What share of the scoured ground is put into basins.
+     * How much of the frozen flat country the ice may leave under water, as a share of it.
      *
-     * Resolved as a quantile of the basin score rather than as a fixed cut through the noise, so
-     * the lake country is equally lake-ridden on every seed instead of depending on where a
-     * particular noise field happens to sit. Not all of it becomes a basin: a blob under
-     * [sheetBasinMinCells] is left alone, which takes about a third of it on the seeds measured.
-     * Finland is a tenth water; this asks for a little more before that loss.
+     * The stage's whole water budget, and the answer to "how much lake is a glaciated world
+     * allowed?". Both regimes draw on it: the valley basins are taken out of it first and the sheet
+     * gets what is left, so the two cannot each quietly spend a full allowance.
+     *
+     * The Earth reasoning, since a number like this is worthless without it. The glaciated shields
+     * are the wettest land there is — Finland is 10% water by area, the Canadian Shield much the
+     * same — but almost all of that is in bodies far below one cell of a world map. At 2048 across
+     * a 12,000 km world a cell is about 17 km², so the lakes a map at this scale can draw at all
+     * are the ones over a thousand km²; in Finland those are Saimaa, Päijänne, Inari, Oulujärvi and
+     * Pielinen, and together they are about 2.5% of the country, not 10%. A generated sheet
+     * province is a whole cold lowland rather than a lake belt, so it should sit a little under
+     * even that: a fifth of the raw shield figure, and the default is 2%.
+     *
+     * Measured on seed 718106 at 2048 with the author's settings, where the old code selected 13%
+     * of the province by quantile and capped nothing: 113 lakes over 2.10% of the land, against 70
+     * over 1.45% now — of which 54 lakes and 1.19% are in basins that exist with the whole stage
+     * switched off, so what the ice itself contributes went from 0.91 to 0.26 percentage points.
      */
-    val sheetBasinCover: Float = 0.13f,
+    val sheetLakeShare: Float = 0.02f,
+    /**
+     * The largest single basin the ice may cut, as a fraction of the whole map.
+     *
+     * Not a tuning knob but a fact about worlds: Lake Superior, the largest lake on Earth that is
+     * not a sea, is 82,100 km² against Earth's 510 million, which is 0.016% of the surface. A body
+     * of water larger than that share of a world is not a lake, it is the Caspian. Expressed
+     * against the map rather than in cells so that 512, 1024 and 2048 draw the same lake: 42 cells
+     * at 512, 168 at 1024, 671 at 2048, which on a 12,000 km world is about 11,500 km² at every
+     * one of them.
+     *
+     * A basin over the cap is not thrown away — that would delete the lake country rather than
+     * size it — it is peeled inward, ring by ring, until its floor fits. The rest of the blob keeps
+     * the scour without the water.
+     */
+    val maxLakeShareOfMap: Float = 0.00016f,
+    /**
+     * The smallest basin the ice bothers to cut, as a fraction of the whole map.
+     *
+     * The floor that stops a finer grid from manufacturing speckle. [LakesConfig.minCells] is a
+     * count of cells and so means a different lake at every resolution — on a 12,000 km world its
+     * twelve cells are 3,300 km² at 512 and 206 km² at 2048 — which is exactly how a 2048 render
+     * ends up sprinkled with ponds that 512 never had. A tenth of [maxLakeShareOfMap] is about
+     * 1,150 km², Lake Geneva's order of magnitude, and that is roughly the smallest body a map of
+     * a whole world should draw at all.
+     *
+     * Four cells at 512, 17 at 1024, 67 at 2048. At 512 and 1024 [LakesConfig.minCells] is still
+     * the binding floor, so this changes nothing there; at 2048 and above it takes over, which is
+     * the point.
+     */
+    val minLakeShareOfMap: Float = 0.000016f,
     /**
      * The size of the basins, as the number of noise periods across the map.
      *
@@ -745,8 +798,6 @@ data class GlaciationConfig(
      * than like a pattern laid over it. It is still the noise that decides their shape.
      */
     val sheetConcavity: Float = 0.8f,
-    /** The smallest scour basin that is cut at all, in cells; below this it is not a lake. */
-    val sheetBasinMinCells: Int = 14,
     /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
     val valleyWidth: Float = 6.5f,
     /**
@@ -816,16 +867,20 @@ data class GlaciationConfig(
     /** Height of the ridge of spoil left at a land terminus, as a fraction of the range. */
     val moraineHeight: Float = 0.045f,
     /**
-     * Height of the recessional moraine laid across the valley at the lower end of every reach.
+     * Height of the recessional moraine laid across the valley at the lower end of an accepted
+     * basin, as a fraction of the range. Zero by default, and the zero is the fix.
      *
-     * The other kind of dam, and the one that does most of the work. A retreating snout pauses,
-     * dumps a bar of till across the trough, and moves on; a valley that has been deglaciated
-     * slowly is a chain of them, with a lake behind each. The scour on its own is not enough,
-     * because how far water spreads behind a rock lip is a question about the slope of the ground,
-     * and on anything but a plain the answer is "two cells" — measured on seed 42, sixty of a
-     * hundred closed basins. A bar of a known height ponds a known depth on any slope.
+     * This was once the dam that did most of the work: a basin cut into a slope spread two cells
+     * before the ground rose out of it, so the water needed a bar of till to pond behind. That is
+     * no longer how a basin is made. A basin is now a *region* — a footprint round the ice's path,
+     * opened so it is nowhere narrower than three cells, with its floor cut below the lowest cell
+     * of its own rim — so it is closed by construction and holds water without any till at all.
+     * With the basin closed anyway, every bar the retreating snout laid could only pond a second,
+     * narrower body of water on the step below it, one cell thick and lying square across the flow:
+     * which is to say a straight bar of water, which is the artefact this stage keeps being fixed
+     * for. Left as a knob rather than deleted so the contribution can be measured again.
      */
-    val riegelHeight: Float = 0.030f,
+    val riegelHeight: Float = 0f,
     /**
      * Whether a glacier that ends in the sea leaves a trough on the sea floor.
      *
@@ -1105,13 +1160,11 @@ data class WorldGenConfig(
                 cirqueRadius = glaciation.cirqueRadius * scale,
                 runOut = (glaciation.runOut * scale).toInt().coerceAtLeast(1),
                 fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1),
-                // A trough is a length on the ground, so it is more cells on a finer grid; a basin
-                // is an area, so it is the square of the scale. `reliefWindow` is a multiple of
-                // `valleyWidth` and `sheetBasinScale` a count of periods across the whole map, so
-                // both already scale and neither is touched.
-                minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2),
-                sheetBasinMinCells =
-                    (glaciation.sheetBasinMinCells * scale * scale).toInt().coerceAtLeast(4)
+                // A trough is a length on the ground, so it is more cells on a finer grid.
+                // `reliefWindow` is a multiple of `valleyWidth`, `sheetBasinScale` a count of
+                // periods across the whole map, and the three lake knobs are map fractions, so
+                // none of them is touched.
+                minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2)
             ),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)

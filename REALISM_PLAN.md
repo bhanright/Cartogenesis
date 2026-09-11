@@ -361,7 +361,7 @@ guard reported, so the next chunk knows its baseline.
 | A2 Continentality | Sonnet | not started | | | |
 | A3 Meridional wind / monsoon | Opus | not started | | | |
 | A4 Absolute rainfall | Sonnet | not started | | | |
-| A5 Cold-cap report | Haiku | not started | | | |
+| A5 Cold-cap report | Haiku | done | 2026-09-11 | e0c3081 (merge a1014ae) | 0% of 50-60deg west coasts forested on all 3 seeds despite 1.9-3.8x latitudinal-mean rain (precip 0.83-0.99): cap is NOT the cause; classify gates on annual mean (<7C -> taiga) and the curve puts 55deg near 0C. Opened A6 |
 | A6 Temperate by coldest month | Sonnet | not started | | | |
 | B1 Continental shelves | Sonnet | not started | | | |
 | B2 Crust-pair boundaries | Opus | not started | | | |

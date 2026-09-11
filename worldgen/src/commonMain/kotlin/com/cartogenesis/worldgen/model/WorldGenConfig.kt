@@ -153,7 +153,41 @@ data class ClimateConfig(
      * rather than left to `seasonalTilt = 0` so that `SeasonsTest` can state plainly what it is
      * turning off, and so the guard that needs seasons can be shown to fail without them.
      */
-    val seasons: Boolean = true
+    val seasons: Boolean = true,
+    /**
+     * How far the wind slants across the latitude lines, in rows per cell of eastward travel.
+     *
+     * The three-cell circulation is not purely zonal: the trades spiral in toward the thermal
+     * equator, the westerlies carry poleward, and the polar easterlies run back down. Giving the
+     * march that component is what turns a row-by-row scan into a diagonal one, and with the belts
+     * migrating over the year it is the whole of the monsoon — in summer the thermal equator
+     * crosses over a tropical coast, the trades there reverse, and air that spent the winter
+     * blowing out to sea spends the summer coming in off it.
+     *
+     * Zero is exactly the zonal march this generator used before, arithmetic for arithmetic. At
+     * 0.3 the air crosses a row every three or four cells, so it traverses ten degrees of latitude
+     * over a continent's width — about what it takes for a coast to feel a sea it does not face.
+     */
+    val meridionalWind: Float = 0.3f,
+    /**
+     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
+     *
+     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
+     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
+     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
+     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
+     * applied to the seasonal departure from the annual mean is `1 + continentality *
+     * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
+     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReach] — a shoreline cell
+     * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
+     * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
+     * field here instead, on the theory that "exposed to water" and "close to water" were the same
+     * question; they were not at this radius — two box-blur passes read barely 0.3 exposure right
+     * at the edge of a single `coastalReach`, so a coast measured that way was already most of the
+     * way to fully continental. Zero reproduces the world from before this setting existed, bit
+     * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
+     */
+    val continentality: Float = 0.6f
 )
 
 @Serializable

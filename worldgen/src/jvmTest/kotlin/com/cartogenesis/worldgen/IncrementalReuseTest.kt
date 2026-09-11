@@ -78,6 +78,14 @@ class IncrementalReuseTest {
                 climate = base.climate.copy(seasonalTilt = base.climate.seasonalTilt + 6f)
             ),
             "seasons" to base.copy(climate = base.climate.copy(seasons = false)),
+            // The slant of the wind belts is the same section again, and the same cross-stage
+            // question: it changes the wind, and the ocean stage is driven by the wind.
+            "meridionalWind" to base.copy(
+                climate = base.climate.copy(meridionalWind = 0f)
+            ),
+            "continentality" to base.copy(
+                climate = base.climate.copy(continentality = base.climate.continentality + 0.4f)
+            ),
             "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
@@ -224,6 +232,7 @@ class IncrementalReuseTest {
                 summerPrecipitation = field(world.climate.summerPrecipitation),
                 winterPrecipitation = field(world.climate.winterPrecipitation),
                 windDirection = world.climate.windDirection.copyOf(),
+                windMeridional = field(world.climate.windMeridional),
                 biome = world.climate.biome.copyOf()
             ),
             rivers = RiverResult(

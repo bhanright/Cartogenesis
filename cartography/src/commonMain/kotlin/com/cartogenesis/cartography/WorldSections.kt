@@ -1,7 +1,10 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.LoadedWorld
 import com.cartogenesis.worldgen.model.MapLabel
+import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
@@ -206,6 +209,50 @@ internal object WorldSections {
         Section("cultures.cultureId", SectionType.I32, ints = world.cultures.cultureId)
     )
 
+    /**
+     * Which sections make up each stage's result, so a reader can tell whether a *stage* survived
+     * rather than merely a section: an old save is missing every section a later chunk added to a
+     * stage's result, not just one of them, and reusing that stage from the sections it does have
+     * would be a different (wrong) answer, not a partial one. [GenerationStage.LANDMARKS] has no
+     * entry because it has no binary section at all — a landmark list lives entirely in
+     * [WorldLists], so it is always present whenever the header carries a world.
+     */
+    private val SECTIONS_BY_STAGE: Map<GenerationStage, List<String>> = mapOf(
+        GenerationStage.TERRAIN to listOf(
+            "terrain.normals.gx", "terrain.normals.gy", "terrain.height"
+        ),
+        GenerationStage.TECTONICS to listOf(
+            "plates.plateId", "plates.boundaryDistance", "plates.nearestBoundaryType", "plates.height"
+        ),
+        GenerationStage.EROSION to listOf("erosion.height"),
+        GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
+        GenerationStage.OCEAN to listOf(
+            "ocean.velocityX", "ocean.velocityY", "ocean.temperature", "ocean.anomaly"
+        ),
+        GenerationStage.CLIMATE to listOf(
+            "climate.temperature", "climate.summerTemperature", "climate.winterTemperature",
+            "climate.precipitation", "climate.summerPrecipitation", "climate.winterPrecipitation",
+            "climate.precipitationMm",
+            "climate.windDirection", "climate.windMeridional", "climate.biome"
+        ),
+        GenerationStage.RIVERS to listOf(
+            "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget", "rivers.lakeId"
+        ),
+        GenerationStage.NATIONS to listOf("nations.nationId", "nations.habitability"),
+        GenerationStage.CULTURES to listOf("cultures.cultureId")
+    )
+
+    /**
+     * Which stages a reader holding exactly these section names can reuse without recomputing.
+     *
+     * Reads only the names — never a section's bytes — so this is cheap enough for a library
+     * listing to call on every save's header, which is what lets the listing say "opens with
+     * regeneration" without ever touching a payload.
+     */
+    fun presentStages(sectionNames: Set<String>): Set<GenerationStage> =
+        SECTIONS_BY_STAGE.filterValues { required -> required.all { it in sectionNames } }.keys +
+            GenerationStage.LANDMARKS
+
     /** The payload, plus the directory that describes it to a reader who has not expanded it. */
     fun write(sections: List<Section>): Pair<ByteArray, List<SectionInfo>> {
         val writer = ByteWriter(sections.sumOf { it.recordLength })
@@ -263,19 +310,29 @@ internal object WorldSections {
     }
 
     /**
-     * Rebuilds the world the sections came from.
+     * Rebuilds as much of the world as the sections allow.
      *
-     * A missing section throws rather than being quietly filled in: a save that has lost an array
-     * is not a world with a gap in it, it is a file this build cannot open, and saying so is the
-     * only way the round-trip guard can tell the difference.
+     * A stage whose sections are all present comes back built from them; a stage missing even one
+     * — an old save opened by a build that has since added a field to that stage's result — comes
+     * back `null` rather than throwing. That is not "inventing an array the file never had": no
+     * stage here reads another's *object*, only its own named sections and the lists, so building
+     * the stages that did survive is sound regardless of which others did not. It is
+     * [WorldGenerationEngine.generate], not this function, that turns "missing" into "regenerated,
+     * and everything downstream of it too" — this function only has to say honestly what it found.
+     *
+     * A corrupt section is a different thing from a missing one and still throws: a length that
+     * disagrees with its own element count ([read]) or a cell count that disagrees with the
+     * config's resolution ([field]/[ints]/[bytes] below) is not a save from an older build, it is
+     * bytes this build cannot trust at all.
      */
     fun rebuild(
         config: WorldGenConfig,
         lists: WorldLists,
         labels: List<MapLabel>,
         sections: Map<String, Section>
-    ): WorldMap {
+    ): PartialWorld {
         val cells = config.width * config.height
+        val present = presentStages(sections.keys)
 
         fun section(name: String): Section =
             sections[name] ?: throw WorldFormatException("save is missing the section '$name'")
@@ -304,38 +361,50 @@ internal object WorldSections {
             return values
         }
 
-        val isLandBytes = bytes("sea.isLand")
-        val isLand = BooleanArray(cells) { isLandBytes[it].toInt() != 0 }
-        val biomes = Biome.entries
-        val biomeBytes = bytes("climate.biome")
-
-        return WorldMap(
-            config = config,
-            terrain = TerrainResult(
+        val terrain = if (GenerationStage.TERRAIN in present) {
+            TerrainResult(
                 normals = NormalField(field("terrain.normals.gx"), field("terrain.normals.gy")),
                 height = field("terrain.height")
-            ),
-            plates = PlateResult(
+            )
+        } else null
+
+        val plates = if (GenerationStage.TECTONICS in present) {
+            PlateResult(
                 plates = lists.plates,
                 plateId = ints("plates.plateId"),
                 boundaryDistance = field("plates.boundaryDistance"),
                 nearestBoundaryType = ints("plates.nearestBoundaryType"),
                 height = field("plates.height")
-            ),
-            erosion = ErosionResult(height = field("erosion.height")),
-            sea = SeaLevelResult(
+            )
+        } else null
+
+        val erosion = if (GenerationStage.EROSION in present) {
+            ErosionResult(height = field("erosion.height"))
+        } else null
+
+        val sea = if (GenerationStage.SEA_LEVEL in present) {
+            val isLandBytes = bytes("sea.isLand")
+            SeaLevelResult(
                 threshold = lists.seaThreshold,
-                isLand = isLand,
+                isLand = BooleanArray(cells) { isLandBytes[it].toInt() != 0 },
                 relativeElevation = field("sea.relativeElevation"),
                 landCellCount = lists.landCellCount
-            ),
-            ocean = OceanResult(
+            )
+        } else null
+
+        val ocean = if (GenerationStage.OCEAN in present) {
+            OceanResult(
                 velocityX = field("ocean.velocityX"),
                 velocityY = field("ocean.velocityY"),
                 temperature = field("ocean.temperature"),
                 anomaly = field("ocean.anomaly")
-            ),
-            climate = ClimateResult(
+            )
+        } else null
+
+        val climate = if (GenerationStage.CLIMATE in present) {
+            val biomes = Biome.entries
+            val biomeBytes = bytes("climate.biome")
+            ClimateResult(
                 temperature = field("climate.temperature"),
                 summerTemperature = field("climate.summerTemperature"),
                 winterTemperature = field("climate.winterTemperature"),
@@ -352,24 +421,47 @@ internal object WorldSections {
                     }
                     biomes[ordinal]
                 }
-            ),
-            rivers = RiverResult(
+            )
+        } else null
+
+        val rivers = if (GenerationStage.RIVERS in present) {
+            RiverResult(
                 filledElevation = field("rivers.filledElevation"),
                 flowAccumulation = field("rivers.flowAccumulation"),
                 flowTarget = ints("rivers.flowTarget"),
                 rivers = lists.rivers,
                 lakes = LakeResult(lakeId = ints("rivers.lakeId"), lakes = lists.lakes)
-            ),
-            nations = NationResult(
+            )
+        } else null
+
+        val nations = if (GenerationStage.NATIONS in present) {
+            NationResult(
                 nationId = ints("nations.nationId"),
                 nations = lists.nations,
                 habitability = field("nations.habitability")
-            ),
-            cultures = CultureResult(
-                cultureId = ints("cultures.cultureId"),
-                cultures = lists.cultures
-            ),
-            landmarks = LandmarkResult(landmarks = lists.landmarks),
+            )
+        } else null
+
+        val cultures = if (GenerationStage.CULTURES in present) {
+            CultureResult(cultureId = ints("cultures.cultureId"), cultures = lists.cultures)
+        } else null
+
+        // No section of its own - a landmark list lives entirely in WorldLists - so it is built
+        // whenever the header carries a world at all, same as before this chunk.
+        val landmarks = LandmarkResult(landmarks = lists.landmarks)
+
+        return LoadedWorld(
+            config = config,
+            terrain = terrain,
+            plates = plates,
+            erosion = erosion,
+            sea = sea,
+            ocean = ocean,
+            climate = climate,
+            rivers = rivers,
+            nations = nations,
+            cultures = cultures,
+            landmarks = landmarks,
             labels = labels
         )
     }

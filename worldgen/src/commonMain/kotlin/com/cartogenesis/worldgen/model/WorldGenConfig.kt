@@ -484,8 +484,6 @@ data class CulturesConfig(
     val climateAffinity: Float = 7.0f,
     /** Extra cost of settling across a strait, on the same scale as a step of unlike country. */
     val seaCrossingCost: Float = 3.0f,
-    /** Country colder than this on average holds no settled people. */
-    val minTemperatureC: Float = -22f,
     /**
      * Extra cost of crossing country nobody settles, such as an ice cap.
      *

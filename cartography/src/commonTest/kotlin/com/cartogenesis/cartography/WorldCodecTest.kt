@@ -11,11 +11,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * The save format is shared between every front end, so it is tested in `commonTest` and runs on
@@ -104,28 +107,119 @@ class WorldCodecTest {
     }
 
     @Test
-    fun `a save with a section missing will not open`() = runTest(timeout = 10.minutes) {
-        // The same failure as dropping a section from the writer, which is how this guard was
-        // shown to bite: the reader will not invent an array it was not given, because a world
-        // with a silently empty height field is far worse than a file that refuses to open.
-        val world = WorldGenerationEngine.generate(worldConfig)
-        val complete = WorldSections.of(world)
-        val short = complete.filterNot { it.name == "erosion.height" }
+    fun `a stage missing all of its sections rebuilds as null instead of refusing to open`() =
+        runTest(timeout = 10.minutes) {
+            // Erosion has exactly one section, so dropping it drops the whole stage cleanly: this
+            // is what an old save looks like to a reader that has since added a field to some
+            // *other* stage's result. It has to come back as a world with a hole in it, not throw
+            // - the old behaviour here (`assertFailsWith<WorldFormatException>`) is precisely the
+            // bug D4 fixes, and refusing a file this way is what broke every version-3 save written
+            // before A1's climate fields, D2's checked-in gzip fixture included.
+            val world = WorldGenerationEngine.generate(worldConfig)
+            val complete = WorldSections.of(world)
+            val short = complete.filterNot { it.name == "erosion.height" }
 
-        val (payload, directory) = WorldSections.write(short)
-        val failure = assertFailsWith<WorldFormatException> {
-            WorldSections.rebuild(
+            val (payload, directory) = WorldSections.write(short)
+            val partial = WorldSections.rebuild(
                 config = worldConfig,
                 lists = WorldLists.of(world),
                 labels = emptyList(),
                 sections = WorldSections.read(payload)
             )
+
+            assertNull(partial.erosion, "erosion's only section was dropped, so it should not rebuild")
+            assertNotNull(partial.terrain, "terrain's sections were untouched")
+            assertNotNull(partial.plates, "plates' sections were untouched")
+            assertNotNull(partial.sea, "sea level's sections were untouched")
+            assertEquals(complete.size - 1, directory.size)
         }
-        assertTrue(
-            failure.message.orEmpty().contains("erosion.height"),
-            "the failure should name the missing section, said: ${failure.message}"
-        )
-        assertEquals(complete.size - 1, directory.size)
+
+    @Test
+    fun `a section that disagrees about its own element count still throws`() =
+        runTest(timeout = 10.minutes) {
+            // Different from a missing section, and still refused: a section that lies about its
+            // own shape is bytes this build cannot trust at all, not an old file it can work around.
+            val world = WorldGenerationEngine.generate(worldConfig)
+            val (payload, _) = WorldSections.write(WorldSections.of(world))
+
+            // Every section's record starts with its ASCII name (int32 length, then the bytes),
+            // then an int32 element type, then an int32 element count, then an int32 byte length
+            // the reader checks the count against. Bumping the count without touching the length
+            // it is supposed to agree with is exactly that disagreement.
+            val corrupted = payload.copyOf()
+            val nameLength = ByteReader(corrupted, position = 0).getInt()
+            val countOffset = 4 + nameLength + 4
+            corrupted[countOffset] = (corrupted[countOffset] + 1).toByte()
+
+            assertFailsWith<WorldFormatException> { WorldSections.read(corrupted) }
+        }
+
+    @Test
+    fun `a save missing the climate sections opens, regenerating climate and everything after it`() =
+        runTest(timeout = 10.minutes) {
+            // The exact shape of A1's fallout: a version-3 save written before a chunk added fields
+            // to one stage's result is missing that stage's sections and no others. It must open,
+            // reusing the stages whose sections survived and regenerating climate and everything
+            // the pipeline runs after it - not refuse the whole file.
+            val world = WorldGenerationEngine.generate(worldConfig)
+            val complete = WorldSections.of(world)
+            val withoutClimate = complete.filterNot { it.name.startsWith("climate.") }
+            assertTrue(withoutClimate.size < complete.size, "the fixture should actually drop something")
+
+            val (payload, directory) = WorldSections.write(withoutClimate)
+            val lists = WorldLists.of(world)
+
+            // What WorldSections.rebuild() hands back for a save like this: every stage whose
+            // sections survived, present; climate, missing.
+            val partial = WorldSections.rebuild(worldConfig, lists, emptyList(), WorldSections.read(payload))
+            assertNotNull(partial.terrain, "terrain's own sections survived and should have rebuilt")
+            assertNotNull(partial.rivers, "rivers' own sections survived and should have rebuilt")
+            assertNull(partial.climate, "climate's sections were dropped and should not have rebuilt")
+
+            // What WorldCodec.decode() does with that: hand it to the engine, which reuses the
+            // stages that survived and regenerates climate and everything downstream of it. Identity,
+            // not equality - a stage that recomputed the same answer would pass an equality check
+            // while costing exactly what reuse exists to avoid, and reusing a stage that should not
+            // have been reused would still pass a null check.
+            val opened = WorldGenerationEngine.generate(worldConfig, previous = partial)
+            assertSame(partial.terrain, opened.terrain, "terrain was regenerated")
+            assertSame(partial.plates, opened.plates, "plates were regenerated")
+            assertSame(partial.erosion, opened.erosion, "erosion was regenerated")
+            assertSame(partial.sea, opened.sea, "sea level was regenerated")
+            assertSame(partial.ocean, opened.ocean, "ocean was regenerated")
+            assertNotSame(partial.rivers, opened.rivers, "rivers should regenerate along with climate")
+            assertNotSame(partial.nations, opened.nations, "realms should regenerate along with climate")
+            assertNotSame(partial.cultures, opened.cultures, "peoples should regenerate along with climate")
+            assertNotSame(
+                partial.landmarks, opened.landmarks, "landmarks should regenerate along with climate"
+            )
+
+            // And the codec's own path over real bytes must open rather than refuse - this is the
+            // actual bug: the pre-fix reader threw WorldFormatException on exactly this file.
+            val original = document().copy(config = worldConfig)
+            val fullBytes = WorldCodec.encode(original, world)
+            val header = WorldCodec.decodeHeader(fullBytes)
+            val stripped = containerBytes(
+                header.copy(sections = directory, payloadBytes = payload.size), payload
+            )
+            val decoded = assertNotNull(
+                WorldCodec.decode(stripped).world,
+                "a save missing only climate's sections should still open"
+            )
+            assertEquals(worldConfig.seed, decoded.config.seed)
+            assertEquals(worldConfig.width, decoded.config.width)
+        }
+
+    /** Hand-assembles a container from a header and payload, the way [WorldCodec.encode] does. */
+    private fun containerBytes(header: SaveHeader, payload: ByteArray): ByteArray {
+        val headerBytes = Json.encodeToString(header).encodeToByteArray()
+        val writer = ByteWriter(WorldCodec.PREFIX_BYTES + headerBytes.size + payload.size)
+        writer.putBytes(byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte()))
+        writer.putInt(WorldCodec.FORMAT_VERSION)
+        writer.putInt(headerBytes.size)
+        writer.putBytes(headerBytes)
+        writer.putBytes(payload)
+        return writer.bytes
     }
 
     @Test

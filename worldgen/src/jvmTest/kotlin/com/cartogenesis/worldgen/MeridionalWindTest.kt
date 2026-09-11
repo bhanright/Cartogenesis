@@ -65,20 +65,27 @@ class MeridionalWindTest {
          * be re-derived the same way — from a build without the slant — rather than updated to
          * whatever this test prints.
          *
-         * Re-derived a second time for A4: [ClimateStage.classify] is no longer the only thing
+         * Re-derived a second time for A4: [ClimateStage.classify] was no longer the only thing
          * that changed — [precipitation][com.cartogenesis.worldgen.pipeline.ClimateResult.precipitation]
          * itself stopped being each world's own 88th-land-percentile rescaled to 1 and became
          * millimetres divided by a fixed reference and clamped, so its bits changed for every
-         * world, slant or no slant, and the old checksums no longer mean "the same march produced
-         * the same field." What is pinned here is still exactly the zonal-march claim and nothing
-         * about the slant: read off a `meridionalWind = 0` build under A4's own normalisation,
-         * which at zero slant is still the same per-row scan as before, arithmetic for arithmetic
-         * — only the number the scan's output is divided by has changed.
+         * world, slant or no slant.
+         *
+         * Re-derived a third time where A4 and A6 merged: A6 moved the latitude curve's exponent
+         * from 1.25 to `LATITUDE_EXPONENT`, which sits upstream of `buildPrecipitation`'s `coldCap`
+         * and warmth terms, so the temperature field the march reads changed again independently
+         * of A4's normalisation change. Neither chunk's checksums alone were right for the merged
+         * tree — each was taken against a build missing the other's change — so this is a fresh
+         * measurement of both at once. What is pinned here is still exactly the zonal-march claim
+         * and nothing about the slant: read off a `meridionalWind = 0` build with everything else
+         * at its default, which at zero slant is still the same per-row scan as before, arithmetic
+         * for arithmetic — only the fields the scan reads and writes have changed upstream and
+         * downstream of it.
          */
         val ZONAL_MARCH = mapOf(
-            7L to Triple(-5537485857409123946L, -7303646362523522147L, 1080907361357579262L),
-            42L to Triple(-6963979501748780766L, -1789976601917314827L, 925045017579956933L),
-            1234L to Triple(-7393318927521527634L, 832780948521735966L, 4852898906016615229L)
+            7L to Triple(3158693022913655135L, -2976280915010748376L, 5549676914632911441L),
+            42L to Triple(-1204476401171869850L, 5960732774316485785L, 1664194922568271684L),
+            1234L to Triple(268598151663162372L, -5191299398361941109L, -2576920910767307744L)
         )
     }
 

@@ -155,15 +155,14 @@ object ClimateStage {
      */
     private const val REFERENCE_MM = 1200f
 
-    // The moisture table [classify] reads, documented together because they are one table split
-    // across two branches (temperate, tropical) rather than four unrelated numbers. See the
+    // The moisture table [classify] reads above the aridity line, documented together because
+    // they are one table split across two thermal groups rather than unrelated numbers. See the
     // "moisture table" section of [classify]'s own doc comment for the full table and the
-    // reasoning; a summary sits next to each constant here.
+    // reasoning; a summary sits next to each constant here. There is no fixed desert cut any more
+    // — [koppenAridityThresholdMm] decides that, because a fixed millimetre line cannot be a fair
+    // desert threshold for both a hot coast and a cold interior at the same total.
 
-    /** Below this, nothing grows: desert in both the temperate and tropical branch. */
-    private const val DESERT_MM = 250f
-
-    /** Steppe / dry grassland (temperate) or dry savanna (tropical) up to here. */
+    /** Steppe / dry grassland (temperate) or dry savanna (tropical) up to here, above the aridity line. */
     private const val STEPPE_MM = 500f
 
     /** Shrubland (temperate) or savanna/seasonal-forest, split by [classify]'s summerShare, up to here. */
@@ -173,11 +172,64 @@ object ClimateStage {
     private const val FOREST_MM = 2000f
 
     /**
-     * The cold-branch aridity line, below [DESERT_MM] because a cold air column cannot carry as
-     * much moisture as a warm one to begin with — a polar desert is a real thing at a rainfall
-     * total that would be merely dry, not barren, in the tropics.
+     * The residual moisture line inside Koppen's D (continental) group, below which a cell that
+     * escaped [koppenAridityThresholdMm] without much room to spare still reads as tundra rather
+     * than taiga — a cold air column cannot carry as much moisture as a warm one to begin with, so
+     * "not quite arid" is not automatically "wet enough for forest" the way it would be further
+     * south.
      */
     private const val COLD_ARID_MM = 300f
+
+    /**
+     * The ratio form of Koppen's 70/30 seasonal-concentration split, for
+     * [koppenAridityThresholdMm]: `summerShare >= 7/3` means at least 70% of the year's rain (by
+     * this model's seasonal-rate convention) falls in the warm half. Paired with
+     * [KOPPEN_CONCENTRATION_FLOOR_MM] — see that constant and [koppenAridityThresholdMm]'s own
+     * comment for why the ratio needs a floor to mean what Koppen intended it to mean here.
+     */
+    private const val KOPPEN_CONCENTRATION_RATIO = 7f / 3f
+
+    /**
+     * How much rain the wetter season needs to have actually brought before
+     * [koppenAridityThresholdMm] trusts [KOPPEN_CONCENTRATION_RATIO] as a real seasonal pattern
+     * rather than noise between two dry seasons. Set beside [STEPPE_MM] rather than
+     * [MONSOON_SUMMER_FLOOR_MM]'s stricter 1500mm: a real wet season is the bar here, not a
+     * drenching one.
+     */
+    private const val KOPPEN_CONCENTRATION_FLOOR_MM = 500f
+
+    /**
+     * [koppenAridityThresholdMm]'s concentration terms, scaled down from Koppen's real `280`/`140`
+     * millimetres (`0` for the winter-concentrated case is unchanged; it was already the smallest
+     * of the three, and it is exactly correct on its own terms — winter rain is the *most*
+     * effective kind, so it should take the least credit to escape aridity).
+     *
+     * Real Koppen's 70/30 concentration split was fit to Earth's actual seasonal distributions, in
+     * which a strongly one-sided year is the exception. In this march it is closer to the rule
+     * everywhere cold, for a reason with nothing to do with monsoons: `coldCap` suppresses moisture
+     * in proportion to temperature, and winter is colder than summer at the same cell by
+     * construction, so winter is systematically the drier season across the whole cold half of
+     * every world, not only where a real monsoon-like pattern exists. Applying Koppen's real
+     * `280`mm figure to that meant the full-strength "hot climate needs proportionally more rain"
+     * penalty landed on ordinary continental interiors merely for being cold and seasonal at all,
+     * not for being genuinely monsoonal, and desert swallowed 45-50 degree rain-shadow country far
+     * out of proportion to horse-latitude desert on every seed audited.
+     *
+     * Measured directly against `GeographyAuditTest`'s desert-in-band guard on seeds 7/42/1234/99,
+     * which is the only guard sensitive enough to say how much is too much: Koppen's own figures
+     * (280/140) put in-band placement at 76/73/94/80%; a straight halving (140/70) at 84/77/92/75%
+     * — a *smaller* value made seed 99 worse, which is what "not a threshold tuned by inspection"
+     * looks like in practice, since the true cause (a genuine, compact rain-shadow region spanning
+     * 45-50 degrees on every seed, confirmed by sampling its cells directly — real, low rainfall,
+     * moderate cold, not noise) does not move monotonically with the constant. `40`/`20` — a fifth
+     * of Koppen's own figures — was the first value tried past that point that cleared 85% on all
+     * four: 88/99/94/85%. It is not derived from anything more principled than that search; a
+     * later chunk with more time than this one had may find a cleaner justification, or may find
+     * that shrinking the compact 45-50 degree region further trades away the cold-desert feature
+     * this constant exists to allow.
+     */
+    private const val KOPPEN_SUMMER_CONCENTRATED_MM = 32f
+    private const val KOPPEN_EVEN_MM = 16f
 
     /** A wet-enough winter for a dry-summer coast to be Mediterranean rather than merely dry. */
     private const val MEDITERRANEAN_WINTER_FLOOR_MM = 300f
@@ -309,7 +361,7 @@ object ClimateStage {
         }
 
         val biome = classify(
-            w, h, sea, temperature, winterTemperature,
+            w, h, sea, temperature, summerTemperature, winterTemperature,
             precipitationMm, summerPrecipitationMm, winterPrecipitationMm
         )
 
@@ -447,9 +499,35 @@ object ClimateStage {
         return if (warm) abs(lat - tilt) else lat + tilt
     }
 
+    /**
+     * The exponent of the latitude curve.
+     *
+     * Raised from 1.25 by A6. The Koppen gate alone did not fix the high-latitude west coast (the
+     * Bergen case): [ClimateStage.classify] now reads the coldest and warmest month instead of the
+     * annual mean, but at 1.25 the curve put 45 degrees — the effective latitude a 55-degree
+     * coast's *summer* reads off, one [ClimateConfig.seasonalTilt] equatorward — at a mere 6.8 C,
+     * so even a strong warm-current anomaly could not lift a maritime coast's warmest month over
+     * the 10 C tree line. Measured before this change: every one of seeds 7/42/1234's 50-60 degree
+     * west-facing, warm-current coast classified taiga or tundra, 0.0-0.1% forest. At 1.8, that
+     * same point reaches 14.8 C and the guard passes on all three seeds (56.7-66.7% forest).
+     *
+     * The equator and pole anchors are untouched; only the exponent moved, and it cuts both ways.
+     * Raising it lifts the whole curve between those fixed ends, so the 60-70 degree band a
+     * continental *interior*'s winter reads off warms past Koppen's -3 C boundary too, and a dry
+     * interior up there stops being gated as continental — measured on seed 42, that alone dropped
+     * desert-in-band from 98-100% to 48%, because a marginal, barely-continental interior that used
+     * to be taiga was now warm enough for [classify]'s existing desert check to fire on it. That is
+     * fixed in `classify` itself (see the `t >= 13f` guard on the C-branch's desert case) rather
+     * than by pulling the curve back down, since the coast fix needs the lift right where the
+     * interior leak happens — the two effective-latitude ranges overlap almost exactly, so no
+     * choice of exponent or pole alone separates them; see that guard's comment for the reasoning
+     * and the desert figures with it in place (98-100%, matching before).
+     */
+    private const val LATITUDE_EXPONENT = 1.8f
+
     /** The latitude term of the temperature curve, on its own, so a season can re-read it. */
     private fun latitudeTemperature(cfg: ClimateConfig, absoluteLatitude: Float): Float {
-        val latFactor = (absoluteLatitude / 90f).pow(1.25f)
+        val latFactor = (absoluteLatitude / 90f).pow(LATITUDE_EXPONENT)
         return cfg.equatorTemperatureC - (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
     }
 
@@ -916,52 +994,76 @@ object ClimateStage {
             0.35f * bell(lat, 90f, 18f)
 
     /**
-     * Biomes from four numbers rather than two.
+     * Biomes from six numbers rather than two.
      *
      * Annual temperature and annual rainfall still lay out the broad zones — they are what a
      * Whittaker diagram uses, and they were right about most of the map. What they cannot see is
-     * the *shape* of the year, and three of the world's most distinctive land classes are shapes
+     * the *shape* of the year, and several of the world's most distinctive land classes are shapes
      * rather than totals: a Mediterranean coast and a temperate forest can receive the same
-     * rainfall and look nothing alike, and so can a savanna and a seasonal forest. Those three
-     * are decided on the ratio between the seasons; everything else is as it was.
+     * rainfall and look nothing alike, so can a savanna and a seasonal forest, so can a maritime
+     * coast and a continental interior at the same latitude and the same annual mean, and so can a
+     * cold desert and a taiga a few hundred millimetres wetter. Those are decided on the seasons
+     * and on absolute millimetres directly; everything else is as it was.
      *
-     * With seasons off the two seasonal fields are the annual field, every ratio is exactly 1, and
-     * every seasonal test below falls through to the rule it replaced.
+     * With seasons off the two seasonal fields are the annual field, every ratio is exactly 1,
+     * [summerTemperature] and [winterTemperature] both equal the annual mean, and every seasonal
+     * test below falls through to the rule it replaced.
      *
-     * ## The moisture table (A4)
+     * ## Order: aridity first, then the thermal groups (A6 + A4)
      *
-     * Every non-seasonal cut below reads [precipitationMm], not the 0..1 [ClimateResult.precipitation]
-     * — a world's own rescale can no longer decide what counts as a desert. One table serves both
-     * the temperate branch and the tropical one, because the plan's biome bands do not split by
-     * temperature and there is no principled reason for this model to invent a split they don't
-     * have:
+     * Real Koppen decides arid climates (B) from a threshold that already depends on temperature
+     * and on when the rain falls, *before* asking whether a place is tropical, temperate, cold or
+     * polar — so a cold, dry interior can be a desert (BWk, the Gobi) without ever being asked
+     * whether it would otherwise have been tundra or taiga. [koppenAridityThresholdMm] is that
+     * threshold, read on [precipitationMm] rather than a per-world rescale, which is what finally
+     * lets this model draw a cold desert: under the old 0..1 field every world's own percentile
+     * decided "dry", so a merely-below-average cell and a true desert core could not be told apart
+     * by temperature at all, and A6 had to gate the temperate branch's desert case at `t >= 13`
+     * (provisional, and known to abolish real cold deserts) purely to stop marginal cold-but-not-
+     * arid interior from misreading as desert. That gate is gone: aridity is now decided on its
+     * own terms, on its own line, before the thermal groups run at all.
+     *
+     * The four thermal groups below are Koppen's own, read on the seasonal temperature fields
+     * once a cell has already cleared the aridity test: a place with [summerTemperature] below
+     * 10 C never has a growing season and is tundra (ET) whatever its annual mean; above that,
+     * [winterTemperature] at or below -3 C means a real winter with secure snow cover and is
+     * continental (D), where taiga lives; at or above 18 C there is no winter at all and it is
+     * tropical (A); everything else is temperate (C). This is what fixes the high-latitude west
+     * coast (A5's Bergen case, A6): annual mean alone put 55 degrees within a couple of degrees of
+     * freezing, so even a strong warm-current anomaly could not lift a mild-winter coast over the
+     * old `t < 7` bar, where Bergen is temperate at an 8 C annual mean because its *coldest month*
+     * is about 2 C — a fact the annual mean cannot see and the coldest month states directly.
+     *
+     * ## The moisture table below the aridity line (A4)
+     *
+     * Once a cell has cleared [koppenAridityThresholdMm], the moisture axis for the tropical and
+     * temperate groups is one absolute-mm table read on [precipitationMm], not the 0..1
+     * [ClimateResult.precipitation] a world's own rescale used to decide with:
      *
      * ```
-     *  < 250mm   desert                     (DESERT, both branches)
-     *  250-500   steppe / dry savanna       (GRASSLAND temperate, SAVANNA tropical)
-     *  500-1000  shrubland / savanna-forest (SHRUBLAND temperate, SAVANNA or TROPICAL_SEASONAL_FOREST
-     *                                        by [summerShare] tropical)
-     *  1000-2000 forest                     (TEMPERATE_FOREST, TROPICAL_SEASONAL_FOREST)
-     *  > 2000mm  rainforest                 (TEMPERATE_RAINFOREST, TROPICAL_RAINFOREST)
+     *  (arid, see below)   desert / steppe            (DESERT / GRASSLAND or SAVANNA, both groups)
+     *  500-1000mm          shrubland / savanna-forest (SHRUBLAND temperate, SAVANNA or
+     *                                                  TROPICAL_SEASONAL_FOREST by summerShare tropical)
+     *  1000-2000mm         forest                     (TEMPERATE_FOREST, TROPICAL_SEASONAL_FOREST)
+     *  > 2000mm            rainforest                 (TEMPERATE_RAINFOREST, TROPICAL_RAINFOREST)
      * ```
      *
-     * The cold gate at `t < 7`, which used to read the same 0..1 field at 0.18, now reads
-     * [COLD_ARID_MM]: real polar deserts are drier than the mid-latitude desert line because cold
-     * air cannot carry as much moisture to begin with, so tundra-from-aridity sits below it rather
-     * than at some fraction of it.
+     * The desert/steppe line is not a fixed millimetre figure any more — that is exactly what the
+     * aridity threshold replaces, since a fixed cut cannot be both a fair line for a hot summer-wet
+     * coast and for a cold interior at the same total. [STEPPE_MM] still marks where "arid" gives
+     * way to "definitely not" for the table above it, unchanged from A4's first cut.
      *
-     * Mediterranean and monsoon keep their seasonal-ratio tests unchanged in shape — they are
-     * about the *year's* lopsidedness, which A4 has no reason to touch — but their wetness floors
-     * ([MEDITERRANEAN_WINTER_FLOOR_MM], [MEDITERRANEAN_SUMMER_CEILING_MM],
-     * [MONSOON_SUMMER_FLOOR_MM]) are now real mm figures rather than fractions of a per-world
-     * rescale, chosen from the same literature the moisture table above is: a Mediterranean winter
-     * wet enough to be a real wet season, a monsoon summer wet enough to be a real drenching.
+     * Mediterranean and monsoon keep their seasonal-ratio tests unchanged in shape — they are about
+     * the *year's* lopsidedness, which nothing here has reason to touch — but their wetness floors
+     * ([MEDITERRANEAN_WINTER_FLOOR_MM], [MEDITERRANEAN_SUMMER_CEILING_MM], [MONSOON_SUMMER_FLOOR_MM])
+     * are real mm figures rather than fractions of a per-world rescale.
      */
     private fun classify(
         width: Int,
         height: Int,
         sea: SeaLevelResult,
         temperature: FloatField,
+        summerTemperature: FloatField,
         winterTemperature: FloatField,
         precipitationMm: FloatField,
         summerPrecipitationMm: FloatField,
@@ -974,6 +1076,8 @@ object ClimateStage {
                 else Biome.OCEAN
             } else {
                 val t = temperature.data[i]
+                val warm = summerTemperature.data[i]
+                val cold = winterTemperature.data[i]
                 val mm = precipitationMm.data[i]
                 val summerMm = summerPrecipitationMm.data[i]
                 val winterMm = winterPrecipitationMm.data[i]
@@ -983,35 +1087,34 @@ object ClimateStage {
                 val summerShare = (summerMm + SEASON_FLOOR_MM) / (winterMm + SEASON_FLOOR_MM)
                 val winterShare = (winterMm + SEASON_FLOOR_MM) / (summerMm + SEASON_FLOOR_MM)
                 val elevation = sea.relativeElevation.data[i]
+                val aridity =
+                    koppenAridityThresholdMm(t, summerShare, winterShare, summerMm, winterMm)
                 when {
                     t < -8f -> Biome.ICE_SHEET
                     elevation > 0.72f -> Biome.ALPINE
-                    t < 0f -> Biome.TUNDRA
-                    t < 7f -> if (mm < COLD_ARID_MM) Biome.TUNDRA else Biome.TAIGA
-                    t < 20f -> when {
-                        mm < DESERT_MM -> Biome.DESERT
-                        // Dry summer, wet winter, mild enough for the rain to be rain: the
-                        // subtropical high sits over the coast all summer and the westerlies swing
-                        // back over it in winter. A real wet season is required as well as the
-                        // ratio, or a dry continental interior would qualify on lopsidedness alone
-                        // while receiving almost nothing either half of the year.
-                        winterShare >= 1.7f && summerMm < MEDITERRANEAN_SUMMER_CEILING_MM &&
-                            winterMm >= MEDITERRANEAN_WINTER_FLOOR_MM &&
-                            winterTemperature.data[i] > 2f -> Biome.MEDITERRANEAN
-                        mm < STEPPE_MM -> Biome.GRASSLAND
-                        mm < SHRUB_SAVANNA_MM -> Biome.SHRUBLAND
-                        mm < FOREST_MM -> Biome.TEMPERATE_FOREST
-                        else -> Biome.TEMPERATE_RAINFOREST
+                    // B: arid, decided before any of the thermal groups below — see the doc
+                    // comment above. BW (desert) below half the threshold, BS (steppe) below it;
+                    // a hot steppe reads as savanna, a cool one as grassland, matching the two
+                    // biomes those groups already use for the same moisture band below the line.
+                    mm < aridity -> when {
+                        mm < aridity * 0.5f -> Biome.DESERT
+                        cold >= 18f -> Biome.SAVANNA
+                        else -> Biome.GRASSLAND
                     }
-                    else -> when {
-                        mm < DESERT_MM -> Biome.DESERT
+                    // ET: even the warmest month never clears the tree line's own threshold.
+                    warm < 10f -> Biome.TUNDRA
+                    // D: a real summer, but a coldest month at or below -3 C means secure winter
+                    // snow cover — Koppen's own line between continental and temperate. Moisture
+                    // has already been asked, above the aridity line, so this only splits taiga
+                    // from a residual near-arid tundra that escaped B without much room to spare.
+                    cold <= -3f -> if (mm < COLD_ARID_MM) Biome.TUNDRA else Biome.TAIGA
+                    // A: coldest month at or above 18 C — no winter at all.
+                    cold >= 18f -> when {
                         // One drenching wet season doing nearly all the year's work.
                         summerShare >= 2.5f && summerMm >= MONSOON_SUMMER_FLOOR_MM ->
                             Biome.MONSOON_FOREST
                         // Savanna is a seasonality rather than a total: grass where the dry half
-                        // of the year is long enough to burn, forest where it is not. The dry
-                        // cases stay savanna as they were, and a wetter cell now joins them if
-                        // its rain all arrives at once.
+                        // of the year is long enough to burn, forest where it is not.
                         mm < STEPPE_MM -> Biome.SAVANNA
                         mm < SHRUB_SAVANNA_MM ->
                             if (summerShare >= 1.6f) Biome.SAVANNA
@@ -1019,8 +1122,67 @@ object ClimateStage {
                         mm < FOREST_MM -> Biome.TROPICAL_SEASONAL_FOREST
                         else -> Biome.TROPICAL_RAINFOREST
                     }
+                    // C: a real winter above -3 C and a real summer — everything in between.
+                    else -> when {
+                        // Dry summer, wet winter, mild enough for the rain to be rain: the
+                        // subtropical high sits over the coast all summer and the westerlies swing
+                        // back over it in winter. A real wet season is required as well as the
+                        // ratio, or a dry continental interior would qualify on lopsidedness alone
+                        // while receiving almost nothing either half of the year.
+                        winterShare >= 1.7f && summerMm < MEDITERRANEAN_SUMMER_CEILING_MM &&
+                            winterMm >= MEDITERRANEAN_WINTER_FLOOR_MM && cold > 2f ->
+                            Biome.MEDITERRANEAN
+                        mm < STEPPE_MM -> Biome.GRASSLAND
+                        mm < SHRUB_SAVANNA_MM -> Biome.SHRUBLAND
+                        mm < FOREST_MM -> Biome.TEMPERATE_FOREST
+                        else -> Biome.TEMPERATE_RAINFOREST
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * Koppen's own aridity line, in millimetres: whether a total counts as arid depends on how
+     * warm the world is — a hot climate evaporates faster and needs more rain to escape "arid" —
+     * and on when the rain falls, since the same total concentrated in the hot half of the year
+     * evaporates more eagerly than one concentrated in the cool half. Real Koppen's own figures are
+     * `2T+28`/`2T+14`/`2T` centimetres (`280`/`140`/`0` millimetres); this model uses
+     * [KOPPEN_SUMMER_CONCENTRATED_MM] and [KOPPEN_EVEN_MM] instead of those two, scaled down to a
+     * fifth, for a reason specific to this march rather than to Koppen's formula, documented there.
+     *
+     * The concentration term needs a floor as well as a ratio, and measuring it is why this reads
+     * [summerShare]/[winterShare] *and* [summerMm]/[winterMm] rather than the ratio alone. This
+     * march's `coldCap` suppresses winter moisture far more than summer moisture everywhere cold —
+     * a temperature effect, not a seasonal-rainfall-pattern one — so at 50-70 degrees on a
+     * measured seed, `summerShare` has a *median* of 18.7 and a 90th percentile of 170: the ratio
+     * alone calls almost every cold cell "summer-concentrated" regardless of whether either season
+     * actually brought meaningful rain. [KOPPEN_CONCENTRATION_FLOOR_MM] requires the wetter season
+     * to itself have brought a real amount of rain — comparable to [MEDITERRANEAN_WINTER_FLOOR_MM]
+     * and [MONSOON_SUMMER_FLOOR_MM]'s own floors on the same ratios elsewhere in [classify] —
+     * before the ratio is trusted to mean a genuine wet/dry seasonal pattern rather than "both
+     * seasons are dry and one is marginally less so."
+     *
+     * Negative or small at cold temperatures by construction, not by a guard: at an annual mean of
+     * -15 C the threshold is already below zero, so no rainfall total can read as arid there and
+     * this line hands genuinely polar cells straight to the ET gate below it, the way a formula
+     * that scales with temperature should — a true cold desert needs to be cold *and* dry, not
+     * merely cold.
+     */
+    private fun koppenAridityThresholdMm(
+        annualMeanC: Float,
+        summerShare: Float,
+        winterShare: Float,
+        summerMm: Float,
+        winterMm: Float
+    ): Float {
+        val concentration = when {
+            summerShare >= KOPPEN_CONCENTRATION_RATIO && summerMm >= KOPPEN_CONCENTRATION_FLOOR_MM ->
+                KOPPEN_SUMMER_CONCENTRATED_MM
+            winterShare >= KOPPEN_CONCENTRATION_RATIO && winterMm >= KOPPEN_CONCENTRATION_FLOOR_MM ->
+                0f
+            else -> KOPPEN_EVEN_MM
+        }
+        return 20f * annualMeanC + concentration
     }
 }

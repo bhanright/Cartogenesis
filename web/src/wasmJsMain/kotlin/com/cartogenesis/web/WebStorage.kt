@@ -2,8 +2,8 @@ package com.cartogenesis.web
 
 import com.cartogenesis.cartography.ByteWorldLibrary
 import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.WorldCodec
-import com.cartogenesis.cartography.WorldDocument
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -229,7 +229,7 @@ internal class IndexedDbLibrary(
      */
     private var migrated = false
 
-    override suspend fun list(): List<WorldDocument> {
+    override suspend fun list(): List<LibraryEntry> {
         migrateFromLocalStorageOnce()
         return super.list()
     }

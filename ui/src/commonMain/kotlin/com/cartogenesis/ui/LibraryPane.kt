@@ -21,7 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.LibraryEntry
 
 /**
  * Saving and reopening worlds.
@@ -37,7 +37,7 @@ import com.cartogenesis.cartography.WorldDocument
 @Composable
 fun LibraryPane(
     title: String,
-    worlds: List<WorldDocument>,
+    worlds: List<LibraryEntry>,
     location: String,
     supportsFileTransfer: Boolean,
     onTitleChange: (String) -> Unit,
@@ -97,7 +97,8 @@ fun LibraryPane(
             )
         }
 
-        items(worlds, key = { it.id }) { world ->
+        items(worlds, key = { it.document.id }) { entry ->
+            val world = entry.document
             Card(Modifier.fillMaxWidth().clickable { onOpen(world.id) }) {
                 Row(
                     Modifier.padding(16.dp).fillMaxWidth(),
@@ -107,7 +108,7 @@ fun LibraryPane(
                         Text(world.title, style = MaterialTheme.typography.titleSmall)
                         Text(
                             "seed ${world.config.seed} · ${world.config.width}px · " +
-                                formatTimestamp(world.savedAt),
+                                "${formatTimestamp(world.savedAt)} · ${entry.status}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -133,7 +133,7 @@ class AbsoluteRainfallTest {
         val newRatio = if (newLush > 0f) newArid / newLush else Float.POSITIVE_INFINITY
         println(
             "ABSRAIN absolute mm, seed $seed: arid config %.2f%% desert, ".format(newArid) +
-                "lush config %.2f%% desert (%.2fx)".format(newRatio, newRatio)
+                "lush config %.2f%% desert (%.2fx)".format(newLush, newRatio)
         )
 
         assertTrue(

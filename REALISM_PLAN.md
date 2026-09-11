@@ -448,6 +448,16 @@ across the northern continent where circulation belts meet (a wind-band seam, wo
 to 72 because the busier September worlds put more sharp edges on the same seed (99.9th percentile
 drift 58 -> 67 with the encoder untouched; README figures updated to match).
 
+### Render review after B4 (2026-09-11, last of the day)
+
+Looked at the 4x glacier crops (on and off) for seeds 42 and 7 and the whole-map fantasy views for
+seeds 42 and 1234. Verdict: believable. With glaciation off, seed 42's north is fine dendritic
+ridging to the pole, a warm landscape with snow on it; with it on, the same ground becomes broad
+flat-floored valleys, hummocky moraine country and scattered lakes, and seed 7's north reads as the
+Canadian Shield, a belt of lakes threaded by rivers that still reach the sea. Nothing below the
+freezing line changed, and the fantasy views at map scale are the same worlds with more water in
+the cold country. Fjord bathymetry is there in the data and faint in the picture, as B4 said.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

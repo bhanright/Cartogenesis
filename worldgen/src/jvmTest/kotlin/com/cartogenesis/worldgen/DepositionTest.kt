@@ -55,8 +55,14 @@ class DepositionTest {
      * A later chunk that changes what the terrain stages produce will move these legitimately, and
      * is expected to re-record them and say so in its report. Nothing but a terrain change should
      * touch them.
+     *
+     * Re-recorded again when `GlaciationStage` was split into its two regimes — valley glaciers
+     * only where the ground is channelled, ice-sheet scour everywhere else — which changes what the
+     * ice leaves behind on every cold world and therefore what the hydraulic pass is handed. The
+     * land count did not move, again: 6226 before and after, because the coastline is still cut
+     * before this stage runs and this stage still never touches it.
      */
-    private val startingPointElevation = 8099398527141345154L
+    private val startingPointElevation = 7450875979753259226L
     private val startingPointLand = 6226
 
     @Test

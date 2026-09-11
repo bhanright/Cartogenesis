@@ -281,12 +281,58 @@ class DebugMapDump {
     @Test
     fun `dump the glaciated coasts`() {
         outputDir.mkdirs()
-        listOf(7L, 42L, 1234L).forEach { seed ->
+        listOf(7L, 42L, 1234L, 718106L).forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val world = WorldGenerationEngine.generateBlocking(config)
             val bare = WorldGenerationEngine.generateBlocking(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
             )
+            // Seed 718106's cold northern continent is the ground the D8 lattice was found on, and
+            // it reaches well south of the polar eighth the belt crops cover: the lattice was in
+            // the flat interior, not on the coast. A wider band of it, plus the whole-map view it
+            // sits in, so the interior can be judged as well as the fjords.
+            if (seed == 718106L) {
+                write(
+                    crop(render(world, Mode.FANTASY), 0, 0, world.width, world.height / 4, 3),
+                    "seed$seed-glacier-northland.png"
+                )
+                write(
+                    crop(render(bare, Mode.FANTASY), 0, 0, world.width, world.height / 4, 3),
+                    "seed$seed-glacier-northland-off.png"
+                )
+                write(render(world, Mode.FANTASY), "seed$seed-fantasy.png")
+                write(render(world, Mode.BIOME), "seed$seed-biome.png")
+
+                // The standing check, and the one that matters. Every crop in this file used to be
+                // 512, which is how the D8 lattice got through review: at 512 it reads as scattered
+                // lakes and short streaks, and at 1024 — the resolution the desktop app actually
+                // opens at — it is a cross-hatched mesh over every cold region. Same world, same
+                // config path the app uses, twice the grid.
+                val fine = WorldGenerationEngine.generateBlocking(config.atResolution(1024, 1024))
+                val bareFine = WorldGenerationEngine.generateBlocking(
+                    config.atResolution(1024, 1024)
+                        .let { it.copy(glaciation = it.glaciation.copy(enabled = false)) }
+                )
+                write(
+                    crop(render(fine, Mode.FANTASY), 410, 40, 340, 255, 3),
+                    "seed$seed-glacier-1024-northland.png"
+                )
+                write(
+                    crop(render(bareFine, Mode.FANTASY), 410, 40, 340, 255, 3),
+                    "seed$seed-glacier-1024-northland-off.png"
+                )
+                val fineLakeCells = fine.rivers.lakes.lakeId.count { it >= 0 }
+                val coarseLakeCells = world.rivers.lakes.lakeId.count { it >= 0 }
+                println(
+                    "GLACIER seed $seed resolution invariance:" +
+                        " 512 ${coarseLakeCells} lake cells of ${world.sea.landCellCount} land" +
+                        " (${"%.2f".format(coarseLakeCells * 100f / world.sea.landCellCount)}%)," +
+                        " 1024 ${fineLakeCells} of ${fine.sea.landCellCount}" +
+                        " (${"%.2f".format(fineLakeCells * 100f / fine.sea.landCellCount)}%);" +
+                        " lakes ${world.rivers.lakes.lakes.size} against" +
+                        " ${fine.rivers.lakes.lakes.size}"
+                )
+            }
             // The northern and southern cold belts, full width, top and bottom eighth of the map.
             listOf("north" to 0, "south" to world.height * 7 / 8).forEach { (half, top) ->
                 write(

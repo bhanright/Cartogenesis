@@ -364,9 +364,14 @@ object MapRasterizer {
 
             MapView.PLATES -> {
                 val plateColor = MapPalette.plate(world.plates.plateId[i])
-                // Darken toward the boundaries so plate edges are readable.
+                // Toward the boundaries the plate colour gives way to what that boundary builds,
+                // so the view says which pair of crusts met rather than only where they met.
                 val edge = (world.plates.boundaryDistance.data[i] / 12f).coerceIn(0f, 1f)
-                MapPalette.blend(0xFF202020.toInt(), plateColor, edge)
+                MapPalette.blend(
+                    MapPalette.boundaryClass(world.plates.nearestBoundaryClass[i]),
+                    plateColor,
+                    edge
+                )
             }
 
             MapView.CURRENTS ->

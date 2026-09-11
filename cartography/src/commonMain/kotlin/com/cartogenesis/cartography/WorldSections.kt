@@ -157,6 +157,10 @@ internal object WorldSections {
         Section("plates.plateId", SectionType.I32, ints = world.plates.plateId),
         Section("plates.boundaryDistance", SectionType.F32, floats = world.plates.boundaryDistance.data),
         Section("plates.nearestBoundaryType", SectionType.I32, ints = world.plates.nearestBoundaryType),
+        Section(
+            "plates.nearestBoundaryClass", SectionType.I32,
+            ints = world.plates.nearestBoundaryClass
+        ),
         Section("plates.height", SectionType.F32, floats = world.plates.height.data),
         Section("erosion.height", SectionType.F32, floats = world.erosion.height.data),
         Section("sea.isLand", SectionType.U8, raw = ByteArray(world.sea.isLand.size) {
@@ -312,6 +316,7 @@ internal object WorldSections {
                 plateId = ints("plates.plateId"),
                 boundaryDistance = field("plates.boundaryDistance"),
                 nearestBoundaryType = ints("plates.nearestBoundaryType"),
+                nearestBoundaryClass = ints("plates.nearestBoundaryClass"),
                 height = field("plates.height")
             ),
             erosion = ErosionResult(height = field("erosion.height")),

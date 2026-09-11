@@ -62,7 +62,146 @@ data class TectonicsConfig(
      * running unbroken from one end to the other. Where such a belt crosses submerged ground that
      * is the difference between a continuous ruler-straight strip of land and an island arc.
      */
-    val rangeVariationScale: Float = 13f
+    val rangeVariationScale: Float = 13f,
+    /**
+     * Whether a convergent boundary's profile depends on which crusts are colliding.
+     *
+     * On it, the three convergent pairs build three different things: oceanic under continental a
+     * narrow coastal range with a volcanic arc behind it, continental against continental a broad
+     * flat-topped plateau, oceanic under oceanic an island arc. Off, every convergent boundary
+     * gets the single [mountainHeight]-at-[boundaryFalloff] belt the generator used before, which
+     * is what `BoundaryPairTest` turns off to show its measurement has teeth — with one profile
+     * the Andes and Tibet are the same shape and the width-to-height ratios coincide.
+     */
+    val crustPairProfiles: Boolean = true,
+    /**
+     * Half-width, in cells, of the coastal range on the continental side of an oceanic–continental
+     * margin. Deliberately far narrower than [collisionWidth]: the Andes are a few hundred
+     * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
+     * of distinguishing the pairs. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     */
+    val andeanWidth: Float = 14f,
+    /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
+    val andeanHeight: Float = 0.52f,
+    /**
+     * How far inland of the suture the volcanic arc stands, in cells.
+     *
+     * A subducting slab does not melt at the trench; it melts once it is deep enough, which puts
+     * the volcanoes a fixed distance behind the margin rather than on it. That offset is what
+     * makes the margin asymmetric in a way a symmetric falloff cannot express.
+     */
+    val arcOffset: Float = 13f,
+    /** Half-width of the volcanic arc ridge about its own axis, in cells. */
+    val arcWidth: Float = 5f,
+    /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
+    val arcHeight: Float = 0.20f,
+    /**
+     * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidth].
+     * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     */
+    val collisionWidth: Float = 26f,
+    /**
+     * Height of the plateau, in normalized elevation units.
+     *
+     * Lower than [andeanHeight] on purpose. Tibet stands below the highest Andean peaks and holds
+     * that height over a hundred times the area, and since the whole field is normalized before
+     * sea level is cut, a plateau as tall as it is wide would simply push every other landform
+     * down the colour ramp.
+     */
+    val collisionHeight: Float = 0.34f,
+    /**
+     * Share of the plateau's half-width that is dead flat before the profile starts falling away.
+     *
+     * Tibet is a plain at altitude, not a ridge: the interesting thing about a continent-continent
+     * collision is that it thickens the crust over a wide area rather than piling it on a line.
+     */
+    val plateauFlatShare: Float = 0.60f,
+    /**
+     * Height of the ranges around a plateau's rim, above the plateau surface itself.
+     *
+     * The Himalaya, the Karakoram, the Kunlun and the Qilian all stand on the edge of Tibet rather
+     * than in it, which is what stops a plateau reading as a dome: the high ground is a rough plain
+     * inside a ring of mountains. Without it the collision profile is smooth everywhere and the
+     * eye reads a mound.
+     */
+    val plateauRimHeight: Float = 0.12f,
+    /**
+     * Where the rim ranges crest, as a share of the plateau's half-width, and how wide they are —
+     * the rim's own half-width is one minus this. Dimensionless, so it needs no rescaling.
+     */
+    val plateauRimShare: Float = 0.78f,
+    /**
+     * How much of [rangeVariation] a plateau feels, as a fraction.
+     *
+     * A belt sagging near to nothing between massifs is right for a range and wrong for a plateau:
+     * a plateau that broke into separate massifs would be a chain again, and uniform height over a
+     * very wide area is the striking thing about Tibet. So it is damped — but only by half, and
+     * the reason for not damping it further is worth recording. A plateau that holds one altitude
+     * for its entire run is one continuous ice cap once the climate stage sees it, and on seed 7,
+     * where over half the land is already ice, that cap walls off the habitable ground behind it
+     * into a single region: at a fifth of the variation one people held 48% of the habitable world
+     * against `CultureRealmTest`'s 45% ceiling, and at half it holds 34%, better than the 38% the
+     * generator managed before this chunk. The same change lifts seed 1234's warm-against-cold
+     * coastal gap from 2.0% to 3.1%. A plateau that swells and sags is not only better geography,
+     * it is the difference between one ice cap and several.
+     */
+    val plateauAlongVariation: Float = 0.50f,
+    /**
+     * How far from the suture the island arc stands, on the overriding plate, in cells.
+     * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     */
+    val islandArcOffset: Float = 8f,
+    /** Half-width of the island-arc ridge about its own axis, in cells. */
+    val islandArcWidth: Float = 7f,
+    /**
+     * Crest height of an island arc, in normalized elevation units.
+     *
+     * Sized so the arc mostly stays under water — it is built on oceanic crust, which sits a
+     * [plateElevationBias] below continental — and only the swells of [rangeVariation] break the
+     * surface. That is what makes an arc a chain of islands rather than a ridge of land.
+     */
+    val islandArcHeight: Float = 0.24f,
+    /** Depth of the floor of a continental rift valley, in normalized elevation units. */
+    val riftDepth: Float = 0.25f,
+    /** Half-width of the rift trough, in cells. */
+    val riftWidth: Float = 7f,
+    /**
+     * Share of the trough's half-width that is flat floor before the ground starts climbing.
+     *
+     * A rift valley has a floor, not a keel: the Rift Valley is a flat plain with an escarpment on
+     * either side, and lakes and rivers lie along it. A V-shaped trough instead gives every river
+     * that finds the axis banks it never cut — enough, measured, to account for most of what
+     * `ValleyIncisionTest` reads as incision. Dimensionless, so it needs no rescaling.
+     */
+    val riftFloorShare: Float = 0.55f,
+    /** How far from the rift axis its raised shoulders crest, in cells. */
+    val riftShoulderOffset: Float = 11f,
+    /** Half-width of each shoulder about its own crest, in cells. */
+    val riftShoulderWidth: Float = 7f,
+    /**
+     * Height of the rift shoulders, in normalized elevation units.
+     *
+     * Crust that is being pulled apart thins and drops, and the flanks rebound: the East African
+     * rift is a trough between two escarpments, not a simple groove. Without the shoulders a rift
+     * reads as an erosional valley rather than a tectonic one.
+     */
+    val riftShoulderHeight: Float = 0.10f,
+    /**
+     * Share of plates that carry a hotspot — a point fixed in the mantle that the plate drifts
+     * over, leaving a line of seamounts behind it.
+     *
+     * Only oceanic plates are considered, so what this produces is island chains in open water
+     * rather than volcanic fields inland.
+     */
+    val hotspotPlateFraction: Float = 0.35f,
+    /** How long a hotspot trail runs before it has subsided to nothing, in cells. */
+    val hotspotChainLength: Float = 110f,
+    /** Distance between successive seamounts along a trail, in cells. */
+    val hotspotSpacing: Float = 15f,
+    /** Radius of a single seamount, in cells. */
+    val hotspotRadius: Float = 5f,
+    /** Height of the youngest seamount in a chain, in normalized elevation units. */
+    val hotspotHeight: Float = 0.17f
 )
 
 /**
@@ -498,6 +637,15 @@ data class WorldGenConfig(
      *  - [TectonicsConfig.boundaryFalloff] is the width of a mountain belt and of the blur that
      *    softens the plate base. Left alone, a 4x larger grid makes both four times narrower in
      *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
+     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidth],
+     *    [TectonicsConfig.arcOffset], [TectonicsConfig.arcWidth], [TectonicsConfig.collisionWidth],
+     *    [TectonicsConfig.islandArcOffset], [TectonicsConfig.islandArcWidth],
+     *    [TectonicsConfig.riftWidth], [TectonicsConfig.riftShoulderOffset],
+     *    [TectonicsConfig.riftShoulderWidth]) is measured in cells for the same reason, and so is
+     *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLength],
+     *    [TectonicsConfig.hotspotSpacing], [TectonicsConfig.hotspotRadius]). Left alone, a larger
+     *    grid would narrow Tibet to the width of the Andes and the distinction this chunk exists
+     *    for would quietly disappear at export resolution.
      *  - [SeaConfig.shelfWidth] is the width of the continental shelf, in the same cell terms as
      *    [TectonicsConfig.boundaryFalloff] and for the same reason: left alone, a larger grid
      *    would shrink it to nothing and every coast would drop straight into deep water again.
@@ -517,7 +665,21 @@ data class WorldGenConfig(
         return copy(
             width = newWidth,
             height = newHeight,
-            tectonics = tectonics.copy(boundaryFalloff = tectonics.boundaryFalloff * scale),
+            tectonics = tectonics.copy(
+                boundaryFalloff = tectonics.boundaryFalloff * scale,
+                andeanWidth = tectonics.andeanWidth * scale,
+                arcOffset = tectonics.arcOffset * scale,
+                arcWidth = tectonics.arcWidth * scale,
+                collisionWidth = tectonics.collisionWidth * scale,
+                islandArcOffset = tectonics.islandArcOffset * scale,
+                islandArcWidth = tectonics.islandArcWidth * scale,
+                riftWidth = tectonics.riftWidth * scale,
+                riftShoulderOffset = tectonics.riftShoulderOffset * scale,
+                riftShoulderWidth = tectonics.riftShoulderWidth * scale,
+                hotspotChainLength = tectonics.hotspotChainLength * scale,
+                hotspotSpacing = tectonics.hotspotSpacing * scale,
+                hotspotRadius = tectonics.hotspotRadius * scale
+            ),
             sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
             erosion = erosion.copy(passes = (erosion.passes * scale).toInt()),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),

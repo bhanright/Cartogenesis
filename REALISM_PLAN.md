@@ -397,6 +397,26 @@ Two things to carry forward:
   its west, and the audit keeps 98%+ of desert in band — but re-check after A4 rescales rainfall,
   which will move every desert.
 
+### Render review after A6 (2026-09-11, later)
+
+Looked at seeds 7, 42, 1234 biomes and seed 42 annual temperature. Verdict: believable, and more
+varied than before. Seed 42's northern continent went from a near-solid ice-and-tundra slab to
+ice, a tundra fringe, a boreal belt, horse-latitude dry blocks at 30-45°N and forested west coasts;
+seed 7 acquired a Sahel gradient (ice, tundra, boreal, a desert-and-savanna belt at 25-35°N, then a
+wet tropical coast); west coasts are green from the subtropics to ~55° on the Chile-shaped
+continent and Mediterranean olive appears on mid-latitude west coasts. Ice fell to 19-43% of land
+by seed, which reads as Earth-like rather than glacial.
+
+Checked arithmetically, not by eye: the new latitude curve (exponent 1.8) gives ~10 °C at 51°
+(London 11), ~24 °C at 30° (Cairo 22), ~3 °C at 60° before the current anomaly (Bergen 8, so a few
+degrees cold there), and 32 °C at the equator (real ~27, a pre-existing warm anchor). Two
+calibration notes for whoever next touches `buildTemperature`: the equator anchor is ~5 °C warm,
+and 60° is ~3 °C cold even with a warm current. Neither is a blocker.
+
+Seed 1234 has a few orange specks inside its equatorial rainforest (rain-shadow pockets behind
+small ranges; the audit keeps ≥95% of desert in band) and its south-western interior is dry from
+30° to 55°S — the Patagonia note from the first review, now larger. Re-check both after A4.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

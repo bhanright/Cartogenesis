@@ -62,11 +62,29 @@ object CultureStage {
         rivers: RiverResult
     ): CultureResult {
         val cells = config.width * config.height
-        val cfg = config.cultures
         val empty = IntArray(cells) { CultureResult.UNSETTLED }
-        if (!cfg.enabled || cfg.cultureCount <= 0 || sea.landCellCount == 0) {
-            return CultureResult(empty, emptyList())
-        }
+        val (units, profile, hearths) = placeHearths(config, sea, climate, rivers)
+            ?: return CultureResult(empty, emptyList())
+
+        val owner = spread(config.cultures, units, profile, hearths)
+        return describe(config, sea, climate, units, profile, hearths, owner)
+    }
+
+    /**
+     * The catchments, what each is like, and where the hearths land — everything downstream of
+     * hearth placement needs. Split out from [generate] so `CultureHearthLandmassTest` can check
+     * the placement directly, against [BasinUnits.landmass] and [BasinUnits.area], rather than
+     * inferring landmasses from the finished map with a second flood fill that would not
+     * necessarily agree with this stage's own notion of one.
+     */
+    internal fun placeHearths(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        climate: ClimateResult,
+        rivers: RiverResult
+    ): Triple<BasinUnits, Profile, List<Int>>? {
+        val cfg = config.cultures
+        if (!cfg.enabled || cfg.cultureCount <= 0 || sea.landCellCount == 0) return null
 
         val land = sea.landCellCount
         val units = BasinPartition.mergeSmall(
@@ -76,15 +94,13 @@ object CultureStage {
             ),
             (land * cfg.minRegionShare).toInt().coerceAtLeast(8)
         )
-        if (units.unitCount == 0) return CultureResult(empty, emptyList())
+        if (units.unitCount == 0) return null
 
         val profile = profile(config, sea, climate, units)
         val random = Random(config.seed * 7919 + 101)
         val hearths = chooseHearths(units, profile, cfg.cultureCount, random)
-        if (hearths.isEmpty()) return CultureResult(empty, emptyList())
-
-        val owner = spread(cfg, units, profile, hearths)
-        return describe(config, sea, climate, units, profile, hearths, owner)
+        if (hearths.isEmpty()) return null
+        return Triple(units, profile, hearths)
     }
 
     /**
@@ -94,7 +110,7 @@ object CultureStage {
      * peoples of the world to a political setting: change the realm count and every culture would
      * move.
      */
-    private class Profile(
+    internal class Profile(
         val temperature: FloatArray,
         val rainfall: FloatArray,
         val elevation: FloatArray,
@@ -165,6 +181,14 @@ object CultureStage {
     /**
      * Where the peoples begin: habitable, spread apart, and preferring the middle of a climate
      * rather than its edge, so a culture has somewhere to expand into on every side.
+     *
+     * Seats are shared out between landmasses in proportion to their *habitable* area before
+     * quality is considered at all, exactly as `BasinRealms.chooseSeeds` shares out realm
+     * capitals — and for the same reason. Left unweighted, every hearth crowds onto whichever
+     * landmass has the best-scoring ground, which is nearly always the largest one; the few
+     * hearths that land there then split it between too few competitors, and one of them swallows
+     * the rest. On seed 7, landmass 0 held 86% of the world's habitable land but drew only 3 of 7
+     * hearths unweighted, and the largest of the three grew to 47%.
      */
     private fun chooseHearths(
         units: BasinUnits,
@@ -188,17 +212,51 @@ object CultureStage {
             u to likeness * units.area[u] * (0.7f + 0.6f * random.nextFloat())
         }.sortedByDescending { it.second }
 
+        // How many hearths each landmass has earned, by its share of *habitable* area (not all
+        // land — an ice-bound landmass should draw no seats). Largest remainder, so the seats add
+        // up exactly and a small habitable island is not rounded out of existence.
+        val habitableArea = IntArray(units.landmassCount)
+        for (u in candidates) habitableArea[units.landmass[u]] += units.area[u]
+        val totalHabitable = habitableArea.sum()
+        val allocation = IntArray(units.landmassCount)
+        if (totalHabitable > 0) {
+            var handed = 0
+            val exact = DoubleArray(units.landmassCount) {
+                habitableArea[it].toDouble() * wanted / totalHabitable
+            }
+            for (m in 0 until units.landmassCount) {
+                allocation[m] = exact[m].toInt()
+                handed += allocation[m]
+            }
+            (0 until units.landmassCount)
+                .sortedByDescending { exact[it] - allocation[it] }
+                .take((wanted - handed).coerceAtLeast(0))
+                .forEach { allocation[it]++ }
+        }
+
         val chosen = ArrayList<Int>()
         val blocked = HashSet<Int>()
         for ((unit, _) in scored) {
             if (chosen.size >= wanted) break
             if (unit in blocked) continue
+            val mass = units.landmass[unit]
+            if (allocation[mass] <= 0) continue
+            allocation[mass]--
             chosen.add(unit)
             blocked.add(unit)
             // Two hearths sharing a neighbourhood would produce one people split down the middle.
             units.neighbours[unit].forEach { near ->
                 blocked.add(near)
                 units.neighbours[near].forEach { blocked.add(it) }
+            }
+        }
+        // If a landmass's quota could not be filled from its own candidates (too few units, or
+        // all blocked by the exclusion ring), fill the remaining seats from whatever is left
+        // rather than returning too few — same fallback as BasinRealms.chooseSeeds.
+        if (chosen.size < wanted) {
+            for ((unit, _) in scored) {
+                if (chosen.size >= wanted) break
+                if (unit !in chosen) chosen.add(unit)
             }
         }
         if (chosen.isEmpty()) chosen.add(candidates.first())

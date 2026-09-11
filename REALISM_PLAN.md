@@ -1,8 +1,8 @@
 # Realism plan
 
-*Drawn up 2026-09-11. Nine improvements to the geography and climate, implemented by subagents in
-chunks that each leave `main` green and pushed, so that a session cut off by usage limits loses at
-most the chunk in flight. The ledger at the bottom is the source of truth for progress; a fresh
+*Drawn up 2026-09-11, revised the same day. A save format that stores the world, then nine
+improvements to the geography and climate, implemented by subagents in chunks that each leave
+`main` green and pushed. The ledger at the bottom is the source of truth for progress; a fresh
 session starts there, not from any conversation.*
 
 ---
@@ -18,10 +18,13 @@ These are the habits that have found every substantive bug in this project. They
 2. **A guard must be shown to fail without the fix.** Write the test, run it against the old code
    (revert the change or flip a flag), see it fail, then see it pass. A guard that has only ever
    been green proves nothing; three of this project's guards passed vacuously before anyone checked.
-3. **JVM and Wasm must agree after every pipeline change.** Run `:worldgen:jvmTest --tests
-   '*WorldFingerprintTest*'` and `:worldgen:wasmJsNodeTest`, compare the six `FINGERPRINT` lines.
-   Anything that iterates a `HashMap`/`HashSet` and picks "first" or "max" diverges between
-   platforms — sort, or tie-break on a key. CI enforces this; do not push red.
+3. **Cross-platform identity is no longer a gate.** Once Track D lands, a save carries the world
+   itself, so a JVM world and a Wasm world from the same seed no longer need to match bit for
+   bit, and nobody spends an afternoon proving that they do. CI keeps the JVM-versus-Wasm
+   fingerprint comparison as an *informational* job — a divergence is still worth a glance,
+   because it usually means a platform-dependent bug rather than a harmless difference — but it
+   does not fail the build and no chunk waits on it. Until D3 flips that switch, treat a red
+   fingerprint job as a warning, not a blocker.
 4. **New config sections must be declared to the reuse chain.** If a stage reads a new section of
    `WorldGenConfig`, add it to that stage's guard in `WorldGenerationEngine` and to the variant
    list in `IncrementalReuseTest`, which compares reuse against fresh generation for every section.
@@ -30,36 +33,108 @@ These are the habits that have found every substantive bug in this project. They
 6. **Windows file locks.** Gradle on this machine locks `build/` subdirectories between runs. The
    cure is `gradlew --stop`, then delete the module's `build` directory in a *separate* command
    from any that mentions the JDK path (the sandbox misreads the two together), then run.
-7. **Small reports.** A subagent's final report is under 300 words: what changed, the before/after
-   numbers, the render verdict, and anything it could not verify. The orchestrator is on a tight
-   budget and reads the report, not the diff.
+7. **Reports carry numbers.** A subagent's final report says what changed, the before/after
+   figures its guard measured, what the render showed, and anything it could not verify. The
+   orchestrator decides from the report; the diff is there if the report raises a question.
 
 ## Session protocol
 
 Each session, on any model:
 
-1. Read the **Ledger** below. Take the first unchecked chunk whose dependencies are checked.
-2. Dispatch one subagent for it, with the chunk's spec pasted verbatim plus the ground rules. One
-   chunk at a time, sequentially — the account is on usage credits, so parallel agents are off.
-3. When the report comes back green: update the ledger entry (date, numbers, commit hash), commit
-   with the chunk's name in the subject, push, wait for CI green.
-4. If the session dies mid-chunk, the next session reverts any uncommitted change (`git checkout
-   -- .`) and restarts that chunk. Nothing in a chunk depends on a previous session's memory.
+1. Read the **Ledger** below. Take every unchecked chunk whose dependencies are checked.
+2. Dispatch a subagent per chunk, each with its spec pasted verbatim plus the ground rules.
+   Chunks with no dependency between them run **in parallel** — Track A and Track B are
+   independent of each other throughout, and each subagent works in its own git worktree so
+   parallel chunks cannot tread on one another's files. Chunks within a track run in their
+   dependency order.
+3. When a report comes back green: merge the worktree, update the ledger entry (date, numbers,
+   commit hash), commit with the chunk's name in the subject, push, wait for CI green. Two
+   chunks that both touch `WorldGenConfig` or `ClimateStage` will conflict at merge; the
+   orchestrator resolves that, which is the main reason it reads reports rather than diffs.
+4. If a session dies mid-chunk, the next session discards that worktree and restarts the chunk.
+   Nothing in a chunk depends on a previous session's memory.
 
 Model per chunk is given below. Rule of thumb: Opus where the algorithm is the work; Sonnet where
-the spec is precise and the test is clear; Haiku for docs, renders and tallies. The orchestrator
-itself does as little as possible.
+the spec is precise and the test is clear; Haiku for docs, renders and tallies.
 
-## Save compatibility — decide before chunk 1
+## Track D — saves that carry the world
 
-Every chunk below changes what a seed generates. Saves record seed and settings, not the world, so
-**every existing CPU save will open as a different world** after this work. GPU saves carry their
-terrain and are unaffected below the climate stage but will get new climate, rivers and realms.
+*Goes first. Every chunk in Tracks A and B changes what a seed generates; once a save stores the
+world rather than the recipe for it, that stops mattering, and so does whether two platforms
+cook the recipe identically.*
 
-Options: (a) accept it — this is a pre-1.0 generator and the saves are the author's own; (b) bump
-`WorldCodec.FORMAT_VERSION` and have old saves store their terrain on first open, as GPU saves
-already do. (b) is a chunk of its own and protects nothing the author has said he values. **The
-plan assumes (a); confirm or change before starting.**
+Today a save is the seed, the settings and the user's overrides, and the world is rebuilt from
+them on open. That is why the JVM and Wasm builds have to generate bit-identical worlds, why CI
+compares their fingerprints, and why a large share of every pipeline change was spent proving
+they still agree. The GPU toggle already broke the rule and was patched around it: a GPU world
+stores its eroded terrain in the save and replays it through the `ErosionAccelerator` seam.
+
+The general form of that patch is the new save. A save stores the finished `WorldMap` — every
+stage's result — and opening it is deserialisation. The engine already knows how to reuse a
+stored stage: `WorldGenerationEngine.generate(config, previous = stored)` skips every stage whose
+settings match, so a save opened with its own config regenerates nothing, and a save whose
+settings are then edited recomputes only what lies downstream — which is exactly how live editing
+works now. `StoredTerrain` becomes a special case of this and goes away.
+
+### D1. Full-world save format — Opus
+
+*Dependencies: none.*
+
+- A save is a container: a JSON header (format version, config, overrides, labels, title,
+  resolution, which platform and version wrote it) followed by binary sections, one per stage
+  result. `WorldCodec` in `:cartography` owns the layout; it is common code, so both front ends
+  write and read the same bytes.
+- Binary, not JSON, for the per-cell arrays: a 1024x1024 world is tens of megabytes of floats,
+  and JSON triples that. Little-endian `float32` for heights and fields that must round-trip
+  exactly; `int32` for cell ids; a byte per cell for biomes. Lists (rivers, lakes, nations,
+  cultures, landmarks) stay JSON in the header — they are small.
+- Compression is a platform seam on `Platform`, because the JVM has `java.util.zip` and the
+  browser has `CompressionStream`, and common code has neither. Gzip both sides; a platform that
+  cannot compress stores raw and says so in the header. Measure the ratio on seeds 7, 42 and
+  1234 at 512 and 1024 and record it — the height fields are noise-like and will not compress as
+  well as the id maps.
+- `WorldCodec.FORMAT_VERSION` finally gets read: bump it, and keep loading version 2 (seed-only)
+  saves by regenerating on open as today. Such a save becomes a full save the next time it is
+  saved. Nothing the author already has is lost, and nothing has to be migrated by hand.
+- Loading goes through the reuse chain: build a `WorldMap` from the sections and pass it as
+  `previous` with the saved config. `IncrementalReuseTest` already proves that a matching config
+  reuses every stage; add a case that a loaded save reuses all of them and generates nothing.
+- Guard: `WorldCodecTest` round-trips a generated world through bytes and asserts every
+  per-cell array is identical (not close — identical) and every list is equal. Show it fails when
+  a section is dropped from the writer. Add a second case: a version-2 save still opens.
+- The GPU toggle's warning about saves not replicating on other machines comes out of the UI;
+  the reason for it no longer exists.
+
+### D2. Web storage — Sonnet
+
+*Dependencies: D1.*
+
+The browser library is `localStorage`, which caps at a few megabytes per origin and cannot hold a
+full-world save. Move the web `WorldLibrary` to IndexedDB, keyed by document id, with the listing
+reading only headers so the library pane stays fast. Add download and upload of the container as
+a file, so a browser save can be moved to the desktop and back — the format is identical, which is
+the point of it living in `:cartography`. Keep `localStorage` migration: existing seed-only
+entries are read once, re-saved into IndexedDB, and removed.
+
+- Guard: the web self-test (`?selftest`) gains a round-trip — save the current world to
+  IndexedDB, reload the page, open it, assert the height field is byte-identical. Report the
+  save size and time in the console line, next to the erosion figures.
+- Check the library listing against a 1024 save: it must not deserialise the arrays to show a
+  title and a date.
+
+### D3. Retire the determinism gate — Haiku
+
+*Dependencies: D1, D2.*
+
+- `ci.yml`: the JVM-versus-Wasm fingerprint step stops failing the build (`continue-on-error`)
+  and prints its diff as a warning annotation instead of an error. Keep the step; it is a free
+  platform-bug detector.
+- `README.md`, `TODO.md`, GEOGRAPHY.md, the site's `CLAUDE.md` and the memory note in the
+  Cartogenesis multiplatform reference: replace every statement that saves depend on identical
+  generation with the new contract — a save carries its world; platforms may differ.
+- The `RealmSpreadTest`/`CultureRealmTest` comments that justify sorted neighbour lists by the
+  Wasm split can stay as history; the sort itself stays, because platform-independent output is
+  still cheaper to reason about even when it is no longer required.
 
 ---
 
@@ -133,7 +208,6 @@ vector rather than a per-row scan; keep the two-lap wrap.
   component set to 0.
 - Render summer and winter rainfall. This is the chunk most likely to look wrong first time;
   budget for one revision.
-- Determinism risk is high here (rule 3): a diagonal march touches cells in a new order.
 
 ### A4. Absolute rainfall — Sonnet
 
@@ -246,6 +320,9 @@ guard reported, so the next chunk knows its baseline.
 
 | Chunk | Model | Status | Date | Commit | Numbers |
 |---|---|---|---|---|---|
+| D1 Full-world save format | Opus | not started | | | |
+| D2 Web storage | Sonnet | not started | | | |
+| D3 Retire the determinism gate | Haiku | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | not started | | | |
 | A1 Seasons | Opus | not started | | | |
 | A2 Continentality | Sonnet | not started | | | |
@@ -258,7 +335,8 @@ guard reported, so the next chunk knows its baseline.
 | B4 Glaciation | Opus | not started | | | |
 | C1 Docs and release | Haiku | not started | | | |
 
-Suggested order, balancing value against interruption risk: **A0, B1, A1, A2, B2, A3, B3, A4, A5,
-B4, C1.** A0 and B1 are cheap and independent, so early sessions bank progress fast; A1 is the
-keystone and gets a fresh session; B chunks interleave so a stalled climate chunk does not stall
-everything.
+Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
+identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1
+in parallel** (three independent chunks, three worktrees). Then D3, and from there the two tracks
+run side by side in dependency order: **A1 → A2 → A3 → A4 → A5** alongside **B2 → B3**, with
+**B4** after both A1 and B3, and **C1** last.

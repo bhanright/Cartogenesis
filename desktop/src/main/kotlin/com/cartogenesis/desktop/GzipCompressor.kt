@@ -17,13 +17,15 @@ object GzipCompressor : Compressor {
 
     override val name: String get() = "gzip"
 
-    override fun compress(data: ByteArray): ByteArray {
+    // Never actually suspends - java.util.zip is plain blocking work - but the seam is suspend
+    // throughout so the browser's CompressionStream fits it too. See Compressor's doc comment.
+    override suspend fun compress(data: ByteArray): ByteArray {
         val out = ByteArrayOutputStream(data.size / 2)
         GZIPOutputStream(out, BUFFER).use { it.write(data) }
         return out.toByteArray()
     }
 
-    override fun decompress(data: ByteArray): ByteArray =
+    override suspend fun decompress(data: ByteArray): ByteArray =
         GZIPInputStream(data.inputStream(), BUFFER).use { it.readBytes() }
 
     /** Large enough that a ninety-megabyte payload is not written a few kilobytes at a time. */

@@ -57,7 +57,7 @@ class WorldCodecTest {
     private val worldConfig = WorldGenConfig(seed = 99L, width = 256, height = 256)
 
     @Test
-    fun `a saved world survives a round trip intact`() {
+    fun `a saved world survives a round trip intact`() = runTest {
         val original = document()
         val restored = assertNotNull(WorldCodec.decode(WorldCodec.encode(original, null)).document)
 
@@ -71,7 +71,7 @@ class WorldCodecTest {
     }
 
     @Test
-    fun `untouched override fields stay null rather than freezing generated values`() {
+    fun `untouched override fields stay null rather than freezing generated values`() = runTest {
         val restored = WorldCodec.decode(WorldCodec.encode(document(), null)).document
         val override = restored.overrides.forNation(3)
 
@@ -227,7 +227,7 @@ class WorldCodecTest {
     }
 
     @Test
-    fun `unreadable bytes are rejected without throwing`() {
+    fun `unreadable bytes are rejected without throwing`() = runTest {
         assertNull(WorldCodec.decodeOrNull("this is not json".encodeToByteArray()))
         assertNull(WorldCodec.decodeOrNull(ByteArray(0)))
         assertNull(WorldCodec.decodeOrNull(byteArrayOf(67, 71, 87, 68, 3, 0, 0, 0, 99, 0, 0, 0)))
@@ -300,6 +300,6 @@ class WorldCodecTest {
 /** Not a compression scheme; a transform the reader must undo through the seam to get the bytes back. */
 private object ReversingCompressor : Compressor {
     override val name: String get() = "reversed"
-    override fun compress(data: ByteArray): ByteArray = data.reversedArray()
-    override fun decompress(data: ByteArray): ByteArray = data.reversedArray()
+    override suspend fun compress(data: ByteArray): ByteArray = data.reversedArray()
+    override suspend fun decompress(data: ByteArray): ByteArray = data.reversedArray()
 }

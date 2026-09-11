@@ -10,6 +10,10 @@ package com.cartogenesis.cartography
  * A platform that cannot compress returns null and the container records `none` in its header, so
  * the file still opens anywhere — the flag travels with the bytes rather than being assumed from
  * whoever is reading them.
+ *
+ * Both methods suspend. `java.util.zip` never needs to, but a browser's `CompressionStream` and
+ * `DecompressionStream` are asynchronous throughout, and now that [WorldLibrary] itself suspends —
+ * for the same reason IndexedDB does — there is nowhere left this has to be a blocking call.
  */
 interface Compressor {
 
@@ -17,18 +21,18 @@ interface Compressor {
     val name: String
 
     /** Null when this platform cannot compress, in which case the payload is stored raw. */
-    fun compress(data: ByteArray): ByteArray?
+    suspend fun compress(data: ByteArray): ByteArray?
 
     /**
      * Null when this platform cannot expand [name]-compressed bytes, which is a readable file this
      * reader cannot open rather than a corrupt one — worth saying differently to the user.
      */
-    fun decompress(data: ByteArray): ByteArray?
+    suspend fun decompress(data: ByteArray): ByteArray?
 }
 
 /** The fallback: store the payload as it is, and say so. */
 object NoCompression : Compressor {
     override val name: String get() = "none"
-    override fun compress(data: ByteArray): ByteArray? = null
-    override fun decompress(data: ByteArray): ByteArray = data
+    override suspend fun compress(data: ByteArray): ByteArray? = null
+    override suspend fun decompress(data: ByteArray): ByteArray = data
 }

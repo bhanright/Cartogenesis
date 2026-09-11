@@ -377,6 +377,26 @@ documented in `README.md` under Deploying and in the site repo's `CLAUDE.md`.
 
 ---
 
+## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
+
+Looked at, not measured: seeds 7, 42, 1234 — fantasy, biome, summer and winter rainfall, winter
+temperature. Verdict: believable. Shelf-fringed coastlines that read as bathymetry; dendritic rivers
+reaching the sea; ice caps with a boreal belt below; deserts confined to the horse latitudes (the
+equatorial yellow on seed 42 is savanna by the palette, `C6B95F`, not desert `DCC493`); rain belts
+that migrate about 10° between seasons, with the Mediterranean west-coast signature appearing in
+winter; A3's rain plumes trailing inland rather than lying in rows. Nothing sent back on the
+strength of the pictures.
+
+Two things to carry forward:
+
+- **Shelf width is the same on every coast.** Real passive margins carry wide shelves and active
+  (subducting) ones narrow. Once B2 knows the crust pair at each margin, `SeaConfig.shelfWidth`
+  should become a per-margin width rather than one number. Small follow-up after B2.
+- **Seed 1234 has a sand-coloured patch reaching ~40-50°S** on the east of its south-western
+  landmass. A Patagonia-style rain-shadow desert is physically defensible there if a range stands to
+  its west, and the audit keeps 98%+ of desert in band — but re-check after A4 rescales rainfall,
+  which will move every desert.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

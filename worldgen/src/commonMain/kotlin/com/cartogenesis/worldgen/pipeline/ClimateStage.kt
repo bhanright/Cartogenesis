@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
+import com.cartogenesis.worldgen.math.DistanceTransform
 import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -112,15 +113,19 @@ object ClimateStage {
         val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
 
         val temperature = buildTemperature(config, sea)
-        // Computed once and shared: the maritime-influence term and continentality are the same
-        // question — how close is the sea — asked by two different consumers, so both read this
-        // rather than each blurring their own copy of the water mask.
+        // The maritime-influence term and continentality both ask "how close is the sea", but they
+        // need different answers to it. Influence wants a fast-fading field so a temperature
+        // anomaly does not leak across a whole continent — the blurred exposure field. Continentality
+        // wants an honest distance in cells, because a coast damped by "still 70% exposed at
+        // coastalReach" barely damps at all; a chamfer distance transform is exact and, at these
+        // resolutions, cheaper than the blur besides.
         val exposure = waterExposure(config, sea)
         applyMaritimeInfluence(config, sea, ocean, temperature, exposure)
+        val waterDist = waterDistance(config, sea)
         val summerTemperature =
-            seasonalTemperature(config, sea, temperature, exposure, tilt, warm = true)
+            seasonalTemperature(config, sea, temperature, waterDist, tilt, warm = true)
         val winterTemperature =
-            seasonalTemperature(config, sea, temperature, exposure, tilt, warm = false)
+            seasonalTemperature(config, sea, temperature, waterDist, tilt, warm = false)
 
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
@@ -173,16 +178,12 @@ object ClimateStage {
      * How much nearby water a land cell can feel: 1 in the open sea, fading to 0 over
      * `OceanConfig.coastalReach` cells inland.
      *
-     * A blur of the land/sea mask rather than a distance transform — cheap, and the two agree
-     * everywhere that matters: land within reach of the coast reads high, land well beyond it reads
-     * exactly 0 once the blur's support runs out. Shared by [applyMaritimeInfluence], which uses it
-     * to fade the sea's temperature anomaly out over the interior, and by continentality in
-     * [seasonalTemperature], which uses the same fade to grow the seasonal swing inland.
-     *
-     * Internal rather than private so `ContinentalityTest` can measure the same field the stage
-     * actually used instead of re-deriving it and risking the two drifting apart.
+     * A blur of the land/sea mask rather than a distance transform — cheap, and it does what
+     * [applyMaritimeInfluence] needs: land within reach of the coast reads high, land well beyond
+     * it reads exactly 0 once the blur's support runs out. Not used by continentality any more —
+     * see [waterDistance] for why an actual distance earns its keep there.
      */
-    internal fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+    private fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val w = config.width
         val h = config.height
         val radius = config.ocean.coastalReach.coerceAtLeast(1)
@@ -192,6 +193,42 @@ object ClimateStage {
         BoxBlur.apply(water, radius = radius, passes = 2)
         for (i in 0 until w * h) water.data[i] = water.data[i].coerceIn(0f, 1f)
         return water
+    }
+
+    /**
+     * Cell distance to the nearest sea cell, by the same chamfer distance transform
+     * `SeaLevelStage` already uses for the continental shelf: two sweeps, `O(width * height)`
+     * regardless of how far the nearest coast is, and correct rather than approximate.
+     *
+     * Continentality first tried the blurred water-exposure field above, on the theory that "how
+     * exposed to water" and "how close to water" were the same question asked two ways. They are
+     * not, at this radius: two box-blur passes leave a cell right at the edge of `coastalReach`
+     * reading roughly 0.2 exposure, not the ~1 that would make a coast read as barely-continental —
+     * a coast this measured as "still 70% of the way to fully continental" is not a coast in any
+     * sense the plan meant. An honest distance says a cell at the shoreline is 0 cells from water
+     * and one three `coastalReach` inland is exactly that, which is what the amplitude formula
+     * below actually needs.
+     *
+     * Internal rather than private so `ContinentalityTest` measures the same field the stage
+     * actually used instead of re-deriving it and risking the two drifting apart.
+     */
+    internal fun waterDistance(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+        val w = config.width
+        val h = config.height
+        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        val label = IntArray(w * h) { -1 }
+        for (i in 0 until w * h) {
+            if (!sea.isLand[i]) {
+                dist[i] = 0f
+                label[i] = i
+            }
+        }
+        // A world with no water at all leaves every distance at INFINITE, which is exactly right:
+        // continentalityFactor below clamps that to 1, the fully-continental case, everywhere.
+        DistanceTransform.run(w, h, dist, label)
+        val field = FloatField(w, h)
+        dist.copyInto(field.data)
+        return field
     }
 
     /**
@@ -299,17 +336,18 @@ object ClimateStage {
      * climate has a small annual range at a latitude where a continental one swings thirty
      * degrees, and that is the sea's heat capacity, not anything about the latitude.
      *
-     * Over land the departure is scaled by `1 + continentality * (1 - exposure)`
-     * ([ClimateConfig.continentality]): a coast, where [exposure] reads near 1, keeps the
-     * amplitude at 1 and swings exactly as far as it did before this setting existed; an interior
-     * with no water nearby reads exposure near 0 and swings up to `1 + continentality` as far.
-     * This is Siberia versus Ireland at the same latitude.
+     * Over land the departure is scaled by `1 + continentality * continentalityFactor`
+     * ([ClimateConfig.continentality]), where `continentalityFactor` is [waterDistance] clamped to
+     * 0..1 over three [OceanConfig.coastalReach]: a cell at the shoreline reads 0 and keeps the
+     * amplitude at 1, swinging exactly as far as it did before this setting existed; a cell three
+     * reaches inland or further reads 1 and swings up to `1 + continentality` as far. This is
+     * Siberia versus Ireland at the same latitude.
      */
     private fun seasonalTemperature(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         annual: FloatField,
-        exposure: FloatField,
+        waterDistance: FloatField,
         tilt: Float,
         warm: Boolean
     ): FloatField {
@@ -317,6 +355,7 @@ object ClimateStage {
         val h = config.height
         val cfg = config.climate
         val field = FloatField(w, h)
+        val continentalReach = 3f * config.ocean.coastalReach.coerceAtLeast(1)
 
         parallelChunks(0, h) { start, end ->
             for (y in start until end) {
@@ -325,7 +364,9 @@ object ClimateStage {
                 for (x in 0 until w) {
                     val i = y * w + x
                     val amplitude = if (sea.isLand[i]) {
-                        1f + cfg.continentality * (1f - exposure.data[i])
+                        val continentalityFactor =
+                            (waterDistance.data[i] / continentalReach).coerceIn(0f, 1f)
+                        1f + cfg.continentality * continentalityFactor
                     } else {
                         OCEAN_SEASONAL_AMPLITUDE
                     }

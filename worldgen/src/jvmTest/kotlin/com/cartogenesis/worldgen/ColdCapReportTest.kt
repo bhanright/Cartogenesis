@@ -74,9 +74,8 @@ class ColdCapReportTest {
             var anomalyColdCount = 0
             // Of the warm-anomaly coast cells specifically — the ones the guard is stated about.
             var warmAnomalyForestCount = 0
-            var debugWarmColdSum = 0.0
-            var debugWarmWarmSum = 0.0
-            var debugWarmLatSum = 0.0
+            var warmAnomalyColdSum = 0.0
+            var warmAnomalyWarmSum = 0.0
 
             coastCells.forEach { i ->
                 val biome = world.climate.biome[i]
@@ -93,7 +92,6 @@ class ColdCapReportTest {
                 // Measure ocean anomaly at the adjacent sea cells.
                 val y = i / w
                 val x = i % w
-                val lat = abs(ClimateStage.latitudeOf(y, h))
                 var anomalySum = 0f
                 var anomalyCount = 0
                 for (dy in -1..1) {
@@ -112,9 +110,8 @@ class ColdCapReportTest {
                     if (anom > 0f) {
                         anomalyWarmSum += anom
                         anomalyWarmCount++
-                        debugWarmColdSum += world.climate.winterTemperature.data[i]
-                        debugWarmWarmSum += world.climate.summerTemperature.data[i]
-                        debugWarmLatSum += lat.toDouble()
+                        warmAnomalyColdSum += world.climate.winterTemperature.data[i]
+                        warmAnomalyWarmSum += world.climate.summerTemperature.data[i]
                         if (biome == Biome.TEMPERATE_FOREST || biome == Biome.TEMPERATE_RAINFOREST) {
                             warmAnomalyForestCount++
                         }
@@ -177,6 +174,10 @@ class ColdCapReportTest {
             val coldAnomalyMean = if (anomalyColdCount > 0) anomalyColdSum / anomalyColdCount else 0f
             val warmCoastForestShare =
                 if (anomalyWarmCount > 0) warmAnomalyForestCount * 100.0 / anomalyWarmCount else 0.0
+            val warmAnomalyColdMean =
+                if (anomalyWarmCount > 0) warmAnomalyColdSum / anomalyWarmCount else 0.0
+            val warmAnomalyWarmMean =
+                if (anomalyWarmCount > 0) warmAnomalyWarmSum / anomalyWarmCount else 0.0
             val interiorTaigaTundraShare =
                 if (interiorLand > 0) interiorTaigaTundra * 100.0 / interiorLand else 0.0
 
@@ -184,21 +185,16 @@ class ColdCapReportTest {
             perSeedShares.add("$seed=${"%.1f".format(warmCoastForestShare)}%")
 
             println(
-                "COLDCAP DEBUG seed $seed: warm-anomaly coast mean lat " +
-                    "${"%.1f".format(debugWarmLatSum / anomalyWarmCount.coerceAtLeast(1))}, " +
-                    "mean cold ${"%.2f".format(debugWarmColdSum / anomalyWarmCount.coerceAtLeast(1))}, " +
-                    "mean warm ${"%.2f".format(debugWarmWarmSum / anomalyWarmCount.coerceAtLeast(1))}"
-            )
-
-            println(
                 "COLDCAP seed $seed: ${coastCells.size} west-coast cells at 50-60°; " +
                     "$rainforestShare% rainforest/temperate-forest, $taigaShare% taiga/tundra; " +
                     "coast precip ${"%.2f".format(coastPrecipMean)} vs lat-mean ${"%.2f".format(latitudePrecipMean)} " +
                     "(${"%.2f".format(precipRatio)}x); " +
                     "warm coasts anom ${"%.1f".format(warmAnomalyMean)}°C ($anomalyWarmCount cells, " +
-                    "${"%.1f".format(warmCoastForestShare)}% forest/rainforest); " +
-                    "cold coasts ${"%.1f".format(coldAnomalyMean)}°C ($anomalyColdCount cells); " +
-                    "interior taiga/tundra ${"%.1f".format(interiorTaigaTundraShare)}% of $interiorLand cells"
+                    "coldest month avg ${"%.1f".format(warmAnomalyColdMean)}°C, warmest month avg " +
+                    "${"%.1f".format(warmAnomalyWarmMean)}°C, ${"%.1f".format(warmCoastForestShare)}% " +
+                    "forest/rainforest); cold coasts ${"%.1f".format(coldAnomalyMean)}°C " +
+                    "($anomalyColdCount cells); interior taiga/tundra " +
+                    "${"%.1f".format(interiorTaigaTundraShare)}% of $interiorLand cells"
             )
 
             // Siberia stays taiga: the fix must not also have warmed the deep interior — which has

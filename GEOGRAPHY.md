@@ -48,8 +48,6 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 
 **Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
 
-**High-latitude west coasts classify as taiga/tundra despite abundant rainfall.** Measured on seeds 7, 42, 1234 at 512×512: zero cells on 50–60° west-facing coasts class as temperate forest despite 3.83–3.71–1.88× the latitudinal mean precipitation (seeds 42/7/1234). The cold cap is not the cause — rainfall is abundant (coast precip 0.91–0.99 normalized). The cause is `classify`, which gates temperate/taiga/tundra on annual-mean temperature (< 7 °C → taiga), and the latitude curve places 55° near 0 °C, so warm-current anomalies (+1.7–2.0°C) still fall below 7 °C. Bergen is temperate by Köppen definition (coldest month > −3 °C, warmest > 10 °C), not by annual mean. Addressed in [A6 Temperate climates by coldest month](REALISM_PLAN.md#a6-temperate-climates-by-coldest-month--sonnet), which classifies Köppen-style on the seasonal fields A1 added and checks whether the latitude curve runs too cold at 45–60°.
-
 **No deposition.** The hydraulic erosion stage removes material and never returns it. No deltas build at river mouths, no floodplains or alluvial fans form along lower channels, and no mass is laid down as rivers flatten. Addressed in [B3 Deposition](REALISM_PLAN.md#b3-deposition--opus).
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
@@ -193,6 +191,49 @@ treat them as if they were. What separates them is the current offshore.
 Verified by `OceanCurrentTest`: poleward flow arrives warm on 85% of samples, the anomaly reaches
 ±7°C, and warm coasts out-score cold ones at matched latitude on every seed tested. With the
 coastal term removed the last of those falls to zero and tips negative.
+
+## Temperate coasts by coldest month
+
+A5 measured that despite the current above, every one of seeds 7, 42 and 1234's 50–60° west-facing
+coasts classed taiga or tundra rather than temperate forest, though they carried 1.9–3.8× their
+latitude's mean rainfall. The rain was never the problem. `classify` gated temperate against taiga
+on *annual-mean* temperature (`t < 7 → taiga`), and the latitude curve put 55° within a couple of
+degrees of freezing, so even a strong warm-current anomaly could not lift a mild-winter coast over
+the annual-mean bar. Bergen is temperate at an 8°C annual mean because its *coldest month* is about
+2°C, not because its year is warm — real Köppen classification never looks at the annual mean for
+this boundary at all.
+
+`classify` now reads the coldest and warmest month instead: warmest month under 10°C is tundra
+(ET); warmest above 10°C with coldest at or below −3°C is continental (D), where taiga lives, split
+from tundra by moisture exactly as the old `t < 7` branch was; warmest above 10°C with coldest
+above −3°C is temperate (C), keeping every existing moisture class including the Mediterranean one.
+The tropical line is Köppen's own, a coldest month at or above 18°C, taken verbatim.
+
+Reading the coldest month at all needed the latitude curve to actually reach it: at the exponent
+seasons landed with, 45° — the effective latitude a 55° coast's summer reads off, one
+`seasonalTilt` equatorward — sat at a mere 6.8°C, below the 10°C tree line regardless of any
+current. The exponent moved from 1.25 to 1.8 (equator and pole anchors untouched) to fix that, and
+it cuts both ways: the same lift that gets a coast's summer past 10°C also lifts a *continental
+interior*'s winter past Köppen's −3°C line at the same latitudes, so a dry rain-shadow interior that
+used to be taiga could reach `classify`'s existing desert check — measured, that alone dropped
+desert-in-band on seed 42 from 98–100% to 48%, because the two effective-latitude ranges overlap
+almost exactly and no choice of exponent or pole separates them. The fix lives in `classify` itself
+rather than in the curve: the desert case in the temperate branch additionally requires an annual
+mean of at least 13°C, distinguishing an actual hot subtropical desert from a barely-continental
+interior that only just cleared the thermal gate. With that in place desert-in-band is 100/100/99/98%
+on seeds 7/42/1234/99, matching the 98–100% measured before this chunk.
+
+Verified by `ColdCapReportTest`, extended from A5's report into an assertion: on seeds 7/42/1234,
+the share of 50–60° west-facing coast cells with a positive current anomaly classing as temperate
+forest or rainforest is 66.7/57.9/56.7% (up from 0.0/0.0/0.1% on the classifier before this chunk),
+while the interior at the same latitudes — too far from any coast for a current to reach — stays
+96.6/87.4/95.6% taiga or tundra. Siberia stays taiga.
+
+One guard moved the wrong way and was not chased down: `CultureRealmTest` fails on seed 7 (86% of
+habitable land settled against a 90% floor), because shrinking the ICE_SHEET cap from 56% to 43% of
+that seed's land exposed a ring of barely-habitable tundra at the margin that the settlement
+algorithm has not caught up with. Left for a follow-up rather than tuned around, per the rule
+against moving a threshold to force a guard green.
 
 ## Mountain belts
 

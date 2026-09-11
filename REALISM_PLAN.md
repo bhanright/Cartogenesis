@@ -60,6 +60,12 @@ Each session, on any model:
    orchestrator resolves that, which is the main reason it reads reports rather than diffs.
 4. If a session dies mid-chunk, the next session discards that worktree and restarts the chunk.
    Nothing in a chunk depends on a previous session's memory.
+5. **Push before dispatching.** Agent worktrees branch from the last *pushed* commit, not from the
+   local `main`. On 2026-09-11 three chunks were dispatched after local merges but before a push,
+   and each started without the work it was told to build on: A6 lacked the test it was to extend,
+   D2 checked in a save fixture written without A1's sections, and D3 was diffed against a stale
+   base. If a dispatch must go out before a push, the agent's first instruction is `git merge
+   main` in its worktree.
 
 Model per chunk is given below. Rule of thumb: Opus where the algorithm is the work; Sonnet where
 the spec is precise and the test is clear; Haiku for docs, renders and tallies.
@@ -144,6 +150,31 @@ entries are read once, re-saved into IndexedDB, and removed.
   still cheaper to reason about even when it is no longer required.
 
 ---
+
+### D4. Forward-compatible sections — Sonnet
+
+*Dependencies: D1, D2. Opened by the A1/D2 merge.*
+
+The reader refuses a container that is missing a section. That is correct for a corrupt file and
+wrong for an old one: A1 added four climate sections, and every version-3 save written before it —
+including D2's checked-in gzip fixture — became unopenable, on both platforms. Every future chunk
+that adds a per-cell field will do the same to every save written before it, which after a release
+means the author's own worlds.
+
+The engine already knows how to cope: a stage whose result is absent is simply not reusable. So a
+missing section should mean "regenerate this stage and everything downstream", not "refuse".
+
+- `WorldSections`/`WorldCodec`: sections are grouped by stage. If any section of a stage is
+  missing, that stage's result is `null` in the loaded `WorldMap` (or the partial `WorldMap` passed
+  as `previous` omits it), and `WorldGenerationEngine.generate(config, previous)` regenerates it
+  and everything after. A corrupt section — wrong length, bad magic — still throws. The header
+  records which stages are present so the library pane can say "opens with regeneration".
+- Guard: `WorldCodecTest` gains a case that writes a container, strips the climate sections, and
+  asserts it opens, that climate and everything downstream regenerated (not `assertSame`), and
+  that terrain through rivers-independent stages were reused (`assertSame`). Show it fails on the
+  refusing reader, then passes. The gzip interoperability fixture stays as written by D2's fix and
+  must keep passing.
+- Bump nothing: this is a reader-side relaxation of version 3.
 
 ## Track A — climate
 
@@ -356,6 +387,7 @@ guard reported, so the next chunk knows its baseline.
 | D1 Full-world save format | Opus | done | 2026-09-11 | 09eb31f (merge 424b34a) | gzip whole-file 2.36-2.57x (512: 24.7->10.4 MB; 1024: 98.7->38-40 MB); heights 1.1x, id maps 136-1010x; round-trip guard failed with a section dropped, then passed; v2 saves open and re-save as v3; all 10 stages reused by assertSame; web stores raw (compression deferred to D2) |
 | D2 Web storage | Sonnet | not started | | | |
 | D3 Retire the determinism gate | Haiku | not started | | | |
+| D4 Forward-compatible sections | Sonnet | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |
 | A1 Seasons | Opus | done | 2026-09-11 | 1aa12ee | 35deg swing: land 13.1C / sea 2.9C; Mediterranean west-coast cells 211/517/494 (seeds 7/42/1234), 0/0/0 with seasons=false; seasons=false reproduces all six fingerprint lines; desert-in-band 100/99/100/98% (belt rescaled to restore the annual mean, no threshold moved); desert AREA fell 5.1%->1.9% on seed 42 (for A4); border-on-river 2.08/2.12/2.16/1.04 (seed 99 down from 1.46); default fingerprint rivers=26 realms=14 |
 | A2 Continentality | Sonnet | not started | | | |
@@ -371,6 +403,6 @@ guard reported, so the next chunk knows its baseline.
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1
-in parallel** (three independent chunks, three worktrees). Then D3, and from there the two tracks
+in parallel** (three independent chunks, three worktrees). Then D3 and D4, and from there the two tracks
 run side by side in dependency order: **A1 → A2 → A3 → A4 → A5 → A6** alongside **B2 → B3**, with
 **B4** after both A1 and B3, and **C1** last.

@@ -66,8 +66,14 @@ class DepositionTest {
      * became regions with a shape of their own, paid for out of a fixed allowance of standing
      * water. Same reason as the last two times — the ice hands the hydraulic pass different rock —
      * and the same reassurance: land 6226 before and after, for the third time.
+     *
+     * Re-recorded a fourth time for E3 (round hotspot cones): [TectonicsConfig.hotspotConeDetail]
+     * defaults on, which supersamples every seamount stamp and gives its rim a few seeded harmonics
+     * instead of the old single-sample, perfectly axisymmetric one — a small elevation change
+     * wherever a hotspot chain happens to cross this seed's plates. Land held at 6226 for the
+     * fourth time: none of seed 42's cones cross sea level either way.
      */
-    private val startingPointElevation = 3498156853756407281L
+    private val startingPointElevation = -4217988462035370624L
     private val startingPointLand = 6226
 
     @Test

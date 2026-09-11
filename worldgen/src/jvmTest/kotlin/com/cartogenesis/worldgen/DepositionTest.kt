@@ -61,8 +61,13 @@ class DepositionTest {
      * ice leaves behind on every cold world and therefore what the hydraulic pass is handed. The
      * land count did not move, again: 6226 before and after, because the coastline is still cut
      * before this stage runs and this stage still never touches it.
+     *
+     * And again when the glacial basins stopped being cut cell by cell along the flow path and
+     * became regions with a shape of their own, paid for out of a fixed allowance of standing
+     * water. Same reason as the last two times — the ice hands the hydraulic pass different rock —
+     * and the same reassurance: land 6226 before and after, for the third time.
      */
-    private val startingPointElevation = 7450875979753259226L
+    private val startingPointElevation = 3498156853756407281L
     private val startingPointLand = 6226
 
     @Test

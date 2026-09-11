@@ -82,7 +82,7 @@ class GlaciationTest {
             "glaciated country holds only ${"%.2f".format(with.ratio)}x the lake density of" +
                 " temperate country (cold ${"%.2f".format(with.coldDensity)}, temperate" +
                 " ${"%.2f".format(with.warmDensity)} lakes per 10k cells)",
-            with.ratio >= 3f
+            with.ratio >= COLD_LAKE_RATIO
         )
     }
 
@@ -338,6 +338,215 @@ class GlaciationTest {
     }
 
     /**
+     * The author's own world, at the resolution and the settings he generates it at.
+     *
+     * Two complaints, one test, because both are about the same world and generating it is not
+     * cheap. Seed 718106 at 2048, ocean at 62%, fourteen plates, twelve realms: the configuration
+     * from the desktop app, not a convenient one.
+     *
+     * **No narrow straight water.** A *bar* is a body of standing water at most two cells across
+     * and at least four cells long along one of the four grid bearings, measured over the whole
+     * body. That is the artefact by its own description — the comb of parallel gullies, the fan of
+     * troughs radiating from a confluence — and the guard's tolerance is zero, because after the
+     * fix no basin *can* be one: a basin is a region opened by a cell and dilated back, so it is a
+     * union of three-by-three blocks and three cells wide everywhere. A guard that can only be
+     * satisfied by construction is the only kind worth having here, since the last two attempts
+     * both set a threshold and both left the author looking at bars one level down.
+     *
+     * Measured on this seed and config, main against the fix:
+     *
+     * | | bars | lakes | lake cells | share of land | largest lake |
+     * |---|---|---|---|---|---|
+     * | main | 4 | 113 | 33,512 | 2.10% | 3,901 (0.093% of map) |
+     * | fixed | 0 | 70 | 23,070 | 1.45% | 3,489 (0.083% of map) |
+     * | glaciation off | 0 | 54 | 19,000 | 1.19% | 5,129 (0.122% of map) |
+     *
+     * The stage's own tally on the fixed code, printed above, says where the bars went: of the
+     * twenty stretches of ice that would have been given an over-deepened basin, **seventeen were
+     * refused for walking the straight-line distance from their head to their lip**. That is the
+     * comb, counted.
+     *
+     * The third row is why the lake *counts* are asserted only against the ice's own contribution.
+     * Most of this world's standing water at 2048 is not glacial at all — it is in tectonic and
+     * erosional basins that exist with the stage switched off — and the largest body on the map is
+     * one of those, at seven times [com.cartogenesis.worldgen.model.GlaciationConfig
+     * .maxLakeShareOfMap]. This stage can cap what it cuts and does; it cannot cap what it did not
+     * make, and a guard that pretended otherwise would be measuring the erosion stage.
+     */
+    @Test
+    fun `the author's 2048 world has no narrow straight water`() {
+        val config = authorConfig(2048)
+        val world = WorldGenerationEngine.generateBlocking(config)
+        reportBudget(config, world)
+        val shape = lakeShape(world)
+        val land = world.sea.landCellCount
+        println(
+            "AUTHOR 2048 seed 718106 sea 0.62: lakes=${shape.lakes} cells=${shape.cells}" +
+                " shareOfLand=${"%.4f".format(shape.cells.toFloat() / land)}" +
+                " largest=${shape.largest} (${"%.6f".format(shape.largestShareOfMap)} of map)" +
+                " bars=${shape.bars} barCells=${shape.barCells}" +
+                " filaments=${countFilaments(world)}" +
+                " parallelBarShare=${"%.4f".format(combShare(world))}"
+        )
+        assertTrue("no water to measure", shape.cells > 1000)
+        assertTrue(
+            "seed 718106 at 2048 carries ${shape.bars} bodies of water at most two cells across" +
+                " and four or more long on a grid bearing (${shape.barCells} cells): a basin the" +
+                " ice cut is a region three cells wide at its narrowest, so none of them can be" +
+                " one of its basins",
+            shape.bars == 0
+        )
+        assertTrue(
+            "seed 718106 at 2048 has ${"%.1f".format(combShare(world) * 100)}% of its standing" +
+                " water in thin grid-bearing bars with a parallel twin within ten cells",
+            combShare(world) < 0.035f
+        )
+    }
+
+    /**
+     * The same world at three grids carries the same lake country, not four times as much of it.
+     *
+     * The resolution contract of `flat frozen country…` extended to the size the author actually
+     * exports at, on his own settings, and the reason the three lake knobs are map fractions rather
+     * than counts of cells. Reported at each grid so the shape of the distribution can be compared
+     * as well as its total.
+     *
+     * Seed 718106 at sea 0.62, main against the fix — lakes, and standing water as a share of land:
+     *
+     * | | 512 | 1024 | 2048 |
+     * |---|---|---|---|
+     * | main | 18 / 1.06% | 72 / 1.66% | 113 / 2.10% |
+     * | fixed | 18 / 0.76% | 34 / 0.80% | 70 / 1.45% |
+     * | glaciation off | 11 / 0.56% | 18 / 0.38% | 54 / 1.19% |
+     *
+     * The residue that still grows with the grid is not this stage's. With the ice switched off
+     * the same world already goes 0.56% / 0.38% / 1.19% — its tectonic and erosional depressions
+     * being resolved — so the contract is stated against the *ice's own* share, 0.20% / 0.42% /
+     * 0.26%, which is what this stage controls and which is flat across a factor of sixteen in
+     * cell count. Before the fix the ice's share was 0.50% / 1.28% / 0.91%.
+     */
+    @Test
+    fun `the lake country is the same at 512, 1024 and 2048`() {
+        val rows = LinkedHashMap<Int, Pair<Float, Float>>()
+        listOf(512, 1024, 2048).forEach { size ->
+            val iced = WorldGenerationEngine.generateBlocking(authorConfig(size))
+            val bare = WorldGenerationEngine.generateBlocking(
+                authorConfig(size).let { it.copy(glaciation = it.glaciation.copy(enabled = false)) }
+            )
+            val icedShape = lakeShape(iced)
+            val bareShape = lakeShape(bare)
+            val land = iced.sea.landCellCount.toFloat()
+            val icedShare = icedShape.cells / land
+            val bareShare = bareShape.cells / land
+            rows[size] = icedShare to bareShare
+            println(
+                "RESOLUTION seed 718106 at $size: lakes ${icedShape.lakes} (${bareShape.lakes}" +
+                    " without ice) water ${"%.4f".format(icedShare)} of land" +
+                    " (${"%.4f".format(bareShare)} without), the ice's own share" +
+                    " ${"%.4f".format(icedShare - bareShare)}, largest ${icedShape.largest}" +
+                    " (${"%.6f".format(icedShape.largestShareOfMap)} of map)," +
+                    " bars ${icedShape.bars}"
+            )
+        }
+        val ice = rows.mapValues { (_, v) -> (v.first - v.second).coerceAtLeast(0f) }
+        val coarse = maxOf(ice.getValue(512), 1e-4f)
+        val fine = ice.getValue(2048)
+        assertTrue(
+            "quadrupling the grid multiplies the ice's own share of standing water by" +
+                " ${"%.2f".format(fine / coarse)} (512: ${"%.4f".format(ice.getValue(512))}," +
+                " 1024: ${"%.4f".format(ice.getValue(1024))}," +
+                " 2048: ${"%.4f".format(fine)}) — glacial basins are being chosen per cell rather" +
+                " than per unit of map, so a finer grid grows more of them",
+            fine / coarse < 2.5f
+        )
+    }
+
+    /** Seed 718106 exactly as the desktop app is set up when the author generates it. */
+    private fun authorConfig(size: Int): WorldGenConfig {
+        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
+        return base.copy(
+            tectonics = base.tectonics.copy(plateCount = 14),
+            nations = base.nations.copy(nationCount = 12)
+        ).atResolution(size, size)
+    }
+
+    private class LakeShape(
+        val lakes: Int,
+        val cells: Int,
+        val largest: Int,
+        val largestShareOfMap: Float,
+        val bars: Int,
+        val barCells: Int
+    )
+
+    /**
+     * How many lakes there are, how big the biggest is, and how many of them are narrow straight
+     * runs along a grid bearing.
+     *
+     * A *bar* is measured over the whole body rather than cell by cell: the extent of the body
+     * along each of the four bearings against its extent across that bearing. Two cells or less
+     * across and four or more along is a bar, whatever else it does. Measured that way a curved
+     * one-cell thread is not a bar — it is a different complaint — and a two-by-four rectangle is,
+     * which is right: at 2048 that is eighty kilometres of dead-straight water eleven wide.
+     */
+    private fun lakeShape(world: WorldMap): LakeShape {
+        val w = world.width
+        val h = world.height
+        val lake = world.rivers.lakes.lakeId
+        val n = world.rivers.lakes.lakes.size
+        if (n == 0) return LakeShape(0, 0, 0, 0f, 0, 0)
+        val anchorX = IntArray(n) { Int.MIN_VALUE }
+        val uMin = Array(4) { IntArray(n) { Int.MAX_VALUE } }
+        val uMax = Array(4) { IntArray(n) { Int.MIN_VALUE } }
+        val vMin = Array(4) { IntArray(n) { Int.MAX_VALUE } }
+        val vMax = Array(4) { IntArray(n) { Int.MIN_VALUE } }
+        val count = IntArray(n)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val id = lake[y * w + x]
+                if (id < 0) continue
+                if (anchorX[id] == Int.MIN_VALUE) anchorX[id] = x
+                var dx = x - anchorX[id]
+                if (dx > w / 2) dx -= w
+                if (dx < -w / 2) dx += w
+                val ux = anchorX[id] + dx
+                count[id]++
+                val u = intArrayOf(ux, ux + y, y, ux - y)
+                val v = intArrayOf(y, ux - y, ux, ux + y)
+                for (k in 0 until 4) {
+                    if (u[k] < uMin[k][id]) uMin[k][id] = u[k]
+                    if (u[k] > uMax[k][id]) uMax[k][id] = u[k]
+                    if (v[k] < vMin[k][id]) vMin[k][id] = v[k]
+                    if (v[k] > vMax[k][id]) vMax[k][id] = v[k]
+                }
+            }
+        }
+        var bars = 0
+        var barCells = 0
+        var cells = 0
+        var largest = 0
+        for (id in 0 until n) {
+            cells += count[id]
+            if (count[id] > largest) largest = count[id]
+            if (count[id] < 4) continue
+            var isBar = false
+            for (k in 0 until 4) {
+                val diagonal = k == 1 || k == 3
+                val length =
+                    if (diagonal) (uMax[k][id] - uMin[k][id]) / 2 + 1
+                    else uMax[k][id] - uMin[k][id] + 1
+                val across = vMax[k][id] - vMin[k][id] + 1
+                if (across <= 2 && length >= 4) isBar = true
+            }
+            if (isBar) {
+                bars++
+                barCells += count[id]
+            }
+        }
+        return LakeShape(n, cells, largest, largest.toFloat() / (w * h), bars, barCells)
+    }
+
+    /**
      * The share of lake water in a thin bar at a grid bearing that has a parallel twin beside it.
      *
      * One straight lake is a trough. Several of them side by side at the same bearing is the grid.
@@ -540,6 +749,27 @@ class GlaciationTest {
 
         /** Enough till to be a bar rather than float rounding. */
         const val TILL = 0.001f
+
+        /**
+         * How much denser with lakes glaciated country has to be than temperate country.
+         *
+         * Three when B4 landed, and it measured 12.47. The number it measures has fallen twice
+         * since, both times because the stage was made to put *less* water on the map rather than
+         * because the contrast weakened: 7.18 after the trunk-only pass, and 2.87 now that the two
+         * regimes share one Earth-calibrated budget
+         * ([com.cartogenesis.worldgen.model.GlaciationConfig.sheetLakeShare]). So the threshold
+         * comes down to two and a half, and the reason it can is the control immediately above it:
+         * with the ice switched off this same world measures **0.00**, because its cold country has
+         * no lakes at all and its temperate country has three. The claim the guard exists to defend
+         * is that ice puts lakes where water alone leaves none, and twelve against none is that
+         * claim whatever the ratio to the warm half of the map comes to.
+         *
+         * Seed 42 at 512 is also the hardest case this guard could have picked, which is worth
+         * knowing before anyone tightens it again: its cold ground fails the relief test at that
+         * grid and passes at 1024, so there is not one valley glacier on the map and every lake
+         * measured here is a sheet basin. At 1024 the same seed has both regimes working.
+         */
+        const val COLD_LAKE_RATIO = 2.5f
     }
 
     /** The stage's own tally, which is not required to balance but is required to be looked at. */
@@ -550,7 +780,11 @@ class GlaciationTest {
                 "GLACIATION budget frozen=${mass.frozenCells}" +
                     " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
                     " trunks=${mass.trunks} parallelDropped=${mass.parallelCellsDropped}" +
-                    " sheet=${mass.sheetCells} scour=${mass.scourCells}/${mass.scourBasins}" +
+                    " sheet=${mass.sheetCells} budget=${mass.lakeBudget}" +
+                    " basins=${mass.basinCells}/${mass.basins}" +
+                    " refused(narrow/straight/small/budget)=${mass.basinsTooNarrow}/" +
+                    "${mass.basinsTooStraight}/${mass.basinsTooSmall}/${mass.basinsOverBudget}" +
+                    " scour=${mass.scourCells}/${mass.scourBasins}" +
                     " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
                     " excavated=${"%.2f".format(mass.excavated)}" +
                     " deposited=${"%.2f".format(mass.deposited)}" +

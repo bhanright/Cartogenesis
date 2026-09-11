@@ -44,6 +44,20 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 **Deserts sit near the horse latitudes.** Desert mean latitude 31–33° against a land mean of 41–53°,
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
+**An interior swings more than a coast.** The seasonal departure is scaled by distance from
+water — a chamfer distance transform from every sea and lake cell, saturating at three times the
+coastal reach — so a shore and an interior at the same latitude no longer swing alike. On seed 42 at
+50° the interior-versus-coast gap in the seasonal swing is 0.2 °C with `continentality` at zero and
+7.5 °C at the default 0.6, and the annual mean is bit-identical either way, because the scaling
+applies to the departure and never to the mean.
+
+**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidth` of a
+coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
+`shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
+so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shallow against 60% with
+the remap off, 0–2.5% of far sea shallow, and zero land cells changed on any seed. Island arcs
+inherit the same platform, which is what makes an archipelago read as one drowned ridge.
+
 **Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
 network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
 floodplains along lower trunks, alluvial fans at range fronts, fans at lake inflows, and deltas
@@ -66,17 +80,13 @@ cells of temperate country — 12.5 times the density, against 0.0 times with th
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 
-**No continentality.** A continental interior swings no more between seasons than a coast at the same latitude. The seasonal departure is damped over water and applied at full strength over every land cell alike, so a shore and an interior at the same latitude swing equally. Addressed in [A2 Continentality](REALISM_PLAN.md#a2-continentality--sonnet).
-
 **The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
-
-**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
-
-**No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
 
 **The sea never drowns a glacial trough.** A fjord is a trough the sea has flooded, and flooding one means re-cutting the sea-level percentile, which moves every other coastline on the map. `GlaciationStage` therefore grades its marine troughs down to the waterline and carves the over-deepened basin on the sea floor beyond the mouth, leaving the shelf as a sill — fjord bathymetry without a fjord's coastline. The high-latitude coasts gain depth and islands, not the long narrow inlets of Norway.
 
 ## Fixed by this audit
+
+**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
 
 **Lakes.** A basin the priority-flood had to raise is now recognised as standing water: 25–47 lakes
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers

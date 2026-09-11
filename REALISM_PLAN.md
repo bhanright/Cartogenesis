@@ -500,6 +500,25 @@ app wasm e689b9e3 served as application/wasm). Orchestrator's own 1024 render of
 after the second pass: irregular lakes on the plain, a handful along the range front, nothing
 straight or parallel. 1.1.0 saves open unchanged and keep their terrain; new worlds get the fix.
 
+Third pass (757b265, merge 98da2e8), after William's 2048 screenshots showed combs again at the
+foot of the range and too many, too-large lakes. Measured on main at 2048 with his settings (seed
+718106, ocean 62%, 14 plates, 12 realms): 4 bars, 113 lakes, water 2.10% of land, largest lake
+0.093% of the map. Basins were still cut cell by cell along the D8 path, so each was as wide as
+the line it followed; no threshold fixes that. A basin is now a region: the ground within a trough
+half-width of the path, opened (eroded one cell and dilated back) so it is a union of 3x3 blocks
+and three cells wide by construction, refused if the ice walked a straight D8 line or the shape is
+a bar; its floor is cut below its own rim, so recessional moraines are off; no basins in the
+run-out past the snowline. Lake abundance is now budgeted in map fractions: sheetLakeShare 0.02
+of frozen flat land (Finland is 10% water but ~2.5% in bodies a world map can draw),
+maxLakeShareOfMap 0.00016 (Lake Superior's share of Earth; over-large basins peeled inward),
+minLakeShareOfMap 0.000016. After: 0 bars, 70 lakes, 1.45% of land, largest 0.083%. With
+glaciation off the same world has 54 lakes, 1.19% and a largest of 0.122%: most of the big water
+at 2048 is the river stage filling tectonic basins, not ice, and the largest lake never was
+glacial. That is a separate question, raised with William. Guards: zero bars at 2048 (4 on the
+old code); resolution contract to 2048 on the ice's own share (0.20/0.42/0.26% at 512/1024/2048);
+lake-density guard 3.0 -> 2.5 (measures 2.87) because the stage puts less water down;
+DepositionTest pin re-recorded, land 6226 unchanged.
+
 Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
 a seed chosen to have the terrain the chunk acts on.
 

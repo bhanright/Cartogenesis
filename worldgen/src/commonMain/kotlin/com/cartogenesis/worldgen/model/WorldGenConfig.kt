@@ -121,7 +121,21 @@ data class ClimateConfig(
      * rather than left to `seasonalTilt = 0` so that `SeasonsTest` can state plainly what it is
      * turning off, and so the guard that needs seasons can be shown to fail without them.
      */
-    val seasons: Boolean = true
+    val seasons: Boolean = true,
+    /**
+     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
+     *
+     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
+     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
+     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
+     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
+     * applied to the seasonal departure from the annual mean is `1 + continentality * (1 -
+     * exposure)`, where `exposure` is [ClimateStage]'s own blurred water-exposure field, so a coast
+     * (`exposure` near 1) keeps the amplitude at 1 and only an interior (`exposure` near 0) reaches
+     * the full `1 + continentality`. Zero reproduces the world from before this setting existed,
+     * bit for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
+     */
+    val continentality: Float = 0.6f
 )
 
 @Serializable

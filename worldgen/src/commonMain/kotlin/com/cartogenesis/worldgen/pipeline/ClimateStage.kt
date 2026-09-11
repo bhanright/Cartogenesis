@@ -112,9 +112,15 @@ object ClimateStage {
         val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
 
         val temperature = buildTemperature(config, sea)
-        applyMaritimeInfluence(config, sea, ocean, temperature)
-        val summerTemperature = seasonalTemperature(config, sea, temperature, tilt, warm = true)
-        val winterTemperature = seasonalTemperature(config, sea, temperature, tilt, warm = false)
+        // Computed once and shared: the maritime-influence term and continentality are the same
+        // question — how close is the sea — asked by two different consumers, so both read this
+        // rather than each blurring their own copy of the water mask.
+        val exposure = waterExposure(config, sea)
+        applyMaritimeInfluence(config, sea, ocean, temperature, exposure)
+        val summerTemperature =
+            seasonalTemperature(config, sea, temperature, exposure, tilt, warm = true)
+        val winterTemperature =
+            seasonalTemperature(config, sea, temperature, exposure, tilt, warm = false)
 
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
@@ -164,6 +170,31 @@ object ClimateStage {
     }
 
     /**
+     * How much nearby water a land cell can feel: 1 in the open sea, fading to 0 over
+     * `OceanConfig.coastalReach` cells inland.
+     *
+     * A blur of the land/sea mask rather than a distance transform — cheap, and the two agree
+     * everywhere that matters: land within reach of the coast reads high, land well beyond it reads
+     * exactly 0 once the blur's support runs out. Shared by [applyMaritimeInfluence], which uses it
+     * to fade the sea's temperature anomaly out over the interior, and by continentality in
+     * [seasonalTemperature], which uses the same fade to grow the seasonal swing inland.
+     *
+     * Internal rather than private so `ContinentalityTest` can measure the same field the stage
+     * actually used instead of re-deriving it and risking the two drifting apart.
+     */
+    internal fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+        val w = config.width
+        val h = config.height
+        val radius = config.ocean.coastalReach.coerceAtLeast(1)
+
+        val water = FloatField(w, h)
+        for (i in 0 until w * h) water.data[i] = if (sea.isLand[i]) 0f else 1f
+        BoxBlur.apply(water, radius = radius, passes = 2)
+        for (i in 0 until w * h) water.data[i] = water.data[i].coerceIn(0f, 1f)
+        return water
+    }
+
+    /**
      * Lets a coast feel the water beside it.
      *
      * The sea anomaly is spread inland with a blur and added to land temperature, so a shore
@@ -174,7 +205,8 @@ object ClimateStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         ocean: OceanResult,
-        temperature: FloatField
+        temperature: FloatField,
+        exposure: FloatField
     ) {
         val cfg = config.ocean
         if (!cfg.enabled || cfg.coastalInfluence <= 0f) return
@@ -186,17 +218,10 @@ object ClimateStage {
         ocean.anomaly.data.copyInto(spread.data)
         BoxBlur.apply(spread, radius = cfg.coastalReach.coerceAtLeast(1), passes = 2)
 
-        // The blur washes the anomaly out over open ocean too, so scale by how much water is
-        // actually nearby; an inland cell should feel almost nothing.
-        val water = FloatField(w, h)
-        for (i in 0 until w * h) water.data[i] = if (sea.isLand[i]) 0f else 1f
-        BoxBlur.apply(water, radius = cfg.coastalReach.coerceAtLeast(1), passes = 2)
-
         parallelChunks(0, w * h) { start, end ->
             for (i in start until end) {
                 if (!sea.isLand[i]) continue
-                val exposure = water.data[i].coerceIn(0f, 1f)
-                temperature.data[i] += spread.data[i] * exposure * cfg.coastalInfluence
+                temperature.data[i] += spread.data[i] * exposure.data[i] * cfg.coastalInfluence
             }
         }
     }
@@ -273,11 +298,18 @@ object ClimateStage {
      * Over water the departure is damped to [OCEAN_SEASONAL_AMPLITUDE] of itself. A maritime
      * climate has a small annual range at a latitude where a continental one swings thirty
      * degrees, and that is the sea's heat capacity, not anything about the latitude.
+     *
+     * Over land the departure is scaled by `1 + continentality * (1 - exposure)`
+     * ([ClimateConfig.continentality]): a coast, where [exposure] reads near 1, keeps the
+     * amplitude at 1 and swings exactly as far as it did before this setting existed; an interior
+     * with no water nearby reads exposure near 0 and swings up to `1 + continentality` as far.
+     * This is Siberia versus Ireland at the same latitude.
      */
     private fun seasonalTemperature(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         annual: FloatField,
+        exposure: FloatField,
         tilt: Float,
         warm: Boolean
     ): FloatField {
@@ -292,7 +324,11 @@ object ClimateStage {
                     latitudeTemperature(cfg, abs(latitudeOf(y, h)))
                 for (x in 0 until w) {
                     val i = y * w + x
-                    val amplitude = if (sea.isLand[i]) 1f else OCEAN_SEASONAL_AMPLITUDE
+                    val amplitude = if (sea.isLand[i]) {
+                        1f + cfg.continentality * (1f - exposure.data[i])
+                    } else {
+                        OCEAN_SEASONAL_AMPLITUDE
+                    }
                     field.data[i] = annual.data[i] + departure * amplitude
                 }
             }

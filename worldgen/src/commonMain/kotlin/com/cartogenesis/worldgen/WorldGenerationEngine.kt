@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
@@ -14,17 +15,17 @@ import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 
-enum class GenerationStage(val label: String) {
-    TERRAIN("Shaping terrain"),
-    TECTONICS("Drifting plates"),
-    EROSION("Wearing down the mountains"),
-    SEA_LEVEL("Flooding oceans"),
-    OCEAN("Turning the currents"),
-    CLIMATE("Simulating climate"),
-    RIVERS("Carving rivers"),
-    NATIONS("Settling realms"),
-    CULTURES("Spreading peoples"),
-    LANDMARKS("Stocking the wilds")
+enum class GenerationStage(val label: String, val shortLabel: String) {
+    TERRAIN("Shaping terrain", "terrain"),
+    TECTONICS("Drifting plates", "plate tectonics"),
+    EROSION("Wearing down the mountains", "erosion"),
+    SEA_LEVEL("Flooding oceans", "sea level"),
+    OCEAN("Turning the currents", "ocean currents"),
+    CLIMATE("Simulating climate", "climate"),
+    RIVERS("Carving rivers", "rivers"),
+    NATIONS("Settling realms", "realms"),
+    CULTURES("Spreading peoples", "peoples"),
+    LANDMARKS("Stocking the wilds", "landmarks")
 }
 
 fun interface GenerationProgress {
@@ -55,11 +56,18 @@ object WorldGenerationEngine {
      * own section alone. If you add a stage, or make an existing one read a new section, add it
      * here too - `IncrementalReuseTest` compares reuse against a fresh generation for a change to
      * every section in turn and will catch you.
+     *
+     * [previous] takes a [PartialWorld] rather than a [WorldMap] for one reason: a save can be
+     * missing a stage a newer build added (see `WorldSections.rebuild`), and that stage's `null`
+     * has to fail the `=== ` guard below exactly as a recomputed one would, which is what makes
+     * "missing" cascade into "and everything downstream" with no extra logic. A `WorldMap` is a
+     * `PartialWorld` with nothing missing, so every existing caller that hands back a live,
+     * fully-generated world keeps compiling unchanged.
      */
 
     suspend fun generate(
         config: WorldGenConfig,
-        previous: WorldMap? = null,
+        previous: PartialWorld? = null,
         /**
          * Used only when the config asks for it, and only for erosion. Declared before [progress]
          * rather than after so that a trailing lambda at a call site still binds to the progress

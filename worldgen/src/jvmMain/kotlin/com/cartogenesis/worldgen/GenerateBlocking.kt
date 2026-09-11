@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
@@ -19,7 +20,7 @@ import kotlinx.coroutines.runBlocking
  */
 fun WorldGenerationEngine.generateBlocking(
     config: WorldGenConfig,
-    previous: WorldMap? = null,
+    previous: PartialWorld? = null,
     accelerator: ErosionAccelerator? = null,
     progress: GenerationProgress = GenerationProgress { _, _, _ -> }
 ): WorldMap = runBlocking { generate(config, previous, accelerator, progress) }

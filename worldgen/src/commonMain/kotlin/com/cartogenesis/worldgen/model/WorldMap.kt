@@ -26,21 +26,27 @@ data class MapLabel(
     val kind: LabelKind = LabelKind.POINT_OF_INTEREST
 )
 
-/** Everything a renderer or exporter needs to draw a finished world. */
+/**
+ * Everything a renderer or exporter needs to draw a finished world.
+ *
+ * Implements [PartialWorld] — every stage non-null here, by construction — which is what lets a
+ * live, fully-generated world be handed straight back to [com.cartogenesis.worldgen.WorldGenerationEngine.generate]
+ * as `previous` with no conversion: a `WorldMap` already *is* the complete case of a partial one.
+ */
 data class WorldMap(
-    val config: WorldGenConfig,
-    val terrain: TerrainResult,
-    val plates: PlateResult,
-    val erosion: ErosionResult,
-    val sea: SeaLevelResult,
-    val ocean: OceanResult,
-    val climate: ClimateResult,
-    val rivers: RiverResult,
-    val nations: NationResult,
-    val cultures: CultureResult,
-    val landmarks: LandmarkResult,
-    val labels: List<MapLabel> = emptyList()
-) {
+    override val config: WorldGenConfig,
+    override val terrain: TerrainResult,
+    override val plates: PlateResult,
+    override val erosion: ErosionResult,
+    override val sea: SeaLevelResult,
+    override val ocean: OceanResult,
+    override val climate: ClimateResult,
+    override val rivers: RiverResult,
+    override val nations: NationResult,
+    override val cultures: CultureResult,
+    override val landmarks: LandmarkResult,
+    override val labels: List<MapLabel> = emptyList()
+) : PartialWorld {
     val width: Int get() = config.width
     val height: Int get() = config.height
 

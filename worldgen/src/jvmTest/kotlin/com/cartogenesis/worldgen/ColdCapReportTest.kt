@@ -8,12 +8,15 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Measures the cold-cap moisture limit and its effect on high-latitude west coasts.
+ * Measures why high-latitude west coasts stay as taiga/tundra despite abundant rainfall.
  *
- * The `coldCap` in `buildPrecipitation` clamps moisture by temperature, which may prevent
- * temperate rainforest from forming on high-latitude west coasts if a warm current brings
- * mild winters but cannot overcome the cold-cap threshold. This test finds such coasts and
- * measures their composition and precipitation to judge whether the problem is real.
+ * The `coldCap` in `buildPrecipitation` clamps moisture by temperature. This test measures
+ * 50–60° west-facing coasts to check whether the cap is responsible for their classification
+ * as taiga/tundra. The data reveals the real cause: `classify` gates on annual-mean temperature
+ * (< 7 °C → taiga), and the latitude curve places 55° near 0 °C, so warm-current anomalies
+ * cannot lift it above the taiga threshold. The rainfall is abundant (1.88–3.83× latitudinal mean);
+ * the cold cap is not the limiting factor. The fix belongs to Köppen-style classification on
+ * seasonal extremes, not to the moisture cap.
  */
 class ColdCapReportTest {
 

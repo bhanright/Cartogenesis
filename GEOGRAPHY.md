@@ -38,6 +38,14 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 **Deserts sit near the horse latitudes.** Desert mean latitude 31–33° against a land mean of 41–53°,
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
+**Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
+network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
+floodplains along lower trunks, alluvial fans at range fronts, fans at lake inflows, and deltas
+where the biggest rivers meet the sea. The budget is exact rather than approximate — `DepositionTest`
+measures material incised against material deposited plus material carried out to sea, over all
+twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
+the ground draining into it, so deposition cannot invent an uphill river.
+
 ## Known deviations
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
@@ -49,8 +57,6 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 **Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
 
 **High-latitude west coasts classify as taiga/tundra despite abundant rainfall.** Measured on seeds 7, 42, 1234 at 512×512: zero cells on 50–60° west-facing coasts class as temperate forest despite 3.83–3.71–1.88× the latitudinal mean precipitation (seeds 42/7/1234). The cold cap is not the cause — rainfall is abundant (coast precip 0.91–0.99 normalized). The cause is `classify`, which gates temperate/taiga/tundra on annual-mean temperature (< 7 °C → taiga), and the latitude curve places 55° near 0 °C, so warm-current anomalies (+1.7–2.0°C) still fall below 7 °C. Bergen is temperate by Köppen definition (coldest month > −3 °C, warmest > 10 °C), not by annual mean. Addressed in [A6 Temperate climates by coldest month](REALISM_PLAN.md#a6-temperate-climates-by-coldest-month--sonnet), which classifies Köppen-style on the seasonal fields A1 added and checks whether the latitude curve runs too cold at 45–60°.
-
-**No deposition.** The hydraulic erosion stage removes material and never returns it. No deltas build at river mouths, no floodplains or alluvial fans form along lower channels, and no mass is laid down as rivers flatten. Addressed in [B3 Deposition](REALISM_PLAN.md#b3-deposition--opus).
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
 

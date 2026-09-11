@@ -44,6 +44,17 @@ object ErosionStage {
         config: WorldGenConfig,
         height: FloatField,
         accelerator: ErosionAccelerator? = null
+    ): ErosionResult = apply(config, height, accelerator, onRound = null)
+
+    /**
+     * @param onRound handed each hydraulic round's mass budget as it closes, for the guard that
+     *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing.
+     */
+    internal suspend fun apply(
+        config: WorldGenConfig,
+        height: FloatField,
+        accelerator: ErosionAccelerator?,
+        onRound: ((RoundMass) -> Unit)?
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -65,7 +76,7 @@ object ErosionStage {
         val relaxConfig = config.copy(erosion = cfg.copy(passes = sweepsPerRound))
 
         return ErosionResult(
-            HydraulicErosion.apply(config, weathered.height, config.seaLevel) { field ->
+            HydraulicErosion.apply(config, weathered.height, config.seaLevel, onRound) { field ->
                 thermal(relaxConfig, field, accelerator).height
             }
         )

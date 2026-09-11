@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
@@ -58,6 +59,7 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
@@ -75,6 +77,7 @@ import kotlin.math.min
 import kotlin.random.Random
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
@@ -114,6 +117,25 @@ fun CartogenesisApp(platform: Platform) {
     var title by remember { mutableStateOf("Untitled world") }
     var saved by remember { mutableStateOf(listOf<WorldDocument>()) }
     val store = platform.library
+    // Click handlers are plain callbacks, not suspend functions, but the library now is - it
+    // lives in IndexedDB on the web build, which is asynchronous throughout. This is how a
+    // button press reaches a suspend call without making the composable itself suspend.
+    val scope = rememberCoroutineScope()
+
+    // What opening a save amounts to, whether it came from the library or from an uploaded file:
+    // hand the world back to the engine as the world to reuse, which recomputes nothing.
+    fun openSave(save: WorldSave) {
+        val doc = save.document
+        documentId = doc.id
+        title = doc.title
+        overrides = doc.overrides
+        labels = doc.labels
+        nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
+        storedTerrain = doc.terrain
+        world = save.world
+        config = doc.config
+        screen = Screen.MAP
+    }
 
     LaunchedEffect(Unit) { saved = store.list() }
 
@@ -235,6 +257,7 @@ fun CartogenesisApp(platform: Platform) {
                     title = title,
                     worlds = saved,
                     location = platform.libraryLocation,
+                    supportsFileTransfer = platform.supportsFileTransfer,
                     onTitleChange = { title = it },
                     onSave = {
                         // The world goes in the file, not the recipe for it. Nothing here depends
@@ -243,40 +266,68 @@ fun CartogenesisApp(platform: Platform) {
                         //
                         // A save is tens of megabytes now, so it can fail where it never used to —
                         // a browser's storage quota, a full disk. That is a message, not a crash.
-                        status = runCatching {
-                            store.save(
-                                WorldDocument(
-                                    id = documentId,
-                                    title = title.ifBlank { "Untitled world" },
-                                    config = config,
-                                    overrides = overrides,
-                                    labels = labels,
-                                    savedAt = epochMillis()
-                                ),
-                                current
-                            )
-                            saved = store.list()
-                            "Saved \"$title\""
-                        }.getOrElse { "Could not save \"$title\": ${it.message ?: it::class.simpleName}" }
-                    },
-                    onOpen = { id ->
-                        store.load(id)?.let { save ->
-                            val doc = save.document
-                            documentId = doc.id
-                            title = doc.title
-                            overrides = doc.overrides
-                            labels = doc.labels
-                            nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
-                            storedTerrain = doc.terrain
-                            // Handing the saved world back as the world to reuse is the whole of
-                            // opening it: the generation the settings change kicks off finds every
-                            // stage already matching its config and computes none of them.
-                            world = save.world
-                            config = doc.config
-                            screen = Screen.MAP
+                        scope.launch {
+                            status = runCatching {
+                                store.save(
+                                    WorldDocument(
+                                        id = documentId,
+                                        title = title.ifBlank { "Untitled world" },
+                                        config = config,
+                                        overrides = overrides,
+                                        labels = labels,
+                                        savedAt = epochMillis()
+                                    ),
+                                    current
+                                )
+                                saved = store.list()
+                                "Saved \"$title\""
+                            }.getOrElse {
+                                "Could not save \"$title\": ${it.message ?: it::class.simpleName}"
+                            }
                         }
                     },
-                    onDelete = { id -> store.delete(id); saved = store.list() }
+                    onDownload = {
+                        // Handing over the same bytes a save would have written - the format is
+                        // shared, so this is the whole of moving a world to the other front end.
+                        scope.launch {
+                            status = runCatching {
+                                platform.downloadWorld(
+                                    WorldDocument(
+                                        id = documentId,
+                                        title = title.ifBlank { "Untitled world" },
+                                        config = config,
+                                        overrides = overrides,
+                                        labels = labels,
+                                        savedAt = epochMillis()
+                                    ),
+                                    current
+                                )
+                                "Downloaded \"$title\""
+                            }.getOrElse {
+                                "Could not download \"$title\": ${it.message ?: it::class.simpleName}"
+                            }
+                        }
+                    },
+                    onUpload = {
+                        scope.launch {
+                            status = runCatching {
+                                val save = platform.uploadWorld()
+                                if (save == null) {
+                                    "No file opened"
+                                } else {
+                                    openSave(save)
+                                    "Opened \"${save.document.title}\" from file"
+                                }
+                            }.getOrElse { "Could not open file: ${it.message ?: it::class.simpleName}" }
+                        }
+                    },
+                    onOpen = { id ->
+                        // Handing the saved world back as the world to reuse is the whole of
+                        // opening it: the generation the settings change kicks off finds every
+                        // stage already matching its config and computes none of them.
+                        scope.launch { store.load(id)?.let(::openSave) }
+                    },
+                    onDelete = { id -> scope.launch { store.delete(id); saved = store.list() } }
                 )
             } else if (screen == Screen.ATLAS && current != null) {
                 AtlasPane(

@@ -123,7 +123,7 @@ object WorldCodec {
      * [writtenBy] names the front end and its version, which is the sort of thing that is only
      * ever wanted when a file will not open and nobody can remember where it came from.
      */
-    fun encode(
+    suspend fun encode(
         document: WorldDocument,
         world: WorldMap?,
         compressor: Compressor = NoCompression,
@@ -197,7 +197,7 @@ object WorldCodec {
      * — the behaviour that build had. A container missing a section throws, because a save that
      * has lost an array is a file this build cannot open rather than a world with a hole in it.
      */
-    fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave {
+    suspend fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave {
         val header = decodeHeader(bytes)
         if (!isContainer(bytes) || header.world == null || header.sections.isEmpty()) {
             return WorldSave(header.document, null)
@@ -232,7 +232,7 @@ object WorldCodec {
         return WorldSave(header.document, world)
     }
 
-    fun decodeOrNull(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave? =
+    suspend fun decodeOrNull(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave? =
         runCatching { decode(bytes, compressor) }.getOrNull()
 
     /** A version-2 save: JSON text, seed and settings only. */

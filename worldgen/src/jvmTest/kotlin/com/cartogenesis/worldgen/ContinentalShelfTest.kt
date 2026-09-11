@@ -1,0 +1,176 @@
+package com.cartogenesis.worldgen
+
+import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
+import kotlin.math.abs
+import kotlin.test.Test
+import kotlin.test.assertTrue
+
+/**
+ * B1: continental shelves.
+ *
+ * A percentile cut through one height field drops the sea floor straight off the coast unless the
+ * ocean floor gets a distinct hypsometric mode -- a shallow band near the coast, then a genuinely
+ * deep floor. That shows up here as the share of *ocean* cells the climate stage already calls
+ * [com.cartogenesis.worldgen.pipeline.Biome.SHALLOW_OCEAN] (`relativeElevation > -0.12`): high
+ * near the coast, low once well clear of it.
+ *
+ * [com.cartogenesis.worldgen.pipeline.SeaLevelStage] remaps the ocean floor *after* the percentile
+ * cut has already fixed the coastline, keyed on distance-to-land, and never touches a land cell.
+ * That is the point of doing it here rather than as an extra depression in [com.cartogenesis.
+ * worldgen.pipeline.PlateStage] before sea level runs: shaping the shelf earlier moved the
+ * threshold itself, so any depth strong enough to be visible also reshuffled which cells were
+ * land -- closing straits into land bridges and merging landmasses that should have stayed apart.
+ * [`the shelf never touches land`] is the guard for that regression specifically.
+ */
+class ContinentalShelfTest {
+
+    private val seeds = listOf(7L, 42L, 1234L)
+
+    @Test
+    fun `shallow water hugs the coast and the open ocean is deep`() {
+        seeds.forEach { seed ->
+            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val shelfWidth = config.sea.shelfWidth
+            val world = WorldGenerationEngine.generateBlocking(config)
+            val (near, far) = shallowShares(world, shelfWidth)
+            println(
+                "SHELF seed $seed: shelfWidth=%.0f near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
+                    .format(shelfWidth, near * 100, far * 100)
+            )
+            // The remap guarantees the whole plateau (-0.02 at the coast to -shelfDepth at the
+            // outer edge, both shallower than the -0.12 cut) reads as shallow, so this should sit
+            // near 100% -- 90% leaves room for the handful of cells right at 2x shelfWidth where
+            // the smoothstep has already blended most of the way back to the natural floor.
+            assertTrue(
+                near > 0.90,
+                "seed $seed: only ${(near * 100).toInt()}% of ocean within $shelfWidth cells of " +
+                    "the coast is shallow"
+            )
+            assertTrue(
+                far < 0.10,
+                "seed $seed: ${(far * 100).toInt()}% of ocean beyond ${2 * shelfWidth} cells from " +
+                    "the coast is still shallow"
+            )
+        }
+    }
+
+    /** Ground rule 2: shown failing without the fix, at exactly the width the guard above uses. */
+    @Test
+    fun `the near-coast share fails without the shelf`() {
+        val defaultWidth = WorldGenConfig().sea.shelfWidth
+        val config = WorldGenConfig(seed = 42L, width = 512, height = 512).let {
+            it.copy(sea = it.sea.copy(shelfWidth = 0f))
+        }
+        val world = WorldGenerationEngine.generateBlocking(config)
+        val (near, far) = shallowShares(world, defaultWidth)
+        println(
+            "SHELF shelfWidth=0 control: near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
+                .format(near * 100, far * 100)
+        )
+        assertTrue(
+            near <= 0.90,
+            "expected the shelfWidth=0 control to fail the near-coast guard, but got " +
+                "${(near * 100).toInt()}% shallow"
+        )
+    }
+
+    /**
+     * The reason this chunk was redesigned: the earlier version shaped the shelf as an extra
+     * depression on oceanic crust *before* sea level was chosen, so any depth strong enough to be
+     * visible also moved the percentile threshold and reshuffled which cells were land. Remapping
+     * the ocean floor after the cut, and skipping every land cell outright, has to leave land
+     * completely alone -- not approximately, exactly -- whatever the shelf settings are.
+     */
+    @Test
+    fun `the shelf never touches land`() {
+        seeds.forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val withShelf = WorldGenerationEngine.generateBlocking(base)
+            val noShelf = WorldGenerationEngine.generateBlocking(
+                base.copy(sea = base.sea.copy(shelfWidth = 0f))
+            )
+
+            assertTrue(
+                withShelf.sea.isLand.contentEquals(noShelf.sea.isLand),
+                "seed $seed: the shelf setting changed which cells are land"
+            )
+
+            var mismatches = 0
+            var worst = 0f
+            for (i in withShelf.sea.isLand.indices) {
+                if (!withShelf.sea.isLand[i]) continue
+                val a = withShelf.sea.relativeElevation.data[i]
+                val b = noShelf.sea.relativeElevation.data[i]
+                if (a != b) {
+                    mismatches++
+                    worst = maxOf(worst, abs(a - b))
+                }
+            }
+            println("SHELF seed $seed: land-invariance check, $mismatches / ${withShelf.sea.landCellCount} land cells differ (worst $worst)")
+            assertTrue(
+                mismatches == 0,
+                "seed $seed: the shelf changed $mismatches land cells' relativeElevation (worst $worst)"
+            )
+
+            // The fingerprint the report asks for: land count is identical, but the whole-field
+            // relativeElevation checksum is not, because the shelf legitimately remaps ocean
+            // cells. Recording both makes that distinction explicit rather than implied.
+            println(
+                "SHELF seed $seed: land=${withShelf.sea.landCellCount} (no-shelf " +
+                    "${noShelf.sea.landCellCount}), relativeElevation checksum " +
+                    "${checksum(withShelf.sea.relativeElevation.data)} (no-shelf " +
+                    "${checksum(noShelf.sea.relativeElevation.data)})"
+            )
+        }
+    }
+
+    private fun checksum(values: FloatArray): Long {
+        var sum = 0L
+        for (v in values) sum = sum * 31 + v.toRawBits()
+        return sum
+    }
+
+    /**
+     * @return (share of ocean within [shelfWidth] cells of the coast that is shallow, share of
+     *   ocean beyond `2 * shelfWidth` cells that is shallow)
+     */
+    private fun shallowShares(world: WorldMap, shelfWidth: Float): Pair<Double, Double> {
+        val w = world.width
+        val h = world.height
+        val land = world.sea.isLand
+
+        // Distance in cells from every ocean cell to the nearest land — the same measure
+        // SeaLevelStage's shelf remap is keyed on.
+        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        val label = IntArray(w * h) { -1 }
+        for (i in 0 until w * h) {
+            if (land[i]) {
+                dist[i] = 0f
+                label[i] = i
+            }
+        }
+        DistanceTransform.run(w, h, dist, label)
+
+        var nearShallow = 0
+        var nearTotal = 0
+        var farShallow = 0
+        var farTotal = 0
+        for (i in 0 until w * h) {
+            if (land[i]) continue
+            val shallow = world.sea.relativeElevation.data[i] > -0.12f
+            val d = dist[i]
+            if (d <= shelfWidth) {
+                nearTotal++
+                if (shallow) nearShallow++
+            } else if (d > 2f * shelfWidth) {
+                farTotal++
+                if (shallow) farShallow++
+            }
+        }
+        val near = if (nearTotal == 0) 0.0 else nearShallow.toDouble() / nearTotal
+        val far = if (farTotal == 0) 0.0 else farShallow.toDouble() / farTotal
+        return near to far
+    }
+}

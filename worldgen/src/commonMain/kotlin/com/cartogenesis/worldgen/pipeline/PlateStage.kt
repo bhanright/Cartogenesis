@@ -67,11 +67,6 @@ object PlateStage {
         val oceanicSide: Boolean
     )
 
-    /** 4-connected neighbours, used wherever a cell's own edge-adjacency needs checking. */
-    private val neighbourOffsets = arrayOf(
-        intArrayOf(1, 0), intArrayOf(-1, 0), intArrayOf(0, 1), intArrayOf(0, -1)
-    )
-
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
         val w = config.width
         val h = config.height
@@ -100,53 +95,6 @@ object PlateStage {
         }
         // Softens the step between plate interiors so ocean basins shelve into continents.
         BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloff / 3f).roundToInt().coerceAtLeast(1))
-
-        // A distinct hypsometric mode for oceanic crust: without this, [plateBase]'s single blur
-        // radius is the only thing standing between the coast and the open ocean, so the sea floor
-        // drops at the same shallow rate everywhere and never reads as two different kinds of
-        // ground. This adds a second depression on top, specific to oceanic crust, that is zero at
-        // the plate edge and ramps to its full depth over `shelfWidth` cells — a shallow, gently
-        // sloping shelf along continental margins, and a separate, deep, roughly flat abyssal floor
-        // everywhere else. Added directly to elevation, like uplift, rather than blended by
-        // `tectonicWeight`: it is a property of the crust itself, not of how strongly tectonics
-        // shapes the base terrain.
-        val shelf = FloatField(w, h)
-        if (cfg.shelfWidth > 0f && cfg.shelfDepth != 0f) {
-            val edgeDist = FloatArray(w * h) { DistanceTransform.INFINITE }
-            val edgeLabel = IntArray(w * h) { -1 }
-            for (y in 0 until h) {
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    val type = plates[plateId[i]].type
-                    var onEdge = false
-                    for (n in neighbourOffsets) {
-                        val ny = y + n[1]
-                        if (ny < 0 || ny >= h) continue
-                        var nx = (x + n[0]) % w
-                        if (nx < 0) nx += w
-                        if (plates[plateId[ny * w + nx]].type != type) {
-                            onEdge = true
-                            break
-                        }
-                    }
-                    if (onEdge) {
-                        edgeDist[i] = 0f
-                        edgeLabel[i] = i
-                    }
-                }
-            }
-            if (edgeLabel.any { it >= 0 }) DistanceTransform.run(w, h, edgeDist, edgeLabel)
-
-            val width = cfg.shelfWidth
-            for (i in shelf.data.indices) {
-                if (plates[plateId[i]].type != PlateType.OCEANIC) continue
-                val t = (edgeDist[i] / width).coerceIn(0f, 1f)
-                // Smoothstep: flat (shallow) right at the edge, flat (full depth) beyond the
-                // shelf, steepest in the middle — the continental slope.
-                val ramp = t * t * (3f - 2f * t)
-                shelf.data[i] = -cfg.shelfDepth * ramp
-            }
-        }
 
         val ridgeNoise = PerlinNoise(config.seed * 104729 + 5)
         val rangeNoise = PerlinNoise(config.seed * 104729 + 911)
@@ -252,7 +200,7 @@ object PlateStage {
                         cfg.detailFrequency,
                         cfg.detailFrequency
                     )
-                    result.data[i] = base + uplift.data[i] + shelf.data[i] + detail
+                    result.data[i] = base + uplift.data[i] + detail
                 }
             }
         }

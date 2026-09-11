@@ -62,27 +62,39 @@ data class TectonicsConfig(
      * running unbroken from one end to the other. Where such a belt crosses submerged ground that
      * is the difference between a continuous ruler-straight strip of land and an island arc.
      */
-    val rangeVariationScale: Float = 13f,
+    val rangeVariationScale: Float = 13f
+)
+
+/**
+ * The continental shelf: a remap of the ocean floor, applied in [SeaLevelStage] *after* the
+ * percentile sea-level cut rather than in the tectonics that feed it.
+ *
+ * An earlier version of this shaped the shelf as an extra depression in [PlateStage], before sea
+ * level was chosen. That moved the percentile threshold itself, so any depth large enough to read
+ * on the map also reshuffled which cells were land — closing straits into land bridges and merging
+ * landmasses that should have stayed apart, visible downstream as a realm or a people swallowing a
+ * neighbour it used to be cut off from. Remapping the ocean floor afterward, keyed on distance to
+ * the coastline that sea level already chose, gets the same shallow margin without moving a single
+ * `isLand` bit or a single land [SeaLevelResult.relativeElevation] value.
+ */
+@Serializable
+data class SeaConfig(
     /**
-     * Extra depth given to oceanic crust once clear of any plate edge, in normalized elevation
-     * units, on top of [plateElevationBias]. Ramped in from zero at the edge over [shelfWidth]
-     * cells rather than applied uniformly, so the sea floor gets its own distinct, deep mode
-     * instead of every stretch of ocean shelving away from the coast at the same shallow rate.
-     *
-     * Kept deliberately modest: this is added directly to elevation (see [PlateStage]) and, since
-     * sea level is a fixed percentile of the whole field, deepening the abyssal floor reshuffles
-     * which cells clear the threshold everywhere at once. Pushed much higher it starts closing
-     * narrow straits into land bridges and merging landmasses that should stay separate — visible
-     * downstream as realms or peoples swallowing a neighbour they used to be cut off from.
+     * Width, in cells, of the shelf plateau; a further band of the same width blends the plateau
+     * back down to the natural sea floor, so the whole remap reaches `2 * shelfWidth` from the
+     * coast. Measured in cells, so [WorldGenConfig.atResolution] rescales it like
+     * [TectonicsConfig.boundaryFalloff] — left alone, a larger grid would shrink the shelf to a
+     * sliver and coastlines would drop straight into deep water again.
      */
-    val shelfDepth: Float = 0.03f,
+    val shelfWidth: Float = 20f,
     /**
-     * Width, in cells, of the continental shelf: how far from a plate edge [shelfDepth] takes to
-     * ramp up to its full value. Measured in cells, so [WorldGenConfig.atResolution] rescales it
-     * the same way it rescales [boundaryFalloff] — left alone, a larger grid would squeeze the
-     * shelf down to a sliver and coastlines would drop straight into the abyss again.
+     * Depth of the shelf plateau at its outer edge, in the same normalized units as
+     * [SeaLevelResult.relativeElevation]. Kept shallower than the -0.12 cut [ClimateStage] uses
+     * for `SHALLOW_OCEAN`, so the entire plateau reads as shallow water; the coast itself sits
+     * shallower still, at a fixed -0.02, so there is a genuine (if gentle) slope across the shelf
+     * rather than a dead-flat plain right up to the shore.
      */
-    val shelfWidth: Float = 14f
+    val shelfDepth: Float = 0.10f
 )
 
 @Serializable
@@ -444,6 +456,7 @@ data class WorldGenConfig(
     val erosion: ErosionConfig = ErosionConfig(),
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
+    val sea: SeaConfig = SeaConfig(),
     val climate: ClimateConfig = ClimateConfig(),
     val rivers: RiverConfig = RiverConfig(),
     val lakes: LakesConfig = LakesConfig(),
@@ -466,9 +479,9 @@ data class WorldGenConfig(
      *  - [TectonicsConfig.boundaryFalloff] is the width of a mountain belt and of the blur that
      *    softens the plate base. Left alone, a 4x larger grid makes both four times narrower in
      *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
-     *  - [TectonicsConfig.shelfWidth] is the width of the continental shelf, in the same cell
-     *    terms as [TectonicsConfig.boundaryFalloff], and for the same reason: left alone, a larger
-     *    grid would shrink it to nothing and every coast would drop straight into deep water again.
+     *  - [SeaConfig.shelfWidth] is the width of the continental shelf, in the same cell terms as
+     *    [TectonicsConfig.boundaryFalloff] and for the same reason: left alone, a larger grid
+     *    would shrink it to nothing and every coast would drop straight into deep water again.
      *  - [ClimateConfig.baseRainRate] is charged per cell of wind travel, so a 4x wider grid
      *    depletes moisture four times over the same journey and parches every interior.
      *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
@@ -485,10 +498,8 @@ data class WorldGenConfig(
         return copy(
             width = newWidth,
             height = newHeight,
-            tectonics = tectonics.copy(
-                boundaryFalloff = tectonics.boundaryFalloff * scale,
-                shelfWidth = tectonics.shelfWidth * scale
-            ),
+            tectonics = tectonics.copy(boundaryFalloff = tectonics.boundaryFalloff * scale),
+            sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
             erosion = erosion.copy(passes = (erosion.passes * scale).toInt()),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)

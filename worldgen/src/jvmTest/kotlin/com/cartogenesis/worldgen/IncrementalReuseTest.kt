@@ -47,6 +47,7 @@ class IncrementalReuseTest {
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
+            "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
             "climate" to base.copy(
                 climate = base.climate.copy(
                     equatorTemperatureC = base.climate.equatorTemperatureC + 4f

@@ -236,21 +236,23 @@ forest or rainforest is 66.7/57.9/56.7% (up from 0.0/0.0/0.1% on the classifier 
 while the interior at the same latitudes — too far from any coast for a current to reach — stays
 96.6/87.4/95.6% taiga or tundra. Siberia stays taiga.
 
-One guard still fails and was traced further than first reported: `CultureRealmTest` on seed 7 (86%
-of habitable land settled against a 90% floor). It is not the settlement algorithm running out of
-reach — culture spread has no cost cap and claims every unit it can reach — and it is not
-`CulturesConfig.minTemperatureC` either, a second, looser habitability test alongside
-`Biome.ICE_SHEET` that `CultureStage.profile` no longer applies (it never actually excluded a unit
-on any of seeds 7/42/1234, so removing it changed nothing; kept regardless, since a redundant
-definition of "empty" that could silently disagree with the first was a latent bug on its own
-terms). The real cause: `CultureStage` decides habitability per drainage-basin *unit*, voting the
-majority biome across every cell in it, while `CultureRealmTest` and `GeographyAuditTest` both
-measure per *cell*. A unit straddling a retreating ice margin can vote `ICE_SHEET` while a large
-minority of its individual cells are not — measured, 11,144 such cells on seed 7 alone — and those
-cells read as habitable land to the per-cell guards and as empty to the stage that settles it. Fixing
-it means deciding what a unit's climate means when its cells disagree, which touches hearth siting
-and `climateDistance` everywhere else a unit's climate is read, not just this one gate — left open
-rather than changed without review.
+A6 also exposed, and fixed, a real bug in how peoples settle the ice margin. `CultureStage` decides
+habitability per drainage-basin *unit*: `biome[u]` was a majority vote across every cell in it, and
+that vote gated both whether a culture could ever reach the unit and which of its cells ended up
+settled. A unit straddling a retreating ice margin can vote `ICE_SHEET` while a large minority of
+its cells individually are not — measured, 11,144 such cells on seed 7 alone — and the whole unit,
+non-ice minority included, was then unreachable. `habitable[u]` is now "this unit has at least one
+non-ice cell", so the spread reaches every mixed unit; `biome[u]`'s majority vote is untouched for
+everything else it decides (hearth scoring, `climateDistance`). Which cells actually get settled is
+then decided per cell against that cell's *own* biome, not the unit's vote — people live on the
+tundra half of a catchment even when the other half is ice. `CultureStage.profile` also drops a
+second, redundant habitability test, `CulturesConfig.minTemperatureC`, that duplicated the
+temperature test `Biome.ICE_SHEET` already is; measured, it never actually excluded a unit on any
+of seeds 7/42/1234, so it was a latent bug rather than a live one.
+
+`CultureRealmTest` now settles 100% of habitable land on all three seeds (seed 7 was 86% against a
+90% floor before the fix), and `RealmSpreadTest` still holds — 100% of land claimed on every seed,
+zero inland enclaves.
 
 ## Mountain belts
 

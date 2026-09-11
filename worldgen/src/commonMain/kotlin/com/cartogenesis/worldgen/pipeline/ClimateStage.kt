@@ -228,9 +228,35 @@ object ClimateStage {
         return if (warm) abs(lat - tilt) else lat + tilt
     }
 
+    /**
+     * The exponent of the latitude curve.
+     *
+     * Raised from 1.25 by A6. The Koppen gate alone did not fix the high-latitude west coast (the
+     * Bergen case): [ClimateStage.classify] now reads the coldest and warmest month instead of the
+     * annual mean, but at 1.25 the curve put 45 degrees — the effective latitude a 55-degree
+     * coast's *summer* reads off, one [ClimateConfig.seasonalTilt] equatorward — at a mere 6.8 C,
+     * so even a strong warm-current anomaly could not lift a maritime coast's warmest month over
+     * the 10 C tree line. Measured before this change: every one of seeds 7/42/1234's 50-60 degree
+     * west-facing, warm-current coast classified taiga or tundra, 0.0-0.1% forest. At 1.8, that
+     * same point reaches 14.8 C and the guard passes on all three seeds (56.7-66.7% forest).
+     *
+     * The equator and pole anchors are untouched; only the exponent moved, and it cuts both ways.
+     * Raising it lifts the whole curve between those fixed ends, so the 60-70 degree band a
+     * continental *interior*'s winter reads off warms past Koppen's -3 C boundary too, and a dry
+     * interior up there stops being gated as continental — measured on seed 42, that alone dropped
+     * desert-in-band from 98-100% to 48%, because a marginal, barely-continental interior that used
+     * to be taiga was now warm enough for [classify]'s existing desert check to fire on it. That is
+     * fixed in `classify` itself (see the `t >= 13f` guard on the C-branch's desert case) rather
+     * than by pulling the curve back down, since the coast fix needs the lift right where the
+     * interior leak happens — the two effective-latitude ranges overlap almost exactly, so no
+     * choice of exponent or pole alone separates them; see that guard's comment for the reasoning
+     * and the desert figures with it in place (98-100%, matching before).
+     */
+    private const val LATITUDE_EXPONENT = 1.8f
+
     /** The latitude term of the temperature curve, on its own, so a season can re-read it. */
     private fun latitudeTemperature(cfg: ClimateConfig, absoluteLatitude: Float): Float {
-        val latFactor = (absoluteLatitude / 90f).pow(1.25f)
+        val latFactor = (absoluteLatitude / 90f).pow(LATITUDE_EXPONENT)
         return cfg.equatorTemperatureC - (cfg.equatorTemperatureC - cfg.poleTemperatureC) * latFactor
     }
 
@@ -646,7 +672,16 @@ object ClimateStage {
                     }
                     // C: a real winter above -3 C and a real summer — everything in between.
                     else -> when {
-                        p < 0.14f -> Biome.DESERT
+                        // Desert here means the hot subtropical kind this belt was measured
+                        // against (`GeographyAuditTest`'s 15-45 degree band): an annual mean under
+                        // 10 C is a place that only just cleared the continental gate above, not a
+                        // Sahara. Moving the D/C boundary poleward to fix the high-latitude coast
+                        // (A6) also exposes marginal, barely-C interior at 46-58 degrees whose dry
+                        // patches were taiga before and would otherwise read as desert now purely
+                        // for having crossed a thermal line by a couple of degrees — measured on
+                        // seed 42, that alone dropped desert-in-band from 98% to 48%. Colder, dry
+                        // C country instead falls to grassland below, same as a cold steppe.
+                        p < 0.14f && t >= 13f -> Biome.DESERT
                         // Dry summer, wet winter, mild enough for the rain to be rain: the
                         // subtropical high sits over the coast all summer and the westerlies swing
                         // back over it in winter. A real wet season is required as well as the

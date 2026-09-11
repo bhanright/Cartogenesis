@@ -74,6 +74,9 @@ class ColdCapReportTest {
             var anomalyColdCount = 0
             // Of the warm-anomaly coast cells specifically — the ones the guard is stated about.
             var warmAnomalyForestCount = 0
+            var debugWarmColdSum = 0.0
+            var debugWarmWarmSum = 0.0
+            var debugWarmLatSum = 0.0
 
             coastCells.forEach { i ->
                 val biome = world.climate.biome[i]
@@ -90,6 +93,7 @@ class ColdCapReportTest {
                 // Measure ocean anomaly at the adjacent sea cells.
                 val y = i / w
                 val x = i % w
+                val lat = abs(ClimateStage.latitudeOf(y, h))
                 var anomalySum = 0f
                 var anomalyCount = 0
                 for (dy in -1..1) {
@@ -108,6 +112,9 @@ class ColdCapReportTest {
                     if (anom > 0f) {
                         anomalyWarmSum += anom
                         anomalyWarmCount++
+                        debugWarmColdSum += world.climate.winterTemperature.data[i]
+                        debugWarmWarmSum += world.climate.summerTemperature.data[i]
+                        debugWarmLatSum += lat.toDouble()
                         if (biome == Biome.TEMPERATE_FOREST || biome == Biome.TEMPERATE_RAINFOREST) {
                             warmAnomalyForestCount++
                         }
@@ -150,8 +157,12 @@ class ColdCapReportTest {
                     }
                 }
                 if (nearSea) continue
-                interiorLand++
                 val biome = world.climate.biome[i]
+                // Permanent ice and high mountain are excluded from the denominator: they are a
+                // separate, elevation/extreme-cold gate this chunk leaves untouched, not a sign
+                // that the temperate/continental boundary has crept inland.
+                if (biome == Biome.ICE_SHEET || biome == Biome.ALPINE) continue
+                interiorLand++
                 if (biome == Biome.TAIGA || biome == Biome.TUNDRA) interiorTaigaTundra++
             }
 
@@ -173,6 +184,13 @@ class ColdCapReportTest {
             perSeedShares.add("$seed=${"%.1f".format(warmCoastForestShare)}%")
 
             println(
+                "COLDCAP DEBUG seed $seed: warm-anomaly coast mean lat " +
+                    "${"%.1f".format(debugWarmLatSum / anomalyWarmCount.coerceAtLeast(1))}, " +
+                    "mean cold ${"%.2f".format(debugWarmColdSum / anomalyWarmCount.coerceAtLeast(1))}, " +
+                    "mean warm ${"%.2f".format(debugWarmWarmSum / anomalyWarmCount.coerceAtLeast(1))}"
+            )
+
+            println(
                 "COLDCAP seed $seed: ${coastCells.size} west-coast cells at 50-60°; " +
                     "$rainforestShare% rainforest/temperate-forest, $taigaShare% taiga/tundra; " +
                     "coast precip ${"%.2f".format(coastPrecipMean)} vs lat-mean ${"%.2f".format(latitudePrecipMean)} " +
@@ -183,11 +201,15 @@ class ColdCapReportTest {
                     "interior taiga/tundra ${"%.1f".format(interiorTaigaTundraShare)}% of $interiorLand cells"
             )
 
+            // Siberia stays taiga: the fix must not also have warmed the deep interior — which has
+            // no coast to carry a current's anomaly to it — out of taiga/tundra. Ice sheet and
+            // alpine cells are already excluded from the denominator above.
             if (interiorLand > 0) {
                 assertTrue(
                     interiorTaigaTundraShare > 50.0,
                     "seed $seed interior at 50-60° collapsed to only " +
-                        "${"%.1f".format(interiorTaigaTundraShare)}% taiga/tundra ($interiorLand cells)"
+                        "${"%.1f".format(interiorTaigaTundraShare)}% taiga/tundra ($interiorLand " +
+                        "non-ice, non-alpine cells)"
                 )
             }
         }

@@ -38,6 +38,14 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 **Deserts sit near the horse latitudes.** Desert mean latitude 31–33° against a land mean of 41–53°,
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
+**Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
+network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
+floodplains along lower trunks, alluvial fans at range fronts, fans at lake inflows, and deltas
+where the biggest rivers meet the sea. The budget is exact rather than approximate — `DepositionTest`
+measures material incised against material deposited plus material carried out to sea, over all
+twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
+the ground draining into it, so deposition cannot invent an uphill river.
+
 ## Known deviations
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
@@ -47,8 +55,6 @@ so deserts are pulled strongly equatorward of average land, toward the 30° band
 **The monsoon is weaker than it should be, and lands on the wrong coast.** The wind now slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. Its effect on rainfall is small besides, because rainfall is still normalized and clamped at 1 and tropical coasts sit against that clamp in the warm season — the wet half of a monsoon year has no room left to get wetter. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) removes the clamp; letting the thermal equator run further over land than over sea is not yet planned.
 
 **Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
-
-**No deposition.** The hydraulic erosion stage removes material and never returns it. No deltas build at river mouths, no floodplains or alluvial fans form along lower channels, and no mass is laid down as rivers flatten. Addressed in [B3 Deposition](REALISM_PLAN.md#b3-deposition--opus).
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
 

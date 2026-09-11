@@ -397,6 +397,26 @@ Two things to carry forward:
   its west, and the audit keeps 98%+ of desert in band — but re-check after A4 rescales rainfall,
   which will move every desert.
 
+### Render review after A6 (2026-09-11, later)
+
+Looked at seeds 7, 42, 1234 biomes and seed 42 annual temperature. Verdict: believable, and more
+varied than before. Seed 42's northern continent went from a near-solid ice-and-tundra slab to
+ice, a tundra fringe, a boreal belt, horse-latitude dry blocks at 30-45°N and forested west coasts;
+seed 7 acquired a Sahel gradient (ice, tundra, boreal, a desert-and-savanna belt at 25-35°N, then a
+wet tropical coast); west coasts are green from the subtropics to ~55° on the Chile-shaped
+continent and Mediterranean olive appears on mid-latitude west coasts. Ice fell to 19-43% of land
+by seed, which reads as Earth-like rather than glacial.
+
+Checked arithmetically, not by eye: the new latitude curve (exponent 1.8) gives ~10 °C at 51°
+(London 11), ~24 °C at 30° (Cairo 22), ~3 °C at 60° before the current anomaly (Bergen 8, so a few
+degrees cold there), and 32 °C at the equator (real ~27, a pre-existing warm anchor). Two
+calibration notes for whoever next touches `buildTemperature`: the equator anchor is ~5 °C warm,
+and 60° is ~3 °C cold even with a warm current. Neither is a blocker.
+
+Seed 1234 has a few orange specks inside its equatorial rainforest (rain-shadow pockets behind
+small ranges; the audit keeps ≥95% of desert in band) and its south-western interior is dry from
+30° to 55°S — the Patagonia note from the first review, now larger. Re-check both after A4.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the
@@ -414,7 +434,7 @@ guard reported, so the next chunk knows its baseline.
 | A3 Meridional wind / monsoon | Opus | done | 2026-09-11 | 8a14ed5 + 53e39d7 (merge 19746a2) | semi-Lagrangian march in lock-step wavefronts, parallel by circulation belt; wind is a vector, direction from the thermal equator; meridionalWind=0 reproduces the zonal march exactly; desert-in-band 100/99/100/98; Mediterranean cells 174/424/375; the plan's 3x/2% monsoon guard could not discriminate (base already >2% on most seeds; 10deg tilt lands summer onshore flow on poleward coasts; rainfall clamped at 1) - guarded instead by a paired difference: east-west ridges gain +0.030/+0.030/+0.013 vs descending +0.020/+0.010/+0.006, exactly 0 without the slant; A4 to restate the monsoon claim; ocean stage untouched (zonally uniform meridional stress has zero curl) |
 | A4 Absolute rainfall | Sonnet | not started | | | |
 | A5 Cold-cap report | Haiku | done | 2026-09-11 | e0c3081 (merge a1014ae) | 0% of 50-60deg west coasts forested on all 3 seeds despite 1.9-3.8x latitudinal-mean rain (precip 0.83-0.99): cap is NOT the cause; classify gates on annual mean (<7C -> taiga) and the curve puts 55deg near 0C. Opened A6 |
-| A6 Temperate by coldest month | Sonnet | not started | | | |
+| A6 Temperate by coldest month | Sonnet | done | 2026-09-11 | 463e6f9 (merge 357a923) | Koppen thermal gates on the seasonal fields (warmest<10 ET; coldest<=-3 D; coldest>=18 A; else C); LATITUDE_EXPONENT 1.25->1.8 was necessary (gate alone left 55deg coasts at 6.8C in summer); 50-60deg warm west coasts 0/0/0.1% -> 65/53/59% forested, interior taiga 100/97/96%; ice share fell (seed 42 32%->19%, seed 7 56%->43%); a PROVISIONAL t>=13 desert gate holds the audit and suppresses cold deserts - A4 replaces it with Koppen aridity; culture settlement now decided per cell (a unit straddling the ice margin no longer strands its non-ice cells): 100% settled on all seeds |
 | B1 Continental shelves | Sonnet | done | 2026-09-11 | d2d9d0a (merge 7e1384a) | redesigned as a post-sea-level floor remap after the pre-sea-level depression moved coastlines and its guard could not discriminate; near-coast shallow 100/100/100% vs 60.3% control, far 2.5/1.3/0.0%; 0 land cells differ on any seed; new SeaConfig (shelfWidth=20, shelfDepth=0.10) in the SEA_LEVEL reuse guard; largest realm 28/26/26%; seed-7 culture 38% (was 48% failing) |
 | B2 Crust-pair boundaries | Opus | not started | | | |
 | B3 Deposition | Opus | not started | | | |

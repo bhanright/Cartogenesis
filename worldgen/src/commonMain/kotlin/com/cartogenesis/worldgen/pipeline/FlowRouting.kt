@@ -113,6 +113,31 @@ internal object FlowRouting {
     }
 
     /**
+     * Every land cell, lowest first, ordered by the depression-filled surface.
+     *
+     * Walking this backwards visits each cell before anything it drains into, which is what lets a
+     * single pass carry a running total — water, or the sediment that water is carrying —
+     * downstream without recursion and without a stack that a long river could overflow.
+     */
+    fun heightOrder(
+        width: Int,
+        height: Int,
+        isLand: BooleanArray,
+        filled: FloatField,
+        landCellCount: Int
+    ): IntArray {
+        // Elevation packed above the cell index so a plain primitive sort orders cells by height.
+        val ordered = LongArray(landCellCount)
+        var n = 0
+        for (i in 0 until width * height) {
+            if (!isLand[i]) continue
+            ordered[n++] = encode(filled.data[i], i)
+        }
+        ordered.sort()
+        return IntArray(landCellCount) { decodeIndex(ordered[it]) }
+    }
+
+    /**
      * Adds each cell's own contribution to everything downstream of it.
      *
      * Walked in order of height rather than by recursion, so a cell's total is final before it
@@ -128,25 +153,72 @@ internal object FlowRouting {
         weightOf: (Int) -> Float
     ): FloatField {
         val accumulation = FloatField(width, height)
-        // Elevation packed above the cell index so a plain primitive sort orders cells by height.
-        val ordered = LongArray(landCellCount)
-        var n = 0
         for (i in 0 until width * height) {
-            if (!isLand[i]) continue
-            accumulation.data[i] = weightOf(i)
-            ordered[n++] = encode(filled.data[i], i)
+            if (isLand[i]) accumulation.data[i] = weightOf(i)
         }
 
-        ordered.sort()
+        val order = heightOrder(width, height, isLand, filled, landCellCount)
         // Highest first, so a cell's own total is final before it passes water downstream.
-        for (k in ordered.indices.reversed()) {
-            val i = decodeIndex(ordered[k])
+        for (k in order.indices.reversed()) {
+            val i = order[k]
             val t = flowTarget[i]
             if (t >= 0 && isLand[t]) {
                 accumulation.data[t] += accumulation.data[i]
             }
         }
         return accumulation
+    }
+
+    /**
+     * Land cells in an order where nothing appears before everything that drains into it — sources
+     * first, mouths last.
+     *
+     * [heightOrder] is nearly this and is not good enough for sediment. Its key biases the
+     * elevation by four before taking the raw bits, and at that magnitude a float's last place is
+     * about 5e-7, so two cells whose real heights differ by less than that sort as equal and the
+     * tie falls to the cell index. Water does not care — flow accumulation off by one cell in ten
+     * thousand is invisible — but a load handed to a cell the walk has already passed is *lost*,
+     * and the mass budget caught it: two to ten cells a round, three percent of the sediment.
+     *
+     * A topological sort of the flow network has no such tolerance. D8 gives each cell one
+     * downstream neighbour and every step is strictly downhill, so the network is a forest and
+     * Kahn's algorithm orders it exactly. Cells are seeded and drained in ascending index order, so
+     * the result is one specific order rather than any valid one.
+     */
+    fun drainageOrder(
+        width: Int,
+        height: Int,
+        isLand: BooleanArray,
+        flowTarget: IntArray,
+        landCellCount: Int
+    ): IntArray {
+        val size = width * height
+        val feeding = IntArray(size)
+        for (i in 0 until size) {
+            if (!isLand[i]) continue
+            val t = flowTarget[i]
+            if (t >= 0 && isLand[t]) feeding[t]++
+        }
+
+        val order = IntArray(landCellCount)
+        var tail = 0
+        for (i in 0 until size) {
+            if (isLand[i] && feeding[i] == 0) order[tail++] = i
+        }
+        var head = 0
+        while (head < tail) {
+            val t = flowTarget[order[head++]]
+            if (t >= 0 && isLand[t] && --feeding[t] == 0) order[tail++] = t
+        }
+
+        // A cycle would leave cells unplaced, and the strictly-downhill rule says there can be
+        // none. Belt and braces: anything left over still gets its turn, at the end.
+        if (tail < landCellCount) {
+            for (i in 0 until size) {
+                if (isLand[i] && feeding[i] > 0) order[tail++] = i
+            }
+        }
+        return order
     }
 
     /**

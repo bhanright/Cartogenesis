@@ -494,6 +494,12 @@ seed 42 at 512 now has no valley glacier at all, because its cold ground fails t
 that grid and passes at 1024 - terrain is rougher at finer grids, which is a pre-existing property
 of the terrain stage, not of this fix.
 
+Released as v1.1.1 on 767ef26 (CI green): portable zip 96 MB, MSI 96 MB, web zip 4.4 MB;
+packaged exe passes --gpu-check; web build deployed (site d266033, loader stamp 202609111142,
+app wasm e689b9e3 served as application/wasm). Orchestrator's own 1024 render of seed 718106
+after the second pass: irregular lakes on the plain, a handful along the range front, nothing
+straight or parallel. 1.1.0 saves open unchanged and keep their terrain; new worlds get the fix.
+
 Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
 a seed chosen to have the terrain the chunk acts on.
 

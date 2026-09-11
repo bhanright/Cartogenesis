@@ -385,8 +385,8 @@ guard reported, so the next chunk knows its baseline.
 | Chunk | Model | Status | Date | Commit | Numbers |
 |---|---|---|---|---|---|
 | D1 Full-world save format | Opus | done | 2026-09-11 | 09eb31f (merge 424b34a) | gzip whole-file 2.36-2.57x (512: 24.7->10.4 MB; 1024: 98.7->38-40 MB); heights 1.1x, id maps 136-1010x; round-trip guard failed with a section dropped, then passed; v2 saves open and re-save as v3; all 10 stages reused by assertSame; web stores raw (compression deferred to D2) |
-| D2 Web storage | Sonnet | not started | | | |
-| D3 Retire the determinism gate | Haiku | not started | | | |
+| D2 Web storage | Sonnet | done | 2026-09-11 | aaf19c7 + 158cac2 (merges b83248c, eb141f0) | IndexedDB with a headers store (listing never reads an array; guard shown to throw without readPrefix); library/codec became suspend; real gzip via CompressionStream; JVM-gzipped fixture decodes on both platforms; live selftest heightIdentical=true, 729 KB, write 85 ms, read 61 ms. Fixture had to be regenerated after A1 added 4 sections (29 total) - the failure that opened D4 |
+| D3 Retire the determinism gate | Haiku | done | 2026-09-11 | 408beb4 (merge b278e7d) | ci.yml fingerprint step continue-on-error with ::warning::; README's three seed-only-save claims replaced; site CLAUDE.md needed nothing; memory note updated by the orchestrator |
 | D4 Forward-compatible sections | Sonnet | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |
 | A1 Seasons | Opus | done | 2026-09-11 | 1aa12ee | 35deg swing: land 13.1C / sea 2.9C; Mediterranean west-coast cells 211/517/494 (seeds 7/42/1234), 0/0/0 with seasons=false; seasons=false reproduces all six fingerprint lines; desert-in-band 100/99/100/98% (belt rescaled to restore the annual mean, no threshold moved); desert AREA fell 5.1%->1.9% on seed 42 (for A4); border-on-river 2.08/2.12/2.16/1.04 (seed 99 down from 1.46); default fingerprint rivers=26 realms=14 |
@@ -395,7 +395,7 @@ guard reported, so the next chunk knows its baseline.
 | A4 Absolute rainfall | Sonnet | not started | | | |
 | A5 Cold-cap report | Haiku | done | 2026-09-11 | e0c3081 (merge a1014ae) | 0% of 50-60deg west coasts forested on all 3 seeds despite 1.9-3.8x latitudinal-mean rain (precip 0.83-0.99): cap is NOT the cause; classify gates on annual mean (<7C -> taiga) and the curve puts 55deg near 0C. Opened A6 |
 | A6 Temperate by coldest month | Sonnet | not started | | | |
-| B1 Continental shelves | Sonnet | not started | | | |
+| B1 Continental shelves | Sonnet | done | 2026-09-11 | d2d9d0a (merge 7e1384a) | redesigned as a post-sea-level floor remap after the pre-sea-level depression moved coastlines and its guard could not discriminate; near-coast shallow 100/100/100% vs 60.3% control, far 2.5/1.3/0.0%; 0 land cells differ on any seed; new SeaConfig (shelfWidth=20, shelfDepth=0.10) in the SEA_LEVEL reuse guard; largest realm 28/26/26%; seed-7 culture 38% (was 48% failing) |
 | B2 Crust-pair boundaries | Opus | not started | | | |
 | B3 Deposition | Opus | not started | | | |
 | B4 Glaciation | Opus | not started | | | |

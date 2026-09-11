@@ -1,26 +1,27 @@
 package com.cartogenesis.web
 
-import com.cartogenesis.cartography.ByteWorldLibrary
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
+import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
 /**
  * What a browser tab can offer.
  *
- * The three answers differ from the desktop's, and nothing else does: worlds live in local storage
+ * The three answers differ from the desktop's, and nothing else does: worlds live in IndexedDB
  * rather than on disk, exporting means handing the browser a file to download rather than writing
  * a path, and the graphics device is reached through WebGPU rather than OpenGL.
  */
@@ -33,21 +34,32 @@ class WebPlatform(
     // here; 1024 would take over a minute and read as a hang.
     override val defaultResolution: Int = 512
 
-    override val library: WorldLibrary = LocalStorageLibrary()
-
     /**
-     * No compression here yet.
+     * `gzip` where `CompressionStream`/`DecompressionStream` exist, `none` otherwise.
      *
-     * A browser's `CompressionStream` is asynchronous and works in streams, which does not fit a
-     * library that saves and loads in a single call, and handing it tens of megabytes of Kotlin
-     * bytes means copying them across the JS boundary one at a time. So the payload is stored raw
-     * and the header says `none`, which every reader honours. Moving web storage to IndexedDB is
-     * asynchronous throughout and is the natural place to revisit this.
+     * Checked once at startup for the header comment below, but [WebGzipCompressor] itself checks
+     * on every call — see its doc comment for why that is worth the redundant check.
      */
-    override val compressor: Compressor = NoCompression
+    override val compressor: Compressor =
+        if (compressionStreamsAvailable()) WebGzipCompressor else NoCompression
+
+    override val library: WorldLibrary = IndexedDbLibrary(compressor, "web")
 
     override val libraryLocation: String =
-        "This browser's local storage. Clearing site data will remove them, so export anything worth keeping."
+        "This browser's IndexedDB storage. Clearing site data will remove them, so download " +
+            "anything worth keeping."
+
+    override val supportsFileTransfer: Boolean = true
+
+    override suspend fun downloadWorld(document: WorldDocument, world: WorldMap?) {
+        val bytes = WorldCodec.encode(document, world, compressor, "web")
+        downloadBytes("cartogenesis-${document.id}.cgw", bytes, "application/octet-stream")
+    }
+
+    override suspend fun uploadWorld(): WorldSave? {
+        val bytes = pickFile() ?: return null
+        return WorldCodec.decodeOrNull(bytes, compressor)
+    }
 
     override suspend fun export(
         config: WorldGenConfig,
@@ -81,46 +93,4 @@ class WebPlatform(
 
     private fun skiaFormat(format: ExportFormat): EncodedImageFormat =
         if (format == ExportFormat.PNG) EncodedImageFormat.PNG else EncodedImageFormat.WEBP
-}
-
-/**
- * Saved worlds in `localStorage`.
- *
- * The shared [ByteWorldLibrary] knows the format; this only has to say where named blobs live.
- * Keys are prefixed so the library can be listed without disturbing anything else the page keeps.
- * Local storage holds text, so the container is base64'd on the way in and back on the way out.
- *
- * The caveat, stated plainly: local storage is a few megabytes per origin and a save now carries
- * the world, which at 512 is tens of megabytes. Most will not fit, and a failed write says so
- * rather than being swallowed. IndexedDB is where this belongs, and is the next piece of work.
- */
-private class LocalStorageLibrary : ByteWorldLibrary(NoCompression, "web") {
-
-    private val prefix = "cartogenesis/"
-
-    override fun names(): List<String> =
-        (0 until storageLength()).mapNotNull { storageKeyAt(it) }
-            .filter { it.startsWith(prefix) }
-            .map { it.removePrefix(prefix) }
-
-    @OptIn(ExperimentalEncodingApi::class)
-    override fun read(name: String): ByteArray? {
-        val text = storageGet(prefix + name) ?: return null
-        // A version-2 entry is the JSON itself rather than base64 of a container, told apart by
-        // the one character JSON must start with and base64 never does.
-        if (text.startsWith("{")) return text.encodeToByteArray()
-        return runCatching { Base64.decode(text) }.getOrNull()
-    }
-
-    @OptIn(ExperimentalEncodingApi::class)
-    override fun write(name: String, bytes: ByteArray) {
-        if (!storageSet(prefix + name, Base64.encode(bytes))) {
-            error(
-                "This browser's storage is full. A saved world now carries the world itself, " +
-                    "which is more than local storage will hold."
-            )
-        }
-    }
-
-    override fun remove(name: String) = storageRemove(prefix + name)
 }

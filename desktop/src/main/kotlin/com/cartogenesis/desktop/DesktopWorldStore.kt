@@ -25,12 +25,15 @@ class DesktopWorldStore(
 
     val location: String get() = directory.absolutePath
 
-    override fun names(): List<String> =
+    // Plain blocking file I/O, same as before `save`/`load`/`list` suspended: the JVM never has a
+    // reason to actually suspend here, the way `GzipCompressor` never does either. The interface
+    // suspends for the browser's sake, and this side of the seam simply does not use it.
+    override suspend fun names(): List<String> =
         directory.listFiles { file ->
             file.name.endsWith(EXTENSION) || file.name.endsWith(LEGACY_EXTENSION)
         }?.map { it.name } ?: emptyList()
 
-    override fun read(name: String): ByteArray? =
+    override suspend fun read(name: String): ByteArray? =
         File(directory, name).takeIf { it.exists() }?.readBytes()
 
     /**
@@ -39,7 +42,7 @@ class DesktopWorldStore(
      * Without this, listing a library of 1024 worlds would read every array in every one of them
      * to put a title and a date on screen.
      */
-    override fun readPrefix(name: String, limit: Int): ByteArray? {
+    override suspend fun readPrefix(name: String, limit: Int): ByteArray? {
         val file = File(directory, name).takeIf { it.exists() } ?: return null
         val wanted = minOf(limit.toLong(), file.length()).toInt()
         return RandomAccessFile(file, "r").use { handle ->
@@ -47,11 +50,11 @@ class DesktopWorldStore(
         }
     }
 
-    override fun write(name: String, bytes: ByteArray) {
+    override suspend fun write(name: String, bytes: ByteArray) {
         File(directory, name).writeBytes(bytes)
     }
 
-    override fun remove(name: String) {
+    override suspend fun remove(name: String) {
         File(directory, name).delete()
     }
 }

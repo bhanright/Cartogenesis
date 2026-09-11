@@ -20,7 +20,7 @@ import com.cartogenesis.worldgen.model.WorldMap
  */
 interface WorldLibrary {
     /** Headers only. A listing must never expand a payload — a 1024 save is tens of megabytes. */
-    suspend fun list(): List<WorldDocument>
+    suspend fun list(): List<LibraryEntry>
 
     suspend fun save(document: WorldDocument, world: WorldMap?)
 
@@ -28,6 +28,13 @@ interface WorldLibrary {
 
     suspend fun delete(id: String)
 }
+
+/**
+ * One row of the library listing: the document, and [SaveHeader.openStatus] — computed from the
+ * header alone, at listing time, since what a save costs to open depends on what *this* build's
+ * sections are, not on anything fixed when the file was written.
+ */
+data class LibraryEntry(val document: WorldDocument, val status: String)
 
 /**
  * A [WorldLibrary] over anything that can read and write named byte blobs.
@@ -67,8 +74,9 @@ abstract class ByteWorldLibrary(
 
     private fun legacyFileName(id: String) = "$id$LEGACY_EXTENSION"
 
-    override suspend fun list(): List<WorldDocument> =
-        names().mapNotNull { header(it)?.document }.sortedByDescending { it.savedAt }
+    override suspend fun list(): List<LibraryEntry> =
+        names().mapNotNull { name -> header(name)?.let { LibraryEntry(it.document, it.openStatus) } }
+            .sortedByDescending { it.document.savedAt }
 
     override suspend fun save(document: WorldDocument, world: WorldMap?) {
         write(fileName(document.id), WorldCodec.encode(document, world, compressor, writtenBy))

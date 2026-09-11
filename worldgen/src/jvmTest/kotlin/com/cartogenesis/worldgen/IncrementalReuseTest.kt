@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.LoadedWorld
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -18,6 +19,8 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.TerrainResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotSame
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -128,6 +131,60 @@ class IncrementalReuseTest {
         assertSame(loaded.cultures, opened.cultures, "peoples were regenerated")
         assertSame(loaded.landmarks, opened.landmarks, "landmarks were regenerated")
         assertEquals(fingerprint(generated), fingerprint(opened))
+    }
+
+    @Test
+    fun `a partial world reuses what it has and regenerates climate downstream`() {
+        // The engine half of D4's contract: a save missing a stage - here, climate, the one A1
+        // actually broke - is not a world the engine refuses. It is a `PartialWorld` with that
+        // stage `null`, and the same guard chain that already forces a recompute of a changed
+        // stage forces a recompute of a missing one, cascading to everything the pipeline runs
+        // after it. `WorldCodecTest` in `:cartography` pins the loader half - this pins the half
+        // that can break here.
+        val generated = WorldGenerationEngine.generateBlocking(base)
+        val loaded = rebuiltAsIfLoaded(generated)
+        val partial = LoadedWorld(
+            config = loaded.config,
+            terrain = loaded.terrain,
+            plates = loaded.plates,
+            erosion = loaded.erosion,
+            sea = loaded.sea,
+            ocean = loaded.ocean,
+            climate = null,
+            rivers = loaded.rivers,
+            nations = loaded.nations,
+            cultures = loaded.cultures,
+            landmarks = loaded.landmarks,
+            labels = loaded.labels
+        )
+
+        val opened = WorldGenerationEngine.generateBlocking(base, previous = partial)
+
+        assertSame(partial.terrain, opened.terrain, "terrain was regenerated")
+        assertSame(partial.plates, opened.plates, "plates were regenerated")
+        assertSame(partial.erosion, opened.erosion, "erosion was regenerated")
+        assertSame(partial.sea, opened.sea, "sea level was regenerated")
+        assertSame(partial.ocean, opened.ocean, "ocean was regenerated")
+        // Rivers, nations, cultures and landmarks all had real (if stale) data in `partial` - their
+        // own sections would have survived a save missing only climate - so a bug that reused them
+        // anyway would still pass a null check. Only identity catches it.
+        assertNotSame(partial.rivers, opened.rivers, "rivers should regenerate along with climate")
+        assertNotSame(partial.nations, opened.nations, "realms should regenerate along with climate")
+        assertNotSame(partial.cultures, opened.cultures, "peoples should regenerate along with climate")
+        assertNotSame(partial.landmarks, opened.landmarks, "landmarks should regenerate along with climate")
+        assertEquals(fingerprint(generated), fingerprint(opened))
+    }
+
+    @Test
+    fun `an entirely absent previous still generates every stage`() {
+        // The degenerate case of a partial world: nothing at all survived (a version-2 save, or the
+        // very first generation). Every guard's `reusable?.takeIf { ... }` has to fail cleanly
+        // rather than throw when `previous` itself is null.
+        val empty = LoadedWorld(config = base)
+        assertNull(empty.terrain)
+        val fresh = fingerprint(WorldGenerationEngine.generateBlocking(base))
+        val fromEmpty = fingerprint(WorldGenerationEngine.generateBlocking(base, previous = empty))
+        assertEquals(fresh, fromEmpty)
     }
 
     /** Every stage result rebuilt around copied arrays, which is what a decoder hands back. */

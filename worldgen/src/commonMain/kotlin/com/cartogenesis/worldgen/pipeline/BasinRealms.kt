@@ -127,8 +127,17 @@ internal object BasinRealms {
             if (u != BasinUnits.NONE) realmOf[i] = realms.owner[u]
         }
 
-        // A capital for every realm that ended up with land, taken from its best-scoring unit.
+        // A capital for every realm that ended up with land, taken from its best-scoring unit —
+        // and the contiguous id it will be known by, decided in the same breath.
+        //
+        // One loop and one predicate on purpose. These used to be two loops: one added a capital
+        // when a realm had a cell to put it on, the other assigned an id when a realm owned any
+        // unit at all. Those are the same condition today, but only by construction, and the day
+        // they differ every realm after the gap is numbered one off from its capital — and
+        // `describe` sizes every per-realm array by the capital list, so the last realm indexes
+        // straight off the end.
         val origins = ArrayList<Int>()
+        val renumber = HashMap<Int, Int>()
         for (realm in 0 until realms.count) {
             var pick = -1
             var pickScore = -1f
@@ -139,15 +148,9 @@ internal object BasinRealms {
                     pick = bestCell[u]
                 }
             }
-            if (pick >= 0) origins.add(pick)
-        }
-
-        // Renumber so realm ids are contiguous and match the origin list.
-        val renumber = HashMap<Int, Int>()
-        for (realm in 0 until realms.count) {
-            var hasLand = false
-            for (u in 0 until units.unitCount) if (realms.owner[u] == realm) { hasLand = true; break }
-            if (hasLand) renumber[realm] = renumber.size
+            if (pick < 0) continue
+            renumber[realm] = origins.size
+            origins.add(pick)
         }
         for (i in realmOf.indices) {
             val r = realmOf[i]
@@ -283,6 +286,38 @@ internal object BasinRealms {
     ): Realms {
         val owner = realmOfUnit.copyOf()
         var count = realmCount
+
+        // Empires come apart. Appetite is a comparative brake - a realm bids against its
+        // neighbours - so a realm that is the only bidder for a region takes it regardless, and
+        // on seed 7 one realm ended up holding 42% of the world that way. Rather than move the
+        // seeds (which thins the contest for river valleys), a realm past the cap is cut in two
+        // along its own internal watersheds, largest first, until none is over. Deterministic:
+        // no random draw, and the flood fill walks sorted neighbour lists.
+        val cap = config.nations.maxRealmShare * units.area.sum().toFloat()
+        var attempts = 0
+        while (attempts++ < 64) {
+            val held = IntArray(count)
+            for (u in 0 until units.unitCount) if (owner[u] >= 0) held[owner[u]] += units.area[u]
+            var realm = -1
+            for (r in 0 until count) if (held[r] > cap && (realm < 0 || held[r] > held[realm])) realm = r
+            if (realm < 0) break
+            val mine = (0 until units.unitCount).filter { owner[it] == realm }
+            if (mine.size < 2) break
+            val start = mine.minByOrNull { quality[it] } ?: break
+            val taken = HashSet<Int>()
+            val frontier = ArrayDeque<Int>()
+            frontier.addLast(start)
+            taken.add(start)
+            while (frontier.isNotEmpty() && taken.size < mine.size / 2) {
+                val u = frontier.removeFirst()
+                units.neighbours[u].forEach { nb ->
+                    if (owner[nb] == realm && taken.add(nb)) frontier.addLast(nb)
+                }
+            }
+            if (taken.isEmpty() || taken.size == mine.size) break
+            val breakaway = count++
+            taken.forEach { owner[it] = breakaway }
+        }
         val chance = config.nations.schismChance.coerceIn(0f, 1f)
         if (chance <= 0f) return Realms(owner, count)
 
@@ -368,7 +403,13 @@ internal object BasinRealms {
             if (allocation[mass] <= 0) continue
             allocation[mass]--
             chosen.add(unit)
-            // Keep the immediate neighbourhood clear so two capitals do not share a valley.
+            // One ring clear, so two capitals do not share a valley - and no more than one,
+            // which was measured rather than assumed. Two rings were tried to stop a lone realm
+            // taking 42% of seed 7: it worked, and it halved how often borders follow rivers on
+            // two of four seeds, because river valleys are the richest ground and spacing the
+            // seeds out of them left both banks to a single realm. Sprawl is handled where it
+            // belongs instead, by splitting an oversized realm along its own watersheds; see
+            // schism().
             blocked.add(unit)
             units.neighbours[unit].forEach { blocked.add(it) }
         }

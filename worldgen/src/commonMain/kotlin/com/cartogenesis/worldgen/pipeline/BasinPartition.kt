@@ -373,7 +373,14 @@ internal object BasinPartition {
         }
 
         // Kept before the straits are added, because a landmass is what you can walk.
-        val touching = Array(unitCount) { sets[it].toIntArray() }
+        //
+        // Sorted, and this is not tidiness. A HashSet iterates in bucket order on the JVM and in
+        // insertion order on Kotlin/Wasm, so without the sort the same world produced 14 realms on
+        // one and 13 on the other: every `firstOrNull`, tie-broken `maxByOrNull` and flood-fill
+        // cutoff downstream reads these arrays, and each one silently followed its platform's
+        // hash order. CI's fingerprint comparison caught it and was red for two weeks before
+        // anyone looked.
+        val touching = Array(unitCount) { sets[it].toIntArray().also { a -> a.sort() } }
 
         // Now the straits. Only coastal cells look, and only straight out, which is enough to find
         // the far shore of a channel without turning every bay into a shortcut.
@@ -409,7 +416,7 @@ internal object BasinPartition {
                 }
             }
         }
-        return Array(unitCount) { sets[it].toIntArray() } to touching
+        return Array(unitCount) { sets[it].toIntArray().also { a -> a.sort() } } to touching
     }
 
     private val DIR_X = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)

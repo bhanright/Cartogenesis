@@ -331,6 +331,16 @@ data class NationsConfig(
      */
     val riverBorderShare: Float = 0.045f,
     /**
+     * The most of the world any one realm may hold, as a share of all land. A realm over this is
+     * split along its own watersheds until it is not.
+     *
+     * Appetite alone cannot bound a realm, because it is a brake relative to the neighbours
+     * bidding for the same ground, and a realm that is the only bidder for a region takes it
+     * whatever its appetite. Spacing the seeds further apart stops that but thins the contest for
+     * river valleys, which is where borders on rivers come from; a cap does not.
+     */
+    val maxRealmShare: Float = 0.30f,
+    /**
      * Chance that a realm holding several catchments splits in two along one of its own
      * watersheds.
      *

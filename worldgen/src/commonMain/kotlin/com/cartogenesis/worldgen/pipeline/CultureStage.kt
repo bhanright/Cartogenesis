@@ -131,7 +131,10 @@ object CultureStage {
             temperature[u] /= c
             rainfall[u] /= c
             elevation[u] /= c
-            biome[u] = biomeTally[u].maxByOrNull { it.value }?.key ?: Biome.GRASSLAND
+            // Ties by ordinal rather than by iteration order, which differs between platforms.
+            biome[u] = biomeTally[u].entries
+                .maxWithOrNull(compareBy<Map.Entry<Biome, Int>> { it.value }.thenByDescending { it.key.ordinal })
+                ?.key ?: Biome.GRASSLAND
             // Only the ice cap is genuinely empty. Tundra is bleak and has held people for as
             // long as there have been people, so the bar is deliberately low — this is not a
             // judgement about how pleasant the ground is.
@@ -298,12 +301,13 @@ object CultureStage {
 
         // A cell of the hearth catchment, for a label to sit on.
         val hearthCell = IntArray(hearths.size) { -1 }
+        val hearthOfUnit = IntArray(units.unitCount) { -1 }
+        hearths.forEachIndexed { id, unit -> hearthOfUnit[unit] = id }
         for (i in 0 until cells) {
             val u = units.unitOf[i]
             if (u == BasinUnits.NONE) continue
-            hearths.forEachIndexed { id, hearthUnit ->
-                if (u == hearthUnit && hearthCell[id] < 0) hearthCell[id] = i
-            }
+            val id = hearthOfUnit[u]
+            if (id >= 0 && hearthCell[id] < 0) hearthCell[id] = i
         }
 
         val described = ArrayList<Culture>()
@@ -320,8 +324,9 @@ object CultureStage {
                     name = "${NameForge.stem(nameSeed, 0L).replaceFirstChar { it.uppercase() }} peoples",
                     hearthCell = hearthCell[id],
                     cellCount = area,
-                    dominantBiome = biomeTally[id]?.maxByOrNull { it.value }?.key
-                        ?: profile.biome[hearthUnit],
+                    dominantBiome = biomeTally[id]?.entries
+                        ?.maxWithOrNull(compareBy<Map.Entry<Biome, Int>> { it.value }.thenByDescending { it.key.ordinal })
+                        ?.key ?: profile.biome[hearthUnit],
                     nameSeed = nameSeed
                 )
             )

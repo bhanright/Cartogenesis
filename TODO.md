@@ -58,6 +58,26 @@
   `GeographyAuditTest` rather than assumed. Capital siting was the one clear violation and is
   fixed; the remaining deviations are recorded below.
 
+- **JVM and Wasm had drifted apart, and CI said so for two weeks** (2026-09-10). Every
+  commit since the basin rework failed the cross-platform fingerprint check: terrain, land and
+  rivers identical, but 14 realms on the JVM against 13 on Wasm. Nobody looked at CI. The cause
+  was `HashSet<Int>.toIntArray()` for catchment neighbour lists - the JVM iterates a hash set in
+  bucket order and Kotlin/Wasm in insertion order, so every `firstOrNull`, tie-broken
+  `maxByOrNull` and flood-fill cutoff downstream quietly followed its platform. Neighbour arrays
+  are now sorted at construction and HashMap picks tie-break on key; both platforms agree on all
+  six fingerprint lines again. The README has carried a CI badge since 2026-08-23 - it was red for
+  the whole fortnight and nobody looked at it, so a badge is not the answer. GitHub can email on
+  workflow failure (Settings -> Notifications -> Actions); that is the setting to turn on.
+
+  Fixing the order changed which realm won the growth race, which surfaced two things the old
+  hash order had hidden. Seed 7 produced a realm holding 42% of the world, because the seeds of
+  its largest landmass all sat at one end and the far end had a single bidder - seeds are now
+  spaced two rings apart, as the culture stage already did. And a nineteen-cell sovereign state on
+  seed 42 turned out to be enclave dissolution keeping the capital's sliver and giving the country
+  away - a realm now keeps its largest piece and the capital moves to it.
+
+  The lesson is process, not code: a red pipeline is only useful if somebody reads it.
+
 - **A peoples layer** (2026-08-24) — a map of who lives where, separate from who rules where.
   Realms are grown from catchments because a state's reach is about ground it can hold; a culture
   spreads through country that *resembles the country it came from*, so it follows a grassland belt

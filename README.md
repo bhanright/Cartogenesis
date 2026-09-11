@@ -264,7 +264,16 @@ could see:
   island or a second continent. Crossing costs something — free crossings let one realm island-hop
   an archipelago and hold most of the world.
 - **Enclaves are dissolved**: a pocket you can walk out of goes to whichever neighbour surrounds it
-  most, while overseas islands, which you cannot walk out of, stay put.
+  most, while overseas islands, which you cannot walk out of, stay put. A realm keeps its largest
+  piece, and if its capital is not on that piece the capital moves - keeping the capital's piece
+  instead once produced a nineteen-cell sovereign state whose country had been given away.
+- **No realm may hold more than a set share of the world** (`maxRealmShare`, 30%). Appetite alone
+  cannot bound a realm, because it is a brake relative to the neighbours bidding for the same
+  ground, and a realm that is the only bidder for a region takes it regardless - one seed produced
+  a 42% empire that way. Spacing the seeds further apart stops it, but was measured to halve how
+  often borders follow rivers, because river valleys are the richest ground and spacing seeds out
+  of them leaves both banks to one realm. So instead a realm over the cap is split along its own
+  internal watersheds, largest first, until none is.
 
 Realm sizes are deliberately uneven. Each realm draws an appetite from a long-tailed distribution,
 so a world gets a couple of great powers, several middling states and a scattering of small ones;

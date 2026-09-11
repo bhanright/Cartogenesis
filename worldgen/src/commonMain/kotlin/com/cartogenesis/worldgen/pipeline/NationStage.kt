@@ -112,12 +112,14 @@ object NationStage {
         val origins = assignment.origins
         if (origins.isEmpty()) return NationResult(nationId, emptyList(), habitability)
 
-        dissolveEnclaves(config, sea, nationId, origins)
-
+        // Wilderness first, enclaves second. Releasing poor ground can cut a realm into pieces,
+        // and dissolving enclaves before that happened left the fragments it made behind.
+        val capitals = origins.toMutableList()
         if (cfgN.wilderness != WildernessMode.CLAIM_ALL_LAND) {
-            leaveWilderness(config, sea, habitability, nationId, origins)
+            leaveWilderness(config, sea, habitability, nationId, capitals)
         }
-        return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, origins), habitability)
+        dissolveEnclaves(config, sea, habitability, nationId, capitals)
+        return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, capitals), habitability)
     }
 
 
@@ -141,8 +143,10 @@ object NationStage {
     private fun dissolveEnclaves(
         config: WorldGenConfig,
         sea: SeaLevelResult,
+        habitability: FloatField,
         nationId: IntArray,
-        origins: List<Int>
+        // Mutable, because a capital can move: see the keep rule below.
+        origins: MutableList<Int>
     ) {
         val w = config.width
         val h = config.height
@@ -182,19 +186,40 @@ object NationStage {
                 members.add(group)
             }
 
-            // What each realm keeps: the piece holding its capital, or its largest if it has none.
-            val keep = HashMap<Int, Int>()
-            val keepArea = HashMap<Int, Int>()
+            // What each realm keeps: its largest piece. The capital's piece used to win outright,
+            // which produced a nineteen-cell sovereign state on seed 42 - a realm whose capital
+            // happened to sit on a sliver cut off by a trunk-river split, so the sliver was kept
+            // and the country given away. A nation is its territory; if the capital is not on the
+            // territory, the capital moves. It keeps its own piece only when that piece is within a
+            // quarter of the largest, so a capital is not uprooted over a marginal difference.
+            val largest = HashMap<Int, Int>()
+            val largestArea = HashMap<Int, Int>()
             members.forEachIndexed { id, group ->
                 val realm = nationId[group[0]]
-                if (group.any { it in capitalPiece }) {
-                    keep[realm] = id
-                    keepArea[realm] = Int.MAX_VALUE
-                } else if (group.size > (keepArea[realm] ?: -1)) {
-                    keepArea[realm] = group.size
-                    keep[realm] = id
+                if (group.size > (largestArea[realm] ?: -1)) {
+                    largestArea[realm] = group.size
+                    largest[realm] = id
                 }
             }
+            val keep = HashMap<Int, Int>()
+            members.forEachIndexed { id, group ->
+                val realm = nationId[group[0]]
+                if (group.none { it in capitalPiece }) return@forEachIndexed
+                val big = largest[realm] ?: id
+                if (id == big || group.size * 4 >= (largestArea[realm] ?: 0)) {
+                    keep[realm] = id
+                } else {
+                    keep[realm] = big
+                    // Best ground in the piece being kept. Scan order breaks ties, which is the
+                    // same on every platform.
+                    val moved = members[big].maxByOrNull { habitability.data[it] }
+                        ?: return@forEachIndexed
+                    capitalPiece.remove(origins[realm])
+                    origins[realm] = moved
+                    capitalPiece.add(moved)
+                }
+            }
+            largest.forEach { (realm, id) -> if (realm !in keep) keep[realm] = id }
 
             var changed = false
             members.forEachIndexed { id, group ->
@@ -220,7 +245,11 @@ object NationStage {
                     }
                 }
                 // No land neighbours at all means an island, not an enclave. Leave it be.
-                val host = pressure.entries.maxByOrNull { it.value }?.key ?: return@forEachIndexed
+                // Ties go to the lower realm id: a HashMap's iteration order differs between the
+                // JVM and Wasm, and "whichever came first" is not a tie-break, it is a coin toss.
+                val host = pressure.entries
+                    .maxWithOrNull(compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
+                    ?.key ?: return@forEachIndexed
                 group.forEach { nationId[it] = host }
                 changed = true
             }

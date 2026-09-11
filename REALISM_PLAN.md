@@ -390,7 +390,7 @@ guard reported, so the next chunk knows its baseline.
 | D4 Forward-compatible sections | Sonnet | not started | | | |
 | A0 GEOGRAPHY.md reconcile | Haiku | done | 2026-09-11 | 9ea2db2 | prose only; river-uphill figure 12-14% carried as last measured 2026-08-23 |
 | A1 Seasons | Opus | done | 2026-09-11 | 1aa12ee | 35deg swing: land 13.1C / sea 2.9C; Mediterranean west-coast cells 211/517/494 (seeds 7/42/1234), 0/0/0 with seasons=false; seasons=false reproduces all six fingerprint lines; desert-in-band 100/99/100/98% (belt rescaled to restore the annual mean, no threshold moved); desert AREA fell 5.1%->1.9% on seed 42 (for A4); border-on-river 2.08/2.12/2.16/1.04 (seed 99 down from 1.46); default fingerprint rivers=26 realms=14 |
-| A2 Continentality | Sonnet | not started | | | |
+| A2 Continentality | Sonnet | done | 2026-09-11 | eb694aa (merge 015a178) | first cut used the blurred exposure field and measured only 3.0C interior-vs-coast against the 6C spec; reworked to a chamfer distance-from-water, factor = clamp(d / 3*coastalReach): seed 42 at 50deg gap 0.2C at continentality=0, 7.5C at default 0.6; annual mean bit-identical; desert-in-band 97-100% |
 | A3 Meridional wind / monsoon | Opus | not started | | | |
 | A4 Absolute rainfall | Sonnet | not started | | | |
 | A5 Cold-cap report | Haiku | done | 2026-09-11 | e0c3081 (merge a1014ae) | 0% of 50-60deg west coasts forested on all 3 seeds despite 1.9-3.8x latitudinal-mean rain (precip 0.83-0.99): cap is NOT the cause; classify gates on annual mean (<7C -> taiga) and the curve puts 55deg near 0C. Opened A6 |

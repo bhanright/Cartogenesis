@@ -155,6 +155,21 @@ data class ClimateConfig(
      */
     val seasons: Boolean = true,
     /**
+     * How far the wind slants across the latitude lines, in rows per cell of eastward travel.
+     *
+     * The three-cell circulation is not purely zonal: the trades spiral in toward the thermal
+     * equator, the westerlies carry poleward, and the polar easterlies run back down. Giving the
+     * march that component is what turns a row-by-row scan into a diagonal one, and with the belts
+     * migrating over the year it is the whole of the monsoon — in summer the thermal equator
+     * crosses over a tropical coast, the trades there reverse, and air that spent the winter
+     * blowing out to sea spends the summer coming in off it.
+     *
+     * Zero is exactly the zonal march this generator used before, arithmetic for arithmetic. At
+     * 0.3 the air crosses a row every three or four cells, so it traverses ten degrees of latitude
+     * over a continent's width — about what it takes for a coast to feel a sea it does not face.
+     */
+    val meridionalWind: Float = 0.3f,
+    /**
      * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
      *
      * Water's heat capacity is what damps a coast's year down from what its latitude alone would

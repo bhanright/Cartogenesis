@@ -186,6 +186,10 @@ internal object WorldSections {
             floats = world.climate.winterPrecipitation.data
         ),
         Section("climate.windDirection", SectionType.I32, ints = world.climate.windDirection),
+        Section(
+            "climate.windMeridional", SectionType.F32,
+            floats = world.climate.windMeridional.data
+        ),
         Section("climate.biome", SectionType.U8, raw = ByteArray(world.climate.biome.size) {
             world.climate.biome[it].ordinal.toByte()
         }),
@@ -335,6 +339,7 @@ internal object WorldSections {
                 summerPrecipitation = field("climate.summerPrecipitation"),
                 winterPrecipitation = field("climate.winterPrecipitation"),
                 windDirection = ints("climate.windDirection"),
+                windMeridional = field("climate.windMeridional"),
                 biome = Array(cells) { i ->
                     val ordinal = biomeBytes[i].toInt() and 0xFF
                     if (ordinal !in biomes.indices) {

@@ -38,6 +38,8 @@ class DebugMapDump {
             write(render(world, Mode.BIOME), "seed$seed-biome.png")
             write(render(world, Mode.SUMMER_RAINFALL), "seed$seed-rainfall-summer.png")
             write(render(world, Mode.WINTER_RAINFALL), "seed$seed-rainfall-winter.png")
+            write(render(world, Mode.SEASON_CONTRAST), "seed$seed-rainfall-contrast.png")
+            write(render(world, Mode.WIND), "seed$seed-wind.png")
             // Continentality's payoff, per seed: an interior at a given latitude should read
             // hotter in summer and colder in winter than a coast at the same latitude.
             write(render(world, Mode.SUMMER_TEMPERATURE), "seed$seed-temperature-summer.png")
@@ -92,6 +94,33 @@ class DebugMapDump {
 
         assertTrue(outputDir.listFiles()!!.isNotEmpty())
         println("Maps written to ${outputDir.absolutePath}")
+    }
+
+    /**
+     * The two seasons' rainfall with the wind slanted and with it purely zonal, side by side.
+     *
+     * The whole of the monsoon is the difference between these two sets, and it is a difference no
+     * summary statistic states as plainly as the pictures do: with a zonal wind the seasonal
+     * pattern is a set of latitude stripes, because a zonal march cannot tell which side of a
+     * continent faces the equator; with the slant the stripes acquire a coastline.
+     */
+    @Test
+    fun `sweep the meridional wind`() {
+        outputDir.mkdirs()
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            listOf(0f, 0.3f).forEach { slant ->
+                val world = WorldGenerationEngine.generateBlocking(
+                    base.copy(climate = base.climate.copy(meridionalWind = slant))
+                )
+                val tag = "seed$seed-slant$slant"
+                write(render(world, Mode.SUMMER_RAINFALL), "$tag-rainfall-summer.png")
+                write(render(world, Mode.WINTER_RAINFALL), "$tag-rainfall-winter.png")
+                write(render(world, Mode.SEASON_CONTRAST), "$tag-rainfall-contrast.png")
+                write(render(world, Mode.BIOME), "$tag-biome.png")
+            }
+        }
+        println("Meridional sweep written to ${outputDir.absolutePath}")
     }
 
     /**
@@ -182,7 +211,51 @@ class DebugMapDump {
         // The local warm and cold season, not July and January. Side by side these are where the
         // subtropical dry belt's migration shows: it sits some ten degrees poleward in the summer
         // map and the same distance equatorward in the winter one.
-        SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE
+        SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE,
+        // Which half of the year the rain arrives in, and the wind vector that decides it.
+        SEASON_CONTRAST, WIND
+    }
+
+    /** The wind vector field, drawn over whichever ground [render] laid down. */
+    private fun drawWind(world: WorldMap, image: BufferedImage) {
+        val g = image.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        val w = world.width
+        val spacing = (w / 24).coerceAtLeast(6)
+        val reach = spacing * 0.45f
+        var y = spacing / 2
+        while (y < world.height) {
+            var x = spacing / 2
+            while (x < w) {
+                val i = y * w + x
+                val dx = world.climate.windDirection[i].toFloat()
+                val dy = world.climate.windMeridional.data[i]
+                val length = sqrt(dx * dx + dy * dy)
+                val ux = dx / length
+                val uy = dy / length
+                g.color = if (dx > 0) Color(0x7FC0F0) else Color(0xF0A860)
+                g.stroke = BasicStroke(1.4f)
+                val x0 = x - ux * reach
+                val y0 = y - uy * reach
+                val x1 = x + ux * reach
+                val y1 = y + uy * reach
+                g.drawLine(x0.toInt(), y0.toInt(), x1.toInt(), y1.toInt())
+                // A head, so the arrow says which way it points rather than merely how it lies.
+                g.drawLine(
+                    x1.toInt(), y1.toInt(),
+                    (x1 - (ux * 0.8f + uy * 0.5f) * reach * 0.5f).toInt(),
+                    (y1 - (uy * 0.8f - ux * 0.5f) * reach * 0.5f).toInt()
+                )
+                g.drawLine(
+                    x1.toInt(), y1.toInt(),
+                    (x1 - (ux * 0.8f - uy * 0.5f) * reach * 0.5f).toInt(),
+                    (y1 - (uy * 0.8f + ux * 0.5f) * reach * 0.5f).toInt()
+                )
+                x += spacing
+            }
+            y += spacing
+        }
+        g.dispose()
     }
 
     /** Mirrors RiverStage's threshold maths so the network can be inspected from outside. */
@@ -304,13 +377,33 @@ class DebugMapDump {
                             0x3B4CC0, 0xB40426
                         )
 
+                    // Black water rather than the dark slate the annual view uses: the wet end of
+                    // the rainfall ramp is itself a deep blue, and against slate a soaked coast
+                    // and the sea beside it were the same colour, which is precisely the thing
+                    // these two maps exist to let you tell apart.
                     Mode.SUMMER_RAINFALL ->
                         if (land) grad(world.climate.summerPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
-                        else 0x20303C
+                        else 0x000000
 
                     Mode.WINTER_RAINFALL ->
                         if (land) grad(world.climate.winterPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
-                        else 0x20303C
+                        else 0x000000
+
+                    // Which half of the year the rain arrives in, rather than how much of it
+                    // there is: red where the warm half dominates, blue where the cold half does.
+                    // A monsoon coast is a red band with the sea on its equatorward side.
+                    Mode.SEASON_CONTRAST -> if (!land) 0x000000 else {
+                        val summer = world.climate.summerPrecipitation.data[i]
+                        val winter = world.climate.winterPrecipitation.data[i]
+                        val lopsided = kotlin.math.ln(
+                            ((summer + 0.02f) / (winter + 0.02f)).toDouble()
+                        ).toFloat() / kotlin.math.ln(3.0).toFloat()
+                        if (lopsided >= 0f) mix(0xF2F0E6, 0xB32020, lopsided)
+                        else mix(0xF2F0E6, 0x1F4E79, -lopsided)
+                    }
+
+                    // The wind vector, as a coarse arrow field over a faint land/sea ground.
+                    Mode.WIND -> if (land) 0x3A3A34 else 0x14202C
 
                     Mode.SUMMER_TEMPERATURE ->
                         grad(
@@ -364,6 +457,7 @@ class DebugMapDump {
         }
 
         if (mode == Mode.FANTASY || mode == Mode.ELEVATION) drawRivers(world, image)
+        if (mode == Mode.WIND) drawWind(world, image)
         return image
     }
 

@@ -74,25 +74,55 @@ class PipelineTest {
             val reachedSea = !world.sea.isLand[mouth]
             val joinedAnother = claimedByOtherRiver.contains(mouth)
             val leftTheMap = mouth / world.width == 0 || mouth / world.width == world.height - 1
+            // E2: a river may also end in standing water that has no outlet. A basin held below
+            // its rim by evaporation is where a real desert river stops — the Amu Darya in the
+            // Aral, the Chari in Chad — and stopping there is reaching water, not dead-ending.
+            val reachedClosedWater = world.rivers.lakes.isLake(mouth) ||
+                world.rivers.lakes.isPlaya(mouth)
             assertTrue(
-                reachedSea || joinedAnother || leftTheMap,
-                "river ending at cell $mouth neither reached the sea, joined another river, " +
-                    "nor ran off the polar edge"
+                reachedSea || joinedAnother || leftTheMap || reachedClosedWater,
+                "river ending at cell $mouth neither reached the sea or a closed lake, " +
+                    "joined another river, nor ran off the polar edge"
             )
         }
     }
 
+    /**
+     * Every land cell drains downhill on the filled surface — except inside a closed basin, where
+     * the fill is not the surface the water is on.
+     *
+     * E2 drains a basin whose catchment cannot keep it full to the brim, and re-routes the ground
+     * it exposes toward the lake that is left rather than over the rim the fill invented. Those
+     * cells no longer descend on the *filled* elevation, because the filled elevation there is a
+     * level that never existed. They are identified the same way the lake step identifies them —
+     * the filled surface standing at least a minimum depth above the real ground — and held to the
+     * weaker rule that their water must reach standing water rather than stop on dry land.
+     */
     @Test
     fun `every land cell drains downhill`() = runTest(timeout = 10.minutes) {
-        val world = WorldGenerationEngine.generate(config())
+        val config = config()
+        val world = WorldGenerationEngine.generate(config)
         val filled = world.rivers.filledElevation
+        val ground = world.sea.relativeElevation
         val target = world.rivers.flowTarget
+        val lakes = world.rivers.lakes
         var stranded = 0
+        var insideBasins = 0
         for (i in target.indices) {
             if (!world.sea.isLand[i]) continue
             val row = i / world.width
             // Polar rows drain off the map, so -1 is legitimate there.
             if (row == 0 || row == world.height - 1) continue
+
+            if (filled.data[i] - ground.data[i] >= config.lakes.minDepth) {
+                insideBasins++
+                // A cell under, or on the drained floor of, a basin the flood had to raise.
+                if (lakes.isLake(i) || lakes.isPlaya(i)) continue
+                val t = target[i]
+                if (t < 0 || (world.sea.isLand[t] && !reachesWater(world, t))) stranded++
+                continue
+            }
+
             val t = target[i]
             if (t < 0) {
                 stranded++
@@ -100,7 +130,29 @@ class PipelineTest {
                 stranded++
             }
         }
+        println("PIPELINE $insideBasins cells inside filled basins, $stranded stranded")
         assertEquals(0, stranded, "interior land cells with no downhill neighbour")
+    }
+
+    /** Whether following the flow from [start] arrives at the sea, a lake, a playa or the edge. */
+    private fun reachesWater(
+        world: com.cartogenesis.worldgen.model.WorldMap,
+        start: Int
+    ): Boolean {
+        var cell = start
+        var steps = 0
+        val limit = world.width * world.height
+        while (steps++ < limit) {
+            if (!world.sea.isLand[cell]) return true
+            if (world.rivers.lakes.isLake(cell) || world.rivers.lakes.isPlaya(cell)) return true
+            val next = world.rivers.flowTarget[cell]
+            if (next < 0) {
+                val row = cell / world.width
+                return row == 0 || row == world.height - 1
+            }
+            cell = next
+        }
+        return false
     }
 
     @Test

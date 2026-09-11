@@ -600,7 +600,7 @@ data class GlaciationConfig(
      * it every frozen cell is its own little glacier and the whole ice cap is stippled with troughs
      * instead of drained by a few of them.
      */
-    val minCatchment: Float = 0.00005f,
+    val minCatchment: Float = 0.00012f,
     /** Frozen catchment at which a glacier is at full width and cuts its full depth. */
     val fullCatchment: Float = 0.02f,
     /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
@@ -638,7 +638,7 @@ data class GlaciationConfig(
      * short-stepped staircase of small rock basins, a gentle one a long flat reach with a single
      * broad lake in it.
      */
-    val basinDrop: Float = 0.015f,
+    val basinDrop: Float = 0.030f,
     /**
      * The most cells one reach may run before the next basin starts, whatever the descent.
      *
@@ -646,7 +646,7 @@ data class GlaciationConfig(
      * inside the ice would be one reach a thousand cells long. The two terms simply add, so a
      * reach ends when it has fallen [basinDrop] *or* run this far, whichever happens first.
      */
-    val basinSpacing: Float = 8f,
+    val basinSpacing: Float = 16f,
     /** Share of a reach the basin occupies; the rest is the step at its lower end. */
     val basinShare: Float = 0.75f,
     /** Radius of the bowl bitten out of a glacier's head, in cells. */

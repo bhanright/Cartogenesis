@@ -480,6 +480,20 @@ contract: lake share of land 512->1024 grew 2.8x, now 1.3x. Lake-density ratio 1
 53%): a knob chosen against a downstream guard, recorded here as such. 2048 could not be generated
 in a test worker (OOM); the author's own 2048 view is the check for that size.
 
+Second pass (bac5366, merge bc76b29), after the orchestrator's own 1024 render showed the
+mountain flanks still combed with parallel 45-degree bars: the trunk test asked for a share of the
+world's frozen ground, so every gully in a rank down a straight range front qualified at once.
+Now a trough needs 5% of its own connected ice field (separate glaciers on 718106 at 1024: 17 ->
+5), a sinuosity of at least 1.25 head to snout (a path that walked the straight-line distance was
+one D8 step repeated), no parallel trough within a trough-width at the same bearing (dropped by
+branch; chain-level did nothing and cell-level fragmented troughs and made it worse), and
+`basinDrop` doubled so a steep flank is not a ruled paternoster. Guard at 1024, filaments and
+parallel-bar share, main -> fixed: 718106 1 -> 0 and 4.1% -> 1.7%; 42 6 -> 0 and 7.1% -> 2.3%;
+7 1 -> 0 and 3.0% -> 1.6%. Lake density 7.18x, resolution growth 1.41x (contract 1.7). Known:
+seed 42 at 512 now has no valley glacier at all, because its cold ground fails the relief test at
+that grid and passes at 1024 - terrain is rougher at finer grids, which is a pre-existing property
+of the terrain stage, not of this fix.
+
 Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
 a seed chosen to have the terrain the chunk acts on.
 

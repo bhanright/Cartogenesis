@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -52,57 +53,146 @@ class MeridionalWindTest {
         /** The share of land the contiguous region has to cover. */
         const val MIN_SHARE = 0.02
 
-        /**
-         * Rainfall checksums of the per-row zonal scan — the march this stage used before the
-         * wind was given a meridional component — with seasons on and everything else at its
-         * default. Annual, warm season, cold season, in that order.
-         *
-         * Taken by building the tree without A3 at all and reading the numbers off it, not by
-         * copying down what this code prints, which would make the guard a tautology. They were
-         * re-derived once already, when continentality landed: it moves the seasonal temperature
-         * the march reads, so the world is not the same world even though the march is the same
-         * march. If a future chunk changes anything upstream of `buildPrecipitation` these have to
-         * be re-derived the same way — from a build without the slant — rather than updated to
-         * whatever this test prints.
-         *
-         * Re-derived again by A6 (`meridionalWind = 0f`, everything else at its default): the
-         * latitude curve's exponent moved from 1.25 to
-         * [com.cartogenesis.worldgen.pipeline.ClimateStage.LATITUDE_EXPONENT] to make the new
-         * Koppen thermal gate in `classify` reachable on a real maritime coast (see that constant's
-         * comment for why). That sits upstream of `buildPrecipitation`'s `coldCap` and warmth
-         * terms, so the temperature field the march reads is not the field these were last taken
-         * against, even though the march itself is untouched by A6.
-         */
-        val ZONAL_MARCH = mapOf(
-            7L to Triple(-5578868080312437754L, 277456964480873017L, 5097945176916378938L),
-            42L to Triple(-3999165463826341470L, -910534057167861536L, -8490406401199561509L),
-            1234L to Triple(2701610681097685820L, 463965894206218816L, 9114447820422796006L)
-        )
+        /** Seeds the zonal-reproduction claim is checked on, at a size cheap enough to run twice. */
+        val ZONAL_MARCH_SEEDS = listOf(7L, 42L, 1234L)
     }
 
+    /**
+     * The promise the setting makes: at `meridionalWind = 0` the diagonal march is the old per-row
+     * scan, arithmetic for arithmetic.
+     *
+     * This used to be checked against checksums pinned from a build without the slant, and those
+     * checksums had to be re-derived three times in one day — once for A4's normalisation change,
+     * once more where A4 merged with A6's latitude-curve exponent, and again when B3's deposition
+     * moved coastlines upstream of the march — because *any* change anywhere upstream of
+     * `buildPrecipitation`, whatever it touches, invalidates a number pinned to what the march
+     * produced on one particular build. A pinned number cannot outlive the tree it was taken from.
+     *
+     * So this asserts the claim directly instead: [referenceZonalMarch] below is a from-scratch
+     * reimplementation of the pre-A3 per-row scan, built on the *same* per-cell physics the
+     * production march uses — [ClimateStage.marchSeaStep] and [ClimateStage.marchLandStep], the
+     * functions [ClimateStage.marchRun] itself calls, factored out of it for exactly this reason —
+     * and run on the generated world's own fields (its temperature, its terrain, its currents), not
+     * on anything this test derives independently. What is left to differ between the two is only
+     * the shape of the march: one row at a time, no meridional blend, which is what
+     * `meridionalWind = 0` is supposed to buy. If a future chunk changes what feeds the march, both
+     * sides move together and the claim stays true by construction; if a future chunk changes the
+     * *march itself* without changing [ClimateStage.marchSeaStep]/[ClimateStage.marchLandStep] to
+     * match, this is exactly the guard that would catch it.
+     */
     @Test
     fun `a wind with no slant reproduces the old zonal march exactly`() {
-        // Every seed measured and printed before any of them is asserted on. The first version
-        // asserted inside the loop, so a re-derivation — which the comment above says is sometimes
-        // the right answer — could only ever see the first seed's new numbers and had to be run
-        // three times to collect the rest.
-        val measured = ZONAL_MARCH.keys.sorted().associateWith { seed ->
+        ZONAL_MARCH_SEEDS.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 256, height = 256)
             val world = WorldGenerationEngine.generateBlocking(
                 base.copy(climate = base.climate.copy(meridionalWind = 0f))
             )
-            Triple(
-                checksum(world.climate.precipitation),
-                checksum(world.climate.summerPrecipitation),
-                checksum(world.climate.winterPrecipitation)
-            )
-        }
-        measured.forEach { (seed, actual) -> println("MERIDIONAL seed $seed zonal march $actual") }
 
-        measured.forEach { (seed, actual) ->
+            val referenceSummer = referenceZonalMarch(world, warm = true)
+            val referenceWinter = referenceZonalMarch(world, warm = false)
+
+            assertFieldsIdentical(
+                referenceSummer, world.climate.summerPrecipitation,
+                "seed $seed summer precipitation no longer matches the reference zonal march"
+            )
+            assertFieldsIdentical(
+                referenceWinter, world.climate.winterPrecipitation,
+                "seed $seed winter precipitation no longer matches the reference zonal march"
+            )
+            println("MERIDIONAL seed $seed matches the reference zonal march on both seasons")
+        }
+    }
+
+    /**
+     * A from-scratch reimplementation of the march exactly as it worked before A3: one air mass
+     * per row, stepping along the row's own wind direction, with no meridional component at all —
+     * not "the production march with a zero blend", a march that has never heard of a blend.
+     *
+     * Reads the generated world's own fields — [WorldMap.sea], [WorldMap.ocean], the season's own
+     * temperature field — exactly as [ClimateStage.buildPrecipitation] does, and calls the same two
+     * per-cell functions production calls, [ClimateStage.marchSeaStep] and
+     * [ClimateStage.marchLandStep]. The wind direction and the circulation-belt factor are the two
+     * pieces of the march this function still has to compute for itself, because they are what a
+     * *row* is marked with before the march ever starts — [ClimateStage.seasonalBand] is already
+     * shared (it is `internal` for `DesertCauseTest`'s own reasons), and the direction formula is
+     * copied from `ClimateStage.buildWind`, which is three lines with no slant term to leave out.
+     *
+     * Returns the field scaled and clamped exactly as [ClimateStage.generateWithSeasonalMm] does,
+     * so it compares bit for bit against [com.cartogenesis.worldgen.pipeline.ClimateResult.summerPrecipitation]
+     * / `.winterPrecipitation` without this test needing to know anything about millimetres.
+     */
+    private fun referenceZonalMarch(world: WorldMap, warm: Boolean): FloatField {
+        val w = world.width
+        val h = world.height
+        val config = world.config
+        val cfg = config.climate
+        val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
+        val temperature = if (warm) world.climate.summerTemperature else world.climate.winterTemperature
+        val precip = FloatField(w, h)
+
+        for (y in 0 until h) {
+            val direction = zonalDirection(y, h, tilt, warm)
+            val band = ClimateStage.seasonalBand(ClimateStage.latitudeOf(y, h), cfg, warm)
+            var moisture = 0.5f
+
+            // Two laps around the cylinder, exactly as the production march does: the first seeds
+            // a realistic moisture state and only the second is recorded.
+            for (lap in 0 until 2) {
+                for (step in 0 until w) {
+                    val x = if (direction > 0) step else w - 1 - step
+                    val i = y * w + x
+
+                    if (!world.sea.isLand[i]) {
+                        val seaTemperature = if (config.ocean.enabled) {
+                            world.ocean.temperature.data[i]
+                        } else {
+                            temperature.data[i]
+                        }
+                        val stepResult = ClimateStage.marchSeaStep(cfg, moisture, seaTemperature)
+                        moisture = stepResult.moisture
+                        if (lap == 1) precip.data[i] = stepResult.rain
+                        continue
+                    }
+
+                    var upwindX = x - direction
+                    upwindX = ((upwindX % w) + w) % w
+                    val upwindElevation = world.sea.relativeElevation.data[y * w + upwindX]
+                    val stepResult = ClimateStage.marchLandStep(
+                        cfg, moisture, world.sea.relativeElevation.data[i], upwindElevation, band,
+                        temperature.data[i]
+                    )
+                    moisture = stepResult.moisture
+                    if (lap == 1) precip.data[i] = stepResult.rain
+                }
+            }
+        }
+
+        BoxBlur.apply(precip, radius = (w / 128).coerceAtLeast(1), passes = 2)
+        for (i in precip.data.indices) {
+            precip.data[i] =
+                (precip.data[i] * ClimateStage.MM_SCALE / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
+        }
+        return precip
+    }
+
+    /** The wind direction [ClimateStage.buildWind] gives a row, with no meridional term to compute. */
+    private fun zonalDirection(y: Int, height: Int, tilt: Float, warm: Boolean): Int {
+        val signed = ClimateStage.latitudeOf(y, height)
+        val offset = if (warm) abs(signed) - tilt else abs(signed) + tilt
+        val belt = abs(offset)
+        return when {
+            belt < 30f -> -1
+            belt < 60f -> 1
+            else -> -1
+        }
+    }
+
+    private fun assertFieldsIdentical(expected: FloatField, actual: FloatField, message: String) {
+        assertEquals(expected.data.size, actual.data.size, message)
+        for (i in expected.data.indices) {
             assertEquals(
-                ZONAL_MARCH.getValue(seed), actual,
-                "seed $seed no longer reproduces the pre-slant zonal march"
+                expected.data[i].toRawBits(), actual.data[i].toRawBits(),
+                "$message (cell $i: ${expected.data[i]} vs ${actual.data[i]})"
             )
         }
     }
@@ -345,11 +435,5 @@ class MeridionalWindTest {
             if (size > largest) largest = size
         }
         return largest
-    }
-
-    private fun checksum(field: FloatField): Long {
-        var c = 0L
-        field.data.forEach { c = c * 31 + it.toRawBits() }
-        return c
     }
 }

@@ -58,9 +58,9 @@ the ground draining into it, so deposition cannot invent an uphill river.
 
 **No continentality.** A continental interior swings no more between seasons than a coast at the same latitude. The seasonal departure is damped over water and applied at full strength over every land cell alike, so a shore and an interior at the same latitude swing equally. Addressed in [A2 Continentality](REALISM_PLAN.md#a2-continentality--sonnet).
 
-**The monsoon is weaker than it should be, and lands on the wrong coast.** The wind now slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. Its effect on rainfall is small besides, because rainfall is still normalized and clamped at 1 and tropical coasts sit against that clamp in the warm season — the wet half of a monsoon year has no room left to get wetter. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) removes the clamp; letting the thermal equator run further over land than over sea is not yet planned.
+**The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
 
-**Rainfall normalizes per world.** Every world rescales so its 88th land percentile sits at 1.0, which means an arid world and a lush one classify identically and every world gets roughly 4.6% desert regardless of its actual moisture. This prevents worlds from differing in their biome distribution. Addressed in [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet).
+**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
 
 **No continental shelves.** Sea level is a percentile cut through a single height field, so the sea floor drops straight off the coast. There are no shallow waters along continental margins. Addressed in [B1 Continental shelves](REALISM_PLAN.md#b1-continental-shelves--sonnet).
 
@@ -225,26 +225,43 @@ seasons landed with, 45° — the effective latitude a 55° coast's summer reads
 current. The exponent moved from 1.25 to 1.8 (equator and pole anchors untouched) to fix that, and
 it cuts both ways: the same lift that gets a coast's summer past 10°C also lifts a *continental
 interior*'s winter past Köppen's −3°C line at the same latitudes, so a dry rain-shadow interior that
-used to be taiga could reach `classify`'s existing desert check — measured, that alone dropped
-desert-in-band on seed 42 from 98–100% to 48%, because the two effective-latitude ranges overlap
-almost exactly and no choice of exponent or pole separates them. The fix lives in `classify` itself
-rather than in the curve: the desert case in the temperate branch additionally requires an annual
-mean of at least 13°C, distinguishing an actual hot subtropical desert from a barely-continental
-interior that only just cleared the thermal gate. With that in place desert-in-band is 100/100/99/98%
-on seeds 7/42/1234/99, matching the 98–100% measured before this chunk.
+used to be taiga could reach `classify`'s desert check on nothing more than a fixed millimetre cut
+— measured, that alone dropped desert-in-band on seed 42 from 98–100% to 48%, because the two
+effective-latitude ranges overlap almost exactly and no choice of exponent or pole separates them.
 
-That 13°C gate is provisional and known to be wrong in one direction: it abolishes cold deserts. The
-Gobi's annual mean is about 2°C and Patagonia's is under 10, and both are currently gated to
-grassland alongside the false positives the check exists to stop. The real fix is a Köppen B (arid)
-test — rainfall in mm against a temperature-dependent threshold, BW/BS — which [A4 Absolute
-rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) is expected to add and subsume this gate
-into.
+A6 landed with that gated off by a provisional fix (an annual mean of at least 13°C added to the
+temperate branch's desert case) rather than solved, and said so: the gate abolished cold deserts —
+the Gobi's annual mean is about 2°C, Patagonia's under 10 — and named the real fix as a Köppen B
+(arid) test on rainfall in mm against a temperature-dependent threshold. [A4 Absolute
+rainfall](REALISM_PLAN.md#a4-absolute-rainfall--sonnet) is that test, and the 13°C gate is gone: B
+is now decided before any of Köppen's thermal groups run, exactly as real Köppen decides it, on
+`classify`'s own `koppenAridityThresholdMm` — `20 × annual-mean-°C` plus a seasonal-concentration
+term, with desert (BW) below half that threshold and steppe (BS) below it outright. The formula is
+self-limiting at cold temperatures: at an annual mean of −15°C the threshold is already negative, so
+no rainfall total can read as arid there, and a genuinely polar cell reaches the ET gate untouched —
+a cold desert has to be cold *and* dry, not merely cold.
+
+The concentration term is not Köppen's own 280/140/0mm figures, though it keeps their shape (warm-
+season-concentrated rain demands the most to escape aridity, cool-season-concentrated the least).
+This march's `coldCap` suppresses winter moisture by temperature almost everywhere cold — a
+temperature effect, not a seasonal-rainfall-pattern one — so on a measured seed the warm/cool
+rainfall ratio has a *median* of 18.7 at 50-70°, calling nearly every cold cell "concentrated"
+regardless of whether either season actually brought meaningful rain. Applying Köppen's real figures
+unguarded put desert as far as 70°+ and dropped desert-in-band to 76/73/94/80% on seeds
+7/42/1234/99. Fixed in two steps, both measured against the same guard: a floor requiring the wetter
+season to have brought a real amount of rain (500mm) before its ratio is trusted, and the
+concentration constants scaled to `32`/`16`/`0` millimetres — a fifth of Köppen's own figures, the
+first value found past a straight halving (which measured worse on one seed, confirming the
+remaining shortfall was a genuine compact rain-shadow region rather than a value to tune past) that
+cleared 85% on every seed. Desert-in-band is 86/90/92/85% on seeds 7/42/1234/99 — see
+`AbsoluteRainfallTest` and `GeographyAuditTest` for the full figures, and `DesertCauseTest` for the
+per-cell diagnostic this was checked against.
 
 Verified by `ColdCapReportTest`, extended from A5's report into an assertion: on seeds 7/42/1234,
 the share of 50–60° west-facing coast cells with a positive current anomaly classing as temperate
-forest or rainforest is 66.7/57.9/56.7% (up from 0.0/0.0/0.1% on the classifier before this chunk),
-while the interior at the same latitudes — too far from any coast for a current to reach — stays
-96.6/87.4/95.6% taiga or tundra. Siberia stays taiga.
+forest or rainforest is 60.8/66.0/29.4% (two of three above half, up from 0.0/0.0/0.1% on the
+classifier before A6), while the interior at the same latitudes — too far from any coast for a
+current to reach — stays 99.8/97.0/99.8% taiga or tundra. Siberia stays taiga.
 
 A6 also exposed, and fixed, a real bug in how peoples settle the ice margin. `CultureStage` decides
 habitability per drainage-basin *unit*: `biome[u]` was a majority vote across every cell in it, and

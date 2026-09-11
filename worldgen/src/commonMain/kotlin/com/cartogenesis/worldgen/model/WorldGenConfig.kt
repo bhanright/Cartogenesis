@@ -423,6 +423,113 @@ data class ErosionConfig(
     val deltaFreeboard: Float = 0.008f
 )
 
+/**
+ * Ice, and what it leaves behind.
+ *
+ * Running water cuts a V and carries its spoil away; ice fills a valley wall to wall, cuts a U,
+ * scours hollows into the floor that no river would ever leave, and dumps everything it carried in
+ * a heap at its snout. Those are different landforms, and a world that has only the first one reads
+ * as a world with no cold in its past — which, until this section existed, was exactly what this
+ * one was.
+ *
+ * Every length here is in cells and so is rescaled by [WorldGenConfig.atResolution], for the same
+ * reason [SeaConfig.shelfWidth] is: a trough four cells wide on a 512 grid is a trough sixteen
+ * cells wide on a 2048 one, and anything else changes the world rather than its detail.
+ */
+@Serializable
+data class GlaciationConfig(
+    /**
+     * Off reproduces the pre-B4 world bit for bit — the stage returns the sea-level result it was
+     * handed, the same object, so nothing downstream can even tell it ran. That is what makes the
+     * lake-density guard's "before" honest.
+     */
+    val enabled: Boolean = true,
+    /**
+     * Mean annual temperature, in C, at or below which ice is permanent and flows.
+     *
+     * Judged on a provisional temperature computed from latitude and altitude alone — the same
+     * curve [ClimateStage] uses, because it is literally the same function — since the climate
+     * stage itself cannot run until the terrain this stage carves is final. Zero is the honest
+     * line: it is where [ClimateStage.classify]'s own ice and tundra gates sit, so the mask is
+     * bounded by the classification the plan asked for rather than merely near it.
+     */
+    val freezingC: Float = 0f,
+    /**
+     * Smallest frozen catchment that carries a glacier, as a share of all land.
+     *
+     * The equivalent of [ErosionConfig.deltaMinCatchment], and there for the same reason: without
+     * it every frozen cell is its own little glacier and the whole ice cap is stippled with troughs
+     * instead of drained by a few of them.
+     */
+    val minCatchment: Float = 0.0001f,
+    /** Frozen catchment at which a glacier is at full width and cuts its full depth. */
+    val fullCatchment: Float = 0.02f,
+    /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
+    val valleyWidth: Float = 5.5f,
+    /**
+     * How much of that half-width is flat floor before the walls start to climb.
+     *
+     * The U, as against the V. A river's own cross-section comes to a point, because water cuts at
+     * a point; ice is in contact with the whole bed at once and planes it flat, and the flat floor
+     * with steep walls above it is the section every photograph of a glaciated valley shows. It is
+     * also what makes an over-deepened basin hold water: a floor that comes to a point one cell
+     * wide leaves a lake one cell wide, which [LakesConfig.minCells] rightly refuses to call a
+     * lake at all.
+     */
+    val floorShare: Float = 0.5f,
+    /** How far a full glacier lowers its bed, as a fraction of the land's elevation range. */
+    val deepening: Float = 0.010f,
+    /**
+     * The extra cut in the over-deepened reaches between the steps, in the same units.
+     *
+     * This is the number that makes lakes. A basin holds water only if its floor lies below the
+     * step downstream of it, and the difference between the two is exactly this — so it has to
+     * clear [LakesConfig.minDepth] with room to spare, at a glacier well short of full strength.
+     */
+    val overDeepening: Float = 0.026f,
+    /** Distance from one over-deepened basin to the next along a trough, in cells. */
+    val basinSpacing: Float = 11f,
+    /** Share of that spacing the basin occupies; the rest is the step at its lower end. */
+    val basinShare: Float = 0.72f,
+    /**
+     * How much deeper than [deepening] + [overDeepening] the bed may be cut where flattening the
+     * long profile asks for it, as a multiple.
+     *
+     * Flattening a reach means cutting its upper end down to the level of its lower end, and on a
+     * steep reach that is an arbitrarily large amount of rock. Ice does over-deepen against the
+     * grain of the old profile, but not without limit, and an uncapped version simply gouged the
+     * mountains away.
+     */
+    val flatteningCap: Float = 4f,
+    /** Radius of the bowl bitten out of a glacier's head, in cells. */
+    val cirqueRadius: Float = 4f,
+    /** How deep that bowl is cut below the headwall, as a fraction of the elevation range. */
+    val cirqueDepth: Float = 0.026f,
+    /**
+     * How far a glacier runs on past the freezing line before it melts, in cells.
+     *
+     * A glacier's snout sits below its own snowline — that is what an ablation zone is — so the
+     * trough, and the moraine at its end, belong a little way into ground that is not frozen. This
+     * is the only licence the mask gets; nothing is carved further down than this.
+     */
+    val runOut: Int = 8,
+    /** Height of the ridge of spoil left at a land terminus, as a fraction of the range. */
+    val moraineHeight: Float = 0.016f,
+    /**
+     * Whether a glacier that ends in the sea leaves a trough on the sea floor.
+     *
+     * The drowned half of a fjord. The coastline itself is settled before this stage runs and is
+     * not moved — see [SeaLevelStage]'s note on why the shelf never touches land — so what is left
+     * to model is the bathymetry: a deep basin at the mouth shallowing out to the shelf, which is a
+     * fjord's sill.
+     */
+    val fjords: Boolean = true,
+    /** How deep a fjord basin is cut at the mouth, in [SeaLevelResult.relativeElevation] units. */
+    val fjordDepth: Float = 0.20f,
+    /** How far out to sea that basin reaches, in cells. */
+    val fjordReach: Int = 6
+)
+
 /** Standing fresh water in basins the terrain does not drain. */
 @Serializable
 data class LakesConfig(
@@ -604,6 +711,7 @@ data class WorldGenConfig(
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
     val sea: SeaConfig = SeaConfig(),
+    val glaciation: GlaciationConfig = GlaciationConfig(),
     val climate: ClimateConfig = ClimateConfig(),
     val rivers: RiverConfig = RiverConfig(),
     val lakes: LakesConfig = LakesConfig(),
@@ -636,6 +744,10 @@ data class WorldGenConfig(
      *    would come out barely eroded at all.
      *  - [ErosionConfig.deltaReach] is the radius of a delta, in cells, so a finer grid would
      *    otherwise shrink every delta to a speck.
+     *  - Every length in [GlaciationConfig] — the width of a trough, the spacing of the basins
+     *    along it, the reach of a cirque, how far the snout runs past the freezing line — is in
+     *    cells for the same reason, and a trough that stayed four cells wide on a 2048 grid would
+     *    be a gully rather than a glacial valley.
      *  - [NationsConfig.slopeResistance] is charged against the climb between adjacent cells. That
      *    climb halves as cells halve, so the total cost of crossing a range stays flat while the
      *    expansion budget grows with the map â€” mountains would stop holding borders.
@@ -652,6 +764,13 @@ data class WorldGenConfig(
             erosion = erosion.copy(
                 passes = (erosion.passes * scale).toInt(),
                 deltaReach = (erosion.deltaReach * scale).toInt().coerceAtLeast(1)
+            ),
+            glaciation = glaciation.copy(
+                valleyWidth = glaciation.valleyWidth * scale,
+                basinSpacing = glaciation.basinSpacing * scale,
+                cirqueRadius = glaciation.cirqueRadius * scale,
+                runOut = (glaciation.runOut * scale).toInt().coerceAtLeast(1),
+                fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1)
             ),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)

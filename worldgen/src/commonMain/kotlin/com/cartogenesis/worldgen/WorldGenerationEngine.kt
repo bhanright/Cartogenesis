@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.CultureStage
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
+import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
@@ -111,10 +112,24 @@ object WorldGenerationEngine {
                     it.config.seaLevel == config.seaLevel &&
                     // The continental shelf is a post-percentile remap of the ocean floor, not a
                     // tectonics setting, so a shelf-only change must not reuse a stale sea stage.
-                    it.config.sea == config.sea
+                    it.config.sea == config.sea &&
+                    // Glaciation carves the same field, immediately afterwards and as part of this
+                    // stage's result, so its settings are this stage's settings for the purpose of
+                    // reuse - and so is `climate`, because the freezing line is read off the
+                    // climate section's own temperature curve two stages before that stage runs.
+                    it.config.glaciation == config.glaciation &&
+                    (!config.glaciation.enabled || it.config.climate == config.climate)
             }
             ?.sea
-            ?: SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
+            // Ice carves between the percentile cut and everything that reads the terrain, which is
+            // why it lives inside this step rather than beside it: what it produces is a sea-level
+            // result, the same shape and the same coastline, with the troughs in it. Giving it a
+            // `GenerationStage` of its own would have meant a save section of its own, and it has
+            // no field of its own to save - it rewrites `sea.relativeElevation`, which is already
+            // stored and already the thing every later stage reads.
+            ?: GlaciationStage.apply(
+                config, SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
+            )
 
         report(GenerationStage.OCEAN)
         val ocean = reusable

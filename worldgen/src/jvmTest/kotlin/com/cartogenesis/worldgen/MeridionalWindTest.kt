@@ -82,17 +82,24 @@ class MeridionalWindTest {
 
     @Test
     fun `a wind with no slant reproduces the old zonal march exactly`() {
-        ZONAL_MARCH.keys.sorted().forEach { seed ->
+        // Every seed measured and printed before any of them is asserted on. The first version
+        // asserted inside the loop, so a re-derivation — which the comment above says is sometimes
+        // the right answer — could only ever see the first seed's new numbers and had to be run
+        // three times to collect the rest.
+        val measured = ZONAL_MARCH.keys.sorted().associateWith { seed ->
             val base = WorldGenConfig(seed = seed, width = 256, height = 256)
             val world = WorldGenerationEngine.generateBlocking(
                 base.copy(climate = base.climate.copy(meridionalWind = 0f))
             )
-            val actual = Triple(
+            Triple(
                 checksum(world.climate.precipitation),
                 checksum(world.climate.summerPrecipitation),
                 checksum(world.climate.winterPrecipitation)
             )
-            println("MERIDIONAL seed $seed zonal march $actual")
+        }
+        measured.forEach { (seed, actual) -> println("MERIDIONAL seed $seed zonal march $actual") }
+
+        measured.forEach { (seed, actual) ->
             assertEquals(
                 ZONAL_MARCH.getValue(seed), actual,
                 "seed $seed no longer reproduces the pre-slant zonal march"

@@ -86,7 +86,16 @@ class ContinentalShelfTest {
     @Test
     fun `the shelf never touches land`() {
         seeds.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            // Glaciation off on both sides, because it is a second stage writing to the same field
+            // and it *is* legitimately sensitive to the shelf: a coastal glacier picks its outlet
+            // by steepest descent, ocean neighbours are compared at their true depth (see
+            // `FlowRouting.flowDirections`), and remapping the sea floor can therefore send a
+            // trough down the next valley along. Measured with it on, that reached 130 of seed 7's
+            // hundred thousand land cells. Real, and nothing to do with the invariant this case is
+            // about, which is that `SeaLevelStage`'s own remap touches only water.
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512).let {
+                it.copy(glaciation = it.glaciation.copy(enabled = false))
+            }
             val withShelf = WorldGenerationEngine.generateBlocking(base)
             val noShelf = WorldGenerationEngine.generateBlocking(
                 base.copy(sea = base.sea.copy(shelfWidth = 0f))

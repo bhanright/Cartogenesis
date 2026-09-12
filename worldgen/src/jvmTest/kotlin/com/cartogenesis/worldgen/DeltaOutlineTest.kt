@@ -8,7 +8,7 @@ import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import com.cartogenesis.worldgen.pipeline.growFan
 import kotlin.math.abs
 import kotlin.math.ln
@@ -72,7 +72,7 @@ class DeltaOutlineTest {
 
         init {
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
-            height = erodeBlocking(config, uplift, log).height
+            height = erodeBlockingLoggingDeposition(config, uplift, log).height
             isLand = SeaLevelStage.percentileCut(height, config.seaLevel).isLand
         }
 

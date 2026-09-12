@@ -5,7 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RoundMass
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingReportingRounds
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.Test
@@ -142,7 +142,7 @@ class DepositionTest {
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         val rounds = ArrayList<RoundMass>()
-        erodeBlocking(config, uplift) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, uplift) { rounds.add(it) }
         assertEquals(config.erosion.hydraulicRounds, rounds.size, "not every round reported")
 
         var worstBudget = 0.0

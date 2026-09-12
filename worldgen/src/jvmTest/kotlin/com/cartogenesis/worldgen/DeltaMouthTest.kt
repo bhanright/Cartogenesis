@@ -5,7 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -55,7 +55,11 @@ class DeltaMouthTest {
     private fun lobeOf(config: WorldGenConfig, deltaLobe: Boolean): BooleanArray {
         val cfg = config.copy(erosion = config.erosion.copy(deltaLobe = deltaLobe))
         val log = DepositionLog(cfg.width * cfg.height)
-        erodeBlocking(cfg, PlateStage.generate(cfg, TerrainStage.generate(cfg)).height, log)
+        erodeBlockingLoggingDeposition(
+            cfg,
+            PlateStage.generate(cfg, TerrainStage.generate(cfg)).height,
+            log
+        )
         return BooleanArray(log.mechanism.size) { log.mechanism[it] == DepositionLog.SEA_LOBE }
     }
 

@@ -161,7 +161,36 @@ data class TectonicsConfig(
      * surface. That is what makes an arc a chain of islands rather than a ridge of land.
      */
     val islandArcHeight: Float = 0.24f,
-    /** Depth of the floor of a continental rift valley, in normalized elevation units. */
+    /**
+     * Depth of the floor of a continental rift valley, in normalized elevation units.
+     *
+     * E7 was dispatched to raise this, on the belief that E4's floors sat "a few percent of the
+     * relief" below their shoulders, and measured it instead. They do not. The value is in the
+     * same units as [riftShoulderHeight] and [collisionHeight] — shares of a field that is
+     * normalized and then cut at a percentile — so what it comes out as on the finished map has to
+     * be measured; measured on the stamp over the five seeds `RiftDepthTest` runs, at 512 and at
+     * 2048, the floor already stands **45-72% of the land's relief** below its shoulder crest,
+     * against Earth's 21-50% (Baikal 3.2-4.0 km of crest-to-floor against 8 km of relief,
+     * Tanganyika 2.8-3.8, Malawi 1.7-2.7, the Dead Sea 1.7-1.9). The water the finished world holds
+     * in a rift is Earth's too: the deepest rift lake on seed 718106 measures 24.2% of the land's
+     * relief at 2048 against Baikal's 20%.
+     *
+     * So it is left where E4 set it, and raising it is refused with the measurement. At 0.35 the
+     * rift stops being a chain of basins and becomes one continuous deep axis that drains along
+     * itself: on 718106 at 2048 the world's standing water falls from 17,412 cells to 8,200 and the
+     * deepest rift lake from 24.2% of the relief to 2.4%, which is the opposite of what this chunk
+     * exists to produce.
+     *
+     * The other half of E7 was to give this floor relief within itself, on the reading that it
+     * was a plane. It is not one — measured, E4's floor already rises and falls by 65-76% of the
+     * trough's own depth within half a segment — and the relief that was built, a chain of deeps
+     * and intra-rift highs hashed per half-graben, was written, measured and reverted: every
+     * amplitude from 0.12 to 0.45 of the segment's depth put a closed sub-basin below the
+     * sea-level cut that the post-cut outlet cannot open, and seeds 718106 and 99 came out
+     * holding a drowned basin of 0.46-0.54% of their land, about twice the Caspian's share of
+     * Earth's, against `OutletIncisionTest`'s bar. `RiftDepthTest` and `RiftDepthAuditTest` are
+     * what is left of it: the measurements, without the change.
+     */
     val riftDepth: Float = 0.25f,
     /** Half-width of the rift trough, in cells. */
     val riftWidth: Float = 7f,

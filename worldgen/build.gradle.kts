@@ -99,7 +99,11 @@ val auditOnlyClasses = listOf(
     // written for the whole world at 1024 and could not, and is here rather than in the per-merge
     // tier because it asserts nothing: six 1024 worlds for a printed report is an audit's job.
     "com.cartogenesis.worldgen.BayHeadDeltaAuditTest",
-    "com.cartogenesis.worldgen.BayHeadDeltaTest"
+    "com.cartogenesis.worldgen.BayHeadDeltaTest",
+    // E7: whether a rift floor of sub-basins holds more water than E4's smooth wedge can only be
+    // answered in the author's own trough at 2048 — `RiftDepthTest` measures the same question at
+    // 512 and records that nothing there can. Two 2048 worlds for one comparison is an audit's job.
+    "com.cartogenesis.worldgen.RiftDepthAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

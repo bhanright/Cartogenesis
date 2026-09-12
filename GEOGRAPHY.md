@@ -272,6 +272,40 @@ same bar. The cap itself is still a share of the map rather than an area in squa
 is S1's business in `REALISM_AUDIT.md`; 0.073% is the Caspian's share of *Earth's* surface, and this
 map's surface is not Earth's.
 
+**Where a rift meets the coast, half its floor is dry.** A half-graben's floor is a wedge — deepest
+against the master fault and rising to about a fifth of that depth against the hinge — and where the
+rift reaches the sea the water in it stands at the waterline, because the post-cut outlet cuts the
+sill down to sea level and stops there. So the hinge shelf is dry ground, and on seed 718106 at 2048
+the author's coastal trough keeps 29% of its flat floor under water and shows the other 71% as a
+lacustrine plain with the river's fan across it. The Gulf of California and the Red Sea are drowned
+along their whole width, because a rift that has opened that far has thinned its crust under the
+whole trough. Two repairs were measured at E7 and both refused. Deepening the stamp: at `riftDepth`
+0.35 against E4's 0.25 the trough's floor does reach 43% under water, but the rift stops being a
+chain of basins and becomes one continuous deep axis that drains along itself, and seed 718106's
+standing water falls from 17,412 cells to 8,200 with its deepest rift lake going from 24.2% of the
+land's relief to 2.4% — a worse world for a better number. Giving the floor a hashed chain of
+sub-basins: it works on the scene, taking the trough from 29% to 38% under water and leaving the
+world's standing water and its hypsometry where they were, but at every amplitude tried, from 12% to
+45% of the segment's depth, it leaves a closed basin below the sea-level cut that the post-cut
+outlet cannot open — seeds 718106 and 99 came out holding a drowned basin of 0.46–0.54% of their
+land, about twice the Caspian's share of Earth's, over `OutletIncisionTest`'s bar. A rift lake
+larger than the largest lake Earth has is not the improvement that was wanted. The repair both
+attempts are standing in for is subsidence that scales with how far the rift has opened, which is a
+process rather than a stamp (S2 in `REALISM_AUDIT.md`).
+
+**A subduction margin draws a coast of constant width.** Every belt on this map varies along its own
+length except the trench, whose depth is `trenchDepth * strength * narrow` — a function of the
+distance to the boundary and of nothing else, which makes it a plane along strike and every contour
+of it a straight line, including the one the sea is cut at. That is the pale bench of constant width
+running dead straight down the seaward side of seed 718106's southern valley at 2048, and the
+measurement that found it also settled what that valley is: an Andean margin, with not one of its
+38,750 cells on a continental rift, where E6 had read it as E4's half-graben. Modulating the trench
+along strike with the same swell every other belt uses was written, measured and reverted — at that
+wavelength (about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
+different straight contour instead of bending it, and the window went from 108 cells of thin
+grid-bearing water and a 31-cell straight run to 146 and 39. The fix wants a shorter wavelength on
+the trench, or dissection of the coastal plain that a nearly flat plain does not currently get.
+
 **There is two and a half times as much cold desert as Earth carries.** Measured as a share of the
 land poleward of 45 degrees and divided by each world's own desert share of all its land, seeds
 7/42/1234/99 read 0.25, 0.55, 0.14 and 0.34 against Earth's 0.12, pooling to 0.31 — over the factor
@@ -625,6 +659,15 @@ why every range on its maps was the same range.
   Tanganyika — rather than a canal. Each segment is a fraction of the map's width rather than a
   count of cells, so the same rift breaks into the same basins at 512 and at 2048, and its
   shoulders vary in height and width with the segment and with `rangeVariation` as ranges do.
+  The **depth** of that floor is Earth's, measured rather than assumed (E7). Stamped, it stands
+  45–72% of the land's relief below its shoulder crest across five seeds at both 512 and 2048,
+  against Earth's own 21–50% (Baikal 3.2–4.0 km of crest-to-floor against 8 km of relief, Tanganyika
+  2.8–3.8, Malawi 1.7–2.7, the Dead Sea 1.7–1.9); the water it ends up holding is Earth's too, the
+  deepest rift lake on seed 718106 at 2048 measuring 24.2% of the land's relief against Baikal's
+  20%. Nor is the floor flat: within half a segment it rises and falls by 65–76% of the trough's own
+  depth, from the accommodation zones, the per-segment depth factor and the terrain the belts are
+  stamped onto. Deepening it further, and laying a hashed chain of sub-basins on it, were both tried
+  and both reverted — see the deviations below.
 - **A few oceanic plates carry a hotspot**, a point that stays put while the plate drifts over it,
   leaving a line of seamounts along the drift vector that subside with age. It is the only thing
   in the pipeline that puts islands somewhere other than a plate boundary. Measured on seeds 7, 42

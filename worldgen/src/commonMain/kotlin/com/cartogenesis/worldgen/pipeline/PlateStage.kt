@@ -145,7 +145,7 @@ object PlateStage {
         val depthFactor: Float,
         /** This segment's shoulder height, as a factor on `riftShoulderHeight`. */
         val shoulderFactor: Float,
-        /** This segment's shoulder half-width, as a factor on `riftShoulderWidth`. */
+        /** This segment's shoulder half-width, as a factor on `riftShoulderWidthCells`. */
         val widthFactor: Float,
         /**
          * Whether the high footwall stands on the pair's [PairInteraction.lowId] plate. Alternates
@@ -217,7 +217,7 @@ object PlateStage {
             // headed. The crusts themselves do not change — a continent does not become an ocean
             // floor between epochs — but which pairs meet, and how squarely, does.
             val epochPlates =
-                if (present) plates else displacedPlates(plates, cfg.epochDrift * epochsAgo, w, h)
+                if (present) plates else displacedPlates(plates, cfg.epochDriftCells * epochsAgo, w, h)
             val epochPlateId = assignPlates(config, epochPlates)
             val boundaries = classifyBoundaries(w, h, epochPlateId, epochPlates)
             // Segmentation is a live rift's structure. A failed one is a filled sag (see the
@@ -277,7 +277,7 @@ object PlateStage {
                 // read as rounded and not as a stain.
                 BoxBlur.apply(
                     target,
-                    radius = (cfg.beltAgeBlur * epochsAgo).roundToInt(),
+                    radius = (cfg.beltAgeBlurCells * epochsAgo).roundToInt(),
                     passes = 2
                 )
                 for (i in uplift.data.indices) uplift.data[i] += target.data[i]
@@ -292,7 +292,7 @@ object PlateStage {
                 else -cfg.plateElevationBias / 2f
         }
         // Softens the step between plate interiors so ocean basins shelve into continents.
-        BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloff / 3f).roundToInt().coerceAtLeast(1))
+        BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloffCells / 3f).roundToInt().coerceAtLeast(1))
 
         stampHotspotChains(config, plates, plateId, uplift)
 
@@ -357,7 +357,7 @@ object PlateStage {
         val plates = createPlates(cfg, w, h, Random(config.seed * 7919 + 13))
         val epochPlates =
             if (epochsAgo == 0) plates
-            else displacedPlates(plates, cfg.epochDrift * epochsAgo, w, h)
+            else displacedPlates(plates, cfg.epochDriftCells * epochsAgo, w, h)
         val plateId = assignPlates(config, epochPlates)
         val boundaries = classifyBoundaries(w, h, plateId, epochPlates)
 
@@ -407,16 +407,16 @@ object PlateStage {
      * shape of a profile rather than its size, so a wider belt keeps the same proportions.
      */
     private fun widened(cfg: TectonicsConfig, factor: Float): TectonicsConfig = cfg.copy(
-        boundaryFalloff = cfg.boundaryFalloff * factor,
-        andeanWidth = cfg.andeanWidth * factor,
-        arcOffset = cfg.arcOffset * factor,
-        arcWidth = cfg.arcWidth * factor,
-        collisionWidth = cfg.collisionWidth * factor,
-        islandArcOffset = cfg.islandArcOffset * factor,
-        islandArcWidth = cfg.islandArcWidth * factor,
-        riftWidth = cfg.riftWidth * factor,
-        riftShoulderOffset = cfg.riftShoulderOffset * factor,
-        riftShoulderWidth = cfg.riftShoulderWidth * factor
+        boundaryFalloffCells = cfg.boundaryFalloffCells * factor,
+        andeanWidthCells = cfg.andeanWidthCells * factor,
+        arcOffsetCells = cfg.arcOffsetCells * factor,
+        arcWidthCells = cfg.arcWidthCells * factor,
+        collisionWidthCells = cfg.collisionWidthCells * factor,
+        islandArcOffsetCells = cfg.islandArcOffsetCells * factor,
+        islandArcWidthCells = cfg.islandArcWidthCells * factor,
+        riftWidthCells = cfg.riftWidthCells * factor,
+        riftShoulderOffsetCells = cfg.riftShoulderOffsetCells * factor,
+        riftShoulderWidthCells = cfg.riftShoulderWidthCells * factor
     )
 
     /**
@@ -464,19 +464,19 @@ object PlateStage {
         val ageSpan = 1f / epochs
 
         run {
-            val range = cfg.boundaryFalloff
+            val range = cfg.boundaryFalloffCells
             // The farthest any profile below reaches from its boundary, so a cell out in a plate
             // interior can be skipped before any of the noise is sampled. The widest is whichever
             // of the belts is broadest once the along-strike width swell is at its maximum.
             val widest = MAX_WIDTH_SCALE * MAX_EDGE_JITTER
             val maxReach = maxOf(
                 range * MAX_WIDTH_SCALE,
-                cfg.andeanWidth * widest,
-                cfg.collisionWidth * widest,
-                cfg.arcOffset + cfg.arcWidth,
-                cfg.islandArcOffset + cfg.islandArcWidth * widest,
-                cfg.riftShoulderOffset +
-                    cfg.riftShoulderWidth * (1f + cfg.riftSegmentShoulderVariation)
+                cfg.andeanWidthCells * widest,
+                cfg.collisionWidthCells * widest,
+                cfg.arcOffsetCells + cfg.arcWidthCells,
+                cfg.islandArcOffsetCells + cfg.islandArcWidthCells * widest,
+                cfg.riftShoulderOffsetCells +
+                    cfg.riftShoulderWidthCells * (1f + cfg.riftSegmentShoulderVariation)
             )
             // Each cell writes only its own uplift entry, and the roughness comes from position rather than a running RNG, so this splits cleanly across cores.
             parallelChunks(0, h) { startY, endY ->
@@ -507,10 +507,10 @@ object PlateStage {
                         // thing that makes plate edges read as drawn on rather than grown. Real
                         // ranges swell, sag, and break into separate massifs.
                         val amount = cfg.rangeVariation.coerceIn(0f, 1f)
-                        val period = cfg.rangeVariationScale.toInt().coerceAtLeast(1)
+                        val period = cfg.rangeVariationCycles.toInt().coerceAtLeast(1)
                         val swell = rangeNoise.fbm(
-                            x * cfg.rangeVariationScale / w,
-                            y * cfg.rangeVariationScale / h,
+                            x * cfg.rangeVariationCycles / w,
+                            y * cfg.rangeVariationCycles / h,
                             3,
                             period,
                             period
@@ -590,10 +590,10 @@ object PlateStage {
                                     -cfg.trenchDepth * strength * narrow
                                 } else {
                                     cfg.andeanHeight * strength *
-                                        beltFalloff(d, cfg.andeanWidth * widthScale * edgeJitter) *
+                                        beltFalloff(d, cfg.andeanWidthCells * widthScale * edgeJitter) *
                                         roughness * alongRange +
                                         cfg.arcHeight * strength *
-                                        ridgeAt(d, cfg.arcOffset, cfg.arcWidth) *
+                                        ridgeAt(d, cfg.arcOffsetCells, cfg.arcWidthCells) *
                                         volcanicChain(arcNoise, x, y, w, h) * alongRange
                                 }
 
@@ -601,7 +601,7 @@ object PlateStage {
                             // crust thickens over a wide area instead of piling onto a line: broad,
                             // high, flat-topped and very nearly symmetric.
                             BoundaryClass.COLLISION_PLATEAU -> {
-                                val plateauWidth = cfg.collisionWidth * widthScale * edgeJitter
+                                val plateauWidth = cfg.collisionWidthCells * widthScale * edgeJitter
                                 val rimShare = cfg.plateauRimShare.coerceIn(0.1f, 0.95f)
                                 cfg.collisionHeight * strength *
                                     plateauFalloff(d, plateauWidth, cfg.plateauFlatShare) *
@@ -634,8 +634,8 @@ object PlateStage {
                                         cfg.islandArcHeight * strength *
                                             ridgeAt(
                                                 d,
-                                                cfg.islandArcOffset,
-                                                cfg.islandArcWidth * widthScale * edgeJitter
+                                                cfg.islandArcOffsetCells,
+                                                cfg.islandArcWidthCells * widthScale * edgeJitter
                                             ) * roughness * alongArc
                                     } else {
                                         0f
@@ -672,7 +672,7 @@ object PlateStage {
                                     // holds a lake for the life of the world — on seed 59758 at
                                     // 2048, one of 1.69 times the Caspian's share of the land,
                                     // which `OutletResolutionTest` caught and 512 and 1024 did not
-                                    // (the trough is longer in cells than `outletReach` only at the
+                                    // (the trough is longer in cells than `outletReachCells` only at the
                                     // fine grid). A varying floor gives it a low end to drain to
                                     // and sills to break it into reaches the notch can finish. It
                                     // is also what a filled sag looks like: the Mississippi
@@ -680,10 +680,10 @@ object PlateStage {
                                     // not a chain of lakes.
                                     -cfg.riftDepth * cfg.failedRiftFill * strength *
                                         roughness * alongRange *
-                                        plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
+                                        plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare) +
                                         cfg.riftShoulderHeight * cfg.failedRiftShoulder *
                                         strength * ridgeAt(
-                                            d, cfg.riftShoulderOffset, cfg.riftShoulderWidth
+                                            d, cfg.riftShoulderOffsetCells, cfg.riftShoulderWidthCells
                                         ) * roughness * alongRange
                                 } else {
                                     val segment = boundary.segment
@@ -694,10 +694,10 @@ object PlateStage {
                                         // `RiftSegmentationTest` can measure the world this chunk
                                         // replaced rather than take its word for it.
                                         -cfg.riftDepth * strength *
-                                            plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
+                                            plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare) +
                                             cfg.riftShoulderHeight * strength *
                                             ridgeAt(
-                                                d, cfg.riftShoulderOffset, cfg.riftShoulderWidth
+                                                d, cfg.riftShoulderOffsetCells, cfg.riftShoulderWidthCells
                                             ) * roughness * alongRange
                                     } else {
                                         // Which flank of the half-graben this cell is on. The
@@ -715,7 +715,7 @@ object PlateStage {
                                         // the flat floor, so the tilt is spent inside the trough
                                         // rather than out on the shoulder slope.
                                         val flatHalf =
-                                            (cfg.riftWidth * cfg.riftFloorShare).coerceAtLeast(1f)
+                                            (cfg.riftWidthCells * cfg.riftFloorShare).coerceAtLeast(1f)
                                         val across = (d / flatHalf).coerceAtMost(1f) *
                                             (if (footwall) 1f else -1f)
                                         val hinge = cfg.riftHingeFloorShare.coerceIn(0f, 1f)
@@ -726,7 +726,7 @@ object PlateStage {
 
                                         val floor = -cfg.riftDepth * segment.depthFactor *
                                             segment.taper * tilt * strength *
-                                            plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare)
+                                            plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare)
 
                                         // High footwall on one flank, low hinge on the other —
                                         // and both fade to their mean at the join, as the trough
@@ -741,8 +741,8 @@ object PlateStage {
                                             (1f + (flank - 1f) * segment.taper) * strength *
                                             ridgeAt(
                                                 d,
-                                                cfg.riftShoulderOffset,
-                                                cfg.riftShoulderWidth * segment.widthFactor
+                                                cfg.riftShoulderOffsetCells,
+                                                cfg.riftShoulderWidthCells * segment.widthFactor
                                             ) * roughness * alongRange
 
                                         // The accommodation zone itself: ground that rises between
@@ -757,7 +757,7 @@ object PlateStage {
                                         // Caspian's share of the map.
                                         val sill = cfg.riftSillHeight * strength *
                                             (1f - segment.taper) *
-                                            beltFalloff(d, cfg.riftShoulderOffset)
+                                            beltFalloff(d, cfg.riftShoulderOffsetCells)
 
                                         floor + shoulder + sill
                                     }
@@ -825,7 +825,7 @@ object PlateStage {
     ) {
         val cfg = config.tectonics
         if (cfg.hotspotPlateFraction <= 0f || cfg.hotspotHeight == 0f) return
-        if (cfg.hotspotRadius <= 0f || cfg.hotspotSpacing <= 0f) return
+        if (cfg.hotspotRadiusCells <= 0f || cfg.hotspotSpacingCells <= 0f) return
 
         val w = uplift.width
         val h = uplift.height
@@ -839,30 +839,30 @@ object PlateStage {
             // placed anywhere at all lands on some other plate nineteen times in twenty, and the
             // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
             // exactly what the first version of this did, on every seed tried.
-            val spread = cfg.hotspotChainLength * 0.3f
+            val spread = cfg.hotspotChainLengthCells * 0.3f
             val originX = plate.seedX + (rnd.nextFloat() - 0.5f) * spread
             val originY = plate.seedY + (rnd.nextFloat() - 0.5f) * spread
             if (plate.type != PlateType.OCEANIC) return@forEach
             if (roll >= cfg.hotspotPlateFraction) return@forEach
 
             var travelled = 0f
-            while (travelled <= cfg.hotspotChainLength) {
+            while (travelled <= cfg.hotspotChainLengthCells) {
                 // The hotspot stays put and the plate slides over it, so the volcano it built a
                 // while ago has since been carried a while along the drift vector. Older means
                 // further along, and lower: the crust cools and the seamount subsides with it.
                 val cx = originX + plate.driftX * travelled
                 val cy = originY + plate.driftY * travelled
-                val age = travelled / cfg.hotspotChainLength
+                val age = travelled / cfg.hotspotChainLengthCells
                 val jitter = 0.6f + 0.8f *
                     (0.5f + 0.5f * sizeNoise.fbm(cx * 9f / w, cy * 9f / h, 2, 9, 9))
                         .coerceIn(0f, 1f)
                 stampSeamount(
                     uplift, plateId, plate.id, cx, cy,
-                    cfg.hotspotRadius, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter,
+                    cfg.hotspotRadiusCells, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter,
                     config.seed, ventIndex, cfg.hotspotConeDetail
                 )
                 ventIndex++
-                travelled += cfg.hotspotSpacing
+                travelled += cfg.hotspotSpacingCells
             }
         }
     }
@@ -1050,7 +1050,7 @@ object PlateStage {
 
         val warpX = PerlinNoise(config.seed * 6151 + 3)
         val warpY = PerlinNoise(config.seed * 6151 + 9)
-        val amplitude = config.tectonics.boundaryFalloff * 1.6f
+        val amplitude = config.tectonics.boundaryFalloffCells * 1.6f
 
         val warped = IntArray(w * h)
         // Reads `raw`, writes its own cell of `warped` — no overlap between rows.

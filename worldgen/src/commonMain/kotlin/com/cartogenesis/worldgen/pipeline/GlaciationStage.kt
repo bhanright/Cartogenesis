@@ -228,7 +228,7 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         val landRange = landRange(isLand, relative)
-        val reliefRadius = (cfg.reliefWindow * cfg.valleyWidth).toInt().coerceIn(2, 64)
+        val reliefRadius = (cfg.reliefWindow * cfg.valleyWidthCells).toInt().coerceIn(2, 64)
         val relief = localRelief(w, h, relative, reliefRadius)
         val channelThreshold = cfg.valleyRelief * landRange
         var channelledCells = 0
@@ -330,7 +330,7 @@ object GlaciationStage {
         var glacierCells = 0
         for (i in 0 until size) {
             if (!candidate[i]) continue
-            if (upstream[i] + downstream[i] - 1 < cfg.minTroughLength) continue
+            if (upstream[i] + downstream[i] - 1 < cfg.minTroughLengthCells) continue
             if (sinuosity(head[i], snout[i], upLength[i] + downLength[i], w) < cfg.minSinuosity) {
                 continue
             }
@@ -383,12 +383,12 @@ object GlaciationStage {
         // How far down the staircase each cell is.
         //
         // Two things advance it, and they simply add: how far the ice has run (in cells, over
-        // [GlaciationConfig.basinSpacing]) and how far it has fallen (in elevation, over
+        // [GlaciationConfig.basinSpacingCells]) and how far it has fallen (in elevation, over
         // [GlaciationConfig.basinDrop]). A reach ends when the sum passes the next whole number, so
         // whichever runs out first ends it — a long flat reach on a plain, a short one on a
         // mountainside. Measured from the head of the longest feeder rather than the nearest, so a
         // tributary joining halfway down does not restart the count.
-        val spacing = cfg.basinSpacing.coerceAtLeast(2f)
+        val spacing = cfg.basinSpacingCells.coerceAtLeast(2f)
         val drop = cfg.basinDrop.coerceAtLeast(1e-4f)
         val progress = FloatArray(size)
         for (k in order.indices) {
@@ -454,7 +454,7 @@ object GlaciationStage {
             cirques++
             val depth = cfg.cirqueDepth * maxOf(strength[i], 0.5f)
             bowl(
-                w, h, i, cfg.cirqueRadius.coerceAtLeast(1f), cfg.floorShare,
+                w, h, i, cfg.cirqueRadiusCells.coerceAtLeast(1f), cfg.floorShare,
                 (relative[i] - depth).coerceAtLeast(0f), isLand, relative, carved
             )
         }
@@ -533,9 +533,9 @@ object GlaciationStage {
         // shelf left standing beyond it as the sill. Water only, and after the shelf remap, so
         // there is nothing left to re-flatten it.
         var submarine = 0.0
-        if (cfg.fjords && cfg.fjordReach > 0) {
+        if (cfg.fjords && cfg.fjordReachCells > 0) {
             val stamp = IntArray(size)
-            val queue = IntArray((2 * cfg.fjordReach + 1) * (2 * cfg.fjordReach + 1))
+            val queue = IntArray((2 * cfg.fjordReachCells + 1) * (2 * cfg.fjordReachCells + 1))
             val queueDistance = IntArray(queue.size)
             var mouthId = 0
             for (i in 0 until size) {
@@ -543,7 +543,7 @@ object GlaciationStage {
                 val t = directions[i]
                 if (t < 0 || isLand[t]) continue
                 submarine += fjord(
-                    w, h, t, cfg.fjordReach, cfg.fjordDepth * strength[i],
+                    w, h, t, cfg.fjordReachCells, cfg.fjordDepth * strength[i],
                     isLand, carved, stamp, ++mouthId, queue, queueDistance
                 )
             }
@@ -1438,7 +1438,7 @@ object GlaciationStage {
         // any platform that runs the same arithmetic.
         val basinNoise = PerlinNoise(config.seed * 31L + 0x91E5L)
         val hummockNoise = PerlinNoise(config.seed * 31L + 0x27C3L)
-        val period = cfg.sheetBasinScale.toInt().coerceAtLeast(2)
+        val period = cfg.sheetBasinCycles.toInt().coerceAtLeast(2)
         val hummockPeriod = (period * 3).coerceAtLeast(4)
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
@@ -1463,7 +1463,7 @@ object GlaciationStage {
         // How hollow each cell is against the ground around it, and the scale of that hollowness
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
-        val meanRadius = (cfg.valleyWidth * 0.5f).toInt().coerceIn(2, 24)
+        val meanRadius = (cfg.valleyWidthCells * 0.5f).toInt().coerceIn(2, 24)
         val concavity = FloatArray(size)
         var concavityScale = 0.0
         for (i in 0 until size) {
@@ -1670,7 +1670,7 @@ object GlaciationStage {
      * root again, since a trough draining four times the ground is about twice the valley.
      */
     private fun valleyHalfWidth(cfg: GlaciationConfig, strength: Float): Float =
-        (cfg.valleyWidth * sqrt(strength)).coerceAtLeast(1f)
+        (cfg.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
 
     /**
      * The flow direction at a glacier cell, as a unit vector, for orienting its cross-section.

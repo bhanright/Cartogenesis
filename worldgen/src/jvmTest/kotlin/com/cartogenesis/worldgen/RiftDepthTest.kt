@@ -163,9 +163,9 @@ class RiftDepthTest {
         val cut = sorted[(sorted.size * config.seaLevel).toInt().coerceIn(0, sorted.size - 1)]
         val relief = (sorted.last() - cut).coerceAtLeast(1e-6f)
 
-        val floorReach = config.tectonics.riftWidth * config.tectonics.riftFloorShare
-        val crestLo = config.tectonics.riftShoulderOffset - config.tectonics.riftShoulderWidth * 0.3f
-        val crestHi = config.tectonics.riftShoulderOffset + config.tectonics.riftShoulderWidth * 0.3f
+        val floorReach = config.tectonics.riftWidthCells * config.tectonics.riftFloorShare
+        val crestLo = config.tectonics.riftShoulderOffsetCells - config.tectonics.riftShoulderWidthCells * 0.3f
+        val crestHi = config.tectonics.riftShoulderOffsetCells + config.tectonics.riftShoulderWidthCells * 0.3f
         val floors = ArrayList<Float>()
         val crests = ArrayList<Float>()
         for (i in 0 until w * h) {
@@ -217,7 +217,7 @@ class RiftDepthTest {
         val height = plates.height.data
         val classes = plates.nearestBoundaryClass
         val distance = plates.boundaryDistance.data
-        val floorReach = cfg.riftWidth * cfg.riftFloorShare
+        val floorReach = cfg.riftWidthCells * cfg.riftFloorShare
         val inFloor = BooleanArray(w * h) { classes[it] == rift && distance[it] <= floorReach }
         var floorCells = 0
         for (i in 0 until w * h) if (inFloor[i]) floorCells++
@@ -226,8 +226,8 @@ class RiftDepthTest {
             return 0f
         }
 
-        val crestLo = cfg.riftShoulderOffset - cfg.riftShoulderWidth * 0.3f
-        val crestHi = cfg.riftShoulderOffset + cfg.riftShoulderWidth * 0.3f
+        val crestLo = cfg.riftShoulderOffsetCells - cfg.riftShoulderWidthCells * 0.3f
+        val crestHi = cfg.riftShoulderOffsetCells + cfg.riftShoulderWidthCells * 0.3f
         val floors = ArrayList<Float>()
         val crests = ArrayList<Float>()
         for (i in 0 until w * h) {

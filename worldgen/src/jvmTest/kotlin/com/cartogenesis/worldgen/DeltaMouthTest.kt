@@ -74,7 +74,7 @@ class DeltaMouthTest {
                 config.copy(erosion = config.erosion.copy(deposition = false))
             )
 
-            val cap = (2 * config.erosion.deltaReach + 1) * (2 * config.erosion.deltaReach + 1)
+            val cap = (2 * config.erosion.deltaReachCells + 1) * (2 * config.erosion.deltaReachCells + 1)
             val was = Delta(before, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = false))
             val now = Delta(after, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = true))
             val floor = Delta(bare, bare, config.seaLevel, cap, BooleanArray(0)).inPocket

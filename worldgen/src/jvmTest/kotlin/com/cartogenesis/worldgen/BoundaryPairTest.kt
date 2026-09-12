@@ -55,7 +55,7 @@ class BoundaryPairTest {
      *
      * `PlateStage` builds elevation out of two quite separate things: a blurred step between plate
      * interiors, set by [com.cartogenesis.worldgen.model.TectonicsConfig.plateElevationBias], and
-     * the uplift along the boundaries. The step is blurred over `boundaryFalloff / 3` cells, so on
+     * the uplift along the boundaries. The step is blurred over `boundaryFalloffCells / 3` cells, so on
      * the continental side of an oceanic-continental margin it slopes down toward the ocean basin
      * across roughly the same distance the coastal range occupies — and it does so on exactly the
      * margins this test wants to measure and not on the continental collisions, which have the same
@@ -165,10 +165,10 @@ class BoundaryPairTest {
         // come back up at the shoulder distance. Nothing else this stage builds has that shape.
         assertTrue(rift.cells > 0, "seed $arcSeed has no continental rift to measure")
         val axis = rift.at(0f)
-        val shoulder = rift.at(cfg.riftShoulderOffset)
+        val shoulder = rift.at(cfg.riftShoulderOffsetCells)
         println(
             "PAIRS seed %d rift axis %+.4f, shoulder at %.0f cells %+.4f"
-                .format(arcSeed, axis, cfg.riftShoulderOffset, shoulder)
+                .format(arcSeed, axis, cfg.riftShoulderOffsetCells, shoulder)
         )
         assertTrue(axis < 0f, "a continental rift's axis should be a trough, measured $axis")
         assertTrue(
@@ -181,15 +181,15 @@ class BoundaryPairTest {
         // the arc's own distance has to beat the profile on the boundary line itself.
         assertTrue(arc.cells > 0, "seed $arcSeed has no island arc to measure")
         val suture = arc.at(0f)
-        val crest = arc.at(cfg.islandArcOffset)
+        val crest = arc.at(cfg.islandArcOffsetCells)
         println(
             "PAIRS seed %d arc suture %+.4f, crest at %.0f cells %+.4f"
-                .format(arcSeed, suture, cfg.islandArcOffset, crest)
+                .format(arcSeed, suture, cfg.islandArcOffsetCells, crest)
         )
         assertTrue(
             crest > suture,
             "an island arc's crest should stand off the suture, measured $suture on the " +
-                "boundary and $crest at ${cfg.islandArcOffset} cells"
+                "boundary and $crest at ${cfg.islandArcOffsetCells} cells"
         )
     }
 
@@ -245,7 +245,7 @@ class BoundaryPairTest {
                 if (delta <= 0.01f) continue
                 raised++
                 if (delta > worst) worst = delta
-                if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloff) {
+                if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) {
                     farFromBoundary++
                 }
             }
@@ -326,7 +326,7 @@ class BoundaryPairTest {
         // the reference level off it moves the measured height of the belt by more than the belt.
         // With the plate-base step flattened (see [platesOf]) the interior is the terrain mean,
         // which is the same everywhere, so one figure serves every class.
-        val innerBaseline = (cfg.collisionWidth * 1.6f).toInt().coerceIn(1, bins - 2)
+        val innerBaseline = (cfg.collisionWidthCells * 1.6f).toInt().coerceIn(1, bins - 2)
         var baselineTotal = 0.0
         var baselineCount = 0L
         worlds.forEach { (_, plates) ->
@@ -407,7 +407,7 @@ class BoundaryPairTest {
      * and 9x9 all read back the identical 0.053 relative amplitude at that size — proof the ceiling
      * is the grid, not the formula, since a real improvement to the stored values would have moved
      * a measurement this coarse by more than floating-point noise. Measured on the same seed's
-     * chain at 2048 — the resolution [TectonicsConfig.hotspotRadius] and friends scale to via
+     * chain at 2048 — the resolution [TectonicsConfig.hotspotRadiusCells] and friends scale to via
      * [WorldGenConfig.atResolution], and the one the spec calls out as where a real chain is
      * visible — the half-height contour is a well-resolved ~10 cells and the unmodified stamp
      * already reads a relative eight-fold amplitude of essentially zero (order 1e-15, i.e. exactly

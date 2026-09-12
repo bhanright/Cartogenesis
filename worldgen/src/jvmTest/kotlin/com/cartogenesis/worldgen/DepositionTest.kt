@@ -253,7 +253,7 @@ class DepositionTest {
                 deltaShare = 1f,
                 deltaMinCatchment = 0f,
                 lakeShare = 1f,
-                deltaReach = 20,
+                deltaReachCells = 20,
                 deltaFreeboard = 0.5f
             )
         )

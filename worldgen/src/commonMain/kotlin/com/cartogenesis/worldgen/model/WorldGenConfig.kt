@@ -30,7 +30,7 @@ data class TectonicsConfig(
     /** Depth of oceanic trenches at subduction boundaries. */
     val trenchDepth: Float = 0.3f,
     /** How far, in cells, boundary effects reach inland. */
-    val boundaryFalloff: Float = 26f,
+    val boundaryFalloffCells: Float = 26f,
     /** Elevation offset between continental and oceanic plate interiors. */
     val plateElevationBias: Float = 0.35f,
     /**
@@ -62,25 +62,25 @@ data class TectonicsConfig(
      * running unbroken from one end to the other. Where such a belt crosses submerged ground that
      * is the difference between a continuous ruler-straight strip of land and an island arc.
      */
-    val rangeVariationScale: Float = 13f,
+    val rangeVariationCycles: Float = 13f,
     /**
      * Whether a convergent boundary's profile depends on which crusts are colliding.
      *
      * On it, the three convergent pairs build three different things: oceanic under continental a
      * narrow coastal range with a volcanic arc behind it, continental against continental a broad
      * flat-topped plateau, oceanic under oceanic an island arc. Off, every convergent boundary
-     * gets the single [mountainHeight]-at-[boundaryFalloff] belt the generator used before, which
+     * gets the single [mountainHeight]-at-[boundaryFalloffCells] belt the generator used before, which
      * is what `BoundaryPairTest` turns off to show its measurement has teeth — with one profile
      * the Andes and Tibet are the same shape and the width-to-height ratios coincide.
      */
     val crustPairProfiles: Boolean = true,
     /**
      * Half-width, in cells, of the coastal range on the continental side of an oceanic–continental
-     * margin. Deliberately far narrower than [collisionWidth]: the Andes are a few hundred
+     * margin. Deliberately far narrower than [collisionWidthCells]: the Andes are a few hundred
      * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
      * of distinguishing the pairs. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
      */
-    val andeanWidth: Float = 14f,
+    val andeanWidthCells: Float = 14f,
     /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
     val andeanHeight: Float = 0.52f,
     /**
@@ -90,16 +90,16 @@ data class TectonicsConfig(
      * the volcanoes a fixed distance behind the margin rather than on it. That offset is what
      * makes the margin asymmetric in a way a symmetric falloff cannot express.
      */
-    val arcOffset: Float = 13f,
+    val arcOffsetCells: Float = 13f,
     /** Half-width of the volcanic arc ridge about its own axis, in cells. */
-    val arcWidth: Float = 5f,
+    val arcWidthCells: Float = 5f,
     /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
     val arcHeight: Float = 0.20f,
     /**
-     * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidth].
+     * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidthCells].
      * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
      */
-    val collisionWidth: Float = 26f,
+    val collisionWidthCells: Float = 26f,
     /**
      * Height of the plateau, in normalized elevation units.
      *
@@ -148,9 +148,9 @@ data class TectonicsConfig(
      * How far from the suture the island arc stands, on the overriding plate, in cells.
      * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
      */
-    val islandArcOffset: Float = 8f,
+    val islandArcOffsetCells: Float = 8f,
     /** Half-width of the island-arc ridge about its own axis, in cells. */
-    val islandArcWidth: Float = 7f,
+    val islandArcWidthCells: Float = 7f,
     /**
      * Crest height of an island arc, in normalized elevation units.
      *
@@ -181,7 +181,7 @@ data class TectonicsConfig(
      */
     val riftDepth: Float = 0.25f,
     /** Half-width of the rift trough, in cells. */
-    val riftWidth: Float = 7f,
+    val riftWidthCells: Float = 7f,
     /**
      * Share of the trough's half-width that is flat floor before the ground starts climbing.
      *
@@ -192,9 +192,9 @@ data class TectonicsConfig(
      */
     val riftFloorShare: Float = 0.55f,
     /** How far from the rift axis its raised shoulders crest, in cells. */
-    val riftShoulderOffset: Float = 11f,
+    val riftShoulderOffsetCells: Float = 11f,
     /** Half-width of each shoulder about its own crest, in cells. */
-    val riftShoulderWidth: Float = 7f,
+    val riftShoulderWidthCells: Float = 7f,
     /**
      * Height of the rift shoulders, in normalized elevation units.
      *
@@ -270,9 +270,9 @@ data class TectonicsConfig(
      * that opened, failed and filled with sediment.
      *
      * So the stage runs itself [historyEpochs] times. Each past epoch displaces every plate seed
-     * back along minus its own drift (see [epochDrift]), classifies the boundaries of *that*
+     * back along minus its own drift (see [epochDriftCells]), classifies the boundaries of *that*
      * configuration by the same crust pairs, stamps the same profiles, and then ages what it
-     * stamped: lower ([beltAgeDecay]), broader ([beltAgeWidening]), rounder ([beltAgeBlur]). The
+     * stamped: lower ([beltAgeDecay]), broader ([beltAgeWidening]), rounder ([beltAgeBlurCells]). The
      * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
      * ones the rest of the pipeline sees, unchanged.
      *
@@ -291,7 +291,7 @@ data class TectonicsConfig(
      * inside a plate interior rather than merging with the modern edge beside it, which is the
      * whole point. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
      */
-    val epochDrift: Float = 45f,
+    val epochDriftCells: Float = 45f,
     /**
      * What fraction of its height a belt keeps per epoch of age.
      *
@@ -321,14 +321,14 @@ data class TectonicsConfig(
      * Held at three cells rather than the six first tried, for a reason about the *length* of a
      * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
      * reach is comparable to the saddles [rangeVariation] leaves between one massif and the next
-     * (about forty cells at 512 for [rangeVariationScale] of thirteen), so it does not only round
+     * (about forty cells at 512 for [rangeVariationCycles] of thirteen), so it does not only round
      * the profile, it fills the gaps and welds a chain of worn massifs into one continuous upland.
      * That is bad geography — the Appalachians are a province of separate ranges with valleys
      * through them — and it showed up downstream as one people holding 45% of seed 42's habitable
      * land against `CultureRealmTest`'s 45% ceiling, because a continuous upland is a corridor.
      * At three cells the saddles survive and the same seed reads 33%.
      */
-    val beltAgeBlur: Float = 3f,
+    val beltAgeBlurCells: Float = 3f,
     /**
      * How much of a failed rift's trough survives as a trough, the rest having filled with
      * sediment.
@@ -361,11 +361,11 @@ data class TectonicsConfig(
      */
     val hotspotPlateFraction: Float = 0.35f,
     /** How long a hotspot trail runs before it has subsided to nothing, in cells. */
-    val hotspotChainLength: Float = 110f,
+    val hotspotChainLengthCells: Float = 110f,
     /** Distance between successive seamounts along a trail, in cells. */
-    val hotspotSpacing: Float = 15f,
+    val hotspotSpacingCells: Float = 15f,
     /** Radius of a single seamount, in cells. */
-    val hotspotRadius: Float = 5f,
+    val hotspotRadiusCells: Float = 5f,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
     val hotspotHeight: Float = 0.17f,
     /**
@@ -394,12 +394,12 @@ data class TectonicsConfig(
 data class SeaConfig(
     /**
      * Width, in cells, of the shelf plateau; a further band of the same width blends the plateau
-     * back down to the natural sea floor, so the whole remap reaches `2 * shelfWidth` from the
+     * back down to the natural sea floor, so the whole remap reaches `2 * shelfWidthCells` from the
      * coast. Measured in cells, so [WorldGenConfig.atResolution] rescales it like
-     * [TectonicsConfig.boundaryFalloff] — left alone, a larger grid would shrink the shelf to a
+     * [TectonicsConfig.boundaryFalloffCells] — left alone, a larger grid would shrink the shelf to a
      * sliver and coastlines would drop straight into deep water again.
      */
-    val shelfWidth: Float = 20f,
+    val shelfWidthCells: Float = 20f,
     /**
      * Depth of the shelf plateau at its outer edge, in the same normalized units as
      * [SeaLevelResult.relativeElevation]. Kept shallower than the -0.12 cut [ClimateStage] uses
@@ -844,7 +844,7 @@ data class ErosionConfig(
      * fan. In cells rather than against the map, and so rescaled by
      * [WorldGenConfig.atResolution] along with everything else measured that way.
      */
-    val deltaReach: Int = 6,
+    val deltaReachCells: Int = 6,
     /**
      * How high above the shoreline a delta cell is built, as a fraction of the land's elevation
      * range.
@@ -912,7 +912,7 @@ data class ErosionConfig(
     val outletIncisionRatio: Float = 3f,
     /**
      * How far below the lip the notch is cut, in cells — rescaled with the grid by
-     * [WorldGenConfig.atResolution], as [deltaReach] is.
+     * [WorldGenConfig.atResolution], as [deltaReachCells] is.
      *
      * The lip cannot fall further than the ground immediately below it, so cutting the lip alone
      * buys one step and then stops: the spill is by construction the *lowest* point on the rim, and
@@ -920,12 +920,12 @@ data class ErosionConfig(
      * grade toward the steeper ground further down and keep deepening round after round, which is
      * what a knickpoint retreating upstream actually does.
      */
-    val outletReach: Int = 64,
+    val outletReachCells: Int = 64,
     /**
      * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
      * its river, and made only of cells the load could lift clear of the water.
      *
-     * Off, it is what it was: every cell within [deltaReach] of the mouth raised to one level, in
+     * Off, it is what it was: every cell within [deltaReachCells] of the mouth raised to one level, in
      * whatever order the growth reached them, with the last one part-filled when the sediment ran
      * out. Three things follow from that and all three were visible on the author's own world at
      * 2048. The slab is flat, so a river arriving at its own delta has nowhere downhill to go and
@@ -946,7 +946,7 @@ data class ErosionConfig(
      * Off, it is what [deltaLobe] left: the growth's *step count* stands in for a distance, and
      * over eight neighbours a step count is the Chebyshev metric, whose iso-lines are squares. A
      * lacustrine fan, whose acceptance rule says only "any ponded cell", therefore covers the whole
-     * `2·deltaReach+1` square around its inflow and leaves a flat raft with straight edges and
+     * `2·deltaReachCells+1` square around its inflow and leaves a flat raft with straight edges and
      * right-angle corners when the water goes away — the rafts the author found beside a rift mouth
      * on seed 718106 at 2048, ten and more cells of dead-straight coast at a stretch. A sea lobe
      * does shape itself, by a cosine of the angle to its trunk, but it compares that shape against
@@ -994,7 +994,7 @@ data class ErosionConfig(
  * one was.
  *
  * Every length here is in cells and so is rescaled by [WorldGenConfig.atResolution], for the same
- * reason [SeaConfig.shelfWidth] is: a trough four cells wide on a 512 grid is a trough sixteen
+ * reason [SeaConfig.shelfWidthCells] is: a trough four cells wide on a 512 grid is a trough sixteen
  * cells wide on a 2048 one, and anything else changes the world rather than its detail.
  */
 @Serializable
@@ -1096,7 +1096,7 @@ data class GlaciationConfig(
      */
     val valleyRelief: Float = 0.35f,
     /**
-     * The radius over which [valleyRelief] is measured, in multiples of [valleyWidth].
+     * The radius over which [valleyRelief] is measured, in multiples of [valleyWidthCells].
      *
      * About twice the trough the ice would cut: wide enough to take in both walls of the valley
      * and the interfluves beyond, narrow enough that a continental slope hundreds of cells across
@@ -1112,7 +1112,7 @@ data class GlaciationConfig(
      * from the furthest head above the cell to the furthest snout below it — before any of it is
      * carved.
      */
-    val minTroughLength: Int = 14,
+    val minTroughLengthCells: Int = 14,
     /**
      * The catchment a trough needs as a share of *its own ice field's* frozen ground.
      *
@@ -1244,7 +1244,7 @@ data class GlaciationConfig(
      * A fraction of the world rather than a count of cells, so the same world gains detail rather
      * than changing character when it is generated at export resolution.
      */
-    val sheetBasinScale: Float = 26f,
+    val sheetBasinCycles: Float = 26f,
     /**
      * How much a cell's own hollowness counts toward being chosen as a basin, against the noise.
      *
@@ -1254,7 +1254,7 @@ data class GlaciationConfig(
      */
     val sheetConcavity: Float = 0.8f,
     /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
-    val valleyWidth: Float = 6.5f,
+    val valleyWidthCells: Float = 6.5f,
     /**
      * How much of that half-width is flat floor before the walls start to climb.
      *
@@ -1289,7 +1289,7 @@ data class GlaciationConfig(
      * broad lake in it.
      *
      * Doubled when the comb was dealt with. On a steep flank this term ends the reach long before
-     * [basinSpacing] does, so a trough down a mountainside was a staircase of a dozen or more short
+     * [basinSpacingCells] does, so a trough down a mountainside was a staircase of a dozen or more short
      * basins, and a dozen basins across a trough running at 45 degrees is a dozen straight bars of
      * water lying parallel — a paternoster chain drawn with a ruler. At twice the descent per step
      * the same trough carries three or four basins instead, each broad enough to read as a lake:
@@ -1304,11 +1304,11 @@ data class GlaciationConfig(
      * inside the ice would be one reach a thousand cells long. The two terms simply add, so a
      * reach ends when it has fallen [basinDrop] *or* run this far, whichever happens first.
      */
-    val basinSpacing: Float = 16f,
+    val basinSpacingCells: Float = 16f,
     /** Share of a reach the basin occupies; the rest is the step at its lower end. */
     val basinShare: Float = 0.75f,
     /** Radius of the bowl bitten out of a glacier's head, in cells. */
-    val cirqueRadius: Float = 3f,
+    val cirqueRadiusCells: Float = 3f,
     /** How deep that bowl is cut below the headwall, as a fraction of the elevation range. */
     val cirqueDepth: Float = 0.014f,
     /**
@@ -1348,7 +1348,7 @@ data class GlaciationConfig(
     /** How deep a fjord basin is cut at the mouth, in [SeaLevelResult.relativeElevation] units. */
     val fjordDepth: Float = 0.20f,
     /** How far out to sea that basin reaches, in cells. */
-    val fjordReach: Int = 6
+    val fjordReachCells: Int = 6
 )
 
 /** Standing fresh water in basins the terrain does not drain. */
@@ -1593,30 +1593,30 @@ data class WorldGenConfig(
      *
      * Some settings are measured in cells and have to be rescaled, or the world changes character
      * rather than just gaining detail:
-     *  - [TectonicsConfig.boundaryFalloff] is the width of a mountain belt and of the blur that
+     *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur that
      *    softens the plate base. Left alone, a 4x larger grid makes both four times narrower in
      *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
-     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidth],
-     *    [TectonicsConfig.arcOffset], [TectonicsConfig.arcWidth], [TectonicsConfig.collisionWidth],
-     *    [TectonicsConfig.islandArcOffset], [TectonicsConfig.islandArcWidth],
-     *    [TectonicsConfig.riftWidth], [TectonicsConfig.riftShoulderOffset],
-     *    [TectonicsConfig.riftShoulderWidth]) is measured in cells for the same reason, and so is
-     *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLength],
-     *    [TectonicsConfig.hotspotSpacing], [TectonicsConfig.hotspotRadius]). Left alone, a larger
+     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidthCells],
+     *    [TectonicsConfig.arcOffsetCells], [TectonicsConfig.arcWidthCells], [TectonicsConfig.collisionWidthCells],
+     *    [TectonicsConfig.islandArcOffsetCells], [TectonicsConfig.islandArcWidthCells],
+     *    [TectonicsConfig.riftWidthCells], [TectonicsConfig.riftShoulderOffsetCells],
+     *    [TectonicsConfig.riftShoulderWidthCells]) is measured in cells for the same reason, and so is
+     *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLengthCells],
+     *    [TectonicsConfig.hotspotSpacingCells], [TectonicsConfig.hotspotRadiusCells]). Left alone, a larger
      *    grid would narrow Tibet to the width of the Andes and the distinction between the crust
      *    pairs would quietly disappear at export resolution. The rift's *segmentation* knobs
      *    ([TectonicsConfig.riftSegmentMin], [TectonicsConfig.riftSegmentMax],
      *    [TectonicsConfig.riftAccommodation]) are the exception: they are map fractions already,
      *    so a rift breaks into the same half-grabens at every resolution and they are not touched.
-     *  - [SeaConfig.shelfWidth] is the width of the continental shelf, in the same cell terms as
-     *    [TectonicsConfig.boundaryFalloff] and for the same reason: left alone, a larger grid
+     *  - [SeaConfig.shelfWidthCells] is the width of the continental shelf, in the same cell terms as
+     *    [TectonicsConfig.boundaryFalloffCells] and for the same reason: left alone, a larger grid
      *    would shrink it to nothing and every coast would drop straight into deep water again.
      *  - [ClimateConfig.baseRainRate] is charged per cell of wind travel, so a 4x wider grid
      *    depletes moisture four times over the same journey and parches every interior.
      *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
      *    across the map takes proportionally more sweeps on a finer grid. Left alone, a large map
      *    would come out barely eroded at all.
-     *  - [ErosionConfig.deltaReach] is the radius of a delta, in cells, so a finer grid would
+     *  - [ErosionConfig.deltaReachCells] is the radius of a delta, in cells, so a finer grid would
      *    otherwise shrink every delta to a speck.
      *  - Every length in [GlaciationConfig] — the width of a trough, the spacing of the basins
      *    along it, the reach of a cirque, how far the snout runs past the freezing line — is in
@@ -1634,42 +1634,42 @@ data class WorldGenConfig(
             width = newWidth,
             height = newHeight,
             tectonics = tectonics.copy(
-                boundaryFalloff = tectonics.boundaryFalloff * scale,
-                andeanWidth = tectonics.andeanWidth * scale,
-                arcOffset = tectonics.arcOffset * scale,
-                arcWidth = tectonics.arcWidth * scale,
-                collisionWidth = tectonics.collisionWidth * scale,
-                islandArcOffset = tectonics.islandArcOffset * scale,
-                islandArcWidth = tectonics.islandArcWidth * scale,
-                riftWidth = tectonics.riftWidth * scale,
-                riftShoulderOffset = tectonics.riftShoulderOffset * scale,
-                riftShoulderWidth = tectonics.riftShoulderWidth * scale,
+                boundaryFalloffCells = tectonics.boundaryFalloffCells * scale,
+                andeanWidthCells = tectonics.andeanWidthCells * scale,
+                arcOffsetCells = tectonics.arcOffsetCells * scale,
+                arcWidthCells = tectonics.arcWidthCells * scale,
+                collisionWidthCells = tectonics.collisionWidthCells * scale,
+                islandArcOffsetCells = tectonics.islandArcOffsetCells * scale,
+                islandArcWidthCells = tectonics.islandArcWidthCells * scale,
+                riftWidthCells = tectonics.riftWidthCells * scale,
+                riftShoulderOffsetCells = tectonics.riftShoulderOffsetCells * scale,
+                riftShoulderWidthCells = tectonics.riftShoulderWidthCells * scale,
                 // A displacement and a blur radius are both lengths on the ground, so they are
                 // more cells on a finer grid; `historyEpochs` and the three dimensionless ageing
                 // factors are not and are left alone.
-                epochDrift = tectonics.epochDrift * scale,
-                beltAgeBlur = tectonics.beltAgeBlur * scale,
-                hotspotChainLength = tectonics.hotspotChainLength * scale,
-                hotspotSpacing = tectonics.hotspotSpacing * scale,
-                hotspotRadius = tectonics.hotspotRadius * scale
+                epochDriftCells = tectonics.epochDriftCells * scale,
+                beltAgeBlurCells = tectonics.beltAgeBlurCells * scale,
+                hotspotChainLengthCells = tectonics.hotspotChainLengthCells * scale,
+                hotspotSpacingCells = tectonics.hotspotSpacingCells * scale,
+                hotspotRadiusCells = tectonics.hotspotRadiusCells * scale
             ),
-            sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
+            sea = sea.copy(shelfWidthCells = sea.shelfWidthCells * scale),
             erosion = erosion.copy(
                 passes = (erosion.passes * scale).toInt(),
-                deltaReach = (erosion.deltaReach * scale).toInt().coerceAtLeast(1),
-                outletReach = (erosion.outletReach * scale).toInt().coerceAtLeast(1)
+                deltaReachCells = (erosion.deltaReachCells * scale).toInt().coerceAtLeast(1),
+                outletReachCells = (erosion.outletReachCells * scale).toInt().coerceAtLeast(1)
             ),
             glaciation = glaciation.copy(
-                valleyWidth = glaciation.valleyWidth * scale,
-                basinSpacing = glaciation.basinSpacing * scale,
-                cirqueRadius = glaciation.cirqueRadius * scale,
+                valleyWidthCells = glaciation.valleyWidthCells * scale,
+                basinSpacingCells = glaciation.basinSpacingCells * scale,
+                cirqueRadiusCells = glaciation.cirqueRadiusCells * scale,
                 runOutCells = (glaciation.runOutCells * scale).toInt().coerceAtLeast(1),
-                fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1),
+                fjordReachCells = (glaciation.fjordReachCells * scale).toInt().coerceAtLeast(1),
                 // A trough is a length on the ground, so it is more cells on a finer grid.
-                // `reliefWindow` is a multiple of `valleyWidth`, `sheetBasinScale` a count of
+                // `reliefWindow` is a multiple of `valleyWidthCells`, `sheetBasinCycles` a count of
                 // periods across the whole map, and the three lake knobs are map fractions, so
                 // none of them is touched.
-                minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2)
+                minTroughLengthCells = (glaciation.minTroughLengthCells * scale).toInt().coerceAtLeast(2)
             ),
             // A lake is an area on the map, not a number of samples of it, so `minCells` scales
             // by the *square* of the grid ratio: twelve cells at 512, 48 at 1024, 192 at 2048, all

@@ -212,7 +212,7 @@ internal object HydraulicErosion {
         var working = height.copy()
 
         val carryingSediment = cfg.deposition
-        val reach = cfg.deltaReach.coerceAtLeast(0)
+        val reach = cfg.deltaReachCells.coerceAtLeast(0)
         // Sediment in transit, per cell, handed on as the walk works its way downstream.
         //
         // In double, and that is not fussiness. A trunk near the coast carries the yield of its
@@ -1200,7 +1200,7 @@ internal object HydraulicErosion {
             var fall = 0f
             var length = 0
             var c = spill
-            while (c >= 0 && isLand[c] && length < cfg.outletReach) {
+            while (c >= 0 && isLand[c] && length < cfg.outletReachCells) {
                 fall = level - relative[c]
                 if (fall > level - floor) break
                 length++
@@ -1230,7 +1230,7 @@ internal object HydraulicErosion {
             // given length on the ground descends by the same amount however many cells that
             // length is cut into.
             val gradient = NOTCH_GRADIENT / w
-            while (c >= 0 && isLand[c] && step < cfg.outletReach) {
+            while (c >= 0 && isLand[c] && step < cfg.outletReachCells) {
                 val target = newLevel - step * gradient
                 if (relative[c] <= target) break
                 val take = (relative[c] - target).toDouble() * landRange
@@ -1278,7 +1278,7 @@ internal object HydraulicErosion {
             if (belowSea) {
                 var back = 1
                 var from = spill
-                while (back <= cfg.outletReach) {
+                while (back <= cfg.outletReachCells) {
                     var best = -1
                     var bestArea = -1f
                     FlowRouting.forEachNeighbour(w, ground.size / w, from % w, from / w) { n ->

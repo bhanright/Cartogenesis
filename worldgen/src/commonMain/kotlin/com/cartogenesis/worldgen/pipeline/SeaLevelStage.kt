@@ -165,9 +165,9 @@ object SeaLevelStage {
      * it touches only cells [SeaLevelResult.isLand] marks as water, so no coastline moves. Three
      * bands, keyed on distance to the nearest land cell in cells:
      *
-     *  - out to `shelfWidth`, a shallow plateau sloping from [SHELF_DEPTH_AT_COAST] at the coast to
+     *  - out to `shelfWidthCells`, a shallow plateau sloping from [SHELF_DEPTH_AT_COAST] at the coast to
      *    `-shelfDepth` at the shelf break;
-     *  - from there to `2 * shelfWidth`, a smoothstep from `-shelfDepth` back down to whatever the
+     *  - from there to `2 * shelfWidthCells`, a smoothstep from `-shelfDepth` back down to whatever the
      *    unshelved depth at that cell already was — the continental slope;
      *  - beyond that, untouched: the natural sea floor is deep enough on its own once clear of the
      *    coast, so only the margin needed fixing.
@@ -194,7 +194,7 @@ object SeaLevelStage {
             } else {
                 enclosed
             }
-        if (seaConfig.shelfWidth <= 0f) return beforeShelf
+        if (seaConfig.shelfWidthCells <= 0f) return beforeShelf
 
         val cellsAcross = beforeShelf.relativeElevation.width
         val cellsDown = beforeShelf.relativeElevation.height
@@ -215,7 +215,7 @@ object SeaLevelStage {
             JumpFloodDistance.run(cellsAcross, cellsDown, distanceToLand, nearestLandCell)
         }
 
-        val shelfBreakCells = seaConfig.shelfWidth
+        val shelfBreakCells = seaConfig.shelfWidthCells
         val slopeFootCells = 2f * shelfBreakCells
         val shelfBreakDepth = -seaConfig.shelfDepth
         val withShelf = FloatField(cellsAcross, cellsDown)

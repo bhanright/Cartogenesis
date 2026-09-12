@@ -32,25 +32,25 @@ class ContinentalShelfTest {
     fun `shallow water hugs the coast and the open ocean is deep`() {
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val shelfWidth = config.sea.shelfWidth
+            val shelfWidthCells = config.sea.shelfWidthCells
             val world = WorldGenerationEngine.generateBlocking(config)
-            val (near, far) = shallowShares(world, shelfWidth)
+            val (near, far) = shallowShares(world, shelfWidthCells)
             println(
-                "SHELF seed $seed: shelfWidth=%.0f near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
-                    .format(shelfWidth, near * 100, far * 100)
+                "SHELF seed $seed: shelfWidthCells=%.0f near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
+                    .format(shelfWidthCells, near * 100, far * 100)
             )
             // The remap guarantees the whole plateau (-0.02 at the coast to -shelfDepth at the
             // outer edge, both shallower than the -0.12 cut) reads as shallow, so this should sit
-            // near 100% -- 90% leaves room for the handful of cells right at 2x shelfWidth where
+            // near 100% -- 90% leaves room for the handful of cells right at 2x shelfWidthCells where
             // the smoothstep has already blended most of the way back to the natural floor.
             assertTrue(
                 near > 0.90,
-                "seed $seed: only ${(near * 100).toInt()}% of ocean within $shelfWidth cells of " +
+                "seed $seed: only ${(near * 100).toInt()}% of ocean within $shelfWidthCells cells of " +
                     "the coast is shallow"
             )
             assertTrue(
                 far < 0.10,
-                "seed $seed: ${(far * 100).toInt()}% of ocean beyond ${2 * shelfWidth} cells from " +
+                "seed $seed: ${(far * 100).toInt()}% of ocean beyond ${2 * shelfWidthCells} cells from " +
                     "the coast is still shallow"
             )
         }
@@ -59,19 +59,19 @@ class ContinentalShelfTest {
     /** Ground rule 2: shown failing without the fix, at exactly the width the guard above uses. */
     @Test
     fun `the near-coast share fails without the shelf`() {
-        val defaultWidth = WorldGenConfig().sea.shelfWidth
+        val defaultWidth = WorldGenConfig().sea.shelfWidthCells
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512).let {
-            it.copy(sea = it.sea.copy(shelfWidth = 0f))
+            it.copy(sea = it.sea.copy(shelfWidthCells = 0f))
         }
         val world = WorldGenerationEngine.generateBlocking(config)
         val (near, far) = shallowShares(world, defaultWidth)
         println(
-            "SHELF shelfWidth=0 control: near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
+            "SHELF shelfWidthCells=0 control: near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
                 .format(near * 100, far * 100)
         )
         assertTrue(
             near <= 0.90,
-            "expected the shelfWidth=0 control to fail the near-coast guard, but got " +
+            "expected the shelfWidthCells=0 control to fail the near-coast guard, but got " +
                 "${(near * 100).toInt()}% shallow"
         )
     }
@@ -98,7 +98,7 @@ class ContinentalShelfTest {
             }
             val withShelf = WorldGenerationEngine.generateBlocking(base)
             val noShelf = WorldGenerationEngine.generateBlocking(
-                base.copy(sea = base.sea.copy(shelfWidth = 0f))
+                base.copy(sea = base.sea.copy(shelfWidthCells = 0f))
             )
 
             assertTrue(
@@ -142,10 +142,10 @@ class ContinentalShelfTest {
     }
 
     /**
-     * @return (share of ocean within [shelfWidth] cells of the coast that is shallow, share of
-     *   ocean beyond `2 * shelfWidth` cells that is shallow)
+     * @return (share of ocean within [shelfWidthCells] cells of the coast that is shallow, share of
+     *   ocean beyond `2 * shelfWidthCells` cells that is shallow)
      */
-    private fun shallowShares(world: WorldMap, shelfWidth: Float): Pair<Double, Double> {
+    private fun shallowShares(world: WorldMap, shelfWidthCells: Float): Pair<Double, Double> {
         val w = world.width
         val h = world.height
         val land = world.sea.isLand
@@ -173,10 +173,10 @@ class ContinentalShelfTest {
             if (land[i]) continue
             val shallow = world.sea.relativeElevation.data[i] > -0.12f
             val d = dist[i]
-            if (d <= shelfWidth) {
+            if (d <= shelfWidthCells) {
                 nearTotal++
                 if (shallow) nearShallow++
-            } else if (d > 2f * shelfWidth) {
+            } else if (d > 2f * shelfWidthCells) {
                 farTotal++
                 if (shallow) farShallow++
             }

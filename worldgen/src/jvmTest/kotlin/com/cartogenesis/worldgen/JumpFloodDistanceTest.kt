@@ -153,7 +153,7 @@ class JumpFloodDistanceTest {
         val world = WorldGenerationEngine.generateBlocking(config)
         val w = world.width
         val h = world.height
-        val shelf = config.sea.shelfWidth
+        val shelf = config.sea.shelfWidthCells
 
         fun field(transform: (Int, Int, FloatArray, IntArray) -> Unit): Pair<FloatArray, IntArray> {
             val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }

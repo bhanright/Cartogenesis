@@ -911,11 +911,11 @@ guard reported, so the next chunk knows its baseline.
 | G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
 | G2 Export rendering on GPU | Opus | in progress | 2026-09-12 | | |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |
-| G4 Jump-flood distance fields | Opus | in progress | 2026-09-12 | | |
-| H4 Currents feed the rain | Sonnet | queued behind G4 | | | |
+| G4 Jump-flood distance fields | Opus | done | 2026-09-12 | 0228500 (merge, see log) | math/JumpFloodDistance propagates source coordinates (1, halving powers of two, 1), integer squared distances, ties to the lower index, row-parallel, exact against brute force; replaced the chamfer in ClimateStage.waterDistance, the shelf remap and PlateStage's boundary distance (plate assignment keeps chamfer: only the label is read); 23/93/367 ms at 512/1024/2048 vs chamfer 6/33/110, +0.77 s on a 2048 generation, so no GPU path (rule 8: measured and declined); eight-fold component lone source 0.083 -> 0.004, shelf break on seed 42 0.030 -> 0.000, both controls in-test; continentality gap 8.5C held; shelf near/far held, 0 land cells differ; BoundaryPair 3.47x -> 3.01x (belts up to 8% wider in cells because Euclid is shorter); rift 3/4/0.32 -> 4/5/0.32; DepositionTest pin re-recorded, land 6226 held; render: plateau margins lose their kinks and sweep, the shelf break rounds |
+| H4 Currents feed the rain | Sonnet | in progress | 2026-09-12 | | |
 | H2 Snow mass balance | Opus | queued behind H4 | | | |
 | H5 Sea-level history | Opus | queued behind E1 | | | |
-| H1 Tectonic history | Opus | queued behind G4 | | | |
+| H1 Tectonic history | Opus | in progress | 2026-09-12 | | |
 | H3 Lithology | Opus | queued behind H1 and G1 | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform

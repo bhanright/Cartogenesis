@@ -125,7 +125,7 @@ object RiverStage {
 
         val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRain)
         val flow = accumulateFlow(w, h, sea, climate, filled, flowTarget)
-        val rivers = traceRivers(config, sea, flow, flowTarget)
+        val rivers = traceRivers(config, sea, flow, flowTarget, lakes)
 
         return RiverResult(filled, flow.accumulation, flowTarget, rivers, lakes)
     }
@@ -184,6 +184,12 @@ object RiverStage {
         // Reused across basins. [LakeWaterBalance.routeIntoWater] empties it as it goes, so it is
         // all-false again by the time the next basin fills it.
         val pending = BooleanArray(w * h)
+        // The other two scratch arrays the re-routing needs. `settled` is stamped with the basin's
+        // own number rather than a boolean, so it never has to be cleared; `pathKey` is only ever
+        // read for cells the current basin has just written.
+        val settled = IntArray(w * h) { -1 }
+        val pathKey = FloatArray(w * h)
+        var basinMark = 0
 
         for (start in 0 until w * h) {
             if (!submerged[start] || visited[start]) continue
@@ -282,7 +288,10 @@ object RiverStage {
             }
 
             for (cell in member) pending[cell] = true
-            LakeWaterBalance.routeIntoWater(w, h, ground, pending, water, member.size, flowTarget)
+            LakeWaterBalance.routeIntoWater(
+                w, h, ground, pending, water, member.size, flowTarget,
+                settled, basinMark++, pathKey, config.seed
+            )
         }
 
         return LakeResult(lakeId, lakes, playa)
@@ -345,11 +354,31 @@ object RiverStage {
         return FlowResult(accumulation, totalRunoff)
     }
 
+    /**
+     * Draws the channels, and stops each one at the water.
+     *
+     * A lake is not a reach of river and must not be drawn as one. What is under a lake is the
+     * depression-filled surface, which inside the basin is flat to within the 1e-6 the fill nudges
+     * each cell of a flat by as the flood passes over it — and the flood passes over equal ground in
+     * cell-index order, so that nudge grows from west to east and from north to south. D8 then reads
+     * a gradient of exactly one nudge per cell pointing due east or due south, and beats every
+     * diagonal because a diagonal's drop is divided by the root of two. The result is a channel
+     * running dead straight from one shore of a lake to the other, and since every row of the lake
+     * does the same thing, several of them in parallel. Measured on seed 59758 at 2048: four
+     * horizontal runs of 36 to 44 cells across the same 2163-cell lake, and on 718106 a 45-cell one.
+     *
+     * None of that is a fact about the terrain — it is the fill's bookkeeping showing through — so
+     * a river ends at the shore. The cell it enters the water at is kept, so the line touches the
+     * lake rather than stopping a step short of it, and the outflow below the lake becomes a channel
+     * of its own: lake cells are struck out of the channel mask above, which leaves the first cell
+     * below the outlet with nothing upstream of it and so makes it a source in its own right.
+     */
     private fun traceRivers(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         flow: FlowResult,
-        flowTarget: IntArray
+        flowTarget: IntArray,
+        lakes: LakeResult
     ): List<River> {
         val w = config.width
         val h = config.height
@@ -361,7 +390,11 @@ object RiverStage {
         // consistent as resolution or sea level changes.
         val threshold = (flow.totalRunoff * cfg.sourceThreshold).coerceAtLeast(1e-4f)
 
-        val isChannel = BooleanArray(w * h) { sea.isLand[it] && accumulation.data[it] >= threshold }
+        // Standing water is not channel. A playa is: it is dry ground most of the year and the
+        // river across it is a real one.
+        val isChannel = BooleanArray(w * h) {
+            sea.isLand[it] && !lakes.isLake(it) && accumulation.data[it] >= threshold
+        }
 
         val hasUpstream = BooleanArray(w * h)
         for (i in 0 until w * h) {
@@ -406,8 +439,8 @@ object RiverStage {
 
                 val next = flowTarget[current]
                 if (next < 0) break
-                if (!sea.isLand[next]) {
-                    path.add(next) // the river mouth
+                if (!sea.isLand[next] || lakes.isLake(next)) {
+                    path.add(next) // the river mouth, on the sea or on a lake shore
                     break
                 }
                 current = next

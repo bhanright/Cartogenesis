@@ -627,6 +627,69 @@ class DebugMapDump {
         println("Balance renders written to ${outputDir.absolutePath}")
     }
 
+    /**
+     * The lakes, close up, with the channels drawn over them.
+     *
+     * [drawRivers] draws every segment of every river, lakes included, which is how the artefact
+     * this exists for became visible: under a lake the routing runs on the depression-filled
+     * surface, and that surface is flat to within the 1e-6 the fill nudges a flat cell by as the
+     * priority flood passes over it. The flood takes equal ground in cell-index order, so the nudge
+     * grows west to east and north to south, and D8 reads a gradient of one nudge per cell pointing
+     * due east or due south — which beats every diagonal, whose drop is divided by the root of two.
+     * Every row of the lake did the same thing. On seed 59758 at 2048 that was four horizontal runs
+     * of 36 to 44 cells across one 2163-cell lake and a vertical one of 44 across another; on
+     * 718106, 45 cells due west across a third.
+     *
+     * The crops are aimed at whichever lake the world actually has rather than at a remembered
+     * coordinate, so they keep finding it when the terrain moves.
+     */
+    @Test
+    fun `dump the lake crossings`() {
+        outputDir.mkdirs()
+
+        listOf(59758L, 718106L).forEach { seed ->
+            val world = WorldGenerationEngine.generateBlocking(
+                WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
+                    .atResolution(1024, 1024)
+            )
+            val lakes = world.rivers.lakes
+            var crossings = 0
+            var longest = 0
+            world.rivers.rivers.forEach { river ->
+                var run = 0
+                river.cells.forEach { cell ->
+                    if (lakes.isLake(cell)) {
+                        crossings++
+                        run++
+                        if (run > longest) longest = run
+                    } else {
+                        run = 0
+                    }
+                }
+            }
+
+            val image = render(world, Mode.FANTASY)
+            lakes.lakes.sortedByDescending { it.cellCount }.take(2).forEachIndexed { rank, lake ->
+                val cells = (0 until world.width * world.height).filter { lakes.lakeId[it] == lake.id }
+                if (cells.isEmpty()) return@forEachIndexed
+                val span = 160
+                val cx = (cells.map { it % world.width }.average().toInt() - span / 2)
+                    .coerceIn(0, world.width - span)
+                val cy = (cells.map { it / world.width }.average().toInt() - span / 2)
+                    .coerceIn(0, world.height - span)
+                write(crop(image, cx, cy, span, span, 4), "crossing-seed$seed-lake$rank.png")
+                println(
+                    "CROSSING seed $seed lake $rank: ${lake.cellCount} cells, crop at ($cx,$cy)"
+                )
+            }
+            println(
+                "CROSSING seed $seed at 1024: $crossings drawn river cells on a lake, " +
+                    "longest unbroken run across water $longest"
+            )
+        }
+        println("Lake crossing crops written to ${outputDir.absolutePath}")
+    }
+
     /** A rectangle of an image, blown up by [zoom] with no smoothing, so cells stay cells. */
     private fun crop(
         source: BufferedImage,

@@ -23,10 +23,15 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 internal open class FakePlatform(
     override val defaultResolution: Int = 512,
     override val accelerator: ErosionAccelerator? = null,
-    override val exportCeiling: Int = 4096,
+    /** What [exportCeiling] answers, whatever the window's shape. */
+    private val ceiling: Int = 4096,
     override val canQuit: Boolean = false,
+    override val graphicsApiPresent: Boolean = true,
+    override val coarsePointer: Boolean = false,
     private val stored: String? = null
 ) : Platform {
+
+    override fun exportCeiling(compact: Boolean): Int = ceiling
 
     override val library: WorldLibrary = EmptyLibrary
     override val compressor: Compressor = NoCompression

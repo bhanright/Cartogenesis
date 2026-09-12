@@ -58,6 +58,12 @@ fun CartogenesisTheme(
     dark: Boolean = isSystemInDarkTheme(),
     choice: ThemeChoice = ThemeChoice.SYSTEM,
     scale: Float = 1f,
+    /**
+     * Whether this is being driven by a fingertip, which is a property of the theme and not of any
+     * control: F5 makes the sliders and the switches bigger by changing one set of numbers here
+     * rather than by editing the controls, exactly as F1 recoloured them.
+     */
+    coarsePointer: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
@@ -67,7 +73,8 @@ fun CartogenesisTheme(
         // else, so the interface would come apart rather than grow.
         Density(density.density * scale, density.fontScale)
     }
-    CompositionLocalProvider(LocalDensity provides scaled) {
+    val targets = if (coarsePointer) TouchTargets.TOUCH else TouchTargets.POINTER
+    CompositionLocalProvider(LocalDensity provides scaled, LocalTouchTargets provides targets) {
         MaterialTheme(
             colorScheme = choice.scheme(dark),
             typography = cartogenesisTypography(),

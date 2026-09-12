@@ -135,10 +135,22 @@ object SettingsCodec {
  */
 internal object SettingsEffects {
 
-    /** The grid a fresh world starts at: the preference, or the platform's own if there is none. */
-    fun resolution(settings: AppSettings, platform: Platform): Int =
-        if (settings.workingResolution == AppSettings.FOLLOW_PLATFORM) platform.defaultResolution
-        else settings.workingResolution
+    /**
+     * The grid a fresh world starts at: the preference, or the platform's own if there is none —
+     * and never above 512 in a phone-shaped window.
+     *
+     * The cap is not a preference being overruled for the sake of it. The settings document is one
+     * string per origin and per user, so a reader who works at 2048 on a desktop and then opens the
+     * web build on their phone arrives with `workingResolution = 2048` in local storage; honouring
+     * it there is a minute of a blocked page on one thread, which reads as a browser that has hung.
+     * 512 is what the web front end already starts at for the same reason.
+     */
+    fun resolution(settings: AppSettings, platform: Platform, compact: Boolean = false): Int {
+        val preferred =
+            if (settings.workingResolution == AppSettings.FOLLOW_PLATFORM) platform.defaultResolution
+            else settings.workingResolution
+        return if (compact) minOf(preferred, Layouts.COMPACT_RESOLUTION) else preferred
+    }
 
     /**
      * The config the application opens with.
@@ -148,8 +160,13 @@ internal object SettingsEffects {
      * into the erosion config here — one writer per setting, so the switch in the header and the
      * preference in the dialog cannot come to disagree about what "on" means.
      */
-    fun startingConfig(settings: AppSettings, platform: Platform, seed: Long): WorldGenConfig {
-        val size = resolution(settings, platform)
+    fun startingConfig(
+        settings: AppSettings,
+        platform: Platform,
+        seed: Long,
+        compact: Boolean = false
+    ): WorldGenConfig {
+        val size = resolution(settings, platform, compact)
         val base = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
         // A machine with no device gets the CPU whatever the preference says: a config claiming
         // GPU acceleration that silently ran on the CPU would be a lie told to the header switch.

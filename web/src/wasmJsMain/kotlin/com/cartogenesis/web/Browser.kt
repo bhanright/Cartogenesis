@@ -100,6 +100,26 @@ internal external fun publishSelfTest(text: String)
 internal external fun openInNewTab(url: String)
 
 /**
+ * Whether this page is being pointed at with a fingertip rather than with a mouse.
+ *
+ * `(pointer: coarse)` is the media query for "the primary input has limited accuracy", which is a
+ * touchscreen and is not a trackpad, a stylus on a tablet PC, or a phone with a mouse plugged into
+ * it. Asked once at startup rather than watched: a device that changes its primary pointer
+ * mid-session is a laptop being folded into a tablet, and a reload is a fair price for that.
+ *
+ * Guarded because `matchMedia` is missing in a handful of embedded webviews and throws on a bad
+ * query string in older Safari; a browser that cannot answer is treated as a mouse, which is the
+ * answer that changes nothing.
+ */
+@JsFun(
+    """() => {
+        try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+        catch (e) { return false; }
+    }"""
+)
+internal external fun pointerIsCoarse(): Boolean
+
+/**
  * One `GET`, resolving to the body as text or to null.
  *
  * The whole of the browser build's network reach, and it is called from exactly one place: the

@@ -48,6 +48,10 @@ internal fun SettingsDialog(
     onSettings: (AppSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 2048 rather than 4096 in a phone browser, and the small print below says so. Read from the
+    // composition rather than passed in because this dialog is opened from a menu item that knows
+    // nothing about the window's shape.
+    val ceiling = platform.exportCeiling(LocalWindowShape.current == WindowShape.COMPACT)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
@@ -90,22 +94,28 @@ internal fun SettingsDialog(
                     }
                 }
 
-                SettingRow(
-                    "Graphics card at launch",
-                    platform.accelerator?.let { "Erosion starts on ${it.name}." }
-                        ?: "Unavailable here: ${platform.accelerationUnavailableBecause}"
-                ) {
-                    Toggle(
-                        "Generate on the graphics card",
-                        settings.graphicsCardAtLaunch,
-                        enabled = platform.accelerator != null
-                    ) { onSettings(settings.copy(graphicsCardAtLaunch = it)) }
+                // Absent rather than disabled where the host has no graphics API at all, for the
+                // reason [Arrangements.headerKnobs] gives: a phone browser without WebGPU is owed
+                // no explanation of a feature its device does not have, and the header switch this
+                // is the preference for is not drawn there either.
+                if (platform.graphicsApiPresent) {
+                    SettingRow(
+                        "Graphics card at launch",
+                        platform.accelerator?.let { "Erosion starts on ${it.name}." }
+                            ?: "Unavailable here: ${platform.accelerationUnavailableBecause}"
+                    ) {
+                        Toggle(
+                            "Generate on the graphics card",
+                            settings.graphicsCardAtLaunch,
+                            enabled = platform.accelerator != null
+                        ) { onSettings(settings.copy(graphicsCardAtLaunch = it)) }
+                    }
                 }
 
                 SettingRow(
                     "Export",
                     "What the export buttons start as. " +
-                        "Nothing above ${platform.exportCeiling} can be finished by this build."
+                        "Nothing above $ceiling can be finished by this build."
                 ) {
                     ChipRow(
                         options = ExportFormat.entries,
@@ -118,7 +128,7 @@ internal fun SettingsDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Exports.SIZES.forEach { size ->
-                            val reachable = Exports.reachable(size, platform.exportCeiling)
+                            val reachable = Exports.reachable(size, ceiling)
                             FilterChip(
                                 selected = settings.exportSize == size,
                                 enabled = reachable,

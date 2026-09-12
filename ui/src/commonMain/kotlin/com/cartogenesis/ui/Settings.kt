@@ -40,9 +40,15 @@ data class AppSettings(
     @SerialName("workingResolution")
     val workingResolution: Int = FOLLOW_PLATFORM,
 
-    /** Whether erosion reaches for the graphics card without being asked. */
+    /**
+     * Whether the graphics device is reached for without being asked.
+     *
+     * The stored key is still `graphicsCardAtLaunch`, which is what every settings file written
+     * before F8 says. The switch was renamed because "card" is wrong on a phone; a preference file
+     * that stopped loading over a change of wording would be a worse thing than an out-of-date key.
+     */
     @SerialName("graphicsCardAtLaunch")
-    val graphicsCardAtLaunch: Boolean = false,
+    val graphicsAccelerationAtLaunch: Boolean = false,
 
     @SerialName("exportFormat")
     val exportFormat: ExportFormat = ExportFormat.PNG,
@@ -156,7 +162,7 @@ internal object SettingsEffects {
      * The config the application opens with.
      *
      * `atResolution` rather than a copy, for the reason [Knobs.atResolution] gives, and the
-     * graphics-card preference is written through [Knobs.graphicsCard] rather than by reaching
+     * graphics-card preference is written through [Knobs.graphicsAcceleration] rather than by reaching
      * into the erosion config here — one writer per setting, so the switch in the header and the
      * preference in the dialog cannot come to disagree about what "on" means.
      */
@@ -170,12 +176,12 @@ internal object SettingsEffects {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
         // A machine with no device gets the CPU whatever the preference says: a config claiming
         // GPU acceleration that silently ran on the CPU would be a lie told to the header switch.
-        val gpu = settings.graphicsCardAtLaunch && platform.accelerator != null
-        return Knobs.graphicsCard.set(base, gpu)
+        val gpu = settings.graphicsAccelerationAtLaunch && platform.accelerator != null
+        return Knobs.graphicsAcceleration.set(base, gpu)
     }
 
     /** Whether [startingConfig] will have asked for the graphics card. */
-    fun usesGraphicsCard(config: WorldGenConfig): Boolean =
+    fun usesGraphicsAcceleration(config: WorldGenConfig): Boolean =
         config.erosion.acceleration == Acceleration.GPU
 
     /** The default export size, never above what this build can finish. */

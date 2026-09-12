@@ -39,7 +39,7 @@ internal enum class PanelSection(val title: String) {
      *
      * It holds the two things that are not settings of the world — which world (the seed and the
      * name) and how finely it is computed — and, since this change, the one setting that is not
-     * about the world either: where the work runs. The graphics-card switch spent F2 in [WORLD],
+     * about the world either: where the work runs. The graphics-acceleration switch spent F2 in [WORLD],
      * directly under Ocean coverage, where it read as something to do with the sea. It decides
      * which processor erodes the terrain, which is a fact about this machine, and it belongs with
      * the resolution it is the other half of.
@@ -154,7 +154,7 @@ internal class Stepper(
 internal class Latch(
     override val section: PanelSection,
     override val label: String,
-    /** True for the graphics-card switch, which a machine with no usable device cannot offer. */
+    /** True for the graphics-acceleration switch, which a machine with no usable device cannot offer. */
     val needsAccelerator: Boolean = false,
     val read: (WorldGenConfig) -> Boolean,
     private val write: (WorldGenConfig, Boolean) -> WorldGenConfig
@@ -223,9 +223,12 @@ internal object Knobs {
      * world is the same world either way — it is a fact about this machine, and on a large one it
      * is most of the difference between a minute and a quarter of an hour.
      */
-    val graphicsCard = Latch(
+    val graphicsAcceleration = Latch(
         section = PanelSection.HEADER,
-        label = "Generate on the graphics card",
+        // Not "graphics card". The device on the phone this was reported from is a block of cores
+        // on the same die as the processor, and there is no card anywhere in it; "acceleration" is
+        // what the switch does and is true of every host that offers one.
+        label = "Graphics acceleration",
         needsAccelerator = true,
         read = { it.erosion.acceleration == Acceleration.GPU },
         write = { config, on ->
@@ -422,7 +425,7 @@ internal object Knobs {
 
     /** Every knob there is, panel and atlas alike, in the order they are drawn. */
     val all: List<Knob> = listOf(
-        graphicsCard,
+        graphicsAcceleration,
         oceanCoverage,
         plates, mountainHeight, erosionStrength,
         seasonalTilt, rainShadow, ice,

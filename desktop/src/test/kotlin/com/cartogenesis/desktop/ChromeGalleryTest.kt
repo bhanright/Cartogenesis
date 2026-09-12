@@ -3,7 +3,9 @@ package com.cartogenesis.desktop
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -191,6 +194,46 @@ class ChromeGalleryTest {
     }
 
     /**
+     * F8's subject: the two reading surfaces on a phone, which is where the map's chrome had to let
+     * go.
+     *
+     * The compact arrangement drew the map's translucent toolbar over whatever the pane was
+     * showing. Over a chart that is right; over a page of text it is a lid, and since the header
+     * carrying "Show map" lives in the pull-up sheet here, the atlas opened underneath a band with
+     * nothing on screen that would close it — which is what William found. The strips now belong to
+     * the map alone and each pane carries its own bar: the world's name, or "Library", and a Map
+     * button.
+     *
+     * Four shots, because the thing being looked at is a *surface* and a chrome is a light and a
+     * dark scheme. What is asserted is what a screenshot allows — that each is a drawn window
+     * rather than a blank one, and that the four differ — and the rest is for the eye.
+     */
+    @Test
+    fun `the atlas and the library are photographed on a phone`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val fingerprints = mutableMapOf<String, Int>()
+
+        listOf("light" to false, "dark" to true).forEach { (tone, dark) ->
+            val (atlas, library) = shootCompactPanes(dark = dark)
+            File(dir, "f8-atlas-$tone.png").writeBytes(atlas.png)
+            File(dir, "f8-library-$tone.png").writeBytes(library.png)
+            fingerprints["atlas-$tone"] = atlas.fingerprint
+            fingerprints["library-$tone"] = library.fingerprint
+            assertTrue(atlas.distinctColours > 40, "the $tone atlas shot is nearly blank")
+            assertTrue(library.distinctColours > 20, "the $tone library shot is nearly blank")
+        }
+
+        println("CHROME wrote four F8 shots (390x844 atlas and library, light and dark) to " +
+            "${dir.absolutePath}")
+        println("CHROME F8 fingerprints $fingerprints")
+        assertEquals(
+            fingerprints.size,
+            fingerprints.values.toSet().size,
+            "two of the F8 shots are identical: $fingerprints"
+        )
+    }
+
+    /**
      * The guard the spec asks `PanelKnobsTest` for, asked again from outside the module and against
      * a real composition.
      *
@@ -301,7 +344,7 @@ class ChromeGalleryTest {
      *
      * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own
      * six headings are all single words set in one line — so the dialog, whose rows are "Working
-     * resolution", "Graphics card at launch" and "Library folder", is the only place either is
+     * resolution", "Graphics acceleration at launch" and "Library folder", is the only place either is
      * legible. Photographed the way a reader reaches it, File then Settings, so the shot also proves
      * the menu item still opens what it claims to.
      */
@@ -346,6 +389,18 @@ class ChromeGalleryTest {
      * moved all eleven values with no code change at all. So the comparison is skipped off the
      * platform it was recorded on, and the scheme-by-scheme guard in `ChromeContrastTest`, which
      * has no pixels in it, is the claim that travels.
+     *
+     * 2026-09-12, F8: all eleven read differently on `release/2.0` on this machine — SYSTEM and
+     * LIGHT 696531673, DARK 1725287667, NAUTICAL -1526613814, MIDNIGHT -1129601573, MARS
+     * -667156423, HIGH_CONTRAST -1182965821, COLORBLIND -775155879, ALLIED 2141018041, HALLOWED
+     * -2056563228, BAROQUE 82259059 — and read *exactly those eleven values* both with F8's changes
+     * and with `App.kt` reverted to the v2.0.0 file, so the drift is not F8's and is already on the
+     * branch. Nothing between 27fd260 and the tag touches `Menus.kt`, `Theme.kt` or `Controls.kt`
+     * except F7 itself, which is the commit the numbers were recorded against, so the cause is
+     * outside the source — the same class of thing as the Linux runner: whatever rasterised the
+     * text is no longer what rasterised it then. Left failing rather than re-recorded, because a
+     * number moved to make a guard green proves nothing (ground rule 5), and because the question
+     * of what changed is worth an answer rather than an overwrite.
      */
     @Test
     fun `the eleven chromes before F7 are pixel-identical`() {
@@ -504,6 +559,51 @@ class ChromeGalleryTest {
         return (down ?: error("no frame")) to (up ?: error("no frame"))
     }
 
+    /**
+     * The compact window on its two reading surfaces: the atlas, then the library.
+     *
+     * One composition for both, because reaching either means generating a world first — the atlas
+     * of no world is a sentence saying so — and a world is the slow part. The route is the reader's
+     * throughout: the sheet up, Generate, Atlas; then the pane's own Map button back to the map,
+     * the sheet up again, and Library. That the middle step works at all is [PhoneAtlasTest]'s
+     * subject; here it is simply how the second shot is reached.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun shootCompactPanes(dark: Boolean): Pair<Shot, Shot> {
+        var atlas: Shot? = null
+        var library: Shot? = null
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = TouchPlatform()
+            setContent {
+                CartogenesisTheme(dark = dark, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Generate").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("512 × 512", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+
+            onNode(ATLAS_BUTTON).performScrollTo().performClick()
+            waitForIdle()
+            atlas = capture()
+
+            onNodeWithText("Map").performClick()
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Library").performScrollTo().performClick()
+            waitForIdle()
+            library = capture()
+        }
+        return (atlas ?: error("no frame")) to (library ?: error("no frame"))
+    }
+
     /** Every string in the semantics tree of a 1440x900 window with all six sections unrolled. */
     @OptIn(ExperimentalTestApi::class)
     private fun textsInWideWindow(): Set<String> {
@@ -596,6 +696,17 @@ class ChromeGalleryTest {
     }
 
     private companion object {
+        /**
+         * The header's Atlas button, and not the map style of the same name.
+         *
+         * The default style is called Atlas and the compact toolbar prints the current style's name
+         * on its button, so with the sheet up two nodes read "Atlas" and they do opposite things.
+         * Material gives a button `Role.Button`; a cell on the strip is a bare clickable, because a
+         * segmented key is a key rather than a row of buttons.
+         */
+        val ATLAS_BUTTON = hasText("Atlas") and
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+
         const val WIDTH = 1440
         const val HEIGHT = 900
 

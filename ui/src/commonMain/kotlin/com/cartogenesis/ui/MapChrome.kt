@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.MapStyle
@@ -66,6 +68,16 @@ import kotlin.math.sin
  */
 
 /**
+ * What a reader who cannot see the strip is told it is, and what a test asks for by name.
+ *
+ * The two toolbars are a row of unlabelled glyphs on a translucent wash, which is a shape with no
+ * name unless one is given: a screen reader announcing "Menu, Style, View" says nothing about what
+ * those three belong to. It also makes the strip a thing a guard can look for, which is the whole
+ * of how `PhoneAtlasTest` asks whether the map's chrome is being drawn over a page of text.
+ */
+internal const val MAP_TOOLBAR: String = "Map toolbar"
+
+/**
  * Along the top edge of the map, inside it: the styles as a segmented control, the views as a menu.
  *
  * Why the two are drawn differently is a matter of arithmetic at the width this application is
@@ -90,7 +102,11 @@ internal fun MapToolbar(
     views: List<MapView>,
     onOptions: (RenderOptions) -> Unit
 ) {
-    Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
+    Surface(
+        color = LocalChromeDetail.current.strip(),
+        contentColor = OverMap.Parchment,
+        modifier = Modifier.semantics { contentDescription = MAP_TOOLBAR }
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -142,7 +158,11 @@ internal fun CompactMapToolbar(
     onOptions: (RenderOptions) -> Unit,
     menu: @Composable () -> Unit
 ) {
-    Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
+    Surface(
+        color = LocalChromeDetail.current.strip(),
+        contentColor = OverMap.Parchment,
+        modifier = Modifier.semantics { contentDescription = MAP_TOOLBAR }
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -339,6 +359,17 @@ private fun ViewMenu(
 internal fun ChartLegend(
     cartouche: Cartouche?,
     prompt: String,
+    /**
+     * What the interface is doing, if it is doing something, in the cartouche's place.
+     *
+     * Null in the wide arrangement, where the progress banner along the map's top edge is in plain
+     * view beside a panel that is also visibly busy. On a phone the sheet takes two thirds of the
+     * screen the moment Generate is pressed — Generate lives in the sheet — and the banner is then
+     * a strip at the top of what is left, a long way from where the reader's thumb and eye are. So
+     * the foot of the map says it too. It is the same sentence the banner is showing: the stage the
+     * engine last reported, or the size of the export being drawn.
+     */
+    progress: String? = null,
     camera: MapCamera,
     /**
      * Which halves of the legend this arrangement carries. A compact window drops the zoom readout
@@ -359,7 +390,15 @@ internal fun ChartLegend(
             // ink, because this lies on a chart whose paper belongs to the style.
             val shape = LocalChromeDetail.current.cartouche
             Column(Modifier.weight(1f).cartoucheFrame(shape)) {
-                if (cartouche == null) {
+                if (progress != null) {
+                    Text(
+                        progress,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OverMap.Parchment,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else if (cartouche == null) {
                     Text(
                         prompt,
                         style = MaterialTheme.typography.bodySmall,

@@ -1,7 +1,11 @@
 package com.cartogenesis.ui
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -15,12 +19,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +62,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.NationOverride
@@ -105,7 +114,14 @@ fun CartogenesisRoot(platform: Platform) {
     }
 
     val current = settings ?: return
-    CartogenesisTheme(choice = current.theme, scale = current.interfaceScale) {
+    CartogenesisTheme(
+        choice = current.theme,
+        scale = current.interfaceScale,
+        // Asked of the host rather than guessed from the width: a tablet in landscape is as wide as
+        // a laptop and is still driven by a thumb, and the theme's touch targets follow the pointer
+        // rather than the window. See [Platform.coarsePointer].
+        coarsePointer = platform.coarsePointer
+    ) {
         CartogenesisApp(
             platform = platform,
             settings = current,
@@ -122,15 +138,46 @@ fun CartogenesisRoot(platform: Platform) {
     }
 }
 
+/**
+ * The application, and the one decision that has to be made before any of it is drawn: which shape
+ * of window this is.
+ *
+ * [BoxWithConstraints] rather than a platform question, because the answer is about the window and
+ * not about the host — a desktop window dragged narrow is a compact window, and the same browser is
+ * wide in landscape and compact in portrait. It measures and places its content exactly as a plain
+ * `Box(Modifier.fillMaxSize())` would, so the wide arrangement below is laid out to the pixel as it
+ * was before F5; all this adds is the width, in dp, to decide with.
+ */
 @Composable
 fun CartogenesisApp(
     platform: Platform,
     settings: AppSettings = AppSettings(),
     onSettings: (AppSettings) -> Unit = {}
 ) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val shape = Layouts.shape(maxWidth.value, platform.coarsePointer)
+        CompositionLocalProvider(LocalWindowShape provides shape) {
+            Application(platform, settings, onSettings, shape, maxHeight)
+        }
+    }
+}
+
+@Composable
+private fun Application(
+    platform: Platform,
+    settings: AppSettings,
+    onSettings: (AppSettings) -> Unit,
+    shape: WindowShape,
+    windowHeight: Dp
+) {
+    val compact = shape == WindowShape.COMPACT
+    /** What this arrangement puts within reach. See [Arrangements]. */
+    val reach = remember(shape, platform) { Arrangements.of(shape, platform) }
+    /** 2048 in a phone browser, 4096 otherwise. See [Platform.exportCeiling]. */
+    val exportCeiling = platform.exportCeiling(compact)
     var config by remember {
         mutableStateOf(
-            SettingsEffects.startingConfig(settings, platform, Random.nextLong(1_000_000))
+            SettingsEffects.startingConfig(settings, platform, Random.nextLong(1_000_000), compact)
         )
     }
     var options by remember { mutableStateOf(RenderOptions()) }
@@ -158,6 +205,14 @@ fun CartogenesisApp(
     var saveAs by remember { mutableStateOf(false) }
     /** The toolbar over the map, which View can put away for an uncluttered picture. */
     var toolbarVisible by remember { mutableStateOf(true) }
+
+    /**
+     * Whether the compact arrangement's settings sheet is pulled up. Unused when wide.
+     *
+     * It starts down, over a whole-screen map, which is the same decision F0 made about the blank
+     * canvas: the application opens showing what it is for rather than showing its controls.
+     */
+    var sheetOpen by remember { mutableStateOf(false) }
 
     // Probed once. A machine with no usable device gets the toggle disabled and told why, rather
     // than a switch that silently does nothing.
@@ -247,6 +302,11 @@ fun CartogenesisApp(
 
     LaunchedEffect(Unit) { saved = store.list() }
 
+    // The library and the atlas are whole screens of their own, and a settings sheet pulled up over
+    // the top third of one is a sheet in the way. Choosing either puts it down; nothing puts it
+    // back up but the reader.
+    LaunchedEffect(screen) { if (screen != Screen.MAP) sheetOpen = false }
+
     /**
      * The update check, run on demand and never on its own unless asked.
      *
@@ -284,7 +344,7 @@ fun CartogenesisApp(
             MenuCommand.SAVE_AS -> saveAs = true
 
             MenuCommand.EXPORT ->
-                pendingExport = SettingsEffects.exportSizeWithin(settings, platform.exportCeiling)
+                pendingExport = SettingsEffects.exportSizeWithin(settings, exportCeiling)
 
             MenuCommand.SETTINGS -> showSettings = true
 
@@ -430,236 +490,418 @@ fun CartogenesisApp(
     // that Ctrl+S works wherever the focus happens to be; they are filtered on a modifier being
     // held, so typing a seed or a name never reaches them, and [Menus.shortcuts] hands back an
     // empty list on the web, where these keystrokes belong to the browser.
+    //
+    // F5 adds the second arrangement of all of this, and nothing else. The five values below are
+    // the contents — the pane, the banner, the legend, the panel's header and the panel's sections
+    // — and the two branches after them are the two ways of enclosing those five. Written as
+    // composable values rather than as private functions because between them they read some thirty
+    // pieces of this composable's state, and a parameter list carrying all of it out to a function
+    // would be a second and worse copy of the same thing.
     val shortcuts = remember(platform) { Menus.shortcuts(platform) }
-    Column(
-        Modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .onPreviewKeyEvent { event ->
-                val command = Menus.match(event, shortcuts) ?: return@onPreviewKeyEvent false
-                if (command.needsWorld && world == null) return@onPreviewKeyEvent false
-                perform(command)
-                true
-            }
-    ) {
-        MenuStrip(
-            platform = platform,
-            hasWorld = world != null,
-            settings = settings,
-            sections = sections,
-            toolbarVisible = toolbarVisible,
-            onCommand = { perform(it) },
-            onTheme = { onSettings(settings.copy(theme = it)) }
-        )
 
-    // Everything below the strip: the panel and the map, taking whatever height is left.
-    Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp)) {
+    // Only the map gets the dark backdrop. The atlas and library are ordinary reading
+    // surfaces and must take their colour from the theme, or their (dark) text lands on
+    // near-black and becomes invisible.
+    val backdrop =
+        if (screen == Screen.MAP) Color(options.style.backdrop)
+        else MaterialTheme.colorScheme.background
 
-        Column(
-            Modifier.width(320.dp).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Panel {
-                PanelHeader(
-                    config = config,
-                    busy = busy,
-                    status = status,
-                    hasWorld = world != null,
-                    exportFormat = exportFormat,
-                    exportCeiling = platform.exportCeiling,
-                    worldName = naming.name,
-                    platform = platform,
-                    atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
-                    libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
-                    onWorldName = naming::rename,
-                    onConfig = { config = it },
-                    onSeed = { config = Knobs.withSeed(config, it); gate.request() },
-                    onResolution = { config = Knobs.atResolution(config, it) },
-                    onNewWorld = {
-                        config = Knobs.withSeed(config, Random.nextLong(1_000_000))
-                        gate.request()
-                    },
-                    onGenerate = { gate.request() },
-                    onExportFormat = { exportFormat = it },
-                    // Clamped here as well as at the button. The disabled chip is a courtesy; this
-                    // is the guarantee, and it is what a size restored from an older build's
-                    // preference — which could still say 8192 — passes through.
-                    onExport = { pendingExport = Exports.clamp(it, platform.exportCeiling) },
-                    onToggleAtlas = {
-                        screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
-                    },
-                    onToggleLibrary = {
-                        screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
+    /** Whichever of the three screens is up, drawn to fill whatever it is given. */
+    val pane: @Composable () -> Unit = {
+        val current = world
+        if (screen == Screen.LIBRARY) {
+            LibraryPane(
+                title = naming.name,
+                worlds = saved,
+                location = platform.libraryLocation,
+                supportsFileTransfer = platform.supportsFileTransfer,
+                onTitleChange = naming::rename,
+                // The same call File ▸ Save makes, so there is one way to write a world to the
+                // library rather than a pane's way and a menu's way.
+                onSave = { saveWorld() },
+                onDownload = {
+                    // Handing over the same bytes a save would have written - the format is
+                    // shared, so this is the whole of moving a world to the other front end.
+                    scope.launch {
+                        status = runCatching {
+                            platform.downloadWorld(document(), current)
+                            "Downloaded \"${naming.title}\""
+                        }.getOrElse {
+                            "Could not download \"${naming.title}\": ${it.message ?: it::class.simpleName}"
+                        }
                     }
-                )
-            }
-
-            // Six sections in pipeline order, five of them rolled up. The panel it replaced was
-            // one undivided column of every control there was, ordered by nothing.
-            Panel(Modifier.weight(1f)) {
-                SettingsPanel(
-                    config = config,
-                    options = options,
-                    busy = busy,
-                    platform = platform,
-                    sections = sections,
-                    onConfig = { config = it },
-                    onOptions = { options = it }
-                )
-            }
-        }
-
-        // Only the map gets the dark backdrop. The atlas and library are ordinary reading
-        // surfaces and must take their colour from the theme, or their (dark) text lands on
-        // near-black and becomes invisible.
-        val backdrop =
-            if (screen == Screen.MAP) Color(options.style.backdrop)
-            else MaterialTheme.colorScheme.background
-
-        Box(
-            Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp).background(backdrop)
-        ) {
-            val current = world
-            if (screen == Screen.LIBRARY) {
-                LibraryPane(
-                    title = naming.name,
-                    worlds = saved,
-                    location = platform.libraryLocation,
-                    supportsFileTransfer = platform.supportsFileTransfer,
-                    onTitleChange = naming::rename,
-                    // The same call File ▸ Save makes, so there is one way to write a world to the
-                    // library rather than a pane's way and a menu's way.
-                    onSave = { saveWorld() },
-                    onDownload = {
-                        // Handing over the same bytes a save would have written - the format is
-                        // shared, so this is the whole of moving a world to the other front end.
-                        scope.launch {
-                            status = runCatching {
-                                platform.downloadWorld(document(), current)
-                                "Downloaded \"${naming.title}\""
-                            }.getOrElse {
-                                "Could not download \"${naming.title}\": ${it.message ?: it::class.simpleName}"
+                },
+                onUpload = {
+                    scope.launch {
+                        status = runCatching {
+                            val save = platform.uploadWorld()
+                            if (save == null) {
+                                "No file opened"
+                            } else {
+                                openSave(save)
+                                "Opened \"${save.document.title}\" from file"
                             }
-                        }
-                    },
-                    onUpload = {
-                        scope.launch {
-                            status = runCatching {
-                                val save = platform.uploadWorld()
-                                if (save == null) {
-                                    "No file opened"
-                                } else {
-                                    openSave(save)
-                                    "Opened \"${save.document.title}\" from file"
-                                }
-                            }.getOrElse { "Could not open file: ${it.message ?: it::class.simpleName}" }
-                        }
-                    },
-                    onOpen = { id ->
-                        // Handing the saved world back as the world to reuse is the whole of
-                        // opening it: the generation the settings change kicks off finds every
-                        // stage already matching its config and computes none of them.
-                        scope.launch { store.load(id)?.let(::openSave) }
-                    },
-                    onDelete = { id -> scope.launch { store.delete(id); saved = store.list() } }
+                        }.getOrElse { "Could not open file: ${it.message ?: it::class.simpleName}" }
+                    }
+                },
+                onOpen = { id ->
+                    // Handing the saved world back as the world to reuse is the whole of
+                    // opening it: the generation the settings change kicks off finds every
+                    // stage already matching its config and computes none of them.
+                    scope.launch { store.load(id)?.let(::openSave) }
+                },
+                onDelete = { id -> scope.launch { store.delete(id); saved = store.list() } }
+            )
+        } else if (screen == Screen.ATLAS && current != null) {
+            AtlasPane(
+                nations = current.nations.nations.map { it.resolve(overrides.forNation(it.id)) },
+                landmarks = current.landmarks.landmarks.map {
+                    it.resolve(overrides.forLandmark(it.id))
+                },
+                selected = selectedNation,
+                onSelect = { selectedNation = it },
+                onEditNation = { id, transform ->
+                    overrides = overrides.withNation(id, transform(overrides.forNation(id)))
+                },
+                onResetNation = { id -> overrides = overrides.withNation(id, NationOverride()) },
+                onEditLandmark = { id, transform ->
+                    overrides = overrides.withLandmark(id, transform(overrides.forLandmark(id)))
+                },
+                config = config,
+                onConfig = { config = it },
+                options = options,
+                onOptions = { options = it },
+                busy = busy,
+                labelMode = labelMode,
+                onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
+            )
+        } else if (screen == Screen.ATLAS) {
+            // Reachable now that the app opens blank: nothing to browse until a world exists.
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Generate a world to see its atlas.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            } else if (screen == Screen.ATLAS && current != null) {
-                AtlasPane(
-                    nations = current.nations.nations.map { it.resolve(overrides.forNation(it.id)) },
-                    landmarks = current.landmarks.landmarks.map {
-                        it.resolve(overrides.forLandmark(it.id))
-                    },
-                    selected = selectedNation,
-                    onSelect = { selectedNation = it },
-                    onEditNation = { id, transform ->
-                        overrides = overrides.withNation(id, transform(overrides.forNation(id)))
-                    },
-                    onResetNation = { id -> overrides = overrides.withNation(id, NationOverride()) },
-                    onEditLandmark = { id, transform ->
-                        overrides = overrides.withLandmark(id, transform(overrides.forLandmark(id)))
-                    },
-                    config = config,
-                    onConfig = { config = it },
-                    options = options,
-                    onOptions = { options = it },
-                    busy = busy,
-                    labelMode = labelMode,
-                    onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
-                )
-            } else if (screen == Screen.ATLAS) {
-                // Reachable now that the app opens blank: nothing to browse until a world exists.
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "Generate a world to see its atlas.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        } else {
+            MapView(
+                image = image,
+                labels = labels,
+                labelMode = labelMode,
+                camera = camera,
+                // Only where there is no wheel and no Fit button within a thumb's reach. A
+                // double-tap handler makes every *single* tap wait for the second one, and on the
+                // desktop a single tap is how a label is placed — a third of a second of nothing
+                // happening after a click is a worse trade than the gesture is worth there.
+                doubleTapToFit = compact,
+                onPlace = { x, y -> pendingLabel = x to y },
+                onLabelClick = { label -> labels = labels.filterNot { it.id == label.id } }
+            )
+        }
+    }
+
+    /** The progress banner, between the toolbar and the map while a world is being made. */
+    val banner: @Composable () -> Unit = {
+        if (busy) {
+            Surface(color = OverMap.Veil, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        Modifier.width(20.dp),
+                        color = OverMap.Parchment,
+                        strokeWidth = 2.dp
                     )
-                }
-            } else {
-                MapView(
-                    image = image,
-                    labels = labels,
-                    labelMode = labelMode,
-                    camera = camera,
-                    onPlace = { x, y -> pendingLabel = x to y },
-                    onLabelClick = { label -> labels = labels.filterNot { it.id == label.id } }
-                )
-            }
-
-            // The two strips that make the map the instrument, and the progress banner between
-            // them and the map. Everything here is over the chart, in ink, so it is stacked rather
-            // than aligned piecemeal: the toolbar first, the banner under it while a world is
-            // being made, and the legend at the foot.
-            Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
-                if (screen == Screen.MAP && toolbarVisible) MapToolbar(options) { options = it }
-                if (busy) {
-                    Surface(color = OverMap.Veil, modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.padding(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                Modifier.width(20.dp),
-                                color = OverMap.Parchment,
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                stage ?: "Generating…",
-                                color = OverMap.Parchment,
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (screen == Screen.MAP) {
-                Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
-                    if (labelMode) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                "Click the map to place a label. Click an existing one to remove it.",
-                                Modifier.padding(12.dp)
-                            )
-                        }
-                    }
-                    ChartLegend(
-                        // No world, no cartouche: an empty sheet is named by nothing, so the
-                        // legend carries F0's one line of instruction instead.
-                        cartouche = world?.let {
-                            Cartouches.of(it, naming.title, generationMillis)
-                        },
-                        prompt = "Pick a seed and settings, then Generate.",
-                        camera = camera
+                    Text(
+                        stage ?: "Generating…",
+                        color = OverMap.Parchment,
+                        style = MaterialTheme.typography.labelLarge
                     )
                 }
             }
         }
     }
+
+    /** The chart legend along the map's foot, and the label-mode notice above it. */
+    val legend: @Composable ColumnScope.() -> Unit = {
+        if (labelMode) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Click the map to place a label. Click an existing one to remove it.",
+                    Modifier.padding(12.dp)
+                )
+            }
+        }
+        ChartLegend(
+            // No world, no cartouche: an empty sheet is named by nothing, so the
+            // legend carries F0's one line of instruction instead.
+            cartouche = world?.let {
+                Cartouches.of(it, naming.title, generationMillis)
+            },
+            prompt = "Pick a seed and settings, then Generate.",
+            camera = camera,
+            parts = reach.legend
+        )
+    }
+
+    /** The slim header: which world, at what size, and what to do with it. */
+    val header: @Composable ColumnScope.() -> Unit = {
+        PanelHeader(
+            config = config,
+            busy = busy,
+            status = status,
+            hasWorld = world != null,
+            exportFormat = exportFormat,
+            exportCeiling = exportCeiling,
+            exportSizes = reach.exportSizes,
+            headerKnobs = Arrangements.headerKnobs(platform),
+            worldName = naming.name,
+            platform = platform,
+            atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
+            libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
+            onWorldName = naming::rename,
+            onConfig = { config = it },
+            onSeed = { config = Knobs.withSeed(config, it); gate.request() },
+            onResolution = { config = Knobs.atResolution(config, it) },
+            onNewWorld = {
+                config = Knobs.withSeed(config, Random.nextLong(1_000_000))
+                gate.request()
+            },
+            onGenerate = { gate.request() },
+            onExportFormat = { exportFormat = it },
+            // Clamped here as well as at the button. The disabled chip is a courtesy; this
+            // is the guarantee, and it is what a size restored from an older build's
+            // preference — which could still say 8192 — passes through.
+            onExport = { pendingExport = Exports.clamp(it, exportCeiling) },
+            onToggleAtlas = {
+                screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
+            },
+            onToggleLibrary = {
+                screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
+            }
+        )
+    }
+
+    /** Six sections in pipeline order, five of them rolled up. */
+    val settingsBody: @Composable ColumnScope.() -> Unit = {
+        SettingsPanel(
+            config = config,
+            options = options,
+            busy = busy,
+            platform = platform,
+            sections = sections,
+            onConfig = { config = it },
+            onOptions = { options = it }
+        )
+    }
+
+    /** The keystrokes, previewed above everything, in whichever arrangement is drawn. */
+    val frame = Modifier.fillMaxSize()
+        .background(MaterialTheme.colorScheme.surface)
+        .onPreviewKeyEvent { event ->
+            val command = Menus.match(event, shortcuts) ?: return@onPreviewKeyEvent false
+            if (command.needsWorld && world == null) return@onPreviewKeyEvent false
+            perform(command)
+            true
+        }
+
+    if (!compact) {
+        Column(frame) {
+            MenuStrip(
+                platform = platform,
+                hasWorld = world != null,
+                settings = settings,
+                sections = sections,
+                toolbarVisible = toolbarVisible,
+                onCommand = { perform(it) },
+                onTheme = { onSettings(settings.copy(theme = it)) }
+            )
+
+            // Everything below the strip: the panel and the map, taking whatever height is left.
+            Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp)) {
+
+                Column(
+                    Modifier.width(320.dp).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Panel { header() }
+
+                    // Six sections in pipeline order, five of them rolled up. The panel it replaced
+                    // was one undivided column of every control there was, ordered by nothing.
+                    Panel(Modifier.weight(1f)) { settingsBody() }
+                }
+
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp)
+                        .background(backdrop)
+                ) {
+                    pane()
+
+                    // The two strips that make the map the instrument, and the progress banner
+                    // between them and the map. Everything here is over the chart, in ink, so it is
+                    // stacked rather than aligned piecemeal: the toolbar first, the banner under it
+                    // while a world is being made, and the legend at the foot.
+                    Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                        if (screen == Screen.MAP && toolbarVisible) {
+                            MapToolbar(options, reach.styles, reach.views) { options = it }
+                        }
+                        banner()
+                    }
+
+                    if (screen == Screen.MAP) {
+                        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) { legend() }
+                    }
+                }
+            }
+        }
+    } else {
+        // The compact arrangement. The map has the whole screen — no gutter, no panel column and no
+        // menu strip above it — and everything else is either over it or under it: the collapsed
+        // toolbar along the top, the legend along the foot, and the panel in a sheet that pulls up
+        // from the bottom edge. The sheet is a sibling of the map rather than an overlay on it, so
+        // pulling it up shortens the map instead of hiding half of it, and the legend it carries
+        // stays visible with the settings open.
+        Column(frame) {
+            Box(Modifier.weight(1f).fillMaxWidth().background(backdrop)) {
+                pane()
+
+                Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                    CompactMapToolbar(
+                        options = options,
+                        styles = reach.styles,
+                        views = reach.views,
+                        // The style and view menus are about the picture, so they go when there is
+                        // no picture — but the menu button is how the application is reached at all
+                        // here, and it stays whatever is on screen.
+                        choices = screen == Screen.MAP && toolbarVisible,
+                        onOptions = { options = it }
+                    ) {
+                        CompactMenuButton(
+                            platform = platform,
+                            hasWorld = world != null,
+                            settings = settings,
+                            sections = sections,
+                            toolbarVisible = toolbarVisible,
+                            onCommand = { perform(it) },
+                            onTheme = { onSettings(settings.copy(theme = it)) }
+                        )
+                    }
+                    banner()
+                }
+
+                if (screen == Screen.MAP) {
+                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) { legend() }
+                }
+            }
+
+            SettingsSheet(
+                open = sheetOpen,
+                onOpen = { sheetOpen = it },
+                expandedHeight = windowHeight * SHEET_SHARE,
+                summary = if (busy) stage ?: "Generating…" else "Seed ${config.seed}"
+            ) {
+                header()
+                settingsBody()
+            }
+        }
     }
 }
+
+/**
+ * The panel, on a sheet that pulls up from the bottom edge.
+ *
+ * Hand-built rather than Material's `BottomSheetScaffold`, for two reasons and not for the usual
+ * one. The first is that this sheet is *persistent and in the layout*: it takes height from the map
+ * rather than covering it, so the legend and the toolbar stay where they are and the map simply
+ * becomes the top third of the screen while the settings are open. A scaffold's sheet floats over
+ * its content and would hide the cartouche of the very world being adjusted. The second is that the
+ * whole of what a scaffold adds — the anchors, the velocity, the nested-scroll handoff — is more
+ * machinery than a sheet with two positions needs, and all of it would have to be shown to work in
+ * a browser on wasm before it could be relied on.
+ *
+ * Two positions, then: down, showing a handle and one line of summary, and up, showing the header
+ * and the six sections in a scrolling column. The handle can be dragged either way or tapped to
+ * toggle, because a grab handle that only responds to a drag is a control half the readers will
+ * press once and give up on.
+ */
+@Composable
+private fun ColumnScope.SettingsSheet(
+    open: Boolean,
+    onOpen: (Boolean) -> Unit,
+    expandedHeight: Dp,
+    summary: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val height by animateDpAsState(if (open) expandedHeight else PEEK_HEIGHT, label = "sheet")
+    // Which way the finger has gone since it went down. The sign at the end of the drag is the
+    // whole decision: up opens, down closes, and a drag that ends where it started leaves it be.
+    var travelled by remember { mutableStateOf(0f) }
+    val drag = rememberDraggableState { delta -> travelled += delta }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(height),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .draggable(
+                        state = drag,
+                        orientation = Orientation.Vertical,
+                        onDragStarted = { travelled = 0f },
+                        onDragStopped = {
+                            if (travelled < -DRAG_TO_SETTLE) onOpen(true)
+                            else if (travelled > DRAG_TO_SETTLE) onOpen(false)
+                        }
+                    )
+                    .clickable { onOpen(!open) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // The grip: a short rule, which is what every sheet on every phone uses to say
+                    // "this comes up". Drawn rather than set as a glyph so it is exactly a rule.
+                    Box(
+                        Modifier.width(34.dp).height(3.dp)
+                            .background(MaterialTheme.colorScheme.outline)
+                    )
+                    Text("Settings", style = MaterialTheme.typography.titleSmall)
+                }
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+            HorizontalDivider()
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                content = content
+            )
+        }
+    }
+}
+
+/** How much of a compact window the settings sheet takes when it is up. */
+private const val SHEET_SHARE = 0.72f
+
+/** The sheet with the settings down: a handle, the word, and one line about the world. */
+private val PEEK_HEIGHT = 44.dp
+
+/** How far a finger has to travel before a drag counts as a pull rather than a wobble. */
+private const val DRAG_TO_SETTLE = 24f
 
 /** One of the boxes the interface is built from: a ruled patch of paper with room to breathe. */
 @Composable
@@ -686,6 +928,13 @@ private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScop
  *
  * Labels are drawn in screen space rather than map space, so they stay readable at any zoom
  * instead of growing into the terrain.
+ *
+ * The touch gestures F5 asks for are, all three, gestures this already had or gets for nothing.
+ * `detectTransformGestures` is the same handler for a two-finger pinch as for a drag — one pointer
+ * reports a pan and no zoom, two report both — and Compose for Wasm delivers a browser's touch
+ * events through the same pointer pipeline the desktop's mouse uses, so nothing here is
+ * platform-specific and there is no touch-only branch to get wrong. Only [doubleTapToFit] is new,
+ * and it is optional for the reason given at its call site.
  */
 @Composable
 private fun MapView(
@@ -693,15 +942,25 @@ private fun MapView(
     labels: List<MapLabel>,
     labelMode: Boolean,
     camera: MapCamera,
+    doubleTapToFit: Boolean,
     onPlace: (Float, Float) -> Unit,
     onLabelClick: (MapLabel) -> Unit
 ) {
     val zoom = camera.zoom
     val pan = camera.pan
+    // Null rather than a no-op handler: passing one at all makes every *single* tap wait for the
+    // double-tap window to expire before it fires, so a window that does not want the gesture must
+    // not ask for it.
+    val fitOnDoubleTap: ((Offset) -> Unit)? =
+        if (doubleTapToFit) ({ _: Offset -> camera.fit() }) else null
 
     Canvas(
         Modifier.fillMaxSize()
             .pointerInput(Unit) {
+                // Drag to pan and pinch to zoom, in one handler: a single pointer reports a pan
+                // and a zoom of 1, two pointers report both, and the centroid is the point the
+                // zoom is taken about — which is what keeps whatever is between the fingers
+                // between the fingers.
                 detectTransformGestures { centroid, panChange, zoomChange, _ ->
                     camera.about(centroid, zoomChange, panChange)
                 }
@@ -725,8 +984,8 @@ private fun MapView(
                     }
                 }
             }
-            .pointerInput(labelMode, labels, image) {
-                detectTapGestures { tap ->
+            .pointerInput(labelMode, labels, image, doubleTapToFit) {
+                detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
                     val img = image ?: return@detectTapGestures
                     val fit = min(size.width.toFloat() / img.width, size.height.toFloat() / img.height)
                     val offsetX = (size.width - img.width * fit) / 2f
@@ -899,6 +1158,8 @@ private fun PanelHeader(
     hasWorld: Boolean,
     exportFormat: ExportFormat,
     exportCeiling: Int,
+    exportSizes: List<Int>,
+    headerKnobs: List<Knob>,
     worldName: String,
     platform: Platform,
     atlasLabel: String,
@@ -949,15 +1210,17 @@ private fun PanelHeader(
     }
 
     // Where the work runs, directly under how finely it is done. The only knob the header draws,
-    // and it is drawn from the declaration rather than by hand. Nothing in this section is a
-    // [Mark] — a knob that writes `RenderOptions` — which `PanelKnobsTest` holds to, so the
-    // options handed in here are never read and the writer is never called.
-    Knobs.inSection(PanelSection.HEADER).forEach { knob ->
+    // and it is drawn from the declaration rather than by hand — from the *arrangement's*
+    // declaration since F5, which is how a host with no graphics API at all draws no switch here
+    // rather than a disabled one. Nothing in this section is a [Mark] — a knob that writes
+    // `RenderOptions` — which `PanelKnobsTest` holds to, so the options handed in here are never
+    // read and the writer is never called.
+    headerKnobs.forEach { knob ->
         KnobControl(knob, config, RenderOptions(), busy, platform, onConfig) {}
     }
 
     // Export, which had a 200dp column of its own on the far side of the map until F3.
-    OutputOptions(busy, hasWorld, exportFormat, exportCeiling, onExportFormat, onExport)
+    OutputOptions(busy, hasWorld, exportFormat, exportCeiling, exportSizes, onExportFormat, onExport)
 
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -1011,7 +1274,7 @@ private fun SettingsPanel(
             expanded = sections.isOpen(section),
             onToggle = { sections.toggle(section) }
         ) {
-            Knobs.inSection(section).forEach { knob ->
+            Arrangements.knobsIn(section, platform).forEach { knob ->
                 KnobControl(knob, config, options, busy, platform, onConfig, onOptions)
             }
         }
@@ -1034,7 +1297,8 @@ private fun Section(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 7.dp),
+            Modifier.fillMaxWidth().clickable(onClick = onToggle)
+                .padding(vertical = 7.dp + LocalTouchTargets.current.extraRowPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1145,13 +1409,22 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
         shape = RoundedCornerShape(2.dp),
         color = Color.Transparent,
         contentColor = if (enabled) scheme.onSurface else scheme.outline,
-        border = BorderStroke(1.dp, if (enabled) scheme.outline else scheme.outlineVariant)
+        border = BorderStroke(1.dp, if (enabled) scheme.outline else scheme.outlineVariant),
+        // A minus sign is nine pixels wide. Under a mouse the box around it is as tight as the
+        // padding makes it; under a fingertip the theme says how big the target has to be.
+        modifier = Modifier
+            .sizeIn(
+                minWidth = LocalTouchTargets.current.minTarget,
+                minHeight = LocalTouchTargets.current.minTarget
+            )
     ) {
-        Text(
-            glyph,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                glyph,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+            )
+        }
     }
 }
 
@@ -1189,6 +1462,7 @@ private fun OutputOptions(
     hasWorld: Boolean,
     exportFormat: ExportFormat,
     exportCeiling: Int,
+    sizes: List<Int>,
     onExportFormat: (ExportFormat) -> Unit,
     onExport: (Int) -> Unit
 ) {
@@ -1221,7 +1495,7 @@ private fun OutputOptions(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Exports.SIZES.forEach { size ->
+        sizes.forEach { size ->
             // A size this build cannot finish keeps its chip — the row would otherwise change
             // width when the ceiling moves, and a missing control says nothing about why it is
             // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
@@ -1272,7 +1546,8 @@ internal fun Toggle(
     onChange: (Boolean) -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        Modifier.fillMaxWidth()
+            .padding(vertical = 2.dp + LocalTouchTargets.current.extraRowPadding),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

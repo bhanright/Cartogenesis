@@ -36,6 +36,31 @@ class WebPlatform(
     override val defaultResolution: Int = 512
 
     /**
+     * Whether this browser has WebGPU at all, which is a different question from whether a device
+     * could be got out of it.
+     *
+     * [accelerator] is null in both cases — no `navigator.gpu`, and a `requestAdapter` that came
+     * back empty — and the interface treats them differently: a browser that has the API and
+     * declined gets the switch disabled with the reason printed beside it, and one that has never
+     * heard of it gets no switch, because there is nothing to explain. On a phone this is the usual
+     * case: iOS Safari and most Android browsers ship no `navigator.gpu` at all.
+     */
+    override val graphicsApiPresent: Boolean = webGpuPresent()
+
+    /** `(pointer: coarse)`. See [pointerIsCoarse]. */
+    override val coarsePointer: Boolean = pointerIsCoarse()
+
+    /**
+     * 2048 on a phone, 4096 otherwise.
+     *
+     * An export re-runs the whole pipeline at the target size and then rasterises it, which at 4096
+     * is sixteen times the working grid's cells in one blocking pass on the page's only thread —
+     * survivable on a laptop, and on a phone it is a tab the browser kills for memory. The chip for
+     * 4096 stays in the row, disabled, saying why, exactly as 8192 does everywhere.
+     */
+    override fun exportCeiling(compact: Boolean): Int = if (compact) 2048 else 4096
+
+    /**
      * `gzip` where `CompressionStream`/`DecompressionStream` exist, `none` otherwise.
      *
      * Checked once at startup for the header comment below, but [WebGzipCompressor] itself checks

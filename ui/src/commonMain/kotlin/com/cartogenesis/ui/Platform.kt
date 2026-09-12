@@ -99,6 +99,31 @@ interface Platform {
     val accelerationUnavailableBecause: String?
 
     /**
+     * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.
+     *
+     * Not the same question as [accelerator] being non-null, and the difference is the whole reason
+     * this exists. A desktop whose driver refused the context has OpenGL and a reason; the switch
+     * is drawn disabled and the reason is printed beside it, which is what a reader is owed. A
+     * phone browser with no `navigator.gpu` has no such feature to explain, and 60 dp of a 390 dp
+     * screen spent saying so is 60 dp taken from the map — so the switch is not drawn at all. See
+     * [Arrangements.headerKnobs].
+     *
+     * True by default: a host that does not answer is assumed to have one, which leaves the switch
+     * where it was and lets [accelerationUnavailableBecause] do the explaining.
+     */
+    val graphicsApiPresent: Boolean get() = true
+
+    /**
+     * Whether the reader is pointing at this with a fingertip rather than a mouse.
+     *
+     * `(pointer: coarse)` in a browser, and false on the desktop. It decides two things: the
+     * arrangement (a tablet in landscape is wide enough for the panel and still cannot be driven
+     * with a 13 dp slider thumb — see [Layouts.arrangement]) and the size of every touch target in
+     * the theme.
+     */
+    val coarsePointer: Boolean get() = false
+
+    /**
      * The largest export this build can actually finish.
      *
      * Not a taste: 8192 does not complete. G2 measured it exhausting a 10 GB heap inside the
@@ -107,8 +132,13 @@ interface Platform {
      * to it. It is a value on the platform, and not a constant in the panel, so that the build
      * which fixes the memory can raise the ceiling without the interface being touched: the export
      * row draws whatever this says.
+     *
+     * [compact] is true in a phone-shaped window, and is a question rather than an assumption
+     * because the answer differs by host: a desktop window narrowed to 700 dp is still a desktop
+     * with every core and a 12 GB heap, while the same 700 dp in a browser is a phone with one
+     * thread. The web front end caps itself at 2048 there; the desktop ignores the argument.
      */
-    val exportCeiling: Int get() = 4096
+    fun exportCeiling(compact: Boolean): Int = 4096
 
     /**
      * Renders at [size] and puts the result wherever this platform puts finished files: a chosen

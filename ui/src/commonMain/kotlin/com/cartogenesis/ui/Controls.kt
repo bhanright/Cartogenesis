@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,16 +76,19 @@ internal fun Slider(
     val scheme = MaterialTheme.colorScheme
     val accent = if (enabled) scheme.primary else scheme.outline
     val rail = if (enabled) scheme.outline else scheme.outlineVariant
+    // The two numbers that used to be literals here. Under a mouse they are still 26 and 13; under
+    // a fingertip they are 44 and 20, and no call site knows the difference. See [TouchTargets].
+    val targets = LocalTouchTargets.current
     MaterialSlider(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().height(26.dp),
+        modifier = modifier.fillMaxWidth().height(targets.sliderHeight),
         enabled = enabled,
         valueRange = valueRange,
         steps = steps,
         thumb = {
             Box(
-                Modifier.size(13.dp)
+                Modifier.size(targets.sliderThumb)
                     .background(accent, CircleShape)
                     .border(1.dp, scheme.onSurface.copy(alpha = 0.45f), CircleShape)
             )
@@ -118,24 +122,31 @@ internal fun Switch(
     enabled: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
-    MaterialSwitch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        modifier = modifier,
-        enabled = enabled,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = scheme.primary,
-            checkedTrackColor = scheme.secondaryContainer,
-            checkedBorderColor = scheme.primary,
-            uncheckedThumbColor = scheme.outline,
-            uncheckedTrackColor = Color.Transparent,
-            uncheckedBorderColor = scheme.outline,
-            disabledCheckedTrackColor = scheme.outlineVariant,
-            disabledUncheckedThumbColor = scheme.outlineVariant,
-            disabledUncheckedTrackColor = Color.Transparent,
-            disabledUncheckedBorderColor = scheme.outlineVariant
+    // Boxed rather than stretched: a Material switch draws itself at a fixed size and forcing a
+    // taller one distorts the track, so what grows under a fingertip is the *target* around it.
+    // With a mouse the minimum is zero, so the box wraps the switch exactly and nothing moves.
+    Box(
+        modifier.heightIn(min = LocalTouchTargets.current.minTarget),
+        contentAlignment = Alignment.Center
+    ) {
+        MaterialSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = scheme.primary,
+                checkedTrackColor = scheme.secondaryContainer,
+                checkedBorderColor = scheme.primary,
+                uncheckedThumbColor = scheme.outline,
+                uncheckedTrackColor = Color.Transparent,
+                uncheckedBorderColor = scheme.outline,
+                disabledCheckedTrackColor = scheme.outlineVariant,
+                disabledUncheckedThumbColor = scheme.outlineVariant,
+                disabledUncheckedTrackColor = Color.Transparent,
+                disabledUncheckedBorderColor = scheme.outlineVariant
+            )
         )
-    )
+    }
 }
 
 /**

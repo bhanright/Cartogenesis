@@ -100,6 +100,15 @@ internal val PANEL_SECTIONS: List<PanelSection> = listOf(
 internal sealed class Knob {
     abstract val section: PanelSection
     abstract val label: String
+
+    /**
+     * Whether this knob is meaningless on a machine with no graphics API at all.
+     *
+     * Asked by [Arrangements.headerKnobs], which drops such a knob rather than drawing it disabled
+     * when [Platform.graphicsApiPresent] is false. Declared on [Knob] rather than only on [Latch]
+     * so the filter is one expression over the list rather than a cast at the call site.
+     */
+    val needsGraphicsDevice: Boolean get() = this is Latch && needsAccelerator
 }
 
 /**

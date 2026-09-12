@@ -9,9 +9,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -205,6 +210,86 @@ internal fun MenuStrip(
         }
     }
     Box(Modifier.fillMaxWidth().background(scheme.outlineVariant).padding(top = 1.dp))
+}
+
+/**
+ * The whole menu strip as one button, for a window with no room for a strip.
+ *
+ * Three words along the top of a 390 dp screen is not a bad menu bar; it is 30 dp of a screen that
+ * has 844 of them, spent on three targets of about 40 by 24 dp each, above a map that wants every
+ * pixel. So on a phone the strip folds into a single glyph over the map's top-left corner and the
+ * three menus become one, in the same order, under their own headings — File, then View's themes,
+ * sections and toolbar, then Help. Nothing is dropped: [MenuStrip] and this draw the same
+ * [Menus.file], [Menus.themes], [Menus.sections] and [Menus.help], which is what `PanelKnobsTest`
+ * compares when it asks whether the compact arrangement can still reach everything.
+ *
+ * It is drawn over the chart rather than on the chrome, so unlike the strip it takes [OverMap]'s
+ * ink — the menu it opens is a sheet over the application and takes the theme's paper, exactly as
+ * the view menu beside it does.
+ */
+@Composable
+internal fun CompactMenuButton(
+    platform: Platform,
+    hasWorld: Boolean,
+    settings: AppSettings,
+    sections: SectionState,
+    toolbarVisible: Boolean,
+    onCommand: (MenuCommand) -> Unit,
+    onTheme: (ThemeChoice) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    val minimum = LocalTouchTargets.current.minTarget
+    Box {
+        Box(
+            Modifier
+                .clickableNoRipple { open = true }
+                .sizeIn(minWidth = minimum, minHeight = minimum)
+                .padding(horizontal = 6.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.Menu,
+                contentDescription = "Menu",
+                tint = OverMap.Parchment,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            shadowElevation = 6.dp
+        ) {
+            MenuHeading("File")
+            Menus.file(platform).forEach { command ->
+                CommandItem(command, hasWorld) {
+                    open = false
+                    onCommand(command)
+                }
+            }
+            MenuHeading("Theme")
+            Menus.themes.forEach { theme ->
+                Ticked(theme.label, settings.theme == theme) {
+                    open = false
+                    onTheme(theme)
+                }
+            }
+            MenuHeading("Panel")
+            Menus.sections.forEach { section ->
+                Ticked(section.title, sections.isOpen(section)) { sections.toggle(section) }
+            }
+            MenuHeading("Map")
+            Ticked(MenuCommand.TOOLBAR.label, toolbarVisible) { onCommand(MenuCommand.TOOLBAR) }
+            MenuHeading("Help")
+            Menus.help.forEach { command ->
+                CommandItem(command, hasWorld) {
+                    open = false
+                    onCommand(command)
+                }
+            }
+        }
+    }
 }
 
 @Composable

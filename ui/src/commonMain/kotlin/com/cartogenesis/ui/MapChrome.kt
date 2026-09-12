@@ -7,13 +7,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,6 +37,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.MapStyle
+import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import kotlin.math.roundToInt
 
@@ -67,13 +75,18 @@ import kotlin.math.roundToInt
  * sheet you are looking at.
  */
 @Composable
-internal fun MapToolbar(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
+internal fun MapToolbar(
+    options: RenderOptions,
+    styles: List<MapStyle>,
+    views: List<MapView>,
+    onOptions: (RenderOptions) -> Unit
+) {
     Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MapChrome.styles.forEachIndexed { index, style ->
+            styles.forEachIndexed { index, style ->
                 if (index > 0) CellRule()
                 StripCell(
                     label = style.label,
@@ -93,7 +106,97 @@ internal fun MapToolbar(options: RenderOptions, onOptions: (RenderOptions) -> Un
                 modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
             )
 
-            ViewMenu(options, onOptions)
+            ViewMenu(options, views, onOptions)
+        }
+    }
+}
+
+/**
+ * The same toolbar on a phone: three targets and one name, instead of ten names and a menu.
+ *
+ * The segmented row above is a chart's key — every style named, the current one inked — and it
+ * needs about 660 dp to be that. At 390 dp the same information has to be a menu, so the row
+ * becomes: the single menu button that replaces the whole menu strip, a palette glyph carrying the
+ * current style's *name* (the one word worth its width, since it is the answer to "what am I
+ * looking at"), and the view menu, which was already a menu and stays one. The small print goes: it
+ * is a sentence about a style the reader has just chosen from a list that said the same thing.
+ *
+ * Drawn in the same [OverMap] ink as the wide strip, for the same reason — this lies on a rendered
+ * chart whose paper belongs to the style, not to the theme.
+ */
+@Composable
+internal fun CompactMapToolbar(
+    options: RenderOptions,
+    styles: List<MapStyle>,
+    views: List<MapView>,
+    choices: Boolean,
+    onOptions: (RenderOptions) -> Unit,
+    menu: @Composable () -> Unit
+) {
+    Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            menu()
+            if (choices) {
+                StyleMenu(options, styles, onOptions)
+                Box(Modifier.weight(1f))
+                ViewMenu(options, views, onOptions)
+            }
+        }
+    }
+}
+
+/**
+ * `◑ Vellum ▾`, and the other nine behind it.
+ *
+ * The compact counterpart of the segmented row, and the only place in the application where a
+ * choice of ten is offered as a menu rather than as a key — which is a loss, and is why the current
+ * style's name is spelled out on the button rather than left to an icon.
+ */
+@Composable
+private fun StyleMenu(
+    options: RenderOptions,
+    styles: List<MapStyle>,
+    onOptions: (RenderOptions) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    val dimmed = !MapChrome.styleApplies(options.view)
+    Box {
+        RuledButton(onClick = { open = true }) {
+            Icon(
+                Icons.Filled.Palette,
+                contentDescription = "Style",
+                tint = OverMap.ParchmentFaint,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                options.style.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (dimmed) OverMap.ParchmentDim else OverMap.Parchment,
+                maxLines = 1
+            )
+            Text("▾", style = MaterialTheme.typography.labelMedium, color = OverMap.ParchmentDim)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            styles.forEach { style ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            style.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (style == options.style) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    onClick = {
+                        onOptions(MapChrome.withStyle(options, style))
+                        open = false
+                    }
+                )
+            }
         }
     }
 }
@@ -137,29 +240,48 @@ private fun CellRule() {
 }
 
 /**
+ * A box ruled on all four sides, which is what a control over the chart looks like here.
+ *
+ * Lifted out of [ViewMenu], where it was written inline, so that the style menu beside it is
+ * plainly the same object and not a second one that happens to look similar. The only thing F5
+ * adds is the minimum size, which is zero under a mouse — so the wide toolbar's View button is the
+ * same pixels it was — and a fingertip's worth under a coarse pointer.
+ */
+@Composable
+private fun RuledButton(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier
+            .clickable(onClick = onClick)
+            .drawBehind {
+                val rule = OverMap.Rule
+                drawRect(rule, Offset(0f, 0f), Size(size.width, 1f))
+                drawRect(rule, Offset(0f, size.height - 1f), Size(size.width, 1f))
+                drawRect(rule, Offset(0f, 0f), Size(1f, size.height))
+                drawRect(rule, Offset(size.width - 1f, 0f), Size(1f, size.height))
+            }
+            .sizeIn(minHeight = LocalTouchTargets.current.minTarget)
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}
+
+/**
  * `View  Fantasy ▾`, and fifteen of them behind it.
  *
  * The menu itself is an ordinary Material menu and so takes the *theme's* paper rather than
  * [OverMap]'s: it is a sheet that opens over the application, not an annotation on the chart.
  */
 @Composable
-private fun ViewMenu(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
+private fun ViewMenu(
+    options: RenderOptions,
+    views: List<MapView>,
+    onOptions: (RenderOptions) -> Unit
+) {
     var open by remember { mutableStateOf(false) }
     Box {
-        Row(
-            Modifier
-                .clickable { open = true }
-                .drawBehind {
-                    val rule = OverMap.Rule
-                    drawRect(rule, Offset(0f, 0f), Size(size.width, 1f))
-                    drawRect(rule, Offset(0f, size.height - 1f), Size(size.width, 1f))
-                    drawRect(rule, Offset(0f, 0f), Size(1f, size.height))
-                    drawRect(rule, Offset(size.width - 1f, 0f), Size(1f, size.height))
-                }
-                .padding(horizontal = 9.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        RuledButton(onClick = { open = true }) {
             Text(
                 "View",
                 style = MaterialTheme.typography.labelSmall,
@@ -174,7 +296,7 @@ private fun ViewMenu(options: RenderOptions, onOptions: (RenderOptions) -> Unit)
             Text("▾", style = MaterialTheme.typography.labelMedium, color = OverMap.ParchmentDim)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            MapChrome.views.forEach { view ->
+            views.forEach { view ->
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -205,7 +327,18 @@ private fun ViewMenu(options: RenderOptions, onOptions: (RenderOptions) -> Unit)
  * F0 wrote for the empty canvas, which is the only instruction the application has ever given.
  */
 @Composable
-internal fun ChartLegend(cartouche: Cartouche?, prompt: String, camera: MapCamera) {
+internal fun ChartLegend(
+    cartouche: Cartouche?,
+    prompt: String,
+    camera: MapCamera,
+    /**
+     * Which halves of the legend this arrangement carries. A compact window drops the zoom readout
+     * and its two steps and keeps Fit — pinch is the gesture a phone already has for zooming, and
+     * there is no gesture anyone would guess for "show me all of it". Declared by [Arrangements]
+     * rather than decided here, so the test can ask what a phone loses.
+     */
+    parts: List<LegendPart>
+) {
     Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
@@ -254,15 +387,23 @@ internal fun ChartLegend(cartouche: Cartouche?, prompt: String, camera: MapCamer
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 12.dp)
             ) {
-                Text(
-                    "${camera.percent}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = OverMap.ParchmentDim,
-                    modifier = Modifier.widthIn(min = 34.dp)
-                )
-                ZoomButton("−") { camera.step(1f / MapCamera.STEP) }
-                ZoomButton("+") { camera.step(MapCamera.STEP) }
-                ZoomButton("Fit") { camera.fit() }
+                if (LegendPart.ZOOM_OUT in parts || LegendPart.ZOOM_IN in parts) {
+                    Text(
+                        "${camera.percent}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = OverMap.ParchmentDim,
+                        modifier = Modifier.widthIn(min = 34.dp)
+                    )
+                }
+                if (LegendPart.ZOOM_OUT in parts) {
+                    ZoomButton("−") { camera.step(1f / MapCamera.STEP) }
+                }
+                if (LegendPart.ZOOM_IN in parts) {
+                    ZoomButton("+") { camera.step(MapCamera.STEP) }
+                }
+                if (LegendPart.FIT in parts) {
+                    ZoomButton("Fit") { camera.fit() }
+                }
             }
         }
     }
@@ -271,18 +412,22 @@ internal fun ChartLegend(cartouche: Cartouche?, prompt: String, camera: MapCamer
 /** Deliberately plain: these sit over the map and should not compete with it. */
 @Composable
 private fun ZoomButton(label: String, onClick: () -> Unit) {
+    val minimum = LocalTouchTargets.current.minTarget
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(2.dp),
         color = Color.Transparent,
         contentColor = OverMap.ParchmentDim,
-        border = BorderStroke(1.dp, OverMap.Rule)
+        border = BorderStroke(1.dp, OverMap.Rule),
+        modifier = Modifier.sizeIn(minWidth = minimum, minHeight = minimum)
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+            )
+        }
     }
 }
 

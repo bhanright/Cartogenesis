@@ -448,6 +448,37 @@ mouths at 2048 on 59758 and at 512 on 42, shown failing on the current code.
   coefficient of variation under 0.05 for the eight-fold component; shown failing on the current
   code. Render the chain at 2048.
 
+### E4. Segmented rifts — Opus
+
+*Dependencies: B2, E3 (both touch `PlateStage`). Files: `PlateStage.kt` rift profile,
+`TectonicsConfig`, tests, `GEOGRAPHY.md`.*
+
+*Requested 2026-09-11 after William circled a 20:1 sinuous strait of uniform width running the
+whole length of a continental rift on seed 59758 at 2048, ocean 62%.* Long narrow seaways are
+real but transient: the Red Sea, the Gulf of California and the Gulf of Aqaba are young rifts, and
+Baikal and Tanganyika are the same shape on land. What Earth never does is keep one trough of
+constant depth between two shoulders of constant height for a thousand kilometres. A rift is a
+chain of half-grabens 50–150 km long, each tilted the opposite way from its neighbour, separated
+by accommodation zones where the floor rises, so the sea enters only the segments that have
+subsided below it and the result is a string of gulfs and lakes joined by sills and land bridges.
+
+- Segment every continental-rift boundary along strike into lengths drawn from a seeded range
+  (a map fraction, so 512 and 2048 agree), alternating half-graben polarity: on each segment one
+  shoulder is the high footwall and the trough deepens toward it, the other shoulder is a low
+  hinge. Trough depth varies per segment (a seeded factor on `riftDepth`) and rises through an
+  accommodation zone at each join, where the floor sits near the shoulder hinge level.
+- Shoulder height and width vary with the segment and with `rangeVariation` as ranges do.
+- Guard: on a seed carrying a long rift below the sea-level cut (find one; seed 59758 at 512 with
+  `seaLevel = 0.62f`, 14 plates is the known case), the sea inside the rift is no longer one
+  connected body along the boundary: count connected sea components inside the rift corridor and
+  the number of land bridges crossing it; assert several of each, and that the corridor's width
+  varies (coefficient of variation of the flooded width along strike above a stated floor). Show
+  both failing on the current code. `BoundaryPairTest`'s plateau-versus-margin figures must hold;
+  `RibbonLandTest` must hold.
+- Render and look at 2048, seed 59758, the author's settings, through `MapRasterizer`: the seam
+  should read as a chain of gulfs and lakes, Red Sea to Baikal, not a channel. Also seeds 7/42/1234
+  at 1024 for regression.
+
 ---
 
 ## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
@@ -629,6 +660,7 @@ guard reported, so the next chunk knows its baseline.
 | E1 Outlet incision | Opus | not started | | | |
 | E2 Lake water balance | Opus | done | 2026-09-11 | 667c956 (merge fec976d) | Thornthwaite on the two seasonal fields, unfitted: hot desert 2272 mm/yr, cool temperate 554, frozen 0 (glacial lakes stay at spill); runoffFraction 0.35 (Earth ~40k of 110k km3/yr; a constant flatters dry basins - Volga/Caspian is ~0.12); bisection over basin hypsometry; endorheic lakes become sinks with flow re-pointed, playa mask as section rivers.playa (33 sections, fixture regenerated); wet basins bit-identical; guard on dry seed 43 (1775-cell basin, 172 mm rain vs 577 evaporation): 18% of spill area at balance vs 100% measured with waterBalance=false; wet seed 99 at spill; 0 stranded rivers; seed 43 lake share 2.40 -> 0.91%, largest 0.677 -> 0.122% of map; 718106 at 1024 82 -> 67 lakes, 10 endorheic; border-on-river moved (42: 1.54 -> 1.10, 99: 1.30 -> 1.97, report-only); render: seed 43's rectangular basin becomes a small lake with a dendritic net across the exposed floor |
 | E3 Round hotspot cones | Sonnet | not started | | | |
+| E4 Segmented rifts | Opus | queued behind E3 | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

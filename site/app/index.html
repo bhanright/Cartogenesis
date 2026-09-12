@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartogenesis</title>
+<!-- ============================================================================
+     The loading shell. `:web:assembleSite` copies this file over the top of the
+     one the Gradle build emits, so this is the page that actually loads the
+     application. Edit this file; never edit anything the build wrote.
+
+     THE TRAP, because it cost an afternoon once already:
+
+     Compose does not put its canvas in the page. It attaches a **shadow root**
+     to #composeTarget and puts the canvas inside that. So:
+
+        document.querySelector('canvas')          → null
+        composeTarget.childElementCount           → 0
+        MutationObserver on #composeTarget        → never fires
+
+     …all of which are true while the application is running perfectly. An
+     overlay waiting on any of those waits forever, sitting on top of a working
+     app. Ask the shadow root, or better, use the signal below.
+
+     THE SIGNAL: the application itself calls hideLoadingMessage(), which does
+     `document.getElementById('loading')?.remove()`. That is a contract the app
+     already honours, so #loading is kept here — invisible, zero-size, existing
+     only to be removed. Watching for its removal is exact and needs no polling.
+     The shadow-root check is kept as a second opinion in case that hook ever
+     goes away upstream.
+
+     Both names are pinned by WebDeploymentContractTest in this repository, which
+     was shown to fail on each in turn.
+============================================================================= -->
+<style>
+  html,body{
+    margin:0;padding:0;height:100%;overflow:hidden;
+    background:#14171a;
+    font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  #composeTarget{position:absolute;inset:0;display:block;outline:none}
+
+  /* Present only so the app can remove it. Must stay in the DOM and must not
+     be visible. */
+  #loading{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+  #boot{
+    position:absolute;inset:0;z-index:10;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;padding:32px;text-align:center;
+    background:#14171a;color:#9c9187;
+    transition:opacity .35s ease;
+  }
+  #boot.done{opacity:0;pointer-events:none}
+  #boot h1{
+    font-family:"Cinzel","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    font-size:15px;letter-spacing:.3em;text-transform:uppercase;
+    color:#f2e7cf;margin:0;font-weight:700;
+  }
+  #bar{width:min(280px,70vw);height:2px;background:#3a2f28;border-radius:2px;overflow:hidden}
+  #bar i{display:block;height:100%;width:0%;background:#c9a227;transition:width .4s ease}
+  #msg{font-size:13px;margin:0;min-height:1.4em}
+  #sub{font-size:11.5px;color:#6e645c;margin:0;max-width:44ch;line-height:1.6}
+  #boot a{color:#c9a227}
+  .warn #msg{color:#e0a0a0}
+</style>
+</head>
+<body>
+
+<div id="composeTarget"></div>
+<div id="loading" aria-hidden="true"></div>
+
+<div id="boot">
+  <h1>Cartogenesis</h1>
+  <div id="bar"><i id="fill"></i></div>
+  <p id="msg">Fetching the engine…</p>
+  <p id="sub">First visit downloads about 4.4&nbsp;MB. It is cached afterwards.</p>
+</div>
+
+<script>
+/* Runs before cartogenesis.js so the observers are in place for the first fetch. */
+(function () {
+  var boot = document.getElementById('boot');
+  var fill = document.getElementById('fill');
+  var msg  = document.getElementById('msg');
+  var sub  = document.getElementById('sub');
+  var t0   = performance.now();
+  var done = false;
+
+  /* Three files make up the engine: the loader and two wasm modules. Counting
+     completed resources is coarse, but it is *true*, unlike a fake percentage. */
+  var EXPECT = 3;
+  var seen = 0;
+  var stats = [];
+
+  function note(e) {
+    if (!/\.wasm($|\?)|cartogenesis\.js($|\?)/.test(e.name)) return;
+    seen++;
+    fill.style.width = Math.round((seen / EXPECT) * 100) + '%';
+    stats.push({ file: e.name.split('/').pop(), wire: e.transferSize, raw: e.decodedBodySize });
+    if (seen === 1) msg.textContent = 'Engine downloaded. Fetching graphics…';
+    if (seen >= 2) msg.textContent = 'Starting up…';
+  }
+
+  if (window.PerformanceObserver) {
+    try {
+      new PerformanceObserver(function (l) { l.getEntries().forEach(note); })
+        .observe({ type: 'resource', buffered: true });
+    } catch (err) { /* diagnostics are optional; never let them break the boot */ }
+  }
+
+  /* Primary signal: the app removes #loading when it has mounted. */
+  var bodyWatch = new MutationObserver(function () {
+    if (!document.getElementById('loading')) finish();
+  });
+  bodyWatch.observe(document.body, { childList: true });
+
+  /* Second opinion, in case that hook ever disappears: a canvas inside the
+     shadow root attached to #composeTarget. attachShadow is not observable, so
+     this one has to poll. */
+  var poll = setInterval(function () {
+    var t = document.getElementById('composeTarget');
+    if (t && t.shadowRoot && t.shadowRoot.querySelector('canvas')) finish();
+  }, 250);
+
+  function finish() {
+    if (done) return;
+    done = true;
+    bodyWatch.disconnect();
+    clearInterval(poll);
+    fill.style.width = '100%';
+    boot.classList.add('done');
+    setTimeout(function () { boot.remove(); }, 400);
+
+    /* Print what the network actually did. wire < raw means the host is
+       compressing — the difference between ~4.4 MB and ~12.4 MB. Measured
+       2026-08-25 on the earlier host: 4.36 MB over the wire, 12.37 MB decoded. */
+    var secs = ((performance.now() - t0) / 1000).toFixed(1);
+    var wire = stats.reduce(function (a, s) { return a + (s.wire || 0); }, 0);
+    var raw  = stats.reduce(function (a, s) { return a + (s.raw  || 0); }, 0);
+    console.log('[cartogenesis] ready in ' + secs + 's');
+    if (wire && raw) {
+      console.log('[cartogenesis] ' + (wire / 1048576).toFixed(2) + ' MB over the wire, '
+                + (raw / 1048576).toFixed(2) + ' MB decoded — compression '
+                + (wire < raw * 0.9 ? 'ON' : 'OFF or unavailable'));
+      console.table(stats);
+    } else {
+      console.log('[cartogenesis] served from cache (transfer sizes not reported)');
+    }
+  }
+
+  /* Escalating honesty. Nothing is called a failure until the last step: a
+     4.4 MB download on a slow line is genuinely slow, and calling that broken
+     is worse than saying nothing. */
+  setTimeout(function () {
+    if (!done) sub.textContent = 'Still working. The engine is compiled after it downloads, which takes a moment.';
+  }, 15000);
+
+  setTimeout(function () {
+    if (!done) {
+      boot.classList.add('warn');
+      msg.textContent = 'This is taking longer than it should.';
+      sub.innerHTML = 'If it never starts, open the browser console — a message about the '
+        + '<code>.wasm</code> MIME type means the server is misconfigured rather than the app being broken. '
+        + '<a href="/">Back to the description</a>.';
+    }
+  }, 75000);
+
+  function fail(detail) {
+    if (done) return;
+    boot.classList.add('warn');
+    msg.textContent = 'The generator could not start.';
+    sub.innerHTML = String(detail || '').replace(/[<>&]/g, '')
+      + '<br><a href="/">Back to the description</a>';
+  }
+  window.addEventListener('error', function (e) {
+    if (e && e.message && /wasm|WebAssembly|MIME/i.test(e.message)) fail(e.message);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var m = e && e.reason && (e.reason.message || e.reason);
+    if (m && /wasm|WebAssembly|MIME/i.test(String(m))) fail(m);
+  });
+})();
+</script>
+<!--
+  The ?v= is load-bearing, not decoration, and the placeholder in it is replaced by
+  :web:assembleSite with the commit the site was built from.
+
+  The two .wasm files carry content hashes, so a new build lands under new names and can be
+  cached for a year. The loader cannot: it is always "cartogenesis.js", and _headers caches
+  it immutably alongside them — which is safe only because this page gives it a new URL on
+  every deploy. This page itself is served no-cache, so a returning visitor always gets the
+  current stamp and therefore always fetches the current loader; an old cached page can only
+  ask for the old loader, which is still there.
+
+  Without that, an old cached loader asks for a wasm hash the deploy has replaced: 404, and a
+  dead app rather than merely a stale one. Reproduced on the v1.0.1 deploy of the earlier host,
+  which sent no cache headers at all.
+
+  The replacement is scoped to this src attribute, so mentioning the placeholder in prose
+  anywhere in this file would leave it un-replaced. Don't.
+-->
+<script src="cartogenesis.js?v=__STAMP__"></script>
+</body>
+</html>

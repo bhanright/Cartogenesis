@@ -105,7 +105,7 @@ the largest such basin covers 1.13% of seed 718106's land with the pass off and 
 Eight passes at most, the loop stopping when a pass finds nothing left to cut: 718106's takes seven
 to stop retreating, seed 99's one.
 
-**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidth` of a
+**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidthCells` of a
 coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
 `shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
 so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shallow against 60% with
@@ -738,7 +738,7 @@ brought into one frame on the cells no epoch touched, and measures it by the sam
 `BoundaryPairTest` uses — against that epoch's own boundaries, since the boundary that built it has
 since moved. Pooled over the three seeds an old belt stands 2.2 times below a present one and is
 1.5 times broader at half height, and the tallest ground the history builds more than 52 cells from
-any present boundary (twice `boundaryFalloff`, about 1,200 km) stands 0.08–0.14 in normalized
+any present boundary (twice `boundaryFalloffCells`, about 1,200 km) stands 0.08–0.14 in normalized
 elevation. With the history switched off that difference field is identically zero and the guard
 finds nothing at all.
 

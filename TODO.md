@@ -189,6 +189,10 @@
 
 ## Open
 
+- **`LakesConfig.minCells` is a fixed 12 cells, not a map fraction.** A rift basin that reads as a
+  lake at 1024 and 2048 is refused at 512, so the picture changes with the working resolution -
+  the same class of defect the glaciation budget fixed for glacial lakes. Express it as a share of
+  the map and pin it with the resolution contract. Found by E4, 2026-09-12.
 - **Over-large filled basins.** At 2048 the largest lake on a typical world is a tectonic basin
   filled by the river stage to its spill point, at 0.12% of the map - bigger than the Caspian's share
   of Earth. Glacial lakes are budgeted since 1.1.2; these are not. The principled fix is outlet

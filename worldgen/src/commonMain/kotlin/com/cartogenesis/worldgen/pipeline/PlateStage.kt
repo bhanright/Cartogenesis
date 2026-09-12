@@ -660,7 +660,26 @@ object PlateStage {
                                     // and the North Sea graben are. Unsegmented on purpose: the
                                     // half-grabens that made it a chain of deeps are exactly what
                                     // the sediment has buried.
+                                    //
+                                    // The floor varies along strike, by the same `roughness *
+                                    // alongRange` every other belt on this map varies by, and that
+                                    // is not decoration. Without it the sag is a spirit level for
+                                    // the whole run of a boundary: no low end, no internal high,
+                                    // nowhere for the water in it to go. The outlet notch measures
+                                    // the slope below a basin's lip to decide how hard the outflow
+                                    // cuts, and on a level floor that slope is zero, so the notch
+                                    // cuts nothing however large the catchment and the trough
+                                    // holds a lake for the life of the world — on seed 59758 at
+                                    // 2048, one of 1.69 times the Caspian's share of the land,
+                                    // which `OutletResolutionTest` caught and 512 and 1024 did not
+                                    // (the trough is longer in cells than `outletReach` only at the
+                                    // fine grid). A varying floor gives it a low end to drain to
+                                    // and sills to break it into reaches the notch can finish. It
+                                    // is also what a filled sag looks like: the Mississippi
+                                    // embayment and the Benue trough carry a river down the axis,
+                                    // not a chain of lakes.
                                     -cfg.riftDepth * cfg.failedRiftFill * strength *
+                                        roughness * alongRange *
                                         plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
                                         cfg.riftShoulderHeight * cfg.failedRiftShoulder *
                                         strength * ridgeAt(

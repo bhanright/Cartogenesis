@@ -113,8 +113,18 @@ class DepositionTest {
      * H1 (the tectonic history) is the ninth such change and the largest of them, and it is the
      * first that did not have to touch this file: land held at 6226 for the ninth time, for the
      * reason it has held every other time.
+     *
+     * And then the land count moved, at H5, for the first time in ten changes. This is the one kind
+     * of change that was always going to move it, and the comment above says so — "none of them
+     * moved the shoreline". H5 does. Water the ocean cannot reach is no longer sea: a body of water
+     * with no way out is a lake, and it is marked land at the height it already stands at so the
+     * river stage can decide what it holds. Only up to the size of the largest lake Earth has,
+     * which on seed 42 at 128 comes to 156 cells, 1.0% of the map; without that cap it would be
+     * several times that. The cut itself is where it has always been — exactly 62% of the cells
+     * still lie below it — and `PipelineTest`'s land-fraction promise still holds inside its own
+     * tolerance.
      */
-    private val startingPointLand = 6226
+    private val startingPointLand = 6382
 
     @Test
     fun `every round conserves mass`() {

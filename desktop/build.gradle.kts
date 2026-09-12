@@ -79,7 +79,11 @@ tasks.withType<Test>().configureEach {
 // the class-name-plus-filter split used in `:worldgen` (see that module's build script for why a
 // `@Tag` was not used there; the same filter mechanism works unchanged on this module's JUnit5
 // runner, so both modules are split the same way).
-val auditOnlyClasses = listOf("com.cartogenesis.desktop.ExportAuditTest")
+val auditOnlyClasses = listOf(
+    "com.cartogenesis.desktop.ExportAuditTest",
+    // H5's own 2048 pair, four worlds and four renders: the same tier for the same reason.
+    "com.cartogenesis.desktop.SeaLevelHistoryAuditTest"
+)
 
 tasks.named<Test>("test") {
     filter {

@@ -100,7 +100,14 @@ object WorldGenerationEngine {
                     // Hydraulic erosion routes water against a provisional shoreline, so where the
                     // sea sits changes what gets carved. Guarding on `erosion` alone reused a
                     // stale height field whenever sea level moved.
-                    it.config.seaLevel == config.seaLevel
+                    it.config.seaLevel == config.seaLevel &&
+                    // H5: and the shoreline the rounds grade to is not today's, it is the stand
+                    // the sea was at while they were cutting. That one field of the sea section is
+                    // named rather than the whole of it on purpose — the shelf remap and the
+                    // enclosed-water rule both happen after erosion, and re-running twelve
+                    // hydraulic rounds because someone moved a shelf slider would undo the whole
+                    // point of this chain.
+                    it.config.sea.lowstand == config.sea.lowstand
             }
             ?.erosion
             ?: ErosionStage.apply(config, plates.height, accelerator)

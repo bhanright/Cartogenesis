@@ -179,10 +179,14 @@ class OutletIncisionTest {
             val now = largestLakeShare(after)
             println(
                 ("OUTLET seed $seed: lakes %d -> %d, water %.3f%% -> %.3f%% of land, " +
-                    "largest %.4f%% -> %.4f%% of the land (the Caspian's share is %.4f%%)").format(
+                    "largest lake in the land %.4f%% -> %.4f%% (the Caspian's share is %.4f%%); " +
+                    "largest drowned basin %.4f%% -> %.4f%% over %d -> %d of them").format(
                     before.rivers.lakes.lakes.size, after.rivers.lakes.lakes.size,
                     lakeShareOfLand(before) * 100, lakeShareOfLand(after) * 100,
-                    was * 100, now * 100, caspianShare * 100
+                    was * 100, now * 100, caspianShare * 100,
+                    largestLakeShare(before, drowned = true) * 100,
+                    largestLakeShare(after, drowned = true) * 100,
+                    drownedLakes(before).count { it }, drownedLakes(after).count { it }
                 )
             )
 
@@ -205,8 +209,13 @@ class OutletIncisionTest {
                 // fell to a third. The claim is unchanged; what it is counted over is now the
                 // quantity the notch actually acts on, and it holds with room on every seed that
                 // starts over-large (0.30 to 0.42 of the control).
-                val waterWas = lakeShareOfLand(before)
-                val waterNow = lakeShareOfLand(after)
+                // Over the basins standing clear of the sea-level cut, which are the ones the
+                // notch can act on at all. H5's drowned basins are in the same tally otherwise, and
+                // they do not answer to the notch — see [drownedLakes] — so on seed 99 they held
+                // the world's water at 0.80 of the control while the basins the notch drains fell
+                // to 0.28 of it.
+                val waterWas = lakeShareOfLand(before, drowned = false)
+                val waterNow = lakeShareOfLand(after, drowned = false)
                 assertTrue(
                     now < was,
                     "seed $seed: an over-large lake did not fall at all, $was to $now"
@@ -232,11 +241,58 @@ class OutletIncisionTest {
         return rounds
     }
 
+    /**
+     * Which lakes stand on ground that lies below the sea-level cut — the ones H5 made.
+     *
+     * The split arrived with H5 and it is a split in kind, not a way of ignoring an inconvenient
+     * number. This guard exists to catch a basin whose outflow failed to drain it: a hollow in the
+     * land, filled to its rim by the priority flood, that the outlet notch should have emptied.
+     * Every lake on the map was such a basin until H5, because any ground below the cut was drawn as
+     * ocean whatever the ocean could reach.
+     *
+     * H5 marks unreachable water as land at the height it already stands at, so a piece of the sea
+     * walled off from the rest of it is a lake now — which is what it is, and what the Caspian is.
+     * The notch cannot be held to account for the size of one. It runs inside the hydraulic pass,
+     * while that ground is still under the provisional sea, so there is no lip for it to cut and no
+     * outflow to cut with; and the basin's floor lies below sea level, so there is nowhere for the
+     * water to go even if there were. Holding these to the Caspian's share would be asking the notch
+     * to fix something that happens after it and is not an outlet's doing.
+     *
+     * So the bar stays on the lakes it was written for, and the drowned basins are printed beside it
+     * rather than hidden. Measured on seed 718106 at 512, H5 leaves one covering 1.11% of the land,
+     * four times the Caspian's share of Earth's: a basin whose rim stands a hair above the waterline
+     * and which fills to it. GEOGRAPHY.md records that as a deviation and says where the fix belongs
+     * — an outlet pass after the cut rather than only inside the rounds.
+     *
+     * Below the cut is read off `erosion.height` against `sea.threshold` rather than off the
+     * shoreline-relative field, because glaciation rewrites the second one between the cut and here.
+     */
+    private fun drownedLakes(world: WorldMap): BooleanArray {
+        val drowned = BooleanArray(world.rivers.lakes.lakes.size)
+        val ground = world.erosion.height.data
+        val cut = world.sea.threshold
+        world.rivers.lakes.lakeId.forEachIndexed { cell, id ->
+            if (id >= 0 && ground[cell] < cut) drowned[id] = true
+        }
+        return drowned
+    }
+
     /** The largest lake as a share of the world's land — see [caspianShare]. */
-    private fun largestLakeShare(world: WorldMap): Double =
-        (world.rivers.lakes.lakes.maxOfOrNull { it.cellCount } ?: 0).toDouble() /
-            world.sea.landCellCount.toDouble()
+    private fun largestLakeShare(world: WorldMap, drowned: Boolean = false): Double {
+        val isDrowned = drownedLakes(world)
+        val largest = world.rivers.lakes.lakes
+            .filterIndexed { id, _ -> isDrowned[id] == drowned }
+            .maxOfOrNull { it.cellCount } ?: 0
+        return largest.toDouble() / world.sea.landCellCount.toDouble()
+    }
 
     private fun lakeShareOfLand(world: WorldMap): Double =
         world.rivers.lakes.lakeId.count { it >= 0 }.toDouble() / world.sea.landCellCount
+
+    /** The same, over the basins on one side or the other of the sea-level cut. */
+    private fun lakeShareOfLand(world: WorldMap, drowned: Boolean): Double {
+        val isDrowned = drownedLakes(world)
+        val cells = world.rivers.lakes.lakeId.count { it >= 0 && isDrowned[it] == drowned }
+        return cells.toDouble() / world.sea.landCellCount
+    }
 }

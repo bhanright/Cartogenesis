@@ -100,6 +100,42 @@ internal object HydraulicErosion {
     private const val CLOSING_BREACHES = 1
 
     /**
+     * The share of the rounds given over to the sea coming back up. The rest are spent at the
+     * lowstand.
+     *
+     * Earth's sea level spent most of the last glacial cycle well below where it is now and came
+     * back up in the last ten thousand years of it, so the caricature is: cut for most of the run
+     * at the low stand, then raise the base level to today over the final rounds. A quarter of
+     * twelve is three, which is enough for the deltas to be built at the level the map is drawn at
+     * — a delta laid at the lowstand is under water by the time anyone sees it — and few enough
+     * that the valleys still get the nine rounds of feedback that make them valleys.
+     *
+     * Doing it as a ramp rather than as one step is not decoration either. A drowned lower valley
+     * that spends three rounds with the sea partway up it collects some of the sediment coming
+     * down, which is what a real estuary does with its own catchment's load; a single jump would
+     * leave every ria scoured clean.
+     */
+    private const val TRANSGRESSION_SHARE = 0.25f
+
+    /**
+     * How far below today's shoreline the sea stands for [round], as a fraction of the land's
+     * relief — the one thing H5 changes about the hydraulic rounds.
+     *
+     * Zero for every round when [com.cartogenesis.worldgen.model.SeaConfig.lowstand] is zero, and
+     * zero for the final round always, so the world the map is cut from is a world whose last act
+     * was at the present sea level.
+     */
+    private fun standBelowToday(config: WorldGenConfig, round: Int): Float {
+        val lowstand = config.sea.lowstand
+        val rounds = config.erosion.hydraulicRounds
+        if (lowstand <= 0f || rounds <= 1) return 0f
+        val rising = (rounds * TRANSGRESSION_SHARE).toInt().coerceAtLeast(1)
+        val held = rounds - rising
+        if (round < held) return lowstand
+        return lowstand * (rounds - 1 - round).toFloat() / rising.toFloat()
+    }
+
+    /**
      * @param provisionalSeaLevel the fraction of the world that will end up under water. Erosion
      *   runs before the sea level is chosen, but water needs somewhere to go, so it works to the
      *   level the sea *will* take.
@@ -177,8 +213,12 @@ internal object HydraulicErosion {
 
         repeat(cfg.hydraulicRounds) { round ->
             // The shoreline moves as the land wears down, so it is found again each round rather
-            // than fixed once. This is the same percentile the sea level stage will use.
-            val sea = SeaLevelStage.apply(working, provisionalSeaLevel)
+            // than fixed once. This is the same percentile the sea level stage will use — taken,
+            // for all but the last few rounds, at the stand the sea was actually at while these
+            // valleys were being cut. See [standBelowToday].
+            val sea = SeaLevelStage.apply(
+                working, provisionalSeaLevel, standBelowToday(config, round)
+            )
             if (sea.landCellCount == 0) {
                 settle()
                 return working

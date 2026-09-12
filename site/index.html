@@ -109,6 +109,13 @@
     padding:15px 34px;
     transition:border-color .18s,transform .18s,box-shadow .18s;
   }
+  .go-btn.secondary{
+    font-size:12px;letter-spacing:.14em;padding:10px 22px;
+    color:var(--brass);background:transparent;border-color:var(--brass-dim);
+  }
+  .go-btn.secondary:hover,.go-btn.secondary:focus-visible{
+    box-shadow:0 8px 20px rgba(201,162,39,.18);
+  }
   .go-btn:hover,.go-btn:focus-visible{
     border-color:var(--brass);transform:translateY(-2px);
     box-shadow:0 10px 26px rgba(126,20,20,.36);
@@ -227,6 +234,7 @@
 
   <div class="launch">
     <a class="go-btn" href="/app/" id="launch">Open Cartogenesis</a>
+    <a class="go-btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Desktop version (recommended)</a>
     <p class="weight">
       Runs in your browser. Nothing is uploaded.<br>
       The first visit downloads <b>about 4.5&nbsp;MB</b>; it is cached after that.

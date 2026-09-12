@@ -129,7 +129,7 @@ class RiftSegmentationTest {
      * corridor holds the most water — because a rift standing dry on a continent has nothing to say
      * about whether a flooded one is a chain of gulfs or a canal.
      *
-     * The corridor is the trough itself, `riftWidth` either side of the axis: the ground the rift
+     * The corridor is the trough itself, `riftWidthCells` either side of the axis: the ground the rift
      * actually lowered. Arc length along the axis comes from the usual double sweep — farthest cell
      * from an arbitrary start, then breadth-first from that, which is the only honest way to
      * measure length along something that meanders — and every corridor cell inherits the arc
@@ -142,7 +142,7 @@ class RiftSegmentationTest {
         val classes = world.plates.nearestBoundaryClass
         val distance = world.plates.boundaryDistance.data
         val land = world.sea.isLand
-        val corridor = WorldGenConfig().tectonics.riftWidth * (w / 512f)
+        val corridor = WorldGenConfig().tectonics.riftWidthCells * (w / 512f)
 
         fun neighbours(i: Int, action: (Int) -> Unit) {
             val x = i % w

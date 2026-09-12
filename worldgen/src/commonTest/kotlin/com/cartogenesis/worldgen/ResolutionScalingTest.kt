@@ -24,7 +24,7 @@ class ResolutionScalingTest {
 
         assertEquals(2048, scaled.width)
         // A belt four times as many cells wide, so it stays the same width on the map.
-        assertEquals(base.tectonics.boundaryFalloff * 4f, scaled.tectonics.boundaryFalloff)
+        assertEquals(base.tectonics.boundaryFalloffCells * 4f, scaled.tectonics.boundaryFalloffCells)
         // Charged per cell of wind travel, so a four-times-wider grid must charge a quarter as
         // much or every interior parches.
         assertEquals(base.climate.baseRainRate / 4f, scaled.climate.baseRainRate)
@@ -40,7 +40,7 @@ class ResolutionScalingTest {
         assertEquals(base.seaLevel, scaled.seaLevel)
         assertEquals(base.tectonics.plateCount, scaled.tectonics.plateCount)
         assertEquals(base.tectonics.detailFrequency, scaled.tectonics.detailFrequency)
-        assertEquals(base.tectonics.rangeVariationScale, scaled.tectonics.rangeVariationScale)
+        assertEquals(base.tectonics.rangeVariationCycles, scaled.tectonics.rangeVariationCycles)
         assertEquals(base.rivers.sourceFlowShare, scaled.rivers.sourceFlowShare)
         assertEquals(base.nations.reach, scaled.nations.reach)
     }
@@ -63,7 +63,7 @@ class ResolutionScalingTest {
         // Guards against the rescaling being quietly dropped, which is how the bug looked: the
         // call was there in export, but the UI never made it.
         val scaled = base.atResolution(1024, 1024)
-        assertTrue(scaled.tectonics.boundaryFalloff > base.tectonics.boundaryFalloff)
+        assertTrue(scaled.tectonics.boundaryFalloffCells > base.tectonics.boundaryFalloffCells)
         assertTrue(scaled.climate.baseRainRate < base.climate.baseRainRate)
     }
 }

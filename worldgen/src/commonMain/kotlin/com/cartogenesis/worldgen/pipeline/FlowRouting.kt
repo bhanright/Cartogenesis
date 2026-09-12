@@ -17,8 +17,14 @@ import com.cartogenesis.worldgen.math.LongMinHeap
  */
 internal object FlowRouting {
 
-    /** Raised by this much per step when flooding a flat, so filled ground still has a gradient. */
-    private const val EPSILON = 1e-6f
+    /**
+     * Raised by this much per step when flooding a flat, so filled ground still has a gradient.
+     *
+     * In the elevation field's own units. Small enough to be invisible on any map, large enough
+     * that a float can still tell two neighbouring cells of a filled lake apart, which is what
+     * gives the routing below a direction to take across one.
+     */
+    private const val FLAT_GRADIENT_STEP = 1e-6f
 
     /**
      * Raises every hollow to the level of its lowest outlet, so no cell is left without a downhill
@@ -35,45 +41,45 @@ internal object FlowRouting {
         val visited = BooleanArray(width * height)
         val heap = LongMinHeap(width * 4)
 
-        for (i in visited.indices) {
-            if (!isLand[i]) visited[i] = true
+        for (cell in visited.indices) {
+            if (!isLand[cell]) visited[cell] = true
         }
 
-        fun seed(i: Int) {
-            if (visited[i]) return
-            visited[i] = true
-            heap.push(encode(filled.data[i], i))
+        fun seedOutlet(cell: Int) {
+            if (visited[cell]) return
+            visited[cell] = true
+            heap.push(encode(filled.data[cell], cell))
         }
 
         // Outlets: land touching the sea, plus land running off the top and bottom edges.
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!isLand[i]) continue
-                if (y == 0 || y == height - 1) {
-                    seed(i)
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val cell = row * width + column
+                if (!isLand[cell]) continue
+                if (row == 0 || row == height - 1) {
+                    seedOutlet(cell)
                     continue
                 }
-                forEachNeighbour(width, height, x, y) { n ->
-                    if (!isLand[n]) seed(i)
+                forEachNeighbour(width, height, column, row) { neighbour ->
+                    if (!isLand[neighbour]) seedOutlet(cell)
                 }
             }
         }
 
         while (!heap.isEmpty()) {
-            val current = heap.pop()
-            val ci = decodeIndex(current)
-            val cElevation = filled.data[ci]
-            val cx = ci % width
-            val cy = ci / width
+            val lowest = heap.pop()
+            val cell = decodeIndex(lowest)
+            val cellElevation = filled.data[cell]
+            val cellColumn = cell % width
+            val cellRow = cell / width
 
-            forEachNeighbour(width, height, cx, cy) { n ->
-                if (!visited[n]) {
-                    visited[n] = true
-                    if (filled.data[n] <= cElevation) {
-                        filled.data[n] = cElevation + EPSILON
+            forEachNeighbour(width, height, cellColumn, cellRow) { neighbour ->
+                if (!visited[neighbour]) {
+                    visited[neighbour] = true
+                    if (filled.data[neighbour] <= cellElevation) {
+                        filled.data[neighbour] = cellElevation + FLAT_GRADIENT_STEP
                     }
-                    heap.push(encode(filled.data[n], n))
+                    heap.push(encode(filled.data[neighbour], neighbour))
                 }
             }
         }
@@ -88,28 +94,30 @@ internal object FlowRouting {
         elevation: FloatField,
         filled: FloatField
     ): IntArray {
-        val target = IntArray(width * height) { -1 }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!isLand[i]) continue
+        val steepestNeighbour = IntArray(width * height) { -1 }
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val cell = row * width + column
+                if (!isLand[cell]) continue
 
-                var best = -1
+                var bestNeighbour = -1
                 var bestDrop = 0f
-                val here = filled.data[i]
-                forEachNeighbourWithDistance(width, height, x, y) { n, distance ->
+                val here = filled.data[cell]
+                forEachNeighbourWithDistance(width, height, column, row) { neighbour, distance ->
                     // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-                    val there = if (isLand[n]) filled.data[n] else elevation.data[n]
+                    val there =
+                        if (isLand[neighbour]) filled.data[neighbour]
+                        else elevation.data[neighbour]
                     val drop = (here - there) / distance
                     if (drop > bestDrop) {
                         bestDrop = drop
-                        best = n
+                        bestNeighbour = neighbour
                     }
                 }
-                target[i] = best
+                steepestNeighbour[cell] = bestNeighbour
             }
         }
-        return target
+        return steepestNeighbour
     }
 
     /**
@@ -128,10 +136,10 @@ internal object FlowRouting {
     ): IntArray {
         // Elevation packed above the cell index so a plain primitive sort orders cells by height.
         val ordered = LongArray(landCellCount)
-        var n = 0
-        for (i in 0 until width * height) {
-            if (!isLand[i]) continue
-            ordered[n++] = encode(filled.data[i], i)
+        var written = 0
+        for (cell in 0 until width * height) {
+            if (!isLand[cell]) continue
+            ordered[written++] = encode(filled.data[cell], cell)
         }
         ordered.sort()
         return IntArray(landCellCount) { decodeIndex(ordered[it]) }
@@ -153,17 +161,17 @@ internal object FlowRouting {
         weightOf: (Int) -> Float
     ): FloatField {
         val accumulation = FloatField(width, height)
-        for (i in 0 until width * height) {
-            if (isLand[i]) accumulation.data[i] = weightOf(i)
+        for (cell in 0 until width * height) {
+            if (isLand[cell]) accumulation.data[cell] = weightOf(cell)
         }
 
         val order = heightOrder(width, height, isLand, filled, landCellCount)
         // Highest first, so a cell's own total is final before it passes water downstream.
-        for (k in order.indices.reversed()) {
-            val i = order[k]
-            val t = flowTarget[i]
-            if (t >= 0 && isLand[t]) {
-                accumulation.data[t] += accumulation.data[i]
+        for (rank in order.indices.reversed()) {
+            val cell = order[rank]
+            val receiver = flowTarget[cell]
+            if (receiver >= 0 && isLand[receiver]) {
+                accumulation.data[receiver] += accumulation.data[cell]
             }
         }
         return accumulation
@@ -221,9 +229,9 @@ internal object FlowRouting {
         flowTarget: IntArray,
         pondDepth: Float
     ): Spillways {
-        val size = width * height
-        val ponded = BooleanArray(size) { isLand[it] && filled[it] - elevation[it] > pondDepth }
-        val seen = BooleanArray(size)
+        val cellCount = width * height
+        val ponded = BooleanArray(cellCount) { isLand[it] && filled[it] - elevation[it] > pondDepth }
+        val seen = BooleanArray(cellCount)
         var stack = IntArray(1024)
 
         var spills = IntArray(64)
@@ -237,11 +245,11 @@ internal object FlowRouting {
         var largestDepth = 0f
         var deepest = 0f
 
-        for (start in 0 until size) {
+        for (start in 0 until cellCount) {
             if (!ponded[start] || seen[start]) continue
 
-            var top = 0
-            stack[top++] = start
+            var stackTop = 0
+            stack[stackTop++] = start
             seen[start] = true
 
             var cells = 0
@@ -249,28 +257,28 @@ internal object FlowRouting {
             var spill = -1
             var spillLevel = Float.MAX_VALUE
 
-            while (top > 0) {
-                val c = stack[--top]
+            while (stackTop > 0) {
+                val cell = stack[--stackTop]
                 cells++
-                if (elevation[c] < basinFloor) basinFloor = elevation[c]
+                if (elevation[cell] < basinFloor) basinFloor = elevation[cell]
 
                 // Where this cell's water leaves the basin. The lowest such exit is the rim the
                 // fill levelled the whole basin up to; the others are higher ground the epsilon
                 // gradient happens to touch.
-                val t = flowTarget[c]
-                if (t >= 0 && isLand[t] && !ponded[t]) {
-                    val level = filled[t]
-                    if (level < spillLevel || (level == spillLevel && t < spill)) {
-                        spillLevel = level
-                        spill = t
+                val receiver = flowTarget[cell]
+                if (receiver >= 0 && isLand[receiver] && !ponded[receiver]) {
+                    val exitLevel = filled[receiver]
+                    if (exitLevel < spillLevel || (exitLevel == spillLevel && receiver < spill)) {
+                        spillLevel = exitLevel
+                        spill = receiver
                     }
                 }
 
-                forEachNeighbour(width, height, c % width, c / width) { n ->
-                    if (ponded[n] && !seen[n]) {
-                        seen[n] = true
-                        if (top == stack.size) stack = stack.copyOf(stack.size * 2)
-                        stack[top++] = n
+                forEachNeighbour(width, height, cell % width, cell / width) { neighbour ->
+                    if (ponded[neighbour] && !seen[neighbour]) {
+                        seen[neighbour] = true
+                        if (stackTop == stack.size) stack = stack.copyOf(stack.size * 2)
+                        stack[stackTop++] = neighbour
                     }
                 }
             }
@@ -285,13 +293,13 @@ internal object FlowRouting {
             levels[basins] = if (spill >= 0) spillLevel else basinFloor
             floors[basins] = basinFloor
             counts[basins] = cells
-            val depth = if (spill >= 0) spillLevel - basinFloor else 0f
+            val fillDepth = if (spill >= 0) spillLevel - basinFloor else 0f
             if (cells > largestCells) {
                 largest = basins
                 largestCells = cells
-                largestDepth = depth
+                largestDepth = fillDepth
             }
-            if (depth > deepest) deepest = depth
+            if (fillDepth > deepest) deepest = fillDepth
             basins++
         }
 
@@ -323,30 +331,30 @@ internal object FlowRouting {
         flowTarget: IntArray,
         landCellCount: Int
     ): IntArray {
-        val size = width * height
-        val feeding = IntArray(size)
-        for (i in 0 until size) {
-            if (!isLand[i]) continue
-            val t = flowTarget[i]
-            if (t >= 0 && isLand[t]) feeding[t]++
+        val cellCount = width * height
+        val feeding = IntArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!isLand[cell]) continue
+            val receiver = flowTarget[cell]
+            if (receiver >= 0 && isLand[receiver]) feeding[receiver]++
         }
 
         val order = IntArray(landCellCount)
         var tail = 0
-        for (i in 0 until size) {
-            if (isLand[i] && feeding[i] == 0) order[tail++] = i
+        for (cell in 0 until cellCount) {
+            if (isLand[cell] && feeding[cell] == 0) order[tail++] = cell
         }
         var head = 0
         while (head < tail) {
-            val t = flowTarget[order[head++]]
-            if (t >= 0 && isLand[t] && --feeding[t] == 0) order[tail++] = t
+            val receiver = flowTarget[order[head++]]
+            if (receiver >= 0 && isLand[receiver] && --feeding[receiver] == 0) order[tail++] = receiver
         }
 
         // A cycle would leave cells unplaced, and the strictly-downhill rule says there can be
         // none. Belt and braces: anything left over still gets its turn, at the end.
         if (tail < landCellCount) {
-            for (i in 0 until size) {
-                if (isLand[i] && feeding[i] > 0) order[tail++] = i
+            for (cell in 0 until cellCount) {
+                if (isLand[cell] && feeding[cell] > 0) order[tail++] = cell
             }
         }
         return order
@@ -367,23 +375,37 @@ internal object FlowRouting {
 
     fun decodeIndex(encoded: Long): Int = (encoded and 0xFFFFFFFFL).toInt()
 
+    /**
+     * Added to an elevation before its bits are packed by [encode].
+     *
+     * Elevation is measured from the shoreline and so goes negative at sea, and the sign bit of a
+     * negative float does not sort as a smaller integer. Four is comfortably above the deepest
+     * water the shoreline-relative field can hold, which is -1.
+     */
     private const val ELEVATION_BIAS = 4f
+
+    /**
+     * Length of a diagonal step, in cells, for the drop-per-distance comparison in
+     * [flowDirections]. Written out rather than taken from `sqrt`, because every world ever
+     * generated took the steepest neighbour by this exact float.
+     */
+    const val DIAGONAL_STEP_CELLS = 1.41421356f
 
     inline fun forEachNeighbour(
         width: Int,
         height: Int,
-        x: Int,
-        y: Int,
+        column: Int,
+        row: Int,
         action: (index: Int) -> Unit
     ) {
-        for (dy in -1..1) {
-            val ny = y + dy
-            if (ny < 0 || ny >= height) continue
-            for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                var nx = (x + dx) % width
-                if (nx < 0) nx += width
-                action(ny * width + nx)
+        for (rowStep in -1..1) {
+            val neighbourRow = row + rowStep
+            if (neighbourRow < 0 || neighbourRow >= height) continue
+            for (columnStep in -1..1) {
+                if (columnStep == 0 && rowStep == 0) continue
+                var neighbourColumn = (column + columnStep) % width
+                if (neighbourColumn < 0) neighbourColumn += width
+                action(neighbourRow * width + neighbourColumn)
             }
         }
     }
@@ -391,19 +413,20 @@ internal object FlowRouting {
     inline fun forEachNeighbourWithDistance(
         width: Int,
         height: Int,
-        x: Int,
-        y: Int,
+        column: Int,
+        row: Int,
         action: (index: Int, distance: Float) -> Unit
     ) {
-        for (dy in -1..1) {
-            val ny = y + dy
-            if (ny < 0 || ny >= height) continue
-            for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                var nx = (x + dx) % width
-                if (nx < 0) nx += width
-                val distance = if (dx != 0 && dy != 0) 1.41421356f else 1f
-                action(ny * width + nx, distance)
+        for (rowStep in -1..1) {
+            val neighbourRow = row + rowStep
+            if (neighbourRow < 0 || neighbourRow >= height) continue
+            for (columnStep in -1..1) {
+                if (columnStep == 0 && rowStep == 0) continue
+                var neighbourColumn = (column + columnStep) % width
+                if (neighbourColumn < 0) neighbourColumn += width
+                val distance =
+                    if (columnStep != 0 && rowStep != 0) DIAGONAL_STEP_CELLS else 1f
+                action(neighbourRow * width + neighbourColumn, distance)
             }
         }
     }

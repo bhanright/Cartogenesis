@@ -128,12 +128,14 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
-     * 4 because the sweep for human-readable names moved serialised property names — the shoreline
-     * height and the terrain gradients among them — with no compatibility shim, so a version-3
-     * file's header no longer means what its keys say. 3 was the container below, 2 the JSON text
-     * that preceded it; neither opens.
+     * 5 because the sweep for human-readable names moved serialised property names with no
+     * compatibility shim, so a header written before it no longer means what its keys say. 4 was
+     * that sweep's first pass over the shared model — the shoreline height and the terrain
+     * gradients among them — and 5 its second over the tectonics, sea, erosion and glaciation
+     * settings, where every cell-valued name took a `Cells` suffix. 3 was the container below with
+     * none of that, 2 the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 4
+    const val FORMAT_VERSION = 5
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

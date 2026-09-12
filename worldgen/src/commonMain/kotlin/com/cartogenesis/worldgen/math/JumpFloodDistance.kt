@@ -35,106 +35,134 @@ object JumpFloodDistance {
     /** Same sentinel [DistanceTransform] uses, so a call site swaps one for the other unchanged. */
     const val INFINITE = 1e18f
 
+    /** No source has claimed this cell yet, in the buffers the flood passes between each other. */
+    private const val NO_SOURCE = -1
+
     /**
      * @param dist pre-seeded with 0 at source cells and [INFINITE] elsewhere; overwritten with
-     *   the distance to the nearest source. Cells with no source anywhere keep [INFINITE].
+     *   the distance to the nearest source, in cells. Cells with no source anywhere keep
+     *   [INFINITE].
      * @param label pre-seeded with a source id at source cells and -1 elsewhere; overwritten with
      *   the id of the nearest source. The id is whatever the caller seeded — a cell index, a plate
      *   id — and is carried, not recomputed.
      */
     fun run(width: Int, height: Int, dist: FloatArray, label: IntArray) {
-        val n = width * height
-        if (n == 0) return
+        val cellCount = width * height
+        if (cellCount == 0) return
 
         // The labels as the caller seeded them. The flood itself moves cell indices, because it
         // needs the source's coordinates to measure to; the label is looked up at the end.
         val seedLabel = label.copyOf()
 
-        var src = IntArray(n) { if (dist[it] == 0f) it else -1 }
-        var any = false
-        for (i in 0 until n) {
-            if (src[i] >= 0) { any = true; break }
+        var nearestSource = IntArray(cellCount) { if (dist[it] == 0f) it else NO_SOURCE }
+        var anySource = false
+        for (cell in 0 until cellCount) {
+            if (nearestSource[cell] >= 0) { anySource = true; break }
         }
-        if (!any) return
+        if (!anySource) return
 
-        var dst = IntArray(n)
-        for (step in schedule(width, height)) {
-            pass(width, height, step, src, dst)
-            val swap = src
-            src = dst
-            dst = swap
+        var nextNearestSource = IntArray(cellCount)
+        for (stepCells in schedule(width, height)) {
+            pass(width, height, stepCells, nearestSource, nextNearestSource)
+            val previous = nearestSource
+            nearestSource = nextNearestSource
+            nextNearestSource = previous
         }
 
-        for (i in 0 until n) {
-            val s = src[i]
-            if (s < 0) continue
-            dist[i] = sqrt(squaredDistance(width, i % width, i / width, s).toDouble()).toFloat()
-            label[i] = seedLabel[s]
+        for (cell in 0 until cellCount) {
+            val source = nearestSource[cell]
+            if (source < 0) continue
+            val squared = squaredDistance(width, cell % width, cell / width, source)
+            dist[cell] = sqrt(squared.toDouble()).toFloat()
+            label[cell] = seedLabel[source]
         }
     }
 
     /**
-     * A step-1 pass, then the halving powers of two, then a second step-1 pass.
+     * A step-1 pass, then the halving powers of two, then a second step-1 pass, in cells.
      *
      * The powers start at the first one at or above half the larger side, which is what makes the
      * flood reach across the whole grid; the two step-1 passes at the ends are cheap insurance
      * against the small errors the bare schedule leaves.
      */
     private fun schedule(width: Int, height: Int): IntArray {
-        var start = 1
-        while (start < maxOf(width, height) / 2) start = start shl 1
-        var count = 2
-        var s = start
-        while (s >= 1) { count++; s = s shr 1 }
-        val out = IntArray(count)
-        var index = 0
-        out[index++] = 1
-        s = start
-        while (s >= 1) { out[index++] = s; s = s shr 1 }
-        out[index] = 1
-        return out
+        var largestStepCells = 1
+        while (largestStepCells < maxOf(width, height) / 2) {
+            largestStepCells = largestStepCells shl 1
+        }
+
+        // The two bracketing step-1 passes, plus one per halving from the largest step down to 1.
+        var passCount = 2
+        var stepCells = largestStepCells
+        while (stepCells >= 1) { passCount++; stepCells = stepCells shr 1 }
+
+        val steps = IntArray(passCount)
+        var next = 0
+        steps[next++] = 1
+        stepCells = largestStepCells
+        while (stepCells >= 1) { steps[next++] = stepCells; stepCells = stepCells shr 1 }
+        steps[next] = 1
+        return steps
     }
 
-    private fun pass(width: Int, height: Int, step: Int, src: IntArray, dst: IntArray) {
-        // Reads `src`, writes only its own cell of `dst`, so the rows split cleanly and the
-        // result does not depend on how they were split.
-        parallelChunks(0, height) { startY, endY ->
-            for (y in startY until endY) {
-                for (x in 0 until width) {
-                    val i = y * width + x
-                    var best = src[i]
-                    var bestD = if (best < 0) Int.MAX_VALUE else squaredDistance(width, x, y, best)
-                    for (oy in -1..1) {
-                        val ny = y + oy * step
-                        if (ny < 0 || ny >= height) continue
-                        val row = ny * width
-                        for (ox in -1..1) {
-                            if (ox == 0 && oy == 0) continue
-                            var nx = (x + ox * step) % width
-                            if (nx < 0) nx += width
-                            val candidate = src[row + nx]
+    /**
+     * One flood pass: every cell adopts the nearest of its own source and the sources held by the
+     * eight cells [stepCells] away, writing the winner into [nextNearestSource].
+     */
+    private fun pass(
+        width: Int,
+        height: Int,
+        stepCells: Int,
+        nearestSource: IntArray,
+        nextNearestSource: IntArray
+    ) {
+        // Reads `nearestSource`, writes only its own cell of `nextNearestSource`, so the rows split
+        // cleanly and the result does not depend on how they were split.
+        parallelChunks(0, height) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until width) {
+                    val cell = row * width + column
+                    var best = nearestSource[cell]
+                    var bestSquared =
+                        if (best < 0) Int.MAX_VALUE
+                        else squaredDistance(width, column, row, best)
+                    for (rowStep in -1..1) {
+                        val neighbourRow = row + rowStep * stepCells
+                        if (neighbourRow < 0 || neighbourRow >= height) continue
+                        val neighbourRowStart = neighbourRow * width
+                        for (columnStep in -1..1) {
+                            if (columnStep == 0 && rowStep == 0) continue
+                            var neighbourColumn = (column + columnStep * stepCells) % width
+                            if (neighbourColumn < 0) neighbourColumn += width
+                            val candidate = nearestSource[neighbourRowStart + neighbourColumn]
                             if (candidate < 0) continue
-                            val d = squaredDistance(width, x, y, candidate)
+                            val candidateSquared =
+                                squaredDistance(width, column, row, candidate)
                             // Ties to the lower cell index: two sources exactly as far away is
                             // common on a grid, and which one wins decides the label.
-                            if (d < bestD || (d == bestD && candidate < best)) {
-                                bestD = d
+                            if (candidateSquared < bestSquared ||
+                                (candidateSquared == bestSquared && candidate < best)
+                            ) {
+                                bestSquared = candidateSquared
                                 best = candidate
                             }
                         }
                     }
-                    dst[i] = best
+                    nextNearestSource[cell] = best
                 }
             }
         }
     }
 
-    /** Squared distance from (x, y) to cell [source], taking the short way round in x. */
-    private fun squaredDistance(width: Int, x: Int, y: Int, source: Int): Int {
-        var dx = x - source % width
-        if (dx < 0) dx = -dx
-        if (dx > width - dx) dx = width - dx
-        val dy = y - source / width
-        return dx * dx + dy * dy
+    /**
+     * Squared distance in cells from ([column], [row]) to cell [source], taking the short way round
+     * in x. Squared, and so an exact integer: the comparisons the flood makes never need the root.
+     */
+    private fun squaredDistance(width: Int, column: Int, row: Int, source: Int): Int {
+        var acrossCells = column - source % width
+        if (acrossCells < 0) acrossCells = -acrossCells
+        if (acrossCells > width - acrossCells) acrossCells = width - acrossCells
+        val downCells = row - source / width
+        return acrossCells * acrossCells + downCells * downCells
     }
 }

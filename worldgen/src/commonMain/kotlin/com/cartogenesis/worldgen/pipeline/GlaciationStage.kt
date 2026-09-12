@@ -78,9 +78,10 @@ internal data class GlacialMass(
  * that balance is positive. The final climate still runs after the carving, on the carved terrain,
  * and it is the one the map shows; the provisional one exists only to say where the ice was.
  *
- * Before H2 the mask was cruder: a provisional mean annual temperature at or below freezing, which
+ * The cruder mask this replaced — a provisional mean annual temperature at or below freezing —
  * cannot tell a snowy highland from a frozen desert and so froze every cold interior on the map.
- * That rule is still here, behind `ClimateConfig.snowBalance`, as the control the guard needs.
+ * That rule is still here, behind `ClimateConfig.snowBalance`, as the control the guard needs. See
+ * REALISM_PLAN.md, H2.
  *
  * ### Two regimes, decided by relief
  *
@@ -147,8 +148,7 @@ object GlaciationStage {
         sea: SeaLevelResult,
         /**
          * The provisional snow balance, in millimetres of water equivalent a year, or null to fall
-         * back to the pre-H2 temperature mask. See [snowBalance] and
-         * [ClimateStage.provisionalSnowBalance].
+         * back to the plain temperature mask. See [ClimateStage.provisionalSnowBalance].
          */
         snowBalance: FloatField? = null
     ): SeaLevelResult = apply(config, sea, snowBalance, onBudget = null)
@@ -163,14 +163,14 @@ object GlaciationStage {
         snowBalance: FloatField?,
         onBudget: ((GlacialMass) -> Unit)?
     ): SeaLevelResult {
-        val cfg = config.glaciation
+        val glaciation = config.glaciation
         // The same object back, so every `===` guard downstream sees an untouched sea stage and
         // the whole world is reproduced bit for bit. This is the control the guard needs.
-        if (!cfg.enabled || sea.landCellCount == 0) return sea
+        if (!glaciation.enabled || sea.landCellCount == 0) return sea
 
-        val w = config.width
-        val h = config.height
-        val size = w * h
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
         val isLand = sea.isLand
         val relative = sea.relativeElevation.data
 
@@ -179,24 +179,24 @@ object GlaciationStage {
         //  - the balance, when the engine has run a provisional climate and handed one over. A
         //    cell is frozen where a year's snow outlasts a year's melt, so a cold dry interior is
         //    bare ground with no glacier to carve it and a wet maritime highland carries ice a
-        //    long way down its flanks. That is the H2 mask.
-        //  - the pre-H2 rule otherwise: a provisional annual mean at or below
+        //    long way down its flanks.
+        //  - otherwise the older rule: a provisional annual mean at or below
         //    [GlaciationConfig.freezingC], which called every cold place frozen whether or not
-        //    any snow ever reached it.
+        //    any snow ever reached it. See REALISM_PLAN.md, H2.
         var frozenCount = 0
-        val frozen = BooleanArray(size)
+        val frozen = BooleanArray(cellCount)
         if (snowBalance != null) {
-            for (i in 0 until size) {
-                if (isLand[i] && snowBalance.data[i] > 0f) {
-                    frozen[i] = true
+            for (cell in 0 until cellCount) {
+                if (isLand[cell] && snowBalance.data[cell] > 0f) {
+                    frozen[cell] = true
                     frozenCount++
                 }
             }
         } else {
             val temperature = ClimateStage.buildTemperature(config, sea)
-            for (i in 0 until size) {
-                if (isLand[i] && temperature.data[i] <= cfg.freezingC) {
-                    frozen[i] = true
+            for (cell in 0 until cellCount) {
+                if (isLand[cell] && temperature.data[cell] <= glaciation.freezingC) {
+                    frozen[cell] = true
                     frozenCount++
                 }
             }
@@ -206,21 +206,21 @@ object GlaciationStage {
         // The ice follows the water's own network. A glacier occupies the valley a river cut before
         // the cold came, which is both what really happens and what makes the result legible: the
         // trough is where the map already had a valley.
-        val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
-        val directions = FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled)
-        val order = FlowRouting.drainageOrder(w, h, isLand, directions, sea.landCellCount)
+        val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
+        val directions = FlowRouting.flowDirections(cellsAcross, cellsDown, isLand, sea.relativeElevation, filled)
+        val order = FlowRouting.drainageOrder(cellsAcross, cellsDown, isLand, directions, sea.landCellCount)
 
         // How much frozen ground drains through each cell — the ice's own catchment, as distinct
         // from the water's. Accumulated along [FlowRouting.drainageOrder] rather than with
         // [FlowRouting.accumulate], for the reason that order exists: the height-sorted walk can
         // hand a cell its load after it has already been passed, and a lost contribution here is a
         // glacier that stops for no reason.
-        val ice = FloatArray(size)
-        for (i in 0 until size) if (frozen[i]) ice[i] = 1f
-        for (k in order.indices) {
-            val i = order[k]
-            val t = directions[i]
-            if (t >= 0 && isLand[t]) ice[t] += ice[i]
+        val ice = FloatArray(cellCount)
+        for (cell in 0 until cellCount) if (frozen[cell]) ice[cell] = 1f
+        for (rank in order.indices) {
+            val cell = order[rank]
+            val receiver = directions[cell]
+            if (receiver >= 0 && isLand[receiver]) ice[receiver] += ice[cell]
         }
 
         // The elevation range within a couple of trough-widths, which is the question "is there a
@@ -228,59 +228,63 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         val landRange = landRange(isLand, relative)
-        val reliefRadius = (cfg.reliefWindow * cfg.valleyWidth).toInt().coerceIn(2, 64)
-        val relief = localRelief(w, h, relative, reliefRadius)
-        val channelThreshold = cfg.valleyRelief * landRange
+        val reliefRadius = (glaciation.reliefWindow * glaciation.valleyWidthCells).toInt().coerceIn(2, 64)
+        val relief = localRelief(cellsAcross, cellsDown, relative, reliefRadius)
+        val channelThreshold = glaciation.valleyRelief * landRange
         var channelledCells = 0
-        val channelled = BooleanArray(size)
-        for (i in 0 until size) {
-            if (isLand[i] && relief[i] >= channelThreshold) {
-                channelled[i] = true
-                if (frozen[i]) channelledCells++
+        val channelled = BooleanArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (isLand[cell] && relief[cell] >= channelThreshold) {
+                channelled[cell] = true
+                if (frozen[cell]) channelledCells++
             }
         }
 
         // The denominator is the frozen ground, not the land: see [GlaciationConfig.minCatchment].
         val frozenLand = frozenCount.toFloat()
-        val glacier = BooleanArray(size)
-        val strength = FloatArray(size)
+        val glacier = BooleanArray(cellCount)
+        val strength = FloatArray(cellCount)
         // Cells travelled since the ice left frozen ground. A snout sits below its own snowline —
         // that is what an ablation zone is — so the trough is allowed this far past the mask and
         // not one cell further.
-        val runOut = IntArray(size) { Int.MAX_VALUE }
+        val runOut = IntArray(cellCount) { Int.MAX_VALUE }
 
         // Which ice field each cell's ice came out of, and how big that field is. A glacier has to
         // be one of the few paths draining *its own* ice field, not merely a large number against
         // the planet's total: see [GlaciationConfig.trunkCatchment].
-        val field = frozenFields(w, h, frozen)
-        val fieldOf = IntArray(size) { field.id[it] }
-        for (k in order.indices) {
-            val i = order[k]
-            val t = directions[i]
-            if (fieldOf[i] >= 0 && t >= 0 && isLand[t] && fieldOf[t] < 0) fieldOf[t] = fieldOf[i]
+        val field = frozenFields(cellsAcross, cellsDown, frozen)
+        val fieldOf = IntArray(cellCount) { field.id[it] }
+        for (rank in order.indices) {
+            val cell = order[rank]
+            val receiver = directions[cell]
+            if (fieldOf[cell] >= 0 && receiver >= 0 && isLand[receiver] &&
+                fieldOf[receiver] < 0
+            ) {
+                fieldOf[receiver] = fieldOf[cell]
+            }
         }
 
         // Everything that could carry a trough: enough ice, close enough to the frozen ground, and
         // standing in channelled country. Whether it actually does is the length test below.
-        val candidate = BooleanArray(size)
-        for (k in order.indices) {
-            val i = order[k]
-            if (frozen[i]) runOut[i] = 0
-            val share = ice[i] / frozenLand
-            val f = fieldOf[i]
-            val fieldShare = if (f >= 0) ice[i] / field.size[f].toFloat() else 0f
-            if (share >= cfg.minCatchment && fieldShare >= cfg.trunkCatchment &&
-                runOut[i] <= cfg.runOutCells && channelled[i]
+        val candidate = BooleanArray(cellCount)
+        for (rank in order.indices) {
+            val cell = order[rank]
+            if (frozen[cell]) runOut[cell] = 0
+            val share = ice[cell] / frozenLand
+            val fieldId = fieldOf[cell]
+            val fieldShare = if (fieldId >= 0) ice[cell] / field.size[fieldId].toFloat() else 0f
+            if (share >= glaciation.minCatchment && fieldShare >= glaciation.trunkCatchment &&
+                runOut[cell] <= glaciation.runOutCells && channelled[cell]
             ) {
-                candidate[i] = true
+                candidate[cell] = true
             }
             // Propagated for every cell that the ice has reached rather than only for the ones
             // that qualified, so a trough interrupted by one flat or thin-iced cell can still find
             // its snout on the other side.
-            val t = directions[i]
-            if (runOut[i] != Int.MAX_VALUE && t >= 0 && isLand[t]) {
-                val next = if (frozen[t]) 0 else runOut[i] + 1
-                if (next < runOut[t]) runOut[t] = next
+            val receiver = directions[cell]
+            if (runOut[cell] != Int.MAX_VALUE && receiver >= 0 && isLand[receiver]) {
+                val nextRunOut = if (frozen[receiver]) 0 else runOut[cell] + 1
+                if (nextRunOut < runOut[receiver]) runOut[receiver] = nextRunOut
             }
         }
 
@@ -293,48 +297,55 @@ object GlaciationStage {
         // and the ground distance walked between them. A path that runs dead straight at one of the
         // eight D8 bearings has walked exactly the straight-line distance, and that is the comb of
         // parallel gullies down a range front — see [GlaciationConfig.minSinuosity].
-        val upstream = IntArray(size)
-        val upLength = FloatArray(size)
-        val head = IntArray(size) { -1 }
-        for (k in order.indices) {
-            val i = order[k]
-            if (!candidate[i]) continue
-            if (upstream[i] == 0) {
-                upstream[i] = 1
-                head[i] = i
+        val upstream = IntArray(cellCount)
+        val upLength = FloatArray(cellCount)
+        val head = IntArray(cellCount) { -1 }
+        for (rank in order.indices) {
+            val cell = order[rank]
+            if (!candidate[cell]) continue
+            if (upstream[cell] == 0) {
+                upstream[cell] = 1
+                head[cell] = cell
             }
-            val t = directions[i]
-            if (t >= 0 && candidate[t] && upstream[i] + 1 > upstream[t]) {
-                upstream[t] = upstream[i] + 1
-                upLength[t] = upLength[i] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
-                head[t] = head[i]
+            val receiver = directions[cell]
+            if (receiver >= 0 && candidate[receiver] && upstream[cell] + 1 > upstream[receiver]) {
+                upstream[receiver] = upstream[cell] + 1
+                val stepCells =
+                    if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
+                upLength[receiver] = upLength[cell] + stepCells
+                head[receiver] = head[cell]
             }
         }
-        val downstream = IntArray(size)
-        val downLength = FloatArray(size)
-        val snout = IntArray(size) { -1 }
-        for (k in order.indices.reversed()) {
-            val i = order[k]
-            if (!candidate[i]) continue
-            downstream[i] = 1
-            downLength[i] = 0f
-            snout[i] = i
-            val t = directions[i]
-            if (t >= 0 && candidate[t] && downstream[t] + 1 > downstream[i]) {
-                downstream[i] = downstream[t] + 1
-                downLength[i] = downLength[t] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
-                snout[i] = snout[t]
+        val downstream = IntArray(cellCount)
+        val downLength = FloatArray(cellCount)
+        val snout = IntArray(cellCount) { -1 }
+        for (rank in order.indices.reversed()) {
+            val cell = order[rank]
+            if (!candidate[cell]) continue
+            downstream[cell] = 1
+            downLength[cell] = 0f
+            snout[cell] = cell
+            val receiver = directions[cell]
+            if (receiver >= 0 && candidate[receiver] && downstream[receiver] + 1 > downstream[cell]) {
+                downstream[cell] = downstream[receiver] + 1
+                val stepCells =
+                    if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
+                downLength[cell] = downLength[receiver] + stepCells
+                snout[cell] = snout[receiver]
             }
         }
 
         var glacierCells = 0
-        for (i in 0 until size) {
-            if (!candidate[i]) continue
-            if (upstream[i] + downstream[i] - 1 < cfg.minTroughLength) continue
-            if (sinuosity(head[i], snout[i], upLength[i] + downLength[i], w) < cfg.minSinuosity) {
+        for (cell in 0 until cellCount) {
+            if (!candidate[cell]) continue
+            if (upstream[cell] + downstream[cell] - 1 < glaciation.minTroughLengthCells) continue
+            val wander = sinuosity(
+                head[cell], snout[cell], upLength[cell] + downLength[cell], cellsAcross
+            )
+            if (wander < glaciation.minSinuosity) {
                 continue
             }
-            glacier[i] = true
+            glacier[cell] = true
             glacierCells++
             // Ice thickness, as a proxy: a glacier draining twenty times the ground is not twenty
             // times as deep, so the root rather than the share itself.
@@ -343,12 +354,14 @@ object GlaciationStage {
             // number, the over-deepening included, and an over-deepening scaled to a fifth is a
             // basin shallower than [LakesConfig.minDepth] — which is to say a basin that the river
             // stage will not see as a lake, on a glacier that was carved anyway.
-            strength[i] = sqrt((ice[i] / frozenLand) / cfg.fullCatchment).coerceIn(MIN_THICKNESS, 1f)
+            strength[cell] = sqrt((ice[cell] / frozenLand) / glaciation.fullCatchment).coerceIn(MIN_THICKNESS, 1f)
         }
 
         // No two glaciers of the same bearing within a trough of each other. Ice that close together
         // is one glacier, and a rank of them is the comb.
-        val suppressed = suppressParallel(cfg, w, h, glacier, directions, ice, strength, order)
+        val suppressed = suppressParallel(
+            glaciation, cellsAcross, cellsDown, glacier, directions, ice, strength, order
+        )
         glacierCells -= suppressed.cells
 
         // The other regime's ground, settled here rather than after the carving because the water
@@ -357,10 +370,10 @@ object GlaciationStage {
         // nothing the scour reads is `directions`, `order` or `ice`. That is the whole point: there
         // is no flow grid in it to show through.
         var sheetCells = 0
-        val sheet = BooleanArray(size)
-        for (i in 0 until size) {
-            if (frozen[i] && !channelled[i] && !glacier[i]) {
-                sheet[i] = true
+        val sheet = BooleanArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (frozen[cell] && !channelled[cell] && !glacier[cell]) {
+                sheet[cell] = true
                 sheetCells++
             }
         }
@@ -375,31 +388,31 @@ object GlaciationStage {
         // the same world. The denominator is the frozen flat ground, with a floor at a quarter of
         // all frozen ground so that an ice field which is nothing but mountains still has an
         // allowance to spend on its valley floors.
-        val minBasinCells = (cfg.minLakeShareOfMap * size).toInt().coerceAtLeast(4)
-        val maxBasinCells = (cfg.maxLakeShareOfMap * size).toInt().coerceAtLeast(minBasinCells)
+        val minBasinCells = (glaciation.minLakeShareOfMap * cellCount).toInt().coerceAtLeast(4)
+        val maxBasinCells = (glaciation.maxLakeShareOfMap * cellCount).toInt().coerceAtLeast(minBasinCells)
         val lakeBudget =
-            (cfg.sheetLakeShare * maxOf(sheetCells, frozenCount / 4).toFloat()).toInt()
+            (glaciation.sheetLakeShare * maxOf(sheetCells, frozenCount / 4).toFloat()).toInt()
 
         // How far down the staircase each cell is.
         //
         // Two things advance it, and they simply add: how far the ice has run (in cells, over
-        // [GlaciationConfig.basinSpacing]) and how far it has fallen (in elevation, over
+        // [GlaciationConfig.basinSpacingCells]) and how far it has fallen (in elevation, over
         // [GlaciationConfig.basinDrop]). A reach ends when the sum passes the next whole number, so
         // whichever runs out first ends it — a long flat reach on a plain, a short one on a
         // mountainside. Measured from the head of the longest feeder rather than the nearest, so a
         // tributary joining halfway down does not restart the count.
-        val spacing = cfg.basinSpacing.coerceAtLeast(2f)
-        val drop = cfg.basinDrop.coerceAtLeast(1e-4f)
-        val progress = FloatArray(size)
-        for (k in order.indices) {
-            val i = order[k]
-            if (!glacier[i]) continue
-            val t = directions[i]
-            if (t >= 0 && glacier[t]) {
-                val step = progress[i] +
-                    (if (isDiagonal(i, t, w)) DIAGONAL else 1f) / spacing +
-                    (relative[i] - relative[t]).coerceAtLeast(0f) / drop
-                if (step > progress[t]) progress[t] = step
+        val spacing = glaciation.basinSpacingCells.coerceAtLeast(2f)
+        val drop = glaciation.basinDrop.coerceAtLeast(1e-4f)
+        val progress = FloatArray(cellCount)
+        for (rank in order.indices) {
+            val cell = order[rank]
+            if (!glacier[cell]) continue
+            val receiver = directions[cell]
+            if (receiver >= 0 && glacier[receiver]) {
+                val step = progress[cell] +
+                    (if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f) / spacing +
+                    (relative[cell] - relative[receiver]).coerceAtLeast(0f) / drop
+                if (step > progress[receiver]) progress[receiver] = step
             }
         }
 
@@ -407,8 +420,8 @@ object GlaciationStage {
         // troughs are stepped like this — the ice scours hardest where it is confined and thickest
         // and rides over the harder bars between — and it is the step at the lower end of a reach
         // that makes the basin a lake rather than merely a dip.
-        val reach = IntArray(size)
-        for (i in 0 until size) if (glacier[i]) reach[i] = progress[i].toInt()
+        val reach = IntArray(cellCount)
+        for (cell in 0 until cellCount) if (glacier[cell]) reach[cell] = progress[cell].toInt()
 
         // Carving proper. Every stamp is computed from the *original* surface and combined with a
         // minimum, so overlapping glaciers compose in any order and the result does not depend on
@@ -422,8 +435,8 @@ object GlaciationStage {
         // which on a rank of parallel gullies down a piedmont is a rank of parallel straight bars
         // of water. Basins are now regions, cut below, and they are the only thing that holds
         // water.
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell]) continue
             // Wall to wall: the ice lowers the whole cross-section toward its bed on a parabola,
             // untouched at the rim and flat at the floor. That parabola is the U.
             //
@@ -432,36 +445,36 @@ object GlaciationStage {
             // valley-width in every direction, including forward down the long profile, and
             // quietly planes off whatever it was supposed to stand above. A cross-section is a
             // cross-section.
-            val bed = (relative[i] - cfg.deepening * strength[i]).coerceAtLeast(0f)
+            val bed = (relative[cell] - glaciation.deepening * strength[cell]).coerceAtLeast(0f)
             swath(
-                w, h, i, flowOf(i, directions, glacier, w, h),
-                valleyHalfWidth(cfg, strength[i]), cfg.floorShare, bed,
+                cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
+                valleyHalfWidth(glaciation, strength[cell]), glaciation.floorShare, bed,
                 isLand, relative, carved
             )
         }
 
         // Cirques: the armchair hollow a glacier bites out of the mountain it starts on. Every head
         // of the ice network gets one, which is what puts tarns at the tops of the valleys.
-        val fedByIce = BooleanArray(size)
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
-            val t = directions[i]
-            if (t >= 0 && glacier[t]) fedByIce[t] = true
+        val fedByIce = BooleanArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell]) continue
+            val receiver = directions[cell]
+            if (receiver >= 0 && glacier[receiver]) fedByIce[receiver] = true
         }
         var cirques = 0
-        for (i in 0 until size) {
-            if (!glacier[i] || fedByIce[i]) continue
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell] || fedByIce[cell]) continue
             cirques++
-            val depth = cfg.cirqueDepth * maxOf(strength[i], 0.5f)
+            val depth = glaciation.cirqueDepth * maxOf(strength[cell], 0.5f)
             bowl(
-                w, h, i, cfg.cirqueRadius.coerceAtLeast(1f), cfg.floorShare,
-                (relative[i] - depth).coerceAtLeast(0f), isLand, relative, carved
+                cellsAcross, cellsDown, cell, glaciation.cirqueRadiusCells.coerceAtLeast(1f), glaciation.floorShare,
+                (relative[cell] - depth).coerceAtLeast(0f), isLand, relative, carved
             )
         }
 
         // The over-deepened basins, as regions rather than as cells along a line. See [cutBasins].
         val basins = cutBasins(
-            cfg, w, h, isLand, frozen, glacier, directions, order, reach, progress,
+            glaciation, cellsAcross, cellsDown, isLand, frozen, glacier, directions, order, reach, progress,
             strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget
         )
 
@@ -469,9 +482,9 @@ object GlaciationStage {
         var scourCells = 0
         var scourBasins = 0
         val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
-        if (cfg.sheetScour && sheetCells >= minBasinCells) {
+        if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
-                config, cfg, w, h, sheet, sheetCells, isLand, relative, landRange, carved,
+                config, glaciation, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, landRange, carved,
                 minBasinCells, maxBasinCells, sheetBudget
             )
             scourCells = tally.cells
@@ -481,69 +494,69 @@ object GlaciationStage {
         if (glacierCells == 0 && scourCells == 0) return sea
 
         var excavated = 0.0
-        for (i in 0 until size) {
-            if (isLand[i]) excavated += (relative[i] - carved[i]).toDouble()
+        for (cell in 0 until cellCount) {
+            if (isLand[cell]) excavated += (relative[cell] - carved[cell]).toDouble()
         }
 
         // Terminal moraines. The one thing ice gives back: everything it was dragging is dumped
         // where it stops, in a ridge across the valley mouth, and the ridge dams the trough behind
         // it. Taken as a maximum rather than a sum where two snouts overlap, so the result cannot
         // depend on the order they were laid in.
-        val moraine = FloatArray(size)
+        val moraine = FloatArray(cellCount)
         var moraines = 0
         var riegels = 0
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
-            val t = directions[i]
-            val ends = t < 0 || !glacier[t]
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell]) continue
+            val receiver = directions[cell]
+            val ends = receiver < 0 || !glacier[receiver]
             if (ends) {
                 // A snout in the sea leaves no ridge: the till goes straight into the water. Only
                 // a glacier that melts on land builds a dam.
-                if (t >= 0 && !isLand[t]) continue
+                if (receiver >= 0 && !isLand[receiver]) continue
                 moraines++
                 bar(
-                    w, h, i, flowOf(i, directions, glacier, w, h),
-                    valleyHalfWidth(cfg, strength[i]) * 1.15f,
-                    till(cfg.moraineHeight, strength[i]), isLand, moraine
+                    cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
+                    valleyHalfWidth(glaciation, strength[cell]) * 1.15f,
+                    till(glaciation.moraineHeight, strength[cell]), isLand, moraine
                 )
-            } else if (reach[t] != reach[i] && cfg.riegelHeight > 0f) {
+            } else if (reach[receiver] != reach[cell] && glaciation.riegelHeight > 0f) {
                 // A recessional moraine, at the lower end of every reach. Off by default now that a
                 // basin is a region closed by its own rim: see [GlaciationConfig.riegelHeight] for
                 // why a bar of till one cell thick across the flow could only add straight water.
                 riegels++
                 bar(
-                    w, h, i, flowOf(i, directions, glacier, w, h),
-                    valleyHalfWidth(cfg, strength[i]),
-                    till(cfg.riegelHeight, strength[i]), isLand, moraine
+                    cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
+                    valleyHalfWidth(glaciation, strength[cell]),
+                    till(glaciation.riegelHeight, strength[cell]), isLand, moraine
                 )
             }
         }
         var deposited = 0.0
-        for (i in 0 until size) {
-            if (moraine[i] <= 0f) continue
+        for (cell in 0 until cellCount) {
+            if (moraine[cell] <= 0f) continue
             // What the field actually took, never what it was asked to take: the terrain is float
             // and a small enough increment rounds away, exactly as the hydraulic pass's budget has
             // to allow for.
-            val before = carved[i]
-            carved[i] = (before.toDouble() + moraine[i].toDouble()).toFloat()
-            deposited += carved[i].toDouble() - before.toDouble()
+            val before = carved[cell]
+            carved[cell] = (before.toDouble() + moraine[cell].toDouble()).toFloat()
+            deposited += carved[cell].toDouble() - before.toDouble()
         }
 
         // The drowned half of a fjord: the basin the ice scoured below the waterline, with the
         // shelf left standing beyond it as the sill. Water only, and after the shelf remap, so
         // there is nothing left to re-flatten it.
         var submarine = 0.0
-        if (cfg.fjords && cfg.fjordReach > 0) {
-            val stamp = IntArray(size)
-            val queue = IntArray((2 * cfg.fjordReach + 1) * (2 * cfg.fjordReach + 1))
+        if (glaciation.fjords && glaciation.fjordReachCells > 0) {
+            val stamp = IntArray(cellCount)
+            val queue = IntArray((2 * glaciation.fjordReachCells + 1) * (2 * glaciation.fjordReachCells + 1))
             val queueDistance = IntArray(queue.size)
             var mouthId = 0
-            for (i in 0 until size) {
-                if (!glacier[i]) continue
-                val t = directions[i]
-                if (t < 0 || isLand[t]) continue
+            for (cell in 0 until cellCount) {
+                if (!glacier[cell]) continue
+                val receiver = directions[cell]
+                if (receiver < 0 || isLand[receiver]) continue
                 submarine += fjord(
-                    w, h, t, cfg.fjordReach, cfg.fjordDepth * strength[i],
+                    cellsAcross, cellsDown, receiver, glaciation.fjordReachCells, glaciation.fjordDepth * strength[cell],
                     isLand, carved, stamp, ++mouthId, queue, queueDistance
                 )
             }
@@ -575,7 +588,7 @@ object GlaciationStage {
             )
         )
 
-        return sea.copy(relativeElevation = FloatField(w, h, carved))
+        return sea.copy(relativeElevation = FloatField(cellsAcross, cellsDown, carved))
     }
 
     /** What the scour did, for the tally. */
@@ -630,9 +643,9 @@ object GlaciationStage {
      * slab. No till is needed to dam it, which is why [GlaciationConfig.riegelHeight] is now zero.
      */
     private fun cutBasins(
-        cfg: GlaciationConfig,
-        w: Int,
-        h: Int,
+        glaciation: GlaciationConfig,
+        cellsAcross: Int,
+        cellsDown: Int,
         isLand: BooleanArray,
         frozen: BooleanArray,
         glacier: BooleanArray,
@@ -647,22 +660,22 @@ object GlaciationStage {
         maxCells: Int,
         budget: Int
     ): BasinTally {
-        val size = w * h
+        val cellCount = cellsAcross * cellsDown
         if (budget < minCells) return BasinTally(0, 0, 0, 0, 0, 0)
 
-        val seed = BooleanArray(size)
-        for (i in 0 until size) {
-            if (!glacier[i] || !frozen[i]) continue
-            if (progress[i] - reach[i] < cfg.basinShare) seed[i] = true
+        val seed = BooleanArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell] || !frozen[cell]) continue
+            if (progress[cell] - reach[cell] < glaciation.basinShare) seed[cell] = true
         }
 
         // One stretch of ice per reach, tributaries included, joined along the flow.
-        val segment = IntArray(size) { -1 }
-        val queue = IntArray(size)
+        val segment = IntArray(cellCount) { -1 }
+        val queue = IntArray(cellCount)
         val segIce = ArrayList<Float>()
         val segCount = ArrayList<Int>()
         val segFirst = ArrayList<Int>()
-        for (start in 0 until size) {
+        for (start in 0 until cellCount) {
             if (!seed[start] || segment[start] >= 0) continue
             val id = segCount.size
             var head = 0
@@ -672,20 +685,22 @@ object GlaciationStage {
             var count = 0
             var maxIce = 0f
             while (head < tail) {
-                val c = queue[head++]
+                val walked = queue[head++]
                 count++
-                if (ice[c] > maxIce) maxIce = ice[c]
-                val t = directions[c]
-                if (t >= 0 && seed[t] && segment[t] < 0 && reach[t] == reach[c]) {
-                    segment[t] = id
-                    queue[tail++] = t
+                if (ice[walked] > maxIce) maxIce = ice[walked]
+                val receiver = directions[walked]
+                if (receiver >= 0 && seed[receiver] && segment[receiver] < 0 && reach[receiver] == reach[walked]) {
+                    segment[receiver] = id
+                    queue[tail++] = receiver
                 }
-                FlowRouting.forEachNeighbour(w, h, c % w, c / w) { nb ->
-                    if (seed[nb] && segment[nb] < 0 && directions[nb] == c &&
-                        reach[nb] == reach[c]
+                FlowRouting.forEachNeighbour(
+                    cellsAcross, cellsDown, walked % cellsAcross, walked / cellsAcross
+                ) { neighbourCell ->
+                    if (seed[neighbourCell] && segment[neighbourCell] < 0 && directions[neighbourCell] == walked &&
+                        reach[neighbourCell] == reach[walked]
                     ) {
-                        segment[nb] = id
-                        queue[tail++] = nb
+                        segment[neighbourCell] = id
+                        queue[tail++] = neighbourCell
                     }
                 }
             }
@@ -696,32 +711,35 @@ object GlaciationStage {
         if (segCount.isEmpty()) return BasinTally(0, 0, 0, 0, 0, 0)
 
         val offset = IntArray(segCount.size + 1)
-        for (b in segCount.indices) offset[b + 1] = offset[b] + segCount[b]
+        for (segmentIndex in segCount.indices) {
+            offset[segmentIndex + 1] = offset[segmentIndex] + segCount[segmentIndex]
+        }
         val fill = IntArray(segCount.size)
         val packed = IntArray(offset[segCount.size])
-        for (i in 0 until size) {
-            val s = segment[i]
-            if (s < 0) continue
-            packed[offset[s] + fill[s]] = i
-            fill[s] = fill[s] + 1
+        for (cell in 0 until cellCount) {
+            val segmentId = segment[cell]
+            if (segmentId < 0) continue
+            packed[offset[segmentId] + fill[segmentId]] = cell
+            fill[segmentId] = fill[segmentId] + 1
         }
 
         // How far the ice walked inside its own stretch, and where it started, so the straightness
         // of the stretch can be asked the same question [GlaciationConfig.minSinuosity] asks of a
         // whole trough. Accumulated along the drainage order, which runs heads first.
-        val chain = FloatArray(size)
-        val chainHead = IntArray(size) { -1 }
-        for (k in order.indices) {
-            val i = order[k]
-            val s = segment[i]
-            if (s < 0) continue
-            if (chainHead[i] < 0) chainHead[i] = i
-            val t = directions[i]
-            if (t >= 0 && segment[t] == s) {
-                val d = chain[i] + (if (isDiagonal(i, t, w)) DIAGONAL else 1f)
-                if (d > chain[t]) {
-                    chain[t] = d
-                    chainHead[t] = chainHead[i]
+        val chain = FloatArray(cellCount)
+        val chainHead = IntArray(cellCount) { -1 }
+        for (index in order.indices) {
+            val cell = order[index]
+            val segmentId = segment[cell]
+            if (segmentId < 0) continue
+            if (chainHead[cell] < 0) chainHead[cell] = cell
+            val receiver = directions[cell]
+            if (receiver >= 0 && segment[receiver] == segmentId) {
+                val distance = chain[cell] +
+                    (if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f)
+                if (distance > chain[receiver]) {
+                    chain[receiver] = distance
+                    chainHead[receiver] = chainHead[cell]
                 }
             }
         }
@@ -731,12 +749,12 @@ object GlaciationStage {
         val ranked = Array(segCount.size) { it }
         ranked.sortWith(compareByDescending<Int> { segIce[it] }.thenBy { segFirst[it] })
 
-        val own = IntArray(size) { -1 }
-        val core = IntArray(size) { -1 }
-        val region = IntArray(size) { -1 }
-        val inset = IntArray(size)
-        val footList = IntArray(size)
-        val regionList = IntArray(size)
+        val own = IntArray(cellCount) { -1 }
+        val core = IntArray(cellCount) { -1 }
+        val region = IntArray(cellCount) { -1 }
+        val inset = IntArray(cellCount)
+        val footList = IntArray(cellCount)
+        val regionList = IntArray(cellCount)
 
         var spent = 0
         var basins = 0
@@ -745,118 +763,121 @@ object GlaciationStage {
         var tooSmall = 0
         var overBudget = 0
 
-        for (s in ranked) {
+        for (segmentId in ranked) {
             if (budget - spent < minCells) {
                 overBudget++
                 continue
             }
-            val from = offset[s]
-            val until = offset[s + 1]
+            val from = offset[segmentId]
+            val until = offset[segmentId + 1]
 
             var outlet = packed[from]
-            for (k in from until until) if (chain[packed[k]] > chain[outlet]) outlet = packed[k]
-            if (sinuosity(chainHead[outlet], outlet, chain[outlet], w) < cfg.minSinuosity) {
+            for (index in from until until) if (chain[packed[index]] > chain[outlet]) outlet = packed[index]
+            if (sinuosity(chainHead[outlet], outlet, chain[outlet], cellsAcross) < glaciation.minSinuosity) {
                 tooStraight++
                 continue
             }
 
             var footCount = 0
-            for (k in from until until) {
-                val c = packed[k]
-                val radius = valleyHalfWidth(cfg, strength[c])
-                val cx = c % w
-                val cy = c / w
+            for (index in from until until) {
+                val walked = packed[index]
+                val radius = valleyHalfWidth(glaciation, strength[walked])
+                val centreColumn = walked % cellsAcross
+                val centreRow = walked / cellsAcross
                 val span = radius.toInt() + 1
-                val r2 = radius * radius
-                for (dy in -span..span) {
-                    val ny = cy + dy
-                    if (ny < 0 || ny >= h) continue
-                    for (dx in -span..span) {
-                        if ((dx * dx + dy * dy).toFloat() > r2) continue
-                        var nx = (cx + dx) % w
-                        if (nx < 0) nx += w
-                        val n = ny * w + nx
-                        if (!isLand[n] || own[n] >= 0) continue
-                        own[n] = s
-                        footList[footCount++] = n
+                val radiusSquared = radius * radius
+                for (rowOffset in -span..span) {
+                    val neighbourRow = centreRow + rowOffset
+                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    for (columnOffset in -span..span) {
+                        if ((columnOffset * columnOffset + rowOffset * rowOffset).toFloat() > radiusSquared) continue
+                        var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                        if (!isLand[neighbour] || own[neighbour] >= 0) continue
+                        own[neighbour] = segmentId
+                        footList[footCount++] = neighbour
                     }
                 }
             }
 
             // Eroded by one: the cells whose whole three-by-three block is inside the footprint.
             var coreCount = 0
-            for (k in 0 until footCount) {
-                val c = footList[k]
-                val cy = c / w
-                if (cy == 0 || cy == h - 1) continue
-                val cx = c % w
+            for (index in 0 until footCount) {
+                val walked = footList[index]
+                val centreRow = walked / cellsAcross
+                if (centreRow == 0 || centreRow == cellsDown - 1) continue
+                val centreColumn = walked % cellsAcross
                 var solid = true
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        var nx = (cx + dx) % w
-                        if (nx < 0) nx += w
-                        if (own[(cy + dy) * w + nx] != s) solid = false
+                for (rowOffset in -1..1) {
+                    for (columnOffset in -1..1) {
+                        var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        if (own[(centreRow + rowOffset) * cellsAcross + neighbourColumn] != segmentId) solid = false
                     }
                 }
                 if (solid) {
-                    core[c] = s
+                    core[walked] = segmentId
                     coreCount++
                 }
             }
             if (coreCount == 0) {
-                for (k in 0 until footCount) own[footList[k]] = -1
+                for (index in 0 until footCount) own[footList[index]] = -1
                 tooNarrow++
                 continue
             }
 
             // Dilated back: the union of those blocks, which is three cells wide everywhere.
             var regionCount = 0
-            for (k in 0 until footCount) {
-                val c = footList[k]
-                if (core[c] != s) continue
-                val cx = c % w
-                val cy = c / w
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        var nx = (cx + dx) % w
-                        if (nx < 0) nx += w
-                        val n = (cy + dy) * w + nx
-                        if (region[n] != s) {
-                            region[n] = s
-                            regionList[regionCount++] = n
+            for (index in 0 until footCount) {
+                val walked = footList[index]
+                if (core[walked] != segmentId) continue
+                val centreColumn = walked % cellsAcross
+                val centreRow = walked / cellsAcross
+                for (rowOffset in -1..1) {
+                    for (columnOffset in -1..1) {
+                        var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        val neighbour = (centreRow + rowOffset) * cellsAcross + neighbourColumn
+                        if (region[neighbour] != segmentId) {
+                            region[neighbour] = segmentId
+                            regionList[regionCount++] = neighbour
                         }
                     }
                 }
             }
 
             if (regionCount < minCells) {
-                for (k in 0 until footCount) own[footList[k]] = -1
+                for (index in 0 until footCount) own[footList[index]] = -1
                 tooSmall++
                 continue
             }
             regionCount =
-                peelToCap(w, h, regionList, regionCount, region, s, inset, queue, maxCells)
+                peelToCap(cellsAcross, cellsDown, regionList, regionCount, region, segmentId, inset, queue, maxCells)
             if (regionCount < minCells) {
-                for (k in 0 until footCount) own[footList[k]] = -1
+                for (index in 0 until footCount) own[footList[index]] = -1
                 tooSmall++
                 continue
             }
-            if (isStraightBar(regionList, regionCount, w)) {
-                for (k in 0 until footCount) own[footList[k]] = -1
+            if (isStraightBar(regionList, regionCount, cellsAcross)) {
+                for (index in 0 until footCount) own[footList[index]] = -1
                 tooStraight++
                 continue
             }
             if (spent + regionCount > budget) {
-                for (k in 0 until footCount) own[footList[k]] = -1
+                for (index in 0 until footCount) own[footList[index]] = -1
                 overBudget++
                 continue
             }
 
             var thickness = 0f
-            for (k in from until until) thickness += strength[packed[k]]
+            for (index in from until until) thickness += strength[packed[index]]
             thickness /= (until - from).toFloat()
-            val depth = (cfg.deepening + cfg.overDeepening) * thickness
-            cutSaucer(w, h, regionList, regionCount, region, s, depth, isLand, carved, inset)
+            val depth = (glaciation.deepening + glaciation.overDeepening) * thickness
+            cutSaucer(
+                cellsAcross, cellsDown, regionList, regionCount, region, segmentId, depth,
+                isLand, carved, inset
+            )
             spent += regionCount
             basins++
         }
@@ -871,37 +892,38 @@ object GlaciationStage {
      * of the body along and across each bearing, so a bar is caught whatever its length and a blob
      * that merely happens to be elongated is not.
      */
-    private fun isStraightBar(cells: IntArray, count: Int, w: Int): Boolean {
+    private fun isStraightBar(cells: IntArray, count: Int, cellsAcross: Int): Boolean {
         if (count < BAR_LENGTH) return false
-        val anchor = cells[0] % w
-        val uMin = IntArray(4) { Int.MAX_VALUE }
-        val uMax = IntArray(4) { Int.MIN_VALUE }
-        val vMin = IntArray(4) { Int.MAX_VALUE }
-        val vMax = IntArray(4) { Int.MIN_VALUE }
-        for (k in 0 until count) {
-            val c = cells[k]
-            val y = c / w
-            var dx = (c % w) - anchor
-            if (dx > w / 2) dx -= w
-            if (dx < -w / 2) dx += w
-            val x = anchor + dx
+        val anchor = cells[0] % cellsAcross
+        val alongMin = IntArray(4) { Int.MAX_VALUE }
+        val alongMax = IntArray(4) { Int.MIN_VALUE }
+        val acrossMin = IntArray(4) { Int.MAX_VALUE }
+        val acrossMax = IntArray(4) { Int.MIN_VALUE }
+        for (index in 0 until count) {
+            val cell = cells[index]
+            val row = cell / cellsAcross
+            var columnOffset = (cell % cellsAcross) - anchor
+            if (columnOffset > cellsAcross / 2) columnOffset -= cellsAcross
+            if (columnOffset < -cellsAcross / 2) columnOffset += cellsAcross
+            val column = anchor + columnOffset
             // East, south-east, south, north-east: the along coordinate and the across coordinate
             // of each. On a diagonal the along coordinate steps by two per cell, which is why the
             // length is halved and the width is not.
-            val u = intArrayOf(x, x + y, y, x - y)
-            val v = intArrayOf(y, x - y, x, x + y)
-            for (a in 0 until 4) {
-                if (u[a] < uMin[a]) uMin[a] = u[a]
-                if (u[a] > uMax[a]) uMax[a] = u[a]
-                if (v[a] < vMin[a]) vMin[a] = v[a]
-                if (v[a] > vMax[a]) vMax[a] = v[a]
+            val alongBearing = intArrayOf(column, column + row, row, column - row)
+            val acrossBearing = intArrayOf(row, column - row, column, column + row)
+            for (bearing in 0 until 4) {
+                if (alongBearing[bearing] < alongMin[bearing]) alongMin[bearing] = alongBearing[bearing]
+                if (alongBearing[bearing] > alongMax[bearing]) alongMax[bearing] = alongBearing[bearing]
+                if (acrossBearing[bearing] < acrossMin[bearing]) acrossMin[bearing] = acrossBearing[bearing]
+                if (acrossBearing[bearing] > acrossMax[bearing]) acrossMax[bearing] = acrossBearing[bearing]
             }
         }
-        for (a in 0 until 4) {
-            val diagonal = a == 1 || a == 3
+        for (bearing in 0 until 4) {
+            val diagonal = bearing == 1 || bearing == 3
             val length =
-                if (diagonal) (uMax[a] - uMin[a]) / 2 + 1 else uMax[a] - uMin[a] + 1
-            val across = vMax[a] - vMin[a] + 1
+                if (diagonal) (alongMax[bearing] - alongMin[bearing]) / 2 + 1
+                else alongMax[bearing] - alongMin[bearing] + 1
+            val across = acrossMax[bearing] - acrossMin[bearing] + 1
             if (across <= BAR_WIDTH && length >= BAR_LENGTH) return true
         }
         return false
@@ -912,8 +934,8 @@ object GlaciationStage {
      * rim: the distance transform the saucered floor and the peeling both read.
      */
     private fun insetDistance(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         cells: IntArray,
         count: Int,
         stamp: IntArray,
@@ -922,25 +944,28 @@ object GlaciationStage {
         queue: IntArray
     ) {
         var tail = 0
-        for (k in 0 until count) {
-            val c = cells[k]
+        for (index in 0 until count) {
+            val cell = cells[index]
             var edge = false
-            forEachOrthogonal(w, h, c % w, c / w) { n -> if (stamp[n] != marker) edge = true }
+            forEachOrthogonal(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) {
+                neighbour ->
+                if (stamp[neighbour] != marker) edge = true
+            }
             if (edge) {
-                inset[c] = 0
-                queue[tail++] = c
+                inset[cell] = 0
+                queue[tail++] = cell
             } else {
-                inset[c] = -1
+                inset[cell] = -1
             }
         }
         var head = 0
         while (head < tail) {
-            val c = queue[head++]
-            val d = inset[c] + 1
-            forEachOrthogonal(w, h, c % w, c / w) { n ->
-                if (stamp[n] == marker && inset[n] < 0) {
-                    inset[n] = d
-                    queue[tail++] = n
+            val cell = queue[head++]
+            val distance = inset[cell] + 1
+            forEachOrthogonal(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                if (stamp[neighbour] == marker && inset[neighbour] < 0) {
+                    inset[neighbour] = distance
+                    queue[tail++] = neighbour
                 }
             }
         }
@@ -956,8 +981,8 @@ object GlaciationStage {
      * it — so the ground outside the cap keeps its scour and loses its lake.
      */
     private fun peelToCap(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         cells: IntArray,
         count: Int,
         stamp: IntArray,
@@ -966,26 +991,26 @@ object GlaciationStage {
         queue: IntArray,
         cap: Int
     ): Int {
-        insetDistance(w, h, cells, count, stamp, marker, inset, queue)
+        insetDistance(cellsAcross, cellsDown, cells, count, stamp, marker, inset, queue)
         if (count <= cap) return count
         var ring = 0
         var kept = count
         while (kept > cap) {
-            val next = ring + 1
-            var n = 0
-            for (k in 0 until count) if (inset[cells[k]] >= next) n++
-            if (n == 0) break
-            ring = next
-            kept = n
+            val nextRing = ring + 1
+            var neighbour = 0
+            for (index in 0 until count) if (inset[cells[index]] >= nextRing) neighbour++
+            if (neighbour == 0) break
+            ring = nextRing
+            kept = neighbour
         }
         if (ring == 0) return count
-        var n = 0
-        for (k in 0 until count) {
-            val c = cells[k]
-            if (inset[c] >= ring) cells[n++] = c else stamp[c] = -1
+        var neighbour = 0
+        for (index in 0 until count) {
+            val cell = cells[index]
+            if (inset[cell] >= ring) cells[neighbour++] = cell else stamp[cell] = -1
         }
-        insetDistance(w, h, cells, n, stamp, marker, inset, queue)
-        return n
+        insetDistance(cellsAcross, cellsDown, cells, neighbour, stamp, marker, inset, queue)
+        return neighbour
     }
 
     /**
@@ -996,8 +1021,8 @@ object GlaciationStage {
      * @return how many cells the cut actually lowered.
      */
     private fun cutSaucer(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         cells: IntArray,
         count: Int,
         stamp: IntArray,
@@ -1008,23 +1033,27 @@ object GlaciationStage {
         inset: IntArray
     ): Int {
         var base = Float.MAX_VALUE
-        for (k in 0 until count) {
-            val c = cells[k]
-            if (carved[c] < base) base = carved[c]
+        for (index in 0 until count) {
+            val cell = cells[index]
+            if (carved[cell] < base) base = carved[cell]
             // Land only. A basin that reaches the coast has the sea for a neighbour, and reading
             // the sea floor as its rim would say the floor has to be cut below the ocean — which,
             // clamped at the waterline, plates the whole basin flat at sea level.
-            forEachOrthogonal(w, h, c % w, c / w) { n ->
-                if (stamp[n] != marker && isLand[n] && carved[n] < base) base = carved[n]
+            forEachOrthogonal(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                if (stamp[neighbour] != marker && isLand[neighbour] &&
+                    carved[neighbour] < base
+                ) {
+                    base = carved[neighbour]
+                }
             }
         }
         var lowered = 0
-        for (k in 0 until count) {
-            val c = cells[k]
-            val f = (inset[c].coerceAtLeast(0) / 2f).coerceIn(0f, 1f)
-            val target = (base - depth * (0.45f + 0.55f * f)).coerceAtLeast(0f)
-            if (target < carved[c]) {
-                carved[c] = target
+        for (index in 0 until count) {
+            val cell = cells[index]
+            val depthShare = (inset[cell].coerceAtLeast(0) / 2f).coerceIn(0f, 1f)
+            val target = (base - depth * (0.45f + 0.55f * depthShare)).coerceAtLeast(0f)
+            if (target < carved[cell]) {
+                carved[cell] = target
                 lowered++
             }
         }
@@ -1048,12 +1077,12 @@ object GlaciationStage {
      * far side of the world are told apart. Eight rather than four, because a snowfield joined only
      * at a corner is still one snowfield.
      */
-    private fun frozenFields(w: Int, h: Int, frozen: BooleanArray): FrozenFields {
-        val size = w * h
-        val id = IntArray(size) { -1 }
+    private fun frozenFields(cellsAcross: Int, cellsDown: Int, frozen: BooleanArray): FrozenFields {
+        val cellCount = cellsAcross * cellsDown
+        val id = IntArray(cellCount) { -1 }
         val sizes = ArrayList<Int>()
-        val queue = IntArray(size)
-        for (start in 0 until size) {
+        val queue = IntArray(cellCount)
+        for (start in 0 until cellCount) {
             if (!frozen[start] || id[start] >= 0) continue
             val label = sizes.size
             var headIdx = 0
@@ -1062,14 +1091,14 @@ object GlaciationStage {
             id[start] = label
             var count = 0
             while (headIdx < tail) {
-                val c = queue[headIdx++]
+                val cell = queue[headIdx++]
                 count++
-                val cx = c % w
-                val cy = c / w
-                FlowRouting.forEachNeighbour(w, h, cx, cy) { n ->
-                    if (frozen[n] && id[n] < 0) {
-                        id[n] = label
-                        queue[tail++] = n
+                val column = cell % cellsAcross
+                val row = cell / cellsAcross
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, column, row) { neighbour ->
+                    if (frozen[neighbour] && id[neighbour] < 0) {
+                        id[neighbour] = label
+                        queue[tail++] = neighbour
                     }
                 }
             }
@@ -1084,13 +1113,13 @@ object GlaciationStage {
      * One means it did not wander at all, which on this grid means it repeated the same D8 step
      * from beginning to end. That is not a valley.
      */
-    private fun sinuosity(head: Int, snout: Int, length: Float, w: Int): Float {
+    private fun sinuosity(head: Int, snout: Int, length: Float, cellsAcross: Int): Float {
         if (head < 0 || snout < 0 || length <= 0f) return 0f
-        var dx = (snout % w) - (head % w)
-        if (dx > w / 2) dx -= w
-        if (dx < -w / 2) dx += w
-        val dy = (snout / w) - (head / w)
-        val straight = sqrt((dx * dx + dy * dy).toFloat())
+        var columnOffset = (snout % cellsAcross) - (head % cellsAcross)
+        if (columnOffset > cellsAcross / 2) columnOffset -= cellsAcross
+        if (columnOffset < -cellsAcross / 2) columnOffset += cellsAcross
+        val rowOffset = (snout / cellsAcross) - (head / cellsAcross)
+        val straight = sqrt((columnOffset * columnOffset + rowOffset * rowOffset).toFloat())
         if (straight < 1e-3f) return Float.MAX_VALUE
         return length / straight
     }
@@ -1114,35 +1143,37 @@ object GlaciationStage {
      * parallel, which they are.
      */
     private fun suppressParallel(
-        cfg: GlaciationConfig,
-        w: Int,
-        h: Int,
+        glaciation: GlaciationConfig,
+        cellsAcross: Int,
+        cellsDown: Int,
         glacier: BooleanArray,
         directions: IntArray,
         ice: FloatArray,
         strength: FloatArray,
         order: IntArray
     ): Suppression {
-        val size = w * h
-        if (cfg.parallelSpacing <= 0f) return Suppression(0, countTrunks(w, h, glacier, directions), 0)
+        val cellCount = cellsAcross * cellsDown
+        if (glaciation.parallelSpacing <= 0f) {
+            return Suppression(0, countTrunks(cellsAcross, cellsDown, glacier, directions), 0)
+        }
 
         // Every bearing read once, before anything is dropped, so that what one cell is compared
         // against cannot depend on which cells were dropped before it.
-        val orientX = FloatArray(size)
-        val orientY = FloatArray(size)
-        var n = 0
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
-            n++
-            val flow = flowOf(i, directions, glacier, w, h)
-            val ox = unpackX(flow)
-            val oy = unpackY(flow)
+        val orientX = FloatArray(cellCount)
+        val orientY = FloatArray(cellCount)
+        var neighbour = 0
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell]) continue
+            neighbour++
+            val flow = flowOf(cell, directions, glacier, cellsAcross, cellsDown)
+            val axisX = unpackX(flow)
+            val axisY = unpackY(flow)
             // Doubled angle: (x, y) -> (x^2 - y^2, 2xy), so a bearing and its reverse agree and a
             // dot product of 0.707 between two of them is 22.5 degrees between the originals.
-            orientX[i] = ox * ox - oy * oy
-            orientY[i] = 2f * ox * oy
+            orientX[cell] = axisX * axisX - axisY * axisY
+            orientY[cell] = 2f * axisX * axisY
         }
-        if (n == 0) return Suppression(0, 0, 0)
+        if (neighbour == 0) return Suppression(0, 0, 0)
 
         // The branches. At every confluence the feeder carrying the most ice continues the branch it
         // was already on and the others begin their own, which is the ordinary main-stem
@@ -1154,50 +1185,54 @@ object GlaciationStage {
         // it is a *chain* of short bars where there was one long lake: measured on seed 718106 at
         // 1024, suppressing by cell took the count of parallel bars of water from 114 up to 281. A
         // gully dropped from its head to its confluence leaves nothing behind to fragment.
-        val dominant = IntArray(size) { -1 }
-        for (i in 0 until size) {
-            if (!glacier[i]) continue
+        val dominant = IntArray(cellCount) { -1 }
+        for (cell in 0 until cellCount) {
+            if (!glacier[cell]) continue
             var best = -1
             var bestIce = -1f
-            FlowRouting.forEachNeighbour(w, h, i % w, i / w) { nb ->
-                if (glacier[nb] && directions[nb] == i && ice[nb] > bestIce) {
-                    bestIce = ice[nb]
-                    best = nb
+            FlowRouting.forEachNeighbour(
+                cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
+            ) { neighbourCell ->
+                if (glacier[neighbourCell] && directions[neighbourCell] == cell &&
+                    ice[neighbourCell] > bestIce
+                ) {
+                    bestIce = ice[neighbourCell]
+                    best = neighbourCell
                 }
             }
-            dominant[i] = best
+            dominant[cell] = best
         }
-        val branch = IntArray(size) { -1 }
+        val branch = IntArray(cellCount) { -1 }
         val branchIce = ArrayList<Float>()
         val branchStart = ArrayList<Int>()
         val branchCount = ArrayList<Int>()
-        for (k in order.indices) {
-            val i = order[k]
-            if (!glacier[i]) continue
-            val d = dominant[i]
-            val b = if (d >= 0 && branch[d] >= 0) {
-                branch[d]
+        for (index in order.indices) {
+            val cell = order[index]
+            if (!glacier[cell]) continue
+            val distance = dominant[cell]
+            val branchId = if (distance >= 0 && branch[distance] >= 0) {
+                branch[distance]
             } else {
                 branchIce.add(0f)
-                branchStart.add(i)
+                branchStart.add(cell)
                 branchCount.add(0)
                 branchIce.size - 1
             }
-            branch[i] = b
-            branchCount[b] = branchCount[b] + 1
-            if (ice[i] > branchIce[b]) branchIce[b] = ice[i]
+            branch[cell] = branchId
+            branchCount[branchId] = branchCount[branchId] + 1
+            if (ice[cell] > branchIce[branchId]) branchIce[branchId] = ice[cell]
         }
 
         // Cells of each branch, laid out contiguously so no per-branch allocation is needed.
         val offset = IntArray(branchCount.size + 1)
-        for (b in branchCount.indices) offset[b + 1] = offset[b] + branchCount[b]
+        for (branchId in branchCount.indices) offset[branchId + 1] = offset[branchId] + branchCount[branchId]
         val fill = IntArray(branchCount.size)
-        val packed = IntArray(n)
-        for (i in 0 until size) {
-            val b = branch[i]
-            if (b < 0) continue
-            packed[offset[b] + fill[b]] = i
-            fill[b] = fill[b] + 1
+        val packed = IntArray(neighbour)
+        for (cell in 0 until cellCount) {
+            val branchId = branch[cell]
+            if (branchId < 0) continue
+            packed[offset[branchId] + fill[branchId]] = cell
+            fill[branchId] = fill[branchId] + 1
         }
 
         // Strongest first, and the branch's first cell breaks a tie, so nothing here depends on the
@@ -1205,42 +1240,45 @@ object GlaciationStage {
         val ranked = Array(branchCount.size) { it }
         ranked.sortWith(compareByDescending<Int> { branchIce[it] }.thenBy { branchStart[it] })
 
-        val claimed = BooleanArray(size)
-        val claimX = FloatArray(size)
-        val claimY = FloatArray(size)
+        val claimed = BooleanArray(cellCount)
+        val claimX = FloatArray(cellCount)
+        val claimY = FloatArray(cellCount)
         var dropped = 0
-        for (b in ranked) {
-            val from = offset[b]
-            val until = offset[b + 1]
+        for (branchId in ranked) {
+            val from = offset[branchId]
+            val until = offset[branchId + 1]
             var conflict = 0
-            for (k in from until until) {
-                val c = packed[k]
-                if (!claimed[c]) continue
-                if (orientX[c] * claimX[c] + orientY[c] * claimY[c] >= PARALLEL_COS) conflict++
+            for (index in from until until) {
+                val walked = packed[index]
+                if (!claimed[walked]) continue
+                if (orientX[walked] * claimX[walked] + orientY[walked] * claimY[walked] >= PARALLEL_BEARING_COSINE) conflict++
             }
             if (conflict * 3 > until - from) {
-                for (k in from until until) glacier[packed[k]] = false
+                for (index in from until until) glacier[packed[index]] = false
                 dropped += until - from
                 continue
             }
-            for (k in from until until) {
-                val c = packed[k]
+            for (index in from until until) {
+                val walked = packed[index]
                 stampClaim(
-                    w, h, c, valleyHalfWidth(cfg, strength[c]) * cfg.parallelSpacing,
-                    orientX[c], orientY[c], claimed, claimX, claimY
+                    cellsAcross,
+                    cellsDown,
+                    walked,
+                    valleyHalfWidth(glaciation, strength[walked]) * glaciation.parallelSpacing,
+                    orientX[walked], orientY[walked], claimed, claimX, claimY
                 )
             }
         }
-        return Suppression(dropped, countTrunks(w, h, glacier, directions), 0)
+        return Suppression(dropped, countTrunks(cellsAcross, cellsDown, glacier, directions), 0)
     }
 
     /** How many separate glaciers are left, counting a chain and its feeders as one. */
-    private fun countTrunks(w: Int, h: Int, glacier: BooleanArray, directions: IntArray): Int {
-        val size = w * h
-        val seen = BooleanArray(size)
-        val queue = IntArray(size)
+    private fun countTrunks(cellsAcross: Int, cellsDown: Int, glacier: BooleanArray, directions: IntArray): Int {
+        val cellCount = cellsAcross * cellsDown
+        val seen = BooleanArray(cellCount)
+        val queue = IntArray(cellCount)
         var trunks = 0
-        for (start in 0 until size) {
+        for (start in 0 until cellCount) {
             if (!glacier[start] || seen[start]) continue
             trunks++
             var head = 0
@@ -1248,16 +1286,20 @@ object GlaciationStage {
             queue[tail++] = start
             seen[start] = true
             while (head < tail) {
-                val c = queue[head++]
-                val t = directions[c]
-                if (t >= 0 && glacier[t] && !seen[t]) {
-                    seen[t] = true
-                    queue[tail++] = t
+                val cell = queue[head++]
+                val receiver = directions[cell]
+                if (receiver >= 0 && glacier[receiver] && !seen[receiver]) {
+                    seen[receiver] = true
+                    queue[tail++] = receiver
                 }
-                FlowRouting.forEachNeighbour(w, h, c % w, c / w) { nb ->
-                    if (glacier[nb] && !seen[nb] && directions[nb] == c) {
-                        seen[nb] = true
-                        queue[tail++] = nb
+                FlowRouting.forEachNeighbour(
+                    cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
+                ) { neighbourCell ->
+                    if (glacier[neighbourCell] && !seen[neighbourCell] &&
+                        directions[neighbourCell] == cell
+                    ) {
+                        seen[neighbourCell] = true
+                        queue[tail++] = neighbourCell
                     }
                 }
             }
@@ -1267,8 +1309,8 @@ object GlaciationStage {
 
     /** Marks the ground a glacier occupies, with the orientation it occupies it at. */
     private fun stampClaim(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         centre: Int,
         radius: Float,
         orientX: Float,
@@ -1277,29 +1319,29 @@ object GlaciationStage {
         claimX: FloatArray,
         claimY: FloatArray
     ) {
-        val cx = centre % w
-        val cy = centre / w
+        val centreColumn = centre % cellsAcross
+        val centreRow = centre / cellsAcross
         val span = radius.toInt() + 1
-        val r2 = radius * radius
-        for (dy in -span..span) {
-            val ny = cy + dy
-            if (ny < 0 || ny >= h) continue
-            for (dx in -span..span) {
-                if ((dx * dx + dy * dy).toFloat() > r2) continue
-                var nx = (cx + dx) % w
-                if (nx < 0) nx += w
-                val c = ny * w + nx
+        val radiusSquared = radius * radius
+        for (rowOffset in -span..span) {
+            val neighbourRow = centreRow + rowOffset
+            if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+            for (columnOffset in -span..span) {
+                if ((columnOffset * columnOffset + rowOffset * rowOffset).toFloat() > radiusSquared) continue
+                var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                val cell = neighbourRow * cellsAcross + neighbourColumn
                 // First claim stands, and the strongest trunk claims first.
-                if (claimed[c]) continue
-                claimed[c] = true
-                claimX[c] = orientX
-                claimY[c] = orientY
+                if (claimed[cell]) continue
+                claimed[cell] = true
+                claimX[cell] = orientX
+                claimY[cell] = orientY
             }
         }
     }
 
     /** Twenty-two and a half degrees, as a dot product of doubled-angle orientations. */
-    private const val PARALLEL_COS = 0.7071f
+    private const val PARALLEL_BEARING_COSINE = 0.7071f
 
     /**
      * The span of the land, so every depth in [GlaciationConfig] can be a fraction of it.
@@ -1309,15 +1351,15 @@ object GlaciationStage {
      * otherwise silently rescale every cut this stage makes.
      */
     private fun landRange(isLand: BooleanArray, relative: FloatArray): Float {
-        var lo = Float.MAX_VALUE
-        var hi = -Float.MAX_VALUE
-        for (i in relative.indices) {
-            if (!isLand[i]) continue
-            val v = relative[i]
-            if (v < lo) lo = v
-            if (v > hi) hi = v
+        var lowest = Float.MAX_VALUE
+        var highest = -Float.MAX_VALUE
+        for (cell in relative.indices) {
+            if (!isLand[cell]) continue
+            val value = relative[cell]
+            if (value < lowest) lowest = value
+            if (value > highest) highest = value
         }
-        return if (hi <= lo) 1f else hi - lo
+        return if (highest <= lowest) 1f else highest - lowest
     }
 
     /**
@@ -1333,34 +1375,42 @@ object GlaciationStage {
      * window is fifty cells across and the naive form would be a second of wall clock on its own.
      * East-west wraps, north-south clamps, exactly as the rest of the pipeline treats the grid.
      */
-    private fun localRelief(w: Int, h: Int, relative: FloatArray, radius: Int): FloatArray {
-        val size = w * h
-        val surface = FloatArray(size) { relative[it].coerceAtLeast(0f) }
+    private fun localRelief(cellsAcross: Int, cellsDown: Int, relative: FloatArray, radius: Int): FloatArray {
+        val cellCount = cellsAcross * cellsDown
+        val surface = FloatArray(cellCount) { relative[it].coerceAtLeast(0f) }
         val span = 2 * radius + 1
-        val rowMin = FloatArray(size)
-        val rowMax = FloatArray(size)
+        val rowMin = FloatArray(cellCount)
+        val rowMax = FloatArray(cellCount)
 
-        val rowPad = FloatArray(w + 2 * radius)
-        val deque = IntArray(maxOf(rowPad.size, h + 2 * radius))
-        for (y in 0 until h) {
-            val base = y * w
-            for (k in rowPad.indices) {
-                var nx = (k - radius) % w
-                if (nx < 0) nx += w
-                rowPad[k] = surface[base + nx]
+        val rowPad = FloatArray(cellsAcross + 2 * radius)
+        val deque = IntArray(maxOf(rowPad.size, cellsDown + 2 * radius))
+        for (row in 0 until cellsDown) {
+            val base = row * cellsAcross
+            for (index in rowPad.indices) {
+                var neighbourColumn = (index - radius) % cellsAcross
+                if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                rowPad[index] = surface[base + neighbourColumn]
             }
-            slide(rowPad, span, true, deque) { o, v -> rowMax[base + o] = v }
-            slide(rowPad, span, false, deque) { o, v -> rowMin[base + o] = v }
+            slide(rowPad, span, true, deque) { offset, value -> rowMax[base + offset] = value }
+            slide(rowPad, span, false, deque) { offset, value -> rowMin[base + offset] = value }
         }
 
-        val out = FloatArray(size)
-        val colPad = FloatArray(h + 2 * radius)
-        val colHi = FloatArray(h)
-        for (x in 0 until w) {
-            for (k in colPad.indices) colPad[k] = rowMax[(k - radius).coerceIn(0, h - 1) * w + x]
-            slide(colPad, span, true, deque) { o, v -> colHi[o] = v }
-            for (k in colPad.indices) colPad[k] = rowMin[(k - radius).coerceIn(0, h - 1) * w + x]
-            slide(colPad, span, false, deque) { o, v -> out[o * w + x] = colHi[o] - v }
+        val out = FloatArray(cellCount)
+        val colPad = FloatArray(cellsDown + 2 * radius)
+        val colHi = FloatArray(cellsDown)
+        for (column in 0 until cellsAcross) {
+            for (index in colPad.indices) {
+                val clamped = (index - radius).coerceIn(0, cellsDown - 1)
+                colPad[index] = rowMax[clamped * cellsAcross + column]
+            }
+            slide(colPad, span, true, deque) { offset, value -> colHi[offset] = value }
+            for (index in colPad.indices) {
+                val clamped = (index - radius).coerceIn(0, cellsDown - 1)
+                colPad[index] = rowMin[clamped * cellsAcross + column]
+            }
+            slide(colPad, span, false, deque) { offset, value ->
+                out[offset * cellsAcross + column] = colHi[offset] - value
+            }
         }
         return out
     }
@@ -1381,15 +1431,15 @@ object GlaciationStage {
         var head = 0
         var tail = 0
         var out = 0
-        for (i in src.indices) {
+        for (cell in src.indices) {
             while (tail > head &&
-                (if (wantMax) src[deque[tail - 1]] <= src[i] else src[deque[tail - 1]] >= src[i])
+                (if (wantMax) src[deque[tail - 1]] <= src[cell] else src[deque[tail - 1]] >= src[cell])
             ) {
                 tail--
             }
-            deque[tail++] = i
-            if (deque[head] <= i - span) head++
-            if (i >= span - 1) emit(out++, src[deque[head]])
+            deque[tail++] = cell
+            if (deque[head] <= cell - span) head++
+            if (cell >= span - 1) emit(out++, src[deque[head]])
         }
     }
 
@@ -1420,9 +1470,9 @@ object GlaciationStage {
      */
     private fun scour(
         config: WorldGenConfig,
-        cfg: GlaciationConfig,
-        w: Int,
-        h: Int,
+        glaciation: GlaciationConfig,
+        cellsAcross: Int,
+        cellsDown: Int,
         sheet: BooleanArray,
         sheetCells: Int,
         isLand: BooleanArray,
@@ -1433,58 +1483,58 @@ object GlaciationStage {
         maxCells: Int,
         budget: Int
     ): ScourTally {
-        val size = w * h
+        val cellCount = cellsAcross * cellsDown
         // Seeded off the world seed, so the pattern is this world's and is reproduced exactly on
         // any platform that runs the same arithmetic.
         val basinNoise = PerlinNoise(config.seed * 31L + 0x91E5L)
         val hummockNoise = PerlinNoise(config.seed * 31L + 0x27C3L)
-        val period = cfg.sheetBasinScale.toInt().coerceAtLeast(2)
+        val period = glaciation.sheetBasinCycles.toInt().coerceAtLeast(2)
         val hummockPeriod = (period * 3).coerceAtLeast(4)
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
-        val lowering = cfg.sheetLowering * landRange
+        val lowering = glaciation.sheetLowering * landRange
         if (lowering > 0f) {
-            for (i in 0 until size) {
-                if (!sheet[i]) continue
-                val x = (i % w).toFloat()
-                val y = (i / w).toFloat()
-                val n = 0.5f + 0.5f * hummockNoise.fbm(
-                    x * hummockPeriod / w, y * hummockPeriod / h, 3, hummockPeriod, hummockPeriod
+            for (cell in 0 until cellCount) {
+                if (!sheet[cell]) continue
+                val column = (cell % cellsAcross).toFloat()
+                val row = (cell / cellsAcross).toFloat()
+                val neighbour = 0.5f + 0.5f * hummockNoise.fbm(
+                    column * hummockPeriod / cellsAcross, row * hummockPeriod / cellsDown, 3, hummockPeriod, hummockPeriod
                 )
-                val target = (relative[i] - lowering * (0.35f + 0.65f * n)).coerceAtLeast(0f)
-                if (target < carved[i]) carved[i] = target
+                val target = (relative[cell] - lowering * (0.35f + 0.65f * neighbour)).coerceAtLeast(0f)
+                if (target < carved[cell]) carved[cell] = target
             }
         }
 
-        val depth = cfg.sheetBasinDepth * landRange
+        val depth = glaciation.sheetBasinDepth * landRange
         if (depth <= 0f || budget < minCells) return ScourTally(0, 0)
 
         // How hollow each cell is against the ground around it, and the scale of that hollowness
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
-        val meanRadius = (cfg.valleyWidth * 0.5f).toInt().coerceIn(2, 24)
-        val concavity = FloatArray(size)
+        val meanRadius = (glaciation.valleyWidthCells * 0.5f).toInt().coerceIn(2, 24)
+        val concavity = FloatArray(cellCount)
         var concavityScale = 0.0
-        for (i in 0 until size) {
-            if (!sheet[i]) continue
-            val cx = i % w
-            val cy = i / w
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            val centreColumn = cell % cellsAcross
+            val centreRow = cell / cellsAcross
             var sum = 0f
-            var n = 0
-            for (dy in -meanRadius..meanRadius) {
-                val ny = cy + dy
-                if (ny < 0 || ny >= h) continue
-                for (dx in -meanRadius..meanRadius) {
-                    var nx = (cx + dx) % w
-                    if (nx < 0) nx += w
-                    sum += carved[ny * w + nx].coerceAtLeast(0f)
-                    n++
+            var neighbour = 0
+            for (rowOffset in -meanRadius..meanRadius) {
+                val neighbourRow = centreRow + rowOffset
+                if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                for (columnOffset in -meanRadius..meanRadius) {
+                    var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                    if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                    sum += carved[neighbourRow * cellsAcross + neighbourColumn].coerceAtLeast(0f)
+                    neighbour++
                 }
             }
-            val c = sum / n - carved[i].coerceAtLeast(0f)
-            concavity[i] = c
-            concavityScale += if (c < 0f) -c.toDouble() else c.toDouble()
+            val walked = sum / neighbour - carved[cell].coerceAtLeast(0f)
+            concavity[cell] = walked
+            concavityScale += if (walked < 0f) -walked.toDouble() else walked.toDouble()
         }
         val concavityNorm = (3.0 * concavityScale / sheetCells).toFloat().coerceAtLeast(1e-6f)
 
@@ -1492,13 +1542,15 @@ object GlaciationStage {
         // A quantile from a histogram rather than a fixed threshold on the noise:
         // a fixed one makes one seed a lake district and the next one bare, for no reason anybody
         // could point at on the map.
-        val raw = FloatArray(size)
-        for (i in 0 until size) {
-            if (!sheet[i]) continue
-            val x = (i % w).toFloat()
-            val y = (i / w).toFloat()
-            val n = 0.5f + 0.5f * basinNoise.fbm(x * period / w, y * period / h, 3, period, period)
-            raw[i] = n + cfg.sheetConcavity * (concavity[i] / concavityNorm).coerceIn(-1f, 1f)
+        val raw = FloatArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            val column = (cell % cellsAcross).toFloat()
+            val row = (cell / cellsAcross).toFloat()
+            val neighbour = 0.5f + 0.5f * basinNoise.fbm(
+                column * period / cellsAcross, row * period / cellsDown, 3, period, period
+            )
+            raw[cell] = neighbour + glaciation.sheetConcavity * (concavity[cell] / concavityNorm).coerceIn(-1f, 1f)
         }
         // Smoothed before it is cut, and this is not cosmetic. The concavity of eroded ground
         // varies cell to cell, so an unsmoothed score threshold shatters every blob into a spray
@@ -1506,32 +1558,32 @@ object GlaciationStage {
         // and none of them a lake — measured on seed 718106, a fifth of the cells the quantile
         // chose survived into a basin. A basin is a landform, so the field that chooses it is read
         // at a landform's scale.
-        val score = FloatArray(size)
+        val score = FloatArray(cellCount)
         val blurRadius = SCORE_BLUR
-        for (i in 0 until size) {
-            if (!sheet[i]) continue
-            val cx = i % w
-            val cy = i / w
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            val centreColumn = cell % cellsAcross
+            val centreRow = cell / cellsAcross
             var sum = 0f
-            var n = 0
-            for (dy in -blurRadius..blurRadius) {
-                val ny = cy + dy
-                if (ny < 0 || ny >= h) continue
-                for (dx in -blurRadius..blurRadius) {
-                    var nx = (cx + dx) % w
-                    if (nx < 0) nx += w
-                    val j = ny * w + nx
-                    if (!sheet[j]) continue
-                    sum += raw[j]
-                    n++
+            var neighbour = 0
+            for (rowOffset in -blurRadius..blurRadius) {
+                val neighbourRow = centreRow + rowOffset
+                if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                for (columnOffset in -blurRadius..blurRadius) {
+                    var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                    if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                    val other = neighbourRow * cellsAcross + neighbourColumn
+                    if (!sheet[other]) continue
+                    sum += raw[other]
+                    neighbour++
                 }
             }
-            score[i] = if (n > 0) sum / n else raw[i]
+            score[cell] = if (neighbour > 0) sum / neighbour else raw[cell]
         }
         val histogram = IntArray(SCORE_BINS)
-        for (i in 0 until size) {
-            if (!sheet[i]) continue
-            val bin = (((score[i] + 1f) / 3f) * SCORE_BINS).toInt().coerceIn(0, SCORE_BINS - 1)
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            val bin = (((score[cell] + 1f) / 3f) * SCORE_BINS).toInt().coerceIn(0, SCORE_BINS - 1)
             histogram[bin]++
         }
         // The quantile is asked for more ground than the budget will pay for — the candidates, not
@@ -1550,12 +1602,12 @@ object GlaciationStage {
         // Blobs: four-connected, because eight-connectivity would thread two separate basins
         // together through a single diagonal touch and a chain of those is exactly the artefact
         // this stage is being rid of.
-        val blob = IntArray(size) { -1 }
-        val queue = IntArray(size)
+        val blob = IntArray(cellCount) { -1 }
+        val queue = IntArray(cellCount)
         val blobFirst = ArrayList<Int>()
         val blobCount = ArrayList<Int>()
         val blobScore = ArrayList<Float>()
-        for (start in 0 until size) {
+        for (start in 0 until cellCount) {
             if (!sheet[start] || blob[start] >= 0 || score[start] < cut) continue
             val id = blobCount.size
             var head = 0
@@ -1565,13 +1617,13 @@ object GlaciationStage {
             var count = 0
             var sum = 0.0
             while (head < tail) {
-                val c = queue[head++]
+                val walked = queue[head++]
                 count++
-                sum += score[c].toDouble()
-                forEachOrthogonal(w, h, c % w, c / w) { n ->
-                    if (blob[n] < 0 && sheet[n] && score[n] >= cut) {
-                        blob[n] = id
-                        queue[tail++] = n
+                sum += score[walked].toDouble()
+                forEachOrthogonal(cellsAcross, cellsDown, walked % cellsAcross, walked / cellsAcross) { neighbour ->
+                    if (blob[neighbour] < 0 && sheet[neighbour] && score[neighbour] >= cut) {
+                        blob[neighbour] = id
+                        queue[tail++] = neighbour
                     }
                 }
             }
@@ -1582,14 +1634,14 @@ object GlaciationStage {
         if (blobCount.isEmpty()) return ScourTally(0, 0)
 
         val offset = IntArray(blobCount.size + 1)
-        for (b in blobCount.indices) offset[b + 1] = offset[b] + blobCount[b]
+        for (blobId in blobCount.indices) offset[blobId + 1] = offset[blobId] + blobCount[blobId]
         val fill = IntArray(blobCount.size)
         val packed = IntArray(offset[blobCount.size])
-        for (i in 0 until size) {
-            val b = blob[i]
-            if (b < 0) continue
-            packed[offset[b] + fill[b]] = i
-            fill[b] = fill[b] + 1
+        for (cell in 0 until cellCount) {
+            val blobId = blob[cell]
+            if (blobId < 0) continue
+            packed[offset[blobId] + fill[blobId]] = cell
+            fill[blobId] = fill[blobId] + 1
         }
 
         // The strongest hollows first, so that what the allowance buys is the lake country the
@@ -1598,19 +1650,19 @@ object GlaciationStage {
         val ranked = Array(blobCount.size) { it }
         ranked.sortWith(compareByDescending<Int> { blobScore[it] }.thenBy { blobFirst[it] })
 
-        val members = IntArray(size)
-        val inset = IntArray(size)
+        val members = IntArray(cellCount)
+        val inset = IntArray(cellCount)
         var spent = 0
         var cells = 0
         var basins = 0
-        for (b in ranked) {
+        for (blobId in ranked) {
             if (budget - spent < minCells) break
-            var count = offset[b + 1] - offset[b]
+            var count = offset[blobId + 1] - offset[blobId]
             if (count < minCells) continue
-            for (k in 0 until count) members[k] = packed[offset[b] + k]
-            count = peelToCap(w, h, members, count, blob, b, inset, queue, maxCells)
+            for (index in 0 until count) members[index] = packed[offset[blobId] + index]
+            count = peelToCap(cellsAcross, cellsDown, members, count, blob, blobId, inset, queue, maxCells)
             if (count < minCells || spent + count > budget) continue
-            cells += cutSaucer(w, h, members, count, blob, b, depth, isLand, carved, inset)
+            cells += cutSaucer(cellsAcross, cellsDown, members, count, blob, blobId, depth, isLand, carved, inset)
             spent += count
             basins++
         }
@@ -1628,15 +1680,21 @@ object GlaciationStage {
     private const val SELECTION_HEADROOM = 2.5f
 
     /** The four orthogonal neighbours, wrapping east-west and stopping at the poles. */
-    private inline fun forEachOrthogonal(w: Int, h: Int, x: Int, y: Int, body: (Int) -> Unit) {
-        var left = x - 1
-        if (left < 0) left += w
-        var right = x + 1
-        if (right >= w) right -= w
-        body(y * w + left)
-        body(y * w + right)
-        if (y > 0) body((y - 1) * w + x)
-        if (y < h - 1) body((y + 1) * w + x)
+    private inline fun forEachOrthogonal(
+        cellsAcross: Int,
+        cellsDown: Int,
+        column: Int,
+        row: Int,
+        body: (Int) -> Unit
+    ) {
+        var left = column - 1
+        if (left < 0) left += cellsAcross
+        var right = column + 1
+        if (right >= cellsAcross) right -= cellsAcross
+        body(row * cellsAcross + left)
+        body(row * cellsAcross + right)
+        if (row > 0) body((row - 1) * cellsAcross + column)
+        if (row < cellsDown - 1) body((row + 1) * cellsAcross + column)
     }
 
     /** Bins the basin score is quantiled in; the score itself runs -1..2. */
@@ -1669,8 +1727,8 @@ object GlaciationStage {
      * How far up the sides the ice reaches, in cells. Wider for a bigger glacier, but slowly — the
      * root again, since a trough draining four times the ground is about twice the valley.
      */
-    private fun valleyHalfWidth(cfg: GlaciationConfig, strength: Float): Float =
-        (cfg.valleyWidth * sqrt(strength)).coerceAtLeast(1f)
+    private fun valleyHalfWidth(glaciation: GlaciationConfig, strength: Float): Float =
+        (glaciation.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
 
     /**
      * The flow direction at a glacier cell, as a unit vector, for orienting its cross-section.
@@ -1679,37 +1737,37 @@ object GlaciationStage {
      * the terminal cross-section lies the same way as the one before it rather than collapsing.
      */
     private fun flowOf(
-        i: Int,
+        cell: Int,
         directions: IntArray,
         glacier: BooleanArray,
-        w: Int,
-        h: Int
+        cellsAcross: Int,
+        cellsDown: Int
     ): Long {
-        val t = directions[i]
-        if (t >= 0) return step(i, t, w)
+        val receiver = directions[cell]
+        if (receiver >= 0) return step(cell, receiver, cellsAcross)
         var from = -1
-        FlowRouting.forEachNeighbour(w, h, i % w, i / w) { n ->
-            if (from < 0 && glacier[n] && directions[n] == i) from = n
+        FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+            if (from < 0 && glacier[neighbour] && directions[neighbour] == cell) from = neighbour
         }
-        return if (from >= 0) step(from, i, w) else pack(1f, 0f)
+        return if (from >= 0) step(from, cell, cellsAcross) else pack(1f, 0f)
     }
 
     /** The unit vector from [from] to [to], packed into a long so no object is allocated. */
-    private fun step(from: Int, to: Int, w: Int): Long {
-        var dx = (to % w) - (from % w)
-        if (dx > w / 2) dx -= w
-        if (dx < -w / 2) dx += w
-        val dy = (to / w) - (from / w)
-        val length = sqrt((dx * dx + dy * dy).toFloat()).coerceAtLeast(1e-6f)
-        return pack(dx / length, dy / length)
+    private fun step(from: Int, to: Int, cellsAcross: Int): Long {
+        var columnOffset = (to % cellsAcross) - (from % cellsAcross)
+        if (columnOffset > cellsAcross / 2) columnOffset -= cellsAcross
+        if (columnOffset < -cellsAcross / 2) columnOffset += cellsAcross
+        val rowOffset = (to / cellsAcross) - (from / cellsAcross)
+        val length = sqrt((columnOffset * columnOffset + rowOffset * rowOffset).toFloat()).coerceAtLeast(1e-6f)
+        return pack(columnOffset / length, rowOffset / length)
     }
 
-    private fun pack(x: Float, y: Float): Long =
-        (x.toRawBits().toLong() shl 32) or (y.toRawBits().toLong() and 0xFFFFFFFFL)
+    private fun pack(column: Float, row: Float): Long =
+        (column.toRawBits().toLong() shl 32) or (row.toRawBits().toLong() and 0xFFFFFFFFL)
 
-    private fun unpackX(v: Long): Float = Float.fromBits((v ushr 32).toInt())
+    private fun unpackX(packed: Long): Float = Float.fromBits((packed ushr 32).toInt())
 
-    private fun unpackY(v: Long): Float = Float.fromBits(v.toInt())
+    private fun unpackY(packed: Long): Float = Float.fromBits(packed.toInt())
 
     /**
      * Lowers the line of cells *across* the flow toward [floorValue] on a parabola: flat over the
@@ -1720,8 +1778,8 @@ object GlaciationStage {
      * stamps one, and consecutive stamps tile the trough between them.
      */
     private fun swath(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         centre: Int,
         flow: Long,
         radius: Float,
@@ -1731,34 +1789,34 @@ object GlaciationStage {
         original: FloatArray,
         carved: FloatArray
     ) {
-        val fx = unpackX(flow)
-        val fy = unpackY(flow)
-        val cx = centre % w
-        val cy = centre / w
+        val axisX = unpackX(flow)
+        val axisY = unpackY(flow)
+        val centreColumn = centre % cellsAcross
+        val centreRow = centre / cellsAcross
         val span = radius.toInt() + 1
         val flat = radius * flatShare.coerceIn(0f, 0.9f)
         val wall = (radius - flat).coerceAtLeast(1e-4f)
-        for (dy in -span..span) {
-            val ny = cy + dy
-            if (ny < 0 || ny >= h) continue
-            for (dx in -span..span) {
-                val along = dx * fx + dy * fy
+        for (rowOffset in -span..span) {
+            val neighbourRow = centreRow + rowOffset
+            if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+            for (columnOffset in -span..span) {
+                val along = columnOffset * axisX + rowOffset * axisY
                 if (along > ALONG_REACH || along < -ALONG_REACH) continue
-                val across = kotlin.math.abs(dx * -fy + dy * fx)
+                val across = kotlin.math.abs(columnOffset * -axisY + rowOffset * axisX)
                 if (across > radius) continue
-                var nx = (cx + dx) % w
-                if (nx < 0) nx += w
-                val c = ny * w + nx
-                if (!isLand[c]) continue
-                val here = original[c]
+                var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                val cell = neighbourRow * cellsAcross + neighbourColumn
+                if (!isLand[cell]) continue
+                val here = original[cell]
                 if (here <= floorValue) continue
                 val target = if (across <= flat) {
                     floorValue
                 } else {
-                    val t = (across - flat) / wall
-                    floorValue + (here - floorValue) * t * t
+                    val acrossFraction = (across - flat) / wall
+                    floorValue + (here - floorValue) * acrossFraction * acrossFraction
                 }
-                if (target < carved[c]) carved[c] = target
+                if (target < carved[cell]) carved[cell] = target
             }
         }
     }
@@ -1773,8 +1831,8 @@ object GlaciationStage {
      * function of the surface this stage was handed.
      */
     private fun bowl(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         centre: Int,
         radius: Float,
         flatShare: Float,
@@ -1783,22 +1841,22 @@ object GlaciationStage {
         original: FloatArray,
         carved: FloatArray
     ) {
-        val cx = centre % w
-        val cy = centre / w
+        val centreColumn = centre % cellsAcross
+        val centreRow = centre / cellsAcross
         val span = radius.toInt() + 1
         val flat = radius * flatShare.coerceIn(0f, 0.9f)
         val wall = (radius - flat).coerceAtLeast(1e-4f)
-        for (dy in -span..span) {
-            val ny = cy + dy
-            if (ny < 0 || ny >= h) continue
-            for (dx in -span..span) {
-                val distance = sqrt((dx * dx + dy * dy).toFloat())
+        for (rowOffset in -span..span) {
+            val neighbourRow = centreRow + rowOffset
+            if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+            for (columnOffset in -span..span) {
+                val distance = sqrt((columnOffset * columnOffset + rowOffset * rowOffset).toFloat())
                 if (distance > radius) continue
-                var nx = (cx + dx) % w
-                if (nx < 0) nx += w
-                val c = ny * w + nx
-                if (!isLand[c]) continue
-                val here = original[c]
+                var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                val cell = neighbourRow * cellsAcross + neighbourColumn
+                if (!isLand[cell]) continue
+                val here = original[cell]
                 if (here <= floorValue) continue
                 // Flat across the middle, then the parabola up to the rim. The flat is the whole
                 // difference between a U and a V, and it is not a cosmetic one: a floor that comes
@@ -1807,10 +1865,10 @@ object GlaciationStage {
                 val target = if (distance <= flat) {
                     floorValue
                 } else {
-                    val t = (distance - flat) / wall
-                    floorValue + (here - floorValue) * t * t
+                    val outFraction = (distance - flat) / wall
+                    floorValue + (here - floorValue) * outFraction * outFraction
                 }
-                if (target < carved[c]) carved[c] = target
+                if (target < carved[cell]) carved[cell] = target
             }
         }
     }
@@ -1825,8 +1883,8 @@ object GlaciationStage {
      * order they were laid in.
      */
     private fun bar(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         centre: Int,
         flow: Long,
         radius: Float,
@@ -1835,33 +1893,33 @@ object GlaciationStage {
         moraine: FloatArray
     ) {
         if (height <= 0f) return
-        val fx = unpackX(flow)
-        val fy = unpackY(flow)
-        val cx = centre % w
-        val cy = centre / w
+        val axisX = unpackX(flow)
+        val axisY = unpackY(flow)
+        val centreColumn = centre % cellsAcross
+        val centreRow = centre / cellsAcross
         val span = radius.toInt() + 1
-        for (dy in -span..span) {
-            val ny = cy + dy
-            if (ny < 0 || ny >= h) continue
-            for (dx in -span..span) {
-                val along = dx * fx + dy * fy
+        for (rowOffset in -span..span) {
+            val neighbourRow = centreRow + rowOffset
+            if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+            for (columnOffset in -span..span) {
+                val along = columnOffset * axisX + rowOffset * axisY
                 if (along > ALONG_REACH || along < -ALONG_REACH) continue
-                val across = kotlin.math.abs(dx * -fy + dy * fx)
+                val across = kotlin.math.abs(columnOffset * -axisY + rowOffset * axisX)
                 if (across > radius) continue
-                var nx = (cx + dx) % w
-                if (nx < 0) nx += w
-                val c = ny * w + nx
-                if (!isLand[c]) continue
-                val t = across / radius
-                val thickness = height * (1f - t * t)
-                if (thickness > moraine[c]) moraine[c] = thickness
+                var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                val cell = neighbourRow * cellsAcross + neighbourColumn
+                if (!isLand[cell]) continue
+                val acrossFraction = across / radius
+                val thickness = height * (1f - acrossFraction * acrossFraction)
+                if (thickness > moraine[cell]) moraine[cell] = thickness
             }
         }
     }
 
     /**
      * Deepens the water in front of a marine snout, deepest at the mouth and fading out over
-     * [reach] cells, so the shelf beyond stands as the sill.
+     * [reachCells] cells, so the shelf beyond stands as the sill.
      *
      * Breadth-first over water from the receiving cell, stamped rather than collected in a set, for
      * the same reason the delta fan is: no hash order may reach the terrain.
@@ -1869,8 +1927,8 @@ object GlaciationStage {
      * @return how much sea floor was taken out, for the tally.
      */
     private fun fjord(
-        w: Int,
-        h: Int,
+        cellsAcross: Int,
+        cellsDown: Int,
         start: Int,
         reach: Int,
         depth: Float,
@@ -1891,32 +1949,32 @@ object GlaciationStage {
         stamp[start] = id
 
         while (head < tail) {
-            val c = queue[head]
-            val d = queueDistance[head]
+            val cell = queue[head]
+            val distance = queueDistance[head]
             head++
 
-            val target = -depth * (1f - d.toFloat() / (reach + 1f))
-            if (target < carved[c]) {
-                removed += (carved[c] - target).toDouble()
-                carved[c] = target
+            val target = -depth * (1f - distance.toFloat() / (reach + 1f))
+            if (target < carved[cell]) {
+                removed += (carved[cell] - target).toDouble()
+                carved[cell] = target
             }
 
-            if (d >= reach) continue
-            val cx = c % w
-            val cy = c / w
-            for (dy in -1..1) {
-                val ny = cy + dy
-                if (ny < 0 || ny >= h) continue
-                for (dx in -1..1) {
-                    if (dx == 0 && dy == 0) continue
-                    var nx = (cx + dx) % w
-                    if (nx < 0) nx += w
-                    val n = ny * w + nx
-                    if (stamp[n] == id || isLand[n]) continue
-                    stamp[n] = id
+            if (distance >= reach) continue
+            val centreColumn = cell % cellsAcross
+            val centreRow = cell / cellsAcross
+            for (rowOffset in -1..1) {
+                val neighbourRow = centreRow + rowOffset
+                if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                for (columnOffset in -1..1) {
+                    if (columnOffset == 0 && rowOffset == 0) continue
+                    var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
+                    if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                    val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                    if (stamp[neighbour] == id || isLand[neighbour]) continue
+                    stamp[neighbour] = id
                     if (tail < queue.size) {
-                        queue[tail] = n
-                        queueDistance[tail] = d + 1
+                        queue[tail] = neighbour
+                        queueDistance[tail] = distance + 1
                         tail++
                     }
                 }
@@ -1937,7 +1995,7 @@ object GlaciationStage {
      */
     private const val ALONG_REACH = 0.75f
 
-    private const val DIAGONAL = 1.41421356f
+    private const val DIAGONAL_STEP_CELLS = 1.41421356f
 
     /** Neighbours differ by one row *and* one column only when the step was diagonal. */
     private fun isDiagonal(from: Int, to: Int, width: Int): Boolean =

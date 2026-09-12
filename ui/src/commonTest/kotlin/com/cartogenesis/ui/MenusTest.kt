@@ -54,6 +54,48 @@ class MenusTest {
         assertNull(MenuCommand.TOOLBAR.shortcut)
     }
 
+    /**
+     * The three shelves F7 put the fifteen chromes on, and what they must not have changed.
+     *
+     * A grouping is the one change to a list of settings that can silently lose one: drop a chrome
+     * from every group and it disappears from the picker and from the View menu while the enum,
+     * the stored value and every other test go on saying it exists. So this asserts a *partition* —
+     * every chrome in exactly one group, no chrome twice, nothing invented — rather than asserting
+     * the three lists, which would be the grouping checked against itself.
+     */
+    @Test
+    fun `the theme groups are a partition of the themes, with every name unchanged`() {
+        val grouped = Menus.themeGroups.flatMap { it.second }
+        assertEquals(
+            Menus.themes.size,
+            grouped.size,
+            "the picker shows ${grouped.size} of ${Menus.themes.size} chromes"
+        )
+        assertEquals(Menus.themes.toSet(), grouped.toSet(), "a chrome is in no group, or in two")
+        assertEquals(grouped.size, grouped.toSet().size, "a chrome appears in two groups")
+        assertEquals(ThemeGroup.entries.size, Menus.themeGroups.size, "a group came out empty")
+
+        // Within a shelf the chromes keep the enum's own order, so nothing a reader learned the
+        // position of has moved further than its heading.
+        Menus.themeGroups.forEach { (group, chromes) ->
+            assertEquals(
+                Menus.themes.filter { it.group() == group },
+                chromes,
+                "${group.label} is not in the list's own order"
+            )
+        }
+
+        // And the two that carry a published promise are the ones under Accessible.
+        assertEquals(
+            listOf(ThemeChoice.HIGH_CONTRAST, ThemeChoice.COLORBLIND),
+            Menus.themeGroups.first { it.first == ThemeGroup.ACCESSIBLE }.second
+        )
+        assertEquals(
+            listOf(ThemeChoice.SYSTEM, ThemeChoice.LIGHT, ThemeChoice.DARK),
+            Menus.themeGroups.first { it.first == ThemeGroup.STANDARD }.second
+        )
+    }
+
     @Test
     fun `the items that need a world say so, and the ones that do not, do not`() {
         assertTrue(MenuCommand.SAVE.needsWorld)

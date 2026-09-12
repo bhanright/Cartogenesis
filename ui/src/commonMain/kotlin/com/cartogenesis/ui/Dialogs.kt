@@ -62,12 +62,23 @@ internal fun SettingsDialog(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 SettingRow("Theme", "Applies at once. System follows this machine's own setting.") {
-                    ChipRow(
-                        options = Menus.themes,
-                        selected = settings.theme,
-                        label = { it.label },
-                        onSelect = { onSettings(settings.copy(theme = it)) }
-                    )
+                    // Fifteen chips in one wrapped block is a wall; three labelled shelves is a
+                    // list. Same names, same order within a shelf, same stored value — see
+                    // [Menus.themeGroups].
+                    Menus.themeGroups.forEach { (group, chromes) ->
+                        Text(
+                            group.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 3.dp)
+                        )
+                        ChipRow(
+                            options = chromes,
+                            selected = settings.theme,
+                            label = { it.label },
+                            onSelect = { onSettings(settings.copy(theme = it)) }
+                        )
+                    }
                 }
 
                 SettingRow(
@@ -219,7 +230,9 @@ internal fun SettingsDialog(
 @Composable
 private fun SettingRow(title: String, note: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
+        // A heading, so it is lettered the way the chrome letters one — which is where Roman's
+        // interpunct actually shows, the panel's own six headings all being single words.
+        Text(LocalChromeDetail.current.heading(title), style = MaterialTheme.typography.titleSmall)
         Text(
             note,
             style = MaterialTheme.typography.labelSmall,
@@ -252,8 +265,8 @@ private fun <T> ChipRow(
 /**
  * Which build this is, what it may be used under, and what it is built out of.
  *
- * The third-party notices are the part that matters legally rather than decoratively: the two type
- * faces the interface is set in are licensed under the SIL Open Font License, which requires the
+ * The third-party notices are the part that matters legally rather than decoratively: the three
+ * type faces the interface is set in are licensed under the SIL Open Font License, which requires the
  * licence to travel with anything that embeds them, and they *are* embedded — in the desktop jar
  * and in the wasm bundle alike. So the list is generated from the dependency graph at build time
  * (see `ui/build.gradle.kts`) rather than typed here, where it would go stale the first time
@@ -282,14 +295,14 @@ internal fun AboutDialog(platform: Platform, onDismiss: () -> Unit) {
                 )
 
                 Text(
-                    "Licence",
+                    LocalChromeDetail.current.heading("Licence"),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(top = 16.dp)
                 )
                 Text(BuildInfo.LICENCE, style = MaterialTheme.typography.bodySmall)
 
                 Text(
-                    "Third-party notices",
+                    LocalChromeDetail.current.heading("Third-party notices"),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(top = 16.dp)
                 )

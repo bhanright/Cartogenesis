@@ -28,9 +28,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AssistChip as MaterialAssistChip
@@ -182,7 +188,9 @@ internal fun Button(
         shape = RoundedCornerShape(2.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = scheme.primaryContainer,
-            contentColor = scheme.primary,
+            // The accent, unless the chrome has made this button a block rather than a stain —
+            // three of F7's four have, and then the label is the ground. See [ChromeDetail.label].
+            contentColor = detail.label(scheme),
             disabledContainerColor = Color.Transparent,
             disabledContentColor = scheme.outline
         ),
@@ -350,33 +358,148 @@ internal fun SectionRule(modifier: Modifier = Modifier) {
         return
     }
     val ink = detail.rule(MaterialTheme.colorScheme)
-    val diamonds = detail.sectionRule == SectionRuleStyle.DOUBLED_WITH_DIAMONDS
-    Canvas(modifier.fillMaxWidth().height(7.dp)) {
-        val weight = 1.dp.toPx()
-        val gap = 3.dp.toPx()
-        val top = (size.height - (gap + weight)) / 2f
-        // A lozenge is as tall as the pair of rules is deep, so the ornament reads as one object
-        // rather than as two lines with something stuck on the end.
-        val half = if (diamonds) (gap + weight) else 0f
-        drawRect(ink, Offset(half, top), androidx.compose.ui.geometry.Size(size.width - half * 2, weight))
-        drawRect(
-            ink,
-            Offset(half, top + gap),
-            androidx.compose.ui.geometry.Size(size.width - half * 2, weight)
+    val style = detail.sectionRule
+    // Every ornamental rule takes the same 7 dp band, so switching chrome cannot make the panel
+    // taller or shorter — only the drawing inside the band changes. The meander is the exception
+    // and says why.
+    val band = if (style == SectionRuleStyle.MEANDER) 12.dp else 7.dp
+    Canvas(modifier.fillMaxWidth().height(band)) {
+        when (style) {
+            SectionRuleStyle.PLAIN -> Unit
+            SectionRuleStyle.DOUBLED, SectionRuleStyle.DOUBLED_WITH_DIAMONDS ->
+                doubled(ink, style == SectionRuleStyle.DOUBLED_WITH_DIAMONDS)
+            SectionRuleStyle.STITCHED -> runningStitch(ink)
+            SectionRuleStyle.MEANDER -> meander(ink)
+            SectionRuleStyle.CUT_BAR -> cutBar(ink)
+        }
+    }
+}
+
+/** Hallowed's and Baroque's: two hairlines, and for Baroque a lozenge centred on each end. */
+private fun DrawScope.doubled(ink: Color, diamonds: Boolean) {
+    val weight = 1.dp.toPx()
+    val gap = 3.dp.toPx()
+    val top = (size.height - (gap + weight)) / 2f
+    // A lozenge is as tall as the pair of rules is deep, so the ornament reads as one object
+    // rather than as two lines with something stuck on the end.
+    val half = if (diamonds) (gap + weight) else 0f
+    drawRect(ink, Offset(half, top), Size(size.width - half * 2, weight))
+    drawRect(ink, Offset(half, top + gap), Size(size.width - half * 2, weight))
+    if (!diamonds) return
+    val middle = top + gap / 2f + weight / 2f
+    listOf(half, size.width - half).forEach { x ->
+        drawPath(
+            Path().apply {
+                moveTo(x, middle - half)
+                lineTo(x + half, middle)
+                lineTo(x, middle + half)
+                lineTo(x - half, middle)
+                close()
+            },
+            ink
         )
-        if (!diamonds) return@Canvas
-        val middle = top + gap / 2f + weight / 2f
-        listOf(half, size.width - half).forEach { x ->
-            drawPath(
-                Path().apply {
-                    moveTo(x, middle - half)
-                    lineTo(x + half, middle)
-                    lineTo(x, middle + half)
-                    lineTo(x - half, middle)
-                    close()
-                },
-                ink
-            )
+    }
+}
+
+/**
+ * Hessian's: a running stitch, 4 dp of thread and 3 dp of cloth.
+ *
+ * A dash effect rather than a loop drawing little rectangles, so the phase is the renderer's and
+ * the stitch does not resample when the panel is resized.
+ */
+private fun DrawScope.runningStitch(ink: Color) {
+    val y = size.height / 2f
+    drawLine(
+        color = ink,
+        start = Offset(0f, y),
+        end = Offset(size.width, y),
+        strokeWidth = 1.dp.toPx(),
+        cap = StrokeCap.Butt,
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
+    )
+}
+
+/**
+ * Roman's: a Greek key, repeating over a continuous base rail.
+ *
+ * The unit is 12 dp rather than the 6 the spec suggested, and the band 12 rather than 7, because
+ * the first draft was drawn at 6 and photographed: at 6 dp a single meander has three arms and two
+ * returns inside six pixels, and what comes out is a comb. A meander is a *drawing*, not a line;
+ * twelve is the smallest unit at which the key reads as a key, and the figure was chosen by looking
+ * rather than by arithmetic, which is what the ground rules ask of anything no guard can measure.
+ *
+ * The last partial unit at the right margin is drawn and clipped by the canvas rather than dropped,
+ * which is what a painted border on a wall does when it meets a corner.
+ */
+private fun DrawScope.meander(ink: Color) {
+    val weight = 1.dp.toPx()
+    val unit = 12.dp.toPx()
+    val step = 3.dp.toPx()
+    val base = size.height - weight / 2f
+    val top = weight / 2f
+    drawLine(ink, Offset(0f, base), Offset(size.width, base), weight)
+    val key = Path()
+    var x = 0f
+    while (x < size.width) {
+        // Up from the rail, across the top, down the far side, back along the middle and up into
+        // the centre: one turn of the spiral, which is the whole of the classical single meander.
+        key.moveTo(x + weight / 2f, base)
+        key.lineTo(x + weight / 2f, top)
+        key.lineTo(x + unit - step, top)
+        key.lineTo(x + unit - step, base - step)
+        key.lineTo(x + step, base - step)
+        key.lineTo(x + step, top + step)
+        key.lineTo(x + unit - 2f * step, top + step)
+        x += unit
+    }
+    drawPath(key, ink, style = Stroke(width = weight))
+}
+
+/**
+ * Hitchcock's: one bar, cut in three, the pieces slipped past one another.
+ *
+ * The Psycho titles are a name sliced into bands that never line up, and the whole gesture is that
+ * the eye keeps trying to read them as one line. The three displacements are 1, 3 and 2 dp from the
+ * top of the band, which is the 1-2 dp the spec asks for between neighbours.
+ */
+private fun DrawScope.cutBar(ink: Color) {
+    val weight = 2.dp.toPx()
+    val gap = 3.dp.toPx()
+    val widths = listOf(0.42f, 0.33f, 0.25f)
+    val offsets = listOf(1.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
+    val span = size.width - gap * (widths.size - 1)
+    var x = 0f
+    widths.forEachIndexed { index, share ->
+        val w = span * share
+        drawRect(ink, Offset(x, offsets[index]), Size(w, weight))
+        x += w + gap
+    }
+}
+
+/**
+ * The weave a chrome draws behind whatever this modifier is attached to.
+ *
+ * Hessian's, and nothing else has ever wanted one — but it goes here rather than at the three
+ * places a panel is drawn, for the same reason every other ornament does: a texture that had to be
+ * applied by hand wherever a panel happens to be is not a theme. A chrome that asks for no texture
+ * gets the modifier back untouched, so there is not even a draw node in the other fourteen.
+ */
+@Composable
+internal fun Modifier.chromeWeave(): Modifier {
+    val detail = LocalChromeDetail.current
+    if (detail.panelTexture == PanelTexture.NONE) return this
+    val ink = detail.textureInk
+    return this.drawBehind {
+        val step = 6.dp.toPx()
+        val weight = 1.dp.toPx()
+        // Two families at ±45°, drawn as intercepts stepped along the top edge: a line of slope +1
+        // through (c, 0) leaves the box at (c + height, height), and its mirror at (c - height,
+        // height). Starting a screen-height to the left of the origin is what fills the corners.
+        var c = -size.height
+        while (c <= size.width + size.height) {
+            drawLine(ink, Offset(c, 0f), Offset(c + size.height, size.height), weight)
+            drawLine(ink, Offset(c, 0f), Offset(c - size.height, size.height), weight)
+            c += step
         }
     }
 }

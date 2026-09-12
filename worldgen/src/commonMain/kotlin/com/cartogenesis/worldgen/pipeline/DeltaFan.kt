@@ -293,8 +293,8 @@ internal object DeltaFan {
         }
 
         /**
-         * How far the rim stands in the direction of a cell that lies [dx], [dy] from the apex at
-         * distance [r].
+         * How far the rim stands in the direction of a cell that lies [columnOffset],
+         * [rowOffset] from the apex at [distanceCells].
          */
         fun radius(columnOffset: Float, rowOffset: Float, distanceCells: Float): Float {
             if (distanceCells <= 0f) return reachCells

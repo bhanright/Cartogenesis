@@ -837,13 +837,10 @@ internal object HydraulicErosion {
             // And the last thing of all: give every river that ends on its own delta a way through
             // it.
             //
-            // Measured on seed 59758 at 2048, where the author found rivers stopping short of the
-            // water: the trunk's drawn chain ended at (640,267), a cell of *sea* — but sea in a
-            // body of its own, 105th of 475 on that map, with the delta's new land all round it.
-            // Within twelve cells of it, 336 of 614 land cells had no lower neighbour at all. So
-            // two things were wrong and neither was the lobe's outline: the water the river reached
-            // could not be reached from the ocean, and the ground it would have had to cross to
-            // find the ocean was dead flat.
+            // Two things stop a river short of the water and neither is the lobe's outline: the
+            // sea it reached is a pocket the ocean cannot reach, which is the sea-level cut's
+            // business, and the ground it would have had to cross to find the ocean is dead flat,
+            // which is this pass's. See [openMouths].
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(cellsAcross, cellsDown, working, provisionalSeaLevel, spoil)
                 incised += opened.removed
@@ -1476,7 +1473,7 @@ internal object HydraulicErosion {
      * Lays [budget] of sediment into the water around a mouth, nearest cells first, building each
      * up to [levelOf] and no higher.
      *
-     * Breadth-first from the receiving cell out to [reach], so a delta grows from the mouth
+     * Breadth-first from the receiving cell out to [reachCells], so a delta grows from the mouth
      * outward the way a real one does, and a big river's load spreads over more of the shelf than
      * a small one's. Cells are enumerated in a fixed order and marked with a stamp rather than
      * collected in a set, so the result does not depend on any hash ordering.

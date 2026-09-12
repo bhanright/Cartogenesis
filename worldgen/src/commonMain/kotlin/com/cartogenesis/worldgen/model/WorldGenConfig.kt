@@ -78,7 +78,7 @@ data class TectonicsConfig(
      * Half-width, in cells, of the coastal range on the continental side of an oceanic–continental
      * margin. Deliberately far narrower than [collisionWidthCells]: the Andes are a few hundred
      * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
-     * of distinguishing the pairs. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     * of distinguishing the pairs. [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val andeanWidthCells: Float = 14f,
     /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
@@ -97,7 +97,7 @@ data class TectonicsConfig(
     val arcHeight: Float = 0.20f,
     /**
      * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidthCells].
-     * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val collisionWidthCells: Float = 26f,
     /**
@@ -146,7 +146,7 @@ data class TectonicsConfig(
     val plateauAlongVariation: Float = 0.50f,
     /**
      * How far from the suture the island arc stands, on the overriding plate, in cells.
-     * Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val islandArcOffsetCells: Float = 8f,
     /** Half-width of the island-arc ridge about its own axis, in cells. */
@@ -174,10 +174,10 @@ data class TectonicsConfig(
      * what the segmentation exists to produce.
      *
      * Giving the floor relief *within* itself was likewise written, measured and reverted: the
-     * floor is not the plane it looks like — it already rises and falls by 65-76% of the trough's
-     * own depth within half a segment — and every amplitude tried put a closed sub-basin below the
-     * sea-level cut that the post-cut outlet cannot open. `RiftDepthTest` and `RiftDepthAuditTest`
-     * are what is left of that: the measurements, without the change. See REALISM_PLAN.md, E7.
+     * floor is not the plane it looks like, and every amplitude tried put a closed sub-basin below
+     * the sea-level cut that the post-cut outlet cannot open. `RiftDepthTest` and
+     * `RiftDepthAuditTest` are what is left of that — the measurements, without the change. See
+     * REALISM_PLAN.md, E7, for the figures.
      */
     val riftDepth: Float = 0.25f,
     /** Half-width of the rift trough, in cells. */
@@ -289,7 +289,7 @@ data class TectonicsConfig(
      * two-epochs-ago boundary sits some 90 cells from where its plates are now, against a plate
      * radius of about 137 cells on a 14-plate 512 world — far enough that an old belt lands well
      * inside a plate interior rather than merging with the modern edge beside it, which is the
-     * whole point. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     * whole point. [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val epochDriftCells: Float = 45f,
     /**
@@ -316,7 +316,7 @@ data class TectonicsConfig(
      * Two box passes rather than three: an old belt should read as rounded, not as a stain. The
      * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
      * range, and it is applied to the epoch's own uplift field alone, so it never touches the
-     * present epoch's edges. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     * present epoch's edges. [WorldGenConfig.atResolution] rescales it with the grid.
      *
      * Held at three cells rather than the six first tried, for a reason about the *length* of a
      * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
@@ -393,11 +393,12 @@ data class TectonicsConfig(
 @Serializable
 data class SeaConfig(
     /**
-     * Width, in cells, of the shelf plateau; a further band of the same width blends the plateau
-     * back down to the natural sea floor, so the whole remap reaches `2 * shelfWidthCells` from the
-     * coast. Measured in cells, so [WorldGenConfig.atResolution] rescales it like
-     * [TectonicsConfig.boundaryFalloffCells] — left alone, a larger grid would shrink the shelf to a
-     * sliver and coastlines would drop straight into deep water again.
+     * Width of the shelf plateau; a further band of the same width blends the plateau back down to
+     * the natural sea floor, so the whole remap reaches `2 * shelfWidthCells` from the coast.
+     * [WorldGenConfig.atResolution] rescales it with the grid, as it does
+     * [TectonicsConfig.boundaryFalloffCells] and for the same reason: left alone, a larger grid
+     * would shrink the shelf to a sliver and coastlines would drop straight into deep water
+     * again.
      */
     val shelfWidthCells: Float = 20f,
     /**

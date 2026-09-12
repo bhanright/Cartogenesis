@@ -403,7 +403,7 @@ object PlateStage {
     }
 
     /**
-     * Every plate seed carried back along minus its own drift by [distance] cells.
+     * Every plate seed carried back along minus its own drift, by [distanceCells].
      *
      * X wraps, because the world is a cylinder. Y clamps, because it is not: a plate whose drift
      * points at a pole was, far enough back, at the pole and no further, and a seed off the edge
@@ -448,7 +448,7 @@ object PlateStage {
      * One epoch's belts, stamped into [uplift] and recorded in [crustAge].
      *
      * This is the per-cell pass that used to be the body of [generate], unchanged except for two
-     * things: what it writes is multiplied by [ageHeight], and every cell it touches at all has
+     * things: what it writes is multiplied by [ageHeightFactor], and every cell it touches has
      * its crust age pulled down to this epoch's band. [tectonics] is the epoch's own widened copy,
      * so
      * every profile below reads the aged width without knowing that it has been aged.

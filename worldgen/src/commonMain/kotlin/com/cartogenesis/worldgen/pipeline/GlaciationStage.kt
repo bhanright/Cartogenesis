@@ -1727,8 +1727,8 @@ object GlaciationStage {
      * How far up the sides the ice reaches, in cells. Wider for a bigger glacier, but slowly — the
      * root again, since a trough draining four times the ground is about twice the valley.
      */
-    private fun valleyHalfWidth(cfg: GlaciationConfig, strength: Float): Float =
-        (cfg.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
+    private fun valleyHalfWidth(glaciation: GlaciationConfig, strength: Float): Float =
+        (glaciation.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
 
     /**
      * The flow direction at a glacier cell, as a unit vector, for orienting its cross-section.
@@ -1919,7 +1919,7 @@ object GlaciationStage {
 
     /**
      * Deepens the water in front of a marine snout, deepest at the mouth and fading out over
-     * [reach] cells, so the shelf beyond stands as the sill.
+     * [reachCells] cells, so the shelf beyond stands as the sill.
      *
      * Breadth-first over water from the receiving cell, stamped rather than collected in a set, for
      * the same reason the delta fan is: no hash order may reach the terrain.

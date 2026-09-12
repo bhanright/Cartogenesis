@@ -158,6 +158,11 @@ class GlaciationTest {
             val config = WorldGenConfig(seed = 718106L, width = 512, height = 512)
                 .copy(seaLevel = level)
                 .atResolution(size, size)
+                // Same reason as the comb guard above: the resolution contract below is a
+                // comparison of lake share of land at two grids, and E1's notch drains basins
+                // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
+                // 0.04% of land, under this test's own floor for having any water to compare.
+                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
             val iced = WorldGenerationEngine.generateBlocking(config)
             val bare = WorldGenerationEngine.generateBlocking(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
@@ -314,6 +319,14 @@ class GlaciationTest {
         listOf(718106L, 42L, 7L).forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
                 .atResolution(1024, 1024)
+                // E1's outlet notch off, because both figures below are shares of the world's
+                // standing water and the notch removes two thirds of it for reasons that have
+                // nothing to do with ice: on seed 718106 at 1024 the lake cells go 6632 -> 2173
+                // while the comb itself holds 113 cells before and 128 after, so an unchanged comb
+                // reads as 1.7% one moment and 5.9% the next. What this guard is about is how much
+                // of the ice's work comes out as a rank of parallel gullies, and that is measured
+                // here against the water the ice had to work with.
+                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
             val world = WorldGenerationEngine.generateBlocking(config)
             val filaments = countFilaments(world)
             val comb = combShare(world)

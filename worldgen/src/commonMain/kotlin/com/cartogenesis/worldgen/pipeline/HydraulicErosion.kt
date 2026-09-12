@@ -17,7 +17,20 @@ internal data class RoundMass(
     val incised: Double,
     val deposited: Double,
     val lostToSea: Double,
-    val fieldDrop: Double
+    val fieldDrop: Double,
+    /** Of [incised], how much the outlet notches took. Zero when the notch is switched off. */
+    val notched: Double = 0.0,
+    /** How many cells the notches were cut into. */
+    val notchCells: Int = 0,
+    /** How many depressions the fill had to raise this round. */
+    val basins: Int = 0,
+    /** Cells in the largest of them, and how deep the fill stands over its lowest ground. */
+    val largestBasinCells: Int = 0,
+    val largestBasinDepth: Float = 0f,
+    /** The rim cell that basin spills over, or -1 if it has none. */
+    val largestBasinSpill: Int = -1,
+    /** The deepest fill anywhere on the map, over any basin's lowest ground. */
+    val deepestBasin: Float = 0f
 )
 
 /**
@@ -59,6 +72,30 @@ internal object HydraulicErosion {
      * setting re-cut every valley.
      */
     private const val POND_DEPTH = 0.004f
+
+    /**
+     * The fall per cell of a freshly cut breach, in the shoreline-relative units the routing works
+     * in.
+     *
+     * A notch has to slope, or the D8 step out of the basin has nowhere to go and the next round's
+     * fill turns the whole channel back into part of the lake. It does not have to slope by much:
+     * ten times the epsilon the depression fill itself uses is enough to give every cell along the
+     * breach a strictly lower neighbour, and small enough that over the longest breach the map
+     * allows it is a rounding error against the depth of the water it is letting out.
+     */
+    private const val NOTCH_GRADIENT = 1e-5f
+
+    /**
+     * How many times the outlets are cut again on the finished surface, once the spoil has been
+     * laid on the rock and the last relaxation has run.
+     *
+     * One, because the spoil is laid once: this is the round of cutting the deposition never got,
+     * not a licence to keep going until nothing stands anywhere. Measured at three instead, on
+     * seeds 7, 42, 1234 and 718106 at 512 with the ice off, it takes seed 42 from four lakes to
+     * none at all and seed 7 from five to one — a world with no standing water outside the glaciated
+     * north is as wrong as one paved with it.
+     */
+    private const val CLOSING_BREACHES = 1
 
     /**
      * @param provisionalSeaLevel the fraction of the world that will end up under water. Erosion
@@ -182,6 +219,36 @@ internal object HydraulicErosion {
             val startingMass =
                 if (onRound != null) totalMass(surfaceOf) + totalMass(sediment) else 0.0
 
+            // The lips of the basins the fill just raised, cut down before the water is routed
+            // over them.
+            //
+            // Before, and not during, because the outlet has to be cut as a whole — a lip can only
+            // fall if the ground between it and the open valley below falls with it — and the walk
+            // that follows runs one cell at a time from the sources down. Running it first also
+            // keeps the two honest about each other: the notch lowers the round's routing surface
+            // along with the terrain, so the walk sees the ground as the notch left it and takes
+            // its own bite out of what is actually there. Whatever the notch removes is handed to
+            // the cell's sediment load, so the walk carries it away like any other spoil and the
+            // budget closes in the round it was opened.
+            val notch = if (cfg.outletIncision || onRound != null) {
+                FlowRouting.spillways(w, h, isLand, relative, ground, directions, POND_DEPTH)
+            } else {
+                null
+            }
+            var notched = 0.0
+            var notchCells = 0
+            if (notch != null && cfg.outletIncision) {
+                val cut = breach(
+                    cfg, w, notch, isLand, relative, ground, directions, area.data, land,
+                    landRange, surfaceOf,
+                    settled = if (carryingSediment) settled else null,
+                    load = if (carryingSediment) load else null
+                )
+                notched = cut.moved
+                notchCells = cut.cells
+                incised += cut.moved
+            }
+
             // Sources first, so every cell has already received whatever its tributaries were
             // carrying by the time it is asked what to do with it.
             for (k in order.indices) {
@@ -282,11 +349,27 @@ internal object HydraulicErosion {
                         // build and the coastline merely creeps outward everywhere at once, which
                         // is a wider continent rather than a delta.
                         val river = area.data[i] / land >= cfg.deltaMinCatchment
+                        // Which way the trunk was pointing when it arrived, so the lobe can build
+                        // out in front of the river rather than equally in every direction.
+                        val outX = shortestX(target % w - i % w, w).toFloat()
+                        val outY = (target / w - i / w).toFloat()
                         val laid = fan(
                             w, h, target, if (river) carried * cfg.deltaShare else 0.0, reach,
                             stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment, settled,
-                            accepts = { c -> !isLand[c] },
-                            levelOf = { deltaTop }
+                            wholeCells = cfg.deltaLobe,
+                            accepts = { c, d ->
+                                !isLand[c] && (
+                                    !cfg.deltaLobe ||
+                                        d <= lobeReach(reach, target, c, outX, outY, w)
+                                    )
+                            },
+                            levelOf = { _, d ->
+                                if (cfg.deltaLobe) {
+                                    lobeLevel(deltaTop, sea.threshold, reach, d)
+                                } else {
+                                    deltaTop
+                                }
+                            }
                         )
                         deposited += laid
                         lost += carried - laid
@@ -304,8 +387,9 @@ internal object HydraulicErosion {
                         val laid = fan(
                             w, h, target, carried * cfg.lakeShare, reach,
                             stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment, settled,
-                            accepts = { c -> isLand[c] && ground[c] - relative[c] > POND_DEPTH },
-                            levelOf = { c ->
+                            wholeCells = false,
+                            accepts = { c, _ -> isLand[c] && ground[c] - relative[c] > POND_DEPTH },
+                            levelOf = { c, _ ->
                                 sea.threshold + (ground[c] - 2f * POND_DEPTH) * landRange
                             }
                         )
@@ -317,21 +401,260 @@ internal object HydraulicErosion {
                 }
             }
 
+            val closing = round == cfg.hydraulicRounds - 1
+            if (closing) settle()
+
+            // One last breach, over the spoil, once the terrain is otherwise finished.
+            //
+            // The whole of the world's deposition is laid on the rock in the line above, after the
+            // last time the water was routed, and a floodplain or a fan laid across a valley mouth
+            // dams it. Nothing routes again after this point, so without this pass the lakes a
+            // world ends up with are mostly the ones its own sediment made in the last instant of
+            // its history: measured on seeds 7 and 42, with the spoil switched off the notch leaves
+            // no tectonic lake at all, and with the spoil on the largest lake on the map is one the
+            // spoil built. A river does not let its own floodplain dam it, and this is where it
+            // says so.
+            //
+            // Before the last relaxation, and it has to be. The accelerator seam replaces that call
+            // wholesale when a stored terrain is being replayed — the snapshot *is* the answer, and
+            // anything cut after it would be cut into a field that had just been overwritten by the
+            // snapshot and would then be cut again every time the save was opened.
+            // `TerrainSnapshotTest` says so, and said so: with this block after the relaxation a
+            // reopened save differed from the world it was taken from at the first cell it looked
+            // at. What it costs is that the sweeps run over the fresh notch and partly fill it back
+            // in, which is the same thing they do to every other channel cut in the same round.
+            //
+            // What this takes leaves the model: there is no walk left to carry it downstream, so it
+            // is accounted as material the outflow took away. The round's own field measurement is
+            // read afterwards, so the two halves of the budget still close on the same number.
+            //
+            // Gated on the notch alone and not on whether anything was carried. The spoil is the
+            // reason this pass exists, but making it conditional on the spoil would mean a world
+            // with deposition running and every rate at zero had different rock from a world with
+            // deposition switched off — and `DepositionTest` holds those two to be bit-identical,
+            // which is the assertion that says the deposition machinery is a layer on top of the
+            // erosion rather than part of it. It caught this.
+            if (closing && cfg.outletIncision) {
+                repeat(CLOSING_BREACHES) {
+                    val after = SeaLevelStage.apply(working, provisionalSeaLevel)
+                    if (after.landCellCount == 0) return@repeat
+                    val spoilGround = after.relativeElevation
+                    val spoilFilled = FlowRouting.fillDepressions(w, h, after.isLand, spoilGround)
+                    val spoilFlow =
+                        FlowRouting.flowDirections(w, h, after.isLand, spoilGround, spoilFilled)
+                    val spoilArea = FlowRouting.accumulate(
+                        w, h, after.isLand, spoilFilled, spoilFlow, after.landCellCount
+                    ) { 1f }
+                    val cut = breach(
+                        cfg, w,
+                        FlowRouting.spillways(
+                            w, h, after.isLand, spoilGround.data, spoilFilled.data, spoilFlow,
+                            POND_DEPTH
+                        ),
+                        after.isLand, spoilGround.data, spoilFilled.data, spoilFlow, spoilArea.data,
+                        after.landCellCount.toFloat(),
+                        (working.max() - after.threshold).coerceAtLeast(1e-6f), working.data,
+                        settled = null, load = null
+                    )
+                    incised += cut.moved
+                    lost += cut.moved
+                    notched += cut.moved
+                    notchCells += cut.cells
+                }
+            }
+
+            working = relax(working)
+
             if (onRound != null) {
                 onRound(
                     RoundMass(
                         incised = incised,
                         deposited = deposited,
                         lostToSea = lost,
-                        fieldDrop = startingMass - totalMass(surfaceOf) - totalMass(sediment)
+                        // Measured off the finished field, spoil and relaxation included. The
+                        // thermal sweeps only move material between neighbours, so they do not
+                        // change the total and the comparison stays a comparison with what left.
+                        fieldDrop = startingMass - totalMass(working.data) - totalMass(sediment),
+                        notched = notched,
+                        notchCells = notchCells,
+                        basins = notch?.count ?: 0,
+                        largestBasinCells = notch?.largestCells ?: 0,
+                        largestBasinDepth = notch?.largestDepth ?: 0f,
+                        largestBasinSpill = notch?.let {
+                            if (it.largest >= 0) it.spill[it.largest] else -1
+                        } ?: -1,
+                        deepestBasin = notch?.deepest ?: 0f
                     )
                 )
             }
-
-            if (round == cfg.hydraulicRounds - 1) settle()
-            working = relax(working)
         }
         return working
+    }
+
+    /**
+     * How high a delta lobe stands [d] cells out from its apex.
+     *
+     * A fan slope, small but never nothing: the freeboard at the apex, falling away to a rim that
+     * still clears the water by a sixth of it. Two things come out of that, and the second is the
+     * reason for it. It reads as a landform rather than a slab — a lobe laid flat at one level is a
+     * blocky raft with a straight edge, which is what the author saw jutting into a bay. And, since
+     * the surface descends seaward the whole way across, the trunk keeps a downhill step over its
+     * own delta and runs on to the new coast instead of arriving at a flat and stopping: the
+     * distributary is the gradient, not a channel cut afterwards.
+     */
+    private fun lobeLevel(apexLevel: Float, shoreline: Float, reach: Int, d: Int): Float {
+        val rim = shoreline + (apexLevel - shoreline) * LOBE_RIM
+        return apexLevel + (rim - apexLevel) * d.toFloat() / (reach + 1).toFloat()
+    }
+
+    /**
+     * How far out the lobe may grow in the direction of one cell.
+     *
+     * A delta builds in front of its river, not in a circle around it: the load arrives moving, and
+     * what it meets on the flanks is the coast it came past. So the reach is the full one straight
+     * ahead and a little over a third of it to the sides and behind, plus a few cells of wobble
+     * keyed to the cell's own position so that no two lobes and no two sides of one lobe have the
+     * same outline. The wobble is arithmetic on the cell index — there is no table and no hash
+     * ordering anywhere in it, so the shape is the same shape on any machine.
+     */
+    private fun lobeReach(reach: Int, apex: Int, cell: Int, outX: Float, outY: Float, w: Int): Int {
+        val dx = shortestX(cell % w - apex % w, w).toFloat()
+        val dy = (cell / w - apex / w).toFloat()
+        val span = sqrt(dx * dx + dy * dy)
+        val out = sqrt(outX * outX + outY * outY)
+        val ahead =
+            if (span <= 0f || out <= 0f) 1f else ((dx * outX + dy * outY) / (span * out))
+        val shape = LOBE_SIDES + (1f - LOBE_SIDES) * ahead.coerceAtLeast(0f)
+        return (reach * (shape + LOBE_WOBBLE * wobble(cell))).toInt()
+    }
+
+    /** A fixed, repeatable number in 0..1 for a cell, from its index and nothing else. */
+    private fun wobble(cell: Int): Float {
+        var x = cell * -0x61c88647
+        x = x xor (x ushr 15)
+        x *= 0x2c1b3c6d
+        x = x xor (x ushr 12)
+        return ((x ushr 8) and 0xFFFF).toFloat() / 65535f
+    }
+
+    /** A column difference across a map that wraps in x, taken the short way round. */
+    private fun shortestX(dx: Int, w: Int): Int = when {
+        dx > w / 2 -> dx - w
+        dx < -w / 2 -> dx + w
+        else -> dx
+    }
+
+    /** Where a lobe's rim stands, as a share of the freeboard its apex stands at. */
+    private const val LOBE_RIM = 0.15f
+
+    /** How far a lobe reaches sideways and behind, as a share of how far it reaches ahead. */
+    private const val LOBE_SIDES = 0.38f
+
+    /** How much of the reach is given over to the per-cell wobble in the outline. */
+    private const val LOBE_WOBBLE = 0.18f
+
+    /** What one pass of the outlet notch took off, and out of how many cells. */
+    private class Breached(val moved: Double, val cells: Int)
+
+    /**
+     * Cuts every filled basin's lip down by what its own outflow can take, and cuts the sill below
+     * the lip down with it.
+     *
+     * The second half is the part that is easy to leave out and fatal to leave out. Lowering the
+     * rim cell alone changes nothing: the fill finds the same rim the next time it runs, because
+     * what dams a basin is not one cell but the whole sill between the lip and the first ground
+     * that already lies below the new lake surface. So the channel is *breached* — cut to a surface
+     * that begins at the new lip level and falls away from it cell by cell down the flow path,
+     * stopping at the first cell that is already lower than that surface. Beyond a steep rim that
+     * is one or two cells; on a plateau it is a gorge, and the length of that gorge is exactly why
+     * a lake on a plateau lasts and one behind a ridge does not.
+     *
+     * Breaching rather than filling is the older of the two answers to a depression in the
+     * hydrology literature and the one that matches what the ground actually does; this pipeline
+     * fills, because the router needs an outlet for every cell in a single pass, and this is where
+     * the other half is put back.
+     *
+     * @param settled the surface deposition is judged against, lowered with the terrain, or null
+     *   when nothing is being carried.
+     * @param load where the spoil goes, or null when there is no walk left to carry it — in which
+     *   case the caller accounts for it as material that left the model.
+     */
+    private fun breach(
+        cfg: ErosionConfig,
+        w: Int,
+        notch: FlowRouting.Spillways,
+        isLand: BooleanArray,
+        relative: FloatArray,
+        ground: FloatArray,
+        directions: IntArray,
+        area: FloatArray,
+        land: Float,
+        landRange: Float,
+        surfaceOf: FloatArray,
+        settled: FloatArray?,
+        load: DoubleArray?
+    ): Breached {
+        var moved = 0.0
+        var cells = 0
+
+        for (b in 0 until notch.count) {
+            val spill = notch.spill[b]
+            if (spill < 0) continue
+            val level = notch.level[b]
+            val floor = notch.floor[b]
+            if (level - floor <= 0f) continue
+
+            // How far this round's outflow lowers the lip. Stream power, in the same form and with
+            // the same coefficient as the ordinary incision, behind a ratio: the discharge is the
+            // basin's whole catchment, which is what flow accumulation has already gathered at the
+            // rim, and the slope is the one the outlet channel actually stands at, measured over
+            // the notch's own length rather than across the single step under the lip. That step is
+            // a saddle's, and a saddle is by construction the flattest way out of a basin: a rate
+            // taken from it drains nothing in the twelve rounds a world gets, which is the
+            // measurement that decided this shape.
+            var fall = 0f
+            var length = 0
+            var c = spill
+            while (c >= 0 && isLand[c] && length < cfg.outletReach) {
+                fall = level - relative[c]
+                if (fall > level - floor) break
+                length++
+                c = directions[c]
+            }
+            if (length == 0) continue
+            val slope = (fall / length * w).coerceAtLeast(0f)
+            val power = cfg.erodibility * cfg.outletIncisionRatio * sqrt(area[spill] / land) * slope
+
+            // Never below the floor of its own basin, because past that there is no lake left to
+            // let out; never below the sea, the base level everything grades to.
+            val drop = minOf(power, (level - floor) * landRange, (level * landRange))
+            if (drop <= 0f) continue
+
+            val newLevel = level - drop / landRange
+            c = spill
+            var step = 0
+            while (c >= 0 && isLand[c] && step < cfg.outletReach) {
+                val target = newLevel - step * NOTCH_GRADIENT
+                if (relative[c] <= target) break
+                val take = (relative[c] - target).toDouble() * landRange
+                val ponded = ground[c] - relative[c] > POND_DEPTH
+                val cut = -raise(surfaceOf, c, -take)
+                if (cut > 0.0) {
+                    val asRelative = (cut / landRange).toFloat()
+                    relative[c] -= asRelative
+                    // Dry ground goes down with the terrain; a cell that was standing under water
+                    // keeps its surface, since deepening a pond does not lower what is on top of it.
+                    if (!ponded) ground[c] -= asRelative
+                    settled?.let { it[c] -= asRelative }
+                    load?.let { it[c] += cut }
+                    moved += cut
+                    cells++
+                }
+                step++
+                c = directions[c]
+            }
+        }
+        return Breached(moved, cells)
     }
 
     /** Stream-power incision, capped by the drop it sits on and by the sea it grades to. */
@@ -407,10 +730,11 @@ internal object HydraulicErosion {
         surfaceOf: FloatArray,
         sediment: FloatArray,
         settled: FloatArray,
-        accepts: (Int) -> Boolean,
-        levelOf: (Int) -> Float
+        wholeCells: Boolean,
+        accepts: (Int, Int) -> Boolean,
+        levelOf: (Int, Int) -> Float
     ): Double {
-        if (budget <= 0.0 || !accepts(start)) return 0.0
+        if (budget <= 0.0 || !accepts(start, 0)) return 0.0
 
         var remaining = budget
         var laid = 0.0
@@ -426,8 +750,19 @@ internal object HydraulicErosion {
             val d = distance[head]
             head++
 
-            val need = levelOf(c).toDouble() - surfaceOf[c].toDouble() - sediment[c].toDouble()
+            // Whole cells only.
+            //
+            // A cell the budget can only half fill is a cell left under water, and once the lobe
+            // has grown past it in a later round it is under water with land all around it: an
+            // enclosed pocket of sea, which is where a river was seen to stop dead a few cells
+            // short of the coast. Forty-two of a hundred and fifty-two mouths on seed 59758 at 2048
+            // ended in one. Leaving the shortfall unspent instead costs nothing — it disperses
+            // offshore with the rest of the load, which is where the other six sevenths of it was
+            // going anyway — and it makes "every cell of a lobe stands above the water" true by
+            // construction rather than by luck.
+            val need = levelOf(c, d).toDouble() - surfaceOf[c].toDouble() - sediment[c].toDouble()
             if (need > 0.0) {
+                if (wholeCells && need > remaining) break
                 val moved = raise(sediment, c, if (need < remaining) need else remaining)
                 settled[c] += moved.toFloat()
                 remaining -= moved
@@ -445,7 +780,7 @@ internal object HydraulicErosion {
                     var nx = (cx + dx) % w
                     if (nx < 0) nx += w
                     val n = ny * w + nx
-                    if (stamp[n] == id || !accepts(n)) continue
+                    if (stamp[n] == id || !accepts(n, d + 1)) continue
                     stamp[n] = id
                     if (tail < queue.size) {
                         queue[tail] = n

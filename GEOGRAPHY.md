@@ -66,6 +66,23 @@ measures material incised against material deposited plus material carried out t
 twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
 the ground draining into it, so deposition cannot invent an uphill river.
 
+**A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
+for every cell, and the routing then runs over the filled surface — which left the lip of a basin as
+the one piece of ground on the map the water never touched, so a tectonic hollow stayed a lake the
+size of the hollow for the whole life of the world. Real basins are drained by their outlets: Lake
+Bonneville emptied through Red Rock Pass and what survived is Great Salt Lake, and Agassiz drained
+through one outlet after another as each in turn cut down. Every hydraulic round now finds each
+filled basin's rim, works out what the outflow can take off it — stream power, the same expression
+and the same coefficient as the ordinary incision, with the basin's whole catchment as the discharge
+and the outlet channel's own slope — and *breaches* the sill: the lip and the ground below it are cut
+to a surface falling away from the new lake level, as far as the first cell that already lies lower.
+Cutting the rim cell alone does nothing, because the next fill finds the same rim; the length of the
+sill is why a lake on a plateau lasts and one behind a ridge does not. Measured on the author's own
+world, seed 718106 at 512: the fill over the largest basin's floor falls from 0.239 of the land's
+relief to 0.010 across the twelve rounds, where with `outletIncision` off it ends at 0.240, exactly
+where it started. What the map keeps is bounded by a figure with a meaning — no world has a lake
+larger than the Caspian's 0.073% share of its surface, where two seeds in four did before.
+
 **Cold country is lake country.** Where the provisional mean annual temperature — latitude and
 altitude, from the same curve `ClimateStage` later uses — falls to freezing, ice takes over the
 valleys the water cut: a flat-floored U-shaped trough across the flow instead of a V, a cirque
@@ -99,6 +116,15 @@ author's world at 1024 the lake count falls 82 to 67 and the lake share of land 
 with ten endorheic basins and 132 playa cells.
 
 ## Known deviations
+
+**Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
+driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut
+down through its rim, which is why it is still there. The hydraulic pass cannot tell the difference,
+because it runs before there is a climate and works to uniform rain — the same circle that makes
+erosion's rainfall flat in the first place. So a desert basin is drained on the same terms as a wet
+one, and the standing water a dry basin keeps is decided afterwards, by the water balance, out of
+whatever rim survived. Breaking that would mean either a rainfall field before the terrain is
+shaped, or a second erosion pass after the climate.
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 

@@ -4,6 +4,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -37,7 +38,9 @@ class ExportSmokeTest {
 
         listOf(2048, 4096).forEach { size ->
             val destination = File(outputDir, Exporter.defaultName(base, size, ExportFormat.PNG))
-            val result = Exporter.export(base, RenderOptions(), size, destination, ExportFormat.PNG)
+            val result = runBlocking {
+                Exporter.export(base, RenderOptions(), size, destination, ExportFormat.PNG)
+            }
 
             println(
                 "EXPORT %d x %d -> %.1f MB in %.1f s".format(
@@ -56,7 +59,7 @@ class ExportSmokeTest {
 
         val results = ExportFormat.entries.associateWith { format ->
             val destination = File(outputDir, Exporter.defaultName(base, 1024, format))
-            Exporter.export(base, RenderOptions(), 1024, destination, format)
+            runBlocking { Exporter.export(base, RenderOptions(), 1024, destination, format) }
         }
 
         val png = results.getValue(ExportFormat.PNG)

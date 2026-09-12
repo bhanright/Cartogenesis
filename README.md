@@ -222,7 +222,9 @@ Because no test can catch that class of problem, the packaged app answers for it
 Cartogenesis.exe --gpu-check
 ```
 
-which prints the device it found, or why it found none, and exits without opening a window.
+which prints the device it found, or why it found none, once for the erosion sweeps and once for the
+export raster — they compile different shaders on the same context — and exits without opening a
+window.
 
 Packaging needs `jpackage`, which the JetBrains Runtime bundled with Android Studio does **not**
 include, so the build looks for a full JDK in the usual install locations. Point it somewhere else
@@ -236,10 +238,20 @@ The desktop build exists for headroom. Measured on this machine:
 
 | Export | Time | Peak heap |
 |---|---|---|
-| 2048 x 2048 | 14 s | 626 MB |
-| 4096 x 4096 | 53 s | 2.0 GB |
+| 2048 x 2048 | 26-35 s | 1.0 GB |
+| 4096 x 4096 | 154-182 s | 3.2-4.0 GB |
+| 8192 x 8192 | — | exhausts a 10 GB heap after 19 min |
 
-The app requests `-Xmx12g`, which is what makes those sizes reachable at all.
+Measured 2026-09-12 by `ExportSmokeTest`, both sizes in one JVM, heap read once at the end; the
+spread is two runs of the same test on the same machine, which is how much a figure like this can
+be trusted. In a fresh JVM, where nothing is warm, 4096 takes 224 s and its high-water occupancy
+sampled throughout is 7.5GB — worth knowing, because that is what someone who exports the first
+thing they generate actually waits for. Both times have grown a long way since the 53 s in an
+earlier revision of this table: the generator has gained the crust-pair belts, the deltas and the
+Koppen biomes since, and none of that is free.
+
+The app requests `-Xmx12g`, which is what makes those sizes reachable at all — and is not enough for
+8192, as the Resolution section below records.
 
 Exports are written as PNG or WebP. PNG is lossless. WebP comes out around a quarter of the size,
 but Skia exposes no lossless WebP encoder, and the loss lands where a map can least afford it: the
@@ -257,6 +269,22 @@ of resolution is therefore eightfold rather than fourfold. Tiles that have gone 
 which is exact — `ErosionSkipTest` asserts bit-identical output — but only buys around 1.3x,
 because terrain roughness at cell scale rises with resolution and most of a fine grid is genuinely
 still moving.
+
+Drawing the map is on the graphics card too, and not behind that toggle. `MapRasterizer`'s work is
+per-pixel — a ramp lookup, a biome wash, a relief shade, a coast and border test — so the whole of
+it is one compute dispatch per tile of the export (`GpuRaster`, behind the `RasterAccelerator` seam
+in `:cartography`). At 4096 it draws 16.7 million pixels in 0.37 s against the processor's 0.71 s,
+and at 8192, in sixteen tiles, in 1.4 s. The shader is handed a `RasterRecipe` — every colour
+already packed, every ramp already chosen, a colour table per realm, people and plate — so nothing
+about the palette is written twice; the blends are integer and truncate where `MapPalette`
+truncates, and `GpuRasterTest` holds the two within one channel step of 255 at the 99.9th percentile
+across all fifteen views in all nine styles. It is not behind the acceleration toggle because that
+toggle is a promise about whether the *world* can be regenerated from its seed, and drawing pixels
+makes no such promise either way.
+
+What that is worth end to end is less than it sounds: a 4096 export spends over three minutes
+generating the world and under a second drawing it, so the raster was never the bottleneck the
+profile suggested. Erosion, below, is.
 
 Erosion is a pure stencil over independent cells, so it is also the one stage worth running on a
 graphics card, and there is an opt-in toggle for it. On an RTX 3070 Ti the sweeps that take 1.3
@@ -481,9 +509,16 @@ rescales the settings that are measured in cells — the mountain-belt falloff a
 rainfall rate. Anything new that is expressed in cells rather than as a frequency or a fraction of
 the map needs adding there, or exports will drift in character from what the preview showed.
 
-Export offers 2048, 4096 and 8192. 4096 peaks around 2.6GB and takes about 50 seconds, most of it
-erosion. 8192 is offered but untested; it would want roughly four times that memory, and going
-much beyond it needs the pipeline reworked to run in tiles.
+Export offers 2048, 4096 and 8192. 4096 takes a little under four minutes on this machine, nearly
+all of it erosion, and its high-water heap is around 7.5GB of the 12 that the launcher asks for.
+
+8192 does not work, and now there is a measurement rather than a suspicion: it exhausts a 10GB heap
+after about nineteen minutes, inside the generator, before a single pixel is drawn (`-Pbenchmark=true`
+on `GpuExportBenchmarkTest` repeats it). The fields for a world that size come to roughly 9GB before
+the transient buffers the FFT and the erosion sweeps want on top. The drawing is not the problem —
+the graphics card rasters 8192 in 1.4 seconds, in sixteen tiles, with no world in memory at all — so
+reaching that size means making generation work in tiles or on disk, not making the renderer bigger.
+Until then 8192 should be treated as a size the UI offers and the machine refuses.
 
 ## Looking at the output
 

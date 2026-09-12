@@ -65,6 +65,14 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     maxHeapSize = "10g"
+
+    // `GpuExportBenchmarkTest` measures whole exports at 4096 and 8192 and is the better part of
+    // half an hour, nearly all of it generating worlds. It stands aside unless a run asks for it:
+    // `-Pbenchmark=true`. The correctness guards beside it are not gated and always run.
+    systemProperty(
+        "cartogenesis.benchmark",
+        providers.gradleProperty("benchmark").getOrElse("false")
+    )
 }
 
 compose.desktop {

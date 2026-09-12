@@ -113,6 +113,7 @@ object NationStage {
         assignment.realmOf.copyInto(nationId)
         val origins = assignment.origins
         if (origins.isEmpty()) return NationResult(nationId, emptyList(), habitability)
+        checkRealmIds(nationId, origins.size, "BasinRealms.assign")
 
         // Wilderness first, enclaves second. Releasing poor ground can cut a realm into pieces,
         // and dissolving enclaves before that happened left the fragments it made behind.
@@ -121,7 +122,32 @@ object NationStage {
             leaveWilderness(config, sea, habitability, nationId, capitals)
         }
         dissolveEnclaves(config, sea, habitability, nationId, capitals)
+        checkRealmIds(nationId, capitals.size, "dissolveEnclaves")
         return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, capitals), habitability)
+    }
+
+    /**
+     * Fails where a bad realm id was written rather than where it lands.
+     *
+     * Every per-realm array in [describe] is sized by the capital list, so a cell holding an id
+     * past the end of that list throws an array index error out of a counting loop that had
+     * nothing to do with putting it there — `counts[owner]++`, hundreds of lines and two steps
+     * away from whichever of [BasinRealms.assign] and [dissolveEnclaves] actually did it. That is
+     * how this arrived as a bug report, and reading the stack told nobody anything.
+     *
+     * Two passes over the grid against a generation that has already done thousands is free, and
+     * what it buys is a message that names the step. Checked rather than assumed because the two
+     * candidates are a hundred lines apart and only one of them can be wrong at a time.
+     */
+    private fun checkRealmIds(nationId: IntArray, realmCount: Int, after: String) {
+        for (i in nationId.indices) {
+            val realm = nationId[i]
+            if (realm == NationResult.UNCLAIMED || realm in 0 until realmCount) continue
+            throw IllegalStateException(
+                "NationStage: after $after, cell $i holds realm id $realm, " +
+                    "but the world has only $realmCount realms"
+            )
+        }
     }
 
 

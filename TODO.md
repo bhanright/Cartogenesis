@@ -269,12 +269,34 @@
   neighbour. Real channels wander. The cure is a routing that carries direction between cells
   (D-infinity, or D8 with a seeded low-amplitude perturbation of the surface it reads), pinned
   by a straight-run guard against the current figure. Found 2026-09-12.
-- **The rift shoulder is a plane, so the sea cuts it in a straight line.** On 718106's southern
-  rift at 2048 the valley's seaward front is a 31-cell straight run of coast, and the same terrain
-  with no deposition at all, cut at the deposited world's own sea level, gives exactly 31 — the
-  straightness is a contour of E4's half-graben, not anything deposition draws. The pale bench of
-  constant width down the valley's west side is the same profile seen side-on. E4's geometry.
-  2026-09-12.
+- **The trench is a plane, so the sea cuts a subduction margin in a straight line.** Restated at E7,
+  which measured the window rather than inferring it: 718106's southern "rift" valley at 2048 is an
+  **Andean margin**, with not one of its 38,750 cells on a continental-rift boundary, so the 31-cell
+  straight run of coast and the pale bench of constant width down its west side are not E4's
+  half-graben. They are the trench, whose profile is `trenchDepth * strength * narrow` — a function
+  of the distance to the boundary and of nothing else, which is a plane along strike, and every
+  contour of a plane is a straight line. Every other belt on the map varies along its own length.
+  Giving the trench the same swell was written, run and reverted: at `rangeVariationScale`'s
+  wavelength (about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
+  different straight contour instead of bending it, and the window went from 108 cells of thin
+  grid-bearing water and a 31-cell run to 146 and 39. Wants a shorter wavelength on the trench, or
+  dissection of a coastal plain too flat for the hydraulic rounds to cut. E4/B2's geometry.
+  2026-09-12, measured at E7.
+- **A rift that meets the coast should be drowned across its whole width.** A half-graben's floor is
+  a wedge and the water in a coastal one stands at the waterline, so the hinge shelf is dry: the
+  author's trough on 718106 at 2048 keeps 38% of its flat floor under water and shows the rest as a
+  lacustrine plain. The Gulf of California and the Red Sea are drowned right across, because a rift
+  that has opened that far has thinned its crust under the whole trough. Two repairs measured and
+  refused at E7: deepening the stamp (at `riftDepth` 0.35 the floor reaches 43% wet but the rift
+  becomes one continuous deep axis and seed 718106's standing water halves, 17,412 cells to 8,200,
+  with its deepest rift lake falling from 24.2% of the land's relief to 2.4%); and a hashed chain of
+  sub-basins on the floor (takes the trough to 38% wet and leaves the world's water and hypsometry
+  alone, but at every amplitude from 12% to 45% of the segment's depth it leaves a closed basin
+  below the sea-level cut the post-cut outlet cannot open — seeds 718106 and 99 at 0.46-0.54% of
+  their land, about twice the Caspian's share of Earth's, over `OutletIncisionTest`'s bar). Both
+  are standing in for subsidence that scales with how far the rift has opened: S2 in
+  `REALISM_AUDIT.md`. Note for whoever takes it: the outlet is the binding constraint, so the
+  sub-basins may be affordable once a drowned basin's outlet can finish its cut. 2026-09-12, E7.
 - **The ice's own added water is still charged per cell.** With the drainage's share separated out,
   `GlaciationTest`'s resolution case measures the ice adding 2 cells of standing water at 512 and 46
   at 1024 on seed 718106 — nearly six times as much per unit of map, on a count too small at 512 to form a

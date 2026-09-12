@@ -46,6 +46,13 @@ These are the habits that have found every substantive bug in this project. They
    this rule and spent a quarter of an hour killing each other's builds — five daemons ended
    "stop command received". If a build dies with "daemon disappeared" or "build cancelled", it was
    stopped from outside; rerun it.
+   Two more Windows traps, both seen on 2026-09-12: directories under a module's `build` tree
+   can acquire the ReadOnly attribute, which surfaces as a `compileKotlinWasmJs` "Internal
+   compiler error" or an `AccessDeniedException` on `build/classes`, and `Remove-Item -Recurse
+   -Force` cannot clear it — clear the attribute recursively first, then delete; and a shell
+   whose `grep` was handed no files reads stdin and sits forever with its working directory in
+   the repo, holding the tree — never `grep $(find ...)`, use `find ... -exec grep {} +`.
+
 7. **Reports carry numbers.** A subagent's final report says what changed, the before/after
    figures its guard measured, what the render showed, and anything it could not verify. The
    orchestrator decides from the report; the diff is there if the report raises a question.

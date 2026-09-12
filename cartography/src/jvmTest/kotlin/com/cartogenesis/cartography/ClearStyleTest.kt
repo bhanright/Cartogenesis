@@ -234,15 +234,22 @@ class ClearStyleTest {
     /**
      * That the whole mechanism is inert in every other style.
      *
-     * The realm set, the hatch and the two political ramps are all reached through
-     * [MapStyle.realmRamp] being non-null, so this is the single assertion that F6 could not have
-     * changed a pixel of the ten styles that came before it.
+     * The realm set and the hatch are both reached through [MapStyle.realmRamp] being non-null, so
+     * this is the single assertion that F6 could not have changed a pixel of the ten styles that
+     * came before it. The two political ramps are reached through
+     * [MapStyle.ownsPoliticalGround], which F9 widened to take in the line-art style as well —
+     * a pen has no blue to paint a political sea with — so that one is asserted separately below.
      */
     @Test
     fun `no other style declares a realm set, and none of them changed`() {
         MapStyle.entries.filter { it != MapStyle.CLEAR }.forEach { style ->
             assertNull(style.realmRamp, "${style.label} now declares a realm set")
             assertTrue(!style.ownsRealms, "${style.label} now owns its realms")
+            assertEquals(
+                style.lineArt,
+                style.ownsPoliticalGround,
+                "${style.label} paints its own political ground without drawing in line art"
+            )
             for (id in 0 until 12) {
                 assertEquals(MapPalette.nation(id), style.realm(id), "${style.label} realm $id")
                 assertEquals(MapPalette.culture(id), style.people(id), "${style.label} people $id")

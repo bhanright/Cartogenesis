@@ -392,8 +392,8 @@ class BoundaryPairTest {
      *
      * [PlateStage.stampHotspotChains]'s own falloff was checked first, directly, before touching
      * anything: it has always computed `sqrt(dx*dx + dy*dy)`, true Euclidean distance, never the
-     * chamfer approximation [com.cartogenesis.worldgen.math.DistanceTransform] uses elsewhere in
-     * the same file for plate assignment and boundary distance. `[eightFoldFacetingIsCatchable]`
+     * chamfer approximation [com.cartogenesis.worldgen.math.DistanceTransform] used elsewhere in
+     * the same file for plate assignment and, until G4, for boundary distance. `[eightFoldFacetingIsCatchable]`
      * below proves the eight-bearing Fourier measurement below would in fact have caught it if it
      * had — a synthetic octagonal metric, stamped and measured exactly the same way, fails hard —
      * so the absence of a failure on the real code is not the guard being blind.

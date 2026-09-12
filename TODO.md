@@ -187,6 +187,22 @@
   realm sizes span roughly 40:1 largest to median, and inland enclaves are down from 16 to 0-1 per
   world. `RealmSpreadTest` and `BorderRealismTest` hold the figures.
 
+- **Distance fields are Euclidean.** The chamfer transform behind distance-from-water
+  (continentality), the plate-boundary profiles and the continental shelf measured an octagonal
+  metric: a walk over the grid that costs 1 along an axis and sqrt(2) along a diagonal, exact on
+  those eight bearings and up to 8.2% long in between, so every contour of the field was an octagon
+  and every feature cut from it inherited the facets. `JumpFloodDistance` replaces it with a
+  jump-flooded Euclidean field — the source's coordinates are propagated instead of a path length,
+  so the distance reported is the straight line to a real cell — and is exact against a brute-force
+  nearest-source search, not merely close. Measured: on one source cell the iso-contour's eight-fold
+  component falls from 8.3% of the radius to 0.4% (floor 1%); on seed 42's shelf break the chamfer
+  contour stood 4.8% too far out on average, 7.6% at 22.5 degrees off the axis and 0.4% along it,
+  an eight-fold component of 3.0% against nothing. Costs 23/93/367 ms at 512/1024/2048 against the
+  chamfer's 6/33/110 — under 1% of a 2048 generation for all three call sites together, which is
+  why the GPU half of G4 was not built. Plate assignment keeps the chamfer transform on purpose:
+  only the nearest-seed label is read there, so the metric decides a partition rather than a
+  contour. 2026-09-12.
+
 ## Open
 
 - **D8 holds a bearing on smooth slopes.** On a planar hillside a drawn river runs 20-35 cells in
@@ -205,8 +221,11 @@
   incision: a basin's spill point erodes down over the hydraulic rounds and the lake drains to a
   smaller one or a river. Raised 2026-09-11.
 - **Hotspot cones on land are eight-sided.** At low ocean coverage an oceanic plate's hotspot chain
-  surfaces as volcanoes, and the chamfer distance transform gives each a faceted cone. Seen on seed
-  718106 at 62% ocean, 2048. Same root as the plateau-edge faceting above.
+  surfaces as volcanoes and each reads as a faceted cone. Seen on seed 718106 at 62% ocean, 2048.
+  E3 showed the cause is not the distance metric — the stamp's falloff was always Euclidean — and
+  supersampled the stamp; G4 has since made every other distance field Euclidean too, so if the
+  facets are still there the remaining suspect is erosion cutting radial gullies along the eight D8
+  bearings down a symmetric cone. Not re-checked at 2048 since E3.
 - **The resolution-consistency guard no longer has a statistical form.** It began as mean slope
   away from plate boundaries; erosion invalidated that, and reintroducing the bug it was written
   for showed it no longer caught it. Measuring belt reach directly does not work either, because a
@@ -240,8 +259,6 @@
 - **Landmark placement is single-threaded** at ~18% of generation time. Parallelising it means
   replacing the sequential RNG in its per-cell scoring with a position-derived hash, which would
   change which sites a given seed produces.
-- **The chamfer distance transform leaves faint octagonal streaks** in terrain near plate
-  boundaries. An exact Euclidean transform would remove them.
 - **Island-arc ridges run dead straight** where a real arc bows convex toward the subducting
   plate — seen on seed 1234 as a bar across the centre and a spine down the north-east. Worth a
   curvature term along strike when someone next opens `PlateStage`.
@@ -253,9 +270,6 @@
   `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
   islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
   are. See GEOGRAPHY.md's "Known deviations".
-- **Chamfer faceting on the widest plateau edges.** B2's collision plateaus show a faint faceted
-  edge where the chamfer distance transform approximates the boundary distance. Visible if looked
-  for, invisible otherwise; the same underlying approximation as the octagonal streaks above.
 - **The latitude curve runs a few degrees off at its anchors.** Checked arithmetically after A6:
   the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
   anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a

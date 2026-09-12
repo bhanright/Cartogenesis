@@ -87,8 +87,17 @@ class DepositionTest {
      * the whole field over its own range, which carries a little of that change everywhere. Land
      * held at 6226 for the sixth time — seed 42's rifts are all under water or well inland of the
      * cut, so no cell crossed the shoreline.
+     *
+     * And a seventh time for G4 (jump-flood distance fields), which changes what every stage that
+     * measures a distance is handed: the chamfer transform that stood behind the boundary profiles
+     * and the continental shelf overstates a distance by up to 8.2% at the bearings between an
+     * axis and a diagonal, and the Euclidean field that replaced it does not, so every belt is a
+     * fraction of a cell wider on those bearings and the shelf break sits a fraction further out.
+     * Land held at 6226 for the seventh time: the shoreline is still a rank cut on a fixed
+     * fraction of the cells, made before the shelf is remapped, and the plate field moved by far
+     * too little to carry a cell of this world across it.
      */
-    private val startingPointElevation = 7967346964201395220L
+    private val startingPointElevation = 2287847990008025508L
     private val startingPointLand = 6226
 
     @Test

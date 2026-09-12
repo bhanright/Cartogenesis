@@ -2,7 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
-import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -301,7 +301,7 @@ object ClimateStage {
         // need different answers to it. Influence wants a fast-fading field so a temperature
         // anomaly does not leak across a whole continent — the blurred exposure field. Continentality
         // wants an honest distance in cells, because a coast damped by "still 70% exposed at
-        // coastalReach" barely damps at all; a chamfer distance transform is exact and, at these
+        // coastalReach" barely damps at all; a distance transform is exact and, at these
         // resolutions, cheaper than the blur besides.
         val exposure = waterExposure(config, sea)
         applyMaritimeInfluence(config, sea, ocean, temperature, exposure)
@@ -405,9 +405,12 @@ object ClimateStage {
     }
 
     /**
-     * Cell distance to the nearest sea cell, by the same chamfer distance transform
-     * `SeaLevelStage` already uses for the continental shelf: two sweeps, `O(width * height)`
-     * regardless of how far the nearest coast is, and correct rather than approximate.
+     * Cell distance to the nearest sea cell, by the same jump-flooded Euclidean distance field
+     * `SeaLevelStage` uses for the continental shelf: a handful of passes, and a true straight-line
+     * distance rather than the best an eight-direction walk can do. G4 replaced the chamfer
+     * transform that was here; the numbers moved slightly, because a chamfer overstates a distance
+     * by up to 8.2% at the bearings between the axis and the diagonal and Siberia is a little
+     * nearer the sea than it used to claim.
      *
      * Continentality first tried the blurred water-exposure field above, on the theory that "how
      * exposed to water" and "how close to water" were the same question asked two ways. They are
@@ -424,7 +427,7 @@ object ClimateStage {
     internal fun waterDistance(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val w = config.width
         val h = config.height
-        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
         val label = IntArray(w * h) { -1 }
         for (i in 0 until w * h) {
             if (!sea.isLand[i]) {
@@ -434,7 +437,7 @@ object ClimateStage {
         }
         // A world with no water at all leaves every distance at INFINITE, which is exactly right:
         // continentalityFactor below clamps that to 1, the fully-continental case, everywhere.
-        DistanceTransform.run(w, h, dist, label)
+        JumpFloodDistance.run(w, h, dist, label)
         val field = FloatField(w, h)
         dist.copyInto(field.data)
         return field

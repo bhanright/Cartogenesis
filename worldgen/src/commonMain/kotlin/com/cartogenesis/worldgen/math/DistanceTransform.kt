@@ -5,6 +5,15 @@ import kotlin.math.sqrt
 /**
  * Two-pass chamfer distance transform with nearest-source label propagation, O(width * height).
  * The X axis wraps.
+ *
+ * What it measures is an octagonal metric, not Euclid: a walk over the grid that may only step
+ * along the eight directions a cell has, costing 1 along an axis and sqrt(2) along a diagonal.
+ * That agrees with the straight-line distance on those eight bearings and overstates it by up to
+ * 8.2% in between, so every contour of the field is an octagon. G4 moved every consumer that reads
+ * the *distance* to [JumpFloodDistance], which has no metric error at all; what is left here is
+ * [com.cartogenesis.worldgen.pipeline.PlateStage]'s plate assignment, where only the nearest-seed
+ * *label* is read and the metric decides nothing anybody can see, and the control in
+ * `JumpFloodDistanceTest` that shows the faceting guard has teeth.
  */
 object DistanceTransform {
 

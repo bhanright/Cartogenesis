@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -169,14 +170,17 @@ object PlateStage {
         val boundaries = classifyBoundaries(w, h, plateId, plates)
         segmentRifts(config, boundaries)
 
-        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        // Euclidean, by jump flooding: every belt profile below is a function of this distance,
+        // so a metric whose contours are octagons hands its facets to the plateau rims and the
+        // trench walls. See [JumpFloodDistance].
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
         val label = IntArray(w * h) { -1 }
         boundaries.keys.forEach { cell ->
             dist[cell] = 0f
             label[cell] = cell
         }
         val hasBoundaries = boundaries.isNotEmpty()
-        if (hasBoundaries) DistanceTransform.run(w, h, dist, label)
+        if (hasBoundaries) JumpFloodDistance.run(w, h, dist, label)
 
         val plateBase = FloatField(w, h)
         for (i in plateBase.data.indices) {
@@ -298,12 +302,14 @@ object PlateStage {
 
                         // A second, finer swell of the width, on top of `widthScale`.
                         //
-                        // The distance transform is a chamfer approximation, so its contours are
-                        // octagons rather than circles. At the old belt width nobody could see
-                        // that; a collision plateau is more than twice as wide, and its edge came
-                        // out as a visible faceted polygon — `widthScale` varies too slowly to
-                        // break up an outline that size. This is sampled three times finer, so the
-                        // rim meanders within itself and the octagon disappears.
+                        // Written when the boundary distance was a chamfer approximation, whose
+                        // contours are octagons rather than circles: at the old belt width nobody
+                        // could see that, but a collision plateau is more than twice as wide and
+                        // its edge came out as a visible faceted polygon, which `widthScale`
+                        // varies too slowly to break up. G4 removed that cause — the distance is
+                        // Euclidean now — but the jitter is kept, because a rim that meanders
+                        // within itself at three times the frequency is what keeps a plateau edge
+                        // from reading as a drawn curve. It is scenery now rather than a patch.
                         val edgeJitter = 0.72f + 0.56f *
                             (0.5f + 0.5f * widthNoise.fbm(x * 17f / w, y * 17f / h, 3, 17, 17))
                                 .coerceIn(0f, 1f)
@@ -577,7 +583,8 @@ object PlateStage {
      *
      * The falloff itself was always true Euclidean distance (`sqrt(dx*dx + dy*dy)`), never the
      * chamfer approximation [DistanceTransform] uses elsewhere in this file for plate assignment
-     * and boundary distance — that was checked directly, by walking sixteen bearings out from a
+     * (and used for boundary distance too, until G4 moved that to [JumpFloodDistance]) — that was
+     * checked directly, by walking sixteen bearings out from a
      * vent with the old single-sample-per-cell code and computing the eight-fold component of the
      * resulting radius curve, and it measures near zero (relative amplitude ~0.003) wherever a
      * cone is read at sub-cell precision. What actually fails the same measurement read the plain
@@ -730,6 +737,14 @@ object PlateStage {
     /**
      * Chamfer-Voronoi assignment, then a noise domain-warp so boundaries meander instead of
      * looking like straight Voronoi edges.
+     *
+     * Deliberately still the chamfer transform after G4 moved every *distance* to
+     * [JumpFloodDistance]. Nothing here reads the distance: only the label survives, and what the
+     * label decides is a partition of the map into plates — which cell belongs to which seed.
+     * There is no contour to facet, so the octagonal metric costs nothing visible; and since a
+     * Euclidean Voronoi would draw its cell walls in slightly different places, switching it would
+     * redraw every plate of every world ever generated for no gain anybody could see. Left alone
+     * on purpose.
      */
     private fun assignPlates(config: WorldGenConfig, plates: List<Plate>): IntArray {
         val w = config.width

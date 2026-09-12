@@ -1,0 +1,38 @@
+# Cloudflare Pages response headers for cartogenesis.com.
+#
+# Read this before adding a rule: when two rules match the same URL and both set the same
+# header, Pages *joins the values with a comma* rather than letting the later one win. Two
+# rules that both set Cache-Control would therefore emit
+# "public, max-age=31536000, immutable, no-cache", which is nonsense. So the rules below are
+# arranged to be mutually exclusive on Cache-Control, and the site-wide rule sets nothing but
+# the sniffing header.
+#
+# Not here on purpose:
+#   Content-Type   Pages already serves .wasm as application/wasm, which is what the
+#                  streaming compiler insists on. Stating it again could only get it wrong.
+#   COOP / COEP    Only needed for SharedArrayBuffer. Nothing here uses threads.
+
+/*
+  X-Content-Type-Options: nosniff
+
+# The two .wasm files carry content hashes in their names, so a given URL is that build's
+# bytes forever and can be cached for a year. cartogenesis.js does not — but the shell stamps
+# ?v=<commit> into its URL on every deploy, and the shell itself is never cached (below), so a
+# visitor always reads a current shell and therefore always asks for a current loader. An old
+# cached shell can only ask for the old loader, which is still there under its old query.
+/app/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+
+/app/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+# The two pages must never be stale: the shell is what carries the loader stamp, so a cached
+# copy of it is exactly the failure the stamp exists to prevent.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/app/index.html
+  Cache-Control: no-cache

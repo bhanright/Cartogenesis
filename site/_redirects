@@ -1,0 +1,13 @@
+# Cloudflare Pages redirects for cartogenesis.com. One rule per line: from, to, status.
+
+# /app without the slash. Pages would probably serve app/index.html anyway, but "probably" is
+# not worth the failure mode: the app's own relative URLs (cartogenesis.js, the two .wasm files)
+# resolve against the site root instead of /app/ if the browser thinks it is at a file rather
+# than a directory, and every one of them 404s.
+/app  /app/  301
+
+# The download card on the description page links here rather than off-site, so the page has
+# nothing to keep in step when a release is cut. 302 because "latest" is by definition not
+# permanent — a 301 would be cached by the browser and pin a visitor to whatever release was
+# current the first time they clicked.
+/releases/latest  https://github.com/bhanright/Cartogenesis/releases/latest  302

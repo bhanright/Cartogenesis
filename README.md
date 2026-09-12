@@ -443,19 +443,32 @@ third-party component is listed, with its own licence, in the About dialog.
 
 ## Deploying the web build
 
-The browser build is live at <https://cartogenesis.bfunk.online>, served as static files from
-Porkbun. It is deployed by copying `web/build/dist/wasmJs/productionExecutable` and discarding the
-source map, the empty `composeResources/` directories, and the emitted `index.html` — the site
-supplies its own shell so it can show a loading screen while 4.4 MB of compressed WebAssembly
-arrives.
+The browser build's own site is <https://cartogenesis.com>, and this repository is where it lives.
+`site/` holds the whole of it — the description page, the poster, the loading shell, and Cloudflare
+Pages' `_headers` and `_redirects`. `./gradlew :web:assembleSite` builds the application and
+assembles the two into `web/build/site`, dropping the source map and the emitted `index.html` and
+stamping the loader's URL with the commit; `./gradlew :desktop:siteTest` does that and then checks
+the tree it produced. `.github/workflows/site.yml` runs both on any pushed `v*` tag, or by hand from
+the Actions tab, and uploads the result to the Cloudflare Pages project `cartogenesis` using two
+repository secrets, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The custom domain is not
+configured from here: it is attached once by hand in the Cloudflare dashboard, under Workers &
+Pages → `cartogenesis` → Custom domains, and the workflow asks the Pages API which branch that
+project treats as production so the upload lands on the deployment the domain actually serves.
+`site/README.md` covers the rest, including how to deploy by hand if Actions is down.
 
-**That shell depends on two names in this repo, and breaking either fails silently** — the
+The older mirror is <https://cartogenesis.bfunk.online>, served as static files from Porkbun and
+deployed from that site's own repository by copying `web/build/dist/wasmJs/productionExecutable` and
+discarding the source map, the empty `composeResources/` directories, and the emitted `index.html` —
+that site supplies its own shell, for the same reason and by the same means as `site/app/index.html`
+does here.
+
+**Either shell depends on two names in this repo, and breaking either name fails silently** — the
 application keeps working and the page around it never finds out:
 
-- `VIEWPORT_ID` in `web/.../Main.kt` must stay `composeTarget`. The site creates the div; Compose
+- `VIEWPORT_ID` in `web/.../Main.kt` must stay `composeTarget`. The shell creates the div; Compose
   mounts into it.
 - `hideLoadingMessage()` in `web/.../Browser.kt` must keep removing `#loading`, and must keep being
-  called on startup. The site keeps an empty div with that id purely so this can delete it, and
+  called on startup. The shell keeps an empty div with that id purely so this can delete it, and
   treats the deletion as its "app is ready" signal.
 
 The second one exists because **Compose does not put its canvas in the page.** It attaches a shadow
@@ -468,13 +481,14 @@ module's source text, since the contract is an id inside a `@JsFun` body that no
 `desktop/build.gradle.kts` declares those sources as test inputs, because without that Gradle keeps
 the task up to date and the build cache restores a stale pass.
 
-One more thing the site has to do, which is this repo's fault rather than the host's: **the two
-`.wasm` files carry content hashes but `cartogenesis.js` does not.** A new build therefore lands
+One more thing a host has to work around, which is this repo's fault rather than the host's: **the
+two `.wasm` files carry content hashes but `cartogenesis.js` does not.** A new build therefore lands
 under new wasm names while the loader keeps its old URL, so a returning visitor with a cached loader
-asks for a wasm hash the deploy has just deleted — a 404 and a dead app, not a stale one. The site
-works around it by loading `cartogenesis.js?v=<stamp>` and stamping it on every deploy. If this
-build is ever hosted somewhere else, that host needs the same trick, or cache headers that make it
-unnecessary.
+asks for a wasm hash the deploy has just deleted — a 404 and a dead app, not a stale one. Both sites
+work around it by loading `cartogenesis.js?v=<stamp>` and stamping it on every deploy;
+`:web:assembleSite` does the stamping for cartogenesis.com and fails the build rather than shipping
+an unstamped shell. If this build is ever hosted somewhere else again, that host needs the same
+trick, or cache headers that make it unnecessary.
 
 The host must serve `.wasm` as `application/wasm` or the browser's streaming compiler refuses it.
 Compression is worth turning on: 12.4 MB raw is 4.4 MB gzipped, and Skia is two thirds of it.

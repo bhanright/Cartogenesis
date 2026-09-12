@@ -58,6 +58,17 @@ These are the habits that have found every substantive bug in this project. They
    stays on the CPU and the spec says so. The CPU path remains the reference; saves carry the
    world, so the two need not be bit-identical.
 
+9. **Code is written for the next human.** (William, 2026-09-12: "sweep the code … for any
+   variable or method names, in-code comments, etc that are very machine oriented and try to make
+   the code more human maintainable".) Names are words, not abbreviations or symbols —
+   `shorelineHeight`, not `thr`; `cellsAcross`, not `w`, beyond a two-line loop — and a name
+   carries its unit when it has one (`reachCells`, `lapseRateCPerKm`). A comment says why the code
+   is as it is and what invariant it keeps, in a sentence or three; the history of how a figure
+   was measured, what was tried and reverted, and which chunk did it belongs in this plan's ledger
+   and in `GEOGRAPHY.md`, not in KDoc. Magic numbers become named constants with the derivation
+   beside them. Every chunk leaves the files it touched more readable than it found them; C2
+   sweeps what the 2.0 line accumulated.
+
 ## Session protocol
 
 Each session, on any model:
@@ -390,6 +401,40 @@ the web build with the site's script, update the site's `CLAUDE.md`. Every step 
 documented in `README.md` under Deploying and in the site repo's `CLAUDE.md`.
 
 ---
+
+### C2. Names and comments for humans — Opus (worldgen), Sonnet (the rest)
+
+*Requested 2026-09-12, for after the 2.0.0 release: "sweep the code after v2.0.0 release for any
+variable or method names, in-code comments, etc that are very machine oriented and try to make
+the code more human maintainable if possible." Runs on `main` as the first chunk of the 3.0 line,
+before M1, so every audit chunk is written against the readable code and no rename ever has to
+be threaded through a chunk in flight; `release/2.0` keeps the old names, and a 2.0.x fix is
+re-applied to `main` by hand.* Behaviour-preserving by construction, which is what makes it safe:
+
+- **Calibration first.** One stage file (`SeaLevelStage.kt`, which has both the terse arithmetic
+  and the long chunk-history KDoc) reworked and shown to William as a before/after sample, with
+  the rules it applied written down; the sweep proceeds on his word or his corrections. Taste is
+  his, not the agent's.
+- **What changes.** Single-letter and abbreviated names outside two-line loops become words with
+  units; method names say what they return or do (`thresholdAtRank` stays, `cutAt` becomes
+  `landAndWaterBelow`, or whatever reads at the call site); KDoc keeps the why and the invariant
+  and loses the measurement history, which moves to the ledger row or `GEOGRAPHY.md` with a
+  pointer left behind (`See REALISM_PLAN.md, H5.`); magic numbers become named constants with
+  their derivation; comments that narrate mechanics line by line go; a short `CODE_STYLE.md`
+  records the rules so later agents follow them (and rule 9 points at it).
+- **What must not change.** Serialised names: every `@Serializable` property in
+  `WorldGenConfig`, the save header and the overrides keeps its wire name via `@SerialName` if the
+  Kotlin name moves, so every 1.x and 2.0 save opens unchanged. Shader source names are theirs.
+  Public entry points the web page and the desktop launcher call are renamed only with their
+  callers.
+- **Guards.** World fingerprints (`WorldFingerprintTest` and the FINGERPRINT lines CI prints)
+  bit-identical before and after on the standard seeds at 512 and on 718106 and 59758 at 2048 —
+  a rename that moves a bit is not a rename; a 2.0.0 save opens and exports byte-identically
+  (`ExportSmokeTest`'s fidelity case against a stored 2.0.0 export); the GPU tolerance tests hold;
+  the full per-merge tier and the audit tier once; the Wasm bundle builds. Order: the shared
+  model (`WorldMap`, `WorldGenConfig`, the stage results) first by one agent, then the pipeline
+  stages, cartography, ui and the two launchers in parallel worktrees, each merged behind a
+  fingerprint check.
 
 ## Track E — lakes sized by physics, not by basins
 
@@ -750,7 +795,8 @@ can be made in the meantime."*
   gets its full section in this plan's format (guards shown failing, render check at 2048, rule
   8's GPU path) when it is dispatched, not before, because the earlier chunks change what the
   later ones must say.
-- **Order.** M1 first, the yardstick; then S1, which every solid-earth chunk needs and which turns
+- **Order.** C2 first — the sweep for human-maintainable names and comments, so every chunk
+  after it is written against readable code; then M1, the yardstick; then S1, which every solid-earth chunk needs and which turns
   the resolution contracts into a property; then two lines in parallel — S2 → S3 → R1 → I1 on the
   solid earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with P1 slotted where it
   touches the fewest open files; K4 once H5b is in; R2, R3, V1 and V2 whenever their inputs exist;
@@ -1276,6 +1322,7 @@ guard reported, so the next chunk knows its baseline.
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
+| C2 Names and comments for humans | Opus + Sonnet | queued for 3.0, first | | | |
 | M1 Earth-likeness metric suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | S1 Units and time | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | S2 Coupled uplift and flexural isostasy | | queued for 3.0 (REALISM_AUDIT.md) | | | |

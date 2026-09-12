@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
@@ -30,6 +31,18 @@ enum class MapView(val label: String) {
     val showsTerrain: Boolean
         get() = this == FANTASY || this == POLITICAL || this == CULTURES ||
             this == ELEVATION || this == BIOMES
+
+    /**
+     * Whether the style chooses this view's colours outright.
+     *
+     * Narrower than [showsTerrain] by the two views that draw the land but are read against a
+     * legend rather than for their looks: elevation means a height and biomes mean a vegetation,
+     * and a style may rake their relief but must not repaint them. It is what decides where a
+     * line-art style rules its water — a vignette across a temperature map's ocean would bury the
+     * temperature.
+     */
+    val styled: Boolean
+        get() = this == FANTASY || this == POLITICAL || this == CULTURES
 
     /**
      * Whether this view is about a flow field rather than the land. These carry direction arrows,
@@ -169,45 +182,107 @@ object MapRasterizer {
         val pixels = IntArray(w * h)
 
         val style = options.style
-        val hillshade = if (options.showHillshade && options.view != MapView.NORMALS) {
-            computeHillshade(world)
-        } else null
+        val reliefDrawn = options.showHillshade && options.view != MapView.NORMALS
+        // A line-art style never asks for the shaded relief, so it never pays for the pass: the
+        // hachures read the same central differences a cell at a time.
+        val hillshade = if (reliefDrawn && !style.lineArt) computeHillshade(world) else null
 
         val lakes = world.rivers.lakes
         val showLakes = options.showLakes && options.view.showsTerrain
 
+        // The engraving. The hachures replace the hillshade wherever the relief would have been
+        // shaded, on every view, since how a style expresses relief has always been the style's
+        // business. The water and the ice are only drawn where the style chooses the colours: a
+        // diagnostic view's sea carries a temperature or an anomaly, and ruling it would bury the
+        // thing it is there to show.
+        val plan = if (style.lineArt) EngravingPlan(w) else null
+        val engraveWater = style.lineArt && options.view.styled
+        val shore = if (plan != null) {
+            ShoreDistance.of(w, h, dryLandMask(world, showLakes))
+        } else null
+        val elevation = world.sea.relativeElevation
+
         for (i in 0 until w * h) {
+            val x = i % w
+            val y = i / w
             if (showLakes && lakes.isLake(i)) {
                 // Depth from how far the water surface sits above the ground beneath it, so a
                 // deep basin reads darker than a shallow flood. The surface is the lake's own,
                 // not the filled elevation: an endorheic lake stands below the brim the fill
                 // raised its basin to, and reading the depth off the fill would draw a shallow
                 // desert lake as if it were full to the rim.
-                val depth = lakes.surfaceAt(i) - world.sea.relativeElevation.data[i]
-                pixels[i] = MapPalette.blend(
+                val depth = lakes.surfaceAt(i) - elevation.data[i]
+                var water = MapPalette.blend(
                     style.lake,
                     style.lakeDeep,
                     (depth * 12f).coerceIn(0f, 1f)
                 )
+                if (plan != null && engraveWater) {
+                    water = MapPalette.blend(
+                        water, style.coastline, Engraving.lakeWater(y, shore!![i], plan)
+                    )
+                }
+                pixels[i] = water
                 continue
             }
 
             var color = baseColor(world, options.view, style, i)
-            if (hillshade != null && world.sea.isLand[i]) {
-                if (style.lineArt) {
-                    // Ink rather than shading: the paper is left alone and strokes are laid on
-                    // where the ground is steep, which is how a pen draws a mountain.
-                    if (style.inked(i % w, i / w, style.relief(hillshade[i]))) color = style.coastline
+            val isLand = world.sea.isLand[i]
+            if (plan != null && engraveWater && !isLand) {
+                color = MapPalette.blend(
+                    color, style.coastline, Engraving.coastalWater(shore!![i], plan)
+                )
+            }
+            if (reliefDrawn && isLand) {
+                if (plan != null) {
+                    // Ink rather than shading: the paper is left alone and strokes are laid down
+                    // the slope, heavier where the ground is steeper, which is how a pen draws a
+                    // mountain when it has no colour to draw it with.
+                    val reach = plan.gradientStencilCells
+                    val gradientX =
+                        (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) *
+                            plan.gradientScale
+                    val gradientY =
+                        (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) *
+                            plan.gradientScale
+                    color = MapPalette.blend(
+                        color,
+                        style.coastline,
+                        Engraving.hachure(x, y, gradientX, gradientY, plan, style.inkGain)
+                    )
                 } else {
-                    color = MapPalette.shade(color, style.relief(hillshade[i]))
+                    color = MapPalette.shade(color, style.relief(hillshade!![i]))
                 }
+            }
+            if (plan != null && engraveWater &&
+                world.climate.biome[i] == Biome.ICE_SHEET
+            ) {
+                color = MapPalette.blend(
+                    color, style.coastline, Engraving.stipple(x, y, plan)
+                )
             }
             pixels[i] = color
         }
 
         if (options.showCoastline) drawCoastline(world, style, pixels)
-        if (options.bordersVisible) drawBorders(world, style, pixels)
+        if (options.bordersVisible) drawBorders(world, style, plan, pixels)
         return pixels
+    }
+
+    /**
+     * Where the engraving's distance field is seeded: land that is not under standing water.
+     *
+     * One field answers both questions the drawing asks of it. Out at sea it is the distance to the
+     * coast, which the vignette's lines follow; inside a lake it is the distance to that lake's own
+     * shore, which the water lines fade with — because a lake is surrounded by dry land, its cells
+     * measure to their own bank and to nothing else.
+     */
+    internal fun dryLandMask(world: WorldMap, showLakes: Boolean): ByteArray {
+        val land = world.sea.isLand
+        val lakes = world.rivers.lakes
+        return ByteArray(land.size) { i ->
+            if (land[i] && !(showLakes && lakes.isLake(i))) 1 else 0
+        }
     }
 
     /** The rivers and landmarks to lay over the raster, as geometry. */
@@ -351,16 +426,15 @@ object MapRasterizer {
      *
      * Ordinarily the shared ocean ramp, because these views are about the land and their sea is
      * only the shape around it — and because a political map that changed colour with the style
-     * would make ten political maps out of one. A style that declares its own realm set gets its
-     * own sea here as well: the set is chosen so that no two realms can be confused, which is
-     * worth nothing if the water competes with them. See [MapStyle.realmRamp].
+     * would make eleven political maps out of one. Two styles are exceptions, and
+     * [MapStyle.ownsPoliticalGround] says why.
      */
     private fun politicalSea(style: MapStyle, relative: Float): Int =
-        if (style.ownsRealms) style.ocean(-relative) else MapPalette.ocean(-relative)
+        if (style.ownsPoliticalGround) style.ocean(-relative) else MapPalette.ocean(-relative)
 
     /** The relief the realm colour is blended toward, from the same style-or-shared rule. */
     private fun politicalLand(style: MapStyle, relative: Float): Int =
-        if (style.ownsRealms) style.land(relative) else MapPalette.land(relative)
+        if (style.ownsPoliticalGround) style.land(relative) else MapPalette.land(relative)
 
     private fun baseColor(world: WorldMap, view: MapView, style: MapStyle, i: Int): Int {
         val isLand = world.sea.isLand[i]
@@ -520,8 +594,17 @@ object MapRasterizer {
     /**
      * Marks a cell whenever the realm to its east or south differs. Only land-to-land transitions
      * count, so a realm's coastline is left to the coastline pass rather than being outlined twice.
+     *
+     * A [plan] means the style draws with a pen, and a pen draws a boundary as a dotted line: the
+     * cells that qualify are broken up by [Engraving.borderDot] and the ones that survive take the
+     * border colour outright rather than three quarters of it.
      */
-    private fun drawBorders(world: WorldMap, style: MapStyle, pixels: IntArray) {
+    private fun drawBorders(
+        world: WorldMap,
+        style: MapStyle,
+        plan: EngravingPlan?,
+        pixels: IntArray
+    ) {
         val w = world.width
         val h = world.height
         val owner = world.nations.nationId
@@ -536,7 +619,12 @@ object MapRasterizer {
 
                 val differs = (land[right] && owner[right] != owner[i]) ||
                     (land[down] && owner[down] != owner[i])
-                if (differs) pixels[i] = MapPalette.blend(pixels[i], style.border, 0.75f)
+                if (!differs) continue
+                if (plan == null) {
+                    pixels[i] = MapPalette.blend(pixels[i], style.border, 0.75f)
+                } else if (Engraving.borderDot(x, y, plan)) {
+                    pixels[i] = MapPalette.blend(pixels[i], style.border, 1f)
+                }
             }
         }
     }

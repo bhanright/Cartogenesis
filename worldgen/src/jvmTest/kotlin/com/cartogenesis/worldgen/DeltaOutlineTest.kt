@@ -288,7 +288,7 @@ class DeltaOutlineTest {
                 val sediment = FloatArray(w * h)
                 val scratch = DeltaFan.Scratch(w * h, reach.toInt())
                 val rim = DeltaFan.Rim(
-                    apex = apex, width = w, reach = reach, outX = outX, outY = outY,
+                    apex = apex, width = w, reachCells = reach, outX = outX, outY = outY,
                     hash = hash, grooved = false, wobble = wobble
                 )
                 growFan(
@@ -546,7 +546,7 @@ class DeltaOutlineTest {
                 val settled = FloatArray(w * h)
                 val scratch = DeltaFan.Scratch(w * h, reach.toInt())
                 val rim = DeltaFan.Rim(
-                    apex = apexY * w + apexX, width = w, reach = reach,
+                    apex = apexY * w + apexX, width = w, reachCells = reach,
                     outX = 1f, outY = 0f, hash = hash, grooved = false
                 )
                 growFan(

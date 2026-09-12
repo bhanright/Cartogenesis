@@ -199,13 +199,13 @@ internal object DeltaFan {
      *
      * @param outX horizontal component of the step the river took as it arrived. Need not be a unit
      *   vector; a zero vector gives a fan that reaches equally in every direction.
-     * @param reach the lobe's full reach straight ahead, in cells. Scaled with the grid by
+     * @param reachCells the lobe's full reach straight ahead, in cells. Scaled with the grid by
      *   `WorldGenConfig.atResolution`, so it is a length on the ground.
      */
     class Rim(
         val apex: Int,
         private val width: Int,
-        val reach: Float,
+        val reachCells: Float,
         outX: Float,
         outY: Float,
         hash: Int,
@@ -236,8 +236,8 @@ internal object DeltaFan {
         private val grooveX = FloatArray(5)
         private val grooveY = FloatArray(5)
         private val grooveHalfWidthCells =
-            if (reach * GROOVE_HALF_WIDTH_SHARE > MIN_GROOVE_HALF_WIDTH_CELLS) {
-                reach * GROOVE_HALF_WIDTH_SHARE
+            if (reachCells * GROOVE_HALF_WIDTH_SHARE > MIN_GROOVE_HALF_WIDTH_CELLS) {
+                reachCells * GROOVE_HALF_WIDTH_SHARE
             } else {
                 MIN_GROOVE_HALF_WIDTH_CELLS
             }
@@ -260,7 +260,7 @@ internal object DeltaFan {
             phase5X = phase5.first; phase5Y = phase5.second
             phase7X = phase7.first; phase7Y = phase7.second
 
-            distributaries = if (!grooved || reach < GROOVE_MIN_REACH_CELLS || outLength <= 0f) {
+            distributaries = if (!grooved || reachCells < GROOVE_MIN_REACH_CELLS || outLength <= 0f) {
                 0
             } else {
                 2 + ((hash ushr 3) and 3)
@@ -297,11 +297,11 @@ internal object DeltaFan {
          * distance [r].
          */
         fun radius(columnOffset: Float, rowOffset: Float, distanceCells: Float): Float {
-            if (distanceCells <= 0f) return reach
+            if (distanceCells <= 0f) return reachCells
             val cosBearing = columnOffset / distanceCells
             val sinBearing = rowOffset / distanceCells
             // cos of the angle to the trunk, and the nose that makes a fan a fan rather than a
-            // disc: full reach straight ahead, [SIDES] of it abeam and behind. The exponent on the
+            // disc: full reach straight ahead, [SIDE_REACH_SHARE] of it abeam and behind. The exponent on the
             // cosine is one, deliberately. A fractional power broadens the fan, and a broader fan
             // looks better — but it also puts harmonics of its own into the outline, and the
             // outline's harmonic content is exactly what `DeltaOutlineTest` measures to tell a
@@ -327,7 +327,7 @@ internal object DeltaFan {
                     WOBBLE_WEIGHT_5 * (cos5 * phase5X - sin5 * phase5Y) +
                     WOBBLE_WEIGHT_7 * (cos7 * phase7X - sin7 * phase7Y)
                 ) * WOBBLE_WEIGHT_TOTAL_INVERSE
-            return reach * nose * (1f + wobble * wobbleTerm)
+            return reachCells * nose * (1f + wobble * wobbleTerm)
         }
 
         /**
@@ -412,9 +412,9 @@ internal object DeltaFan {
      * heap is bounded by the cells inside a disc of radius `reach`, which is why it can be sized
      * from the reach rather than from the grid.
      */
-    class Scratch(cells: Int, reach: Int) {
+    class Scratch(cells: Int, reachCells: Int) {
         val stamp = IntArray(cells)
-        private val capacity = ((2 * reach + 1) * (2 * reach + 1)).coerceAtLeast(9)
+        private val capacity = ((2 * reachCells + 1) * (2 * reachCells + 1)).coerceAtLeast(9)
         private val cells = IntArray(capacity)
         private val keys = FloatArray(capacity)
         private val penalties = FloatArray(capacity)
@@ -637,7 +637,7 @@ internal inline fun growFan(
         // and nothing else, so every cell has a lower neighbour straight out from the mouth by
         // construction. What it costs is that the flanks of a lobe end above the rim level and drop
         // to the water in one step, which is a delta front, and is what a delta actually has.
-        val reachFraction = (distanceCells / rim.reach).coerceAtMost(1f)
+        val reachFraction = (distanceCells / rim.reachCells).coerceAtMost(1f)
 
         val need = levelOf(cell, reachFraction).toDouble() -
             surfaceOf[cell].toDouble() - sediment[cell].toDouble()

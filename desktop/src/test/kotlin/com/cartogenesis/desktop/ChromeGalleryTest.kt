@@ -58,6 +58,31 @@ class ChromeGalleryTest {
         assertTrue(dark.distinctColours > 200, "the dark shot is nearly blank")
     }
 
+    /**
+     * The same window with every section of the panel unrolled.
+     *
+     * F2's subject is the panel, and the panel a reader first sees is five ruled headings with a
+     * `+` at the margin — which is the point of it, and which shows none of the settings inside.
+     * So there is a second light shot with all six sections open, for reviewing what F2 actually
+     * put in them. It doubles as the only assertion anyone can make about a disclosure control
+     * without reading pixels: clicking the headings has to change the picture.
+     */
+    @Test
+    fun `the sections unroll`() {
+        val dir = File("build/screens").apply { mkdirs() }
+
+        val closed = shoot(dark = false)
+        val open = shoot(dark = false, openSections = true)
+
+        File(dir, "chrome-sections.png").writeBytes(open.png)
+        println("CHROME wrote the unrolled panel to ${dir.absolutePath}")
+
+        assertTrue(
+            closed.fingerprint != open.fingerprint,
+            "opening every section changed nothing on screen"
+        )
+    }
+
     private class Shot(val png: ByteArray, val fingerprint: Int, val distinctColours: Int)
 
     /**
@@ -68,7 +93,7 @@ class ChromeGalleryTest {
      * exercises the same path a reader takes.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shoot(dark: Boolean): Shot {
+    private fun shoot(dark: Boolean, openSections: Boolean = false): Shot {
         var shot: Shot? = null
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             val platform = ChromePlatform()
@@ -83,6 +108,16 @@ class ChromeGalleryTest {
                 onAllNodesWithText("realms ·", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
+
+            if (openSections) {
+                // In this order, because Cartography holds the style and view names and a couple
+                // of those are words a heading could be mistaken for. Rolled up, they are not in
+                // the tree at all; opened last, nothing after them is looked for.
+                listOf("Terrain", "Climate", "Water", "Peoples", "Cartography").forEach {
+                    onNodeWithText(it).performClick()
+                    waitForIdle()
+                }
+            }
 
             val bitmap = onRoot().captureToImage().asSkiaBitmap()
             val png = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!.bytes

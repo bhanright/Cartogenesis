@@ -1524,7 +1524,7 @@ deep); 59758 19 lakes, 0.78%, largest 0.072%. Packaged exe passes `--gpu-check` 
 the export raster. Portable zip 97 MB, MSI 98 MB, web zip 5.1 MB, on the GitHub release with the
 notes. Web build deployed from `main` (site c8792d0, loader stamp 202609121528, app wasm
 000bc7aa, the six bundled faces kept), the description page's notice now "Works on phones", its
-spec list at eleven styles and sixteen themes, and its poster the top band of 718106's 2048
+spec list at eleven styles and fifteen themes, and its poster the top band of 718106's 2048
 render (1600x800 WebP, 150 KB); site notes 1a21532. Three Windows build traps hit during the
 release and recorded in rule 6. `release/2.0` cut from the tag for 2.0.x; `main` is the 3.0
 line and its version 3.0.0-dev.

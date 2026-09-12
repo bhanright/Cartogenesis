@@ -362,17 +362,24 @@ class DebugMapDump {
      * A single seamount is only a handful of cells across, which is invisible at whole-world
      * scale and exactly where a rasterized-circle artefact would live if there were one. Seed
      * 718106 carries a chain, with the author's settings (sea level 0.62, 14 plates, 12 realms
-     * are all defaults). The vent is located fresh at each resolution from the with/without-chains
-     * plate height difference, rather than scaled from a lower-resolution position, because the
-     * plate RNG is not a simple rescaling between resolutions.
+     * are all defaults). 1024 and 2048 are reached via [WorldGenConfig.atResolution] from the 512
+     * base, exactly as the app does, so [TectonicsConfig.hotspotRadius] and friends scale up with
+     * the grid rather than staying pinned to their 512 cell count -- a plain `WorldGenConfig(width
+     * = 2048, ...)` would not rescale them and the cone would come out the same handful of cells
+     * across at every resolution instead of genuinely finer or coarser. The vent is located fresh
+     * at each resolution from the with/without-chains plate height difference, rather than scaled
+     * from a lower-resolution position, because the plate RNG is not a simple rescaling between
+     * resolutions.
      */
     @Test
     fun `dump the hotspot cone`() {
         outputDir.mkdirs()
         val seed = 718106L
+        val base512 = WorldGenConfig(seed = seed, width = 512, height = 512)
 
         listOf(512, 1024, 2048).forEach { size ->
-            val base = WorldGenConfig(seed = seed, width = size, height = size)
+            val base = if (size == 512) base512 else base512.atResolution(size, size)
+            val radiusScale = size / 512
 
             listOf(false to "before", true to "after").forEach { (detail, tag) ->
                 val config = base.copy(tectonics = base.tectonics.copy(hotspotConeDetail = detail))
@@ -392,8 +399,11 @@ class DebugMapDump {
 
                 // The raw cone, isolated: with-chains minus without-chains, before erosion or any
                 // other stage touches it, so whatever shape the stamp itself makes is what shows.
-                val cellsAcross = 24
-                val zoom = 480 / cellsAcross
+                // The window scales with the cone's own radius so the crop frames it the same way
+                // at every resolution instead of clipping it at 2048 or drowning it in margin at
+                // 512.
+                val cellsAcross = 24 * radiusScale
+                val zoom = (480 / cellsAcross).coerceAtLeast(1)
                 val image = BufferedImage(cellsAcross * zoom, cellsAcross * zoom, BufferedImage.TYPE_INT_RGB)
                 for (yy in 0 until cellsAcross) {
                     for (xx in 0 until cellsAcross) {

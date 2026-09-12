@@ -27,6 +27,13 @@ internal object BasinRealms {
 
     class Assignment(val realmOf: IntArray, val origins: List<Int>)
 
+    /**
+     * Shares the catchments out and gives each realm a capital.
+     *
+     * Returns a realm id per cell, row-major and [NationResult.UNCLAIMED] over water and over
+     * wilderness, together with one origin cell per realm — indexed by the same ids the map holds,
+     * renumbered so they are contiguous.
+     */
     fun assign(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -34,69 +41,74 @@ internal object BasinRealms {
         habitability: FloatField,
         random: Random
     ): Assignment {
-        val cfg = config.nations
+        val nationsConfig = config.nations
         val realmOfUnit = IntArray(units.unitCount) { NationResult.UNCLAIMED }
-        if (cfg.nationCount <= 0 || units.unitCount == 0) {
-            return Assignment(IntArray(config.width * config.height) { NationResult.UNCLAIMED }, emptyList())
+        if (nationsConfig.nationCount <= 0 || units.unitCount == 0) {
+            return Assignment(
+                IntArray(config.width * config.height) { NationResult.UNCLAIMED },
+                emptyList()
+            )
         }
 
         // How good a place each catchment is to hold, and where in it a capital would sit.
-        val worth = FloatArray(units.unitCount)
+        val habitabilitySum = FloatArray(units.unitCount)
         val bestCell = IntArray(units.unitCount) { -1 }
         val bestScore = FloatArray(units.unitCount) { -1f }
-        for (i in units.unitOf.indices) {
-            val u = units.unitOf[i]
-            if (u == BasinUnits.NONE) continue
-            val score = habitability.data[i]
-            worth[u] += score
-            if (score > bestScore[u]) {
-                bestScore[u] = score
-                bestCell[u] = i
+        for (cell in units.unitOf.indices) {
+            val unit = units.unitOf[cell]
+            if (unit == BasinUnits.NONE) continue
+            val score = habitability.data[cell]
+            habitabilitySum[unit] += score
+            if (score > bestScore[unit]) {
+                bestScore[unit] = score
+                bestCell[unit] = cell
             }
         }
         val quality = FloatArray(units.unitCount) {
-            if (units.area[it] == 0) 0f else worth[it] / units.area[it]
+            if (units.area[it] == 0) 0f else habitabilitySum[it] / units.area[it]
         }
 
         // Seed on the best land, but forced apart, or every realm sprouts in the same fertile
         // valley and the rest of the world is left to whoever is nearest.
-        val seeds = chooseSeeds(units, quality, cfg.nationCount, random)
+        val seeds = chooseSeeds(units, quality, nationsConfig.nationCount, random)
         seeds.forEachIndexed { realm, unit -> realmOfUnit[unit] = realm }
 
-        // Appetite. Raised to a power so the draw has a tail: most realms want a middling amount,
-        // a few want a great deal.
+        // Appetite: how many fair shares of the world's land each realm is out to hold. Raised to
+        // a power so the draw has a tail — most realms want a middling amount, a few want a great
+        // deal — which is what stops a world reading as a dozen equal slabs.
         val totalLand = units.area.sum().toFloat()
         val appetite = FloatArray(seeds.size) {
-            (0.35f + random.nextFloat().pow(2.2f) * 2.6f)
+            MIN_APPETITE + random.nextFloat().pow(APPETITE_TAIL) * APPETITE_RANGE
         }
-        val share = FloatArray(seeds.size)
         val fairShare = totalLand / seeds.size
         val held = IntArray(seeds.size)
         seeds.forEachIndexed { realm, unit -> held[realm] = units.area[unit] }
 
         // Grow by claiming whichever adjacent catchment is cheapest, cheapest meaning good land
         // that the realm still has appetite for.
-        val heap = LongMinHeap(units.unitCount * 4 + 64)
+        val frontier = LongMinHeap(units.unitCount * HEAP_ENTRIES_PER_UNIT + HEAP_SPARE)
         fun offer(realm: Int, from: Int, unit: Int) {
             if (realmOfUnit[unit] != NationResult.UNCLAIMED) return
             val hunger = (appetite[realm] * fairShare - held[realm]) / fairShare
-            if (hunger <= 0f && cfg.wilderness != WildernessMode.CLAIM_ALL_LAND) return
+            if (hunger <= 0f && nationsConfig.wilderness != WildernessMode.CLAIM_ALL_LAND) return
             // Poor ground is dear, and a realm that has eaten its fill finds everything dear.
-            var cost = (1f - quality[unit]) * 4f + (1f - hunger).coerceAtLeast(0f) * 6f
+            var cost = (1f - quality[unit]) * POOR_GROUND_COST +
+                (1f - hunger).coerceAtLeast(0f) * SATED_COST
             // Water is crossable but not free. Without this a realm that reaches one strait tends
             // to island-hop the length of an archipelago, which produced a single realm spanning
             // half the world the first time this ran.
-            if (units.landmass[unit] != units.landmass[from]) cost += cfg.straitCrossingCost
-            heap.push(encode(cost, realm * units.unitCount + unit))
+            if (units.landmass[unit] != units.landmass[from]) {
+                cost += nationsConfig.straitCrossingCost
+            }
+            frontier.push(encode(cost, realm * units.unitCount + unit))
         }
 
         seeds.forEachIndexed { realm, unit ->
             units.neighbours[unit].forEach { offer(realm, unit, it) }
         }
 
-        while (!heap.isEmpty()) {
-            val entry = heap.pop()
-            val packed = decodeIndex(entry)
+        while (!frontier.isEmpty()) {
+            val packed = decodeIndex(frontier.pop())
             val realm = packed / units.unitCount
             val unit = packed % units.unitCount
             if (realmOfUnit[unit] != NationResult.UNCLAIMED) continue
@@ -111,7 +123,7 @@ internal object BasinRealms {
         // goes to whichever realm is nearest; otherwise it is left as wilderness, which is what
         // they asked for.
         var realmCount = seeds.size
-        if (cfg.wilderness == WildernessMode.CLAIM_ALL_LAND) {
+        if (nationsConfig.wilderness == WildernessMode.CLAIM_ALL_LAND) {
             // Returns a new count, because a wholly isolated island becomes a realm of its own.
             // Passing the old one here dropped those islands off the end of every later loop and
             // left them unclaimed after all — 3% of seed 7's land, which is what this was for.
@@ -122,9 +134,9 @@ internal object BasinRealms {
 
         // Back down to cells.
         val realmOf = IntArray(config.width * config.height) { NationResult.UNCLAIMED }
-        for (i in realmOf.indices) {
-            val u = units.unitOf[i]
-            if (u != BasinUnits.NONE) realmOf[i] = realms.owner[u]
+        for (cell in realmOf.indices) {
+            val unit = units.unitOf[cell]
+            if (unit != BasinUnits.NONE) realmOf[cell] = realms.owner[unit]
         }
 
         // A capital for every realm that ended up with land, taken from its best-scoring unit —
@@ -137,29 +149,62 @@ internal object BasinRealms {
         // `describe` sizes every per-realm array by the capital list, so the last realm indexes
         // straight off the end.
         val origins = ArrayList<Int>()
-        val renumber = HashMap<Int, Int>()
+        val renumbered = HashMap<Int, Int>()
         for (realm in 0 until realms.count) {
-            var pick = -1
-            var pickScore = -1f
-            for (u in 0 until units.unitCount) {
-                if (realms.owner[u] != realm) continue
-                if (bestScore[u] > pickScore) {
-                    pickScore = bestScore[u]
-                    pick = bestCell[u]
+            var capital = -1
+            var capitalScore = -1f
+            for (unit in 0 until units.unitCount) {
+                if (realms.owner[unit] != realm) continue
+                if (bestScore[unit] > capitalScore) {
+                    capitalScore = bestScore[unit]
+                    capital = bestCell[unit]
                 }
             }
-            if (pick < 0) continue
-            renumber[realm] = origins.size
-            origins.add(pick)
+            if (capital < 0) continue
+            renumbered[realm] = origins.size
+            origins.add(capital)
         }
-        for (i in realmOf.indices) {
-            val r = realmOf[i]
-            if (r != NationResult.UNCLAIMED) realmOf[i] = renumber[r] ?: NationResult.UNCLAIMED
+        for (cell in realmOf.indices) {
+            val realm = realmOf[cell]
+            if (realm != NationResult.UNCLAIMED) {
+                realmOf[cell] = renumbered[realm] ?: NationResult.UNCLAIMED
+            }
         }
-        for (i in realmOf.indices) if (!sea.isLand[i]) realmOf[i] = NationResult.UNCLAIMED
+        for (cell in realmOf.indices) if (!sea.isLand[cell]) realmOf[cell] = NationResult.UNCLAIMED
 
         return Assignment(realmOf, origins)
     }
+
+    /**
+     * How many fair shares of the world's land a realm sets out to hold: [MIN_APPETITE] at least,
+     * and up to that plus [APPETITE_RANGE].
+     *
+     * The draw is raised to [APPETITE_TAIL] before it is scaled, which bends a flat draw into one
+     * with a long tail: most realms come out middling and a few come out hungry, so a world has a
+     * couple of powers and several small states rather than a dozen equal slabs.
+     */
+    private const val MIN_APPETITE = 0.35f
+    private const val APPETITE_TAIL = 2.2f
+    private const val APPETITE_RANGE = 2.6f
+
+    /**
+     * What a catchment costs a realm to take: the worst possible ground costs [POOR_GROUND_COST],
+     * and a realm that has eaten its whole appetite pays [SATED_COST] on top of whatever the ground
+     * itself costs.
+     *
+     * Being sated costs more than poor land does, which is what makes appetite the thing that
+     * decides a realm's size and quality the thing that decides its shape. Both are on the same
+     * scale as `NationsConfig.straitCrossingCost`.
+     */
+    private const val POOR_GROUND_COST = 4f
+    private const val SATED_COST = 6f
+
+    /**
+     * Room reserved in the growth queue: a unit can be offered once per neighbour it has, and the
+     * spare covers the seeds' own first offers on a world with very few units.
+     */
+    private const val HEAP_ENTRIES_PER_UNIT = 4
+    private const val HEAP_SPARE = 64
 
     /**
      * Gives every remaining catchment to the nearest realm, spreading outward so the result stays
@@ -174,12 +219,12 @@ internal object BasinRealms {
         var changed = true
         while (changed) {
             changed = false
-            for (u in 0 until units.unitCount) {
-                if (owner[u] != NationResult.UNCLAIMED) continue
-                val neighbour = units.neighbours[u].firstOrNull {
+            for (unit in 0 until units.unitCount) {
+                if (owner[unit] != NationResult.UNCLAIMED) continue
+                val settledNeighbour = units.neighbours[unit].firstOrNull {
                     owner[it] != NationResult.UNCLAIMED
                 } ?: continue
-                owner[u] = owner[neighbour]
+                owner[unit] = owner[settledNeighbour]
                 changed = true
             }
         }
@@ -188,83 +233,94 @@ internal object BasinRealms {
         // A substantial one becomes a realm of its own; a rock in the ocean does not, because a
         // three-cell sovereign state is not a country, it is a rendering artefact. Those go to
         // whichever realm lies nearest across the water.
-        val minIslandRealm = (units.area.sum() * MIN_ISLAND_REALM_SHARE).toInt().coerceAtLeast(24)
-        var next = realmCount
-        for (u in 0 until units.unitCount) {
-            if (owner[u] != NationResult.UNCLAIMED || units.area[u] == 0) continue
+        val smallestIslandRealm = (units.area.sum() * MIN_ISLAND_REALM_SHARE).toInt()
+            .coerceAtLeast(MIN_ISLAND_REALM_CELLS)
+        var nextRealm = realmCount
+        for (start in 0 until units.unitCount) {
+            if (owner[start] != NationResult.UNCLAIMED || units.area[start] == 0) continue
 
-            val group = ArrayList<Int>()
+            val island = ArrayList<Int>()
             val frontier = ArrayDeque<Int>()
-            frontier.addLast(u)
-            group.add(u)
-            val visiting = HashSet<Int>()
-            visiting.add(u)
+            frontier.addLast(start)
+            island.add(start)
+            val reached = HashSet<Int>()
+            reached.add(start)
             while (frontier.isNotEmpty()) {
-                val c = frontier.removeFirst()
-                units.neighbours[c].forEach {
-                    if (owner[it] == NationResult.UNCLAIMED && visiting.add(it)) {
-                        group.add(it)
-                        frontier.addLast(it)
+                val unit = frontier.removeFirst()
+                units.neighbours[unit].forEach { neighbour ->
+                    if (owner[neighbour] == NationResult.UNCLAIMED && reached.add(neighbour)) {
+                        island.add(neighbour)
+                        frontier.addLast(neighbour)
                     }
                 }
             }
 
-            val area = group.sumOf { units.area[it] }
-            if (area >= minIslandRealm) {
-                val island = next++
-                group.forEach { owner[it] = island }
+            val islandCells = island.sumOf { units.area[it] }
+            if (islandCells >= smallestIslandRealm) {
+                val islandRealm = nextRealm++
+                island.forEach { owner[it] = islandRealm }
             } else {
-                val host = nearestRealm(units, owner, centroids, group)
-                group.forEach { owner[it] = host }
+                val host = nearestRealm(units, owner, centroids, island)
+                island.forEach { owner[it] = host }
             }
         }
-        return next
+        return nextRealm
     }
 
-    /** The realm whose nearest territory is closest to [group], by centroid distance. */
+    /** The realm whose nearest territory is closest to [island], by centroid distance. */
     private fun nearestRealm(
         units: BasinUnits,
         owner: IntArray,
         centroids: Array<FloatArray>,
-        group: List<Int>
+        island: List<Int>
     ): Int {
-        var best = 0
-        var bestDistance = Float.MAX_VALUE
+        var nearest = 0
+        var nearestDistanceSquared = Float.MAX_VALUE
         for (other in 0 until units.unitCount) {
             val realm = owner[other]
             if (realm == NationResult.UNCLAIMED || units.area[other] == 0) continue
-            group.forEach { mine ->
-                val dx = centroids[other][0] - centroids[mine][0]
-                val dy = centroids[other][1] - centroids[mine][1]
-                val d = dx * dx + dy * dy
-                if (d < bestDistance) {
-                    bestDistance = d
-                    best = realm
+            island.forEach { mine ->
+                val across = centroids[other][CENTROID_COLUMN] - centroids[mine][CENTROID_COLUMN]
+                val down = centroids[other][CENTROID_ROW] - centroids[mine][CENTROID_ROW]
+                val distanceSquared = across * across + down * down
+                if (distanceSquared < nearestDistanceSquared) {
+                    nearestDistanceSquared = distanceSquared
+                    nearest = realm
                 }
             }
         }
-        return best
+        return nearest
     }
 
     /** Rocks below this share of all land are not given a flag of their own. */
     private const val MIN_ISLAND_REALM_SHARE = 0.004f
 
+    /**
+     * And below this many cells outright, so a very small map cannot make a sovereign state out of
+     * a handful of cells the share alone would let through.
+     */
+    private const val MIN_ISLAND_REALM_CELLS = 24
+
+    /** The two slots of a centroid. */
+    private const val CENTROID_COLUMN = 0
+    private const val CENTROID_ROW = 1
+
     /** Mean position of each unit's cells, for judging which realm an island lies nearest. */
     private fun centroids(config: WorldGenConfig, units: BasinUnits): Array<FloatArray> {
-        val w = config.width
-        val sums = Array(units.unitCount) { FloatArray(2) }
-        for (i in units.unitOf.indices) {
-            val u = units.unitOf[i]
-            if (u == BasinUnits.NONE) continue
-            sums[u][0] += (i % w).toFloat()
-            sums[u][1] += (i / w).toFloat()
+        val cellsAcross = config.width
+        val centroids = Array(units.unitCount) { FloatArray(2) }
+        for (cell in units.unitOf.indices) {
+            val unit = units.unitOf[cell]
+            if (unit == BasinUnits.NONE) continue
+            centroids[unit][CENTROID_COLUMN] += (cell % cellsAcross).toFloat()
+            centroids[unit][CENTROID_ROW] += (cell / cellsAcross).toFloat()
         }
-        for (u in 0 until units.unitCount) {
-            val n = units.area[u].coerceAtLeast(1).toFloat()
-            sums[u][0] /= n
-            sums[u][1] /= n
+        for (unit in 0 until units.unitCount) {
+            val cellsInUnit = units.area[unit].coerceAtLeast(1).toFloat()
+            centroids[unit][CENTROID_COLUMN] /= cellsInUnit
+            centroids[unit][CENTROID_ROW] /= cellsInUnit
         }
-        return sums
+        return centroids
     }
 
     private class Realms(val owner: IntArray, val count: Int)
@@ -287,36 +343,36 @@ internal object BasinRealms {
         val owner = realmOfUnit.copyOf()
         var count = realmCount
 
-        // Empires come apart. Appetite is a comparative brake - a realm bids against its
-        // neighbours - so a realm that is the only bidder for a region takes it regardless, and
-        // on seed 7 one realm ended up holding 42% of the world that way. Rather than move the
-        // seeds (which thins the contest for river valleys), a realm past the cap is cut in two
-        // along its own internal watersheds, largest first, until none is over. Deterministic:
+        // Empires come apart. Appetite is a comparative brake — a realm bids against its
+        // neighbours — so a realm that is the only bidder for a region takes it whatever its
+        // appetite. Rather than move the seeds, which thins the contest for river valleys and so
+        // costs the world its river borders, a realm past `NationsConfig.maxRealmShare` is cut in
+        // two along its own internal watersheds, largest first, until none is over. Deterministic:
         // no random draw, and the flood fill walks sorted neighbour lists.
-        val cap = config.nations.maxRealmShare * units.area.sum().toFloat()
+        // See GEOGRAPHY.md, "Realms of uneven size".
+        val capCells = config.nations.maxRealmShare * units.area.sum().toFloat()
         var attempts = 0
-        while (attempts++ < 64) {
+        while (attempts++ < MAX_CAP_SPLITS) {
             val held = IntArray(count)
-            for (u in 0 until units.unitCount) if (owner[u] >= 0) held[owner[u]] += units.area[u]
-            var realm = -1
-            for (r in 0 until count) if (held[r] > cap && (realm < 0 || held[r] > held[realm])) realm = r
-            if (realm < 0) break
-            val mine = (0 until units.unitCount).filter { owner[it] == realm }
-            if (mine.size < 2) break
-            val start = mine.minByOrNull { quality[it] } ?: break
-            val taken = HashSet<Int>()
-            val frontier = ArrayDeque<Int>()
-            frontier.addLast(start)
-            taken.add(start)
-            while (frontier.isNotEmpty() && taken.size < mine.size / 2) {
-                val u = frontier.removeFirst()
-                units.neighbours[u].forEach { nb ->
-                    if (owner[nb] == realm && taken.add(nb)) frontier.addLast(nb)
+            for (unit in 0 until units.unitCount) {
+                if (owner[unit] >= 0) held[owner[unit]] += units.area[unit]
+            }
+            var largestOverCap = -1
+            for (realm in 0 until count) {
+                if (held[realm] > capCells &&
+                    (largestOverCap < 0 || held[realm] > held[largestOverCap])
+                ) {
+                    largestOverCap = realm
                 }
             }
-            if (taken.isEmpty() || taken.size == mine.size) break
+            if (largestOverCap < 0) break
+            val mine = (0 until units.unitCount).filter { owner[it] == largestOverCap }
+            if (mine.size < MIN_CAP_SPLIT_UNITS) break
+            val breakawayUnits = growBreakaway(
+                units, owner, quality, largestOverCap, mine, minTakenUnits = 1
+            ) ?: break
             val breakaway = count++
-            taken.forEach { owner[it] = breakaway }
+            breakawayUnits.forEach { owner[it] = breakaway }
         }
         val chance = config.nations.schismChance.coerceIn(0f, 1f)
         if (chance <= 0f) return Realms(owner, count)
@@ -325,31 +381,64 @@ internal object BasinRealms {
             val mine = (0 until units.unitCount).filter { owner[it] == realm }
             // Needs enough pieces that a split leaves two believable countries rather than a
             // country and an enclave.
-            if (mine.size < 4) continue
+            if (mine.size < MIN_SCHISM_UNITS) continue
             if (random.nextFloat() > chance) continue
-
-            val targetSize = mine.size / 2
-            // Start from the piece furthest from the realm's best land, so the breakaway is the
-            // periphery rather than the heartland — which is the way these usually go.
-            val start = mine.minByOrNull { quality[it] } ?: continue
-
-            val taken = HashSet<Int>()
-            val frontier = ArrayDeque<Int>()
-            frontier.addLast(start)
-            taken.add(start)
-            while (frontier.isNotEmpty() && taken.size < targetSize) {
-                val u = frontier.removeFirst()
-                units.neighbours[u].forEach { nb ->
-                    if (owner[nb] == realm && taken.add(nb)) frontier.addLast(nb)
-                }
-            }
-            if (taken.size < 2 || taken.size == mine.size) continue
-
+            val breakawayUnits = growBreakaway(
+                units, owner, quality, realm, mine, minTakenUnits = MIN_SCHISM_UNITS / 2
+            ) ?: continue
             val breakaway = count++
-            taken.forEach { owner[it] = breakaway }
+            breakawayUnits.forEach { owner[it] = breakaway }
         }
         return Realms(owner, count)
     }
+
+    /**
+     * Half of one realm's catchments, grown outward from its poorest, or null when the fill took
+     * fewer than [minTakenUnits] or swallowed the whole realm.
+     *
+     * [mine] is every catchment the realm holds. Starting from the poorest is what makes the
+     * breakaway the periphery rather than the heartland, which is the way these usually go;
+     * growing by flood fill through the realm's own neighbour lists is what keeps both halves
+     * contiguous and puts the line between them on divides the realm already contained.
+     */
+    private fun growBreakaway(
+        units: BasinUnits,
+        owner: IntArray,
+        quality: FloatArray,
+        realm: Int,
+        mine: List<Int>,
+        minTakenUnits: Int
+    ): Set<Int>? {
+        val start = mine.minByOrNull { quality[it] } ?: return null
+
+        val taken = HashSet<Int>()
+        val frontier = ArrayDeque<Int>()
+        frontier.addLast(start)
+        taken.add(start)
+        while (frontier.isNotEmpty() && taken.size < mine.size / 2) {
+            val unit = frontier.removeFirst()
+            units.neighbours[unit].forEach { neighbour ->
+                if (owner[neighbour] == realm && taken.add(neighbour)) frontier.addLast(neighbour)
+            }
+        }
+        if (taken.size < minTakenUnits || taken.size == mine.size) return null
+        return taken
+    }
+
+    /**
+     * Most times the over-cap split runs. Each pass takes one realm apart, so a world would have
+     * to be pathological to need more; the loop leaves the moment nothing is over the cap.
+     */
+    private const val MAX_CAP_SPLITS = 64
+
+    /**
+     * Fewest catchments a realm must hold to be split.
+     *
+     * Two for the cap, because an over-large realm has to come apart somehow; four for a voluntary
+     * schism, so that it leaves two believable countries rather than a country and an enclave.
+     */
+    private const val MIN_CAP_SPLIT_UNITS = 2
+    private const val MIN_SCHISM_UNITS = 4
 
     /**
      * Picks where the realms start.
@@ -370,28 +459,33 @@ internal object BasinRealms {
         // version of this non-deterministic and threw from the sort itself.
         val scored = (0 until units.unitCount)
             .filter { units.area[it] > 0 }
-            .map { it to quality[it] * (0.75f + 0.5f * random.nextFloat()) }
+            .map {
+                it to quality[it] *
+                    (MIN_SEED_JITTER + SEED_JITTER_RANGE * random.nextFloat())
+            }
             .sortedByDescending { it.second }
 
         // How many realms each landmass has earned. Largest remainder, so the seats add up exactly
         // and a small island is not rounded out of existence.
-        val landArea = IntArray(units.landmassCount)
-        for (u in 0 until units.unitCount) {
-            if (units.area[u] > 0) landArea[units.landmass[u]] += units.area[u]
+        val landmassArea = IntArray(units.landmassCount)
+        for (unit in 0 until units.unitCount) {
+            if (units.area[unit] > 0) landmassArea[units.landmass[unit]] += units.area[unit]
         }
-        val total = landArea.sum()
-        val allocation = IntArray(units.landmassCount)
-        if (total > 0) {
-            var handed = 0
-            val exact = DoubleArray(units.landmassCount) { landArea[it].toDouble() * wanted / total }
-            for (m in 0 until units.landmassCount) {
-                allocation[m] = exact[m].toInt()
-                handed += allocation[m]
+        val totalLand = landmassArea.sum()
+        val seatsPerLandmass = IntArray(units.landmassCount)
+        if (totalLand > 0) {
+            var handedOut = 0
+            val exactSeats = DoubleArray(units.landmassCount) {
+                landmassArea[it].toDouble() * wanted / totalLand
+            }
+            for (landmass in 0 until units.landmassCount) {
+                seatsPerLandmass[landmass] = exactSeats[landmass].toInt()
+                handedOut += seatsPerLandmass[landmass]
             }
             (0 until units.landmassCount)
-                .sortedByDescending { exact[it] - allocation[it] }
-                .take((wanted - handed).coerceAtLeast(0))
-                .forEach { allocation[it]++ }
+                .sortedByDescending { exactSeats[it] - seatsPerLandmass[it] }
+                .take((wanted - handedOut).coerceAtLeast(0))
+                .forEach { seatsPerLandmass[it]++ }
         }
 
         val chosen = ArrayList<Int>()
@@ -399,17 +493,16 @@ internal object BasinRealms {
         for ((unit, _) in scored) {
             if (chosen.size >= wanted) break
             if (unit in blocked) continue
-            val mass = units.landmass[unit]
-            if (allocation[mass] <= 0) continue
-            allocation[mass]--
+            val landmass = units.landmass[unit]
+            if (seatsPerLandmass[landmass] <= 0) continue
+            seatsPerLandmass[landmass]--
             chosen.add(unit)
-            // One ring clear, so two capitals do not share a valley - and no more than one,
-            // which was measured rather than assumed. Two rings were tried to stop a lone realm
-            // taking 42% of seed 7: it worked, and it halved how often borders follow rivers on
-            // two of four seeds, because river valleys are the richest ground and spacing the
-            // seeds out of them left both banks to a single realm. Sprawl is handled where it
-            // belongs instead, by splitting an oversized realm along its own watersheds; see
-            // schism().
+            // One ring clear, so two capitals do not share a valley — and no more than one ring,
+            // which was measured rather than assumed: two rings cost the world its river borders,
+            // because river valleys are the richest ground and spacing the seeds out of them
+            // leaves both banks to a single realm. Sprawl is handled where it belongs instead, by
+            // splitting an oversized realm along its own watersheds; see [schism]. See
+            // GEOGRAPHY.md, "Realms of uneven size".
             blocked.add(unit)
             units.neighbours[unit].forEach { blocked.add(it) }
         }
@@ -423,10 +516,31 @@ internal object BasinRealms {
         return chosen
     }
 
+    /**
+     * How much a catchment's quality is jittered before the seeds are picked: three quarters of it
+     * at least, and up to a quarter above it.
+     *
+     * Without the jitter the same map always seeds the same catchments, which makes two worlds
+     * that differ only in their realm count look like the same world; with it too wide, a realm
+     * takes root on ground nobody would settle.
+     */
+    private const val MIN_SEED_JITTER = 0.75f
+    private const val SEED_JITTER_RANGE = 0.5f
+
+    /**
+     * Packs a growth cost and a realm-and-unit index into one sortable long: the cost's raw bits
+     * in the high half, the index in the low half, so [LongMinHeap] orders by cost and breaks ties
+     * on the index the same way on every platform.
+     *
+     * Biased by one so the bits sort in the same order as the values — a cost is never below -1,
+     * and a negative float's raw bits sort backwards.
+     */
     private fun encode(cost: Float, index: Int): Long {
-        val bits = (cost + 1f).toRawBits()
+        val bits = (cost + COST_BIAS).toRawBits()
         return (bits.toLong() shl 32) or index.toLong()
     }
 
     private fun decodeIndex(encoded: Long): Int = (encoded and 0xFFFFFFFFL).toInt()
+
+    private const val COST_BIAS = 1f
 }

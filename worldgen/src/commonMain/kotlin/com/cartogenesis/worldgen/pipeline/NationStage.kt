@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.naming.NameKind
-import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.random.Random
 import kotlinx.serialization.Serializable
@@ -61,18 +60,171 @@ data class NationResult(
 /**
  * Step 6: settle the world.
  *
- * Realms are seeded on the most liveable ground and then grown outwards by cheapest-cost
- * expansion, where mountains, deserts, ice and open water all cost more to push through than
- * gentle farmland. Borders end up where expansion ran out of steam against something hard, which
- * is why they settle onto mountain ranges, rivers and coastlines without being told to.
+ * Territory is handed out in whole drainage catchments rather than grown cell by cell. A catchment
+ * is a piece of country that hangs together — one river system, one set of valleys — so a border
+ * between two of them falls on a watershed without anything being told to put it there, and
+ * cutting a large catchment along its own trunk river puts the rest of the borders on water.
+ * [BasinPartition] makes the pieces and [BasinRealms] shares them out, weighted by how liveable
+ * each one is.
  *
- * Expansion is capped, so remote and hostile country is left as unclaimed wilderness rather than
- * every last cell being painted.
+ * Two clean-up passes then run on the cells rather than the pieces: poor country can be released
+ * as unclaimed wilderness, and a pocket of one realm stranded inside another is given to whichever
+ * neighbour surrounds it.
+ *
+ * See REALISM_PLAN.md, B2 and B3.
  */
 object NationStage {
 
-    /** Scales cost into the sortable integer key the heap uses. */
-    private const val COST_SCALE = 64f
+    /**
+     * Highest ground, in `SeaLevelResult.relativeElevation` units, that habitability treats as
+     * ordinary country, and the most of a cell's score high ground may take away.
+     *
+     * A slope is harder to farm and harder to hold the higher it goes, but never worthless: even
+     * at the cap a mountain cell keeps 15% of its biome's score, because people do live in
+     * mountains.
+     */
+    private const val ELEVATION_PENALTY_PER_UNIT = 1.1f
+    private const val MAX_ELEVATION_PENALTY = 0.85f
+
+    /**
+     * What a drawable river is worth to the cell it runs through, added rather than multiplied.
+     *
+     * Fresh water is worth more than anything else on the habitability list, and it is worth it
+     * even in country the biome score has already written off — which an added bonus says and a
+     * multiplied one does not.
+     */
+    private const val RIVER_BONUS = 0.35f
+
+    /**
+     * Elevation above which a cell counts toward a realm's mountain share, in
+     * `SeaLevelResult.relativeElevation` units. What the atlas means by "mountainous".
+     */
+    private const val HIGH_GROUND_ELEVATION = 0.4f
+
+    /**
+     * Floors on the catchment sizes, in cells, for the two shares in `NationsConfig` that are
+     * expressed against the whole world's land.
+     *
+     * A share of a very small map rounds to nothing, and a partition into one-cell units is not a
+     * partition. Both are a resolution guard rather than a modelling choice.
+     */
+    private const val SMALLEST_LARGE_BASIN = 16
+    private const val SMALLEST_KEPT_BASIN = 4
+
+    /**
+     * Decorrelates the realm draw from every other stage's use of the world seed, so that changing
+     * the realm count does not move the cultures or the landmarks.
+     */
+    private const val REALM_SEED_MULTIPLIER = 8191L
+    private const val REALM_SEED_OFFSET = 17L
+
+    /**
+     * Times the enclave pass runs. Giving one pocket away can join two others into a piece worth
+     * keeping, so the answer is not settled in one go; three is where it stops changing, and the
+     * pass returns early the moment a round gives nothing away.
+     */
+    private const val ENCLAVE_PASSES = 3
+
+    /**
+     * How large the piece holding a realm's capital has to be, relative to that realm's largest
+     * piece, for the capital to stay where it is.
+     *
+     * Written as the reciprocal: the piece must be at least a quarter of the largest. Wide enough
+     * that a capital is not uprooted over a marginal difference, tight enough that a realm cannot
+     * be governed from a sliver.
+     */
+    private const val CAPITAL_KEEP_SHARE = 4
+
+    /**
+     * Land neighbours a coastal cell needs before it counts as fully sheltered.
+     *
+     * Seven of the eight, since a cell with all eight is not on the coast at all. A crude
+     * stand-in for a bay against a headland, but it is the one the grid actually knows.
+     */
+    private const val MOST_SHELTERING_NEIGHBOURS = 7f
+
+    /**
+     * Sea-surface anomaly, in degrees Celsius, at which the harbour and fishery terms reach their
+     * full configured value.
+     *
+     * Six degrees is about as far as a strong current carries water from its latitude's own mean —
+     * the Gulf Stream off Norway, the Humboldt off Peru — so it is the natural full scale.
+     */
+    private const val FULL_ANOMALY_C = 6f
+
+    /**
+     * How much of the warm-harbour bonus an entirely exposed coast still gets, and how much the
+     * rest of it is worth once the coast is fully sheltered.
+     *
+     * A warm current is worth something to any coast it washes; a sheltered one can also put a
+     * port in it. The two sum to one, so a fully sheltered coast gets the whole configured bonus.
+     */
+    private const val EXPOSED_HARBOUR_SHARE = 0.45f
+    private const val SHELTERED_HARBOUR_SHARE = 0.55f
+
+    /**
+     * Share of the world's runoff a cell must carry for habitability to treat it as being on a
+     * river. `RiverConfig.sourceFlowShare`'s default — see [drawableRiverFlow].
+     */
+    private const val DRAWN_RIVER_FLOW_SHARE = 0.0006f
+
+    /**
+     * Radii for the two blurred copies [describe] judges a capital site on, as a divisor of the
+     * map width so a capital is chosen on the same real country at every resolution: the
+     * hinterland it can be fed from, and the ground it has to stand above to be defensible.
+     */
+    private const val HINTERLAND_RADIUS_DIVISOR = 64
+    private const val RELIEF_RADIUS_DIVISOR = 96
+
+    /** Smallest useful blur radius, so a small map still averages more than a single cell. */
+    private const val MIN_BLUR_RADIUS = 2
+
+    /**
+     * Two, one short of [BoxBlur.PASSES_FOR_GAUSSIAN]. What these two blurs feed is a comparison
+     * between neighbouring cells' scores, not a picture, so the square kernel's corners never
+     * reach anything a reader sees.
+     */
+    private const val BLUR_PASSES = 2
+
+    /**
+     * What each thing is worth to a capital site, on one scale.
+     *
+     * Fresh water is the one non-negotiable and is worth more than a harbour; the hinterland comes
+     * next, because a capital has to be fed; the coast is worth least, since a flat coastal bonus
+     * of any size puts every coastal realm's capital on the shore. See [describe].
+     */
+    private const val CAPITAL_OWN_GROUND = 0.8f
+    private const val CAPITAL_ON_RIVER = 0.45f
+    private const val CAPITAL_ON_COAST = 0.18f
+    private const val CAPITAL_HINTERLAND = 0.6f
+    private const val CAPITAL_HEAD_OF_NAVIGATION = 0.10f
+    private const val CAPITAL_DEFENSIBILITY = 2.5f
+
+    /**
+     * How far above its surroundings, in `SeaLevelResult.relativeElevation` units, a capital site
+     * still gains from standing.
+     *
+     * A hill is defensible; a mountain is a different problem and not a better capital, so the
+     * term is capped rather than left to run.
+     */
+    private const val MOST_USEFUL_RELIEF = 0.12f
+
+    /**
+     * Turns the world seed and a realm id into the seed its names and its atlas entry are drawn
+     * from, so neighbouring realms sound like different peoples.
+     *
+     * A large prime for the world and a smaller one per realm, so that changing either the seed or
+     * the realm count moves every realm's naming rather than shifting the same names along by one.
+     */
+    private const val CULTURE_SEED_MULTIPLIER = 1_000_003L
+    private const val CULTURE_SEED_STRIDE = 7919L
+
+    /** The same again for the prose, so a realm's name and its lore do not share a stream. */
+    private const val ATLAS_SEED_MULTIPLIER = 17L
+    private const val ATLAS_SEED_OFFSET = 3L
+
+    /** Floor on the settled-biome weight, so a realm with no liveable ground divides by something. */
+    private const val MIN_SETTLED_WEIGHT = 1e-4f
 
     fun generate(
         config: WorldGenConfig,
@@ -81,34 +233,35 @@ object NationStage {
         rivers: RiverResult,
         ocean: OceanResult
     ): NationResult {
-        val w = config.width
-        val h = config.height
-        val cfg = config.nations
-        val cellCount = w * h
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val nationsConfig = config.nations
+        val cellCount = cellsAcross * cellsDown
 
         val habitability = habitability(config, sea, climate, rivers, ocean)
         val nationId = IntArray(cellCount) { NationResult.UNCLAIMED }
 
-        if (sea.landCellCount == 0 || cfg.nationCount <= 0) {
+        if (sea.landCellCount == 0 || nationsConfig.nationCount <= 0) {
             return NationResult(nationId, emptyList(), habitability)
         }
 
-        // Territory is handed out in whole catchments rather than grown cell by cell, which is what
-        // puts borders on watersheds instead of wherever two expansions happened to meet.
-        val cfgN = config.nations
-        val land = sea.landCellCount
+        val landCells = sea.landCellCount
         val catchments = BasinPartition.compute(
-            config, sea, rivers, (land * cfgN.maxBasinShare).toInt().coerceAtLeast(16)
+            config, sea, rivers,
+            (landCells * nationsConfig.maxBasinShare).toInt().coerceAtLeast(SMALLEST_LARGE_BASIN)
         )
         // Cut the big ones along their trunk, so some frontiers are rivers and not only divides.
         val banked = BasinPartition.splitAlongTrunks(
-            config, sea, rivers, catchments, rivers.flowAccumulation.data.max() * cfgN.riverBorderShare
+            config, sea, rivers, catchments,
+            rivers.flowAccumulation.data.max() * nationsConfig.riverBorderShare
         )
         val units = BasinPartition.mergeSmall(
-            config, sea, banked, (land * cfgN.minBasinShare).toInt().coerceAtLeast(4)
+            config, sea, banked,
+            (landCells * nationsConfig.minBasinShare).toInt().coerceAtLeast(SMALLEST_KEPT_BASIN)
         )
         val assignment = BasinRealms.assign(
-            config, sea, units, habitability, Random(config.seed * 8191 + 17)
+            config, sea, units, habitability,
+            Random(config.seed * REALM_SEED_MULTIPLIER + REALM_SEED_OFFSET)
         )
         assignment.realmOf.copyInto(nationId)
         val origins = assignment.origins
@@ -118,12 +271,16 @@ object NationStage {
         // Wilderness first, enclaves second. Releasing poor ground can cut a realm into pieces,
         // and dissolving enclaves before that happened left the fragments it made behind.
         val capitals = origins.toMutableList()
-        if (cfgN.wilderness != WildernessMode.CLAIM_ALL_LAND) {
+        if (nationsConfig.wilderness != WildernessMode.CLAIM_ALL_LAND) {
             leaveWilderness(config, sea, habitability, nationId, capitals)
         }
         dissolveEnclaves(config, sea, habitability, nationId, capitals)
         checkRealmIds(nationId, capitals.size, "dissolveEnclaves")
-        return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, capitals), habitability)
+        return NationResult(
+            nationId,
+            describe(config, sea, climate, rivers, habitability, nationId, capitals),
+            habitability
+        )
     }
 
     /**
@@ -140,11 +297,11 @@ object NationStage {
      * candidates are a hundred lines apart and only one of them can be wrong at a time.
      */
     private fun checkRealmIds(nationId: IntArray, realmCount: Int, after: String) {
-        for (i in nationId.indices) {
-            val realm = nationId[i]
+        for (cell in nationId.indices) {
+            val realm = nationId[cell]
             if (realm == NationResult.UNCLAIMED || realm in 0 until realmCount) continue
             throw IllegalStateException(
-                "NationStage: after $after, cell $i holds realm id $realm, " +
+                "NationStage: after $after, cell $cell holds realm id $realm, " +
                     "but the world has only $realmCount realms"
             )
         }
@@ -176,98 +333,108 @@ object NationStage {
         // Mutable, because a capital can move: see the keep rule below.
         origins: MutableList<Int>
     ) {
-        val w = config.width
-        val h = config.height
-        val capitalPiece = HashSet<Int>()
-        origins.forEach { capitalPiece.add(it) }
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
+        val capitalCells = HashSet<Int>()
+        origins.forEach { capitalCells.add(it) }
 
         // Repeated, because giving one pocket away can join two others into a piece worth keeping.
-        repeat(3) {
-            val piece = IntArray(w * h) { -1 }
-            val members = ArrayList<MutableList<Int>>()
-            for (start in 0 until w * h) {
-                if (piece[start] >= 0 || !sea.isLand[start]) continue
+        repeat(ENCLAVE_PASSES) {
+            // Every connected run of one realm's own land, numbered. A realm normally has one; the
+            // extras are the islands, the exclaves and the debris this function is here to clear.
+            val pieceOfCell = IntArray(cellCount) { -1 }
+            val pieces = ArrayList<MutableList<Int>>()
+            for (start in 0 until cellCount) {
+                if (pieceOfCell[start] >= 0 || !sea.isLand[start]) continue
                 val realm = nationId[start]
                 if (realm == NationResult.UNCLAIMED) continue
-                val id = members.size
-                val group = ArrayList<Int>()
-                val stack = ArrayDeque<Int>()
-                stack.addLast(start)
-                piece[start] = id
-                while (stack.isNotEmpty()) {
-                    val c = stack.removeLast()
-                    group.add(c)
-                    val x = c % w
-                    val y = c / w
-                    for (dy in -1..1) {
-                        val ny = y + dy
-                        if (ny !in 0 until h) continue
-                        for (dx in -1..1) {
-                            val n = ny * w + ((x + dx + w) % w)
-                            if (piece[n] < 0 && sea.isLand[n] && nationId[n] == realm) {
-                                piece[n] = id
-                                stack.addLast(n)
+                val pieceId = pieces.size
+                val pieceCells = ArrayList<Int>()
+                val toVisit = ArrayDeque<Int>()
+                toVisit.addLast(start)
+                pieceOfCell[start] = pieceId
+                while (toVisit.isNotEmpty()) {
+                    val cell = toVisit.removeLast()
+                    pieceCells.add(cell)
+                    val column = cell % cellsAcross
+                    val row = cell / cellsAcross
+                    for (rowStep in -1..1) {
+                        val neighbourRow = row + rowStep
+                        if (neighbourRow !in 0 until cellsDown) continue
+                        for (columnStep in -1..1) {
+                            val neighbour = neighbourRow * cellsAcross +
+                                ((column + columnStep + cellsAcross) % cellsAcross)
+                            if (pieceOfCell[neighbour] < 0 && sea.isLand[neighbour] &&
+                                nationId[neighbour] == realm
+                            ) {
+                                pieceOfCell[neighbour] = pieceId
+                                toVisit.addLast(neighbour)
                             }
                         }
                     }
                 }
-                members.add(group)
+                pieces.add(pieceCells)
             }
 
-            // What each realm keeps: its largest piece. The capital's piece used to win outright,
-            // which produced a nineteen-cell sovereign state on seed 42 - a realm whose capital
-            // happened to sit on a sliver cut off by a trunk-river split, so the sliver was kept
-            // and the country given away. A nation is its territory; if the capital is not on the
-            // territory, the capital moves. It keeps its own piece only when that piece is within a
-            // quarter of the largest, so a capital is not uprooted over a marginal difference.
-            val largest = HashMap<Int, Int>()
-            val largestArea = HashMap<Int, Int>()
-            members.forEachIndexed { id, group ->
-                val realm = nationId[group[0]]
-                if (group.size > (largestArea[realm] ?: -1)) {
-                    largestArea[realm] = group.size
-                    largest[realm] = id
+            // What each realm keeps: its largest piece. A nation is its territory, so if the
+            // capital is not on the territory, the capital moves — the capital's piece keeps its
+            // status only when it is within [CAPITAL_KEEP_SHARE] of the largest, so a capital is
+            // not uprooted over a marginal difference. Letting the capital's piece win outright
+            // produced a nineteen-cell sovereign state whose real country had been given away.
+            val largestPieceOfRealm = HashMap<Int, Int>()
+            val largestPieceCells = HashMap<Int, Int>()
+            pieces.forEachIndexed { pieceId, pieceCells ->
+                val realm = nationId[pieceCells[0]]
+                if (pieceCells.size > (largestPieceCells[realm] ?: -1)) {
+                    largestPieceCells[realm] = pieceCells.size
+                    largestPieceOfRealm[realm] = pieceId
                 }
             }
-            val keep = HashMap<Int, Int>()
-            members.forEachIndexed { id, group ->
-                val realm = nationId[group[0]]
-                if (group.none { it in capitalPiece }) return@forEachIndexed
-                val big = largest[realm] ?: id
-                if (id == big || group.size * 4 >= (largestArea[realm] ?: 0)) {
-                    keep[realm] = id
+            val keptPieceOfRealm = HashMap<Int, Int>()
+            pieces.forEachIndexed { pieceId, pieceCells ->
+                val realm = nationId[pieceCells[0]]
+                if (pieceCells.none { it in capitalCells }) return@forEachIndexed
+                val largest = largestPieceOfRealm[realm] ?: pieceId
+                if (pieceId == largest ||
+                    pieceCells.size * CAPITAL_KEEP_SHARE >= (largestPieceCells[realm] ?: 0)
+                ) {
+                    keptPieceOfRealm[realm] = pieceId
                 } else {
-                    keep[realm] = big
+                    keptPieceOfRealm[realm] = largest
                     // Best ground in the piece being kept. Scan order breaks ties, which is the
                     // same on every platform.
-                    val moved = members[big].maxByOrNull { habitability.data[it] }
+                    val movedCapital = pieces[largest].maxByOrNull { habitability.data[it] }
                         ?: return@forEachIndexed
-                    capitalPiece.remove(origins[realm])
-                    origins[realm] = moved
-                    capitalPiece.add(moved)
+                    capitalCells.remove(origins[realm])
+                    origins[realm] = movedCapital
+                    capitalCells.add(movedCapital)
                 }
             }
-            largest.forEach { (realm, id) -> if (realm !in keep) keep[realm] = id }
+            largestPieceOfRealm.forEach { (realm, pieceId) ->
+                if (realm !in keptPieceOfRealm) keptPieceOfRealm[realm] = pieceId
+            }
 
             var changed = false
-            members.forEachIndexed { id, group ->
-                val realm = nationId[group[0]]
-                if (keep[realm] == id) return@forEachIndexed
+            pieces.forEachIndexed { pieceId, pieceCells ->
+                val realm = nationId[pieceCells[0]]
+                if (keptPieceOfRealm[realm] == pieceId) return@forEachIndexed
 
                 // Who is next door on foot, and how much of this pocket's edge each of them holds.
-                val pressure = HashMap<Int, Int>()
-                group.forEach { c ->
-                    val x = c % w
-                    val y = c / w
-                    for (dy in -1..1) {
-                        val ny = y + dy
-                        if (ny !in 0 until h) continue
-                        for (dx in -1..1) {
-                            val n = ny * w + ((x + dx + w) % w)
-                            if (!sea.isLand[n]) continue
-                            val other = nationId[n]
+                val edgeHeldBy = HashMap<Int, Int>()
+                pieceCells.forEach { cell ->
+                    val column = cell % cellsAcross
+                    val row = cell / cellsAcross
+                    for (rowStep in -1..1) {
+                        val neighbourRow = row + rowStep
+                        if (neighbourRow !in 0 until cellsDown) continue
+                        for (columnStep in -1..1) {
+                            val neighbour = neighbourRow * cellsAcross +
+                                ((column + columnStep + cellsAcross) % cellsAcross)
+                            if (!sea.isLand[neighbour]) continue
+                            val other = nationId[neighbour]
                             if (other != NationResult.UNCLAIMED && other != realm) {
-                                pressure[other] = (pressure[other] ?: 0) + 1
+                                edgeHeldBy[other] = (edgeHeldBy[other] ?: 0) + 1
                             }
                         }
                     }
@@ -275,10 +442,12 @@ object NationStage {
                 // No land neighbours at all means an island, not an enclave. Leave it be.
                 // Ties go to the lower realm id: a HashMap's iteration order differs between the
                 // JVM and Wasm, and "whichever came first" is not a tie-break, it is a coin toss.
-                val host = pressure.entries
-                    .maxWithOrNull(compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
+                val host = edgeHeldBy.entries
+                    .maxWithOrNull(
+                        compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key }
+                    )
                     ?.key ?: return@forEachIndexed
-                group.forEach { nationId[it] = host }
+                pieceCells.forEach { nationId[it] = host }
                 changed = true
             }
             if (!changed) return
@@ -304,19 +473,20 @@ object NationStage {
         nationId: IntArray,
         origins: List<Int>
     ) {
-        val bar = config.nations.minSeedHabitability
+        val settleableFrom = config.nations.minSeedHabitability
         val capitals = origins.toHashSet()
-        for (i in nationId.indices) {
-            if (!sea.isLand[i]) continue
+        for (cell in nationId.indices) {
+            if (!sea.isLand[cell]) continue
             // A capital is never wilderness, whatever the ground around it scores.
-            if (i in capitals) continue
-            if (habitability.data[i] < bar) nationId[i] = NationResult.UNCLAIMED
+            if (cell in capitals) continue
+            if (habitability.data[cell] < settleableFrom) nationId[cell] = NationResult.UNCLAIMED
         }
     }
 
     /**
-     * How well people could live on a cell, 0..1. Driven by biome, then nudged by fresh water, by
-     * how punishing the terrain is, and — on the coast — by what the sea offshore is doing.
+     * How well people could live on each cell, 0..1, zero over water. Driven by biome, then nudged
+     * by fresh water, by how punishing the terrain is, and — on the coast — by what the sea
+     * offshore is doing.
      */
     private fun habitability(
         config: WorldGenConfig,
@@ -325,15 +495,16 @@ object NationStage {
         rivers: RiverResult,
         ocean: OceanResult
     ): FloatField {
-        val w = config.width
-        val h = config.height
-        val field = FloatField(w, h)
-        val riverThreshold = riverThreshold(sea, climate)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val field = FloatField(cellsAcross, cellsDown)
+        val drawableRiverFlow = drawableRiverFlow(sea, climate)
 
-        for (i in 0 until w * h) {
-            if (!sea.isLand[i]) continue
+        for (cell in 0 until cellsAcross * cellsDown) {
+            if (!sea.isLand[cell]) continue
 
-            var score = when (climate.biome[i]) {
+            // What the ground itself is worth, before water, relief and the sea have their say.
+            var score = when (climate.biome[cell]) {
                 Biome.TEMPERATE_FOREST, Biome.GRASSLAND -> 1.0f
                 // Wheat, olive and vine country, and the densest wet-rice country there is: two
                 // of the most thickly settled landscapes on Earth, so neither may fall through to
@@ -353,13 +524,16 @@ object NationStage {
             }
 
             // High ground is hard to farm and hard to hold.
-            val elevation = sea.relativeElevation.data[i]
-            score *= (1f - (elevation * 1.1f).coerceIn(0f, 0.85f))
+            val elevation = sea.relativeElevation.data[cell]
+            score *= (1f - (elevation * ELEVATION_PENALTY_PER_UNIT)
+                .coerceIn(0f, MAX_ELEVATION_PENALTY))
 
             // Fresh water is worth more than anything else on this list.
-            if (rivers.flowAccumulation.data[i] >= riverThreshold) score = (score + 0.35f).coerceAtMost(1f)
+            if (rivers.flowAccumulation.data[cell] >= drawableRiverFlow) {
+                score = (score + RIVER_BONUS).coerceAtMost(1f)
+            }
 
-            field.data[i] = score.coerceIn(0f, 1f)
+            field.data[cell] = score.coerceIn(0f, 1f)
         }
 
         if (config.ocean.enabled) applyCoastalValue(config, sea, field, ocean)
@@ -384,128 +558,87 @@ object NationStage {
         field: FloatField,
         ocean: OceanResult
     ) {
-        val w = config.width
-        val h = config.height
-        val cfg = config.nations
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val nationsConfig = config.nations
 
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val i = y * w + x
-                if (!sea.isLand[i]) continue
+        for (row in 0 until cellsDown) {
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                if (!sea.isLand[cell]) continue
 
-                var anomalySum = 0f
-                var shelfUpwelling = 0f
+                var anomalySumC = 0f
+                var shelfUpwellingC = 0f
                 var waterNeighbours = 0
                 var landNeighbours = 0
 
-                for (dy in -1..1) {
-                    val ny = y + dy
-                    if (ny !in 0 until h) continue
-                    for (dx in -1..1) {
-                        if (dx == 0 && dy == 0) continue
-                        val nx = (x + dx + w) % w
-                        val n = ny * w + nx
-                        if (sea.isLand[n]) {
+                for (rowStep in -1..1) {
+                    val neighbourRow = row + rowStep
+                    if (neighbourRow !in 0 until cellsDown) continue
+                    for (columnStep in -1..1) {
+                        if (columnStep == 0 && rowStep == 0) continue
+                        val neighbourColumn = (column + columnStep + cellsAcross) % cellsAcross
+                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                        if (sea.isLand[neighbour]) {
                             landNeighbours++
                             continue
                         }
                         waterNeighbours++
-                        val anomaly = ocean.anomaly.data[n]
-                        anomalySum += anomaly
+                        val anomalyC = ocean.anomaly.data[neighbour]
+                        anomalySumC += anomalyC
                         // Shelf, not open ocean: depth below sea level, small means shallow.
-                        val depth = -sea.relativeElevation.data[n]
-                        if (anomaly < 0f && depth < cfg.navigableDepth) {
-                            shelfUpwelling += -anomaly
+                        val depth = -sea.relativeElevation.data[neighbour]
+                        if (anomalyC < 0f && depth < nationsConfig.navigableDepth) {
+                            shelfUpwellingC += -anomalyC
                         }
                     }
                 }
                 if (waterNeighbours == 0) continue
 
-                val meanAnomaly = anomalySum / waterNeighbours
+                val meanAnomalyC = anomalySumC / waterNeighbours
                 // A bay ringed by land is sheltered; an exposed headland is not. Neighbouring land
                 // count is a crude stand-in for that, but it is the one the grid actually knows.
-                val shelter = (landNeighbours / 7f).coerceIn(0f, 1f)
-                val harbour = (meanAnomaly / 6f).coerceIn(-1f, 1f) *
-                    cfg.warmHarbourBonus * (0.45f + 0.55f * shelter)
-                val fishery = (shelfUpwelling / waterNeighbours / 6f).coerceIn(0f, 1f) *
-                    cfg.upwellingFisheryBonus
+                val shelter = (landNeighbours / MOST_SHELTERING_NEIGHBOURS).coerceIn(0f, 1f)
+                val harbour = (meanAnomalyC / FULL_ANOMALY_C).coerceIn(-1f, 1f) *
+                    nationsConfig.warmHarbourBonus *
+                    (EXPOSED_HARBOUR_SHARE + SHELTERED_HARBOUR_SHARE * shelter)
+                val fishery =
+                    (shelfUpwellingC / waterNeighbours / FULL_ANOMALY_C).coerceIn(0f, 1f) *
+                        nationsConfig.upwellingFisheryBonus
 
-                field.data[i] = (field.data[i] + harbour + fishery).coerceIn(0f, 1f)
+                field.data[cell] = (field.data[cell] + harbour + fishery).coerceIn(0f, 1f)
             }
         }
-    }
-
-    /** Matches RiverStage's notion of "big enough to be drawn", without re-tracing anything. */
-    private fun riverThreshold(sea: SeaLevelResult, climate: ClimateResult): Float {
-        var totalRunoff = 0f
-        for (i in sea.isLand.indices) {
-            if (sea.isLand[i]) totalRunoff += 0.05f + climate.precipitation.data[i]
-        }
-        return (totalRunoff * 0.0006f).coerceAtLeast(1e-4f)
     }
 
     /**
-     * Picks starting cells: the most liveable ground, but forced apart so realms do not all sprout
-     * inside the same fertile valley.
+     * The accumulated flow at which `RiverStage` would draw a channel, so habitability and the map
+     * agree about which cells are on a river — computed from the rainfall rather than by
+     * re-tracing anything.
+     *
+     * This pins `RiverConfig.sourceFlowShare`'s default rather than reading the setting, so a
+     * world generated with that slider moved has a habitability field built against the default
+     * river density while the map draws a different one. Reading the setting would leave a default
+     * world untouched and move every other one, which is a change to what the generator produces
+     * and not a rename; noted here rather than made, because it is a difference and not a design.
      */
-    private fun seedOrigins(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        habitability: FloatField
-    ): List<Int> {
-        val w = config.width
-        val h = config.height
-        val random = Random(config.seed * 31337 + 7)
-
-        // Each cell is scored once and then sorted on that fixed value. Drawing the jitter inside
-        // the comparator instead would give a cell a different score on each comparison, which
-        // both breaks the sort contract and destroys the determinism the whole pipeline rests on.
-        val candidates = (0 until w * h)
-            .filter { sea.isLand[it] && habitability.data[it] > config.nations.minSeedHabitability }
-            .map { it to habitability.data[it] * (0.75f + 0.5f * random.nextFloat()) }
-            .sortedByDescending { it.second }
-            .map { it.first }
-
-        if (candidates.isEmpty()) return emptyList()
-
-        val wanted = config.nations.nationCount
-        // Natural spacing for this many realms over this much land.
-        val natural = kotlin.math.sqrt(sea.landCellCount.toDouble() / wanted).toFloat()
-
-        // Wide spacing spreads realms onto continents that greedy picking would otherwise skip,
-        // but too wide and there is nowhere left to put the last few. Rather than trade coverage
-        // against count with a fixed figure, start wide and relax until the count is met.
-        var spacing = natural * config.nations.seedSpacing
-        var best: List<Int> = emptyList()
-        repeat(6) {
-            val chosen = pickSpaced(candidates, w, spacing, wanted)
-            if (chosen.size > best.size) best = chosen
-            if (chosen.size >= wanted) return chosen
-            spacing *= 0.75f
-        }
-        return best
-    }
-
-    private fun pickSpaced(candidates: List<Int>, width: Int, spacing: Float, wanted: Int): List<Int> {
-        val chosen = ArrayList<Int>(wanted)
-        val minimumSquared = spacing * spacing
-        for (candidate in candidates) {
-            if (chosen.size >= wanted) break
-            val cx = candidate % width
-            val cy = candidate / width
-            val clear = chosen.none { other ->
-                val ox = other % width
-                val oy = other / width
-                var dx = abs(cx - ox).toFloat()
-                if (dx > width / 2f) dx = width - dx
-                val dy = (cy - oy).toFloat()
-                dx * dx + dy * dy < minimumSquared
+    private fun drawableRiverFlow(sea: SeaLevelResult, climate: ClimateResult): Float {
+        var totalRunoff = 0f
+        for (cell in sea.isLand.indices) {
+            if (sea.isLand[cell]) {
+                totalRunoff += RiverStage.runoffWeight(climate.precipitation.data[cell])
             }
-            if (clear) chosen.add(candidate)
         }
-        return chosen
+        return (totalRunoff * DRAWN_RIVER_FLOW_SHARE).coerceAtLeast(RiverStage.MIN_SOURCE_FLOW)
     }
 
+    /**
+     * Everything the atlas says about each realm, from the map it was given: area, coast, rivers,
+     * neighbours, biome shares, a capital, a population and the prose.
+     *
+     * [origins] is one cell per realm, indexed by realm id, and every per-realm array below is
+     * sized by it — which is what [checkRealmIds] exists to protect.
+     */
     private fun describe(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -515,10 +648,11 @@ object NationStage {
         nationId: IntArray,
         origins: List<Int>
     ): List<Nation> {
-        val w = config.width
-        val h = config.height
-        val riverThreshold = riverThreshold(sea, climate)
-        val cellArea = config.nations.squareKilometresPerCell(w, h)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val drawableRiverFlow = drawableRiverFlow(sea, climate)
+        val squareKmPerCell =
+            config.nations.squareKilometresPerCell(cellsAcross, cellsDown)
 
         // Resources discovered near a realm are folded in later by the landmark stage; realms
         // start from what their own land yields.
@@ -533,9 +667,17 @@ object NationStage {
         // single cell it stands on: how much food its hinterland could grow, and whether it sits
         // above the surrounding ground or in a hollow.
         val hinterland = habitability.copy()
-        BoxBlur.apply(hinterland, radius = (config.width / 64).coerceAtLeast(2), passes = 2)
+        BoxBlur.apply(
+            hinterland,
+            radius = (config.width / HINTERLAND_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
+            passes = BLUR_PASSES
+        )
         val smoothedElevation = sea.relativeElevation.copy()
-        BoxBlur.apply(smoothedElevation, radius = (config.width / 96).coerceAtLeast(2), passes = 2)
+        BoxBlur.apply(
+            smoothedElevation,
+            radius = (config.width / RELIEF_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
+            passes = BLUR_PASSES
+        )
 
         val bestCapital = FloatArray(origins.size) { -1f }
         val capitalCell = IntArray(origins.size) { -1 }
@@ -544,77 +686,78 @@ object NationStage {
         val heartlandBiome = Array(origins.size) { HashMap<Biome, Float>() }
         val highGround = IntArray(origins.size)
 
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val i = y * w + x
-                val owner = nationId[i]
+        for (row in 0 until cellsDown) {
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                val owner = nationId[cell]
                 if (owner == NationResult.UNCLAIMED) continue
 
                 counts[owner]++
-                biomes[owner][climate.biome[i]] = (biomes[owner][climate.biome[i]] ?: 0) + 1
-                capacity[owner] += habitability.data[i].toDouble()
-                heartlandBiome[owner][climate.biome[i]] =
-                    (heartlandBiome[owner][climate.biome[i]] ?: 0f) + habitability.data[i]
-                if (sea.relativeElevation.data[i] > 0.4f) highGround[owner]++
+                biomes[owner][climate.biome[cell]] =
+                    (biomes[owner][climate.biome[cell]] ?: 0) + 1
+                capacity[owner] += habitability.data[cell].toDouble()
+                heartlandBiome[owner][climate.biome[cell]] =
+                    (heartlandBiome[owner][climate.biome[cell]] ?: 0f) + habitability.data[cell]
+                if (sea.relativeElevation.data[cell] > HIGH_GROUND_ELEVATION) highGround[owner]++
 
                 var touchesSea = false
-                forEachNeighbour(w, h, x, y) { n, _ ->
-                    if (!sea.isLand[n]) touchesSea = true
-                    val other = nationId[n]
-                    if (other != NationResult.UNCLAIMED && other != owner) neighbours[owner].add(other)
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, column, row) { neighbour ->
+                    if (!sea.isLand[neighbour]) touchesSea = true
+                    val other = nationId[neighbour]
+                    if (other != NationResult.UNCLAIMED && other != owner) {
+                        neighbours[owner].add(other)
+                    }
                 }
                 if (touchesSea) coastal[owner]++
 
-                val onRiver = rivers.flowAccumulation.data[i] >= riverThreshold
+                val onRiver = rivers.flowAccumulation.data[cell] >= drawableRiverFlow
                 if (onRiver) riverine[owner]++
 
                 // Why a capital ends up somewhere, in roughly the order history cares about.
-                //
                 // Fresh water first: it is the one non-negotiable, and a river is worth more than
                 // a harbour. Then the hinterland, since a capital needs land around it that can
                 // feed the place. Then defensibility — high ground relative to its surroundings.
-                // A harbour counts, but modestly: an earlier version gave it a flat bonus large
-                // enough that every realm touching a coast put its capital on the shore, and the
-                // audit found 12 of 12 capitals coastal on every seed, which no real map shows.
-                var score = habitability.data[i] * 0.8f
-                if (onRiver) score += 0.45f
-                if (touchesSea) score += 0.18f
-                score += hinterland.data[i] * 0.6f
+                // A harbour counts, but modestly: a flat bonus large enough to matter put every
+                // coastal realm's capital on the shore, which no real map shows.
+                var score = habitability.data[cell] * CAPITAL_OWN_GROUND
+                if (onRiver) score += CAPITAL_ON_RIVER
+                if (touchesSea) score += CAPITAL_ON_COAST
+                score += hinterland.data[cell] * CAPITAL_HINTERLAND
 
                 // The head of navigation, not the river mouth. Historically a capital sits where
                 // boats coming upriver have to stop and unload — inland enough to be defensible
                 // and out of the floodplain, but still reachable by water. Without this the best
                 // score is always the river mouth, which put nearly every capital on the shore.
-                if (onRiver && !touchesSea) score += 0.10f
+                if (onRiver && !touchesSea) score += CAPITAL_HEAD_OF_NAVIGATION
 
-                val relief = sea.relativeElevation.data[i] - smoothedElevation.data[i]
-                score += relief.coerceIn(0f, 0.12f) * 2.5f
+                val relief = sea.relativeElevation.data[cell] - smoothedElevation.data[cell]
+                score += relief.coerceIn(0f, MOST_USEFUL_RELIEF) * CAPITAL_DEFENSIBILITY
 
                 if (score > bestCapital[owner]) {
                     bestCapital[owner] = score
-                    capitalCell[owner] = i
+                    capitalCell[owner] = cell
                 }
             }
         }
 
         return origins.indices.mapNotNull { id ->
             if (counts[id] == 0) return@mapNotNull null
-            val total = counts[id].toFloat()
-            val cultureSeed = config.seed * 1_000_003L + id * 7919L
-            val random = Random(cultureSeed * 17 + 3)
+            val realmCells = counts[id].toFloat()
+            val cultureSeed = config.seed * CULTURE_SEED_MULTIPLIER + id * CULTURE_SEED_STRIDE
+            val random = Random(cultureSeed * ATLAS_SEED_MULTIPLIER + ATLAS_SEED_OFFSET)
 
             val name = NameForge.name(cultureSeed, NameKind.REALM, 0L)
             val capitalName = NameForge.name(cultureSeed, NameKind.SETTLEMENT, 1L)
             val shares = biomes[id].entries.sortedByDescending { it.value }
-                .map { it.key to it.value / total }
+                .map { it.key to it.value / realmCells }
             val heartland = heartlandBiome[id].entries.maxByOrNull { it.value }?.key
                 ?: shares.firstOrNull()?.first ?: Biome.GRASSLAND
 
-            val population =
-                (capacity[id] * cellArea * config.nations.peoplePerArableKm2).roundToLong()
-            val coastalShare = coastal[id] / total
-            val riverShare = riverine[id] / total
-            val mountainShare = highGround[id] / total
+            val population = (capacity[id] * squareKmPerCell *
+                config.nations.peoplePerArableKm2).roundToLong()
+            val coastalShare = coastal[id] / realmCells
+            val riverShare = riverine[id] / realmCells
+            val mountainShare = highGround[id] / realmCells
             val landlocked = coastal[id] == 0
 
             val government = Atlas.government(random, coastalShare, counts[id], neighbours[id].size)
@@ -623,7 +766,8 @@ object NationStage {
             val settledShares = heartlandBiome[id].entries
                 .sortedByDescending { it.value }
                 .let { entries ->
-                    val weight = entries.sumOf { it.value.toDouble() }.toFloat().coerceAtLeast(1e-4f)
+                    val weight = entries.sumOf { it.value.toDouble() }.toFloat()
+                        .coerceAtLeast(MIN_SETTLED_WEIGHT)
                     entries.map { it.key to it.value / weight }
                 }
             val exports = Atlas.exports(
@@ -656,32 +800,5 @@ object NationStage {
         }
     }
 
-    private fun encode(cost: Float, index: Int): Long {
-        val key = (cost * COST_SCALE).toLong().coerceIn(0L, 0x7FFF_FFFFL)
-        return (key shl 32) or index.toLong()
-    }
-
-    private fun decodeIndex(encoded: Long): Int = (encoded and 0xFFFFFFFFL).toInt()
-
-    private fun decodeCost(encoded: Long): Float = (encoded ushr 32).toFloat() / COST_SCALE
-
-    private inline fun forEachNeighbour(
-        width: Int,
-        height: Int,
-        x: Int,
-        y: Int,
-        action: (index: Int, distance: Float) -> Unit
-    ) {
-        for (dy in -1..1) {
-            val ny = y + dy
-            if (ny < 0 || ny >= height) continue
-            for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                var nx = (x + dx) % width
-                if (nx < 0) nx += width
-                action(ny * width + nx, if (dx != 0 && dy != 0) 1.41421356f else 1f)
-            }
-        }
-    }
 }
 

@@ -61,23 +61,34 @@ internal object LakeWaterBalance {
      * glacial lakes are untouched.
      */
     fun potentialEvaporationMm(summerC: Float, winterC: Float, scale: Float): Float {
-        val warmIndex = heatIndex(summerC)
-        val coldIndex = heatIndex(winterC)
-        val i = 6.0 * (warmIndex + coldIndex)
-        if (i <= 0.0) return 0f
-        val a = 6.75e-7 * i * i * i - 7.71e-5 * i * i + 1.792e-2 * i + 0.49239
-        val year = 6.0 * monthlyPet(summerC, i, a) + 6.0 * monthlyPet(winterC, i, a)
-        return (year * scale).toFloat().coerceAtLeast(0f)
+        // The bare figures below are Thornthwaite's own, in the order the formula above gives
+        // them: `I` is the year's heat index, `a` its cubic in `I`.
+        val warmIndex = monthlyHeatIndex(summerC)
+        val coldIndex = monthlyHeatIndex(winterC)
+        val yearHeatIndex = MONTHS_PER_SEASON * (warmIndex + coldIndex)
+        if (yearHeatIndex <= 0.0) return 0f
+        val exponent = 6.75e-7 * yearHeatIndex * yearHeatIndex * yearHeatIndex -
+            7.71e-5 * yearHeatIndex * yearHeatIndex + 1.792e-2 * yearHeatIndex + 0.49239
+        val yearMm = MONTHS_PER_SEASON * monthlyPotentialMm(summerC, yearHeatIndex, exponent) +
+            MONTHS_PER_SEASON * monthlyPotentialMm(winterC, yearHeatIndex, exponent)
+        return (yearMm * scale).toFloat().coerceAtLeast(0f)
     }
 
-    private fun heatIndex(t: Float): Double =
-        if (t <= 0f) 0.0 else (t / 5.0).pow(1.514)
+    /** Months the world's two seasonal temperature fields each stand for. */
+    private const val MONTHS_PER_SEASON = 6.0
+
+    private fun monthlyHeatIndex(temperatureC: Float): Double =
+        if (temperatureC <= 0f) 0.0 else (temperatureC / 5.0).pow(1.514)
 
     /** Thornthwaite's monthly total, capped: the power law runs away on a warm, low-index year. */
-    private fun monthlyPet(t: Float, i: Double, a: Double): Double {
-        if (t <= 0f) return 0.0
-        val pet = 16.0 * (10.0 * t / i).pow(a)
-        return pet.coerceAtMost(MAX_MONTHLY_PET)
+    private fun monthlyPotentialMm(
+        temperatureC: Float,
+        yearHeatIndex: Double,
+        exponent: Double
+    ): Double {
+        if (temperatureC <= 0f) return 0.0
+        val potentialMm = 16.0 * (10.0 * temperatureC / yearHeatIndex).pow(exponent)
+        return potentialMm.coerceAtMost(MAX_MONTHLY_PET)
     }
 
     /**
@@ -127,27 +138,31 @@ internal object LakeWaterBalance {
         minDepth: Float,
         runoffFraction: Float
     ): Balance {
-        val n = sortedGround.size
-        val inflow = runoffFraction * catchmentRainMm
+        val basinCellCount = sortedGround.size
+        val inflowMm = runoffFraction * catchmentRainMm
 
-        // Net gain with the lowest k cells under water. Rain that falls on the lake itself all
-        // joins the lake, so those cells swap their runoff share for the whole of it, and pay
-        // evaporation.
-        fun net(k: Int): Float =
-            inflow - runoffFraction * rainPrefix[k] + rainPrefix[k] - evaporationPrefix[k]
+        // Net gain in mm with the lowest `submerged` cells under water. Rain that falls on the
+        // lake itself all joins the lake, so those cells swap their runoff share for the whole of
+        // it, and pay evaporation.
+        fun netGainMm(submerged: Int): Float =
+            inflowMm - runoffFraction * rainPrefix[submerged] + rainPrefix[submerged] -
+                evaporationPrefix[submerged]
 
-        if (net(n) >= 0f) return Balance(n, spillSurface, atSpill = true)
-        if (net(1) < 0f) return Balance(0, sortedGround[0], atSpill = false)
-
-        // Largest k that still balances. net(1) >= 0 > net(n), so the answer is in [1, n).
-        var low = 1
-        var high = n
-        while (low + 1 < high) {
-            val mid = (low + high) / 2
-            if (net(mid) >= 0f) low = mid else high = mid
+        if (netGainMm(basinCellCount) >= 0f) {
+            return Balance(basinCellCount, spillSurface, atSpill = true)
         }
-        val surface = (sortedGround[low - 1] + minDepth).coerceAtMost(spillSurface)
-        return Balance(low, surface, atSpill = false)
+        if (netGainMm(1) < 0f) return Balance(0, sortedGround[0], atSpill = false)
+
+        // The most cells that still balance. One balances and all of them do not, so the answer
+        // lies between.
+        var balances = 1
+        var doesNot = basinCellCount
+        while (balances + 1 < doesNot) {
+            val midpoint = (balances + doesNot) / 2
+            if (netGainMm(midpoint) >= 0f) balances = midpoint else doesNot = midpoint
+        }
+        val surface = (sortedGround[balances - 1] + minDepth).coerceAtMost(spillSurface)
+        return Balance(balances, surface, atSpill = false)
     }
 
     /**
@@ -174,33 +189,52 @@ internal object LakeWaterBalance {
      * falls by 3e-3 to 1.3e-2 per cell — so nowhere with genuine relief in it is moved at all.
      */
     fun jitter(width: Int, x: Int, y: Int, seed: Long): Float {
-        val lattice = (width / JITTER_PERIOD).coerceAtLeast(1)
-        val gx = x / JITTER_PERIOD
-        val gy = y / JITTER_PERIOD
-        val fx = (x - gx * JITTER_PERIOD).toFloat() / JITTER_PERIOD
-        val fy = (y - gy * JITTER_PERIOD).toFloat() / JITTER_PERIOD
+        val latticeColumns = (width / JITTER_PERIOD).coerceAtLeast(1)
+        val latticeColumn = x / JITTER_PERIOD
+        val latticeRow = y / JITTER_PERIOD
+        val acrossCell = (x - latticeColumn * JITTER_PERIOD).toFloat() / JITTER_PERIOD
+        val downCell = (y - latticeRow * JITTER_PERIOD).toFloat() / JITTER_PERIOD
         // Smoothstep, so the field has no creases on the lattice lines for a path to follow.
-        val sx = fx * fx * (3f - 2f * fx)
-        val sy = fy * fy * (3f - 2f * fy)
-        val x0 = gx % lattice
-        val x1 = (gx + 1) % lattice
-        val top = lerp(hash(x0, gy, seed), hash(x1, gy, seed), sx)
-        val bottom = lerp(hash(x0, gy + 1, seed), hash(x1, gy + 1, seed), sx)
-        return lerp(top, bottom, sy) * JITTER_AMPLITUDE
+        val acrossBlend = acrossCell * acrossCell * (3f - 2f * acrossCell)
+        val downBlend = downCell * downCell * (3f - 2f * downCell)
+        val leftColumn = latticeColumn % latticeColumns
+        val rightColumn = (latticeColumn + 1) % latticeColumns
+        val alongTop = lerp(
+            hash(leftColumn, latticeRow, seed), hash(rightColumn, latticeRow, seed), acrossBlend
+        )
+        val alongBottom = lerp(
+            hash(leftColumn, latticeRow + 1, seed),
+            hash(rightColumn, latticeRow + 1, seed),
+            acrossBlend
+        )
+        return lerp(alongTop, alongBottom, downBlend) * JITTER_AMPLITUDE
     }
 
-    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+    private fun lerp(from: Float, to: Float, fraction: Float): Float =
+        from + (to - from) * fraction
 
-    /** One lattice corner's value in -1..1. Integer mixing only, so every platform agrees. */
-    private fun hash(ix: Int, iy: Int, seed: Long): Float {
-        var h = seed xor (ix.toLong() * -0x61c8864680b583ebL) xor (iy.toLong() * 0x27220a95_1d5a2b1fL)
-        h = h xor (h ushr 30)
-        h *= -0x40a7b892e31b1a47L
-        h = h xor (h ushr 27)
-        h *= -0x6b2fb644ecceee15L
-        h = h xor (h ushr 31)
-        return (h ushr 40).toInt() / 8388608f - 1f
+    /**
+     * One lattice corner's value in -1..1.
+     *
+     * Integer mixing only — the multiply-shift-xor rounds are SplitMix64's, chosen because they
+     * are the same on every platform where a floating-point hash would not be. The last line takes
+     * the top 24 bits and maps them onto -1..1, hence [HALF_OF_24_BITS].
+     */
+    private fun hash(latticeColumn: Int, latticeRow: Int, seed: Long): Float {
+        var mixed = seed xor
+            (latticeColumn.toLong() * -0x61c8864680b583ebL) xor
+            (latticeRow.toLong() * 0x27220a95_1d5a2b1fL)
+        mixed = mixed xor (mixed ushr 30)
+        mixed *= -0x40a7b892e31b1a47L
+        mixed = mixed xor (mixed ushr 27)
+        mixed *= -0x6b2fb644ecceee15L
+        mixed = mixed xor (mixed ushr 31)
+        return (mixed ushr (Long.SIZE_BITS - HASH_BITS)).toInt() / HALF_OF_24_BITS - 1f
     }
+
+    /** Bits of the mixed hash kept, and half that range, which is what centres it on zero. */
+    private const val HASH_BITS = 24
+    private const val HALF_OF_24_BITS = 8388608f
 
     /** Cells across one period of the jitter field: short enough to bend a path inside one basin. */
     private const val JITTER_PERIOD = 8
@@ -264,7 +298,7 @@ internal object LakeWaterBalance {
         fun surfaceAt(cell: Int): Float =
             ground.data[cell] + jitter(width, cell % width, cell / width, seed)
 
-        val heap = LongMinHeap(cellCount.coerceAtLeast(16))
+        val frontier = LongMinHeap(cellCount.coerceAtLeast(MIN_HEAP_CAPACITY))
         for (cell in water) {
             if (!pending[cell]) continue
             pending[cell] = false
@@ -272,42 +306,52 @@ internal object LakeWaterBalance {
             flowTarget[cell] = -1
             val here = surfaceAt(cell)
             pathKey[cell] = here
-            heap.push(FlowRouting.encode(here, cell))
+            frontier.push(FlowRouting.encode(here, cell))
         }
 
-        while (!heap.isEmpty()) {
-            val cell = FlowRouting.decodeIndex(heap.pop())
-            val x = cell % width
-            val y = cell / width
+        while (!frontier.isEmpty()) {
+            val cell = FlowRouting.decodeIndex(frontier.pop())
+            val column = cell % width
+            val row = cell / width
             val here = surfaceAt(cell)
 
             // Water cells are sinks and were settled with the seeds; everything else drains.
             if (settled[cell] != mark) {
                 settled[cell] = mark
-                var best = -1
-                var bestDrop = -Float.MAX_VALUE
-                FlowRouting.forEachNeighbourWithDistance(width, height, x, y) { n, distance ->
-                    if (settled[n] != mark) return@forEachNeighbourWithDistance
-                    val drop = (here - surfaceAt(n)) / distance
-                    if (drop > bestDrop || (drop == bestDrop && n < best)) {
-                        bestDrop = drop
-                        best = n
+                var steepestNeighbour = -1
+                var steepestDrop = -Float.MAX_VALUE
+                FlowRouting.forEachNeighbourWithDistance(
+                    width, height, column, row
+                ) { neighbour, distance ->
+                    if (settled[neighbour] != mark) return@forEachNeighbourWithDistance
+                    val drop = (here - surfaceAt(neighbour)) / distance
+                    if (drop > steepestDrop ||
+                        (drop == steepestDrop && neighbour < steepestNeighbour)
+                    ) {
+                        steepestDrop = drop
+                        steepestNeighbour = neighbour
                     }
                 }
-                flowTarget[cell] = best
+                flowTarget[cell] = steepestNeighbour
             }
 
-            val level = pathKey[cell]
-            FlowRouting.forEachNeighbour(width, height, x, y) { n ->
-                if (!pending[n]) return@forEachNeighbour
-                pending[n] = false
+            val highestOnRoute = pathKey[cell]
+            FlowRouting.forEachNeighbour(width, height, column, row) { neighbour ->
+                if (!pending[neighbour]) return@forEachNeighbour
+                pending[neighbour] = false
                 // Keyed by the highest ground on the way down, so the route out of a side hollow
                 // is the one over its lowest saddle.
-                val there = surfaceAt(n)
-                val key = if (there > level) there else level
-                pathKey[n] = key
-                heap.push(FlowRouting.encode(key, n))
+                val there = surfaceAt(neighbour)
+                val key = if (there > highestOnRoute) there else highestOnRoute
+                pathKey[neighbour] = key
+                frontier.push(FlowRouting.encode(key, neighbour))
             }
         }
     }
+
+    /**
+     * Floor on the priority queue's initial capacity, so a two-cell playa does not allocate a heap
+     * that has to grow on its first few pushes.
+     */
+    private const val MIN_HEAP_CAPACITY = 16
 }

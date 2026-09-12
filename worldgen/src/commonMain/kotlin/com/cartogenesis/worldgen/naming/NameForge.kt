@@ -24,13 +24,16 @@ class NameStyle(seed: Long) {
 
     init {
         val random = Random(seed)
-        onsets = ONSET_POOL.pick(random, 7, 11)
-        nuclei = NUCLEUS_POOL.pick(random, 4, 6)
-        codas = CODA_POOL.pick(random, 5, 8)
-        realmSuffixes = REALM_SUFFIXES.pick(random, 3, 5)
-        settlementSuffixes = SETTLEMENT_SUFFIXES.pick(random, 3, 5)
-        doublesVowels = random.nextFloat() < 0.25f
-        likesApostrophe = random.nextFloat() < 0.15f
+        // Slice sizes, not counts of anything real: wide enough that two cultures rarely draw the
+        // same inventory, narrow enough that each one still sounds like a single language rather
+        // than like the whole pool.
+        onsets = ONSET_POOL.pick(random, min = 7, max = 11)
+        nuclei = NUCLEUS_POOL.pick(random, min = 4, max = 6)
+        codas = CODA_POOL.pick(random, min = 5, max = 8)
+        realmSuffixes = REALM_SUFFIXES.pick(random, min = 3, max = 5)
+        settlementSuffixes = SETTLEMENT_SUFFIXES.pick(random, min = 3, max = 5)
+        doublesVowels = random.nextFloat() < DOUBLED_VOWEL_CULTURE_CHANCE
+        likesApostrophe = random.nextFloat() < APOSTROPHE_CULTURE_CHANCE
     }
 
     /**
@@ -44,7 +47,7 @@ class NameStyle(seed: Long) {
         val builder = StringBuilder()
         var previousEndedInConsonant = false
 
-        repeat(syllables.coerceIn(1, 3)) { index ->
+        repeat(syllables.coerceIn(1, MAX_SYLLABLES)) { index ->
             val lastSyllable = index == syllables - 1
 
             // After a consonant ending, favour a simple single-letter onset.
@@ -57,14 +60,17 @@ class NameStyle(seed: Long) {
 
             var vowel = nuclei.random(random)
             // Only ever lengthen a plain vowel; doubling a diphthong gives "ouu" and "aeu".
-            if (doublesVowels && vowel.length == 1 && index == 0 && random.nextFloat() < 0.35f) {
+            if (doublesVowels && vowel.length == 1 && index == 0 &&
+                random.nextFloat() < DOUBLED_VOWEL_CHANCE
+            ) {
                 vowel += vowel
             }
             builder.append(vowel)
 
             // A coda on every syllable makes a word a mouthful, so only sometimes — and more often
             // at the end, where it reads as a proper ending.
-            val wantsCoda = random.nextFloat() < (if (lastSyllable) 0.7f else 0.3f)
+            val wantsCoda = random.nextFloat() <
+                (if (lastSyllable) FINAL_CODA_CHANCE else MEDIAL_CODA_CHANCE)
             if (wantsCoda) {
                 val coda = if (lastSyllable) codas.random(random)
                 else codas.filter { it.length == 1 }.randomOrNull(random) ?: codas.random(random)
@@ -75,7 +81,7 @@ class NameStyle(seed: Long) {
             }
 
             if (likesApostrophe && !lastSyllable && !previousEndedInConsonant &&
-                random.nextFloat() < 0.18f
+                random.nextFloat() < APOSTROPHE_CHANCE
             ) {
                 builder.append('\'')
             }
@@ -84,7 +90,7 @@ class NameStyle(seed: Long) {
     }
 
     /** A short, clean stem for constructions that supply their own descriptor. */
-    fun stem(random: Random): String = word(random, random.nextInt(1, 3))
+    fun stem(random: Random): String = word(random, random.nextInt(1, MAX_SYLLABLES))
 
     fun name(random: Random, kind: NameKind): String = when (kind) {
         NameKind.REALM -> realmName(random)
@@ -98,26 +104,66 @@ class NameStyle(seed: Long) {
 
     private fun realmName(random: Random): String {
         // Suffixes add length of their own, so the stem stays short when one is attached.
-        return when (random.nextInt(5)) {
+        return when (random.nextInt(REALM_NAME_FORMS)) {
             0 -> "The ${REALM_TITLES.random(random)} of ${word(random, random.nextInt(2, 4))}"
-            1 -> word(random, 3)
-            else -> "${word(random, random.nextInt(1, 3))}${realmSuffixes.random(random)}"
+            1 -> word(random, MAX_SYLLABLES)
+            else ->
+                "${word(random, random.nextInt(1, MAX_SYLLABLES))}${realmSuffixes.random(random)}"
         }
     }
 
     private fun settlementName(random: Random): String {
-        val stem = word(random, random.nextInt(1, 3))
-        return if (random.nextFloat() < 0.55f) "$stem${settlementSuffixes.random(random)}" else stem
+        val stem = word(random, random.nextInt(1, MAX_SYLLABLES))
+        return if (random.nextFloat() < SUFFIXED_SETTLEMENT_CHANCE) {
+            "$stem${settlementSuffixes.random(random)}"
+        } else {
+            stem
+        }
     }
 
     /** "<word> <descriptor>" or "<descriptor> of <word>", e.g. "the Kelmar Reach". */
     private fun feature(random: Random, descriptors: List<String>): String {
         val stem = stem(random)
         val descriptor = descriptors.random(random)
-        return if (random.nextFloat() < 0.35f) "$descriptor of $stem" else "$stem $descriptor"
+        return if (random.nextFloat() < DESCRIPTOR_FIRST_CHANCE) {
+            "$descriptor of $stem"
+        } else {
+            "$stem $descriptor"
+        }
     }
 
     private companion object {
+
+        /** Longest word this generator builds, in syllables. Past three a name stops scanning. */
+        const val MAX_SYLLABLES = 3
+
+        /** How many cultures double a vowel at all, and how many use an apostrophe at all. */
+        const val DOUBLED_VOWEL_CULTURE_CHANCE = 0.25f
+        const val APOSTROPHE_CULTURE_CHANCE = 0.15f
+
+        /** And how often a culture that does either actually does it, per opportunity. */
+        const val DOUBLED_VOWEL_CHANCE = 0.35f
+        const val APOSTROPHE_CHANCE = 0.18f
+
+        /**
+         * How often a syllable takes a coda. Far more often at the end of a word, where a
+         * consonant reads as a proper ending; a coda on every syllable makes a word a mouthful.
+         */
+        const val FINAL_CODA_CHANCE = 0.7f
+        const val MEDIAL_CODA_CHANCE = 0.3f
+
+        /**
+         * Shapes a realm name can take: a title ("The Duchy of ..."), a bare word, or a suffixed
+         * stem — the last being the common case, and so taking the three remaining draws.
+         */
+        const val REALM_NAME_FORMS = 5
+
+        /** How often a settlement takes a suffix rather than standing as a bare stem. */
+        const val SUFFIXED_SETTLEMENT_CHANCE = 0.55f
+
+        /** How often a feature is "Sea of Kelmar" rather than "Kelmar Sea". */
+        const val DESCRIPTOR_FIRST_CHANCE = 0.35f
+
         val ONSET_POOL = listOf(
             "b", "br", "d", "dr", "f", "g", "gr", "h", "k", "kr", "l", "m", "n", "p", "pr",
             "r", "s", "sh", "sk", "sl", "st", "t", "th", "tr", "v", "w", "y", "z", "kh", "gl",
@@ -161,11 +207,22 @@ object NameForge {
 
     /** A bare place-word with no descriptor, for callers that add their own wording. */
     fun stem(cultureSeed: Long, salt: Long): String =
-        styleFor(cultureSeed).stem(Random(cultureSeed * 31 + salt * 2_654_435_761L))
+        styleFor(cultureSeed).stem(streamFor(cultureSeed, salt))
 
     /** Names one thing. [salt] separates the names a single culture generates from each other. */
-    fun name(cultureSeed: Long, kind: NameKind, salt: Long): String {
-        val style = styleFor(cultureSeed)
-        return style.name(Random(cultureSeed * 31 + salt * 2_654_435_761L), kind)
-    }
+    fun name(cultureSeed: Long, kind: NameKind, salt: Long): String =
+        styleFor(cultureSeed).name(streamFor(cultureSeed, salt), kind)
+
+    /**
+     * The draw one name comes out of: the culture's own seed, offset by the salt so that two
+     * things named by the same culture do not come out identical.
+     *
+     * The salt is multiplied by Knuth's 32-bit golden-ratio constant, because every caller passes
+     * an index and consecutive indices would otherwise land in a run of neighbouring seeds.
+     */
+    private fun streamFor(cultureSeed: Long, salt: Long): Random =
+        Random(cultureSeed * CULTURE_STRIDE + salt * GOLDEN_RATIO_32)
+
+    private const val CULTURE_STRIDE = 31L
+    private const val GOLDEN_RATIO_32 = 2_654_435_761L
 }

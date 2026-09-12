@@ -45,6 +45,47 @@ data class LandmarkResult(val landmarks: List<Landmark>)
  */
 object LandmarkStage {
 
+    /**
+     * Decorrelates the site draw from the realm and culture draws, so that changing the realm
+     * count does not move every lair on the map.
+     */
+    private const val SITE_SEED_MULTIPLIER = 6_700_417L
+    private const val SITE_SEED_OFFSET = 91L
+
+    /**
+     * How much a site's score is jittered: three fifths of it at least, and up to two fifths
+     * above it. Wide, because remoteness alone would put every site in the same waste.
+     */
+    private const val MIN_SITE_JITTER = 0.6f
+    private const val SITE_JITTER_RANGE = 0.8f
+
+    /**
+     * Fraction of the natural spacing that sites are actually held apart by.
+     *
+     * At exactly the natural spacing the last few sites have nowhere left to go on a world whose
+     * land is in awkward shapes, and the map comes up short of the count it was asked for.
+     */
+    private const val SPACING_SLACK = 0.8f
+
+    /**
+     * Elevation, in `SeaLevelResult.relativeElevation` units, above which a site counts as being
+     * in the mountains — which is what puts the wyrms and the ore up there.
+     */
+    private const val HIGH_GROUND_ELEVATION = 0.45f
+
+    /** Cells from a plate boundary within which a site counts as volcanic country. */
+    private const val VOLCANIC_REACH_CELLS = 6f
+
+    /** Mean annual temperature, in degrees Celsius, below which a site counts as cold country. */
+    private const val COLD_COUNTRY_C = 0f
+
+    /**
+     * Seeds the naming style landmarks share. One style for the whole world rather than one per
+     * realm, because these places tend to predate whoever lives nearby.
+     */
+    private const val NAME_SEED_MULTIPLIER = 7717L
+    private const val NAME_SEED_OFFSET = 4211L
+
     fun generate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -53,46 +94,53 @@ object LandmarkStage {
         plates: PlateResult,
         nations: NationResult
     ): LandmarkResult {
-        val cfg = config.landmarks
-        if (cfg.count <= 0 || sea.landCellCount == 0) return LandmarkResult(emptyList())
+        val landmarksConfig = config.landmarks
+        if (landmarksConfig.count <= 0 || sea.landCellCount == 0) {
+            return LandmarkResult(emptyList())
+        }
 
-        val w = config.width
-        val h = config.height
-        val random = Random(config.seed * 6_700_417L + 91)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val random = Random(config.seed * SITE_SEED_MULTIPLIER + SITE_SEED_OFFSET)
 
-        val anyWilderness = (0 until w * h).any {
+        val anyWilderness = (0 until cellsAcross * cellsDown).any {
             sea.isLand[it] && nations.nationId[it] == NationResult.UNCLAIMED
         }
 
         // Score every land cell once, then take the best sites with spacing between them.
         val scored = ArrayList<Pair<Int, Float>>()
-        for (i in 0 until w * h) {
-            if (!sea.isLand[i]) continue
-            val unclaimed = nations.nationId[i] == NationResult.UNCLAIMED
+        for (cell in 0 until cellsAcross * cellsDown) {
+            if (!sea.isLand[cell]) continue
+            val unclaimed = nations.nationId[cell] == NationResult.UNCLAIMED
 
             // Remoteness is the main draw. When the whole world is claimed there is no wilderness
             // to prefer, so fall back to whatever is least liveable.
             var score = if (unclaimed && anyWilderness) 1f else 0f
-            score += (1f - nations.habitability.data[i]) * cfg.remotenessBias
-            score *= 0.6f + 0.8f * random.nextFloat()
-            if (!unclaimed && anyWilderness && cfg.wildernessOnly) continue
-            scored.add(i to score)
+            score += (1f - nations.habitability.data[cell]) * landmarksConfig.remotenessBias
+            score *= MIN_SITE_JITTER + SITE_JITTER_RANGE * random.nextFloat()
+            if (!unclaimed && anyWilderness && landmarksConfig.wildernessOnly) continue
+            scored.add(cell to score)
         }
         if (scored.isEmpty()) return LandmarkResult(emptyList())
 
         scored.sortByDescending { it.second }
 
-        val spacing = kotlin.math.sqrt(sea.landCellCount.toDouble() / cfg.count).toFloat() * 0.8f
-        val chosen = ArrayList<Int>(cfg.count)
+        // Natural spacing for this many sites over this much land, pulled in a little so a world
+        // that cannot quite fit them at arm's length still gets its full count.
+        val spacingCells = kotlin.math.sqrt(
+            sea.landCellCount.toDouble() / landmarksConfig.count
+        ).toFloat() * SPACING_SLACK
+        val chosen = ArrayList<Int>(landmarksConfig.count)
         for ((cell, _) in scored) {
-            if (chosen.size >= cfg.count) break
-            val cx = cell % w
-            val cy = cell / w
+            if (chosen.size >= landmarksConfig.count) break
+            val column = cell % cellsAcross
+            val row = cell / cellsAcross
             val clear = chosen.none { other ->
-                var dx = abs(cx - other % w).toFloat()
-                if (dx > w / 2f) dx = w - dx
-                val dy = (cy - other / w).toFloat()
-                dx * dx + dy * dy < spacing * spacing
+                // The map wraps east to west, so the shorter way round is the real distance.
+                var across = abs(column - other % cellsAcross).toFloat()
+                if (across > cellsAcross / 2f) across = cellsAcross - across
+                val down = (row - other / cellsAcross).toFloat()
+                across * across + down * down < spacingCells * spacingCells
             }
             if (clear) chosen.add(cell)
         }
@@ -121,9 +169,11 @@ object LandmarkStage {
     ): LandmarkKind {
         val elevation = sea.relativeElevation.data[cell]
         val biome = climate.biome[cell]
-        val volcanic = plates.boundaryDistance.data[cell] < 6f
+        val volcanic = plates.boundaryDistance.data[cell] < VOLCANIC_REACH_CELLS
 
-        // Weights per kind, nudged by what the ground is actually like.
+        // Weights per kind, nudged by what the ground is actually like. A `mutableMapOf` because
+        // it iterates in insertion order on every platform, and the roll below walks it — a
+        // HashMap's bucket order would draw a different kind on the JVM and in a browser.
         val weights = mutableMapOf(
             LandmarkKind.MONSTER_LAIR to 1.0f,
             LandmarkKind.DUNGEON to 0.8f,
@@ -133,7 +183,7 @@ object LandmarkStage {
             LandmarkKind.WONDER to 0.6f,
             LandmarkKind.SANCTUARY to 0.5f
         )
-        if (elevation > 0.45f) {
+        if (elevation > HIGH_GROUND_ELEVATION) {
             weights[LandmarkKind.MONSTER_LAIR] = 2.0f
             weights[LandmarkKind.DUNGEON] = 1.6f
             weights[LandmarkKind.RESOURCE] = 1.8f
@@ -164,9 +214,9 @@ object LandmarkStage {
         sea: SeaLevelResult,
         climate: ClimateResult
     ): String {
-        val high = sea.relativeElevation.data[cell] > 0.45f
+        val high = sea.relativeElevation.data[cell] > HIGH_GROUND_ELEVATION
         val biome = climate.biome[cell]
-        val cold = climate.temperature.data[cell] < 0f
+        val cold = climate.temperature.data[cell] < COLD_COUNTRY_C
 
         return when (kind) {
             LandmarkKind.MONSTER_LAIR -> when {
@@ -215,7 +265,7 @@ object LandmarkStage {
 
     /** Landmark names ignore realm cultures — these places tend to predate whoever lives nearby. */
     private fun nameFor(config: WorldGenConfig, kind: LandmarkKind, detail: String, salt: Long): String {
-        val cultureSeed = config.seed * 7717L + 4211L
+        val cultureSeed = config.seed * NAME_SEED_MULTIPLIER + NAME_SEED_OFFSET
         // Anything phrased as "<something> of <place>" takes a bare stem. Using a full generated
         // name there appends a descriptor of its own and yields "Sunken vault of Expanse of Zuk".
         val stem = NameForge.stem(cultureSeed, salt)

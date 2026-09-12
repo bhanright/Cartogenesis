@@ -433,6 +433,85 @@ class DebugMapDump {
         println("Hotspot cone crops written to ${outputDir.absolutePath}")
     }
 
+    /**
+     * E2, before and after: the same worlds with the lake water balance off and on.
+     *
+     * Seed 43 carries the largest basin in dry country found by searching 1..120 — 1775 cells at
+     * (416,384) at 512, about 172 mm of rain a year — so it is rendered whole and again as a crop
+     * around that basin, where the difference between a filled bowl and a desert lake is a thing
+     * you can see rather than a number. Seed 718106 is the author's world at the resolution the
+     * desktop app opens at.
+     */
+    @Test
+    fun `dump the lake water balance`() {
+        outputDir.mkdirs()
+
+        fun pair(seed: Long, size: Int): Pair<WorldMap, WorldMap> {
+            val base = WorldGenConfig(seed = seed, width = size, height = size)
+            val off = WorldGenerationEngine.generateBlocking(
+                base.copy(lakes = base.lakes.copy(waterBalance = false))
+            )
+            val on = WorldGenerationEngine.generateBlocking(base)
+            return off to on
+        }
+
+        // The window around the biggest basin the balance drained, so the crop finds it whatever
+        // the world does rather than being aimed at a remembered coordinate.
+        fun basinWindow(off: WorldMap, on: WorldMap, span: Int): Triple<Int, Int, Int> {
+            val shrunk = off.rivers.lakes.lakes.maxByOrNull { lake ->
+                val cells = off.rivers.lakes.lakeId.indices.count { off.rivers.lakes.lakeId[it] == lake.id }
+                val wet = off.rivers.lakes.lakeId.indices.count {
+                    off.rivers.lakes.lakeId[it] == lake.id && on.rivers.lakes.isLake(it)
+                }
+                cells - wet
+            } ?: return Triple(0, 0, span)
+            val cells = off.rivers.lakes.lakeId.indices.filter { off.rivers.lakes.lakeId[it] == shrunk.id }
+            val cx = cells.map { it % off.width }.average().toInt()
+            val cy = cells.map { it / off.width }.average().toInt()
+            return Triple(
+                (cx - span / 2).coerceIn(0, off.width - span),
+                (cy - span / 2).coerceIn(0, off.height - span),
+                span
+            )
+        }
+
+        val (dryOff, dryOn) = pair(43L, 512)
+        write(render(dryOff, Mode.FANTASY), "balance-seed43-off.png")
+        write(render(dryOn, Mode.FANTASY), "balance-seed43-on.png")
+        val (bx, by, span) = basinWindow(dryOff, dryOn, 180)
+        write(crop(render(dryOff, Mode.FANTASY), bx, by, span, span, 4), "balance-seed43-basin-off.png")
+        write(crop(render(dryOn, Mode.FANTASY), bx, by, span, span, 4), "balance-seed43-basin-on.png")
+        println("BALANCE-RENDER seed 43 basin crop at ($bx,$by) ${span}x$span")
+
+        val (authorOff, authorOn) = pair(718106L, 1024)
+        write(render(authorOff, Mode.FANTASY), "balance-seed718106-1024-off.png")
+        write(render(authorOn, Mode.FANTASY), "balance-seed718106-1024-on.png")
+        write(render(authorOn, Mode.BIOME), "balance-seed718106-1024-biome.png")
+        val (ax, ay, aspan) = basinWindow(authorOff, authorOn, 300)
+        write(crop(render(authorOff, Mode.FANTASY), ax, ay, aspan, aspan, 3), "balance-seed718106-basin-off.png")
+        write(crop(render(authorOn, Mode.FANTASY), ax, ay, aspan, aspan, 3), "balance-seed718106-basin-on.png")
+        println("BALANCE-RENDER seed 718106 basin crop at ($ax,$ay) ${aspan}x$aspan")
+
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val (off, on) = pair(seed, 512)
+            write(render(off, Mode.FANTASY), "balance-seed$seed-off.png")
+            write(render(on, Mode.FANTASY), "balance-seed$seed-on.png")
+        }
+
+        listOf(dryOff to "43 off", dryOn to "43 on", authorOff to "718106 off", authorOn to "718106 on")
+            .forEach { (world, label) ->
+                val lakes = world.rivers.lakes
+                println(
+                    "BALANCE-RENDER $label: ${lakes.lakes.size} lakes, " +
+                        "${lakes.lakeId.count { it >= 0 }} lake cells, " +
+                        "${lakes.playa.count { it }} playa cells, " +
+                        "${lakes.lakes.count { it.endorheic }} endorheic, " +
+                        "${world.rivers.rivers.size} rivers"
+                )
+            }
+        println("Balance renders written to ${outputDir.absolutePath}")
+    }
+
     /** A rectangle of an image, blown up by [zoom] with no smoothing, so cells stay cells. */
     private fun crop(
         source: BufferedImage,
@@ -581,12 +660,23 @@ class DebugMapDump {
                 val land = world.sea.isLand[i]
                 val rel = world.sea.relativeElevation.data[i]
 
-                // Standing fresh water sits on top of whatever the land would have been.
+                // Standing fresh water sits on top of whatever the land would have been. Depth
+                // comes off the lake's own surface, not the fill: an endorheic lake stands below
+                // the brim its basin was raised to.
                 if (land && world.rivers.lakes.isLake(i) &&
                     (mode == Mode.FANTASY || mode == Mode.ELEVATION)
                 ) {
-                    val depth = world.rivers.filledElevation.data[i] - rel
+                    val depth = world.rivers.lakes.surfaceAt(i) - rel
                     image.setRGB(x, y, mix(0x4E92B4, 0x2F6B8C, (depth * 12f).coerceIn(0f, 1f)))
+                    continue
+                }
+
+                // A basin too dry to hold water at all. Pale salt, so the flats can be told from
+                // the desert around them while E2's follow-up decides how to draw them properly.
+                if (land && world.rivers.lakes.isPlaya(i) &&
+                    (mode == Mode.FANTASY || mode == Mode.ELEVATION)
+                ) {
+                    image.setRGB(x, y, 0xEDE6D6)
                     continue
                 }
 

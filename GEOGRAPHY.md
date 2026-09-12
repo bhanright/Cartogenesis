@@ -76,6 +76,28 @@ river network cannot leave a hollow in its own bed and ice does nothing else: on
 `GlaciationTest` measures 52 lakes per 42,000 cells of ice, tundra and taiga against 3 per 30,000
 cells of temperate country — 12.5 times the density, against 0.0 times with the ice switched off.
 
+**A dry basin is not a full one.** Depression filling raises every closed basin to its spill level,
+which is the right answer to a routing question and the wrong answer to a hydrological one: the
+Caspian, the Aral, Chad, Eyre and the Great Salt Lake all sit far below the rims of basins many
+times their own size, because a lake with no outlet loses water only by evaporating and settles
+where its catchment's inflow matches evaporation off its surface. `RiverStage` now solves that
+balance for every basin before it calls one a lake. Inflow is a runoff fraction (0.35 by default —
+Earth's rivers deliver about a third of the rain that falls on land) of `precipitationMm` summed
+over the catchment, which is the flow accumulation at the basin's pour point; the loss is
+Thornthwaite (1948) potential evaporation read off the warm- and cold-season temperature fields,
+which puts a hot desert at 2270 mm a year and cool temperate country at 554 mm with none of its
+published constants touched. The area at a given level is the basin's own hypsometry, so the answer
+is found by bisecting over the basin's cells sorted by the ground beneath them. A basin whose
+balance reaches the brim overflows exactly as before — wet country is untouched, cell for cell —
+and one that cannot is endorheic: its water is re-routed inward to the lake it can sustain, no
+river leaves it, and the rivers that used to be drawn below its rim are gone because that water
+never left. Where even the first cell of water cannot be held there is no lake at all, only a
+playa, recorded per cell for a later chunk to draw as salt flats. Measured on the largest dry basin
+in seeds 1-120 (seed 43, 1775 cells at 172 mm of rain against 577 mm of evaporation): 18% of its
+spill-level area holds water at balance, against 100% with the balance switched off. Across the
+author's world at 1024 the lake count falls 82 to 67 and the lake share of land 1.15% to 0.91%,
+with ten endorheic basins and 132 playa cells.
+
 ## Known deviations
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
@@ -92,7 +114,9 @@ cells of temperate country — 12.5 times the density, against 0.0 times with th
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
 run into it, and one river leaves at the outlet. River segments *inside* a lake are no longer drawn,
 since the river there is the lake — and those were precisely the segments that appeared to flow
-uphill. Depth is shaded from how far the water surface stands above the ground beneath it.
+uphill. Depth is shaded from how far the water surface stands above the ground beneath it. (The
+spill level is now only where a lake sits when it overflows; see "A dry basin is not a full one"
+above for the basins that stand below their rims.)
 
 **Capital siting.** Every capital was coastal — 12 of 12 on every seed, which no real map shows. The
 harbour bonus was large enough to outweigh everything else, and the best river cell is always the

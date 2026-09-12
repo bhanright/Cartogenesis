@@ -94,6 +94,12 @@ class IncrementalReuseTest {
             ),
             "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),
+            // E2's knobs live on the same section, and the river stage's guard covers the whole of
+            // it - but the water balance reaches further than any earlier lake setting did, since
+            // an endorheic basin rewrites the flow targets under it and takes its catchment out of
+            // everything downstream. A stale river stage would show up here and nowhere else.
+            "waterBalance" to base.copy(lakes = base.lakes.copy(waterBalance = false)),
+            "runoffFraction" to base.copy(lakes = base.lakes.copy(runoffFraction = 0.08f)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
             "nations" to base.copy(nations = base.nations.copy(nationCount = base.nations.nationCount + 4)),
             "wilderness" to base.copy(
@@ -248,7 +254,11 @@ class IncrementalReuseTest {
                 flowAccumulation = field(world.rivers.flowAccumulation),
                 flowTarget = world.rivers.flowTarget.copyOf(),
                 rivers = world.rivers.rivers.toList(),
-                lakes = LakeResult(world.rivers.lakes.lakeId.copyOf(), world.rivers.lakes.lakes.toList())
+                lakes = LakeResult(
+                    world.rivers.lakes.lakeId.copyOf(),
+                    world.rivers.lakes.lakes.toList(),
+                    world.rivers.lakes.playa.copyOf()
+                )
             ),
             nations = NationResult(
                 nationId = world.nations.nationId.copyOf(),
@@ -323,7 +333,11 @@ class IncrementalReuseTest {
             // Lakes are their own result hanging off the river stage. Leaving them out made
             // the `lakes` case pass while reusing a stale river stage — the check went
             // through the motions without ever looking at what the setting changes.
-            "lakes=${world.rivers.lakes.lakes.size},${world.rivers.lakes.lakeId.sum()}",
+            "lakes=${world.rivers.lakes.lakes.size},${world.rivers.lakes.lakeId.sum()}," +
+                // E2's endorheic basins and playas: a stale river stage would keep the old
+                // brim-full lakes, and the cell count alone would not say so.
+                "${world.rivers.lakes.lakes.count { it.endorheic }}," +
+                "${world.rivers.lakes.playa.count { it }}",
             "nations=${world.nations.nations.size},${world.nations.nationId.sum()}",
             "landmarks=${world.landmarks.landmarks.size}"
         ).joinToString("\n         ")

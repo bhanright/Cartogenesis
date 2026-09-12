@@ -407,6 +407,16 @@ walk is needed, `ErosionConfig`, tests.*
   12 realms), through `MapRasterizer`: the big basins should become river valleys or small lakes
   with a river leaving through a notch; nothing else should move.
 
+**E1 addition (2026-09-11, evening): deltas strand their rivers.** On seed 59758 at 2048 (ocean
+62%, 14 plates, 12 realms) William saw a river dead-end short of the sea. Measured: every chain ends
+at a sea cell, but in 42 of 152 mouths that cell is a one-or-two-cell pocket of sea enclosed by
+land, and 44 more touch the sea by one cell. B3's delta grows breadth-first around the old mouth,
+raises those cells to land, leaves the mouth below sea level, and cuts no channel across the lobe to
+the new shore; the lobe is exactly flat and nearly rectangular. Folded into E1 because it is the
+same code: the trunk must continue across its delta to the open sea along a low distributary path,
+the old pocket fills, the lobe slopes seaward with an irregular outline. Guard: zero enclosed-pocket
+mouths at 2048 on 59758 and at 512 on 42, shown failing on the current code.
+
 ### E2. Lake water balance — Opus
 
 *Dependencies: A4 (rainfall in mm). Files: `RiverStage.kt` lake step, `LakesConfig`, tests.*
@@ -617,7 +627,7 @@ guard reported, so the next chunk knows its baseline.
 | B4 Glaciation | Opus | done | 2026-09-11 | d3c6191 (merge 1ed02d2) | GlaciationStage inside the SEA_LEVEL step after the shelf remap, returning a SeaLevelResult (no new section or field); mask = provisional annual mean <= 0C from ClimateStage.buildTemperature (made internal - the only climate change); U cross-section across the flow, staircase reaches measured in descent, recessional moraine per reach, cirque per head, terminal moraine per land snout, sea-floor trough per marine snout, bounded to mask + 8 cells; never touches isLand (land 6226 unchanged); guard seed 42: 12.36 lakes per 10k cold cells vs 0.99 temperate = 12.47x, 0.00x with glaciation=false (shown failing); off reproduces the base fingerprint exactly; lakes 5/4/1 -> 73/56/20; cultures largest 29/30/32%, ice 17/41/25%; desert-in-band and deposition budget unchanged; shelf land-invariance case and ValleyIncisionTest's control now run with glaciation off because they measured it; DepositionTest pin re-recorded; unverified: fjord bathymetry exists (109 units of sea floor) but the coastline cannot indent because isLand is fixed first - recorded in GEOGRAPHY.md as a deviation replacing 'No glaciation' |
 | C1 Docs and release | Sonnet | done | 2026-09-11 | ccba6d7 (merge 6b6d8c6) | README pipeline, saving, peoples, views and CI sections rewritten against the code; TODO.md gained three done entries and five open items from the render reviews; GEOGRAPHY.md and the atlas copy needed nothing; cartogenesisVersion 1.1.0; checkout and setup-java to v5; tag v1.1.0 on 6b6d8c6 (CI green), release with portable zip 96 MB, MSI 96 MB, web zip 4.4 MB; packaged exe passes --gpu-check; web build deployed to cartogenesis.bfunk.online (site aa04a5d, loader stamp 202609110610, new wasm served as application/wasm); site CLAUDE.md updated |
 | E1 Outlet incision | Opus | not started | | | |
-| E2 Lake water balance | Opus | not started | | | |
+| E2 Lake water balance | Opus | done | 2026-09-11 | 667c956 (merge fec976d) | Thornthwaite on the two seasonal fields, unfitted: hot desert 2272 mm/yr, cool temperate 554, frozen 0 (glacial lakes stay at spill); runoffFraction 0.35 (Earth ~40k of 110k km3/yr; a constant flatters dry basins - Volga/Caspian is ~0.12); bisection over basin hypsometry; endorheic lakes become sinks with flow re-pointed, playa mask as section rivers.playa (33 sections, fixture regenerated); wet basins bit-identical; guard on dry seed 43 (1775-cell basin, 172 mm rain vs 577 evaporation): 18% of spill area at balance vs 100% measured with waterBalance=false; wet seed 99 at spill; 0 stranded rivers; seed 43 lake share 2.40 -> 0.91%, largest 0.677 -> 0.122% of map; 718106 at 1024 82 -> 67 lakes, 10 endorheic; border-on-river moved (42: 1.54 -> 1.10, 99: 1.30 -> 1.97, report-only); render: seed 43's rectangular basin becomes a small lake with a dendritic net across the exposed floor |
 | E3 Round hotspot cones | Sonnet | not started | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform

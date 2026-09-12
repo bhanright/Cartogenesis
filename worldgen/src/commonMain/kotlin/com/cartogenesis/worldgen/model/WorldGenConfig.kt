@@ -917,7 +917,37 @@ data class LakesConfig(
      */
     val minDepth: Float = 0.004f,
     /** Smallest lake worth drawing, in cells. Below this it is a puddle, not a feature. */
-    val minCells: Int = 12
+    val minCells: Int = 12,
+    /**
+     * Whether a closed basin's lake is sized by its water balance rather than filled to the brim.
+     *
+     * Depression filling answers a routing question and its answer is the spill level, so every
+     * basin on the map used to hold a lake full to the rim. That is right where the lake overflows
+     * and wrong everywhere else: the Caspian, the Aral, Chad, Eyre and the Great Salt Lake all sit
+     * far below the rim of basins many times their size, held there by evaporation. With this on,
+     * a basin's surface settles where its catchment's runoff matches evaporation off the water,
+     * capped at the spill. Off reproduces the old world exactly — a basin whose balance reaches the
+     * brim takes the same code path either way.
+     */
+    val waterBalance: Boolean = true,
+    /**
+     * What share of the rain falling on a catchment reaches the basin, rather than evaporating or
+     * transpiring off the ground where it fell.
+     *
+     * Earth's land receives roughly 110,000 cubic kilometres of rain a year and its rivers deliver
+     * roughly 40,000, so a third is the global figure. A real runoff coefficient is far from
+     * constant — it rises with rainfall and falls in hot, dry, vegetated country — and holding it
+     * constant flatters dry basins, giving them more inflow than they would truly get, so the
+     * effect this exists to produce is if anything understated.
+     */
+    val runoffFraction: Float = 0.35f,
+    /**
+     * Multiplies the Thornthwaite potential evaporation, for a world meant to be wetter or drier
+     * than Earth. One is the published curve, unmodified; see
+     * [com.cartogenesis.worldgen.pipeline.LakeWaterBalance.potentialEvaporationMm] for what it puts
+     * a hot desert and a cool temperate basin at.
+     */
+    val evaporationScale: Float = 1.0f
 )
 
 /** Settlement. Everything here is a starting point the user can overrule per realm. */

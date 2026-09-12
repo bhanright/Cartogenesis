@@ -92,6 +92,11 @@ class IncrementalReuseTest {
             "continentality" to base.copy(
                 climate = base.climate.copy(continentality = base.climate.continentality + 0.4f)
             ),
+            // H4: the march's over-sea moisture pickup now scales by the ocean stage's current
+            // anomaly, so this knob has to invalidate the same way the others in this section do.
+            "currentMoisture" to base.copy(
+                climate = base.climate.copy(currentMoisture = base.climate.currentMoisture + 0.1f)
+            ),
             "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),
             // E2's knobs live on the same section, and the river stage's guard covers the whole of

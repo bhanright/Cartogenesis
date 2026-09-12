@@ -391,7 +391,22 @@ data class ClimateConfig(
      * way to fully continental. Zero reproduces the world from before this setting existed, bit
      * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
      */
-    val continentality: Float = 0.6f
+    val continentality: Float = 0.6f,
+    /**
+     * How strongly a current's sea-surface temperature anomaly scales the moisture the march
+     * picks up over that sea cell, per degree of anomaly.
+     *
+     * Evaporation follows sea-surface temperature (Clausius-Clapeyron gives roughly +7% of
+     * saturation per degree), and which water is warm or cold is a question about currents, not
+     * latitude alone — [OceanStage] already solves the gyres and reports each cell's departure
+     * from its latitude's mean as [com.cartogenesis.worldgen.pipeline.OceanResult.anomaly]. This
+     * multiplies the march's over-sea pickup by `1 + currentMoisture * anomaly`, so a cold
+     * upwelling current (Atacama, Namib, Baja) starves the coast it washes and a warm one (the
+     * Gulf Stream, Norway) feeds it. The default of 0.07 is the Clausius-Clapeyron figure, so a
+     * 5-degree cold anomaly cuts pickup by 35% ("cuts it by a third"). Zero reproduces the field
+     * from before this setting existed, bit for bit, whatever the anomaly.
+     */
+    val currentMoisture: Float = 0.07f
 )
 
 @Serializable

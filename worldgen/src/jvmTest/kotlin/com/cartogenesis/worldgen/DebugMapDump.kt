@@ -102,6 +102,28 @@ class DebugMapDump {
     }
 
     /**
+     * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), before
+     * (`currentMoisture = 0`, today's field) and after (the default 0.07/deg). Annual rainfall and
+     * biome only, since the effect is on the annual march's over-sea pickup rather than anything
+     * seasonal.
+     */
+    @Test
+    fun `dump the H4 current-coupled coast before and after`() {
+        outputDir.mkdirs()
+        val seed = 26L
+        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val after = WorldGenerationEngine.generateBlocking(base)
+        val before = WorldGenerationEngine.generateBlocking(
+            base.copy(climate = base.climate.copy(currentMoisture = 0f))
+        )
+        write(render(before, Mode.RAINFALL), "seed$seed-h4-before-rainfall.png")
+        write(render(before, Mode.BIOME), "seed$seed-h4-before-biome.png")
+        write(render(after, Mode.RAINFALL), "seed$seed-h4-after-rainfall.png")
+        write(render(after, Mode.BIOME), "seed$seed-h4-after-biome.png")
+        println("H4 render: seed $seed before/after written to ${outputDir.absolutePath}")
+    }
+
+    /**
      * The three convergent pairs, side by side against the world that could not tell them apart.
      *
      * Every seed is rendered twice, once with

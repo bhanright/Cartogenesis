@@ -88,6 +88,8 @@ data class RiverResult(
  * Step 5: fill depressions so water never dead-ends inland, route every cell downhill, size the
  * lakes the fill implies against what their catchments can keep wet, accumulate rainfall downstream,
  * and trace the resulting channels to the coast — or to a lake with no way out of it.
+ *
+ * See REALISM_PLAN.md, E1 and E2, and GEOGRAPHY.md for what each rule is judged against.
  */
 object RiverStage {
 

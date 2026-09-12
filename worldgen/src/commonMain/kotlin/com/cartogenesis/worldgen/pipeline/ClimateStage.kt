@@ -1331,7 +1331,7 @@ object ClimateStage {
      * drift apart.
      */
     internal fun marchSeaStep(
-        cfg: ClimateConfig,
+        climateConfig: ClimateConfig,
         incomingMoisture: Float,
         seaTemperatureC: Float,
         currentAnomalyC: Float = 0f
@@ -1340,10 +1340,10 @@ object ClimateStage {
         // Clausius-Clapeyron gives roughly +7% of saturation per degree, which is what
         // `currentMoisture` defaults to. Floored at zero so a freak anomaly cannot make the pickup
         // negative.
-        val currentFactor = (1f + cfg.currentMoisture * currentAnomalyC).coerceAtLeast(0f)
+        val currentFactor = (1f + climateConfig.currentMoisture * currentAnomalyC).coerceAtLeast(0f)
         val moisture = incomingMoisture +
-            cfg.evaporationRate * warmth * currentFactor * (1f - incomingMoisture)
-        return MarchStep(moisture, moisture * cfg.baseRainRate * SEA_RAIN_MULTIPLE)
+            climateConfig.evaporationRate * warmth * currentFactor * (1f - incomingMoisture)
+        return MarchStep(moisture, moisture * climateConfig.baseRainRate * SEA_RAIN_MULTIPLE)
     }
 
     /**
@@ -1358,7 +1358,7 @@ object ClimateStage {
      * [marchSeaStep] for why this is shared with `MeridionalWindTest` rather than restated there.
      */
     internal fun marchLandStep(
-        cfg: ClimateConfig,
+        climateConfig: ClimateConfig,
         incomingMoisture: Float,
         elevationHere: Float,
         upwindElevation: Float,
@@ -1368,7 +1368,7 @@ object ClimateStage {
         // Orographic lift is the climb the air made getting here.
         val rise = (elevationHere - upwindElevation).coerceAtLeast(0f)
 
-        val rate = (cfg.baseRainRate + cfg.orographicStrength * rise) * bandFactor
+        val rate = (climateConfig.baseRainRate + climateConfig.orographicStrength * rise) * bandFactor
         val rain = (incomingMoisture * rate).coerceAtMost(incomingMoisture)
         var moisture = incomingMoisture - rain
 
@@ -1379,7 +1379,7 @@ object ClimateStage {
         // latitude re-moistens alike, at which point deserts stop preferring the horse latitudes
         // at all. See GEOGRAPHY.md, "Where the deserts are", for what that measures.
         val warmth = evaporativeWarmth(landTemperatureC)
-        moisture += cfg.landRecoveryRate * warmth * bandFactor * (1f - moisture)
+        moisture += climateConfig.landRecoveryRate * warmth * bandFactor * (1f - moisture)
 
         // Cold air simply holds less water.
         val coldCap = ((landTemperatureC - COLD_CAP_ZERO_C) / COLD_CAP_SPAN_C)

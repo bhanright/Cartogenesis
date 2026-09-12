@@ -52,6 +52,8 @@ data class CultureResult(
  * Cultures are built from catchments too, but from the unsplit ones. Realms cut a catchment along
  * its trunk river so the water can serve as a frontier; a people usually lives on both banks and
  * treats the river as its road, so the coarser partition is both cheaper and closer to right.
+ *
+ * See REALISM_PLAN.md, B3.
  */
 object CultureStage {
 

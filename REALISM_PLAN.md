@@ -650,7 +650,7 @@ in Settings and the View menu alongside System/Light/Dark/Nautical/Midnight/Mars
 
 ### Release 2.0.0 checklist
 
-When F and the GPU chunks are green: version 2.0.0; full suite plus the audit tier once; William's
+When F, H5 and H5b are green (G1 follows the release; G2 and G4 are in): version 2.0.0; full suite plus the audit tier once; William's
 two worlds rendered at 2048 and looked at; artefacts, `--gpu-check`, tag, release with notes that
 cover Tracks F, G, H and T1; web deploy from main (the deploy script now keeps the font folder);
 the site's small-screen notice becomes "Works on phones. Worlds generate at 512; exports are
@@ -772,6 +772,55 @@ elevation, mark it land, and let the river stage's depression fill decide whethe
 (a below-sea-level lake is the Caspian) or dry ground. Guard: zero enclosed sea regions after the
 cut on the standard seeds and on 59758 at 2048; the delta and rift guards hold; shown failing on
 the current code (E1 measured 46/37/40/62 pocket mouths on 59758/42/7/1234 at 512).
+
+### H5b. Channels cannot pond, drowned basins get an outlet, the desert guard by band — Opus
+
+*Dependencies: H5 merged. Added 2026-09-12 from the H5 review.* H5 moved three guard bars, and
+two of the three were defects measured rather than bars re-derived (rule 5): the comb share of
+standing water at 1024 rose from 2.5/2.8/1.7% to 2.3/4.5/2.6% on 718106/42/7 and the bar went
+3.5 → 5%; and a converted basin on 718106 fills to 1.11% of the land at 512, four times the
+Caspian's share, recorded as a deviation. The third, desert-in-band 85 → 80 pooled, is a
+measurement that cannot tell Earth's own out-of-band category from the defect it was written
+for. G1 must port the final semantics of the first two, so this precedes it.
+
+- **The receiver clamp.** The stream-power incision lowers a cell without regard to what its D8
+  receiver does in the same round, so a cell can end a round below the cell it drains to; the fill
+  turns that pit into a pond, and along a channel the ponds line up into exactly the thin
+  grid-bearing bars the comb measurement catches. Every landscape-evolution model since Braun &
+  Willett (2013, *Geomorphology* 180–181, the FastScape scheme) bounds a node's new elevation
+  below by its receiver's, `z_i' ≥ z_r'`, by processing nodes from the outlets upstream — the
+  order the D8 tree already gives. Do that, for incision and for whatever else the measurement
+  shows making channel pits (deposition raising a cell above its donors is an alluvial dam, which
+  is real but rare; measure before clamping it). Guard: channel cells lower than their receiver
+  after the rounds, zero by construction; the comb bar back at 3.5% or lower with the derivation
+  beside it, shown failing with the clamp off; lake count and share at 512/1024/2048 on 718106
+  reported; the mass budget exact; time reported. The ordered pass is a graph walk and stays on
+  the CPU (rule 8); write in the G1 handoff that the GPU port needs the same bound.
+- **A second outlet pass after the cut.** A basin the enclosure rule converts is filled by the
+  drainage to its sill, and neither E1's notch (which ran while that ground was under the
+  provisional sea) nor E2's balance (the floor is below sea level, there is nowhere to drain) can
+  touch it. Run E1's breach once more after the cut: a converted basin whose water balance
+  overflows cuts its sill toward grade; if the notch reaches below today's sea level the basin is
+  an arm of the sea — re-run the enclosure and it is ocean, an inlet with a narrow mouth. One that
+  never overflows stays a below-sea-level lake or playa (the Caspian, the Dead Sea, the Qattara).
+  Guard: the drowned-basin share `OutletIncisionTest` and `OutletResolutionTest` now print inside
+  the Caspian cap on the standard seeds and on 718106 and 59758 at 2048; shown failing with the
+  pass off (1.11% on 718106 at 512). Keep the share convention for the cap (S1 in
+  `REALISM_AUDIT.md` owns the conversion to km²).
+- **The desert guard by band.** Restate `GeographyAuditTest`'s desert measure so that it
+  distinguishes desert equatorward of 15° (the defect the guard was written for: desert on the
+  wettest rows) from desert poleward of 45° (Earth's own out-of-band category: the Gobi's north,
+  Patagonia, the Kazakh deserts), and so that a seed's land distribution does not decide the
+  answer: desert as a fraction of the *land in each band*, against Earth's per-band fractions from
+  Peel, Finlayson & McMahon (2007) Köppen–Geiger maps, with the bars derived from those figures
+  (a factor of two pooled, three per seed, as the plan's other one-sample guards do) and the
+  derivation beside the assertion. The pooled in-band figure stays as a printed report. Shown to
+  bite against a world with the subtropical dry belt switched off or the equivalent. If the
+  poleward band comes out over Earth's bound, that is a finding to diagnose and report (H5's
+  own note suggests the interiors dried when the spurious pockets stopped evaporating, and lakes
+  never feed the march), not a bar to widen.
+- Render 718106/42/7 at 1024 and 718106/59758 at 2048 and look; `GEOGRAPHY.md` gains the clamp
+  as held-by-construction and loses or restates the drowned-basin deviation.
 
 ### H1. Tectonic history — Opus
 
@@ -1032,6 +1081,24 @@ MSI 96 MB, web zip 4.5 MB; packaged exe passes --gpu-check; web build deployed f
 (site eb88d9b, loader stamp 202609120356, app wasm 8e5e62ee served as application/wasm); site
 notes updated. main is the 2.0 line: F1-F3, G2, T1 are there and not in 1.2.0.
 
+### Render review after H5 and F6 (2026-09-12)
+
+Both of William's worlds at 2048 on the H5 branch, against the same seeds on main before it,
+crop by crop. Held: coasts gain rias and estuaries where rivers meet them (718106's north-west
+inlet lengthens into a ria; 59758's estuary count 1 → 9), the sprinkle of ponds at 2048 is gone
+(`minCells` now an area), interiors keep fewer, larger lakes, and no pocket of sea survives. The
+one large new feature is a Caspian-shaped lake filling a coastal rift trough on 718106 (0.13% of
+the map, 1000 × 380 km), where main had a valley with a small lake: a below-sea-level basin
+walled from the sea by a sill, which is the Caspian's own situation and defensible once per
+world, but it exists because nothing can cut its sill after the cut — H5b. The crenulation H5
+records as a deviation reads, at 2048, as a rugged coast rather than noise; its fault is that
+every coast gets it. Pre-existing and not H5's: square-cornered coastal lobes with straight edges
+(718106 south-west, 59758 north and east, the same before and after — deposition lobes with a
+rectangular footprint, now in TODO), a flat-topped island with straight sides on 59758, and
+nested crescent-shaped lakes down a hotspot cone on 718106's southern rift (terraces ponded at
+successive fill levels, TODO). F6's five chromes and the colour-blind style reviewed from the
+gallery screenshots: each distinct and readable, the map unchanged under all of them.
+
 ## Realism audit II (2026-09-12)
 
 *William asked for a second audit of the climatology, geology, hydrology and presentation, "with a
@@ -1093,15 +1160,16 @@ guard reported, so the next chunk knows its baseline.
 | F4 Menus, settings, updates, notices | Opus | done | 2026-09-12 | 72b666a (merge 4b05eef) | menu strip drawn once in :ui (File: New world, Open library, Save, Save as, Export, Settings, Quit on desktop; View: theme System/Light/Dark/Nautical/Midnight/Mars, sections, toolbar; Help: Check for updates, About), declared as data in Menus.kt with MenusTest; desktop shortcuts Ctrl+N/O/S/Shift+S/E/,/Q; SettingsStore on the seam (desktop %APPDATA%\Cartogenesis\settings.json via temp-and-rename, web localStorage) with theme, resolution, card at launch, export defaults clamped by exportCeiling, library folder, scale, check-at-launch, reset; SettingsEffects tested by effect (10 + 5 desktop, including nothing reaches the network at launch); BuildInfo generated from gradle.properties; Updates.evaluate on the releases JSON with UpdatesTest (9, no socket); Notices.kt generated from the jvm and wasmJs runtime graphs plus LWJGL and the two OFL faces, 98 entries, NoticesTest; MapStyle.MARS (basalt sea, faint scarp coast, dark channels, rust-ochre-dust-white land, palette-only so the GPU raster is identical) and a Mars chrome; twelve screenshots. Found: no LICENSE file in the repo - About says so; William to decide. Found: OutletResolutionTest red on main since H1 (59758 at 2048, 1.69x Caspian) - handed to H5 |
 | F5 Phones | Opus | done | 2026-09-12 | c79ace6 (merge, see log) | one decision at the root (BoxWithConstraints -> Layouts.shape): below 800 dp or under a coarse pointer the map is full-bleed, the menu strip folds to one glyph, the toolbar to that glyph plus a palette menu with the current style's name and the view menu, the legend keeps cartouche and Fit; header and sections live in a pull-up sheet (72% height) that shortens the map rather than covering the cartouche; Arrangements declares each arrangement's reach and PanelKnobsTest (23 -> 32) proves the compact one reaches every knob, shown failing with a section dropped; gestures needed nothing platform-specific (detectTransformGestures already pans and pinches on wasm), double-tap-to-fit compact-only because it delays single taps that place labels; seam gains graphicsApiPresent, coarsePointer, exportCeiling(compact) = 2048 on web; compact starts at 512; wide layout pixel-identical at 1440x900 in every seed-independent region; screenshots at 390x844 and 768x1024, light and dark, sheet down and up; ui 75/75, desktop 28 with only OutletResolutionTest red (pre-existing) |
 | F6 Five chromes and a colour-blind map style | Opus | done | 2026-09-12 | a0ecd6f (merge e0d4275) | High contrast (pure black, pure white, 2 dp rules, type x1.15, opaque map strips, the spec's #1A6EFF kept as the *mark* at 4.72:1 and the same hue lifted to #6FA8FF at 8.72:1 wherever the accent is a word, since no colour pairs with #1A6EFF at 7:1), Colorblind (warm dark greys so Okabe-Ito's orange and sky blue reach 7.29:1 and 7.12:1 as text; error is their reddish purple, not their vermillion, which sits 6.04 from the orange under deuteranopia; armed button underlined, chosen chip ruled 2 dp, disabled chip struck), Allied (buff paper panels, navy ink, #B22222 grid red at 4.07:1, olive drab as the overprint on every filled state, capitals on the headings, boxed cartouche), Hallowed (lapis ground and filled states, vellum panels with ink, #D4AF37 leaf reserved for the doubled section rules and a shadowed gold #8A6A12 at 4.17:1 for the accent, crimson danger), Baroque (walnut ground and filled states, cream marble panels, lit oxblood at 8.50:1, gilt double rules with end diamonds, synthesised italic display face). Ornament, capitals, cues, stroke weight and the strip colour all live in one `ChromeDetail` read by `Controls.kt`, `Section` and the legend, so the six older chromes are byte-identical. `MapStyle.CLEAR` "Colour-blind": flat #1F2A3A sea, cividis-ordered 8-stop land ramp (adjacent stops >= 8.00 CIEDE2000 under deuteranopia and protanopia), biome wash 0, white rivers, 1-cell black coast at full strength, Tol muted nine for realms (worst pair 7.38 over every ground) with a 2-in-6 diagonal hatch for each further turn of the cycle (7.52 against its own fill); bar stated at 6.0. Palette-only bar the hatch: the recipe gained two political ramps that equal the plain pair for every other style, and the shader six lines for the comb, so `GpuRasterTest` passes over 15 views x 11 styles. Guards shown failing three ways (teal -> near-green 2.25; HC accent as text 4.72:1; vermillion 6.04). ui 81, cartography 25, desktop 30 with only the pre-existing `OutletResolutionTest` red |
-| G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
+| G1 Hydraulic rounds on GPU | Opus | queued behind H5b (ports its receiver clamp and post-cut outlet) | | | |
 | G2 Export rendering on GPU | Opus | done | 2026-09-12 | 8dca89f | RasterAccelerator seam in cartography takes a RasterRecipe (colours and tables pre-packed, no palette logic in shaders); desktop GpuRaster on OpenGL compute, web left to a later WGSL port; every view and style, relief, coastline, borders, lakes, hatching; 4M-pixel tiles, fields uploaded once; GlContext extracted from GpuErosion (two contexts on one thread invalidate each other's programs), erosion arithmetic untouched; 99.9th-percentile drift 0 across 141.5M pixels, worst channel 2 on 0.0002% (GLSL sqrt at a ramp node); 4096 export 224 -> 210 s, raster 714 -> 368 ms - the raster was never the bottleneck, generation is; 8192 exhausts a 10 GB heap inside the generator before a pixel is drawn (the device rasters 8192 in 0.9 s); README export table corrected |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |
 | G4 Jump-flood distance fields | Opus | done | 2026-09-12 | 0228500 (merge, see log) | math/JumpFloodDistance propagates source coordinates (1, halving powers of two, 1), integer squared distances, ties to the lower index, row-parallel, exact against brute force; replaced the chamfer in ClimateStage.waterDistance, the shelf remap and PlateStage's boundary distance (plate assignment keeps chamfer: only the label is read); 23/93/367 ms at 512/1024/2048 vs chamfer 6/33/110, +0.77 s on a 2048 generation, so no GPU path (rule 8: measured and declined); eight-fold component lone source 0.083 -> 0.004, shelf break on seed 42 0.030 -> 0.000, both controls in-test; continentality gap 8.5C held; shelf near/far held, 0 land cells differ; BoundaryPair 3.47x -> 3.01x (belts up to 8% wider in cells because Euclid is shorter); rift 3/4/0.32 -> 4/5/0.32; DepositionTest pin re-recorded, land 6226 held; render: plateau margins lose their kinks and sweep, the shelf break rounds |
 | H4 Currents feed the rain | Sonnet | done | 2026-09-12 | 30e7dc1 (merge, see log) | marchSeaStep scales over-sea pickup by 1 + currentMoisture * anomaly (0.07/deg, Clausius-Clapeyron); 0 reproduces the field bit for bit; seed 26 cold west coast 1548 -> 1536 mm (-0.8%), warm east coast +0.1%; shown failing with the coupling off; MM_SCALE anchor unmoved (3160/172 mm); no guard moved. Honest finding: at the derived rate no west-coast cell flips to desert on 40 seeds because the march is near saturation before landfall - reduced evaporation is only half of the Atacama; the other half is the cold sea stabilising the air and suppressing rain-out over the coast. A later pass should scale the release rate over cold-current coasts, not the pickup; recorded in TODO |
 | H2 Snow mass balance | Opus | done | 2026-09-12 | 801999a (merge 349c752) | SnowBalance: accumulation = each half-year's precipitation x a snow fraction ramped over -1..+3 C, ablation = positive-degree-day melt at 4.5 mm/degree-day (Braithwaite 1995, Hock 2003) with half-year means turned into degree-days by Calov and Greve 2005 (sigma 4.5 C); ClimateConfig.snowBalance, false reproduces main bit for bit (elevation and biome checksums pinned on 7/42/1234/99); provisional balance before glaciation reuses the seasonal fields on a still ocean (+66/298/1408 ms at 512/1024/2048; solving the gyres would cost 2.1 s and move 0.5-1.6% of the mask); balance 1/3/10 ms so no GPU, the seam cut and SnowBalanceAuditTest re-checks the 50 ms line; ice share of land 7/42/1234/99: 41.9/18.3/26.0/28.8 -> 8.4/3.9/12.0/12.6%, pooled 28.8 -> 9.2% vs Earth 10.1%; cold dry interior 39.9 -> 0.0% ice, wet quarter iced where the dry quarter is not (the control ran backwards), shown failing off; carving mask reads a Pleistocene world: GlaciationConfig.glacialMaximumC 6 C (Tierney 2020) as a polar-amplified ramp 2 C equator to 12 C pole, 26% of seed 42 under maximum ice vs Earth ~25% while the map draws today's 3.9%; lake-density guard restated at 1024 (6.93x, control 1.54x), resolution bar 1.7 -> 2.0 with derivation; desert-in-band, cultures, realms, comb unmoved; render: seed 7's northern third from white to tundra with ice on the polar margin and high wet ground, biome shares elsewhere identical to 0.1% |
-| H5 Sea-level history | Opus | in progress | 2026-09-12 | | |
+| H5 Sea-level history | Opus | done | 2026-09-12 | 3cc827e + 8e24cd3 (merge 84216d9) | SeaConfig.lowstand 0.015 (Earth's 120 m against 8 km of relief) holds the hydraulic base level down for rounds 0-8 and walks it up over 9-11, one scalar per round so G1 ports it free; after the cut every water body is 8-labelled wrapping in x and any non-ocean body no larger than the Caspian (enclosedSeaMaxShare 0.00073 of the map) becomes land at its own height, the fill and the water balance deciding lake or playa - the cap added after measuring its absence (3-5% of the map flipping, a lake 4x the Caspian, rift gulfs turned to lakes, desert-in-band to 82%); solving the cut for ocean coverage written and reverted (drowns E4's bridges); H1's aulacogens gained along-strike roughness so the notch measures a slope, LakesConfig.minCells scales as an area, OutletResolutionTest green at 512/1024/2048 on both seeds; 512 estuary mouths 12/14/3 -> 35/52/62, pockets 87/85/533 -> 0, 2048 estuaries 3 -> 32 and 1 -> 9, pockets 925/305 -> 0; shown failing with lowstand 0 and enclosure off; moved: DepositionTest land 6226 -> 6382, rift bridges 3 -> 2, ribbon 1.05 -> 1.10, meridional pooled, comb 0.035 -> 0.05 and desert 85/75 -> 80/65 (both handed to H5b as defects, not bars); new deviations: drowned basins to 1.1% of land, lowstand roughens every coast, inland seas above the cap stay sea |
+| H5b Channels cannot pond, drowned basins get an outlet, desert guard by band | Opus | queued | | | |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
-| H3 Lithology | Opus | queued behind H1 and G1 | | | |
+| H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
 | Audit II Realism audit, literature-backed | Fable | done | 2026-09-12 | see log | REALISM_AUDIT.md: five structural absences (scale, coupled uplift/isostasy, prescribed atmosphere, rectangular planet, coast as a line) plus presentation and determinism findings; twenty-three chunks S/W/R/K/I/P/V/N/M with dependencies, effort, visual weight, rigour and GPU applicability; an Earth-likeness metric table (hypsometry, coastline fractal dimension, Hack and Horton, lake and island size laws, desert, ice, lake and wetland shares, reef limit, delta class mix); sources listed with what was read and what is cited from memory to be checked at dispatch |
 

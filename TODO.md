@@ -2,6 +2,11 @@
 
 ## Done
 
+- **`LakesConfig.minCells` scales as an area** (2026-09-12, H5) — twelve cells at 512, 48 at
+  1024, 192 at 2048, the same piece of ground at every grid; the 2048 sprinkle of ponds that 512
+  never had is gone, and `OutletResolutionTest` holds at 512/1024/2048 on both of the author's
+  seeds.
+
 - **Lakes** (2026-08-23) — basins the flood had to raise are now standing water, with rivers
   running in and one leaving at the outlet. Took uphill-looking river segments from 13-20% down to
   12-14%; what is left is shallow filled ground below the lake depth threshold.
@@ -217,15 +222,37 @@
   neighbour. Real channels wander. The cure is a routing that carries direction between cells
   (D-infinity, or D8 with a seeded low-amplitude perturbation of the surface it reads), pinned
   by a straight-run guard against the current figure. Found 2026-09-12.
-- **`LakesConfig.minCells` is a fixed 12 cells, not a map fraction.** A rift basin that reads as a
-  lake at 1024 and 2048 is refused at 512, so the picture changes with the working resolution -
-  the same class of defect the glaciation budget fixed for glacial lakes. Express it as a share of
-  the map and pin it with the resolution contract. Found by E4, 2026-09-12.
-- **Over-large filled basins.** At 2048 the largest lake on a typical world is a tectonic basin
-  filled by the river stage to its spill point, at 0.12% of the map - bigger than the Caspian's share
-  of Earth. Glacial lakes are budgeted since 1.1.2; these are not. The principled fix is outlet
-  incision: a basin's spill point erodes down over the hydraulic rounds and the lake drains to a
-  smaller one or a river. Raised 2026-09-11.
+- **Over-large filled basins, the drowned kind.** E1's outlet incision and E2's water balance
+  size the lakes the drainage makes; what they cannot reach is a basin the sea-level cut converts
+  from unreachable sea to land (H5), because the notch ran while that ground was under the
+  provisional sea and the floor is below sea level. On 718106 at 512 one fills to 1.11% of the
+  land, four times the Caspian's share; at 2048 the same trough holds a Caspian-shaped lake of
+  0.13% of the map. The repair is E1's breach run once more after the cut, so a basin that
+  overflows cuts its sill and, if the notch reaches below sea level, becomes an arm of the sea
+  (H5b in REALISM_PLAN.md). Raised 2026-09-11, narrowed 2026-09-12.
+- **Channels pond into thin grid-bearing lakes.** The incision can leave a cell lower than its
+  D8 receiver, the fill ponds it, and along a channel the ponds line up into the bars the comb
+  measurement catches; H5's lowstand made it worse (2.8% → 4.5% of standing water on seed 42 at
+  1024). FastScape's bound, `z_i' ≥ z_r'` in downstream-to-upstream order, removes the class (H5b).
+  2026-09-12.
+- **Lakes never feed the moisture march.** Lakes are decided two stages after the climate, so no
+  lake evaporates into the air above it: no lake-effect rain downwind of a Caspian or a Great
+  Lake, and the interiors that used to drink from H5's spurious sea pockets are drier now that
+  those are land. A provisional lake mask from the filled surface before the march (the way H2
+  runs a provisional climate before the ice) is the cure; W3 in REALISM_AUDIT.md. 2026-09-12.
+- **Square-cornered coastal lobes.** Deposition lobes reach the sea with a rectangular footprint
+  and straight edges (718106 south-west coast, 59758 north and east coasts at 2048, identical
+  before and after H5). A lobe is a fan; its outline should follow the distance from the mouth,
+  not the grid. 2026-09-12.
+- **Nested crescent lakes down a hotspot cone.** On 718106's southern rift at 2048 a cone carries
+  a round crater lake and, below it, a stack of crescent-shaped lakes that are the cone's
+  terraces ponded at successive fill levels. Whether the terraces are E3's supersampled stamp or
+  the fill stepping down a smooth slope is not yet measured. 2026-09-12.
+- **The lowstand roughens every coast.** H5's base-level fall cuts every shoreline, not only the
+  ones a river reaches, so the rise floods a fringe of small bays round whole continents. Earth's
+  drowned coasts are indented where the rivers are and straight where they are not; the repair is
+  to scale the stand's effect by local drainage, or to let K1's wave climate smooth the coasts that
+  drift would (REALISM_AUDIT.md). Recorded by H5, 2026-09-12.
 - **Hotspot cones on land are eight-sided.** At low ocean coverage an oceanic plate's hotspot chain
   surfaces as volcanoes and each reads as a faceted cone. Seen on seed 718106 at 62% ocean, 2048.
   E3 showed the cause is not the distance metric — the stamp's falloff was always Euclidean — and

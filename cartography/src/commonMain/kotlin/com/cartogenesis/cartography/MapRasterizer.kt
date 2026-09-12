@@ -51,7 +51,7 @@ data class RenderOptions(
     val showHillshade: Boolean = true,
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
-    val showLandmarks: Boolean = true,
+    val showLandmarks: Boolean = false,
     val showLakes: Boolean = true,
     /** Multiplies river widths; HD exports scale this up with resolution. */
     val riverScale: Float = 1f

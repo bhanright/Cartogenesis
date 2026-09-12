@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,12 +37,18 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * The two strips that turn the map into the instrument.
@@ -347,15 +354,11 @@ internal fun ChartLegend(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            // Boxed where the chrome asks — Allied, whose subject is a map margin, and where the
-            // title block of a sheet is always ruled off from the sheet.
-            val boxed = LocalChromeDetail.current.boxedCartouche
-            Column(
-                Modifier.weight(1f).then(
-                    if (boxed) Modifier.border(1.dp, OverMap.Rule).padding(horizontal = 7.dp, vertical = 4.dp)
-                    else Modifier
-                )
-            ) {
+            // Dressed where the chrome asks — Allied's map-margin box, Hessian's sewn label,
+            // Roman's double rule, Hitchcock's spiral. Every one of them is drawn in [OverMap]'s
+            // ink, because this lies on a chart whose paper belongs to the style.
+            val shape = LocalChromeDetail.current.cartouche
+            Column(Modifier.weight(1f).cartoucheFrame(shape)) {
                 if (cartouche == null) {
                     Text(
                         prompt,
@@ -363,12 +366,18 @@ internal fun ChartLegend(
                         color = OverMap.ParchmentDim
                     )
                 } else {
-                    Text(
-                        cartouche.worldName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = OverMap.Parchment,
-                        maxLines = 1
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (shape == CartoucheStyle.SPIRAL) Spiral()
+                        Text(
+                            cartouche.worldName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = OverMap.Parchment,
+                            maxLines = 1
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             cartouche.facts,
@@ -416,6 +425,69 @@ internal fun ChartLegend(
                 }
             }
         }
+    }
+}
+
+/**
+ * The frame round the title block, as this chrome frames one.
+ *
+ * Four of the fifteen chromes ask for something and eleven ask for nothing, and the eleven get the
+ * modifier back untouched — no border, no padding, no draw node — which is what keeps their legends
+ * pixel-identical. The stitched and doubled forms are drawn rather than bordered because
+ * `Modifier.border` takes one stroke and neither of those is one stroke.
+ */
+private fun Modifier.cartoucheFrame(shape: CartoucheStyle): Modifier = when (shape) {
+    CartoucheStyle.PLAIN, CartoucheStyle.SPIRAL -> this
+    CartoucheStyle.BOXED ->
+        this.border(1.dp, OverMap.Rule).padding(horizontal = 7.dp, vertical = 4.dp)
+
+    // A sewn label: the same box, its edge a running stitch of 4 dp and 3 dp — the panel's rules
+    // and the cartouche's border are the same thread.
+    CartoucheStyle.STITCHED -> this
+        .drawBehind {
+            val weight = 1.dp.toPx()
+            val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
+            drawRect(
+                color = OverMap.Rule,
+                topLeft = Offset(weight / 2f, weight / 2f),
+                size = Size(size.width - weight, size.height - weight),
+                style = Stroke(width = weight, pathEffect = dash)
+            )
+        }
+        .padding(horizontal = 7.dp, vertical = 4.dp)
+
+    // Boxed twice, a hair apart: the frame of an inscription, where the inner rule is the one the
+    // letters are measured from and the outer one is the edge of the stone.
+    CartoucheStyle.DOUBLE_RULE -> this
+        .border(1.dp, OverMap.Rule)
+        .padding(2.dp)
+        .border(1.dp, OverMap.Rule)
+        .padding(horizontal = 6.dp, vertical = 3.dp)
+}
+
+/**
+ * Vertigo's spiral, at the size of a capital letter, beside the world's name.
+ *
+ * An Archimedean spiral — radius growing linearly with angle — drawn as one stroked path over three
+ * turns. Saul Bass's is a Lissajous figure drawn on a pendulum harmonograph, which is a lovely
+ * thing and quite illegible at 14 dp; this is the shape everyone remembers it as.
+ */
+@Composable
+private fun Spiral() {
+    Canvas(Modifier.size(15.dp)) {
+        val turns = 2
+        val steps = turns * 36
+        val outer = size.minDimension / 2f - 0.5.dp.toPx()
+        val path = Path()
+        for (k in 0..steps) {
+            val t = k / steps.toFloat()
+            val angle = t * turns * 2f * PI.toFloat()
+            val radius = t * outer
+            val x = size.width / 2f + radius * cos(angle)
+            val y = size.height / 2f + radius * sin(angle)
+            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, OverMap.Parchment, style = Stroke(width = 1.dp.toPx()))
     }
 }
 

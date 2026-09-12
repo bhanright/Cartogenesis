@@ -42,6 +42,9 @@ val lwjglNatives = when {
 
 dependencies {
     testImplementation(kotlin("test"))
+    // Composes the whole interface offscreen so `ChromeGalleryTest` can photograph it. It is the
+    // only way to see the theme without a person opening the window.
+    testImplementation(compose.desktop.uiTestJUnit4)
     implementation(project(":ui"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)

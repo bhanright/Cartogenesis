@@ -702,7 +702,12 @@ private fun Application(
 
     /** The keystrokes, previewed above everything, in whichever arrangement is drawn. */
     val frame = Modifier.fillMaxSize()
-        .background(MaterialTheme.colorScheme.surface)
+        // The paper the panels are laid on, which for eleven of the fifteen chromes is the same
+        // paper the panels are — see [ChromeDetail.windowGround].
+        .background(LocalChromeDetail.current.ground(MaterialTheme.colorScheme))
+        // So the cloth runs behind the gutter between the panels and the map as well as inside
+        // them, which is what stops Hessian looking like linen panels pasted onto paper.
+        .chromeWeave()
         .onPreviewKeyEvent { event ->
             val command = Menus.match(event, shortcuts) ?: return@onPreviewKeyEvent false
             if (command.needsWorld && world == null) return@onPreviewKeyEvent false
@@ -848,7 +853,7 @@ private fun ColumnScope.SettingsSheet(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().chromeWeave()) {
             Row(
                 Modifier.fillMaxWidth()
                     .draggable(
@@ -915,7 +920,8 @@ private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScop
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
-            Modifier.verticalScroll(rememberScrollState()).padding(14.dp),
+            // The weave, where the chrome is a cloth. Identity everywhere else — see [chromeWeave].
+            Modifier.chromeWeave().verticalScroll(rememberScrollState()).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             content = content
         )
@@ -1302,10 +1308,12 @@ private fun Section(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Capitals where the chrome asks for them, which is Allied and its 1940s sheet. The
-            // words are the panel's own either way — a heading is uppercased, never rewritten.
+            // Lettered the way the chrome letters a heading: Allied's capitals, Matrix's prompt,
+            // Roman's interpunct. The words are the panel's own either way — a heading is
+            // uppercased, pointed and prompted, never rewritten. `panel = true` because this is the
+            // one place Allied's capitals reach; see [HeadingCase].
             Text(
-                if (LocalChromeDetail.current.smallCapsHeadings) title.uppercase() else title,
+                LocalChromeDetail.current.heading(title, panel = true),
                 style = MaterialTheme.typography.titleSmall
             )
             Text(

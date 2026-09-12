@@ -58,6 +58,17 @@ These are the habits that have found every substantive bug in this project. They
    stays on the CPU and the spec says so. The CPU path remains the reference; saves carry the
    world, so the two need not be bit-identical.
 
+9. **Code is written for the next human.** (William, 2026-09-12: "sweep the code … for any
+   variable or method names, in-code comments, etc that are very machine oriented and try to make
+   the code more human maintainable".) Names are words, not abbreviations or symbols —
+   `shorelineHeight`, not `thr`; `cellsAcross`, not `w`, beyond a two-line loop — and a name
+   carries its unit when it has one (`reachCells`, `lapseRateCPerKm`). A comment says why the code
+   is as it is and what invariant it keeps, in a sentence or three; the history of how a figure
+   was measured, what was tried and reverted, and which chunk did it belongs in this plan's ledger
+   and in `GEOGRAPHY.md`, not in KDoc. Magic numbers become named constants with the derivation
+   beside them. Every chunk leaves the files it touched more readable than it found them; C2
+   sweeps what the 2.0 line accumulated.
+
 ## Session protocol
 
 Each session, on any model:
@@ -391,6 +402,40 @@ documented in `README.md` under Deploying and in the site repo's `CLAUDE.md`.
 
 ---
 
+### C2. Names and comments for humans — Opus (worldgen), Sonnet (the rest)
+
+*Requested 2026-09-12, for after the 2.0.0 release: "sweep the code after v2.0.0 release for any
+variable or method names, in-code comments, etc that are very machine oriented and try to make
+the code more human maintainable if possible." Runs on `main` as the first chunk of the 3.0 line,
+before M1, so every audit chunk is written against the readable code and no rename ever has to
+be threaded through a chunk in flight; `release/2.0` keeps the old names, and a 2.0.x fix is
+re-applied to `main` by hand.* Behaviour-preserving by construction, which is what makes it safe:
+
+- **Calibration first.** One stage file (`SeaLevelStage.kt`, which has both the terse arithmetic
+  and the long chunk-history KDoc) reworked and shown to William as a before/after sample, with
+  the rules it applied written down; the sweep proceeds on his word or his corrections. Taste is
+  his, not the agent's.
+- **What changes.** Single-letter and abbreviated names outside two-line loops become words with
+  units; method names say what they return or do (`thresholdAtRank` stays, `cutAt` becomes
+  `landAndWaterBelow`, or whatever reads at the call site); KDoc keeps the why and the invariant
+  and loses the measurement history, which moves to the ledger row or `GEOGRAPHY.md` with a
+  pointer left behind (`See REALISM_PLAN.md, H5.`); magic numbers become named constants with
+  their derivation; comments that narrate mechanics line by line go; a short `CODE_STYLE.md`
+  records the rules so later agents follow them (and rule 9 points at it).
+- **What must not change.** Serialised names: every `@Serializable` property in
+  `WorldGenConfig`, the save header and the overrides keeps its wire name via `@SerialName` if the
+  Kotlin name moves, so every 1.x and 2.0 save opens unchanged. Shader source names are theirs.
+  Public entry points the web page and the desktop launcher call are renamed only with their
+  callers.
+- **Guards.** World fingerprints (`WorldFingerprintTest` and the FINGERPRINT lines CI prints)
+  bit-identical before and after on the standard seeds at 512 and on 718106 and 59758 at 2048 —
+  a rename that moves a bit is not a rename; a 2.0.0 save opens and exports byte-identically
+  (`ExportSmokeTest`'s fidelity case against a stored 2.0.0 export); the GPU tolerance tests hold;
+  the full per-merge tier and the audit tier once; the Wasm bundle builds. Order: the shared
+  model (`WorldMap`, `WorldGenConfig`, the stage results) first by one agent, then the pipeline
+  stages, cartography, ui and the two launchers in parallel worktrees, each merged behind a
+  fingerprint check.
+
 ## Track E — lakes sized by physics, not by basins
 
 *Added 2026-09-11 evening after 1.1.2. The river stage fills every closed depression to its spill
@@ -685,6 +730,44 @@ in Settings and the View menu alongside System/Light/Dark/Nautical/Midnight/Mars
 - Screenshots of the window in each of the five chromes, and the fantasy and political views in
   the CLEAR style, captured by `ChromeGalleryTest`/`StyleGalleryTest` and reviewed.
 
+### F7. Four more chromes: Matrix, Hessian, Roman, Hitchcock — Opus
+
+*Dependencies: F6 (same files). Requested 2026-09-12: "add more themes of your own design based
+on the names Matrix, Hessian, Roman, and Hitchcock."* Each is a complete Material scheme in
+`Theme.kt` in the F1/F6 pattern with its ornament in `ChromeDetail`, selectable in Settings and
+the View menu; the six older chromes and F6's five stay byte-identical.
+
+- **Matrix.** The 1999 film's terminal: a black ground (#030704), panels a very dark green
+  (#071209), phosphor-green text (#3DF07A) with a dimmer green (#1F8F49) for secondary text and
+  amber (#FFB000) for danger; rules 1 dp green at 40%; filled states invert to black on green;
+  the display and control faces in IBM Plex Mono (OFL — bundle regular and bold beside the two
+  faces F1 added, and add the face to the notices generator); section headings in capitals with a
+  `>` prompt before them; the map's toolbar and legend strips at 85% black. Guard: every text
+  pair at WCAG AA (4.5:1), asserted; the new face's OFL notice present in `Notices.kt`.
+- **Hessian.** The cloth: a burlap ground (#B3956A) with a woven crosshatch drawn under the
+  panels (two families of 1 dp lines at ±45°, 6 dp apart, at 8% opacity, the way Allied draws its
+  overprint), unbleached-linen panels (#EDE3CC), dark brown text (#3A2A1B), a twine accent
+  (#7A5C3A) with stencil red (#8B3A2F) for the armed button and danger, rules drawn as
+  running-stitch dashes (4 dp on, 3 dp off), headings in letter-spaced capitals, the cartouche a
+  sewn label with a stitched border. Guard: AA on every text pair, with the crosshatch under the
+  text measured in.
+- **Roman.** Imperial: a Pompeian-red ground (#7A1F1F), marble panels (#F1EAD9), near-black
+  inscriptional text (#1F1B18), headings in letter-spaced capitals with an interpunct (·) between
+  the words of a multi-word heading, a bronze accent (#9C7A3C), Pompeian red for the filled
+  states with white text, a Greek-key meander drawn as the rule under each section heading (a
+  6 dp repeating unit in Canvas), the cartouche boxed with a double rule. Guard: AA on every text
+  pair.
+- **Hitchcock.** Saul Bass's title cards: a charcoal ground (#151515), flat black panels
+  (#1C1C1C), off-white text (#F2EFE8), Vertigo vermilion (#E8491D) as the accent and the armed
+  Generate button a vermilion block with black capitals, mustard (#D9A21B) secondary, the display
+  face bold with tight tracking in capitals, section rules as a bar cut into three segments
+  displaced 1–2 dp from one another (the Psycho titles), and a small spiral drawn beside the
+  world's name in the cartouche. Guard: AA on every text pair; vermilion on black is about 5.5:1
+  as text, so check it and use a lifted tint where it is a word, as F6 did for High contrast.
+- Screenshots of the window in each chrome from `ChromeGalleryTest`, reviewed. If the theme
+  list is now unwieldy (fifteen entries), group the Settings picker and the View menu into
+  Standard / Accessible / Styled without changing any existing name or stored setting value.
+
 ### Release 2.0.0 checklist
 
 When F, H5 and H5b are green (G1 follows the release; G2 and G4 are in): version 2.0.0; full suite plus the audit tier once; William's
@@ -694,6 +777,35 @@ the site's small-screen notice becomes "Works on phones. Worlds generate at 512;
 capped at 2048."; **the site's poster (`cartogenesis/poster.webp`, 1600x800, ~150 KB) replaced by
 a fresh 2048 export of one of William's worlds in the new renderer, cropped to the same 2:1
 band** (William, 2026-09-12); the site's CLAUDE.md notes updated; the LICENSE is MIT.
+
+## Release 3.0 — the audit, on its own line
+
+*Decided 2026-09-12: "once that and all other planned work is complete and 2.0 is launched,
+let's plan to implement all of your audit findings in 3.0, working from a fork so changes to 2.0
+can be made in the meantime."*
+
+- **Branching.** When v2.0.0 is tagged, `release/2.0` is cut from the tag, the way `release/1.2`
+  was. 2.0.x fixes land there, are released from there, deploy the site from there, and are
+  merged forward into `main` after each release. `main` becomes the 3.0 line and carries the
+  audit's chunks; nothing from it reaches `release/2.0` except a fix cherry-picked by hand. The
+  version on `main` becomes 3.0.0-dev the day the branch is cut, so the About dialog and the
+  update check never mistake a development build for a release.
+- **Scope.** Every chunk in `REALISM_AUDIT.md` section 10: S1–S3, W1–W4, R1–R3, K1–K4, I1,
+  P1–P2, V1–V3, N1–N2 and M1 — twenty-three chunks. The ledger lists each as queued for 3.0; each
+  gets its full section in this plan's format (guards shown failing, render check at 2048, rule
+  8's GPU path) when it is dispatched, not before, because the earlier chunks change what the
+  later ones must say.
+- **Order.** C2 first — the sweep for human-maintainable names and comments, so every chunk
+  after it is written against readable code; then M1, the yardstick; then S1, which every solid-earth chunk needs and which turns
+  the resolution contracts into a property; then two lines in parallel — S2 → S3 → R1 → I1 on the
+  solid earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with P1 slotted where it
+  touches the fewest open files; K4 once H5b is in; R2, R3, V1 and V2 whenever their inputs exist;
+  N1 and N2 alongside; P2 and V3 last. G1 and H3 finish before 3.0 begins if they have not
+  already.
+- **What 3.0 must show.** The Earth-likeness suite green on the standard seeds; both of William's
+  worlds at 2048 and 4096 reviewed crop by crop against the 2.0 renders; 2.0 saves open unchanged
+  (a save carries its world, so a 3.0 build never regenerates a 2.0 world unless asked; the same
+  seed generated afresh under 3.0 is a different world, and the release notes say so).
 
 ## Track G — more of the pipeline on the graphics card
 
@@ -1240,9 +1352,34 @@ guard reported, so the next chunk knows its baseline.
 | H5 Sea-level history | Opus | done | 2026-09-12 | 3cc827e + 8e24cd3 (merge 84216d9) | SeaConfig.lowstand 0.015 (Earth's 120 m against 8 km of relief) holds the hydraulic base level down for rounds 0-8 and walks it up over 9-11, one scalar per round so G1 ports it free; after the cut every water body is 8-labelled wrapping in x and any non-ocean body no larger than the Caspian (enclosedSeaMaxShare 0.00073 of the map) becomes land at its own height, the fill and the water balance deciding lake or playa - the cap added after measuring its absence (3-5% of the map flipping, a lake 4x the Caspian, rift gulfs turned to lakes, desert-in-band to 82%); solving the cut for ocean coverage written and reverted (drowns E4's bridges); H1's aulacogens gained along-strike roughness so the notch measures a slope, LakesConfig.minCells scales as an area, OutletResolutionTest green at 512/1024/2048 on both seeds; 512 estuary mouths 12/14/3 -> 35/52/62, pockets 87/85/533 -> 0, 2048 estuaries 3 -> 32 and 1 -> 9, pockets 925/305 -> 0; shown failing with lowstand 0 and enclosure off; moved: DepositionTest land 6226 -> 6382, rift bridges 3 -> 2, ribbon 1.05 -> 1.10, meridional pooled, comb 0.035 -> 0.05 and desert 85/75 -> 80/65 (both handed to H5b as defects, not bars); new deviations: drowned basins to 1.1% of land, lowstand roughens every coast, inland seas above the cap stay sea |
 | H5b Channels cannot pond, drowned basins get an outlet, desert guard by band | Opus | done | 2026-09-12 | (hash) | **The receiver clamp.** The incision is now a pass of its own over the D8 tree read from the outlets upstream (`FlowRouting.drainageOrder` reversed), each cut bounded below by the receiver's already-final new height — Braun and Willett (2013)'s `z_i' >= z_r'`; the transport walk still runs sources-first and picks up what the ordered pass took in `incisedAt`. What the bound replaces is the reason the holes were there: `drop * 0.5` was written in the shoreline-relative units the drop is measured in and spent on the height field, whose land range is about a quarter, so a well-fed channel cell could be cut by about twice the height it actually stood above its own receiver, every round. Pit census over the twelve rounds at 512, counting only cells a mechanism put below their receiver that were not there when the round opened, on 718106/42/7: outlet notch 0/0/0 in every round, incision 6383/10/5 -> 0/0/0, spoil 1173/420/509, closing breach and grooves 894/404/473, thermal relax 830/418/513 (fewer than the closing figure on 718106 — the sweeps take pits away). Channel cells the finished map draws under water 1627/106/323 -> 780/54/265; total incised over the rounds 5735/3095/2707 -> 5177/3064/2689. Shown failing through `erodeBlocking(config, uplift, receiverClamp = false)`, a test-only seam deliberately kept off `WorldGenConfig` (`ReceiverClampTest`). Comb share at 1024 on 718106/42/7 2.4/4.9/2.6% -> 2.2/4.4/1.7%, bar 5% -> **4.5%**, not the 3.5% asked for: the residual on seed 42 is the spoil, and the no-uphill rule that bounds an alluvial dam computes its margin in relative units and spends it as a height budget, so the margin is about four times what it means to be — measured, put in TODO.md, handed to E5/G1 rather than fixed here. Lakes on 718106 at 512: 98 -> 53, standing water 3.98% -> 1.54% of land. **The post-cut outlet.** `SeaConfig.postCutOutlet` runs the breach again on the far side of the cut over the basins the enclosure rule made (floor below the shoreline), same stream power, same `outletIncisionRatio`, same units, with the base-level limit lifted — the water behind one of these sills stands below the sea, so the sea is not what the river crossing it grades to — and the cut continued back across the lake bed up the inflow with the largest catchment, which is the other half of a sill once the target goes below the old water surface and without which seed 99's basin moved 1486 cells to 1428 and then not at all over eight further passes. Where the outflow reaches the waterline the sill becomes water and the basin is an arm of the sea at the next labelling; where it does not, the basin keeps a lake below sea level. Eight passes at most, stopping when a pass cuts nothing: 718106's largest runs 1883, 1195, 985, 838, 663, 515, 405, 366, 366 cells and its surface 0.227 -> 0.018 of the land's relief, flat from the seventh. Largest drowned basin as a share of land at 512, pass off -> on: 718106 1.128% -> 0.263% (4.53x -> 1.05x the Caspian's 0.249% of Earth's land), 99 0.605% -> 0.072%, 43 0.155% -> 0.156% (its outflow cannot cut its sill — the Caspian's own case), 1234 0.156% -> 0.164%; asserted now in `OutletIncisionTest` (against the same 1.4x chaos allowance its sibling bar uses), `OutletResolutionTest` and `SeaLevelHistoryAuditTest` where H5 could only print it. **The desert guard by band.** `GeographyAuditTest` measures desert as a share of the land in 0-15, 15-45 and 45-90 degrees, hemispheres pooled, divided by that world's own desert share of all its land, against Earth's from Peel, Finlayson and McMahon (2007) (BW = BWh 14.2% + BWk 4.9% = 19.1% of land; a named-desert census against the land in each band gives 5.2/39.2/2.2%, ratios 0.27/2.05/0.12, derivation beside the assertion). Seeds 7/42/1234/99: tropics **0.00 on every seed**, horse latitudes 2.83/2.52/2.91/2.40 (pooled 2.66), poleward 0.25/0.55/0.14/0.34 (pooled 0.31). First two asserted at a factor of two pooled and three per seed; shown biting with `landRecoveryRate = 0`, where the tropics go to 1.15/2.30/2.46/2.46. **The poleward band is a finding, not a bar**: 0.31 against Earth's 0.12 is two and a half times Earth's cold desert, left un-asserted and recorded as a deviation, because the cause is the interiors drying when the enclosure rule took their inland evaporation away and lakes still never feed the march (W3, TODO.md), which is the climate stage's and not this chunk's. **Moved:** `DepositionTest`'s pinned land 6382 -> 6327 at 128 (38 of it the clamp, 17 the outlet pass; the cut itself has not moved, 62% of cells still below it); `GlaciationTest`'s comb bar 5% -> 4.5%; `SeaLevelHistoryTest`'s lowstand pair now holds `postCutOutlet` off in both arms, because the post-cut notch makes narrow inlets of its own and was raising the control as much as the world under test (seed 7's control 22 -> 33 estuary mouths, the ratio 1.64 -> 1.30) — the shipped pair is printed beside it (seed 7: 36 -> 43 estuaries with the pass on); `SnowBalanceTest`'s carved-above-freezing assertion re-derived from `runOut` at 2% of carved ground (seed 99 measures 220 of 20,843, 1.06%, the others exactly zero); `RibbonLandTest`'s comparative bound restated as an absolute one against Earth's peninsulas and island arcs (0.7-1.0% of its land, bar 1.5%) because the ratio it held was between a count of two strips and a count of five and could not carry a tenth — 0.350% single-epoch against 0.622% with the history, both well inside Earth's. |
 | E5 Deltas and fans with natural outlines | Opus | queued, parallel with H5b | | | |
+| F7 Matrix, Hessian, Roman, Hitchcock chromes | Opus | done | 2026-09-12 | 30f0803 (merge e479716) | Matrix (phosphor #3DF07A on #030704 with #071209 panels, #1F8F49 secondary, #FFB000 danger, rules the phosphor at 40% = #1D6B36 composited, 2.92:1 as a rule; filled states invert to black on green at 13.46:1; IBM Plex Mono 2.004 from IBM/plex v6.4.0 - the same release the bundled Plex Sans is byte-identical to - carrying *both* type roles, loaded only by this chrome; `> ` before every heading; strips 85% black. The containers go *down* rather than up because a terminal has no elevation, and because Material's lighter menu ground put #1F8F49 at 4.32:1). Hessian (burlap #BC9E73 ground - the spec's #B3956A lifted one shade after the weave measured the brown at 4.34:1 - linen #EDE3CC panels with a 8% crosshatch at +/-45 deg 6 dp apart behind them and behind the frame, running-stitch rules 4 on 3 off, stencil-red #8B3A2F armed button with linen lettering at 6.00:1, twine #7A5C3A as the mark and #6A4E2C as the word, sewn-label cartouche). Roman (Pompeian #7A1F1F ground and filled states with white at 10.28:1, marble #F1EAD9 panels, #1F1B18 inscriptional capitals pointed with an interpunct, bronze #9C7A3C kept as the mark at 3.33:1 with #7A5C24 at 5.17:1 for the word - Hallowed's gold-leaf decision again - a Greek key under each heading at a 12 dp unit, 6 dp having photographed as a comb, double-ruled cartouche). Hitchcock (charcoal #151515 ground, flat-black #1C1C1C panels, #F2EFE8 off-white, bold tight capitals; the spec's "about 5.5:1" for the vermilion measured **4.38:1** on the panel, so #E8491D is the mark and the armed block with black lettering at 5.40:1 and #FF7A55 is the word at 6.63:1; mustard #D9A21B secondary at 7.41:1; section rules a bar cut in three and displaced 1-3 dp; Vertigo's spiral beside the world's name). Worst AA pair per chrome: Matrix 4.62, Hessian 4.81 woven and bare, Roman 5.17, Hitchcock 5.40, bar 4.5. Seven new fields on the one `ChromeDetail` - heading case and its prompt and interpunct, button label, cartouche shape, panel texture and its ink, window ground - all identities for the eleven older chromes, which are proved unchanged two ways: every one of 36 Material roles x 11 schemes equal to values recorded from 27fd260, and the File menu's own layer captured in each of the eleven and equal to fingerprints recorded from the same commit (the window itself cannot be compared - it carries a random seed and world name, which the first draft of that guard discovered by moving four of eleven fingerprints with no code change). Fifteen entries grouped Standard / Accessible / Styled in the picker and the View menu; no name, no order within a group and no stored value moved. Guards shown to bite seven ways: Matrix menu ground 4.32:1, Hessian burlap unlifted 4.39:1 woven while the bare cloth passed at 4.86, Roman bronze 3.33:1, Hitchcock vermilion 4.38:1, Nautical's oxide moved one unit (scheme guard), Nautical's menu ground moved one unit (capture guard), a group dropped (5 of 15 chromes). Hessian's armed button also failed unplanned at 1.00:1 - twine and stencil red sit at the same luminance. ui 91, cartography 25, desktop 33, all green; `:ui:compileKotlinWasmJs` and `:web:wasmJsBrowserDistribution` build and both mono faces land in `composeResources/.../font/` in the distribution (+314 KB, 6 faces / 1.25 MB in all). |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
+| C2 Names and comments for humans | Opus + Sonnet | queued for 3.0, first | | | |
+| M1 Earth-likeness metric suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| S1 Units and time | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| S2 Coupled uplift and flexural isostasy | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| S3 Erosion reads the climate | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| W1 Energy balance and sea ice | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| W2 Pressure-driven surface winds | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| W3 Moisture budget calibrated | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| W4 Vegetation density and permafrost | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| R1 Channel initiation and drainage density | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| R2 Rivers drawn as rivers | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| R3 Wetlands and inland deltas | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| K1 Wave climate and longshore drift | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| K2 Delta and estuary type | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| K3 Reefs and atolls | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| K4 Fjord coastlines | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| I1 Ice sheets with a profile | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| P1 Metric-aware physics and a projection | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| P2 A spherical grid | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| V1 Tints by climate and sky-model shading | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| V2 Generalisation, graticule and scale | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| V3 Labels | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| N2 Scale-free suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | Audit II Realism audit, literature-backed | Fable | done | 2026-09-12 | see log | REALISM_AUDIT.md: five structural absences (scale, coupled uplift/isostasy, prescribed atmosphere, rectangular planet, coast as a line) plus presentation and determinism findings; twenty-three chunks S/W/R/K/I/P/V/N/M with dependencies, effort, visual weight, rigour and GPU applicability; an Earth-likeness metric table (hypsometry, coastline fractal dimension, Hack and Horton, lake and island size laws, desert, ice, lake and wetland shares, reef limit, delta class mix); sources listed with what was read and what is cited from memory to be checked at dispatch |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform

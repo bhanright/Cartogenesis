@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.cartogenesis.ui.generated.resources.Res
+import com.cartogenesis.ui.generated.resources.plex_mono_bold
+import com.cartogenesis.ui.generated.resources.plex_mono_regular
 import com.cartogenesis.ui.generated.resources.plex_sans_medium
 import com.cartogenesis.ui.generated.resources.plex_sans_regular
 import com.cartogenesis.ui.generated.resources.spectral_regular
@@ -96,12 +98,15 @@ fun CartogenesisTheme(
  * Which chrome the window is dressed in.
  *
  * [SYSTEM] is the default and is what F1 shipped: the desktop's or the browser's own light/dark
- * setting, followed live. The four named ones are a deliberate refusal of the usual "light, dark,
- * auto" triple — the application already owns ten palettes, one per map style, and the two
- * chromes F1 wrote are literally two of them (Vellum's paper, and the author's site). So the extra
- * choices are lifted from the styles rather than invented: choosing Nautical dresses the window in
+ * setting, followed live. The fourteen named ones are a deliberate refusal of the usual "light,
+ * dark, auto" triple — the application already owns eleven palettes, one per map style, and the
+ * two chromes F1 wrote are literally two of them (Vellum's paper, and the author's site). F4's
+ * three are lifted from the styles rather than invented: choosing Nautical dresses the window in
  * the admiralty chart's buff and oxide, Midnight in its slate and brass-gold, Mars in basalt and
- * rust. A reader who works in one style can put the whole window in it.
+ * rust, so a reader who works in one style can put the whole window in it. F6's five and F7's four
+ * are asked for by name — high contrast, colour-blind, Allied, Hallowed, Baroque, Matrix, Hessian,
+ * Roman, Hitchcock — and each is a room rather than a chart. Fifteen is more than a flat list can
+ * carry, so [group] puts them on three shelves; nothing about a name or a stored value moves.
  *
  * The map is *not* restyled by this, and that separation is deliberate: which style a map is drawn
  * in is a property of the map (and of the exported file), while this is a property of the room the
@@ -118,7 +123,11 @@ enum class ThemeChoice(val label: String) {
     COLORBLIND("Colorblind"),
     ALLIED("Allied"),
     HALLOWED("Hallowed"),
-    BAROQUE("Baroque");
+    BAROQUE("Baroque"),
+    MATRIX("Matrix"),
+    HESSIAN("Hessian"),
+    ROMAN("Roman"),
+    HITCHCOCK("Hitchcock");
 
     /** [systemDark] is consulted only by [SYSTEM]; every other choice is an answer already. */
     internal fun scheme(systemDark: Boolean): ColorScheme = when (this) {
@@ -133,6 +142,10 @@ enum class ThemeChoice(val label: String) {
         ALLIED -> AlliedChrome
         HALLOWED -> HallowedChrome
         BAROQUE -> BaroqueChrome
+        MATRIX -> MatrixChrome
+        HESSIAN -> HessianChrome
+        ROMAN -> RomanChrome
+        HITCHCOCK -> HitchcockChrome
     }
 
     /**
@@ -142,14 +155,30 @@ enum class ThemeChoice(val label: String) {
      */
     internal fun isDark(): Boolean? = when (this) {
         SYSTEM -> null
-        LIGHT, NAUTICAL, ALLIED, HALLOWED, BAROQUE -> false
-        DARK, MIDNIGHT, MARS, HIGH_CONTRAST, COLORBLIND -> true
+        LIGHT, NAUTICAL, ALLIED, HALLOWED, BAROQUE, HESSIAN, ROMAN -> false
+        DARK, MIDNIGHT, MARS, HIGH_CONTRAST, COLORBLIND, MATRIX, HITCHCOCK -> true
+    }
+
+    /**
+     * Which of the three shelves this chrome sits on in the picker and in the View menu.
+     *
+     * Fifteen names in one flat run is a list nobody reads to the end of, and the three groups are
+     * not arbitrary: [ThemeGroup.STANDARD] is what the application shipped with and what a reader
+     * who wants no opinion should take, [ThemeGroup.ACCESSIBLE] is the two whose promise is a
+     * measured threshold rather than a look, and [ThemeGroup.STYLED] is the ten that are a room to
+     * work in. No name and no stored value moves: this is a heading over a list, nothing more.
+     */
+    internal fun group(): ThemeGroup = when (this) {
+        SYSTEM, LIGHT, DARK -> ThemeGroup.STANDARD
+        HIGH_CONTRAST, COLORBLIND -> ThemeGroup.ACCESSIBLE
+        NAUTICAL, MIDNIGHT, MARS, ALLIED, HALLOWED, BAROQUE,
+        MATRIX, HESSIAN, ROMAN, HITCHCOCK -> ThemeGroup.STYLED
     }
 
     /**
      * Everything about a chrome that is not a colour or a type size.
      *
-     * See [ChromeDetail]. Five of the eleven answer with something other than the default, and the
+     * See [ChromeDetail]. Nine of the fifteen answer with something other than the default, and the
      * six that came before F6 all answer with the default itself — which is what keeps their
      * screenshots pixel-identical.
      */
@@ -160,7 +189,24 @@ enum class ThemeChoice(val label: String) {
         ALLIED -> AlliedDetail
         HALLOWED -> HallowedDetail
         BAROQUE -> BaroqueDetail
+        MATRIX -> MatrixDetail
+        HESSIAN -> HessianDetail
+        ROMAN -> RomanDetail
+        HITCHCOCK -> HitchcockDetail
     }
+}
+
+/**
+ * The three shelves the fifteen chromes are offered on.
+ *
+ * A grouping, not a setting: nothing here is stored, nothing here is a name a reader has already
+ * chosen, and [ThemeChoice.entries] is still the whole list in its own order for anything that
+ * wants it. See [ThemeChoice.group].
+ */
+internal enum class ThemeGroup(val label: String) {
+    STANDARD("Standard"),
+    ACCESSIBLE("Accessible"),
+    STYLED("Styled")
 }
 
 /**
@@ -180,27 +226,116 @@ internal enum class SectionRuleStyle {
     DOUBLED,
 
     /** The same two, with a small lozenge centred on each end — the rule the site draws in CSS. */
-    DOUBLED_WITH_DIAMONDS
+    DOUBLED_WITH_DIAMONDS,
+
+    /** Hessian's running stitch: 4 dp of thread, 3 dp of cloth, all the way across. */
+    STITCHED,
+
+    /** Roman's Greek key: a meander in a 6 dp repeating unit, drawn as one stroked path. */
+    MEANDER,
+
+    /**
+     * Hitchcock's bar, cut into three and the pieces slipped past one another.
+     *
+     * The Psycho titles are a name sliced into bands that never quite line up; this is the same
+     * gesture at the width of a section heading.
+     */
+    CUT_BAR
+}
+
+/**
+ * How a chrome dresses the title block at the foot of the map.
+ *
+ * The cartouche is drawn over the chart in [OverMap]'s ink rather than in the scheme's, so a chrome
+ * cannot recolour it — but it can say what shape it is, and four of them do.
+ */
+internal enum class CartoucheStyle {
+    /** Words on the strip, nothing round them. Every chrome before F6. */
+    PLAIN,
+
+    /** Ruled off from the sheet, the way a map margin boxes its title block. Allied. */
+    BOXED,
+
+    /** A sewn label: the same box, its border a running stitch. Hessian. */
+    STITCHED,
+
+    /** Boxed twice, a hair apart, the way an inscription is framed. Roman. */
+    DOUBLE_RULE,
+
+    /** A small spiral wound in beside the world's name. Hitchcock, and it is Vertigo's. */
+    SPIRAL
+}
+
+/**
+ * Anything drawn *into* a panel behind its content.
+ *
+ * One chrome asks for this and it is the whole of its subject: Hessian is a cloth, and a cloth that
+ * was only a colour would be a paint chip.
+ */
+internal enum class PanelTexture {
+    NONE,
+
+    /** Two families of hairlines at ±45°, 6 dp apart, at 8% — a plain weave. */
+    CROSSHATCH
+}
+
+/**
+ * Where a chrome sets its headings as capitals.
+ *
+ * Two answers rather than one because F6 and F7 mean different things by it. Allied wanted the
+ * *panel's* six section headings lettered like a map margin, and that is all it ever touched; the
+ * four F7 chromes are typographic through and through — a terminal prompt, a stencil, an
+ * inscription, a title card — and set every heading in the application, the settings dialog's rows
+ * and the menus' own headings included. Keeping the two apart is what leaves Allied byte-identical
+ * while F7 reaches further.
+ */
+internal enum class HeadingCase {
+    /** As written. Every chrome but Allied and F7's four. */
+    SENTENCE,
+
+    /** Capitals in the panel's section headings, and nowhere else. Allied. */
+    PANEL_CAPITALS,
+
+    /** Capitals wherever a heading is set. F7's four. */
+    CAPITALS
 }
 
 /**
  * The part of a chrome that is not in its [ColorScheme] or its [Typography].
  *
- * F6 asks for five things that a colour scheme cannot say: a rule drawn twice in gold, a rule with
- * a diamond at each end, headings set as capitals, a state told by a shape as well as by a hue, and
- * an accent that is a *mark* rather than a word. Each of those would otherwise have to be written
- * where the control is used, which is exactly what `Controls.kt` exists to prevent — so they are
- * declared here instead, handed down through [LocalChromeDetail], and read once by the composable
- * whose job the thing is.
+ * F6 asked for five things a colour scheme cannot say: a rule drawn twice in gold, a rule with a
+ * diamond at each end, headings set as capitals, a state told by a shape as well as by a hue, and
+ * an accent that is a *mark* rather than a word. F7 added seven more: a prompt and an interpunct
+ * before a heading, a label for a button that is a block rather than a stain, a shape for the
+ * cartouche, a texture behind a panel and the ink to draw it in, and a ground for the window
+ * itself. Each of those would otherwise have to be written where the control is used, which is
+ * exactly what `Controls.kt` exists to prevent — so they are declared here instead, handed down
+ * through [LocalChromeDetail], and read once by the composable whose job the thing is.
  *
- * Every field defaults to what the six chromes before F6 already did, so those are untouched.
+ * Every field defaults to what the six chromes before F6 already did, so those are untouched — and
+ * `ChromeContrastTest` and `ChromeGalleryTest` between them assert that the eleven chromes before
+ * F7 are unchanged in every Material role and pixel-identical where they are drawn.
  */
 internal class ChromeDetail(
     val sectionRule: SectionRuleStyle = SectionRuleStyle.PLAIN,
     /** The ink an ornamental rule is drawn in. Null means the scheme's own `outlineVariant`. */
     val ruleAccent: Color? = null,
     /** Headings set as capitals, which is as near to small capitals as an OFL text face gets. */
-    val smallCapsHeadings: Boolean = false,
+    val headings: HeadingCase = HeadingCase.SENTENCE,
+    /**
+     * Set before a heading, verbatim. Matrix's `>`, and nothing else has ever wanted one.
+     *
+     * A prompt rather than a bullet: on a terminal the caret is what says the next word is a thing
+     * you may act on, and a section heading in this application is exactly that.
+     */
+    val headingPrefix: String? = null,
+    /**
+     * Whether the words of a multi-word heading are separated by an interpunct rather than a space.
+     *
+     * Roman's, and it is not decoration: a Latin inscription has no word spaces, it has points, and
+     * `WORKING·RESOLUTION` is the difference between capitals and lettering.
+     */
+    val headingInterpunct: Boolean = false,
     /**
      * The accent where it is a mark rather than a word — a border, a slider's fill, a switch's
      * bead. Null means the scheme's `primary`, which is what every chrome but High contrast wants.
@@ -209,8 +344,19 @@ internal class ChromeDetail(
      * 7:1 of anything that is read (1.4.6) and 3:1 of anything that is merely seen (1.4.11). The
      * saturated blue that chrome is specified with reaches 4.67:1 against black, which is a good
      * mark and an unreadable word, so the mark keeps it and the word takes the same hue lifted.
+     * Hitchcock's vermilion is the same story and is measured in `ChromeContrastTest`.
      */
     val markAccent: Color? = null,
+    /**
+     * The label of the armed button, where the chrome has made that button a solid block.
+     *
+     * Null, and the label is the scheme's `primary` on a wash of `primaryContainer` — a stain and a
+     * darker rule, which is what F1 decided even the loudest control on a page of ink should be.
+     * Three chromes disagree, and for the same reason each time: a phosphor terminal, a stencil and
+     * a Saul Bass title card all invert rather than stain, so the container is the accent at full
+     * strength and the label is the ground.
+     */
+    val buttonLabel: Color? = null,
     /**
      * Whether a state that is otherwise carried by hue also gets a shape: the armed button
      * underlined, a chosen chip ruled twice as heavily, a disabled one struck through.
@@ -220,17 +366,57 @@ internal class ChromeDetail(
     val stroke: Dp = 1.dp,
     /** The two strips over the map. Null means [OverMap.Strip], which is deliberately translucent. */
     val overMapStrip: Color? = null,
-    /** Whether the cartouche is boxed, the way a map margin boxes its title block. */
-    val boxedCartouche: Boolean = false
+    /**
+     * The ground the whole window is painted in, behind the panels and the gutters.
+     *
+     * Null, and it is the scheme's `surface` — which is what the window has taken since F1, and
+     * which is why every light chrome before F7 is a page with panels of the same paper on it,
+     * told apart by a ruled edge. That is right for a chart and wrong for four subjects whose whole
+     * premise is a *panel set against a ground*: burlap with linen labels sewn to it, marble panels
+     * on a Pompeian wall, a terminal's windows on a black screen, a Bass card's blocks on charcoal.
+     * Material's `background` role is the colour each of those wants and the frame does not read it,
+     * so the chrome says so here rather than the frame changing its mind for all fifteen.
+     */
+    val windowGround: Color? = null,
+    /** What shape the cartouche is, the way a map margin decides about its title block. */
+    val cartouche: CartoucheStyle = CartoucheStyle.PLAIN,
+    /** Anything drawn into a panel behind its content. Hessian's weave, and nothing else. */
+    val panelTexture: PanelTexture = PanelTexture.NONE,
+    /** The ink [panelTexture] is drawn in, and at what strength. Ignored where there is no texture. */
+    val textureInk: Color = Color.Transparent
 ) {
     /** The accent where it is a border, a fill or a bead rather than a word. */
     fun mark(scheme: ColorScheme): Color = markAccent ?: scheme.primary
+
+    /** The label of the armed button. */
+    fun label(scheme: ColorScheme): Color = buttonLabel ?: scheme.primary
 
     /** The ink a section rule is drawn in. */
     fun rule(scheme: ColorScheme): Color = ruleAccent ?: scheme.outlineVariant
 
     /** The ground of the two strips laid over the chart. */
     fun strip(): Color = overMapStrip ?: OverMap.Strip
+
+    /** The ground the window itself is painted in. */
+    fun ground(scheme: ColorScheme): Color = windowGround ?: scheme.surface
+
+    /**
+     * A heading, lettered the way this chrome letters one.
+     *
+     * [panel] is true only at the panel's own six section headings, which is the whole reach of
+     * [HeadingCase.PANEL_CAPITALS]. The words themselves are never rewritten — a heading is
+     * uppercased, pointed and prompted, and that is all.
+     */
+    fun heading(title: String, panel: Boolean = false): String {
+        val capitals = headings == HeadingCase.CAPITALS ||
+            (panel && headings == HeadingCase.PANEL_CAPITALS)
+        var text = title
+        if (headingInterpunct) {
+            text = text.split(' ').filter { it.isNotEmpty() }.joinToString("·")
+        }
+        if (capitals) text = text.uppercase()
+        return if (headingPrefix == null) text else headingPrefix + text
+    }
 
     companion object {
         val PLAIN = ChromeDetail()
@@ -717,7 +903,7 @@ private val ColorblindDetail = ChromeDetail(shapeCues = true)
 // red is the grid numeral at 4.07:1 on that paper, and the olive drab is the ground the whole
 // sheet lies on, the filled state and the inverse surface.
 //
-// The display face is set as capitals on the section headings — see [ChromeDetail.smallCapsHeadings]
+// The display face is set as capitals on the section headings — see [HeadingCase.PANEL_CAPITALS]
 // and Allied's own tracking in [typographyFor] — and the cartouche is boxed, the way the title
 // block of a map margin is.
 private val AmsBuff = Color(0xFFD9CBA3)
@@ -770,7 +956,10 @@ private val AlliedChrome: ColorScheme = lightColorScheme(
     surfaceContainerHighest = Color(0xFFC4B48D)
 )
 
-private val AlliedDetail = ChromeDetail(smallCapsHeadings = true, boxedCartouche = true)
+private val AlliedDetail = ChromeDetail(
+    headings = HeadingCase.PANEL_CAPITALS,
+    cartouche = CartoucheStyle.BOXED
+)
 
 // HALLOWED: an illuminated manuscript.
 //
@@ -904,6 +1093,356 @@ private val BaroqueDetail = ChromeDetail(
     ruleAccent = Gilt
 )
 
+// ---- F7's four. ----
+//
+// Four names and nothing else: Matrix, Hessian, Roman, Hitchcock. Like F6's five these are rooms
+// rather than charts, and they are built the same way — a complete Material scheme with
+// `surfaceTint` equal to the surface, every ornament declared in [ChromeDetail] and read once by
+// the composable whose job it is, and not one colour written at a call site. What they add to the
+// machinery is what four subjects that are *typography* rather than palette needed: a third bundled
+// face, a prompt and a point before a heading, a texture behind a panel, a label colour for a
+// button that is a block rather than a stain, and three more ways to rule off a section.
+//
+// Every text pair in all four is measured at WCAG AA in `ChromeContrastTest`, and two of the four
+// needed the same decision F6 made for High contrast — the colour a spec names is a good mark and a
+// thin word — so the mark keeps the named value and the word takes the same hue moved.
+
+// MATRIX: a phosphor terminal.
+//
+// The 1999 film's screens are a CRT in a dark room: a black that is very slightly green because the
+// tube is never quite off, one bright phosphor for everything that matters, a dimmer draw of the
+// same phosphor for everything that does not, and amber only when something is wrong. Two decisions
+// are worth stating.
+//
+// The first is that there is no elevation. Material lifts a menu or a dialog by lightening it, and
+// on this palette that walks the dimmer green straight past AA — #1F8F49 measures 4.62:1 on the
+// panel and only 4.32:1 on the lightened container Material would want for an open menu. A terminal
+// has no elevation to express: an overlay is a *hole*, darker than the screen and bordered in
+// green. So the containers go down rather than up (4.85:1 at the darkest), which is both what the
+// subject looks like and what keeps the spec's own two greens exactly as written.
+//
+// The second is that the filled states invert. F1's rule is that even the loudest control is a
+// stain and a darker rule; a terminal's is that a selected thing is the ground and the screen is
+// the ink. So `primaryContainer` and `secondaryContainer` are the phosphor at full strength and
+// [ChromeDetail.buttonLabel] paints the label in the black — 13.46:1, the strongest pair in any
+// chrome here.
+private val TerminalBlack = Color(0xFF030704)
+private val TerminalPanel = Color(0xFF071209)
+
+/** The phosphor. Everything that is read, and every filled state's ground. */
+private val Phosphor = Color(0xFF3DF07A)
+
+/** The same tube, further from the gun: secondary text, at 4.62:1 on the panel. */
+private val PhosphorDim = Color(0xFF1F8F49)
+
+/** The one warning colour a monochrome terminal ever had. */
+private val TerminalAmber = Color(0xFFFFB000)
+
+/**
+ * The rules: the phosphor at 40%, which is what the spec asks for and what a scan line looks like.
+ *
+ * Left as an alpha rather than flattened to a hex on purpose — it is drawn over three different
+ * near-blacks and should be the same 40% draw on each. Composited over the panel it is #1D6B36,
+ * 2.92:1, which is a rule and not a word.
+ */
+private val PhosphorRule = Color(0x663DF07A)
+
+private val MatrixChrome: ColorScheme = darkColorScheme(
+    primary = Phosphor,
+    onPrimary = TerminalBlack,
+    primaryContainer = Phosphor,
+    onPrimaryContainer = TerminalBlack,
+    inversePrimary = PhosphorDim,
+    secondary = PhosphorDim,
+    onSecondary = TerminalBlack,
+    secondaryContainer = Phosphor,
+    onSecondaryContainer = TerminalBlack,
+    tertiary = PhosphorDim,
+    onTertiary = TerminalBlack,
+    tertiaryContainer = Color(0xFF030A05),
+    onTertiaryContainer = Phosphor,
+    background = TerminalBlack,
+    onBackground = Phosphor,
+    surface = TerminalPanel,
+    onSurface = Phosphor,
+    surfaceVariant = Color(0xFF050E07),
+    onSurfaceVariant = PhosphorDim,
+    surfaceTint = TerminalPanel,
+    inverseSurface = Phosphor,
+    inverseOnSurface = TerminalBlack,
+    error = TerminalAmber,
+    onError = TerminalBlack,
+    errorContainer = Color(0xFF2A1C00),
+    onErrorContainer = TerminalAmber,
+    outline = PhosphorDim,
+    outlineVariant = PhosphorRule,
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF0B1B0E),
+    surfaceDim = TerminalBlack,
+    // Downward, not upward: see the note above. An open menu is a darker rectangle with a green
+    // edge, which is what an overlay on a terminal is and what holds the dim green at AA.
+    surfaceContainerLowest = Color(0xFF010301),
+    surfaceContainerLow = Color(0xFF020603),
+    surfaceContainer = TerminalPanel,
+    surfaceContainerHigh = Color(0xFF050E07),
+    surfaceContainerHighest = Color(0xFF030A05)
+)
+
+private val MatrixDetail = ChromeDetail(
+    headings = HeadingCase.CAPITALS,
+    headingPrefix = "> ",
+    buttonLabel = TerminalBlack,
+    // The screen behind the windows: the black the panels are one shade of green away from, so a
+    // panel reads as a lit region of the tube rather than as the whole tube.
+    windowGround = TerminalBlack,
+    // 85% black. The default strip is a wash of warm ink at 76%, which over a chart reads as a
+    // brown smear; a terminal's overlay is black and nearly opaque.
+    overMapStrip = Color(0xD9000000)
+)
+
+// HESSIAN: the cloth.
+//
+// Burlap, unbleached linen, dark brown thread, twine, and the stencil red a sack is stamped with.
+// The subject is a *weave*, so the chrome carries a texture as well as a palette: two families of
+// hairlines at ±45°, 6 dp apart, at 8%, drawn behind everything a panel holds — see
+// [PanelTexture.CROSSHATCH]. Every rule in the application becomes a running stitch and the
+// cartouche becomes a sewn label.
+//
+// The weave is measured in rather than assumed harmless, and it is not: composited at 8% it darkens
+// each ground by about 4%, which for dark text on light cloth *lowers* contrast. The spec's burlap
+// #B3956A leaves the brown at 4.34:1 with the weave in — under AA — so the ground is lifted one
+// shade to #BC9E73, exactly as F1 lifted Vellum's paper for a whole window's worth of it. That is
+// 4.85:1 woven and 5.42:1 plain, and the text colour the spec names is untouched.
+private val Burlap = Color(0xFFBC9E73)
+private val Linen = Color(0xFFEDE3CC)
+private val LinenSunk = Color(0xFFE0D3B6)
+
+/** The thread everything is written in, and the ink the weave is drawn with at 8%. */
+private val ClothInk = Color(0xFF3A2A1B)
+private val ClothInkFaded = Color(0xFF5A4632)
+
+/** Twine: the accent as a mark — a border, a rail, a bead, a stitch. 4.81:1 on linen. */
+private val Twine = Color(0xFF7A5C3A)
+
+/** The same fibre in shadow, for the accent where it has to be read. 5.22:1 on woven linen. */
+private val TwineDark = Color(0xFF6A4E2C)
+
+/** Stencil red: what a sack is stamped with, and what this chrome arms and alarms in. */
+private val StencilRed = Color(0xFF8B3A2F)
+
+private val HessianChrome: ColorScheme = lightColorScheme(
+    primary = TwineDark,
+    onPrimary = Linen,
+    // The armed button is the stencil, not a stain: a red block with linen lettering, 6.00:1.
+    primaryContainer = StencilRed,
+    onPrimaryContainer = Linen,
+    inversePrimary = Color(0xFFD9B98C),
+    secondary = ClothInkFaded,
+    onSecondary = Linen,
+    // The twine, where it is a block rather than a thread: a chosen chip, a switch that is on.
+    secondaryContainer = Twine,
+    onSecondaryContainer = Linen,
+    tertiary = ClothInkFaded,
+    onTertiary = Linen,
+    tertiaryContainer = Color(0xFFDCCFB2),
+    onTertiaryContainer = Color(0xFF33251A),
+    background = Burlap,
+    onBackground = ClothInk,
+    surface = Linen,
+    onSurface = ClothInk,
+    surfaceVariant = LinenSunk,
+    onSurfaceVariant = ClothInkFaded,
+    surfaceTint = Linen,
+    inverseSurface = ClothInk,
+    inverseOnSurface = Linen,
+    error = StencilRed,
+    onError = Linen,
+    errorContainer = Color(0xFFE7CDBE),
+    onErrorContainer = Color(0xFF3A130C),
+    outline = Color(0xFF9C8462),
+    outlineVariant = Color(0xFFCFBF9C),
+    scrim = Color(0xFF241A10),
+    surfaceBright = Color(0xFFF6EEDC),
+    surfaceDim = Color(0xFFD3C5A6),
+    surfaceContainerLowest = Color(0xFFF6EEDC),
+    surfaceContainerLow = Color(0xFFF1E8D2),
+    surfaceContainer = Linen,
+    surfaceContainerHigh = Color(0xFFE4D8BD),
+    surfaceContainerHighest = Color(0xFFDCCEB0)
+)
+
+private val HessianDetail = ChromeDetail(
+    sectionRule = SectionRuleStyle.STITCHED,
+    ruleAccent = Twine,
+    headings = HeadingCase.CAPITALS,
+    // The armed button is a stencilled block, so its lettering is the cloth: linen on stencil red
+    // at 6.00:1, where the twine the accent is otherwise would have been 1.00:1 on it — the two
+    // happen to sit at the same luminance, which is exactly the kind of thing a guard is for.
+    buttonLabel = Linen,
+    cartouche = CartoucheStyle.STITCHED,
+    // The cloth itself, with the linen labels sewn onto it. Woven like everything else here.
+    windowGround = Burlap,
+    panelTexture = PanelTexture.CROSSHATCH,
+    textureInk = ClothInk.copy(alpha = 0.08f)
+)
+
+// ROMAN: an imperial wall.
+//
+// Pompeian red is the ground the whole room is painted in, marble is every surface set against it,
+// and the lettering is the near-black of a chiselled inscription. Two things make it Roman rather
+// than merely red: the headings are pointed rather than spaced — `WORKING·RESOLUTION`, because a
+// Latin inscription has no word spaces — and every section is ruled off with a Greek key.
+//
+// The bronze is the same decision Hallowed made about gold leaf. #9C7A3C on marble measures 3.33:1,
+// which is what bronze on stone has always measured and is why it was used for fittings rather than
+// for text; so the bronze is the *rule* — the meander, the borders, the beads — and the accent that
+// has to be read is the same metal darkened to #7A5C24, 5.17:1.
+private val Pompeian = Color(0xFF7A1F1F)
+private val RomanMarble = Color(0xFFF1EAD9)
+private val RomanMarbleSunk = Color(0xFFE3DAC4)
+private val Inscription = Color(0xFF1F1B18)
+private val InscriptionFaded = Color(0xFF4A423A)
+
+/** Bronze. The meander and the fittings; never a word. */
+private val Bronze = Color(0xFF9C7A3C)
+
+/** The same metal darkened, for the accent where it has to be read. */
+private val BronzeDark = Color(0xFF7A5C24)
+
+/** A lit Pompeian, for anything that has gone wrong: 7.12:1 on marble. */
+private val PompeianLit = Color(0xFF8A2B2B)
+
+private val RomanChrome: ColorScheme = lightColorScheme(
+    primary = BronzeDark,
+    onPrimary = RomanMarble,
+    // The red, where it is a block: the armed button, with white lettering at 10.28:1.
+    primaryContainer = Pompeian,
+    onPrimaryContainer = Color(0xFFFFFFFF),
+    inversePrimary = Bronze,
+    secondary = PompeianLit,
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Pompeian,
+    onSecondaryContainer = Color(0xFFFFFFFF),
+    tertiary = InscriptionFaded,
+    onTertiary = RomanMarble,
+    tertiaryContainer = Color(0xFFE7DEC8),
+    onTertiaryContainer = Color(0xFF33291C),
+    background = Pompeian,
+    onBackground = Color(0xFFFFFFFF),
+    surface = RomanMarble,
+    onSurface = Inscription,
+    surfaceVariant = RomanMarbleSunk,
+    onSurfaceVariant = InscriptionFaded,
+    surfaceTint = RomanMarble,
+    inverseSurface = Pompeian,
+    inverseOnSurface = Color(0xFFFFFFFF),
+    error = PompeianLit,
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFE9CFC6),
+    onErrorContainer = Color(0xFF3A0E0E),
+    outline = Color(0xFFB0A183),
+    outlineVariant = Color(0xFFD5C9AD),
+    scrim = Color(0xFF2A0A0A),
+    surfaceBright = Color(0xFFFAF5EA),
+    surfaceDim = Color(0xFFD8CDB4),
+    surfaceContainerLowest = Color(0xFFFAF5EA),
+    surfaceContainerLow = Color(0xFFF5EEDF),
+    surfaceContainer = RomanMarble,
+    surfaceContainerHigh = Color(0xFFE9E0CB),
+    surfaceContainerHighest = Color(0xFFDFD5BE)
+)
+
+private val RomanDetail = ChromeDetail(
+    sectionRule = SectionRuleStyle.MEANDER,
+    ruleAccent = Bronze,
+    headings = HeadingCase.CAPITALS,
+    headingInterpunct = true,
+    markAccent = Bronze,
+    buttonLabel = Color(0xFFFFFFFF),
+    // The wall the marble is set into.
+    windowGround = Pompeian,
+    cartouche = CartoucheStyle.DOUBLE_RULE
+)
+
+// HITCHCOCK: a Saul Bass title card.
+//
+// Charcoal, flat black, off-white, and exactly one hot colour. Bass's cards are cut rather than
+// drawn — Psycho's name arrives in three bands that never line up — so the section rule is a bar
+// sliced in three and slipped, and the cartouche carries Vertigo's spiral wound in beside the
+// world's name.
+//
+// The vermilion is the third instance of F6's two-form accent and the spec predicted it: #E8491D is
+// "about 5.5:1" on black by reputation and measures **4.38:1** on the flat-black panel and 4.70:1
+// on the charcoal — over AA on the ground, under it on the panel, which is the worse of the two and
+// the one that decides. So the true Vertigo vermilion is the *mark* and the block — the armed
+// button is a vermilion slab with black lettering at 5.40:1 — and the word takes the same hue
+// lifted to #FF7A55, 6.63:1.
+private val Charcoal = Color(0xFF151515)
+private val FlatBlack = Color(0xFF1C1C1C)
+private val BassWhite = Color(0xFFF2EFE8)
+private val BassGrey = Color(0xFFB9B3A8)
+
+/** Vertigo vermilion, as named. The block, the rail, the bead, the border. */
+private val Vermilion = Color(0xFFE8491D)
+
+/** The same hue lifted, for the accent where it is a word. */
+private val VermilionLit = Color(0xFFFF7A55)
+
+/** Bass's other colour. 7.41:1 on the panel. */
+private val Mustard = Color(0xFFD9A21B)
+
+private val HitchcockChrome: ColorScheme = darkColorScheme(
+    primary = VermilionLit,
+    onPrimary = Color(0xFF000000),
+    primaryContainer = Vermilion,
+    onPrimaryContainer = Color(0xFF000000),
+    inversePrimary = Color(0xFF8A2408),
+    secondary = Mustard,
+    onSecondary = Color(0xFF000000),
+    secondaryContainer = Mustard,
+    onSecondaryContainer = Color(0xFF000000),
+    tertiary = BassGrey,
+    onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFF2A2A2A),
+    onTertiaryContainer = BassWhite,
+    background = Charcoal,
+    onBackground = BassWhite,
+    surface = FlatBlack,
+    onSurface = BassWhite,
+    surfaceVariant = Color(0xFF242424),
+    onSurfaceVariant = BassGrey,
+    surfaceTint = FlatBlack,
+    inverseSurface = BassWhite,
+    inverseOnSurface = Charcoal,
+    // One hot colour on a title card, and it does both jobs: emphasis and alarm. The lifted tint
+    // where it is a word, exactly as the accent.
+    error = VermilionLit,
+    onError = Color(0xFF000000),
+    errorContainer = Color(0xFF3A1208),
+    onErrorContainer = Color(0xFFFF9E86),
+    outline = Color(0xFF6E6A64),
+    outlineVariant = Color(0xFF3A3A3A),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF303030),
+    surfaceDim = Charcoal,
+    surfaceContainerLowest = Color(0xFF0E0E0E),
+    surfaceContainerLow = Color(0xFF181818),
+    surfaceContainer = FlatBlack,
+    surfaceContainerHigh = Color(0xFF232323),
+    surfaceContainerHighest = Color(0xFF2A2A2A)
+)
+
+private val HitchcockDetail = ChromeDetail(
+    sectionRule = SectionRuleStyle.CUT_BAR,
+    ruleAccent = Vermilion,
+    headings = HeadingCase.CAPITALS,
+    markAccent = Vermilion,
+    buttonLabel = Color(0xFF000000),
+    // Charcoal behind the flat-black blocks: a card is printed, not a screen.
+    windowGround = Charcoal,
+    cartouche = CartoucheStyle.SPIRAL
+)
+
 /**
  * The handful of colours that sit *over the map* rather than beside it.
  *
@@ -952,7 +1491,7 @@ private val AtlasShapes = Shapes(
 )
 
 /**
- * Two faces, and the rule for which goes where.
+ * Two faces, and the rule for which goes where — and, for one chrome, a third.
  *
  * Spectral, a serif cut for screens, carries everything that names something — the application, a
  * section, a realm. IBM Plex Sans, which is narrow and legible small, carries everything that
@@ -960,9 +1499,14 @@ private val AtlasShapes = Shapes(
  * convention in cartography: the title and the legend headings are set, the annotations are
  * lettered.
  *
- * Both are bundled as Compose resources rather than named as system families, so the browser build
- * renders in the same faces as the desktop instead of falling back to whatever the page's default
- * happens to be. They are open licensed (SIL OFL 1.1; the licences are in `ui/licences`).
+ * F7 adds IBM Plex Mono, from the same IBM Plex release as the sans (v6.4.0, the face at version
+ * 2.004), and exactly one chrome sets its type in it: Matrix, whose subject is a terminal, where
+ * there is no such split because every glyph sits on the same grid.
+ *
+ * All three are bundled as Compose resources rather than named as system families, so the browser
+ * build renders in the same faces as the desktop instead of falling back to whatever the page's
+ * default happens to be. They are open licensed (SIL OFL 1.1; the licences are in `ui/licences` and
+ * the generated `Notices.kt` names all three).
  *
  * Composed once here and remembered: `Font` loads its bytes through the resource reader, and
  * building the families inside each `TextStyle` would ask for them again on every recomposition.
@@ -977,25 +1521,70 @@ private fun cartogenesisTypography(choice: ThemeChoice): Typography {
         Font(Res.font.plex_sans_regular, FontWeight.Normal),
         Font(Res.font.plex_sans_medium, FontWeight.Medium)
     )
-    return remember(display, sans, choice) { typographyFor(choice, display, sans) }
+    // The third face, and it is built only by the chrome that sets its type in it. `Font` reads the
+    // resource where it is called, so building this family unconditionally would have a browser
+    // fetch 314 KB of a face fourteen of the fifteen chromes never draw a glyph of.
+    val mono = if (choice == ThemeChoice.MATRIX) {
+        FontFamily(
+            Font(Res.font.plex_mono_regular, FontWeight.Normal),
+            Font(Res.font.plex_mono_bold, FontWeight.Bold)
+        )
+    } else {
+        null
+    }
+    return remember(display, sans, mono, choice) { typographyFor(choice, display, sans, mono) }
 }
 
 /**
- * The same two faces, set the way this chrome sets them.
+ * The same faces, set the way this chrome sets them.
  *
- * Three of F6's five ask for a change of *type* rather than of colour, and none of them is a thing
- * a call site should be doing: High contrast wants everything one step larger, Allied wants the
- * display face tracked out for capitals, Baroque wants the headings in italic. So each is a
- * transformation of the one [Typography] rather than a second one written out, which is also what
- * guarantees the other eight chromes are untouched — they take the identity transformation.
+ * Seven of the fifteen chromes ask for a change of *type* rather than of colour, and none of them
+ * is a thing a call site should be doing: High contrast wants everything one step larger, Allied,
+ * Hessian and Roman want the display face tracked out for capitals, Baroque wants the headings in
+ * italic, Hitchcock wants them heavy and tight, and Matrix wants a different face entirely. So each
+ * is a transformation of the one [Typography] rather than a second one written out, which is also
+ * what guarantees the other eight chromes are untouched — they take the identity transformation.
  */
 private fun typographyFor(
     choice: ThemeChoice,
     display: FontFamily,
-    sans: FontFamily
+    sans: FontFamily,
+    mono: FontFamily? = null
 ): Typography {
     val base = typography(display, sans)
     return when (choice) {
+        // One face for both roles, because a terminal has one. The split F1 drew — a serif for what
+        // names, a sans for what measures — is a printer's convention, and a screen that renders
+        // every glyph on the same grid has no use for it. Everything else about the scale stays:
+        // only the family and the letterfit move, so the panel does not change shape when the
+        // chrome does. Mono is wide, so the tracking the serif needed comes back out.
+        ThemeChoice.MATRIX -> mono?.let { face ->
+            base.map {
+                it.copy(
+                    fontFamily = face,
+                    letterSpacing = (it.letterSpacing.value - 0.2f).coerceAtLeast(0f).sp
+                )
+            }
+        } ?: base
+
+        // The same letterfit Allied uses, and for the same reason: a stencil is capitals with air
+        // between them. The words are uppercased by [ChromeDetail.heading].
+        ThemeChoice.HESSIAN, ThemeChoice.ROMAN -> base.mapDisplay {
+            it.copy(letterSpacing = (it.letterSpacing.value + 1.2f).sp)
+        }
+
+        // A Bass card is heavy and tight — the letters touch, and the eye reads the shape of the
+        // word before it reads the word. Spectral is bundled in regular and semibold, so Bold is
+        // the semibold with the renderer's own emboldening on top, which is what a title card's
+        // lettering was too.
+        ThemeChoice.HITCHCOCK -> base.mapDisplay {
+            it.copy(
+                fontWeight = FontWeight.Bold,
+                fontSynthesis = FontSynthesis.Weight,
+                letterSpacing = (it.letterSpacing.value - 0.6f).sp
+            )
+        }
+
         // One step larger, everywhere. 1.15 is a Material type step; the interface scale in
         // Settings multiplies the density instead, so the two compose rather than fight.
         ThemeChoice.HIGH_CONTRAST -> base.map { it.enlarged(1.15f) }
@@ -1003,7 +1592,7 @@ private fun typographyFor(
         // Capitals need air between them or they set as a wall; 1.2sp on the display styles is
         // what turns Spectral's caps into something that reads as small capitals rather than as
         // shouting. The words themselves are uppercased by the heading composable, from
-        // [ChromeDetail.smallCapsHeadings] — this is only the letterfit.
+        // [ChromeDetail.heading] — this is only the letterfit.
         ThemeChoice.ALLIED -> base.mapDisplay {
             it.copy(letterSpacing = (it.letterSpacing.value + 1.2f).sp)
         }

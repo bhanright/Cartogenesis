@@ -344,9 +344,9 @@ threshold set from what the generator produced last week. A single `EarthLikenes
 | Drainage density vs aridity | peaked in semi-arid climates | Moglen, Eltahir & Bras 1998 |
 | Lake size distribution | Pareto, exponent ~1.06 by count; 4.2 M km² total | Downing et al. 2006 |
 | Island size distribution | power law (Korčak), exponent ~0.5 | Korčak 1938; Mandelbrot |
-| Desert within 15–45° | ~85–88% of desert area | derived from Köppen–Geiger maps (Peel 2007) |
+| Desert, share of the land in each latitude band (0–15°, 15–45°, 45–90°) | per-band BW fractions derived from the Köppen–Geiger map; H5b derives and writes them | Peel, Finlayson & McMahon 2007 |
 | Ice share of land | 10.1% | Cogley 2014 / RGI |
-| Lakes share of land | ~1.8% | Downing 2006 / Verpoorter 2014 |
+| Lakes, share of land in lakes at least one cell in area | ≈1.7% for lakes ≥ 100 km², ≈1.2% for ≥ 1,000 km² (from the paper's size classes; re-read at M1); compare at the map's cell area, since the 4.2 M km² total is mostly ponds below any grid here | Downing et al. 2006 |
 | Wetlands share of land | ~6% | Davidson 2014 |
 | Reef latitude limit | coldest month ≥ 18 °C | Kleypas 1999 |
 | Delta class mix | all three Galloway classes present | Nienhuis 2020 |

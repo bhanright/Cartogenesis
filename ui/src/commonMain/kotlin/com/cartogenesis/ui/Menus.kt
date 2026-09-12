@@ -105,6 +105,18 @@ internal object Menus {
     /** The chromes the View menu's Theme submenu offers: every one there is. */
     val themes: List<ThemeChoice> = ThemeChoice.entries
 
+    /**
+     * The same fifteen, on three shelves.
+     *
+     * F7 took the list past the point where a flat run is a list: Standard, Accessible and Styled
+     * are three headings over the same chromes in the same order within each, and every name and
+     * every stored value is exactly what it was. A group with nothing in it is dropped rather than
+     * drawn empty, which is only defensive — all three have members and a test says so.
+     */
+    val themeGroups: List<Pair<ThemeGroup, List<ThemeChoice>>> = ThemeGroup.entries
+        .map { group -> group to themes.filter { it.group() == group } }
+        .filter { it.second.isNotEmpty() }
+
     /** The panel sections View can show and hide: the same six the panel draws. */
     val sections: List<PanelSection> = PANEL_SECTIONS
 
@@ -174,12 +186,16 @@ internal fun MenuStrip(
             MenuButton("View", open == "View", { open = if (open == "View") null else "View" }) {
                 // The theme submenu, flattened into a labelled run of items with a tick beside the
                 // current one. A real nested submenu is a hover-timing problem Material 3 has no
-                // component for, and six items do not need one.
+                // component for, and fifteen items do not need one — but they do need the three
+                // headings F7 put over them, which is all `themeGroups` is.
                 MenuHeading("Theme")
-                Menus.themes.forEach { theme ->
-                    Ticked(theme.label, settings.theme == theme) {
-                        open = null
-                        onTheme(theme)
+                Menus.themeGroups.forEach { (group, chromes) ->
+                    MenuSubHeading(group.label)
+                    chromes.forEach { theme ->
+                        Ticked(theme.label, settings.theme == theme) {
+                            open = null
+                            onTheme(theme)
+                        }
                     }
                 }
                 MenuHeading("Panel")
@@ -269,10 +285,13 @@ internal fun CompactMenuButton(
                 }
             }
             MenuHeading("Theme")
-            Menus.themes.forEach { theme ->
-                Ticked(theme.label, settings.theme == theme) {
-                    open = false
-                    onTheme(theme)
+            Menus.themeGroups.forEach { (group, chromes) ->
+                MenuSubHeading(group.label)
+                chromes.forEach { theme ->
+                    Ticked(theme.label, settings.theme == theme) {
+                        open = false
+                        onTheme(theme)
+                    }
                 }
             }
             MenuHeading("Panel")
@@ -361,10 +380,27 @@ private fun Ticked(label: String, on: Boolean, onClick: () -> Unit) {
 @Composable
 private fun MenuHeading(text: String) {
     Text(
-        text,
+        LocalChromeDetail.current.heading(text),
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp)
+    )
+}
+
+/**
+ * A shelf inside a run of menu items: Standard, Accessible, Styled.
+ *
+ * Quieter and further in than [MenuHeading], because these sit *under* "Theme" rather than beside
+ * "Panel" and "Map" — three of them at the same weight as their parent would read as six headings
+ * rather than as one with three shelves.
+ */
+@Composable
+private fun MenuSubHeading(text: String) {
+    Text(
+        LocalChromeDetail.current.heading(text),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 22.dp, top = 6.dp, bottom = 1.dp)
     )
 }
 

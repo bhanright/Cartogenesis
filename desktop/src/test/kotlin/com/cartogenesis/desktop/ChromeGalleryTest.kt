@@ -258,6 +258,105 @@ class ChromeGalleryTest {
         )
     }
 
+    /**
+     * F7's four, each with a world on screen at 1440x900.
+     *
+     * The same shot as F6's, for the same reason: every one of these four changes something the
+     * panel and the map frame do rather than only what colour they are — a prompt before each
+     * section heading and a monospaced face throughout (Matrix), a weave behind the panels and a
+     * running stitch under every heading (Hessian), a Greek key and a double-ruled cartouche
+     * (Roman), a cut bar and a spiral beside the world's name (Hitchcock) — and none of that can be
+     * seen in a palette. The panel is left rolled up, as a reader first sees it, because that is
+     * where the six ruled headings are.
+     */
+    @Test
+    fun `the four F7 chromes are photographed with a world in the window`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val chromes = listOf(
+            "matrix" to ThemeChoice.MATRIX,
+            "hessian" to ThemeChoice.HESSIAN,
+            "roman" to ThemeChoice.ROMAN,
+            "hitchcock" to ThemeChoice.HITCHCOCK
+        )
+
+        val fingerprints = mutableMapOf<String, Int>()
+        chromes.forEach { (name, choice) ->
+            val shot = shoot(dark = false, choice = choice)
+            File(dir, "f7-$name.png").writeBytes(shot.png)
+            fingerprints[name] = shot.fingerprint
+            assertTrue(shot.distinctColours > 200, "the $name shot is nearly blank")
+        }
+        println("CHROME wrote four ${WIDTH}x$HEIGHT F7 shots to ${dir.absolutePath}")
+        println("CHROME F7 fingerprints $fingerprints")
+        assertEquals(
+            chromes.size,
+            fingerprints.values.toSet().size,
+            "two of the four chromes rendered identically: $fingerprints"
+        )
+    }
+
+    /**
+     * The settings dialog in the two F7 chromes whose lettering only shows there.
+     *
+     * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own
+     * six headings are all single words set in one line — so the dialog, whose rows are "Working
+     * resolution", "Graphics card at launch" and "Library folder", is the only place either is
+     * legible. Photographed the way a reader reaches it, File then Settings, so the shot also proves
+     * the menu item still opens what it claims to.
+     */
+    @Test
+    fun `the F7 lettering is photographed in the settings dialog`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val chromes = listOf("matrix" to ThemeChoice.MATRIX, "roman" to ThemeChoice.ROMAN)
+        val fingerprints = mutableMapOf<String, Int>()
+        chromes.forEach { (name, choice) ->
+            val shot = shootChrome(choice, Opened.SETTINGS)
+            File(dir, "f7-settings-$name.png").writeBytes(shot.png)
+            fingerprints[name] = shot.fingerprint
+            assertTrue(shot.distinctColours > 3, "the settings shot in $name is a flat colour")
+        }
+        println("CHROME wrote two F7 settings shots to ${dir.absolutePath}")
+        assertEquals(2, fingerprints.values.toSet().size, "both settings shots are identical")
+    }
+
+    /**
+     * That F7 left every chrome before it pixel-identical.
+     *
+     * The claim F7 has to make, in pixels. F6's ornament went into one `ChromeDetail` read by
+     * `Controls.kt`, `Section` and the legend; F7 added seven more fields to the same object and
+     * four more call sites - a texture behind a panel, a ground behind the window, a colour for a
+     * button that is a block, a frame round the cartouche - every one of which must be an identity
+     * for a chrome that asks for nothing. If any of them is not, it shows here.
+     *
+     * What is photographed is the **File menu's own layer**, and that is forced rather than chosen.
+     * The window carries a randomly chosen seed and world name, so a shot of it is a different
+     * picture every run and can never be compared with a recorded number - the first draft of this
+     * test recorded eleven window fingerprints and four of them moved on the next run with no code
+     * change at all, which is exactly the failure a guard is meant to catch in itself. The File
+     * menu is seven fixed labels and their shortcuts on the chrome's own paper, drawn through the
+     * same theme, and it is the same picture every time.
+     *
+     * The expected values were recorded from `main` at 27fd260 by running this capture there,
+     * before a line of F7 was written. `ChromeContrastTest` makes the other half of the claim, in
+     * colours: the same eleven schemes, role by role.
+     */
+    @Test
+    fun `the eleven chromes before F7 are pixel-identical`() {
+        val moved = mutableListOf<String>()
+        val measured = mutableMapOf<String, Int>()
+        BEFORE_F7.forEach { (name, expected) ->
+            val choice = ThemeChoice.entries.first { it.name == name }
+            val shot = shootChrome(choice, Opened.MENU)
+            measured[name] = shot.fingerprint
+            if (shot.fingerprint != expected) moved += "$name $expected -> ${shot.fingerprint}"
+        }
+        println("CHROME F7 identity check over ${BEFORE_F7.size} chromes: $measured")
+        assertTrue(
+            moved.isEmpty(),
+            "F7 changed a chrome that came before it: ${moved.joinToString("; ")}"
+        )
+    }
+
     private enum class Opened { NOTHING, MENU, SETTINGS, ABOUT }
 
     /**
@@ -268,11 +367,15 @@ class ChromeGalleryTest {
      * wired to what they claim to open.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shootChrome(choice: ThemeChoice, opened: Opened): Shot {
+    private fun shootChrome(choice: ThemeChoice, opened: Opened, dark: Boolean = false): Shot {
         var shot: Shot? = null
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent {
-                CartogenesisTheme(choice = choice) {
+                // `dark` is consulted only by ThemeChoice.SYSTEM. It is passed rather than left to
+                // its default so that a shot of SYSTEM is the same picture on a machine set to dark
+                // as on one set to light — which the identity check below depends on, and which the
+                // F4 shots of Light, Dark and Mars are unaffected by either way.
+                CartogenesisTheme(dark = dark, choice = choice) {
                     CartogenesisApp(ChromePlatform())
                 }
             }
@@ -491,6 +594,24 @@ class ChromeGalleryTest {
 
         /** Generous: this is a full 512 world on the CPU, on whatever machine is running the tests. */
         const val GENERATION_TIMEOUT_MS = 300_000L
+
+        /**
+         * The eleven chromes as their File menu photographed on `main` at 27fd260,
+         * in a 1440x900 window. Recorded, not computed; see the test that reads them.
+         */
+        val BEFORE_F7: List<Pair<String, Int>> = listOf(
+            "SYSTEM" to 1852807361,
+            "LIGHT" to 1852807361,
+            "DARK" to -1977585743,
+            "NAUTICAL" to -1182522316,
+            "MIDNIGHT" to -1411692474,
+            "MARS" to 331029558,
+            "HIGH_CONTRAST" to -1191793614,
+            "COLORBLIND" to -183061993,
+            "ALLIED" to 1266833254,
+            "HALLOWED" to -1306379635,
+            "BAROQUE" to 832442652
+        )
 
         /**
          * The panel's own copy, as a reader sees it: the header's controls, the six section

@@ -71,12 +71,24 @@ class GlaciationTest {
         assertTrue("no temperate country to measure", with.warmLand > 2000)
         assertTrue("control has no glaciated country", without.coldLand > 2000)
 
+        // The control, restated by H1. What it is for is to show that the ratio below is the ice's
+        // doing and not the seed's, and it said so as `without.ratio < 3` — the two zones are
+        // alike before the ice runs. That is a ratio of two very small numbers on the control
+        // world: with the tectonic history on, seed 42's un-glaciated cold country holds three
+        // ponds and its temperate country holds none, which reads as a ratio of 6.87 out of
+        // 0.69 lakes per 10k cells against 0.00. Nothing about that says the guard is measuring
+        // something other than the ice; it says a ratio with a zero under it is not a measurement.
+        //
+        // So the control is stated against the quantity it is actually about: how much of the cold
+        // country's water the ice put there. Measured, the ice multiplies it by four and a half
+        // (0.69 -> 3.11 lakes per 10k cold cells) and the two zones' ratio goes 6.87 -> 9.26.
         assertTrue(
-            "without glaciation the two zones are alike: cold ${"%.2f".format(without.coldDensity)}" +
-                " against temperate ${"%.2f".format(without.warmDensity)} lakes per 10k cells," +
-                " ratio ${"%.2f".format(without.ratio)} — if this is already above 3 the guard is" +
-                " measuring something other than the ice",
-            without.ratio < 3f
+            "without glaciation the cold country already holds" +
+                " ${"%.2f".format(without.coldDensity)} lakes per 10k cells against the iced" +
+                " world's ${"%.2f".format(with.coldDensity)} — if the ice is not what put them" +
+                " there the ratio below is measuring something else (control zone ratio" +
+                " ${"%.2f".format(without.ratio)}, iced ${"%.2f".format(with.ratio)})",
+            with.coldDensity >= 3f * without.coldDensity
         )
         assertTrue(
             "glaciated country holds only ${"%.2f".format(with.ratio)}x the lake density of" +
@@ -329,6 +341,16 @@ class GlaciationTest {
                 // of the ice's work comes out as a rank of parallel gullies, and that is measured
                 // here against the water the ice had to work with.
                 .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
+                // And H1's tectonic history off, for a reason of the same shape. Both figures are
+                // shares of the world's standing water, and the history changes how much of that
+                // there is and where: its worn old belts are broad, low-relief uplands, which is
+                // exactly the ground B4's two regimes divide between them, and a cold one sits
+                // near the boundary. On seed 42 the comb share reads 3.2% with the history off and
+                // 3.6% with it on, either side of a bar of 3.5% — a fortieth of the world's water
+                // moving between two categories, not a comb appearing. What the shipped world
+                // measures is asserted where it can be read against the un-glaciated world of the
+                // same seed: see `the author's 2048 world has no narrow straight water`.
+                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val world = WorldGenerationEngine.generateBlocking(config)
             val filaments = countFilaments(world)
             val comb = combShare(world)

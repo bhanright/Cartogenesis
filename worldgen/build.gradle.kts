@@ -88,7 +88,10 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.ColdCapReportTest",
     "com.cartogenesis.worldgen.ErosionConvergenceTest",
     "com.cartogenesis.worldgen.GlaciationAuditTest",
-    "com.cartogenesis.worldgen.RealmIdRangeAuditTest"
+    "com.cartogenesis.worldgen.RealmIdRangeAuditTest",
+    // H1's cost report: sixteen runs of the tectonic stage at 1024 and 2048, reported rather than
+    // asserted. Its guards run at 512 and stay in `TectonicHistoryTest`.
+    "com.cartogenesis.worldgen.TectonicHistoryAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

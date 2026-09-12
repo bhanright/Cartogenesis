@@ -244,6 +244,98 @@ data class TectonicsConfig(
      */
     val riftSillHeight: Float = 0.075f,
     /**
+     * How many tectonic epochs the world's history carries, the present one included.
+     *
+     * A drift vector that only classifies today's boundaries gives a world where nothing has ever
+     * moved: every range is young and sits exactly on a plate edge. Earth is not like that. The
+     * Appalachians and the Urals are collisions whose boundary is gone — worn low, broadened, and
+     * a thousand kilometres from any plate edge — and the North Sea and the Benue trough are rifts
+     * that opened, failed and filled with sediment.
+     *
+     * So the stage runs itself [historyEpochs] times. Each past epoch displaces every plate seed
+     * back along minus its own drift (see [epochDrift]), classifies the boundaries of *that*
+     * configuration by the same crust pairs, stamps the same profiles, and then ages what it
+     * stamped: lower ([beltAgeDecay]), broader ([beltAgeWidening]), rounder ([beltAgeBlur]). The
+     * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
+     * ones the rest of the pipeline sees, unchanged.
+     *
+     * 1 — or 0, which means the same thing — is the pre-H1 generator, bit for bit: the present
+     * epoch alone, with every ageing factor exactly 1 and never applied. `TectonicHistoryTest`
+     * pins that against checksums taken from the build before this chunk.
+     */
+    val historyEpochs: Int = 3,
+    /**
+     * How far a plate travels between one epoch and the next, in cells.
+     *
+     * A plate boundary only moves if the plates either side of it move relative to one another, so
+     * this is what decides how far an old belt ends up from a present one. At the default a
+     * two-epochs-ago boundary sits some 90 cells from where its plates are now, against a plate
+     * radius of about 137 cells on a 14-plate 512 world — far enough that an old belt lands well
+     * inside a plate interior rather than merging with the modern edge beside it, which is the
+     * whole point. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     */
+    val epochDrift: Float = 45f,
+    /**
+     * What fraction of its height a belt keeps per epoch of age.
+     *
+     * Earth's figure is the Appalachians against the Alps: a Palaeozoic collision stands about
+     * 2000 m where an active one stands 4000-4800, so a little under a half per orogeny. Two
+     * epochs back that leaves a fifth, which is the Urals and the worn stumps of the Caledonides
+     * — high ground, not mountains. Measured, the belts of one epoch ago come out 2.2 times below
+     * the present ones; `TectonicHistoryTest` reports the figure.
+     */
+    val beltAgeDecay: Float = 0.45f,
+    /**
+     * How much broader a belt gets per epoch of age.
+     *
+     * An orogen does not merely sink, it spreads: the crustal root relaxes and the debris is laid
+     * out on the forelands either side, which is why the Appalachian province is wider than the
+     * Alpine one for a third of the height.
+     */
+    val beltAgeWidening: Float = 1.45f,
+    /**
+     * Radius, in cells, of the rounding blur applied per epoch of age.
+     *
+     * Two box passes rather than three: an old belt should read as rounded, not as a stain. The
+     * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
+     * range, and it is applied to the epoch's own uplift field alone, so it never touches the
+     * present epoch's edges. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     *
+     * Held at three cells rather than the six first tried, for a reason about the *length* of a
+     * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
+     * reach is comparable to the saddles [rangeVariation] leaves between one massif and the next
+     * (about forty cells at 512 for [rangeVariationScale] of thirteen), so it does not only round
+     * the profile, it fills the gaps and welds a chain of worn massifs into one continuous upland.
+     * That is bad geography — the Appalachians are a province of separate ranges with valleys
+     * through them — and it showed up downstream as one people holding 45% of seed 42's habitable
+     * land against `CultureRealmTest`'s 45% ceiling, because a continuous upland is a corridor.
+     * At three cells the saddles survive and the same seed reads 33%.
+     */
+    val beltAgeBlur: Float = 3f,
+    /**
+     * How much of a failed rift's trough survives as a trough, the rest having filled with
+     * sediment.
+     *
+     * A rift that opened in a past epoch and then stopped does not stay a canyon: it becomes an
+     * aulacogen, a broad shallow sag full of its own erosion products, which is what the North
+     * Sea, the Benue trough and the Mississippi embayment are. So a past epoch's continental rift
+     * keeps this share of its depth (before ageing takes its share too) and only a remnant of its
+     * shoulders ([failedRiftShoulder]).
+     */
+    val failedRiftFill: Float = 0.55f,
+    /** What a failed rift keeps of its shoulders. Flexural uplift relaxes once the fault stops. */
+    val failedRiftShoulder: Float = 0.35f,
+    /**
+     * The relief, in normalized elevation units, at which an epoch's belt counts as having made
+     * the crust beneath it its own age — the scale of [PlateResult.crustAge].
+     *
+     * A cell the epoch raised by this much or more takes that epoch's age outright; one it barely
+     * touched keeps whatever older age it had. H3 reads the field to decide erodibility, so what
+     * matters is that the bands are unambiguous, which is why the value is a relief rather than a
+     * distance.
+     */
+    val crustAgeReference: Float = 0.05f,
+    /**
      * Share of plates that carry a hotspot — a point fixed in the mantle that the plate drifts
      * over, leaving a line of seamounts behind it.
      *
@@ -1328,6 +1420,11 @@ data class WorldGenConfig(
                 riftWidth = tectonics.riftWidth * scale,
                 riftShoulderOffset = tectonics.riftShoulderOffset * scale,
                 riftShoulderWidth = tectonics.riftShoulderWidth * scale,
+                // H1. A displacement and a blur radius are both lengths on the ground, so they are
+                // more cells on a finer grid; `historyEpochs` and the three dimensionless ageing
+                // factors are not and are left alone.
+                epochDrift = tectonics.epochDrift * scale,
+                beltAgeBlur = tectonics.beltAgeBlur * scale,
                 hotspotChainLength = tectonics.hotspotChainLength * scale,
                 hotspotSpacing = tectonics.hotspotSpacing * scale,
                 hotspotRadius = tectonics.hotspotRadius * scale

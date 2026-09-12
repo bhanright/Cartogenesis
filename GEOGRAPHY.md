@@ -130,7 +130,7 @@ concentric crescent moats, 563 cells of standing water lying in rings. A cell ma
 until the slope from its feeder reaches the slope at which the river's transport capacity equals
 its load — the equilibrium slope of a transport-limited channel, solved out of the same expression
 the capacity is written in, so it costs no constant of its own. Measured in that window: 563 cells
-of ringed water before and none after; 2675 cells of standing water in all before and 1120 after,
+of ringed water before and none after; 2282 cells of standing water in all before and 1121 after,
 against 1535 on the same ground with no deposition at all, so the spoil now takes water out of a
 valley where it used to add it. The margin itself is measured and spent in one unit system, which
 it was not: it was read in shoreline-relative units and spent as a height, so an alluvial dam could

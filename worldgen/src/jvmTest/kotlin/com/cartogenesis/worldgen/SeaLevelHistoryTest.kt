@@ -95,9 +95,9 @@ class SeaLevelHistoryTest {
             //
             // E6 is why. Its graded floodplain lays less spoil in the lower valleys, which are
             // exactly where an estuary is counted, and on seed 7 the pair went 26 -> 40 before it
-            // and 26 -> 32 after: the lowstand's own contribution is undiminished in kind and the
+            // and 25 -> 32 after: the lowstand's own contribution is undiminished in kind and the
             // ratio fell through a 1.4 bar set on one seed's arithmetic. The three seeds measure
-            // 1.23, 2.53 and 4.31 and the loop used to stop at the first of them, so what was
+            // 1.28, 2.53 and 4.31 and the loop used to stop at the first of them, so what was
             // guarding the claim was seed 7 alone. Same restatement the desert guard and
             // `CultureRealmTest` carry: the direction per seed, the size pooled.
             assertTrue(
@@ -115,9 +115,9 @@ class SeaLevelHistoryTest {
             )
         }
 
-        // The size of it, pooled. The three seeds measure 1.23, 2.53 and 4.31 times as many estuary
+        // The size of it, pooled. The three seeds measure 1.28, 2.53 and 4.31 times as many estuary
         // mouths with the lowstand as without; the bar is 1.5, which sits well under their mean of
-        // 2.69 and well over the 1.0 that would mean the lowstand drowned nothing. Pooled because the
+        // 2.71 and well over the 1.0 that would mean the lowstand drowned nothing. Pooled because the
         // count is a property of where one world's valleys happen to meet its coast — seed 7 has a
         // ria coast already and the lowstand has less to add to it — and the claim is about the
         // mechanism, not about seed 7.

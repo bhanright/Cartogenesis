@@ -119,7 +119,7 @@ class CultureRealmTest {
             // below rather than asserted on whichever of them the loop reached first.
             //
             // It used to read `> 1.3` here, which stopped at seed 42 and so was a bar set by one
-            // world: the three seeds measure 1.38, 1.75 and 2.00, a spread of nearly a half, and a
+            // world: the three seeds measure 1.50, 1.75 and 1.88, and a
             // realm map is built from drainage catchments, so anything that moves the river network
             // moves it. E6 found it at 1.25 on seed 42 alone and the other two unmeasured. Same
             // shape as the desert guard: the claim per seed, the strength pooled, every figure
@@ -137,7 +137,7 @@ class CultureRealmTest {
                     "inside a country, so the peoples layer is close to a copy of the political map"
             )
         }
-        // And the strong form, pooled. Three worlds measure 1.38, 1.75 and 2.00 realms per people,
+        // And the strong form, pooled. Three worlds measure 1.50, 1.75 and 1.88 realms per people,
         // a mean of 1.71; the bar is 1.4, which is under the worst of the three and well over the
         // 1.0 that would mean the two layers agree. Pooling is what makes it a statement about the
         // generator rather than about seed 42: one world's realm count is a property of where its

@@ -8,8 +8,8 @@
   margin `headroom` allows an alluvial dam was measured in shoreline-relative units and spent as a
   height, so a dam could stand about four times higher than the no-uphill rule allows, and the rule
   it bounds has a flat for its fixed point anyway. Aggradation now stops at the slope the river
-  needs to carry its load. In his window: 563 cells of ringed water before, none after; 2675 cells
-  of standing water before, 1120 after, against 1535 with no deposition at all. The saw-tooth
+  needs to carry its load. In his window: 563 cells of ringed water before, none after; 2282 cells
+  of standing water before, 1121 after, against 1535 with no deposition at all. The saw-tooth
   fringe and the forty-five degree comb are almost none of them the spoil's — 102 of the 145 cells
   are there with deposition switched off — and the dead-straight seaward front is none of it: the
   deposition-off terrain cut at the deposited world's own sea level gives the same 31-cell straight
@@ -18,7 +18,7 @@
 - **A lacustrine fan's floor is charged per cell** (2026-09-12, E6) — fixed as E5 had written it and
   reverted it: the floor is a fraction of the fan's rim, identical at 512 and held at every other
   grid. It surfaced as B4's resolution contract, where the drainage's lake area per unit of map was
-  growing 2.38x between 512 and 1024; with the fan fixed it is 1.92x.
+  growing 2.38x between 512 and 1024; with the fan fixed it is 1.91x.
 
 - **Square-cornered coastal lobes** (2026-09-12, E5) — the fan walk handed its own breadth-first
   step count to the acceptance rule as though it were a distance, and over eight neighbours a step
@@ -276,8 +276,8 @@
   constant width down the valley's west side is the same profile seen side-on. E4's geometry.
   2026-09-12.
 - **The ice's own added water is still charged per cell.** With the drainage's share separated out,
-  `GlaciationTest`'s resolution case measures the ice adding 2 cells of standing water at 512 and 51
-  at 1024 on seed 718106 — six times as much per unit of map, on a count too small at 512 to form a
+  `GlaciationTest`'s resolution case measures the ice adding 2 cells of standing water at 512 and 46
+  at 1024 on seed 718106 — nearly six times as much per unit of map, on a count too small at 512 to form a
   ratio. The drainage's own share keeps the 2.0 contract at 1.92. B4's. 2026-09-12.
 - **Saw-tooth lake shores and forty-five degree bars.** Thin one- and two-cell bars of water along
   the flow grid fringe the lakes in 718106's southern rift at 2048: 107 cells in the author's

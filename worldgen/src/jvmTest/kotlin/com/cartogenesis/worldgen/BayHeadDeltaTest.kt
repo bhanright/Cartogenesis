@@ -20,7 +20,7 @@ import kotlin.test.Test
  *    four times on these worlds — and the rule it bounds has a *flat* for its fixed point anyway.
  *    Twelve rounds of creeping toward a flat leave a near-plane whose residual hollows pond into
  *    shapes with no landform behind them. In the author's window: 563 lake cells lying in arcs
- *    about a fitted centre before, 0 after; 2675 lake cells in all before, 1120 after, against
+ *    about a fitted centre before, 0 after; 2282 lake cells in all before, 1121 after, against
  *    1535 on the same ground with no deposition.
  *  - **The saw-tooth bars are almost none of them the spoil's.** 145 lake cells lie in thin bars at
  *    a grid or diagonal bearing in that window; 102 of them are there with deposition switched off
@@ -65,16 +65,16 @@ class BayHeadDeltaTest {
      * in full rather than quietly dropping:
      *
      *  - **Standing water against a world that lays no sediment.** At 1024 the ungraded rule holds
-     *    1.75x and 1.04x of it on the two seeds and the graded rule 1.76x and 1.19x — the graded
+     *    1.75x and 1.04x of it on the two seeds and the graded rule 1.74x and 1.16x — the graded
      *    rule holds *more* on one of them. In the author's own window at 2048 the same measure
-     *    reads 2675 cells before and 1120 after against a floor of 1535, which is the artefact; the
+     *    reads 2282 cells before and 1121 after against a floor of 1535, which is the artefact; the
      *    whole world averages it away.
      *  - **Rings of water**: standing water in a band about a fitted centre, far longer than thick.
      *    563 cells before and 0 after in his window at 2048; at 1024 over the whole world, 59
-     *    against 59 on one seed and 429 against 464 on the other, because at that grid every long
+     *    against 59 on one seed and 429 against 426 on the other, because at that grid every long
      *    curved lake fits a circular band and the measure finds lakes rather than moats.
      *  - **Rising steps along the trunk**: the share of a river's last twelve steps that go uphill,
-     *    lake crossings excluded. 19.4% -> 13.7% and 15.0% -> 13.7%: it moves the right way every
+     *    lake crossings excluded. 19.4% -> 15.9% and 15.0% -> 14.5%: it moves the right way every
      *    time and nowhere near far enough to hold a bar, because most of those steps are the D8
      *    chain crossing ground the fill raised rather than the delta plain.
      *  - **Thin bars at a grid bearing** — the saw-teeth and the forty-five degree comb — are not

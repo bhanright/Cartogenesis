@@ -259,9 +259,10 @@ class GlaciationTest {
         val fineAdded = fineWork.addedWater
         // The same share with the ice's own water taken out of it: the standing water the drainage
         // put there, which is what every stage outside B4 controls. E6 measured the two apart
-        // because the total stopped keeping the contract while the drainage's half kept it — 2.04
-        // against 1.92 — and the whole of the difference is `addedWater`, which is two cells at
-        // 512. A ratio built on two cells is not a measurement, which is exactly why the ice's own
+        // because the total stopped keeping the contract while the drainage's half kept it — 2.38
+        // before E6's lacustrine fix and 2.00 after, against the drainage's own 1.91 — and the
+        // whole of the difference is `addedWater`, which is two cells at 512.
+        // A ratio built on two cells is not a measurement, which is exactly why the ice's own
         // figure has always been printed here rather than asserted; what is asserted is the half
         // that can be. The ice's own scaling is recorded in `TODO.md` for a B4 chunk.
         val coarseDrainage =
@@ -417,7 +418,7 @@ class GlaciationTest {
         // than the no-uphill rule allows — about four times — and put the lacustrine fan's floor on
         // a fraction of its rim instead of a charge per cell. Both take spoil-made hollows out of
         // the world, and the comb residual is mostly those: measured at 1024 with the notch and the
-        // history off, seeds 718106/42/7 read 1.1%, 2.4% and 1.3% where H5b left them at 2.2%, 4.4%
+        // history off, seeds 718106/42/7 read 1.2%, 2.5% and 1.5% where H5b left them at 2.2%, 4.4%
         // and 1.7%. The bar goes back to the figure the guard was written with, with the worst seed
         // now at two thirds of it.
         val COMB_BAR = 0.035f

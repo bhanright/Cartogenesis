@@ -136,8 +136,9 @@ over the twelve rounds: the incision made 6383, 10 and 5, the outlet notch none 
 in any round, the thermal relaxation none it did not also take away, and the spoil a few hundred
 where a floodplain laid at the very end stands above the channel feeding it — an alluvial dam, which
 is a real landform and is left alone. With the clamp the incision makes none, and the channel cells
-the map ends up drawing as standing water fall from 2279 to 1148 on seed 718106, 171 to 129 on 42
-and 391 to 351 on 7. See `ReceiverClampTest`.
+the map ends up drawing as standing water fall from 1627 to 780 on seed 718106, 106 to 54 on 42 and
+323 to 265 on 7. On the author's own world at 1024 the lakes go from 25 to 17 and the standing water
+from 1.60% of the land to 0.49%. See `ReceiverClampTest`.
 
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as

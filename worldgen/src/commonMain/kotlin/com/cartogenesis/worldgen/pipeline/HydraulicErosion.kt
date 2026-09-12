@@ -367,9 +367,14 @@ internal object HydraulicErosion {
             // has to raise that hole to route through it, so it becomes standing water, and along a
             // channel the holes line up into a rank of thin bars lying at a grid bearing — which is
             // exactly the shape `GlaciationTest`'s comb measurement exists to catch, and what took
-            // it from 3.5% to 5% at H5. Measured here per mechanism before anything was clamped:
-            // the incision leaves hundreds of such cells a round and every other mechanism leaves
-            // none worth naming, which is why this is the only clamp in the file.
+            // it from 3.5% to 5% at H5. Measured here per mechanism before anything was clamped
+            // (see `ReceiverClampTest` for the table): over the twelve rounds on seed 718106 at
+            // 512 the incision made 6383 of them, the outlet notch none at all in any round on any
+            // seed, and the thermal relaxation fewer than it took away. What is left after this
+            // clamp is the spoil, a few hundred cells where a floodplain laid at the end of the
+            // last round stands above the channel feeding it — an alluvial dam, which is a real
+            // landform and which the deposition's own no-uphill rule owns. So this is the only
+            // clamp in the file, and it is here on the evidence rather than on suspicion.
             //
             // The bound is Braun and Willett's (2013, *Geomorphology* 180-181, 170-179 — the
             // FastScape scheme), and every landscape-evolution model since has carried it:

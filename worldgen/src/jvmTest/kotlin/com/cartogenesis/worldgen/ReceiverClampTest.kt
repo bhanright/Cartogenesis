@@ -41,14 +41,16 @@ import kotlin.test.assertTrue
  *
  * | seed | notch | incision | spoil | closing | relax | channel cells drawn under water |
  * |---|---|---|---|---|---|---|
- * | 718106 off | 0 | 6383 | — | 6423 | 4167 | 2279 |
- * | 718106 on  | 0 | 0 | — | 894 | 830 | 1148 |
- * | 42 off | 0 | 10 | — | 311 | 328 | 171 |
- * | 42 on  | 0 | 0 | — | 404 | 418 | 129 |
- * | 7 off | 0 | 5 | — | 377 | 421 | 391 |
- * | 7 on  | 0 | 0 | — | 473 | 513 | 351 |
+ * | 718106 off | 0 | 6383 | 6748 | 6423 | 4167 | 1627 |
+ * | 718106 on  | 0 | 0 | 1173 | 894 | 830 | 780 |
+ * | 42 off | 0 | 10 | 344 | 311 | 328 | 106 |
+ * | 42 on  | 0 | 0 | 420 | 404 | 418 | 54 |
+ * | 7 off | 0 | 5 | 433 | 377 | 421 | 323 |
+ * | 7 on  | 0 | 0 | 509 | 473 | 513 | 265 |
  *
- * (The spoil column is filled in by the run; it was added after the table above was first taken.)
+ * The middle columns are cumulative through a round — a cell the spoil put below its receiver is
+ * still there when the closing breach is counted — so the closing and relax figures are what is
+ * *standing* at those points, not new holes of their own. On 718106 the relax takes some away.
  *
  * The incision is the mechanism worth clamping and the only one clamped. The notch cuts a surface
  * that falls away from the new lip by construction and leaves nothing, on any seed, in any round.
@@ -59,6 +61,13 @@ import kotlin.test.assertTrue
  * landform, and the existing no-uphill rule already holds it to the margin below each donor — so
  * it is measured and left alone rather than clamped on suspicion, and `DeltaMouthTest` and E5's
  * chunk own the deposition.
+ *
+ * Worth knowing about that residual, and recorded in TODO.md rather than acted on here: the
+ * no-uphill margin is computed off `settled`, which is seeded from the shoreline-relative field and
+ * then updated with height-unit amounts, so the room a cell is given is about `1/landRange` times
+ * the room the rule means — four-odd on a typical world. It is the same unit muddle the clamp above
+ * closes for the incision, and it is why the spoil's count rises slightly when the incision's falls
+ * (a less deeply cut channel leaves a floodplain standing relatively higher).
  */
 class ReceiverClampTest {
 

@@ -342,6 +342,11 @@ object SeaLevelStage {
      * only as the working copy the drop limits are spent against, so that a rate written per unit
      * of the land's relief means the same thing at every grid.
      *
+     * What the notch takes leaves the model, as the closing breach's spoil does and for the same
+     * reason: there is no walk left to carry it downstream, the sediment ledger belongs to the
+     * hydraulic rounds, and this runs two stages after they closed. `DepositionTest`'s budget is
+     * measured over those rounds and is untouched by anything here.
+     *
      * Deterministic, and re-runnable: the pass reads only the height field and the config, so
      * `WorldGenerationEngine`'s stage reuse gets the same answer as a fresh generation
      * (`IncrementalReuseTest` varies the sea section, which is where the switch lives).

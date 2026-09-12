@@ -59,4 +59,19 @@ data class WorldMap(
     fun isLand(x: Int, y: Int): Boolean = sea.isLand[y * width + x]
 
     fun landFraction(): Float = sea.landCellCount.toFloat() / (width * height)
+
+    /**
+     * The share of the map that is neither ocean nor standing water — the land a reader would call
+     * land.
+     *
+     * Since H5 this is the number the sea-level slider governs, and [landFraction] is not. Water the
+     * ocean cannot reach is marked land at the height it already stands at, because a body of water
+     * with no way out to the sea is a lake and not an arm of the ocean, and the river stage fills it
+     * accordingly. So `isLand` now covers a few percent of the map that is under a lake: on seed 42
+     * at 512 the cut still puts exactly 62% of the map below the waterline, but 4.6% of it is walled
+     * off from the ocean, so [landFraction] reads 0.426 where the slider asked for 0.380 and this
+     * reads 0.380. `PipelineTest`'s land-fraction promise is stated on this.
+     */
+    fun dryLandFraction(): Float =
+        (sea.landCellCount - rivers.lakes.lakeId.count { it >= 0 }).toFloat() / (width * height)
 }

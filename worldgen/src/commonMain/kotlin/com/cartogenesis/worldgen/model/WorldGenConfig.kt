@@ -298,7 +298,82 @@ data class SeaConfig(
      * shallower still, at a fixed -0.02, so there is a genuine (if gentle) slope across the shelf
      * rather than a dead-flat plain right up to the shore.
      */
-    val shelfDepth: Float = 0.10f
+    val shelfDepth: Float = 0.10f,
+    /**
+     * How far below today's shoreline the sea stood while the rivers were cutting, as a fraction
+     * of the land's own relief.
+     *
+     * The hydraulic rounds grade every channel to the sea they can see, so with the sea fixed at
+     * today's level no valley may continue below it and every coastline is a clean percentile cut
+     * through the land. That is not the coast any real continent has. The last glacial maximum put
+     * the sea about 120 m below where it stands now, rivers cut to *that* level and left their
+     * lower valleys hanging when the ice melted, and what the sea did on the way back up is the
+     * Atlantic seaboard's sounds, Brittany's and Galicia's rias, the Chesapeake, the Severn, every
+     * estuary on the map. The shelf between the two stands is a drowned plain with the old channels
+     * still on it.
+     *
+     * 120 m against the roughly 8 km of relief between sea level and the highest land is 1.5%, and
+     * that is the default. Held as a fraction of relief rather than in cells or in raw height, for
+     * the reason `outletIncisionRatio` is: relief is a different number at every grid, and a stand
+     * expressed in the height field's own units would drown a different amount of coast at 512
+     * than at 2048.
+     *
+     * Zero puts the sea where it is today for every round, which is what the generator did before
+     * this setting existed and reproduces that world bit for bit — the control the estuary guard
+     * needs.
+     */
+    val lowstand: Float = 0.015f,
+    /**
+     * Whether a body of water the ocean cannot reach is treated as land after the cut.
+     *
+     * Sea level is a percentile over the whole height field, so *any* hollow below the cut is
+     * drawn as ocean whether or not a drop of ocean could get to it — and erosion leaves a great
+     * many one-cell hollows just under the waterline near a coast. Measured with deposition
+     * switched off entirely, a third of every seed's river mouths ended in such a pocket. Cutting
+     * an inlet from each of them out to the sea was tried in the hydraulic pass and reverted,
+     * because a small body of water the ocean cannot reach is sometimes a landform rather than an
+     * artefact: the gulfs of a flooded rift are exactly such bodies, and joining them to the ocean
+     * turns the chain back into the canal `RiftSegmentationTest` exists to break up.
+     *
+     * Connectedness in the cut itself is the answer, and it is the only place that can tell the
+     * two apart without guessing. A water region that does not touch the ocean's main body — by
+     * eight-connectivity, wrapping in x as every neighbour walk in this generator does, because a
+     * rift's sill may be one cell wide and a diagonal step is a step — is marked land at the
+     * elevation it already has. What happens to it next is not this stage's business: the river
+     * stage's depression fill raises it to its lowest outlet and the water balance decides whether
+     * it holds a lake (a lake below sea level is the Caspian, the Dead Sea, the Qattara) or dries
+     * out into a salt flat.
+     *
+     * Off is the control, and it is the pre-H5 behaviour exactly.
+     */
+    val enclosedSeaIsLand: Boolean = true,
+    /**
+     * How large a body of unreachable water may be and still be turned into land, as a share of the
+     * map. Bigger ones are left as sea.
+     *
+     * The Caspian is 371,000 km² on a 510-million-km² Earth, which is 0.073% of the surface and the
+     * largest lake this planet has; `OutletIncisionTest` already holds the generator to it for the
+     * lakes the drainage makes. It is the right figure here for the same reason. A hollow under the
+     * waterline that the ocean cannot reach is a lake, and a lake that would be larger than any lake
+     * Earth has is not a lake — it is a piece of the sea that the percentile cut has walled off with
+     * a sliver of ground, and calling it land invents a landform nothing on Earth resembles.
+     *
+     * The cap was not in H5's specification and was added after measuring what its absence costs,
+     * which was a great deal. Converting *every* unreachable body turns 3.2 to 4.6% of the map from
+     * sea into land: it hands seed 718106 a lake of 0.32% of the map, four times the Caspian, and
+     * seed 43 one of 0.83%; it turns E4's rift gulfs into lakes, so `RiftSegmentationTest` measures
+     * a different rift and reads one body where it wants three; it takes the pooled desert-in-band
+     * figure from 88% to 83%, below the 85-88% Earth itself manages, because it removes several
+     * percent of the map's worth of inland evaporation and dries the interiors that were drinking
+     * from it; and it takes `GlaciationTest`'s comb share on seed 7 from 1.6% to 5.6% against a bar
+     * of 3.5%, because the fill ponds the channels crossing a drowned tract in exactly the thin
+     * grid-bearing bars that measurement exists to catch. With the cap the mouths this chunk set out
+     * to rescue are still rescued — the pockets a river ends in are a handful of cells, not an
+     * inland sea — and none of that follows.
+     *
+     * At or below the cap, not above it, so a body exactly the Caspian's size becomes a lake.
+     */
+    val enclosedSeaMaxShare: Float = 0.00073f
 )
 
 @Serializable

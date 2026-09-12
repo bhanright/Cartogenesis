@@ -65,6 +65,15 @@ class IncrementalReuseTest {
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
             "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
+            // H5: the lowstand is the one field of the sea section that reaches *back* into
+            // erosion, since it is the base level the hydraulic rounds grade to. The sea stage's
+            // own guard would never have caught it going stale, because the sea stage would have
+            // been recomputed anyway and would simply have recut a terrain nobody re-eroded.
+            "lowstand" to base.copy(sea = base.sea.copy(lowstand = 0f)),
+            // And the other half of H5, which changes only the cut: water the ocean cannot reach
+            // is land, so this moves `isLand` and everything downstream of it without touching a
+            // single height.
+            "enclosedSea" to base.copy(sea = base.sea.copy(enclosedSeaIsLand = false)),
             // Glaciation carves the sea stage's own field, in the same step, so its guard is the
             // sea stage's guard. Turning it off rather than nudging a number, because off is the
             // largest change the section can make and so the loudest failure if it went stale.

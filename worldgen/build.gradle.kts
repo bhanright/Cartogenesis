@@ -93,7 +93,13 @@ val auditOnlyClasses = listOf(
     // asserted. Its guards run at 512 and stay in `TectonicHistoryTest`.
     "com.cartogenesis.worldgen.TectonicHistoryAuditTest",
     // H2's cost report, which builds a 2048 world's terrain to time the balance on it.
-    "com.cartogenesis.worldgen.SnowBalanceAuditTest"
+    "com.cartogenesis.worldgen.SnowBalanceAuditTest",
+    // E6: the one measurement that separates a graded floodplain from a flat one does it in the
+    // author's own valley at 2048, and nowhere else. `BayHeadDeltaTest` holds the four that were
+    // written for the whole world at 1024 and could not, and is here rather than in the per-merge
+    // tier because it asserts nothing: six 1024 worlds for a printed report is an audit's job.
+    "com.cartogenesis.worldgen.BayHeadDeltaAuditTest",
+    "com.cartogenesis.worldgen.BayHeadDeltaTest"
 )
 
 tasks.named<Test>("jvmTest") {

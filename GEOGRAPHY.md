@@ -120,6 +120,23 @@ measures material incised against material deposited plus material carried out t
 twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
 the ground draining into it, so deposition cannot invent an uphill river.
 
+**A river aggrades to grade, not to a flat.** Where a trunk carries more than its gradient can
+hold it lays the surplus down, and the question is when it stops. The rule was "a cell may rise
+until it is level with the cell that feeds it", whose fixed point is a plane: twelve rounds of
+creeping a fraction of the way there turned lower valleys into flats, and a flat dams itself — the
+depression fill ponds whatever hollows are left in it and the map shows water in shapes no landform
+explains. On seed 718106's southern rift at 2048 that was a rounded-square pocket and two
+concentric crescent moats, 563 cells of standing water lying in rings. A cell may now rise only
+until the slope from its feeder reaches the slope at which the river's transport capacity equals
+its load — the equilibrium slope of a transport-limited channel, solved out of the same expression
+the capacity is written in, so it costs no constant of its own. Measured in that window: 563 cells
+of ringed water before and none after; 2282 cells of standing water in all before and 1121 after,
+against 1535 on the same ground with no deposition at all, so the spoil now takes water out of a
+valley where it used to add it. The margin itself is measured and spent in one unit system, which
+it was not: it was read in shoreline-relative units and spent as a height, so an alluvial dam could
+stand `1 / landRange` times higher than the no-uphill rule allows — about four times on these
+worlds.
+
 **A delta is a fan, and its outline is a curve.** Every fan this stage lays — the lobe at a river
 mouth, the cone at a lake inflow — is grown from its apex by a graph walk whose rim is
 `R·(sides + (1 − sides)·max(cos θ, 0))·(1 + a·s(θ))`, with θ measured from the direction the river

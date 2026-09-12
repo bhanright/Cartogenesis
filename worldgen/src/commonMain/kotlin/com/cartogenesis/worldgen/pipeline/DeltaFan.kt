@@ -22,9 +22,18 @@ internal class DepositionLog(cells: Int) {
     /** How much was laid on the cell, summed over every round. */
     val laid = DoubleArray(cells)
 
+    /** The first and the last hydraulic round that laid anything on the cell; -1 for neither. */
+    val firstRound = ByteArray(cells) { -1 }
+    val lastRound = ByteArray(cells) { -1 }
+
+    /** Set by the stage as each round opens, so [record] needs no extra argument. */
+    var round: Int = 0
+
     fun record(cell: Int, mark: Byte, from: Int, amount: Double) {
         mechanism[cell] = mark
         if (apex[cell] < 0) apex[cell] = from
+        if (firstRound[cell] < 0) firstRound[cell] = round.toByte()
+        lastRound[cell] = round.toByte()
         laid[cell] += amount
     }
 
@@ -491,6 +500,14 @@ internal inline fun growFan(
     surfaceOf: FloatArray,
     sediment: FloatArray,
     settled: FloatArray,
+    /**
+     * What one height unit is worth in the shoreline-relative units [settled] is kept in — the
+     * reciprocal of the land's range. The fan's own writes to [settled] are inert inside one round,
+     * since every cell it touches is water and no land cell drains into one, but an array whose
+     * units depend on who wrote to it is a trap, and the muddle that was there cost the alluvial
+     * dams a factor of four.
+     */
+    toRelative: Float,
     wholeCells: Boolean,
     log: DepositionLog?,
     mark: Byte,
@@ -583,7 +600,7 @@ internal inline fun growFan(
         if (need <= 0.0) continue
         if (wholeCells && need > remaining) break
         val moved = fanRaise(sediment, c, if (need < remaining) need else remaining)
-        settled[c] += moved.toFloat()
+        settled[c] += (moved * toRelative).toFloat()
         remaining -= moved
         laid += moved
         log?.record(c, mark, apex, moved)

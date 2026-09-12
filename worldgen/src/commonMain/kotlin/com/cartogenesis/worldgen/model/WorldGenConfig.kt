@@ -945,7 +945,28 @@ data class ErosionConfig(
      *
      * Off is the control `DeltaOutlineTest` measures against.
      */
-    val deltaOutline: Boolean = true
+    val deltaOutline: Boolean = true,
+    /**
+     * Whether a floodplain aggrades to the slope its river needs in order to carry its load, or
+     * simply rises until it is level with the cell that feeds it.
+     *
+     * Off, it is what it was, and its fixed point is a **flat**: a cell may rise to within nothing
+     * of its feeder, so twelve rounds of creeping a fraction of the way there turn a lower valley
+     * into a plane. A plane meeting the sea has a level set that is a straight line, which is why
+     * the author's rift mouth on seed 718106 at 2048 had 32 cells of dead-straight shore where the
+     * same ground with no deposition at all has 16; and the residual hollows in a near-plane pond
+     * into shapes with no landform behind them — the rounded-square lake and the ring of crescent
+     * moats in the same crop.
+     *
+     * On, the margin is measured down to the slope at which the transport capacity equals the load
+     * — the equilibrium slope of a transport-limited channel, solved out of the same expression
+     * `transportCapacity` already appears in, so it costs no new constant. A river aggrades where
+     * its bed is steeper than it needs and stops when it is graded, which is what a delta plain and
+     * a floodplain actually are.
+     *
+     * Off is the control `BayHeadDeltaTest` measures against.
+     */
+    val gradedAggradation: Boolean = true
 )
 
 /**

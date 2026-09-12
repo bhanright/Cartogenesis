@@ -665,6 +665,20 @@ lake run as dead-straight horizontal or vertical lines, one lake on 718106 has a
 edge - the re-routing toward the water assigns targets in scan order on a flat (a fix-up agent is
 on it). Release 1.2.0 waits for both.
 
+Follow-up on the straight lines (e079d49, merge a5b7cec): the diagnosis above was wrong and the
+fix-up agent measured why. Rivers ending in balanced lakes are no straighter than rivers to the
+sea (straight-run share 0.43 vs 0.48). The lines were rivers drawn ACROSS lake surfaces: under a
+lake the routing runs on the fill, flat to the 1e-6 nudge the flood adds in cell-index order, so
+D8 walks due east or due south row after row (four horizontal runs of 36-44 cells across one
+2163-cell lake on 59758 at 2048). Lake cells are now struck from the channel mask and a trace stops
+at the first water cell; guard: no drawn river crosses open water, shown failing (seed 7 drew 9
+cells across a lake). Routing into balanced lakes was rewritten anyway to steepest descent over
+the real ground with seeded value noise 1e-5 on flats (dead-flat floor: 95.8% repeated bearings
+and a longest run of 61 became 61.6% and 32). Reported and passed to E1: ruler-straight
+shorelines come from lacustrine fans laid to one flat level. Reported and left: D8 on a smooth
+planar hillside holds one bearing for 20-35 cells with no flat involved; that is D8 itself.
+
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

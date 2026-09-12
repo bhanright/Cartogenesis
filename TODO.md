@@ -189,6 +189,12 @@
 
 ## Open
 
+- **D8 holds a bearing on smooth slopes.** On a planar hillside a drawn river runs 20-35 cells in
+  one of the eight grid directions before it bends (seed 59758 at 2048, (34,1095) to (68,1095),
+  drops 3e-3 to 9e-3 per cell), because steepest descent on a plane always picks the same
+  neighbour. Real channels wander. The cure is a routing that carries direction between cells
+  (D-infinity, or D8 with a seeded low-amplitude perturbation of the surface it reads), pinned
+  by a straight-run guard against the current figure. Found 2026-09-12.
 - **`LakesConfig.minCells` is a fixed 12 cells, not a map fraction.** A rift basin that reads as a
   lake at 1024 and 2048 is refused at 512, so the picture changes with the working resolution -
   the same class of defect the glaciation budget fixed for glacial lakes. Express it as a share of

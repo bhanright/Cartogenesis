@@ -155,7 +155,7 @@ class ReceiverClampTest {
         val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
-        // The same figure `RiversConfig.sourceThreshold` draws a river at, and the same one the
+        // The same figure `RiverConfig.sourceFlowShare` draws a river at, and the same one the
         // in-round census uses; the depth is `LakesConfig.minDepth`.
         val channel = 0.0006f
         val ground = sea.relativeElevation.data

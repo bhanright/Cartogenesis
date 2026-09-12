@@ -14,13 +14,13 @@ import kotlin.test.assertTrue
  * `1 + continentality * continentalityFactor`, where `continentalityFactor` is
  * `ClimateStage.waterDistance` — an actual cell distance to the nearest sea, from the same distance
  * transform `SeaLevelStage` uses for the continental shelf — clamped to 0..1 over three
- * `coastalReach`. A shoreline cell keeps the amplitude at 1; a cell three reaches inland or
+ * `coastalReachCells`. A shoreline cell keeps the amplitude at 1; a cell three reaches inland or
  * further reaches the full `1 + continentality`. This is Siberia versus Ireland.
  *
  * An earlier version of both the feature and this guard read the blurred water-exposure field
  * instead, on the theory that "exposed to water" and "close to water" were the same question asked
  * two ways. Measured, they were not at this radius: two box-blur passes leave a cell right at the
- * edge of `coastalReach` reading only around 0.2-0.3 exposure, not the ~1 that would make a coast
+ * edge of `coastalReachCells` reading only around 0.2-0.3 exposure, not the ~1 that would make a coast
  * read as barely continental, so the near/far amplitude gap that version could produce topped out
  * around 3 C against the plan's stated 6. Reading the actual distance instead removes that ceiling;
  * see the A2 follow-up report for the before/after numbers.
@@ -82,7 +82,7 @@ class ContinentalityTest {
         )
         val w = world.width
         val h = world.height
-        val reach = world.config.ocean.coastalReach
+        val reach = world.config.ocean.coastalReachCells
         // The same field production reads, not a re-derivation of it — see the class doc for why
         // that distinction mattered here.
         val distance = ClimateStage.waterDistance(world.config, world.sea)

@@ -281,7 +281,7 @@ internal object HydraulicErosion {
             // than fixed once. This is the same percentile the sea level stage will use — taken,
             // for all but the last few rounds, at the stand the sea was actually at while these
             // valleys were being cut. See [standBelowToday].
-            val sea = SeaLevelStage.apply(
+            val sea = SeaLevelStage.percentileCut(
                 working, provisionalSeaLevel, standBelowToday(config, round)
             )
             if (sea.landCellCount == 0) {
@@ -307,7 +307,7 @@ internal object HydraulicErosion {
             // `relative` is elevation measured from the shoreline in units of the land's range, so
             // converting between the two needs that range. Everything below that is a height has to
             // say which of the two it is in; see [settled].
-            val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
+            val landRange = (working.max() - sea.shorelineHeight).coerceAtLeast(1e-6f)
             val toRelative = 1f / landRange
 
             // Ground as the walk leaves it: the pre-round elevation plus everything this round has
@@ -332,10 +332,10 @@ internal object HydraulicErosion {
             }
 
             // Raw height a delta cell is built up to.
-            val deltaTop = sea.threshold + cfg.deltaFreeboard * landRange
+            val deltaTop = sea.shorelineHeight + cfg.deltaFreeboard * landRange
             // Where the rim of a lobe stands, and how deep the water has to be before the lobe
             // stops wanting to cross it. See [SHELF_BREAK].
-            val rimTop = sea.threshold + (deltaTop - sea.threshold) * LOBE_RIM
+            val rimTop = sea.shorelineHeight + (deltaTop - sea.shorelineHeight) * LOBE_RIM
             val shelfDepth = (SHELF_BREAK * landRange).coerceAtLeast(1e-9f)
 
             var incised = 0.0
@@ -614,7 +614,7 @@ internal object HydraulicErosion {
                                 // than against the cell beside it, so the same delta bends the same
                                 // way whatever the sea floor happens to be doing elsewhere.
                                 advance = { c ->
-                                    val depth = sea.threshold - (surfaceOf[c] + sediment[c])
+                                    val depth = sea.shorelineHeight - (surfaceOf[c] + sediment[c])
                                     1f + DEPTH_COST *
                                         (if (depth > 0f) depth else 0f) / shelfDepth
                                 },
@@ -624,7 +624,8 @@ internal object HydraulicErosion {
                                 levelOf = { c, t ->
                                     val level = deltaTop + (rimTop - deltaTop) * t
                                     if (rim.grooved(rim.dx(c), rim.dy(c))) {
-                                        sea.threshold + (level - sea.threshold) * GROOVE_KEEP
+                                        sea.shorelineHeight +
+                                            (level - sea.shorelineHeight) * GROOVE_KEEP
                                     } else {
                                         level
                                     }
@@ -646,7 +647,7 @@ internal object HydraulicErosion {
                                 },
                                 levelOf = { _, d ->
                                     if (cfg.deltaLobe) {
-                                        lobeLevel(deltaTop, sea.threshold, reach, d)
+                                        lobeLevel(deltaTop, sea.shorelineHeight, reach, d)
                                     } else {
                                         deltaTop
                                     }
@@ -700,7 +701,7 @@ internal object HydraulicErosion {
                                 levelOf = { c, t ->
                                     val depth = 2f * POND_DEPTH * (1f + LAKE_FAN_SLOPE * t) *
                                         (0.9f + 0.35f * wobble(c))
-                                    sea.threshold + (ground[c] - depth) * landRange
+                                    sea.shorelineHeight + (ground[c] - depth) * landRange
                                 }
                             )
                         } else {
@@ -729,7 +730,7 @@ internal object HydraulicErosion {
                                     val depth = 2f * POND_DEPTH *
                                         (1f + LAKE_FAN_SLOPE * d / reach.coerceAtLeast(1)) *
                                         (0.9f + 0.35f * wobble(c))
-                                    sea.threshold + (ground[c] - depth) * landRange
+                                    sea.shorelineHeight + (ground[c] - depth) * landRange
                                 }
                             )
                         }
@@ -796,7 +797,7 @@ internal object HydraulicErosion {
             // erosion rather than part of it. It caught this.
             if (closing && cfg.outletIncision) {
                 repeat(CLOSING_BREACHES) {
-                    val after = SeaLevelStage.apply(working, provisionalSeaLevel)
+                    val after = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
                     if (after.landCellCount == 0) return@repeat
                     val spoilGround = after.relativeElevation
                     val spoilFilled = FlowRouting.fillDepressions(w, h, after.isLand, spoilGround)
@@ -813,7 +814,7 @@ internal object HydraulicErosion {
                         ),
                         after.isLand, spoilGround.data, spoilFilled.data, spoilFlow, spoilArea.data,
                         after.landCellCount.toFloat(),
-                        (working.max() - after.threshold).coerceAtLeast(1e-6f), working.data,
+                        (working.max() - after.shorelineHeight).coerceAtLeast(1e-6f), working.data,
                         settled = null, load = null
                     )
                     incised += cut.moved
@@ -978,7 +979,7 @@ internal object HydraulicErosion {
     /**
      * How much of the land a watercourse must drain before this stage treats it as a river.
      *
-     * Deliberately the same figure as `RiversConfig.sourceThreshold`, and deliberately a constant
+     * Deliberately the same figure as `RiverConfig.sourceFlowShare`, and deliberately a constant
      * rather than a read of that setting, for the same reason [POND_DEPTH] is: the rivers section
      * is chosen long after erosion runs, and reading it here would mean adding `rivers` to
      * erosion's reuse guard so that moving a river setting re-cut every valley. The two agree
@@ -1077,11 +1078,11 @@ internal object HydraulicErosion {
         spoil: FloatArray
     ): Opened {
         val size = w * h
-        val sea = SeaLevelStage.apply(working, provisionalSeaLevel)
+        val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
         if (sea.landCellCount == 0) return Opened(0.0, 0)
         val isLand = sea.isLand
         val height = working.data
-        val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
+        val landRange = (working.max() - sea.shorelineHeight).coerceAtLeast(1e-6f)
         // Measured against the pond depth rather than against the delta's freeboard, though a
         // freeboard is what it is cutting through. `DepositionTest` holds that no deposition knob
         // may change a world with deposition switched off, and this pass runs either way; reading
@@ -1090,7 +1091,7 @@ internal object HydraulicErosion {
         // Per cell, from a gradient held against the map, so a groove of a given length on the
         // ground is the same groove however fine the grid that cuts it.
         val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / w).coerceAtLeast(1e-7f)
-        val floor = sea.threshold + step * LOBE_RIM
+        val floor = sea.shorelineHeight + step * LOBE_RIM
 
         val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled)
@@ -1114,7 +1115,7 @@ internal object HydraulicErosion {
         for (k in order.indices.reversed()) {
             val c = order[k]
             // Every river the map will draw, not only the few big enough to build a delta. The
-            // rivers stage draws a channel once it carries `RiversConfig.sourceThreshold` of the
+            // rivers stage draws a channel once it carries `RiverConfig.sourceFlowShare` of the
             // world's runoff, and with the flat rain this stage works to that is the same figure as
             // a share of the land. At `deltaMinCatchment` instead — five times as much — the trunk
             // at the author's own mouth on seed 59758 did not qualify and nothing was cut.
@@ -1124,7 +1125,7 @@ internal object HydraulicErosion {
             if (!onFlat) continue
             val t = flow[c]
             if (t < 0) continue
-            val below = if (isLand[t]) height[t] else sea.threshold
+            val below = if (isLand[t]) height[t] else sea.shorelineHeight
             val want = minOf(height[c], below + fall).coerceAtLeast(floor)
             if (height[c] > want) {
                 removed += -raise(height, c, (want - height[c]).toDouble())

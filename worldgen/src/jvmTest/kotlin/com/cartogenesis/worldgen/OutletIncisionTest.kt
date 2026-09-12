@@ -287,13 +287,13 @@ class OutletIncisionTest {
      * and which fills to it. GEOGRAPHY.md records that as a deviation and says where the fix belongs
      * — an outlet pass after the cut rather than only inside the rounds.
      *
-     * Below the cut is read off `erosion.height` against `sea.threshold` rather than off the
+     * Below the cut is read off `erosion.height` against `sea.shorelineHeight` rather than off the
      * shoreline-relative field, because glaciation rewrites the second one between the cut and here.
      */
     private fun drownedLakes(world: WorldMap): BooleanArray {
         val drowned = BooleanArray(world.rivers.lakes.lakes.size)
         val ground = world.erosion.height.data
-        val cut = world.sea.threshold
+        val cut = world.sea.shorelineHeight
         world.rivers.lakes.lakeId.forEachIndexed { cell, id ->
             if (id >= 0 && ground[cell] < cut) drowned[id] = true
         }

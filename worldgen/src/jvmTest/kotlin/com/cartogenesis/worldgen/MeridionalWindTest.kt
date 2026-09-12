@@ -135,7 +135,7 @@ class MeridionalWindTest {
         val h = world.height
         val config = world.config
         val cfg = config.climate
-        val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
+        val tilt = if (cfg.seasons) cfg.seasonalTiltDegrees else 0f
         val temperature = if (warm) world.climate.summerTemperature else world.climate.winterTemperature
         val precip = FloatField(w, h)
 

@@ -204,8 +204,8 @@ class PanelKnobsTest {
             Knobs.erosionStrength.set(base, 0.08f)
         )
         assertEquals(
-            base.copy(climate = base.climate.copy(seasonalTilt = 18f)),
-            Knobs.seasonalTilt.set(base, 18f)
+            base.copy(climate = base.climate.copy(seasonalTiltDegrees = 18f)),
+            Knobs.seasonalTiltDegrees.set(base, 18f)
         )
         assertEquals(
             base.copy(climate = base.climate.copy(orographicStrength = 3.5f)),
@@ -272,7 +272,7 @@ class PanelKnobsTest {
         val stock = WorldGenConfig()
         assertEquals(stock.tectonics.andeanHeight, Knobs.mountainHeight.read(stock))
         assertEquals(stock.erosion.erodibility, Knobs.erosionStrength.read(stock))
-        assertEquals(stock.climate.seasonalTilt, Knobs.seasonalTilt.read(stock))
+        assertEquals(stock.climate.seasonalTiltDegrees, Knobs.seasonalTiltDegrees.read(stock))
         assertEquals(stock.climate.orographicStrength, Knobs.rainShadow.read(stock))
         assertEquals(stock.glaciation.enabled, Knobs.ice.read(stock))
         assertEquals(stock.lakes.waterBalance, Knobs.dryBasins.read(stock))

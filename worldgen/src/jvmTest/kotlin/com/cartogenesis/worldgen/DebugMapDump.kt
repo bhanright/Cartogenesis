@@ -998,7 +998,7 @@ class DebugMapDump {
         for (i in acc.indices) {
             if (land[i]) totalRunoff += 0.05f + world.climate.precipitation.data[i]
         }
-        val threshold = (totalRunoff * world.config.rivers.sourceThreshold).coerceAtLeast(1e-4f)
+        val threshold = (totalRunoff * world.config.rivers.sourceFlowShare).coerceAtLeast(1e-4f)
 
         val channel = BooleanArray(acc.size) { land[it] && acc[it] >= threshold }
         val channelCount = channel.count { it }

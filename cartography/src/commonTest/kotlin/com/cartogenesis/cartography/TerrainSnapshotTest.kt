@@ -14,9 +14,9 @@ import kotlin.test.assertTrue
 /**
  * A stored terrain has to come back exactly, and has to rebuild exactly the world it came from.
  *
- * This was the guarantee that let a world generated on the graphics card be saved at all. A
- * version-3 save carries every stage, so nothing written today needs it — but the saves the
- * author already has do, and replaying one through the accelerator seam is still how they open.
+ * This was the guarantee that let a world generated on the graphics card be saved at all. A save
+ * has carried every stage since the container format, so nothing written today needs it; the
+ * replay seam is kept, and tested, because it is what proves a stored terrain is a terrain.
  */
 class TerrainSnapshotTest {
 
@@ -84,21 +84,19 @@ class TerrainSnapshotTest {
     }
 
     @Test
-    fun `a version 2 save's snapshot still comes back out of the file`() = runTest(timeout = 10.minutes) {
-        // Written by the previous build: JSON, with the terrain base64'd into it. Nothing writes
-        // one any more, and an existing one has to keep opening as the world it was.
+    fun `a snapshot travels through a header and comes back exactly`() = runTest {
+        // The field is dead weight on the wire now (see WorldDocument.terrain), but while it is
+        // still on the wire it has to survive it: base64 of raw float bits, through JSON, intact.
         val heights = FloatArray(16) { it * 0.001f }
-        val encoded = TerrainSnapshot.of(4, 4, heights)
-        val older = """
-            {
-              "id": "old", "title": "Stored", "savedAt": 1,
-              "config": { "seed": 7, "width": 4, "height": 4 },
-              "terrain": { "width": 4, "height": 4, "data": "${encoded.data}" }
-            }
-        """.trimIndent()
+        val document = WorldDocument(
+            id = "stored",
+            title = "Stored",
+            config = WorldGenConfig(seed = 7L, width = 4, height = 4),
+            terrain = TerrainSnapshot.of(4, 4, heights),
+            savedAt = 1L
+        )
 
-        val save = assertNotNull(WorldCodec.decodeOrNull(older.encodeToByteArray()))
-        assertNull(save.world, "a version-2 save carries no world of its own")
+        val save = assertNotNull(WorldCodec.decodeOrNull(WorldCodec.encode(document, null)))
         val terrain = assertNotNull(save.document.terrain)
         assertEquals(4, terrain.width)
         val values = terrain.decode()

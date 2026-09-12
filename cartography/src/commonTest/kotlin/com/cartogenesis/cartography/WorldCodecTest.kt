@@ -56,6 +56,15 @@ class WorldCodecTest {
         savedAt = 1_700_000_000_000L
     )
 
+    /** Writes one little-endian int at a fixed offset, to forge a header from an older build. */
+    private class ByteWriterAt(private val bytes: ByteArray, private val offset: Int) {
+        fun putInt(value: Int) {
+            for (byte in 0 until 4) {
+                bytes[offset + byte] = ((value shr (8 * byte)) and 0xFF).toByte()
+            }
+        }
+    }
+
     /** Small enough to run on every target, large enough to have rivers, realms and peoples. */
     private val worldConfig = WorldGenConfig(seed = 99L, width = 256, height = 256)
 
@@ -102,7 +111,9 @@ class WorldCodecTest {
 
         assertArraysIdentical(world, restored)
         assertListsEqual(world, restored)
-        assertEquals(world.sea.threshold.toRawBits(), restored.sea.threshold.toRawBits())
+        assertEquals(
+            world.sea.shorelineHeight.toRawBits(), restored.sea.shorelineHeight.toRawBits()
+        )
         assertEquals(world.sea.landCellCount, restored.sea.landCellCount)
     }
 
@@ -248,39 +259,35 @@ class WorldCodecTest {
     }
 
     @Test
-    fun `a version 2 save still opens, and is written back as a full one`() = runTest(timeout = 10.minutes) {
-        // Exactly what the previous build wrote: JSON, no magic, no payload, seed and settings.
-        val older = """
+    fun `a save from an older format is refused rather than misread`() = runTest {
+        // Exactly what the build before the container wrote: JSON, no magic, no payload.
+        val olderText = """
             {
               "id": "old",
               "title": "Old World",
               "config": { "seed": 7, "width": 128, "height": 128 },
-              "savedAt": 1,
-              "somethingRemovedLater": { "a": 1 }
+              "savedAt": 1
             }
         """.trimIndent()
 
-        val save = assertNotNull(
-            WorldCodec.decodeOrNull(older.encodeToByteArray()),
-            "a version-2 save should still open"
-        )
-        assertNull(save.world, "a version-2 save carries no world; it is regenerated on open")
-        assertEquals(7L, save.document.config.seed)
-        // Missing settings fall back to today's defaults rather than zero.
-        assertEquals(WorldGenConfig().nations.nationCount, save.document.config.nations.nationCount)
-        assertEquals(WorldGenConfig().seaLevel, save.document.config.seaLevel)
-        assertEquals(
-            WorldCodec.LEGACY_TEXT_VERSION,
-            WorldCodec.decodeHeader(older.encodeToByteArray()).formatVersion
-        )
+        // A header decoded with unknown keys ignored would take this build's defaults wherever a
+        // setting has since been renamed, so it would open as a different world with no complaint.
+        // Refusing is the only honest answer while the format is still moving.
+        assertFailsWith<WorldFormatException> {
+            WorldCodec.decodeHeader(olderText.encodeToByteArray())
+        }
+        assertNull(WorldCodec.decodeOrNull(olderText.encodeToByteArray()))
 
-        // Opening it regenerates the world, and saving it again writes a version-3 container.
-        val regenerated = WorldGenerationEngine.generate(save.document.config)
-        val rewritten = WorldCodec.encode(save.document, regenerated)
-        val header = WorldCodec.decodeHeader(rewritten)
-        assertEquals(WorldCodec.FORMAT_VERSION, header.formatVersion)
-        assertEquals("old", header.document.id)
-        assertArraysIdentical(regenerated, assertNotNull(WorldCodec.decode(rewritten).world))
+        // And a container one version behind, which is the case a real older save would be.
+        val current = WorldCodec.encode(document(), null)
+        val older = current.copyOf().also {
+            ByteWriterAt(it, WorldCodec.VERSION_OFFSET).putInt(WorldCodec.FORMAT_VERSION - 1)
+        }
+        val refusal = assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(older) }
+        assertTrue(
+            refusal.message!!.contains("${WorldCodec.FORMAT_VERSION - 1}"),
+            "the refusal should name the version it found: ${refusal.message}"
+        )
     }
 
     @Test
@@ -288,7 +295,7 @@ class WorldCodecTest {
         // What a library listing does, and the reason the header sits uncompressed at the front.
         val world = WorldGenerationEngine.generate(worldConfig)
         val bytes = WorldCodec.encode(document().copy(config = worldConfig), world, writtenBy = "a test")
-        val headerLength = ByteReader(bytes, position = 8).getInt()
+        val headerLength = ByteReader(bytes, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
         val prefixOnly = bytes.copyOfRange(0, WorldCodec.PREFIX_BYTES + headerLength)
 
         val header = WorldCodec.decodeHeader(prefixOnly)

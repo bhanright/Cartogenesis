@@ -109,7 +109,7 @@ class RiftDepthAuditTest {
         var belowTheCut = 0
         var belowTheCutNow = 0
         val ground = world.erosion.height.data
-        val cut = world.sea.threshold
+        val cut = world.sea.shorelineHeight
         val heights = ArrayList<Float>()
         for (y in troughWindow[1] until troughWindow[3]) {
             for (x in troughWindow[0] until troughWindow[2]) {

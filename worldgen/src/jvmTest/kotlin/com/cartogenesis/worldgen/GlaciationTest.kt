@@ -755,11 +755,11 @@ internal fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
  * those lakes are often long, thin and lying on a grid bearing, because the channels beneath them
  * were cut by D8 flow while the sea stood low. That is precisely the shape [combShare] exists to
  * catch the ice making, and it cannot tell the two apart: on seed 718106 at 1024 leaving them in
- * reads 4.0% against a bar of 3.5%. Read off `erosion.height` against `sea.threshold`, because
+ * reads 4.0% against a bar of 3.5%. Read off `erosion.height` against `sea.shorelineHeight`, because
  * glaciation rewrites the shoreline-relative field between the cut and here.
  */
 internal fun belowTheSeaLevelCut(world: WorldMap, cell: Int): Boolean =
-    world.erosion.height.data[cell] < world.sea.threshold
+    world.erosion.height.data[cell] < world.sea.shorelineHeight
 
 /**
  * The share of lake water in a thin bar at a grid bearing that has a parallel twin beside it.

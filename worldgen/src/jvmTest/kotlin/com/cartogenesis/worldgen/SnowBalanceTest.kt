@@ -237,7 +237,7 @@ class SnowBalanceTest {
             )
             assertTrue("seed $seed has no carved ground to measure", carvedCells > 0)
             // Measured exactly zero on all four seeds at H2, up to 42,925 carved cells: the
-            // ablation zone `GlaciationConfig.runOut` allows — a trough may continue up to 8 cells
+            // ablation zone `GlaciationConfig.runOutCells` allows — a trough may continue up to 8 cells
             // past the frozen mask, onto ground an ice age's own ablation would keep warmer than
             // freezing — did not in practice put a single carved cell above freezing on the terrain
             // the mask was read from, so the assertion was held at that measured line rather than
@@ -257,7 +257,7 @@ class SnowBalanceTest {
             assertTrue(
                 "seed $seed: $aboveFreezing of $carvedCells carved cells sit above ${freezing}C on" +
                     " the pre-glaciation terrain (max exceedance ${"%.2f".format(maxExceedanceC)}C)," +
-                    " more than the 2% of carved ground `runOut` can account for",
+                    " more than the 2% of carved ground `runOutCells` can account for",
                 aboveFreezing <= carvedCells / 50
             )
         }
@@ -505,7 +505,7 @@ class SnowBalanceTest {
     /** Land far from any water, bitterly cold in winter, dry — and thawing in summer. */
     private fun coldDryInterior(config: WorldGenConfig, world: WorldMap): List<Int> {
         val distance = ClimateStage.waterDistance(config, world.sea)
-        val continental = 3f * config.ocean.coastalReach.coerceAtLeast(1)
+        val continental = 3f * config.ocean.coastalReachCells.coerceAtLeast(1)
         return (0 until config.width * config.height).filter { i ->
             world.sea.isLand[i] &&
                 world.climate.winterTemperature.data[i] < -20f &&

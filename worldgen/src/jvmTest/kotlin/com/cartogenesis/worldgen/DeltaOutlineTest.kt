@@ -73,7 +73,7 @@ class DeltaOutlineTest {
         init {
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
             height = erodeBlocking(config, uplift, log).height
-            isLand = SeaLevelStage.apply(height, config.seaLevel).isLand
+            isLand = SeaLevelStage.percentileCut(height, config.seaLevel).isLand
         }
 
         fun mask(mechanism: Byte) = BooleanArray(w * h) { log.mechanism[it] == mechanism }
@@ -647,7 +647,7 @@ class DeltaOutlineTest {
         val w = run.w
         val h = run.h
         val mask = run.mask(DepositionLog.SEA_LOBE)
-        val sea = SeaLevelStage.apply(run.height, 0.62f)
+        val sea = SeaLevelStage.percentileCut(run.height, 0.62f)
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }

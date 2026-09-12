@@ -386,9 +386,9 @@ object RiverStage {
         if (sea.landCellCount == 0) return emptyList()
 
         val accumulation = flow.accumulation
-        // sourceThreshold is expressed against the whole world's runoff, so river density stays
+        // sourceFlowShare is expressed against the whole world's runoff, so river density stays
         // consistent as resolution or sea level changes.
-        val threshold = (flow.totalRunoff * cfg.sourceThreshold).coerceAtLeast(1e-4f)
+        val threshold = (flow.totalRunoff * cfg.sourceFlowShare).coerceAtLeast(1e-4f)
 
         // Standing water is not channel. A playa is: it is dry ground most of the year and the
         // river across it is a real one.
@@ -446,7 +446,7 @@ object RiverStage {
                 current = next
             }
 
-            if (path.size < cfg.minLength) {
+            if (path.size < cfg.minLengthCells) {
                 // Release only the cells this trace claimed, never a trunk it merely touched.
                 for (n in 0 until claimedByThisRiver) claimed[path[n]] = false
                 continue

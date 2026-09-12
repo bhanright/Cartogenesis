@@ -8,10 +8,11 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 /** Where the shoreline sits, which cells are land, and how far each cell stands from the water. */
 data class SeaLevelResult(
     /**
-     * The height the shoreline sits at, in the height field's own units. A cell at or above it is
-     * land; a cell below it is water.
+     * The height the shoreline sits at, in the height field's own 0..1 units — the same units
+     * `ErosionResult.height` is in, not [relativeElevation]'s. A cell at or above it is land; a
+     * cell below it is water.
      */
-    val threshold: Float,
+    val shorelineHeight: Float,
     /** One entry per cell, row-major, true where that cell is land. */
     val isLand: BooleanArray,
     /**
@@ -93,8 +94,13 @@ object SeaLevelStage {
      * and it is the same unit `HydraulicErosion` holds its own rates in, so a stand of 1.5% means
      * the same fraction of the same thing at 512 as at 2048. See [SeaConfig.lowstand] and
      * REALISM_PLAN.md, H5.
+     *
+     * Named apart from [apply] rather than overloading it: a caller that wanted the whole stage
+     * and reached the two-float form by accident would silently lose the enclosure rule, the
+     * drowned basins' outlets and the shelf. A whole-stage entry point is `apply`; a partial one
+     * says which part it does.
      */
-    fun apply(
+    fun percentileCut(
         height: FloatField,
         seaLevelFraction: Float,
         lowstandShareOfRelief: Float = 0f
@@ -152,8 +158,8 @@ object SeaLevelStage {
     }
 
     /**
-     * The whole stage: the percentile cut, then the enclosure rule, the drowned basins' outlets and
-     * the continental shelf, each as its [SeaConfig] switch asks for it.
+     * The whole stage: the percentile cut ([percentileCut]), then the enclosure rule, the drowned
+     * basins' outlets and the continental shelf, each as its [SeaConfig] switch asks for it.
      *
      * The shelf is a remap of the ocean floor *after* the cut has already fixed the coastline, and
      * it touches only cells [SeaLevelResult.isLand] marks as water, so no coastline moves. Three
@@ -173,12 +179,12 @@ object SeaLevelStage {
         val seaConfig = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this is
         // cutting, not to the map that is drawn.
-        val percentileCut = apply(height, config.seaLevel)
+        val plainCut = percentileCut(height, config.seaLevel)
         val enclosed =
             if (seaConfig.enclosedSeaIsLand) {
-                markUnreachableWaterAsLand(percentileCut, height, seaConfig)
+                markUnreachableWaterAsLand(plainCut, height, seaConfig)
             } else {
-                percentileCut
+                plainCut
             }
         // The basins the line above turned into land get their outlets cut, once, now that there is
         // a shoreline for them to be measured against.
@@ -321,7 +327,7 @@ object SeaLevelStage {
         val largestLakeCells = (cellCount * seaConfig.enclosedSeaMaxShare).toInt()
         val isLand = base.isLand.copyOf()
         val relativeElevation = base.relativeElevation.copy()
-        val reliefAboveShoreline = (height.max() - base.threshold).coerceAtLeast(MIN_RANGE)
+        val reliefAboveShoreline = (height.max() - base.shorelineHeight).coerceAtLeast(MIN_RANGE)
         var landCellCount = base.landCellCount
         for (cell in 0 until cellCount) {
             val body = bodyOfCell[cell]
@@ -329,10 +335,10 @@ object SeaLevelStage {
             isLand[cell] = true
             landCellCount++
             relativeElevation.data[cell] =
-                (height.data[cell] - base.threshold) / reliefAboveShoreline
+                (height.data[cell] - base.shorelineHeight) / reliefAboveShoreline
         }
 
-        return SeaLevelResult(base.threshold, isLand, relativeElevation, landCellCount)
+        return SeaLevelResult(base.shorelineHeight, isLand, relativeElevation, landCellCount)
     }
 
     /**
@@ -382,7 +388,7 @@ object SeaLevelStage {
     ): SeaLevelResult {
         val cellsAcross = height.width
         val cellsDown = height.height
-        val shorelineHeight = enclosed.threshold
+        val shorelineHeight = enclosed.shorelineHeight
         // Both ends of the world's own range, so that re-cutting the working copy leaves every
         // untouched cell on the float it already had.
         val highestGround = height.max()

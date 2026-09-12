@@ -78,7 +78,7 @@ class OutletResolutionTest {
                 // GEOGRAPHY.md records the deviation.
                 val drowned = BooleanArray(world.rivers.lakes.lakes.size)
                 val ground = world.erosion.height.data
-                val cut = world.sea.threshold
+                val cut = world.sea.shorelineHeight
                 world.rivers.lakes.lakeId.forEachIndexed { cell, id ->
                     if (id >= 0 && ground[cell] < cut) drowned[id] = true
                 }

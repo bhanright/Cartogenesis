@@ -123,6 +123,45 @@ object MapRasterizer {
     const val WILDERNESS = MapPalette.WILDERNESS
     const val BORDER = MapPalette.BORDER
 
+    /*
+     * The flat colours the diagnostic views use where a ramp would say nothing: the sea on a
+     * rainfall map, the land on a currents map, and the land/sea pair the wind arrows are read
+     * against. Named rather than written inline so a [RasterAccelerator] can be handed the same
+     * numbers instead of a second copy of them.
+     */
+    internal const val RAINFALL_SEA = 0xFF20303C.toInt()
+    internal const val CURRENTS_LAND = 0xFF3A3A32.toInt()
+    internal const val WIND_LAND_LOW = 0xFF4A4638.toInt()
+    internal const val WIND_LAND_HIGH = 0xFF9A9384.toInt()
+    internal const val WIND_SEA = 0xFF16242F.toInt()
+
+    /**
+     * How far the hillshade's central differences are exaggerated, at a map [width].
+     *
+     * Gentle relief still has to read at map scale, and these are differences between adjacent
+     * cells: at four times the grid a step covers a quarter of the ground, and the relief would
+     * otherwise render four times flatter.
+     */
+    internal fun hillshadeScale(width: Int): Float = 12f * (width / 512f)
+
+    /**
+     * Draws the map on [accelerator] if it will take the job, and on the CPU if it will not.
+     *
+     * The CPU remains the reference: an accelerator that cannot describe a view, or cannot reach a
+     * device, returns null and this falls through to [rasterize] with nothing lost but the speed.
+     */
+    suspend fun rasterize(
+        world: WorldMap,
+        options: RenderOptions,
+        accelerator: RasterAccelerator?
+    ): IntArray {
+        if (accelerator != null) {
+            val recipe = RasterRecipe.of(world, options)
+            if (recipe != null) accelerator.rasterize(recipe)?.let { return it }
+        }
+        return rasterize(world, options)
+    }
+
     /** ARGB pixels, row-major, `world.width * world.height` long. */
     fun rasterize(world: WorldMap, options: RenderOptions = RenderOptions()): IntArray {
         val w = world.width
@@ -361,15 +400,15 @@ object MapRasterizer {
 
             MapView.RAINFALL ->
                 if (isLand) MapPalette.precipitation(world.climate.precipitation.data[i])
-                else 0xFF20303C.toInt()
+                else RAINFALL_SEA
 
             MapView.SUMMER_RAINFALL ->
                 if (isLand) MapPalette.precipitation(world.climate.summerPrecipitation.data[i])
-                else 0xFF20303C.toInt()
+                else RAINFALL_SEA
 
             MapView.WINTER_RAINFALL ->
                 if (isLand) MapPalette.precipitation(world.climate.winterPrecipitation.data[i])
-                else 0xFF20303C.toInt()
+                else RAINFALL_SEA
 
             MapView.PLATES -> {
                 val plateColor = MapPalette.plate(world.plates.plateId[i])
@@ -384,18 +423,18 @@ object MapRasterizer {
             }
 
             MapView.CURRENTS ->
-                if (isLand) 0xFF3A3A32.toInt()
+                if (isLand) CURRENTS_LAND
                 else MapPalette.temperatureAnomaly(world.ocean.anomaly.data[i])
 
             MapView.WIND -> {
                 // Land and sea have to stay apart, or the arrows sit on undifferentiated ground.
                 val base = if (isLand) {
                     MapPalette.blend(
-                        0xFF4A4638.toInt(), 0xFF9A9384.toInt(),
+                        WIND_LAND_LOW, WIND_LAND_HIGH,
                         world.sea.relativeElevation.data[i].coerceIn(0f, 1f)
                     )
                 } else {
-                    0xFF16242F.toInt()
+                    WIND_SEA
                 }
                 // The belts are carried by the arrow colours; tinting the ground as well only
                 // costs the land/sea contrast the arrows are read against.
@@ -420,10 +459,7 @@ object MapRasterizer {
         val elevation = world.sea.relativeElevation
         val shade = FloatArray(w * h)
 
-        // Exaggerated so gentle relief still reads at map scale. Scaled with resolution because
-        // these are central differences between adjacent cells: at 4x the grid size each step
-        // covers a quarter of the ground and the relief would otherwise render four times flatter.
-        val zScale = 12f * (w / 512f)
+        val zScale = hillshadeScale(w)
         val lightX = -0.6f
         val lightY = -0.6f
         val lightZ = 0.53f

@@ -33,6 +33,11 @@ class DesktopPlatform : Platform {
     // why, which is more use than a switch that silently does nothing.
     private val gpu = GpuErosion.createOrNull()
 
+    // The export raster shares that device and the context it runs on. It is deliberately not
+    // behind the same switch: the erosion one is a promise about whether the world can be
+    // regenerated from its seed, and drawing pixels makes no such promise either way.
+    private val gpuRaster = GpuRaster.createOrNull()
+
     override val accelerator: ErosionAccelerator? get() = gpu.accelerator
 
     override val accelerationUnavailableBecause: String? get() = gpu.unavailableBecause
@@ -47,7 +52,7 @@ class DesktopPlatform : Platform {
         // not, or the window stops answering for the best part of a minute.
         val destination = chooseSaveFile(Exporter.defaultName(config, size, format)) ?: return null
         val result = withContext(Dispatchers.Default) {
-            Exporter.export(config, options, size, destination, format)
+            Exporter.export(config, options, size, destination, format, gpuRaster.accelerator)
         }
         return ExportOutcome(result.file.name, result.millis, result.bytes)
     }

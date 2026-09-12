@@ -62,24 +62,22 @@ object MapPalette {
     /** @param elevation 0 at the shoreline, 1 at the highest peak. */
     fun land(elevation: Float): Int = ramp(LAND_RAMP, elevation.coerceIn(0f, 1f))
 
+    private val TEMPERATURE_RAMP = intArrayOf(
+        0xFF3B4CC0.toInt(), 0xFF6F92E8.toInt(), 0xFFDDDDDD.toInt(),
+        0xFFF0A15C.toInt(), 0xFFB40426.toInt()
+    )
+
+    private val PRECIPITATION_RAMP = intArrayOf(
+        0xFFE8D9A8.toInt(), 0xFFC9CE7F.toInt(), 0xFF7FB07A.toInt(),
+        0xFF3A8C8C.toInt(), 0xFF1F4E79.toInt()
+    )
+
     fun temperature(celsius: Float): Int {
         val t = ((celsius + 30f) / 70f).coerceIn(0f, 1f)
-        return ramp(
-            intArrayOf(
-                0xFF3B4CC0.toInt(), 0xFF6F92E8.toInt(), 0xFFDDDDDD.toInt(),
-                0xFFF0A15C.toInt(), 0xFFB40426.toInt()
-            ),
-            t
-        )
+        return ramp(TEMPERATURE_RAMP, t)
     }
 
-    fun precipitation(value: Float): Int = ramp(
-        intArrayOf(
-            0xFFE8D9A8.toInt(), 0xFFC9CE7F.toInt(), 0xFF7FB07A.toInt(),
-            0xFF3A8C8C.toInt(), 0xFF1F4E79.toInt()
-        ),
-        value.coerceIn(0f, 1f)
-    )
+    fun precipitation(value: Float): Int = ramp(PRECIPITATION_RAMP, value.coerceIn(0f, 1f))
 
     /** Stable, well-spaced hues so neighbouring plates stay visually distinct. */
     fun plate(id: Int): Int {
@@ -134,9 +132,24 @@ object MapPalette {
      */
     fun temperatureAnomaly(degrees: Float): Int {
         val t = (degrees / 7f).coerceIn(-1f, 1f)
-        return if (t >= 0f) blend(0xFF20384C.toInt(), 0xFFC4442E.toInt(), t)
-        else blend(0xFF20384C.toInt(), 0xFF3E86C4.toInt(), -t)
+        return if (t >= 0f) blend(ANOMALY_MID, ANOMALY_WARM, t)
+        else blend(ANOMALY_MID, ANOMALY_COLD, -t)
     }
+
+    /** Normal for the latitude, warmer than it, colder than it. */
+    internal const val ANOMALY_MID = 0xFF20384C.toInt()
+    internal const val ANOMALY_WARM = 0xFFC4442E.toInt()
+    internal const val ANOMALY_COLD = 0xFF3E86C4.toInt()
+
+    /*
+     * The ramps and the biome table, handed out for a [RasterAccelerator] to upload. Read-only by
+     * convention — nothing outside this file has a reason to write to one, and a copy per export
+     * would be pointless traffic.
+     */
+    internal val plainOceanRamp: IntArray get() = OCEAN_RAMP
+    internal val plainLandRamp: IntArray get() = LAND_RAMP
+    internal val temperatureRamp: IntArray get() = TEMPERATURE_RAMP
+    internal val precipitationRamp: IntArray get() = PRECIPITATION_RAMP
 
     fun blend(a: Int, b: Int, t: Float): Int {
         val f = t.coerceIn(0f, 1f)

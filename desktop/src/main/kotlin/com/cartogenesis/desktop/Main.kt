@@ -1,12 +1,12 @@
 package com.cartogenesis.desktop
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.cartogenesis.ui.CartogenesisApp
+import com.cartogenesis.ui.CartogenesisTheme
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -26,6 +26,13 @@ fun main(args: Array<String>) {
             probe.accelerator?.let { "GPU available: ${it.name}" }
                 ?: "GPU unavailable: ${probe.unavailableBecause}"
         )
+        // Reported separately because the two compile different shaders on the one context, and a
+        // driver that takes the erosion sweeps and refuses the raster is a thing that can happen.
+        val raster = GpuRaster.createOrNull()
+        println(
+            raster.accelerator?.let { "Export raster on the GPU: ${it.name}" }
+                ?: "Export raster on the GPU unavailable: ${raster.unavailableBecause}"
+        )
         return
     }
     launchWindow()
@@ -38,7 +45,9 @@ private fun launchWindow() = application {
         title = "Cartogenesis",
         state = rememberWindowState(width = 1500.dp, height = 950.dp)
     ) {
-        MaterialTheme { CartogenesisApp(platform) }
+        // The theme follows the desktop's own light/dark setting; everything it decides lives in
+        // :ui, so the browser build is dressed identically.
+        CartogenesisTheme { CartogenesisApp(platform) }
     }
 }
 

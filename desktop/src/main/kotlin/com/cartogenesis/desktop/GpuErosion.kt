@@ -1,13 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import org.lwjgl.glfw.GLFW
-import org.lwjgl.opengl.GL
 import org.lwjgl.opengl.GL43C
-import org.lwjgl.system.MemoryUtil
 
 /**
  * Runs the erosion sweeps on the graphics card.
@@ -43,13 +37,13 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         talus: Float,
         passes: Int,
         rate: Float
-    ): FloatArray? = runOnContext {
+    ): FloatArray? = GlContext.run("Erosion") {
         val cells = width * height
         val orthogonal = talus / width
         val diagonal = orthogonal * kotlin.math.sqrt(2f)
         val settled = orthogonal * 1e-3f
 
-        val compiled = programs ?: return@runOnContext null
+        val compiled = programs ?: return@run null
         val phaseA = compiled.first
         val phaseB = compiled.second
 
@@ -125,15 +119,6 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
 
     private var programs: Pair<Int, Int>? = null
 
-    private fun <T> runOnContext(body: () -> T?): T? =
-        try {
-            worker.submit(Callable { body() }).get(1, TimeUnit.HOURS)
-        } catch (e: Exception) {
-            // A driver fault here should cost the user a slower generation, not the app.
-            System.err.println("GPU erosion failed, falling back to the CPU: ${e.message}")
-            null
-        }
-
     companion object {
         /**
          * Work group side. 16x16 is 256 invocations, which every device supporting compute
@@ -141,77 +126,21 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
          */
         private const val GROUP = 16
 
-        private val worker = Executors.newSingleThreadExecutor { runnable ->
-            // The OpenGL context belongs to whichever thread made it current, so every call has to
-            // come back to this one. A daemon thread so it cannot hold the app open.
-            Thread(runnable, "cartogenesis-gpu").apply { isDaemon = true }
-        }
-
         /**
-         * Creates an offscreen context and compiles the shaders, or returns null with a reason if
-         * this machine cannot offer what is needed. No window is ever shown.
+         * Takes the shared offscreen context and compiles the sweeps, or returns null with a reason
+         * if this machine cannot offer what is needed. No window is ever shown.
          */
         fun createOrNull(): Result {
-            return try {
-                worker.submit(Callable { initialise() }).get(30, TimeUnit.SECONDS)
-            } catch (e: Exception) {
-                Result(null, e.message ?: e::class.simpleName ?: "unknown failure")
-            }
-        }
+            val context = GlContext.ensure()
+            val device = context.device
+                ?: return Result(null, context.unavailableBecause ?: "unknown failure")
 
-        private fun initialise(): Result {
-            // macOS is refused before GLFW is touched, for two separate reasons and neither is
-            // fixable here. Apple deprecated OpenGL at 4.1, and compute shaders arrived in 4.3, so
-            // the context this needs cannot exist there. And GLFW must be initialised on the main
-            // thread on macOS, while this runs on a thread of its own — so the attempt would not
-            // fail politely, it would take the process with it.
-            val os = System.getProperty("os.name").orEmpty().lowercase()
-            if (os.contains("mac") || os.contains("darwin")) {
-                return Result(
-                    null,
-                    "macOS caps OpenGL at 4.1 and compute shaders need 4.3. Generation runs on the " +
-                        "processor here; the browser build offers WebGPU instead."
-                )
-            }
-            if (!GLFW.glfwInit()) return Result(null, "GLFW could not start")
-            GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE)
-            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4)
-            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3)
-            GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE)
-
-            val window = GLFW.glfwCreateWindow(1, 1, "cartogenesis", MemoryUtil.NULL, MemoryUtil.NULL)
-            if (window == MemoryUtil.NULL) {
-                GLFW.glfwTerminate()
-                return Result(null, "no OpenGL 4.3 context, which compute shaders need")
-            }
-            GLFW.glfwMakeContextCurrent(window)
-            GL.createCapabilities()
-
-            val device = GL43C.glGetString(GL43C.GL_RENDERER) ?: "unknown device"
             val gpu = GpuErosion(device)
-            gpu.programs = try {
-                compile(PHASE_A_SOURCE) to compile(PHASE_B_SOURCE)
-            } catch (e: Exception) {
-                return Result(null, "shader would not compile: ${e.message}")
-            }
+            gpu.programs = GlContext.run("Compiling the erosion sweeps", seconds = 30) {
+                GlContext.compileCompute(PHASE_A_SOURCE) to
+                    GlContext.compileCompute(PHASE_B_SOURCE)
+            } ?: return Result(null, "the erosion shader would not compile")
             return Result(gpu, null)
-        }
-
-        private fun compile(source: String): Int {
-            val shader = GL43C.glCreateShader(GL43C.GL_COMPUTE_SHADER)
-            GL43C.glShaderSource(shader, source)
-            GL43C.glCompileShader(shader)
-            if (GL43C.glGetShaderi(shader, GL43C.GL_COMPILE_STATUS) == GL43C.GL_FALSE) {
-                error(GL43C.glGetShaderInfoLog(shader))
-            }
-            val program = GL43C.glCreateProgram()
-            GL43C.glAttachShader(program, shader)
-            GL43C.glLinkProgram(program)
-            if (GL43C.glGetProgrami(program, GL43C.GL_LINK_STATUS) == GL43C.GL_FALSE) {
-                error(GL43C.glGetProgramInfoLog(program))
-            }
-            GL43C.glDeleteShader(shader)
-            return program
         }
 
         /** Shared preamble: the grid, the neighbourhood, and how a cell is addressed. */

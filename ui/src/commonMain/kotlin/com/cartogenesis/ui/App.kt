@@ -21,16 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -404,7 +398,7 @@ fun CartogenesisApp(platform: Platform) {
 
             if (busy) {
                 Surface(
-                    color = Color.Black.copy(alpha = 0.6f),
+                    color = OverMap.Veil,
                     modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
                 ) {
                     Row(
@@ -412,8 +406,16 @@ fun CartogenesisApp(platform: Platform) {
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(Modifier.width(20.dp), color = Color.White)
-                        Text(stage ?: "Generating…", color = Color.White)
+                        CircularProgressIndicator(
+                            Modifier.width(20.dp),
+                            color = OverMap.Parchment,
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            stage ?: "Generating…",
+                            color = OverMap.Parchment,
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -434,14 +436,16 @@ fun CartogenesisApp(platform: Platform) {
     }
 }
 
-/** One of the boxes the interface is built from: a bordered surface with room to breathe. */
+/** One of the boxes the interface is built from: a ruled patch of paper with room to breathe. */
 @Composable
 private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(6.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        color = MaterialTheme.colorScheme.surface,
+        // No tonal elevation: a panel is a sheet of the same paper, told apart from the ground by
+        // a ruled edge rather than by being tinted a shade of the accent.
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(14.dp),
@@ -543,8 +547,8 @@ private fun MapView(
         labels.forEach { label ->
             val x = (label.x * img.width * fit + offsetX) * zoom + pan.x
             val y = (label.y * img.height * fit + offsetY) * zoom + pan.y
-            drawCircle(Color(0xFF1A1A1A), radius = 4f, center = Offset(x, y))
-            drawCircle(Color(0xFFF2E4C6), radius = 2f, center = Offset(x, y))
+            drawCircle(OverMap.Ink, radius = 4f, center = Offset(x, y))
+            drawCircle(OverMap.Parchment, radius = 2f, center = Offset(x, y))
         }
     }
 
@@ -567,7 +571,7 @@ private fun MapView(
             Text(
                 "${(zoom * 100).roundToInt()}%",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xCCFFFFFF)
+                color = OverMap.ParchmentDim
             )
             ZoomButton("-") { zoom = (zoom / WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
             ZoomButton("+") { zoom = (zoom * WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
@@ -582,8 +586,8 @@ private fun ZoomButton(label: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
-        color = Color(0x99000000),
-        contentColor = Color.White
+        color = OverMap.Veil,
+        contentColor = OverMap.Parchment
     ) {
         Text(
             label,
@@ -606,11 +610,11 @@ private fun LabelChip(label: MapLabel) {
         Text(
             label.text,
             style = MaterialTheme.typography.labelLarge,
-            color = Color(0xFF14171A),
+            color = OverMap.Ink,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .offsetFraction(label.x, label.y)
-                .background(Color(0xCCF2E4C6), RoundedCornerShape(4.dp))
+                .background(OverMap.ParchmentDim, RoundedCornerShape(2.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         )
     }
@@ -686,7 +690,7 @@ private fun WorldActions(
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit
 ) {
-    Text("Cartogenesis", style = MaterialTheme.typography.titleMedium)
+    Text("Cartogenesis", style = MaterialTheme.typography.titleLarge)
     SeedField(seed = seed, busy = busy, onSeed = onSeed)
     // The one unambiguous "start" action - Go and New world both do change the seed and so also
     // generate, but this is the button for someone who has touched nothing yet.

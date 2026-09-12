@@ -1422,7 +1422,10 @@ internal object HydraulicErosion {
                 if (margin < room) room = margin
             }
         }
-        return if (fed) room - grade else drop - grade
+        // The grade is already taken off each feeder's margin above; a cell with no feeder at all
+        // has only the fall to its own receiver to play with, and it must keep the grade out of
+        // that too.
+        return if (fed) room else drop - grade
     }
 
     /**

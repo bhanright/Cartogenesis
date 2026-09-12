@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.sqrt
 import kotlin.test.Test
-import kotlin.test.assertTrue
 
 /**
  * E6: what a river leaves at the head of a bay is a delta plain, not a terrace with moats round it.

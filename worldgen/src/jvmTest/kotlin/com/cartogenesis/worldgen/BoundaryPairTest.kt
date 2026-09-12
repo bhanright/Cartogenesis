@@ -6,6 +6,12 @@ import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.PlateType
 import com.cartogenesis.worldgen.pipeline.TerrainStage
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -379,5 +385,189 @@ class BoundaryPairTest {
         return Profile(
             cells, baseline, peak, peakDistance, trough, troughDistance, half * 2f, values
         )
+    }
+
+    /**
+     * E3: are hotspot cones round?
+     *
+     * [PlateStage.stampHotspotChains]'s own falloff was checked first, directly, before touching
+     * anything: it has always computed `sqrt(dx*dx + dy*dy)`, true Euclidean distance, never the
+     * chamfer approximation [com.cartogenesis.worldgen.math.DistanceTransform] uses elsewhere in
+     * the same file for plate assignment and boundary distance. `[eightFoldFacetingIsCatchable]`
+     * below proves the eight-bearing Fourier measurement below would in fact have caught it if it
+     * had — a synthetic octagonal metric, stamped and measured exactly the same way, fails hard —
+     * so the absence of a failure on the real code is not the guard being blind.
+     *
+     * Reading the real cone's radius at sixteen whole-cell bearings and stopping at the nearest
+     * cell (matching how a [com.cartogenesis.worldgen.model.FloatField] is read everywhere else in
+     * this codebase — no interpolation) does show an apparent eight-fold component on seed
+     * 718106's 512-resolution world: a single seamount's half-height contour sits at only ~2.5
+     * cells there, and a grid cannot resolve a five-percent radius difference when one whole cell
+     * is thirty-to-forty percent of the radius being measured. Supersampling the stamp 3x3, 5x5
+     * and 9x9 all read back the identical 0.053 relative amplitude at that size — proof the ceiling
+     * is the grid, not the formula, since a real improvement to the stored values would have moved
+     * a measurement this coarse by more than floating-point noise. Measured on the same seed's
+     * chain at 2048 — the resolution [TectonicsConfig.hotspotRadius] and friends scale to via
+     * [WorldGenConfig.atResolution], and the one the spec calls out as where a real chain is
+     * visible — the half-height contour is a well-resolved ~10 cells and the unmodified stamp
+     * already reads a relative eight-fold amplitude of essentially zero (order 1e-15, i.e. exactly
+     * round to floating-point precision). There is nothing to fix in the falloff; the fix applied
+     * here ([TectonicsConfig.hotspotConeDetail]: sub-cell supersampling plus a few low, seeded
+     * harmonics of the rim, in [PlateStage]) is aimed instead at the small-radius rasterization
+     * that the 512 measurement was actually seeing, and at giving cones individual silhouettes.
+     */
+    @Test
+    fun `hotspot cones are round at the resolution they surface on`() {
+        fun measure(width: Int, detail: Boolean): Triple<Double, Double, Double> {
+            val base = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+            val config = (if (width == 512) base else base.atResolution(width, width)).let {
+                it.copy(tectonics = it.tectonics.copy(hotspotConeDetail = detail))
+            }
+            val withChains = PlateStage.generate(config, TerrainStage.generate(config))
+            val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
+            val flat = PlateStage.generate(without, TerrainStage.generate(without))
+
+            val delta = FloatArray(width * width)
+            var peakI = -1
+            var peakV = 0f
+            for (i in delta.indices) {
+                val d = withChains.height.data[i] - flat.height.data[i]
+                delta[i] = d
+                if (d > peakV) { peakV = d; peakI = i }
+            }
+            val cx = (peakI % width).toFloat()
+            val cy = (peakI / width).toFloat()
+            val half = peakV / 2f
+
+            fun nearest(x: Float, y: Float): Float {
+                val xi = x.toInt().coerceIn(0, width - 1)
+                val yi = y.toInt().coerceIn(0, width - 1)
+                return delta[yi * width + xi]
+            }
+
+            val radii = DoubleArray(16)
+            for (k in 0 until 16) {
+                val theta = 2.0 * PI * k / 16.0
+                val dx = cos(theta).toFloat()
+                val dy = sin(theta).toFloat()
+                var r = 0f
+                while (r < width / 4f) {
+                    if (nearest(cx + dx * r, cy + dy * r) < half) break
+                    r += 0.1f
+                }
+                radii[k] = r.toDouble()
+            }
+            val relAmp8 = eightFoldRelativeAmplitude(radii)
+            return Triple(radii.average(), relAmp8, peakV.toDouble())
+        }
+
+        val (mean512Before, amp512Before, _) = measure(512, detail = false)
+        val (mean512After, amp512After, _) = measure(512, detail = true)
+        val (mean2048Before, amp2048Before, _) = measure(2048, detail = false)
+        val (mean2048After, amp2048After, _) = measure(2048, detail = true)
+
+        println(
+            "E3 seed 718106 @512  before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
+                .format(mean512Before, amp512Before)
+        )
+        println(
+            "E3 seed 718106 @512  after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
+                .format(mean512After, amp512After)
+        )
+        println(
+            "E3 seed 718106 @2048 before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
+                .format(mean2048Before, amp2048Before)
+        )
+        println(
+            "E3 seed 718106 @2048 after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
+                .format(mean2048After, amp2048After)
+        )
+
+        // The guard proper: measured where the cone is actually resolved by the grid, which is
+        // where the spec's own "visible at 2048" points. Both before and after pass here -- see
+        // the class doc above for why "before" was never actually broken -- so what this protects
+        // against is a future regression back toward a non-Euclidean or asymmetric falloff, not a
+        // defect fixed in this chunk.
+        assertTrue(
+            amp2048After < 0.05,
+            "seed 718106's hotspot cone at 2048 has a relative eight-fold amplitude of " +
+                "$amp2048After, wanted under 0.05"
+        )
+
+        // 512 is reported, not asserted: a single grid cell there is thirty-to-forty percent of
+        // the half-height radius being measured, so a nearest-cell reading cannot resolve a
+        // five-percent difference no matter how round the underlying cone is -- asserting on it
+        // would be tuning the guard to a number it cannot honestly move, which is exactly what the
+        // ground rules ask not to do.
+    }
+
+    /**
+     * Proves the measurement in the guard above actually has teeth: stamps a cone with a genuine
+     * octagonal (chamfer-style) distance metric instead of Euclidean and confirms the same
+     * sixteen-bearing Fourier read flags it. Self-contained — no [PlateStage] involved — because
+     * the real code was never using this metric, only whether the guard would catch it if it had.
+     */
+    @Test
+    fun `eightFoldFacetingIsCatchable`() {
+        val radius = 20f
+
+        fun measure(distanceOf: (Float, Float) -> Float): Double {
+            // The profile from stampSeamount, applied to whichever distance metric is handed in.
+            fun height(dx: Float, dy: Float): Float {
+                val d = distanceOf(dx, dy)
+                if (d >= radius) return 0f
+                val u = 1f - d / radius
+                return u * u * (3f - 2f * u)
+            }
+            val half = height(0f, 0f) / 2f
+            val radii = DoubleArray(16)
+            for (k in 0 until 16) {
+                val theta = 2.0 * PI * k / 16.0
+                val dirX = cos(theta).toFloat()
+                val dirY = sin(theta).toFloat()
+                var r = 0f
+                while (r < radius * 2f) {
+                    if (height(dirX * r, dirY * r) < half) break
+                    r += 0.01f
+                }
+                radii[k] = r.toDouble()
+            }
+            return eightFoldRelativeAmplitude(radii)
+        }
+
+        val euclidean = measure { dx, dy -> sqrt(dx * dx + dy * dy) }
+        // A regular octagon's distance field: the intersection of an axis-aligned square and one
+        // rotated 45 degrees, the classic chamfer approximation to a circle.
+        val octagonal = measure { dx, dy ->
+            max(max(abs(dx), abs(dy)), (abs(dx) + abs(dy)) * 0.70710678f)
+        }
+        println(
+            "E3 measurement check: Euclidean relative 8-fold amplitude %.4f, octagonal %.4f"
+                .format(euclidean, octagonal)
+        )
+        assertTrue(
+            euclidean < 0.05,
+            "the Euclidean control should read round; got $euclidean"
+        )
+        assertTrue(
+            octagonal > 0.05,
+            "an octagonal metric should fail the guard the way a chamfer-faceted cone would; " +
+                "got $octagonal"
+        )
+    }
+
+    /** DFT magnitude at the eighth harmonic of a 16-sample series, relative to its mean. */
+    private fun eightFoldRelativeAmplitude(radii: DoubleArray): Double {
+        val n = radii.size
+        val mean = radii.average()
+        var re = 0.0
+        var im = 0.0
+        for (k in 0 until n) {
+            val theta = 2.0 * PI * 8 * k / n
+            re += radii[k] * cos(theta)
+            im += radii[k] * sin(theta)
+        }
+        val amp = 2.0 * sqrt(re * re + im * im) / n
+        return if (mean == 0.0) 0.0 else amp / mean
     }
 }

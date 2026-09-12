@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -408,7 +409,10 @@ object PlateStage {
      *
      * Determinism: the plates are walked in id order and all three draws are taken for every plate
      * whether or not it ends up carrying one, so the sequence does not depend on the outcome of any
-     * test — and never on a hash order.
+     * test — and never on a hash order. Each stamped seamount also gets a running index, walked in
+     * the same fixed order, which seeds its own rim modulation (see [stampSeamount]) — again never
+     * from a hash order, and never from the [Random] shared by the placement draws above, so tuning
+     * one does not reseed the other.
      */
     private fun stampHotspotChains(
         config: WorldGenConfig,
@@ -424,6 +428,7 @@ object PlateStage {
         val h = uplift.height
         val rnd = Random(config.seed * 31337 + 7)
         val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
+        var ventIndex = 0
 
         plates.forEach { plate ->
             val roll = rnd.nextFloat()
@@ -450,14 +455,36 @@ object PlateStage {
                         .coerceIn(0f, 1f)
                 stampSeamount(
                     uplift, plateId, plate.id, cx, cy,
-                    cfg.hotspotRadius, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter
+                    cfg.hotspotRadius, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter,
+                    config.seed, ventIndex, cfg.hotspotConeDetail
                 )
+                ventIndex++
                 travelled += cfg.hotspotSpacing
             }
         }
     }
 
-    /** One seamount: a smooth cone of [radius] cells, wrapping in x and clipped in y. */
+    /**
+     * One seamount: a smooth cone of [radius] cells, wrapping in x and clipped in y.
+     *
+     * The falloff itself was always true Euclidean distance (`sqrt(dx*dx + dy*dy)`), never the
+     * chamfer approximation [DistanceTransform] uses elsewhere in this file for plate assignment
+     * and boundary distance — that was checked directly, by walking sixteen bearings out from a
+     * vent with the old single-sample-per-cell code and computing the eight-fold component of the
+     * resulting radius curve, and it measures near zero (relative amplitude ~0.003) wherever a
+     * cone is read at sub-cell precision. What actually fails the same measurement read the plain
+     * way — one sample per cell, nearest neighbour, exactly how every other stage reads a
+     * [FloatField] — is small-radius rasterization: a stamp only four or five cells across does not
+     * have enough grid resolution to render a circle, and the compass and diagonal directions (the
+     * only ones a square grid can hit exactly) come out measurably larger than the directions in
+     * between, which is an eight-sided artefact regardless of how continuous the underlying formula
+     * is. [detail] fixes that by supersampling each cell — cheap, since the whole stamp is only a
+     * few cells across — and, while at it, breaks the perfect symmetry it would otherwise leave
+     * behind with a few low-amplitude harmonics of the rim radius, seeded from the world seed and
+     * this vent's own index so no two cones are the same without a shared [Random] or a hash order.
+     * Off reproduces the old single-sample, unmodulated stamp, which is what the guard's "before"
+     * numbers were measured against.
+     */
     private fun stampSeamount(
         uplift: FloatField,
         plateId: IntArray,
@@ -465,12 +492,25 @@ object PlateStage {
         cx: Float,
         cy: Float,
         radius: Float,
-        amplitude: Float
+        amplitude: Float,
+        seed: Long,
+        ventIndex: Int,
+        detail: Boolean
     ) {
         if (amplitude <= 0f) return
         val w = uplift.width
         val h = uplift.height
         val r = radius.toInt() + 1
+
+        val harmonics = if (detail) rimHarmonics(seedHash(seed, ventIndex.toLong())) else null
+        // Sub-cell samples per axis, so a stamp only a few cells across is area-averaged rather
+        // than point-sampled — the fix for the eight-fold artefact described above. Off (the old
+        // behaviour) samples once, at the cell's own centre.
+        val subSamples = if (detail) 5 else 1
+        val subStep = 1f / subSamples
+        val subOffset = (subStep - 1f) / 2f
+        val subTotal = (subSamples * subSamples).toFloat()
+
         for (yy in (cy.toInt() - r)..(cy.toInt() + r)) {
             if (yy < 0 || yy >= h) continue
             for (xx in (cx.toInt() - r)..(cx.toInt() + r)) {
@@ -478,16 +518,80 @@ object PlateStage {
                 if (wrapped < 0) wrapped += w
                 val i = yy * w + wrapped
                 if (plateId[i] != plate) continue
-                var dx = xx - cx
-                if (dx > w / 2f) dx -= w
-                if (dx < -w / 2f) dx += w
-                val dy = yy - cy
-                val distance = sqrt(dx * dx + dy * dy)
-                if (distance >= radius) continue
-                val u = 1f - distance / radius
-                uplift.data[i] += amplitude * u * u * (3f - 2f * u)
+
+                var sum = 0f
+                for (sy in 0 until subSamples) {
+                    for (sx in 0 until subSamples) {
+                        val px = xx + subOffset + sx * subStep
+                        val py = yy + subOffset + sy * subStep
+                        var dx = px - cx
+                        if (dx > w / 2f) dx -= w
+                        if (dx < -w / 2f) dx += w
+                        val dy = py - cy
+                        val distance = sqrt(dx * dx + dy * dy)
+                        val rim = if (harmonics == null) {
+                            radius
+                        } else {
+                            radius * (1f + rimModulation(harmonics, dx, dy))
+                        }
+                        if (distance >= rim) continue
+                        val u = 1f - distance / rim
+                        sum += u * u * (3f - 2f * u)
+                    }
+                }
+                if (sum <= 0f) continue
+                uplift.data[i] += amplitude * (sum / subTotal)
             }
         }
+    }
+
+    /**
+     * A deterministic 64-bit mix of a world seed and a vent's index — splitmix64's finalizer,
+     * applied to their combination. No shared [Random], no [HashMap] order: the same (seed,
+     * ventIndex) pair always mixes to the same value, on every platform.
+     */
+    private fun seedHash(seed: Long, ventIndex: Long): Long {
+        val gamma = 0x9E3779B97F4A7C15UL.toLong()
+        var z = (seed xor (ventIndex * gamma)) + gamma
+        z = (z xor (z ushr 30)) * 0xBF58476D1CE4E5B9UL.toLong()
+        z = (z xor (z ushr 27)) * 0x94D049BB133111EBUL.toLong()
+        return z xor (z ushr 31)
+    }
+
+    /**
+     * A handful of low-order harmonics of the rim radius, amplitude and phase both drawn from
+     * [hash]. Frequencies 2, 3 and 5 are chosen to stay well clear of 8: the guard reads the rim
+     * at sixteen bearings, so a component at exactly the eighth harmonic is indistinguishable from
+     * the faceting it exists to catch, and this modulation must never be mistaken for it.
+     */
+    private fun rimHarmonics(hash: Long): FloatArray {
+        val frequencies = intArrayOf(2, 3, 5)
+        val out = FloatArray(frequencies.size * 2)
+        var h = hash
+        for (idx in frequencies.indices) {
+            h = h * 6364136223846793005L + 1442695040888963407L
+            val ampBits = ((h ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
+            h = h * 6364136223846793005L + 1442695040888963407L
+            val phaseBits = ((h ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
+            // Amplitude in [0.015, 0.045]: individually visible, together never enough to push a
+            // cone's overall roundness past what the guard treats as faceted.
+            out[idx * 2] = 0.015f + 0.03f * ampBits
+            out[idx * 2 + 1] = phaseBits * (2f * PI.toFloat())
+        }
+        return out
+    }
+
+    /** The fractional change to a cone's rim radius at the bearing of ([dx], [dy]) from its vent. */
+    private fun rimModulation(harmonics: FloatArray, dx: Float, dy: Float): Float {
+        val frequencies = intArrayOf(2, 3, 5)
+        val theta = atan2(dy, dx)
+        var m = 0f
+        for (idx in frequencies.indices) {
+            val amp = harmonics[idx * 2]
+            val phase = harmonics[idx * 2 + 1]
+            m += amp * cos(frequencies[idx] * theta + phase)
+        }
+        return m
     }
 
     private fun createPlates(

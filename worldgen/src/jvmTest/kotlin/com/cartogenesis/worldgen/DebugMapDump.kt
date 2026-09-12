@@ -1,9 +1,12 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.PlateStage
+import com.cartogenesis.worldgen.pipeline.TerrainStage
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.RenderingHints
@@ -351,6 +354,93 @@ class DebugMapDump {
             )
         }
         println("Glacier crops written to ${outputDir.absolutePath}")
+    }
+
+    /**
+     * A hotspot chain's cones, close up, with [TectonicsConfig.hotspotConeDetail] on and off.
+     *
+     * A single seamount is only a handful of cells across, which is invisible at whole-world
+     * scale and exactly where a rasterized-circle artefact would live if there were one. Seed
+     * 718106 carries a chain, with the author's settings (sea level 0.62, 14 plates, 12 realms
+     * are all defaults). 1024 and 2048 are reached via [WorldGenConfig.atResolution] from the 512
+     * base, exactly as the app does, so [TectonicsConfig.hotspotRadius] and friends scale up with
+     * the grid rather than staying pinned to their 512 cell count -- a plain `WorldGenConfig(width
+     * = 2048, ...)` would not rescale them and the cone would come out the same handful of cells
+     * across at every resolution instead of genuinely finer or coarser. The vent is located fresh
+     * at each resolution from the with/without-chains plate height difference, rather than scaled
+     * from a lower-resolution position, because the plate RNG is not a simple rescaling between
+     * resolutions.
+     */
+    @Test
+    fun `dump the hotspot cone`() {
+        outputDir.mkdirs()
+        val seed = 718106L
+        val base512 = WorldGenConfig(seed = seed, width = 512, height = 512)
+
+        listOf(512, 1024, 2048).forEach { size ->
+            val base = if (size == 512) base512 else base512.atResolution(size, size)
+            val radiusScale = size / 512
+
+            listOf(false to "before", true to "after").forEach { (detail, tag) ->
+                val config = base.copy(tectonics = base.tectonics.copy(hotspotConeDetail = detail))
+                val terrain = TerrainStage.generate(config)
+                val withChains = PlateStage.generate(config, terrain)
+                val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
+                val flat = PlateStage.generate(without, TerrainStage.generate(without))
+
+                var peakI = -1
+                var peakV = 0f
+                for (i in withChains.height.data.indices) {
+                    val d = withChains.height.data[i] - flat.height.data[i]
+                    if (d > peakV) { peakV = d; peakI = i }
+                }
+                val px = peakI % size
+                val py = peakI / size
+
+                // The raw cone, isolated: with-chains minus without-chains, before erosion or any
+                // other stage touches it, so whatever shape the stamp itself makes is what shows.
+                // The window scales with the cone's own radius so the crop frames it the same way
+                // at every resolution instead of clipping it at 2048 or drowning it in margin at
+                // 512.
+                val cellsAcross = 24 * radiusScale
+                val zoom = (480 / cellsAcross).coerceAtLeast(1)
+                val image = BufferedImage(cellsAcross * zoom, cellsAcross * zoom, BufferedImage.TYPE_INT_RGB)
+                for (yy in 0 until cellsAcross) {
+                    for (xx in 0 until cellsAcross) {
+                        val sx = (px - cellsAcross / 2 + xx).coerceIn(0, size - 1)
+                        val sy = (py - cellsAcross / 2 + yy).coerceIn(0, size - 1)
+                        val d = (withChains.height.data[sy * size + sx] - flat.height.data[sy * size + sx])
+                            .coerceIn(0f, peakV)
+                        val grey = (255 * (d / peakV)).toInt().coerceIn(0, 255)
+                        val rgb = (grey shl 16) or (grey shl 8) or grey
+                        for (by in 0 until zoom) for (bx in 0 until zoom) {
+                            image.setRGB(xx * zoom + bx, yy * zoom + by, rgb)
+                        }
+                    }
+                }
+                write(image, "seed$seed-hotspot-cone-isolated-$size-$tag.png")
+
+                // The same vent as it actually renders in the finished world -- through erosion,
+                // sea level and biomes -- so a change to the raw stamp can be checked against what
+                // the player would see, not just against the isolated diagnostic above. Only at
+                // 1024 (the spec's whole-pipeline render size): a full engine run at three
+                // resolutions times two states is unneeded cost the isolated crop above already
+                // covers for 512 and 2048.
+                if (size == 1024) {
+                    val world = WorldGenerationEngine.generateBlocking(config)
+                    val span = 90
+                    write(
+                        crop(
+                            render(world, Mode.ELEVATION),
+                            (px - span / 2).coerceIn(0, size - span), (py - span / 2).coerceIn(0, size - span),
+                            span, span, 6
+                        ),
+                        "seed$seed-hotspot-$size-$tag.png"
+                    )
+                }
+            }
+        }
+        println("Hotspot cone crops written to ${outputDir.absolutePath}")
     }
 
     /**

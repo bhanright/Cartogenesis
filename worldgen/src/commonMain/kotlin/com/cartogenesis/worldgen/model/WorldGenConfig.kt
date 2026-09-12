@@ -201,7 +201,15 @@ data class TectonicsConfig(
     /** Radius of a single seamount, in cells. */
     val hotspotRadius: Float = 5f,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
-    val hotspotHeight: Float = 0.17f
+    val hotspotHeight: Float = 0.17f,
+    /**
+     * Antialias a seamount's stamp with sub-cell supersampling and give its rim a few low
+     * harmonics of seeded noise, so a cone only a handful of cells across does not rasterize as a
+     * blocky near-octagon and no two cones are identical. Off reproduces the old single-sample,
+     * unmodulated stamp, which is what [com.cartogenesis.worldgen.pipeline.PlateStage]'s hotspot
+     * guard measures "before" against.
+     */
+    val hotspotConeDetail: Boolean = true
 )
 
 /**

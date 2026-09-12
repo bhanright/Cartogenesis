@@ -12,9 +12,9 @@ import kotlin.test.assertTrue
  *
  * `ClimateStage.seasonalTemperature` scales the seasonal departure from the annual mean by
  * `1 + continentality * continentalityFactor`, where `continentalityFactor` is
- * `ClimateStage.waterDistance` — an actual cell distance to the nearest sea, from the same chamfer
- * distance transform `SeaLevelStage` already uses for the continental shelf — clamped to 0..1 over
- * three `coastalReach`. A shoreline cell keeps the amplitude at 1; a cell three reaches inland or
+ * `ClimateStage.waterDistance` — an actual cell distance to the nearest sea, from the same distance
+ * transform `SeaLevelStage` uses for the continental shelf — clamped to 0..1 over three
+ * `coastalReach`. A shoreline cell keeps the amplitude at 1; a cell three reaches inland or
  * further reaches the full `1 + continentality`. This is Siberia versus Ireland.
  *
  * An earlier version of both the feature and this guard read the blurred water-exposure field

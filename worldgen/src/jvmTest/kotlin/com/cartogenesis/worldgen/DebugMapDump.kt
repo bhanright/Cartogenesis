@@ -1,5 +1,7 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -688,6 +690,126 @@ class DebugMapDump {
             )
         }
         println("Lake crossing crops written to ${outputDir.absolutePath}")
+    }
+
+    /**
+     * G4: the two places the distance transform's contours are visible — the outer edge of a
+     * collision plateau, and the shelf break — on seed 42 at 1024, whole and at 4x.
+     *
+     * Both crops are located from the world itself rather than from remembered coordinates, on a
+     * 64-cell lattice so the window cannot slide about between two runs of a slightly different
+     * generator: the plateau window holds the most cells sitting on a collision plateau's *outer
+     * rim* (boundary distance within a fifth of `collisionWidth` of it), and the shelf window the
+     * most ocean cells on the continental *slope* — distance to land between one and two
+     * `shelfWidth`, the band `SeaLevelStage` smoothsteps back down to the natural sea floor.
+     * Those two bands are the iso-contours of the distance field, which is what this is looking
+     * at. The chosen corners are printed so a before-and-after pair can be checked to be looking
+     * at the same ground.
+     */
+    @Test
+    fun `dump the distance field edges`() {
+        outputDir.mkdirs()
+        val size = 1024
+        val config = WorldGenConfig(seed = 42L, width = 512, height = 512).atResolution(size, size)
+        val world = WorldGenerationEngine.generateBlocking(config)
+        val image = render(world, Mode.ELEVATION)
+        write(image, "distfield-seed42-$size-elevation.png")
+
+        val plateau = com.cartogenesis.worldgen.pipeline.BoundaryClass.COLLISION_PLATEAU.ordinal
+        val span = 160
+
+        fun bestWindow(interesting: (Int) -> Boolean): Pair<Int, Int> {
+            var bestX = 0
+            var bestY = 0
+            var best = -1
+            var y = 0
+            while (y + span <= size) {
+                var x = 0
+                while (x + span <= size) {
+                    var count = 0
+                    for (yy in y until y + span step 2) {
+                        for (xx in x until x + span step 2) {
+                            if (interesting(yy * size + xx)) count++
+                        }
+                    }
+                    if (count > best) { best = count; bestX = x; bestY = y }
+                    x += 64
+                }
+                y += 64
+            }
+            return bestX to bestY
+        }
+
+        val rim = config.tectonics.collisionWidth
+        val (px, py) = bestWindow { i ->
+            world.sea.isLand[i] && world.plates.nearestBoundaryClass[i] == plateau &&
+                abs(world.plates.boundaryDistance.data[i] - rim) < rim * 0.2f
+        }
+
+        // Distance to land, the field the shelf remap is keyed on, by the transform the pipeline
+        // itself uses.
+        val toLand = FloatArray(size * size) { JumpFloodDistance.INFINITE }
+        val label = IntArray(size * size) { -1 }
+        for (i in 0 until size * size) {
+            if (world.sea.isLand[i]) { toLand[i] = 0f; label[i] = i }
+        }
+        JumpFloodDistance.run(size, size, toLand, label)
+        val shelf = config.sea.shelfWidth
+        val (sx, sy) = bestWindow { i ->
+            !world.sea.isLand[i] && toLand[i] > shelf && toLand[i] <= 2f * shelf
+        }
+        write(crop(image, px, py, span, span, 4), "distfield-seed42-$size-plateau.png")
+        write(crop(image, sx, sy, span, span, 4), "distfield-seed42-$size-shelf.png")
+        write(
+            crop(render(world, Mode.PLATES), px, py, span, span, 4),
+            "distfield-seed42-$size-plateau-plates.png"
+        )
+
+        // The fields themselves, banded every two cells: the contours the two crops above inherit
+        // their shape from, drawn so a facet is a straight run of band edge rather than something
+        // to be inferred from a shaded slope.
+        write(
+            crop(bands(world.plates.boundaryDistance.data, size, size), px, py, span, span, 4),
+            "distfield-seed42-$size-plateau-contours.png"
+        )
+        write(
+            crop(bands(toLand, size, size), sx, sy, span, span, 4),
+            "distfield-seed42-$size-shelf-contours.png"
+        )
+        // The same window, same seeds, by the chamfer transform: the octagonal contours the shelf
+        // used to be cut from, drawn in whichever run this is so the pair can be compared without
+        // reverting anything.
+        val chamfer = FloatArray(size * size) { DistanceTransform.INFINITE }
+        val chamferLabel = IntArray(size * size) { -1 }
+        for (i in 0 until size * size) {
+            if (world.sea.isLand[i]) { chamfer[i] = 0f; chamferLabel[i] = i }
+        }
+        DistanceTransform.run(size, size, chamfer, chamferLabel)
+        write(
+            crop(bands(chamfer, size, size), sx, sy, span, span, 4),
+            "distfield-seed42-$size-shelf-contours-chamfer.png"
+        )
+        println(
+            "DISTFIELD seed 42 at $size: plateau crop at ($px,$py), shelf crop at ($sx,$sy), " +
+                "land=${world.sea.landCellCount}"
+        )
+    }
+
+    /** A distance field as alternating two-cell bands — its iso-contours, drawn. */
+    private fun bands(field: FloatArray, width: Int, height: Int): BufferedImage {
+        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        for (i in field.indices) {
+            val d = field[i]
+            val band = (d / 2f).toInt()
+            val shade = if (band % 2 == 0) 210 else 70
+            val tint = ((d / 60f).coerceIn(0f, 1f) * 60).toInt()
+            image.setRGB(
+                i % width, i / width,
+                ((shade - tint).coerceIn(0, 255) shl 16) or
+                    (shade shl 8) or ((shade + tint).coerceIn(0, 255))
+            )
+        }
+        return image
     }
 
     /** A rectangle of an image, blown up by [zoom] with no smoothing, so cells stay cells. */

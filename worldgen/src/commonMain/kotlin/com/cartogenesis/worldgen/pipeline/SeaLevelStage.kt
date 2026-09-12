@@ -1,6 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.SeaConfig
 
@@ -89,7 +89,10 @@ object SeaLevelStage {
         val h = base.relativeElevation.height
         val land = base.isLand
 
-        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        // Euclidean distance to the nearest land cell, by jump flooding: the three bands below are
+        // read straight off it, so the shelf break is one of this field's iso-contours and used to
+        // inherit the octagon the chamfer transform's contours are. See [JumpFloodDistance].
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
         val label = IntArray(w * h) { -1 }
         for (i in 0 until w * h) {
             if (land[i]) {
@@ -97,7 +100,7 @@ object SeaLevelStage {
                 label[i] = i
             }
         }
-        if (base.landCellCount > 0) DistanceTransform.run(w, h, dist, label)
+        if (base.landCellCount > 0) JumpFloodDistance.run(w, h, dist, label)
 
         val width = sea.shelfWidth
         val plateauFloor = -sea.shelfDepth

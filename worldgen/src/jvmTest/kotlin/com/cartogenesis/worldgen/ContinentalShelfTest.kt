@@ -1,6 +1,6 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -150,9 +150,12 @@ class ContinentalShelfTest {
         val h = world.height
         val land = world.sea.isLand
 
-        // Distance in cells from every ocean cell to the nearest land — the same measure
-        // SeaLevelStage's shelf remap is keyed on.
-        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
+        // Distance in cells from every ocean cell to the nearest land — the same measure, by the
+        // same transform, SeaLevelStage's shelf remap is keyed on. It has to be the same one: the
+        // chamfer metric this used before G4 reads up to 8.2% further than Euclid at the bearings
+        // between an axis and a diagonal, so measuring one field against a shelf cut from the
+        // other would put a ring of genuinely shallow cells outside the "near" band.
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
         val label = IntArray(w * h) { -1 }
         for (i in 0 until w * h) {
             if (land[i]) {
@@ -160,7 +163,7 @@ class ContinentalShelfTest {
                 label[i] = i
             }
         }
-        DistanceTransform.run(w, h, dist, label)
+        JumpFloodDistance.run(w, h, dist, label)
 
         var nearShallow = 0
         var nearTotal = 0

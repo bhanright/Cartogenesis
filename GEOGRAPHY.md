@@ -47,11 +47,12 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
 **An interior swings more than a coast.** The seasonal departure is scaled by distance from
-water — a chamfer distance transform from every sea and lake cell, saturating at three times the
-coastal reach — so a shore and an interior at the same latitude no longer swing alike. On seed 42 at
-50° the interior-versus-coast gap in the seasonal swing is 0.2 °C with `continentality` at zero and
-7.5 °C at the default 0.6, and the annual mean is bit-identical either way, because the scaling
-applies to the departure and never to the mean.
+water — a jump-flooded Euclidean distance transform from every sea and lake cell, saturating at
+three times the coastal reach — so a shore and an interior at the same latitude no longer swing
+alike. On seed 42 at 50° the interior-versus-coast gap in the seasonal swing is 0.6 °C with
+`continentality` at zero and 8.5 °C at the default 0.6 (measured again at G4; A2 first recorded
+0.2 and 7.5, and the chunks between have moved the coastline under it), and the annual mean is
+bit-identical either way, because the scaling applies to the departure and never to the mean.
 
 **Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidth` of a
 coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at

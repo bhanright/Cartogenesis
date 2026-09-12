@@ -26,6 +26,13 @@ fun main(args: Array<String>) {
             probe.accelerator?.let { "GPU available: ${it.name}" }
                 ?: "GPU unavailable: ${probe.unavailableBecause}"
         )
+        // Reported separately because the two compile different shaders on the one context, and a
+        // driver that takes the erosion sweeps and refuses the raster is a thing that can happen.
+        val raster = GpuRaster.createOrNull()
+        println(
+            raster.accelerator?.let { "Export raster on the GPU: ${it.name}" }
+                ?: "Export raster on the GPU unavailable: ${raster.unavailableBecause}"
+        )
         return
     }
     launchWindow()

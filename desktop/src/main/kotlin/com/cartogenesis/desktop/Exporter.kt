@@ -1,5 +1,7 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -16,6 +18,11 @@ import org.jetbrains.skia.Image
  * The whole pipeline is re-run at the target size rather than upscaling the preview, so the detail
  * is real rather than interpolated, and there is enough heap to actually finish: 4096 wants roughly
  * 2GB.
+ *
+ * Where the machine has a graphics device the per-pixel half of the drawing runs on it. That is not
+ * governed by the acceleration switch in the panel, which is about whether the *world* can be
+ * reproduced from its seed: the raster changes no part of the world, only how quickly the same
+ * picture is drawn, and it is held to within a channel step of what the processor would have drawn.
  */
 object Exporter {
 
@@ -26,12 +33,13 @@ object Exporter {
         val format: ExportFormat
     )
 
-    fun export(
+    suspend fun export(
         config: WorldGenConfig,
         options: RenderOptions,
         size: Int,
         destination: File,
-        format: ExportFormat = ExportFormat.PNG
+        format: ExportFormat = ExportFormat.PNG,
+        raster: RasterAccelerator? = null
     ): Result {
         val started = System.currentTimeMillis()
 
@@ -39,10 +47,9 @@ object Exporter {
         val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
         val scale = size.toFloat() / config.width
-        val bitmap = MapImage.toBitmap(
-            world,
-            options.copy(riverScale = options.riverScale * scale.coerceAtLeast(1f))
-        )
+        val exportOptions = options.copy(riverScale = options.riverScale * scale.coerceAtLeast(1f))
+        val pixels = MapRasterizer.rasterize(world, exportOptions, raster)
+        val bitmap = MapImage.toBitmap(world, exportOptions, pixels)
 
         // Quality 100 is lossless for WebP and ignored by the PNG encoder, so one call covers both.
         val data = Image.makeFromBitmap(bitmap).encodeToData(skiaFormat(format), quality = 100)

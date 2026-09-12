@@ -43,10 +43,20 @@ object MapImage {
     }
 
     /** Kept separate from [render] so export can encode without going through Compose. */
-    fun toBitmap(world: WorldMap, options: RenderOptions): Bitmap {
+    fun toBitmap(world: WorldMap, options: RenderOptions): Bitmap =
+        toBitmap(world, options, MapRasterizer.rasterize(world, options))
+
+    /**
+     * The same, with the raster already done.
+     *
+     * Export draws its pixels on the graphics card where there is one (see
+     * [com.cartogenesis.cartography.RasterAccelerator]) and hands them here, so the overlays and the
+     * bitmap do not care which processor drew what is underneath them.
+     */
+    fun toBitmap(world: WorldMap, options: RenderOptions, pixels: IntArray): Bitmap {
         val w = world.width
         val h = world.height
-        val pixels = MapRasterizer.rasterize(world, options)
+        require(pixels.size == w * h) { "raster is ${pixels.size} pixels, not ${w * h}" }
 
         val bytes = ByteArray(w * h * 4)
         for (i in pixels.indices) {

@@ -454,6 +454,18 @@ mouths at 2048 on 59758 and at 512 on 42, shown failing on the current code.
   coefficient of variation under 0.05 for the eight-fold component; shown failing on the current
   code. Render the chain at 2048.
 
+**Crash investigation (2026-09-12, after E1 merged).** One full-suite run on 8dcac66 threw
+`ArrayIndexOutOfBoundsException: Index 2048 out of bounds for length 14` in `NationStage.describe`
+generating seed 718106 at 2048 with the author's settings: a realm id equal to the map width. An
+Opus agent could not reproduce it on the same commit across 560 worlds (400 seeds at 512, 150 with
+LEAVE_WILDERNESS, the author's config at 1024 and 2048 with each of E1 and E2 toggled off, ten
+sea-level jitters at 2048), showed by reading that neither `BasinRealms.assign`'s renumbering nor
+`dissolveEnclaves` can widen the id range, and added `checkRealmIds` after both steps (fails fast
+naming the step and cell) plus `RealmIdRangeTest` (74a9a23, merge 5b04d01). The orchestrator then
+generated the same world three times in one JVM and again inside the full desktop suite: every
+per-stage checksum identical, no crash. Not explained. If it recurs the message now names the
+step; a longer soak was run before release.
+
 ### E4. Segmented rifts — Opus
 
 *Dependencies: B2, E3 (both touch `PlateStage`). Files: `PlateStage.kt` rift profile,

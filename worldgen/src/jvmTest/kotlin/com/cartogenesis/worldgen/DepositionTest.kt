@@ -87,8 +87,15 @@ class DepositionTest {
      * the whole field over its own range, which carries a little of that change everywhere. Land
      * held at 6226 for the sixth time — seed 42's rifts are all under water or well inland of the
      * cut, so no cell crossed the shoreline.
+     *
+     * And a seventh time, for the delta work in the same stage as E1: the closing pass now opens
+     * the pockets of water a river ends in and cuts a groove along a drawn river's own path where
+     * that path crosses ground the fill had to raise. It runs whether or not anything is being
+     * carried — deliberately, and this pin is the reason: the case below holds a world with
+     * deposition off and a world with it running and every rate at zero to be bit-identical, and
+     * gating the pass on the spoil broke that. Land held at 6226 for the seventh time.
      */
-    private val startingPointElevation = 7967346964201395220L
+    private val startingPointElevation = -6873775825996281819L
     private val startingPointLand = 6226
 
     @Test

@@ -950,6 +950,17 @@ shorelines come from lacustrine fans laid to one flat level. Reported and left: 
 planar hillside holds one bearing for 20-35 cells with no flat involved; that is D8 itself.
 
 
+### Release 1.2.0 (2026-09-12)
+
+Cut from `release/1.2` (branched from main before F1, so it carries Track E, G4, F0, the atlas
+move and the realm-id guard but not the theme) at 9dfdf7a, E1's third pass cherry-picked on top.
+Full suite green on the branch (worldgen 109, cartography 18, desktop 10). William's two worlds at
+2048 through the app's renderer: 718106 37 lakes, 0.29% of land, largest 0.016% of the map;
+59758 74 lakes, 0.82%, largest 0.036%; rifts as chains, rivers to the coasts. Portable zip 96 MB,
+MSI 96 MB, web zip 4.5 MB; packaged exe passes --gpu-check; web build deployed from the branch
+(site eb88d9b, loader stamp 202609120356, app wasm 8e5e62ee served as application/wasm); site
+notes updated. main is the 2.0 line: F1-F3, G2, T1 are there and not in 1.2.0.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

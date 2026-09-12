@@ -227,6 +227,7 @@ internal object HydraulicErosion {
         }
 
         repeat(cfg.hydraulicRounds) { round ->
+            log?.round = round
             // The shoreline moves as the land wears down, so it is found again each round rather
             // than fixed once. This is the same percentile the sea level stage will use — taken,
             // for all but the last few rounds, at the stand the sea was actually at while these
@@ -254,20 +255,33 @@ internal object HydraulicErosion {
             val ground = filled.data
             val surfaceOf = working.data
 
+            // `relative` is elevation measured from the shoreline in units of the land's range, so
+            // converting between the two needs that range. Everything below that is a height has to
+            // say which of the two it is in; see [settled].
+            val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
+            val toRelative = 1f / landRange
+
             // Ground as the walk leaves it: the pre-round elevation plus everything this round has
             // already added or taken away. Deposition is judged against this rather than against
             // the stale field, or a cell could be raised past the neighbour that feeds it.
+            //
+            // In **shoreline-relative units**, because that is what it is seeded from and what
+            // `breach` has always subtracted from it, and every amount added to it below is now
+            // converted into them. They were not: the spoil and the incision were added in height
+            // units while the seed was relative, so the margin `headroom` measures was a relative
+            // number spent as a height one, and an alluvial dam could stand `1 / landRange` times
+            // higher than the no-uphill rule allows — about four times, on the worlds measured.
+            // H5b found the same muddle on the incision side and closed it there; this is the
+            // deposition half of it.
             val settled = if (carryingSediment) relative.copyOf() else relative
             if (carryingSediment) {
                 load.fill(0.0)
                 // The no-uphill rule is judged against the finished surface, spoil included, or
                 // the rounds would each be allowed the same margin over and over.
-                for (i in settled.indices) settled[i] += sediment[i]
+                for (i in settled.indices) settled[i] += sediment[i] * toRelative
             }
 
-            // Raw height a delta cell is built up to. `relative` is elevation measured from the
-            // shoreline in units of the land's range, so converting back needs that range.
-            val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
+            // Raw height a delta cell is built up to.
             val deltaTop = sea.threshold + cfg.deltaFreeboard * landRange
             // Where the rim of a lobe stands, and how deep the water has to be before the lobe
             // stops wanting to cross it. See [SHELF_BREAK].
@@ -365,7 +379,7 @@ internal object HydraulicErosion {
                         // front -- and the coastline shreds into drowned valleys and islands.
                         val taken = cut(cfg, i, target, w, drop, area, land, relative)
                         val moved = -raise(surfaceOf, i, -taken.toDouble())
-                        settled[i] -= moved.toFloat()
+                        settled[i] -= (moved * toRelative).toFloat()
                         carried += moved
                         incised += moved
                     }
@@ -386,14 +400,40 @@ internal object HydraulicErosion {
                         // cell may never stand as high as the cell feeding it -- that is an uphill
                         // river -- and taking only a fraction of that margin per round means the
                         // floor creeps toward grade over the rounds rather than jumping to it.
-                        val room = headroom(w, h, i, drop, directions, settled)
+                        // The slope this river needs in order to carry what it is holding: the
+                        // slope at which `capacity` equals `carried`, read straight off the line
+                        // above. That is the equilibrium slope of a transport-limited channel, and
+                        // it costs no new constant — it is the same expression solved for slope
+                        // instead of for capacity.
+                        //
+                        // Why it is here at all: without it the rule was "a cell may rise until it
+                        // is level with the cell that feeds it", whose fixed point is a **flat**.
+                        // Twelve rounds of creeping a fraction of the way toward that turned the
+                        // lower valleys into planes, and a plane meeting the sea has a level set
+                        // that is a straight line — which is what the author's rift mouth was: 32
+                        // cells of dead-straight shore in the scene against 16 on the same ground
+                        // with no deposition at all. A river does not aggrade to a flat; it
+                        // aggrades until it is steep enough to carry its load, and then it stops.
+                        val grade = if (cfg.gradedAggradation) {
+                            val conveyance =
+                                (cfg.transportCapacity * sqrt(area.data[i] / land)).toDouble()
+                            // In the same relative units `settled` and `ground` are kept in: the
+                            // slope above is a rise per unit of map width, so one cell of it is
+                            // that over `w`.
+                            if (conveyance > 1e-12) (carried / conveyance / w).toFloat() else 0f
+                        } else {
+                            0f
+                        }
+                        // `room` comes back in the relative units [settled] is kept in; the load
+                        // and the field are heights, so it is converted here and nowhere else.
+                        val room = headroom(w, h, i, drop, directions, settled, grade) * landRange
                         val give = minOf(carried - capacity, room.toDouble()) * cfg.depositionRate
                         if (give > 0.0) {
                             // Tallied from what the field actually took, never from what it was
                             // asked to take: the terrain is float, so a small enough increment
                             // rounds away, and a budget counted on intent would not notice.
                             val moved = raise(sediment, i, give)
-                            settled[i] += moved.toFloat()
+                            settled[i] += (moved * toRelative).toFloat()
                             carried -= moved
                             deposited += moved
                             log?.record(i, DepositionLog.FLOODPLAIN, -1, moved)
@@ -432,7 +472,7 @@ internal object HydraulicErosion {
                             rim.pruneGrooves(h) { c -> !isLand[c] }
                             growFan(
                                 w, h, budget, rim, scratch!!, ++mouthId,
-                                surfaceOf, sediment, settled,
+                                surfaceOf, sediment, settled, toRelative,
                                 wholeCells = true,
                                 log = log,
                                 mark = DepositionLog.SEA_LOBE,
@@ -462,7 +502,7 @@ internal object HydraulicErosion {
                             fan(
                                 w, h, target, budget, reach,
                                 stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment,
-                                settled,
+                                settled, toRelative,
                                 wholeCells = cfg.deltaLobe,
                                 log = log,
                                 mark = DepositionLog.SEA_LOBE,
@@ -513,7 +553,7 @@ internal object HydraulicErosion {
                             )
                             growFan(
                                 w, h, carried * cfg.lakeShare, rim, scratch!!, ++mouthId,
-                                surfaceOf, sediment, settled,
+                                surfaceOf, sediment, settled, toRelative,
                                 wholeCells = false,
                                 log = log,
                                 mark = DepositionLog.LAKE_FAN,
@@ -536,7 +576,7 @@ internal object HydraulicErosion {
                             fan(
                                 w, h, target, carried * cfg.lakeShare, reach,
                                 stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment,
-                                settled,
+                                settled, toRelative,
                                 wholeCells = false,
                                 log = log,
                                 mark = DepositionLog.LAKE_FAN,
@@ -1093,18 +1133,23 @@ internal object HydraulicErosion {
         i: Int,
         drop: Float,
         directions: IntArray,
-        settled: FloatArray
+        settled: FloatArray,
+        grade: Float
     ): Float {
         var room = Float.MAX_VALUE
         var fed = false
         FlowRouting.forEachNeighbour(w, h, i % w, i / w) { n ->
             if (directions[n] == i) {
                 fed = true
-                val margin = settled[n] - settled[i]
+                // The margin up to the feeder, less the fall the channel needs to keep over that
+                // step. At grade this is nought and the cell stops rising; on a reach steeper than
+                // the river needs it is positive and the floor creeps up toward grade.
+                val step = if (isDiagonal(n, i, w)) DIAGONAL else 1f
+                val margin = settled[n] - settled[i] - grade * step
                 if (margin < room) room = margin
             }
         }
-        return if (fed) room else drop
+        return if (fed) room - grade else drop - grade
     }
 
     /**
@@ -1132,6 +1177,7 @@ internal object HydraulicErosion {
         surfaceOf: FloatArray,
         sediment: FloatArray,
         settled: FloatArray,
+        toRelative: Float,
         wholeCells: Boolean,
         log: DepositionLog?,
         mark: Byte,
@@ -1168,7 +1214,7 @@ internal object HydraulicErosion {
             if (need > 0.0) {
                 if (wholeCells && need > remaining) break
                 val moved = raise(sediment, c, if (need < remaining) need else remaining)
-                settled[c] += moved.toFloat()
+                settled[c] += (moved * toRelative).toFloat()
                 remaining -= moved
                 laid += moved
                 log?.record(c, mark, start, moved)

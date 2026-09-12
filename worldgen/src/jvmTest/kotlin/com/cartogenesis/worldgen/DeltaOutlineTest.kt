@@ -294,7 +294,8 @@ class DeltaOutlineTest {
                 growFan(
                     w, h, budget = 1e9, rim = rim, scratch = scratch, id = trial + 1,
                     surfaceOf = FloatArray(w * h) { -1f }, sediment = sediment,
-                    settled = FloatArray(w * h), wholeCells = false, log = null,
+                    settled = FloatArray(w * h), toRelative = 1f, wholeCells = false,
+                    log = null,
                     mark = DepositionLog.SEA_LOBE,
                     accepts = { true }, advance = { 1f }, levelOf = { _, _ -> 0f }
                 )
@@ -551,7 +552,8 @@ class DeltaOutlineTest {
                 growFan(
                     w, h, budget = 1e9, rim = rim, scratch = scratch, id = trial + 1,
                     surfaceOf = surface, sediment = sediment, settled = settled,
-                    wholeCells = false, log = null, mark = DepositionLog.SEA_LOBE,
+                    toRelative = 1f, wholeCells = false, log = null,
+                    mark = DepositionLog.SEA_LOBE,
                     accepts = { true },
                     advance = { c -> if (bent) 1f - surface[c] else 1f },
                     levelOf = { _, _ -> 0f }

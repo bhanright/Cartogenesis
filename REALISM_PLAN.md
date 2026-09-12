@@ -707,6 +707,35 @@ GPU paths read it, so both CPU and GPU erosion honour it and the tolerance test 
 
 ---
 
+## Track T — the test suite
+
+*Proposed 2026-09-12 after William asked which tests could be reduced or deprecated. Measured
+per class on this machine under load: worldgen jvmTest 34 classes, 100 cases, 1357 s; desktop
+tests dominated by a 183 s export. About two thirds of the worldgen time is renders, profiles and
+reports, not correctness. Awaiting William's go-ahead; runs after 1.2.0 because it edits test
+files the running chunks are in.*
+
+### T1. Two tiers and a shorter path — Sonnet
+
+- **On-demand tier** (`gradlew audit`, and a nightly CI job): `DebugMapDump` (259 s, the render
+  harness - always run explicitly with `--rerun` anyway), `StageProfileTest` (158 s),
+  `GenerationSpeedTest`, `DesertCauseTest`, `ColdCapReportTest`, `ErosionConvergenceTest`
+  (55 s together; reports, and the last asserts thread splitting that CI's small runners fail),
+  the 2048 cases of `GlaciationTest`, `LakeWaterBalanceTest` and `RealmIdRangeTest` (the 1024 and
+  512 cases stay), and `ExportSmokeTest`'s 2048 export (a 1024 export stays per merge).
+- **Drop the absolute elevation pin in `DepositionTest`**: re-recorded nine times in two days; its
+  structural cases and the off-equals-on-at-zero-rates identity are the guard.
+- **Remove the Kotlin/JS target** from `worldgen` and `cartography`: nothing consumes it since the
+  web build went Wasm, and it compiles in every build.
+- **CI**: run the Wasm suite once; take the fingerprint from that run's output instead of a second
+  `--rerun-tasks` pass, or drop the diff step and keep `WorldFingerprintTest` (0.4 s) as the local
+  check.
+- Expected: worldgen per-merge suite from ~23 min loaded (13 idle) to ~6; desktop from ~5 to ~2;
+  CI from three engine runs to two. Everything cut is kept in the audit tier. Guard: the audit
+  tier is run once green before the chunk is accepted, and the per-merge suite time is reported.
+
+---
+
 ## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
 
 Looked at, not measured: seeds 7, 42, 1234 — fantasy, biome, summer and winter rainfall, winter
@@ -927,6 +956,7 @@ guard reported, so the next chunk knows its baseline.
 | H5 Sea-level history | Opus | queued behind E1 | | | |
 | H1 Tectonic history | Opus | in progress | 2026-09-12 | | |
 | H3 Lithology | Opus | queued behind H1 and G1 | | | |
+| T1 Two test tiers | Sonnet | proposed, awaiting William | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

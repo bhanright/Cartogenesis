@@ -54,18 +54,25 @@ enum class MapStyle(
     /**
      * Draw the land as ink on blank paper rather than as filled colour.
      *
-     * A different way of drawing rather than a different palette. Nothing is tinted by height at
-     * all: the paper shows through everywhere, and relief is expressed by hatching — short diagonal
-     * strokes laid down where the ground is steep and left off where it is flat, which is how a
-     * pen describes a mountain when it has no colour to describe it with. Ridges come out dense,
-     * plains blank, and the shape reads from the density alone.
+     * A different way of drawing rather than a different palette, and the flag that turns the whole
+     * engraving on: hachures instead of hillshade, a vignette instead of an empty sea, ruled water
+     * instead of a lake fill, stipple on the ice and a dotted border. Nothing is tinted by height
+     * at all — the paper shows through everywhere, and the shape is carried by where the strokes
+     * fall and how heavily. See [Engraving], which draws all of it, and [EngravingPlan], which
+     * decides how big each mark is on a sheet of this width.
      *
      * It stops short of the thing it is imitating. A hand-drawn map draws each range as a little
-     * picture of a mountain, repeated and shaded by eye; this hatches by slope, so the texture is
+     * picture of a mountain, repeated and shaded by eye; this hachures by slope, so the texture is
      * right and the pictograms are not there.
      */
     internal val lineArt: Boolean,
-    /** How readily the hatching darkens as the ground steepens. Only used when [lineArt]. */
+    /**
+     * How readily a hachure stroke thickens and blackens as the ground steepens. Only when [lineArt].
+     *
+     * Lehmann's constant: the steepness at which a stroke reaches its full weight is one over this,
+     * measured from [EngravingPlan.SLOPE_FLOOR]. Low leaves everything but a cliff face grey and
+     * thin; high fills whole ranges solid and loses the shape the strokes were drawn to carry.
+     */
     internal val inkGain: Float,
     /** Drawn behind the map, and used by a front end for the surround. */
     val backdrop: Int,
@@ -350,16 +357,34 @@ enum class MapStyle(
     ),
 
     /**
-     * Pen and ink on blank paper, after the maps drawn for high fantasy. No fill anywhere: the
-     * coast is a line, the rivers are lines, and the mountains are hatching laid on where the
-     * ground is steep. Borders are the one thing in colour, as they often are on those maps.
+     * An engraved map: everything on the sheet is a mark made by a pen, and there is no fill
+     * anywhere.
+     *
+     * The four conventions of the engraved atlas, each drawn per pixel from a field the raster
+     * already has, and all of them in [Engraving]:
+     *
+     *  - **Hachures for the relief.** Short strokes running straight down the slope, thickening and
+     *    blackening as the ground steepens and leaving the plain as paper — Lehmann's rule, which
+     *    is how a pen describes a mountain when it has no colour to describe it with. The direction
+     *    comes from the aspect at each pixel, so a range reads as a range rather than as a scribble
+     *    laid at one bearing over everything.
+     *  - **A vignette round the coast.** Four lines following the shore out to sea at widening
+     *    spacing, fading as they go, and nothing at all beyond them. This is what makes an engraved
+     *    ocean read as water rather than as the paper it is printed on.
+     *  - **Ruled water in the lakes.** Horizontal lines, close under the shore and fading toward the
+     *    middle, inside a firm outline — instead of a grey blot, which is a colour decision and this
+     *    style has no colour to spend.
+     *  - **Stipple on the ice**, and a **dotted** border rather than a solid one. Borders are the
+     *    one thing in colour, as they often are on these maps.
      */
     PEN_AND_INK(
         label = "Pen and ink",
-        detail = "Line art: hatched relief, red borders",
+        detail = "Engraved: hachured relief, coastal vignette, red borders",
+        // One tone, five times over. The open sea past the vignette is the paper itself: a depth
+        // gradient nobody can see is still a fill, and an engraver had none to give.
         oceanRamp = intArrayOf(
-            0xFFF6F2E8.toInt(), 0xFFF6F2E8.toInt(), 0xFFF7F3EA.toInt(),
-            0xFFF8F4EC.toInt(), 0xFFF9F6EF.toInt()
+            0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(),
+            0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt()
         ),
         landRamp = intArrayOf(
             0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(), 0xFFFBF8F0.toInt(),
@@ -368,9 +393,11 @@ enum class MapStyle(
         paper = 0xFFFBF8F0.toInt(),
         biomeWash = 0f,
         biomeMuting = 1f,
-        river = 0xFF1E1A16.toInt(),
-        lake = 0xFFDCD8CE.toInt(),
-        lakeDeep = 0xFFC6C2B8.toInt(),
+        // One pen: the rivers, the coast and the hachures are all the same ink.
+        river = 0xFF17130F.toInt(),
+        // Paper, so the lake branch leaves the water blank and the ruling is all that is on it.
+        lake = 0xFFFBF8F0.toInt(),
+        lakeDeep = 0xFFFBF8F0.toInt(),
         coastline = 0xFF17130F.toInt(),
         coastlineStrength = 0.95f,
         border = 0xFFA82820.toInt(),
@@ -378,9 +405,11 @@ enum class MapStyle(
         reliefStrength = 1f,
         glyphMuting = 0.5f,
         lineArt = true,
-        // Low enough that only a genuinely steep face fills solid. At 3.2 anything with a slope at
-        // all crossed the threshold on every hatch line, and whole ranges came out as black mass.
-        inkGain = 1.15f,
+        // Full weight at a slope of 0.40, which is the seventy-fifth percentile of this world's
+        // land: the ranges draw at the widest the lattice will hold, the rolling country between
+        // them draws at half that, and the plains draw nothing. Lower and a mountain reads as a
+        // scatter of hairlines; higher and the ranges fill solid and take the shape with them.
+        inkGain = 3.0f,
         backdrop = 0xFF262320.toInt()
     ),
 
@@ -558,30 +587,28 @@ enum class MapStyle(
         else -> MapPalette.blend(color, paper, glyphMuting)
     }
 
-    /**
-     * Whether this cell takes ink, for a line-art style.
-     *
-     * The hatch is a diagonal comb: a cell's threshold depends on where it sits, so ink lands in
-     * lines running across the slope rather than as a grey smear. The steeper the ground the lower
-     * the bar, so a ridge fills solid, a hillside becomes stripes, and a plain stays blank.
-     */
-    internal fun inked(x: Int, y: Int, shade: Float): Boolean {
-        if (!lineArt) return false
-        val steepness = (1f - shade).coerceAtLeast(0f)
-        val hatch = (((x + y) % 5) + 1) / 6f
-        return steepness * inkGain > hatch
-    }
-
     /** Relief, exaggerated or softened. 1 leaves the hillshade exactly as computed. */
     internal fun relief(shade: Float): Float = 1f + (shade - 1f) * reliefStrength
 
     /**
-     * Whether the political and peoples views take this style's own water, land and realm set.
+     * Whether the political and peoples views take this style's own realm set.
      *
      * False for every style but [CLEAR], which is what leaves the other ten drawing exactly the
      * pixels they drew before F6.
      */
     internal val ownsRealms: Boolean get() = realmRamp != null
+
+    /**
+     * Whether the political and peoples views take this style's own water and land as well.
+     *
+     * Ordinarily they do not: a political map that changed colour with the style would make eleven
+     * political maps out of one, and the shared ramps keep it one. Two styles have to be exceptions
+     * and for the same reason — the ground they hand those views is *part of the style's claim*,
+     * not decoration. [CLEAR] declares a realm set chosen so that no two realms can be confused,
+     * which is worth nothing under a sea that competes with them; [PEN_AND_INK] draws with a pen,
+     * and a pen has no blue.
+     */
+    internal val ownsPoliticalGround: Boolean get() = realmRamp != null || lineArt
 
     /** The colour of realm [id], cycling through the declared set where there is one. */
     internal fun realm(id: Int): Int {

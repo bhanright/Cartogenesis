@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.EngravingPlan
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RasterRecipe
 import org.lwjgl.opengl.GL43C
@@ -73,6 +74,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             recipe.colorsB?.let { bindInts(buffers, BINDING_COLORS_B, it) }
             recipe.lakeId?.let { bindInts(buffers, BINDING_LAKE_ID, it) }
             recipe.lakeSurface?.let { bindFloats(buffers, BINDING_LAKE_SURFACE, it) }
+            recipe.shoreDistance?.let { bindFloats(buffers, BINDING_SHORE, it) }
             bindInts(buffers, BINDING_BIOME_COLORS, recipe.biomeColors)
 
             // The realm field is the same array as the political view's own, so it is uploaded once
@@ -212,6 +214,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1i(uniform("uRealmSet"), recipe.realmSetSize)
         GL43C.glUniform1f(uniform("uHatchStrength"), recipe.hatchStrength)
 
+        setEngravingUniforms(recipe)
+
         colour("uPaper", recipe.paper)
         colour("uLake", recipe.lake)
         colour("uLakeDeep", recipe.lakeDeep)
@@ -226,6 +230,43 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         colour("uAnomalyMid", recipe.anomalyMid)
         colour("uAnomalyWarm", recipe.anomalyWarm)
         colour("uAnomalyCold", recipe.anomalyCold)
+    }
+
+    /**
+     * The engraving's stroke geometry, straight out of the [com.cartogenesis.cartography.EngravingPlan]
+     * the recipe built.
+     *
+     * Not one of these is derived here. The plan is computed once on the processor from the map's
+     * width and both paths read the same numbers, so the two drawings cannot end up at different
+     * pitches — which is the same rule that keeps the palette out of the shader.
+     */
+    private fun setEngravingUniforms(recipe: RasterRecipe) {
+        GL43C.glUniform1i(uniform("uEngraveWater"), recipe.engraveWater.toGl())
+        GL43C.glUniform1i(uniform("uIceBiome"), recipe.iceBiome)
+
+        val plan = recipe.engraving ?: return
+        GL43C.glUniform1i(uniform("uHachureStencil"), plan.gradientStencilCells)
+        GL43C.glUniform1f(uniform("uGradientScale"), plan.gradientScale)
+        GL43C.glUniform1i(uniform("uHachureLattice"), plan.hachureLatticeCells)
+        GL43C.glUniform1i(uniform("uHachureColumns"), plan.hachureLatticeColumns)
+        GL43C.glUniform1f(uniform("uStrokeHalfLength"), plan.strokeHalfLengthCells)
+        GL43C.glUniform1f(uniform("uStrokeHalfWidth"), plan.strokeHalfWidthCells)
+        GL43C.glUniform1f(uniform("uSlopeFloor"), EngravingPlan.SLOPE_FLOOR)
+        GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT)
+        GL43C.glUniform1f(uniform("uAntialias"), EngravingPlan.ANTIALIAS_CELLS)
+        GL43C.glUniform1f(uniform("uVignetteBase"), plan.vignetteBaseCells)
+        GL43C.glUniform1f(uniform("uVignetteHalf"), plan.vignetteHalfWidthCells)
+        GL43C.glUniform1i(uniform("uVignetteLines"), plan.vignetteLineCount)
+        GL43C.glUniform1f(uniform("uShoreInk"), plan.shoreInkCells)
+        GL43C.glUniform1f(uniform("uLakeRim"), plan.lakeRimCells)
+        GL43C.glUniform1f(uniform("uLakePitch"), plan.lakeLinePitchCells)
+        GL43C.glUniform1f(uniform("uLakeHalf"), plan.lakeLineHalfWidthCells)
+        GL43C.glUniform1f(uniform("uLakeFade"), plan.lakeFadeCells)
+        GL43C.glUniform1f(uniform("uLakeLineStrength"), EngravingPlan.LAKE_LINE_STRENGTH)
+        GL43C.glUniform1i(uniform("uStipplePitch"), plan.stipplePitchCells)
+        GL43C.glUniform1f(uniform("uStippleRadius"), plan.stippleRadiusCells)
+        GL43C.glUniform1i(uniform("uBorderBlock"), plan.borderDashCells)
+        GL43C.glUniform1i(uniform("uBorderDuty"), EngravingPlan.BORDER_DUTY_PERCENT)
     }
 
     /** A packed ARGB int as the shader wants it: three channels, each an integer 0..255. */
@@ -269,7 +310,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         private const val BINDING_BIOME_COLORS = 11
         private const val BINDING_LAKE_SURFACE = 12
         private const val BINDING_RAMPS = 13
-        private const val BINDING_OUTPUT = 14
+        private const val BINDING_SHORE = 14
+        private const val BINDING_OUTPUT = 15
 
         /**
          * Takes the shared offscreen context and compiles the raster, or returns null with a reason
@@ -305,7 +347,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             layout(std430, binding = 11) readonly buffer BiomeColors { uint biomeColors[]; };
             layout(std430, binding = 12) readonly buffer LakeSurface { float lakeSurface[]; };
             layout(std430, binding = 13) readonly buffer Ramps { uint ramps[]; };
-            layout(std430, binding = 14) writeonly buffer Output { uint pixels[]; };
+            layout(std430, binding = 14) readonly buffer Shore { float shoreDistance[]; };
+            layout(std430, binding = 15) writeonly buffer Output { uint pixels[]; };
 
             uniform int uWidth;
             uniform int uHeight;
@@ -341,6 +384,35 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform vec3 uAnomalyCold;
             uniform int uRealmSet;
             uniform float uHatchStrength;
+
+            // The engraving, from the recipe's EngravingPlan. Not one of these is derived here:
+            // every length is a share of the map's width worked out once on the processor, so the
+            // two paths cannot draw at different pitches. See Engraving.kt, of which the four
+            // functions below are a line-for-line copy.
+            uniform int uEngraveWater;
+            uniform int uIceBiome;
+            uniform int uHachureStencil;
+            uniform float uGradientScale;
+            uniform int uHachureLattice;
+            uniform int uHachureColumns;
+            uniform float uStrokeHalfLength;
+            uniform float uStrokeHalfWidth;
+            uniform float uSlopeFloor;
+            uniform float uFullInkAt;
+            uniform float uAntialias;
+            uniform float uVignetteBase;
+            uniform float uVignetteHalf;
+            uniform int uVignetteLines;
+            uniform float uShoreInk;
+            uniform float uLakeRim;
+            uniform float uLakePitch;
+            uniform float uLakeHalf;
+            uniform float uLakeFade;
+            uniform float uLakeLineStrength;
+            uniform int uStipplePitch;
+            uniform float uStippleRadius;
+            uniform int uBorderBlock;
+            uniform int uBorderDuty;
 
             // offset and length of each ramp within `ramps`
             uniform ivec2 uRamp[8];
@@ -440,6 +512,125 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return clamp(shading, 0.45, 1.35);
             }
 
+            /*
+             * Engraving.hashBits, to the bit. Kotlin's Int multiply keeps the low 32 bits exactly
+             * as GLSL's uint multiply does, its `ushr` is this `>>`, and neither side divides or
+             * looks at a sign, so the two hashes agree on every input.
+             */
+            uint hashBits(int a, int b) {
+                uint h = (uint(a) * 73856093u) ^ (uint(b) * 19349663u);
+                h ^= h >> 15u;
+                h *= 0x85EBCA6Bu;
+                h ^= h >> 13u;
+                h *= 0xC2B2AE35u;
+                h ^= h >> 16u;
+                return h;
+            }
+
+            float unitFrom(uint bits, uint shift) {
+                return float((bits >> shift) & 0xFFFu) / 4096.0;
+            }
+
+            /*
+             * Engraving.hachure. Lehmann's rule: one short stroke a lattice cell, nudged off centre
+             * by a hash of the cell, every stroke along the aspect at the pixel asking about it,
+             * and the width and the blackness from the steepness. Nine cells is enough — a stroke
+             * cannot reach further than one and a quarter cells from its seed — and that is also
+             * what keeps the two paths together, since the cells the two neighbourhoods differ by
+             * when they disagree about which cell a pixel is in cannot reach it either.
+             */
+            float hachureInk(int x, int y) {
+                int reach = uHachureStencil;
+                precise float gradX =
+                    (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * uGradientScale;
+                precise float gradY =
+                    (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * uGradientScale;
+                precise float slope = sqrt(gradX * gradX + gradY * gradY);
+                float steepness = clamp((slope - uSlopeFloor) * uInkGain, 0.0, 1.0);
+                if (steepness <= 0.0) return 0.0;
+
+                precise float inverse = 1.0 / slope;
+                precise float downX = gradX * inverse;
+                precise float downY = gradY * inverse;
+
+                int pitch = uHachureLattice;
+                float halfLength = uStrokeHalfLength;
+                float halfWidth = uStrokeHalfWidth * steepness;
+                float soft = uAntialias;
+                int cellX = x / pitch;
+                int cellY = y / pitch;
+
+                float strongest = 0.0;
+                for (int offsetY = -1; offsetY <= 1; offsetY++) {
+                    for (int offsetX = -1; offsetX <= 1; offsetX++) {
+                        int column = cellX + offsetX;
+                        int row = cellY + offsetY;
+                        int wrapped = column % uHachureColumns;
+                        if (wrapped < 0) wrapped += uHachureColumns;
+                        uint bits = hashBits(wrapped, row);
+                        precise float seedX =
+                            float(column * pitch) + float(pitch) * (0.25 + 0.5 * unitFrom(bits, 8u));
+                        precise float seedY =
+                            float(row * pitch) + float(pitch) * (0.25 + 0.5 * unitFrom(bits, 20u));
+                        precise float awayX = float(x) - seedX;
+                        precise float awayY = float(y) - seedY;
+                        precise float along = abs(awayX * downX + awayY * downY);
+                        precise float across = abs(awayX * -downY + awayY * downX);
+                        float coverage =
+                            (1.0 - smoothstep(halfLength - soft, halfLength + soft, along)) *
+                            (1.0 - smoothstep(halfWidth - soft, halfWidth + soft, across));
+                        strongest = max(strongest, coverage);
+                    }
+                }
+
+                float darkness = min(steepness / uFullInkAt, 1.0);
+                return strongest * darkness;
+            }
+
+            /* Engraving.coastalWater: the vignette, and the solid ink of the shore itself. */
+            float coastalWaterInk(float shore) {
+                if (shore < uShoreInk) return 1.0;
+                precise float band = floor(sqrt(2.0 * shore / uVignetteBase + 0.25) - 1.0);
+                if (band < 0.0 || band >= float(uVignetteLines)) return 0.0;
+                float centre = uVignetteBase * (band + 1.0) * (band + 2.0) * 0.5;
+                float coverage = 1.0 - smoothstep(
+                    uVignetteHalf - uAntialias, uVignetteHalf + uAntialias, abs(shore - centre));
+                return coverage * (1.0 - band / float(uVignetteLines));
+            }
+
+            /* Engraving.lakeWater: a firm bank, and ruled water fading toward the middle. */
+            float lakeWaterInk(int y, float shore) {
+                if (shore < uLakeRim) return 1.0;
+                precise float phase = float(y) / uLakePitch;
+                float fromLine = abs(phase - floor(phase) - 0.5) * uLakePitch;
+                float coverage = 1.0 - smoothstep(
+                    uLakeHalf - uAntialias, uLakeHalf + uAntialias, fromLine);
+                float fade = clamp(1.0 - shore / uLakeFade, 0.0, 1.0);
+                return coverage * fade * uLakeLineStrength;
+            }
+
+            /* Engraving.stipple: one dot a lattice cell, on integer centres so both paths agree. */
+            float stippleInk(int x, int y) {
+                int pitch = uStipplePitch;
+                int cellX = x / pitch;
+                int cellY = y / pitch;
+                uint bits = hashBits(cellX, cellY);
+                int spread = max(pitch / 2, 1);
+                int centreX = cellX * pitch + pitch / 4 + int((bits >> 8u) & 0xFFFu) % spread;
+                int centreY = cellY * pitch + pitch / 4 + int((bits >> 20u) & 0xFFFu) % spread;
+                float dx = float(x - centreX);
+                float dy = float(y - centreY);
+                precise float away = sqrt(dx * dx + dy * dy);
+                return 1.0 - smoothstep(
+                    uStippleRadius - uAntialias, uStippleRadius + uAntialias, away);
+            }
+
+            /* Engraving.borderDot: which blocks of a boundary take ink, so the line reads dotted. */
+            bool borderDot(int x, int y) {
+                uint bits = hashBits(x / uBorderBlock, y / uBorderBlock);
+                return (bits >> 8u) % 100u < uint(uBorderDuty);
+            }
+
             vec3 tint(vec3 base, int biome) {
                 if (uBiomeWash <= 0.0) return base;
                 vec3 muted = blend(unpack(biomeColors[biome]), uPaper, uBiomeMuting);
@@ -531,6 +722,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 bool land = isLand(i);
                 float relative = elevation[i];
 
+                bool engraveWater = uLineArt != 0 && uEngraveWater != 0;
+
                 vec3 colour;
                 bool standingWater = uShowLakes != 0 && lakeId[i] != -1;
                 if (standingWater) {
@@ -539,20 +732,28 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     precise float depth = lakeSurface[lakeId[i]] - relative;
                     precise float shallowness = depth * 12.0;
                     colour = blend(uLake, uLakeDeep, clamp(shallowness, 0.0, 1.0));
+                    if (engraveWater) {
+                        colour = blend(colour, uCoastline, lakeWaterInk(y, shoreDistance[i]));
+                    }
                 } else {
                     colour = baseColour(x, y, i, land, relative);
+                    if (engraveWater && !land) {
+                        colour = blend(colour, uCoastline, coastalWaterInk(shoreDistance[i]));
+                    }
                     if (uHillshade != 0 && land) {
-                        precise float relief = 1.0 + (hillshadeAt(x, y) - 1.0) * uReliefStrength;
                         if (uLineArt != 0) {
-                            // Ink rather than shading: the paper is left alone and a stroke is laid
-                            // on where the ground is steep, in a diagonal comb so the texture runs
-                            // across the slope instead of smearing grey over it.
-                            float steepness = max(1.0 - relief, 0.0);
-                            float hatch = float(((x + y) % 5) + 1) / 6.0;
-                            if (steepness * uInkGain > hatch) colour = uCoastline;
+                            // Ink rather than shading: the paper is left alone and strokes are laid
+                            // down the slope, heavier where the ground is steeper, which is how a
+                            // pen draws a mountain when it has no colour to draw it with.
+                            colour = blend(colour, uCoastline, hachureInk(x, y));
                         } else {
+                            precise float relief =
+                                1.0 + (hillshadeAt(x, y) - 1.0) * uReliefStrength;
                             colour = shade(colour, relief);
                         }
+                    }
+                    if (engraveWater && uIceBiome >= 0 && biomeAt(i) == uIceBiome) {
+                        colour = blend(colour, uCoastline, stippleInk(x, y));
                     }
                 }
 
@@ -568,7 +769,15 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     bool differs =
                         (isLand(right) && nationId[right] != nationId[i]) ||
                         (isLand(down) && nationId[down] != nationId[i]);
-                    if (differs) colour = blend(colour, uBorder, 0.75);
+                    // A pen draws a boundary as a dotted line, so under line art the qualifying
+                    // cells are broken into blocks and the survivors take the colour outright.
+                    if (differs) {
+                        if (uLineArt != 0) {
+                            if (borderDot(x, y)) colour = blend(colour, uBorder, 1.0);
+                        } else {
+                            colour = blend(colour, uBorder, 0.75);
+                        }
+                    }
                 }
 
                 uvec3 channels = uvec3(colour);

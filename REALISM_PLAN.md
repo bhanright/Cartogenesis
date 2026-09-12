@@ -648,6 +648,16 @@ in Settings and the View menu alongside System/Light/Dark/Nautical/Midnight/Mars
 - Screenshots of the window in each of the five chromes, and the fantasy and political views in
   the CLEAR style, captured by `ChromeGalleryTest`/`StyleGalleryTest` and reviewed.
 
+### Release 2.0.0 checklist
+
+When F and the GPU chunks are green: version 2.0.0; full suite plus the audit tier once; William's
+two worlds rendered at 2048 and looked at; artefacts, `--gpu-check`, tag, release with notes that
+cover Tracks F, G, H and T1; web deploy from main (the deploy script now keeps the font folder);
+the site's small-screen notice becomes "Works on phones. Worlds generate at 512; exports are
+capped at 2048."; **the site's poster (`cartogenesis/poster.webp`, 1600x800, ~150 KB) replaced by
+a fresh 2048 export of one of William's worlds in the new renderer, cropped to the same 2:1
+band** (William, 2026-09-12); the site's CLAUDE.md notes updated; the LICENSE is MIT.
+
 ## Track G — more of the pipeline on the graphics card
 
 *Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the

@@ -138,13 +138,7 @@ class LakeWaterBalanceTest {
         val on = world(wetSeed, waterBalance = true)
 
         val basin = basinOf(off, 700f, Float.MAX_VALUE)
-        // 200 until H1. The floor is a sampling requirement — the case needs a basin big enough to
-        // mean something — not the claim, which is that whatever wet basin the seed has stays full
-        // to its spill, and that is asserted below on every cell of it. The tectonic history
-        // rewrites the relief the depression fill runs over, and seed 99's largest wet basin came
-        // out 151 cells instead of 200-odd; it is still the largest wet basin the seed has, and it
-        // is still full.
-        assertTrue(basin.size >= 120, "seed $wetSeed has no large wet basin any more (${basin.size} cells)")
+        assertTrue(basin.size >= 200, "seed $wetSeed has no large wet basin any more (${basin.size} cells)")
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
         val stillWet = basin.count { on.rivers.lakes.isLake(it) }

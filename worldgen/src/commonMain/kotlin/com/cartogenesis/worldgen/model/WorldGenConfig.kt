@@ -300,8 +300,18 @@ data class TectonicsConfig(
      * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
      * range, and it is applied to the epoch's own uplift field alone, so it never touches the
      * present epoch's edges. Measured in cells, so [WorldGenConfig.atResolution] rescales it.
+     *
+     * Held at three cells rather than the six first tried, for a reason about the *length* of a
+     * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
+     * reach is comparable to the saddles [rangeVariation] leaves between one massif and the next
+     * (about forty cells at 512 for [rangeVariationScale] of thirteen), so it does not only round
+     * the profile, it fills the gaps and welds a chain of worn massifs into one continuous upland.
+     * That is bad geography — the Appalachians are a province of separate ranges with valleys
+     * through them — and it showed up downstream as one people holding 45% of seed 42's habitable
+     * land against `CultureRealmTest`'s 45% ceiling, because a continuous upland is a corridor.
+     * At three cells the saddles survive and the same seed reads 33%.
      */
-    val beltAgeBlur: Float = 6f,
+    val beltAgeBlur: Float = 3f,
     /**
      * How much of a failed rift's trough survives as a trough, the rest having filled with
      * sediment.

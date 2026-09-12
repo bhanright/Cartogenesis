@@ -567,7 +567,63 @@ data class ErosionConfig(
      * sharpest instrument the pipeline has for "did the coastline move", and it is worth reading
      * its numbers as a measure of disturbance rather than only as pass or fail.
      */
-    val deltaFreeboard: Float = 0.008f
+    val deltaFreeboard: Float = 0.008f,
+    /**
+     * Whether the outflow from a filled basin is allowed to cut its own lip down.
+     *
+     * Every round fills the hollows so the water has somewhere to go, and the routing then runs
+     * over the filled surface — which means the lip of a basin is the one piece of ground the
+     * water never touches, and a tectonic hollow stays a lake the size of the hollow for the whole
+     * life of the world. That is backwards. A basin filled to its rim overflows, the overflow has
+     * a knickpoint at the lip, and the lip gives way: Bonneville emptied through Red Rock Pass in
+     * weeks and left Great Salt Lake, and Agassiz drained through one outlet after another as each
+     * in turn cut down. A lake is sized by the resistance of its outlet, not by the size of its
+     * basin.
+     *
+     * Off is the control the guard needs, and reproduces the pre-E1 world exactly.
+     */
+    val outletIncision: Boolean = true,
+    /**
+     * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
+     * multiple of [erodibility].
+     *
+     * Expressed as a ratio rather than as its own rate because it is the same stream power in the
+     * same form — the discharge through an outlet is the basin's whole catchment, which flow
+     * accumulation has already routed through that cell, and the slope is the one the channel below
+     * the lip stands at. What the multiplier says is that a knickpoint is not an ordinary reach: the
+     * flow over a lip is concentrated into a notch rather than spread across a valley floor, it is
+     * falling over a step rather than running down a grade, and the lip is the one place on the
+     * network where every round's fill hands the water a fresh head to work with.
+     */
+    val outletIncisionRatio: Float = 1f,
+    /**
+     * How far below the lip the notch is cut, in cells — rescaled with the grid by
+     * [WorldGenConfig.atResolution], as [deltaReach] is.
+     *
+     * The lip cannot fall further than the ground immediately below it, so cutting the lip alone
+     * buys one step and then stops: the spill is by construction the *lowest* point on the rim, and
+     * the ground just beyond a saddle is gentle. Cutting the channel with it is what lets the notch
+     * grade toward the steeper ground further down and keep deepening round after round, which is
+     * what a knickpoint retreating upstream actually does.
+     */
+    val outletReach: Int = 64,
+    /**
+     * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
+     * its river, and made only of cells the load could lift clear of the water.
+     *
+     * Off, it is what it was: every cell within [deltaReach] of the mouth raised to one level, in
+     * whatever order the growth reached them, with the last one part-filled when the sediment ran
+     * out. Three things follow from that and all three were visible on the author's own world at
+     * 2048. The slab is flat, so a river arriving at its own delta has nowhere downhill to go and
+     * stops at the inner edge of it. The outline is the square the growth ran out at, which is not
+     * a landform. And the part-filled cells stay under water while later rounds build past them, so
+     * the map ends up with pockets of sea enclosed by new land — forty-two of a hundred and
+     * fifty-two river mouths on seed 59758, which is what a river appearing to dead-end in a bay
+     * turned out to be.
+     *
+     * Off is also the control `DeltaMouthTest` measures against.
+     */
+    val deltaLobe: Boolean = true
 )
 
 /**
@@ -1190,7 +1246,8 @@ data class WorldGenConfig(
             sea = sea.copy(shelfWidth = sea.shelfWidth * scale),
             erosion = erosion.copy(
                 passes = (erosion.passes * scale).toInt(),
-                deltaReach = (erosion.deltaReach * scale).toInt().coerceAtLeast(1)
+                deltaReach = (erosion.deltaReach * scale).toInt().coerceAtLeast(1),
+                outletReach = (erosion.outletReach * scale).toInt().coerceAtLeast(1)
             ),
             glaciation = glaciation.copy(
                 valleyWidth = glaciation.valleyWidth * scale,

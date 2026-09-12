@@ -72,8 +72,16 @@ class DepositionTest {
      * instead of the old single-sample, perfectly axisymmetric one — a small elevation change
      * wherever a hotspot chain happens to cross this seed's plates. Land held at 6226 for the
      * fourth time: none of seed 42's cones cross sea level either way.
+     *
+     * And a fifth time for E1 (outlet incision), which is a change to the hydraulic pass itself
+     * rather than to what it is handed: every round now breaches the lip of each filled basin
+     * before the water is routed over it, so the rock this pins is rock the water has cut in a
+     * place it never used to reach. The switch is `ErosionConfig.outletIncision` and turning it off
+     * reproduces the number above it. Land held at 6226 for the fifth time, which is what it must
+     * do — the shoreline is a rank cut on a fixed fraction of the cells and the notch moves no cell
+     * across it on this world.
      */
-    private val startingPointElevation = -4217988462035370624L
+    private val startingPointElevation = -4006153834021044631L
     private val startingPointLand = 6226
 
     @Test

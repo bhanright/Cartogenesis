@@ -170,6 +170,137 @@ internal object FlowRouting {
     }
 
     /**
+     * The basins the fill had to raise, one entry per basin.
+     *
+     * Every array here is indexed by basin rather than by cell, so nothing that reads it has to
+     * carry a grid-sized side table to work out which hollow a cell belongs to.
+     */
+    class Spillways(
+        val count: Int,
+        /** The rim cell each basin spills over, or -1 where it has none the water can cut. */
+        val spill: IntArray,
+        /** The level of that rim: the height the fill raised the whole basin to. */
+        val level: FloatArray,
+        /** The lowest true ground in the basin: the level at which it holds no water at all. */
+        val floor: FloatArray,
+        val cells: IntArray,
+        /** The largest basin by area, and how deep the fill stands over its lowest ground. */
+        val largest: Int,
+        val largestCells: Int,
+        val largestDepth: Float,
+        /** The deepest fill anywhere on the map: how far the water stands over the lowest ground. */
+        val deepest: Float
+    )
+
+    /**
+     * Finds every depression the fill had to raise and the rim cell each one spills over.
+     *
+     * A basin filled to its rim is a lake with an overflow, and the overflow has a knickpoint at
+     * the lip. What decides the lake's size is how fast that lip wears down, not how big the hollow
+     * behind it is — Bonneville emptied through Red Rock Pass because the pass gave way, and what
+     * was left was Great Salt Lake. So the interesting cell is the rim, and the interesting
+     * quantity is how far it may fall: to the floor of its own basin and no further, because below
+     * that there is no lake left to drain.
+     *
+     * Ponded cells are grouped by connectivity, seeded in ascending index order and walked with an
+     * explicit stack, so the labelling is one specific labelling rather than any valid one. The
+     * spill of a basin is the lowest cell outside it that a cell inside it drains to, ties broken
+     * on the cell index — no set, no map, and nothing that depends on a hash.
+     *
+     * @param elevation the true ground, before the fill raised anything.
+     * @param filled the surface the routing actually runs on.
+     * @param pondDepth how far the fill must stand above the ground before a cell counts as water
+     *   rather than as a flat the epsilon-fill nudged.
+     */
+    fun spillways(
+        width: Int,
+        height: Int,
+        isLand: BooleanArray,
+        elevation: FloatArray,
+        filled: FloatArray,
+        flowTarget: IntArray,
+        pondDepth: Float
+    ): Spillways {
+        val size = width * height
+        val ponded = BooleanArray(size) { isLand[it] && filled[it] - elevation[it] > pondDepth }
+        val seen = BooleanArray(size)
+        var stack = IntArray(1024)
+
+        var spills = IntArray(64)
+        var levels = FloatArray(64)
+        var floors = FloatArray(64)
+        var counts = IntArray(64)
+        var basins = 0
+
+        var largest = -1
+        var largestCells = 0
+        var largestDepth = 0f
+        var deepest = 0f
+
+        for (start in 0 until size) {
+            if (!ponded[start] || seen[start]) continue
+
+            var top = 0
+            stack[top++] = start
+            seen[start] = true
+
+            var cells = 0
+            var basinFloor = Float.MAX_VALUE
+            var spill = -1
+            var spillLevel = Float.MAX_VALUE
+
+            while (top > 0) {
+                val c = stack[--top]
+                cells++
+                if (elevation[c] < basinFloor) basinFloor = elevation[c]
+
+                // Where this cell's water leaves the basin. The lowest such exit is the rim the
+                // fill levelled the whole basin up to; the others are higher ground the epsilon
+                // gradient happens to touch.
+                val t = flowTarget[c]
+                if (t >= 0 && isLand[t] && !ponded[t]) {
+                    val level = filled[t]
+                    if (level < spillLevel || (level == spillLevel && t < spill)) {
+                        spillLevel = level
+                        spill = t
+                    }
+                }
+
+                forEachNeighbour(width, height, c % width, c / width) { n ->
+                    if (ponded[n] && !seen[n]) {
+                        seen[n] = true
+                        if (top == stack.size) stack = stack.copyOf(stack.size * 2)
+                        stack[top++] = n
+                    }
+                }
+            }
+
+            if (basins == spills.size) {
+                spills = spills.copyOf(basins * 2)
+                levels = levels.copyOf(basins * 2)
+                floors = floors.copyOf(basins * 2)
+                counts = counts.copyOf(basins * 2)
+            }
+            spills[basins] = spill
+            levels[basins] = if (spill >= 0) spillLevel else basinFloor
+            floors[basins] = basinFloor
+            counts[basins] = cells
+            val depth = if (spill >= 0) spillLevel - basinFloor else 0f
+            if (cells > largestCells) {
+                largest = basins
+                largestCells = cells
+                largestDepth = depth
+            }
+            if (depth > deepest) deepest = depth
+            basins++
+        }
+
+        return Spillways(
+            basins, spills, levels, floors, counts, largest, largestCells, largestDepth, deepest
+        )
+    }
+
+    /**
      * Land cells in an order where nothing appears before everything that drains into it — sources
      * first, mouths last.
      *

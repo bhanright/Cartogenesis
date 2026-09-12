@@ -11,23 +11,36 @@ import kotlin.test.assertTrue
  * file with nothing in it, and left an About dialog that says the application is made of nothing
  * and licensed under nothing. That would compile.
  *
- * The two type faces are named explicitly because their notices are a licence requirement rather
+ * The three type faces are named explicitly because their notices are a licence requirement rather
  * than a courtesy — the OFL asks that the licence travel with anything embedding the fonts, and
- * they are embedded in the desktop jar and the wasm bundle alike.
+ * they are embedded in the desktop jar and the wasm bundle alike. IBM Plex Mono is the third, added
+ * by F7 for the Matrix chrome: a face is embedded whether or not fourteen of the fifteen chromes
+ * ever draw a glyph of it, so the notice is owed the moment the file is in the module.
  */
 class NoticesTest {
 
     @Test
-    fun `the notices name the two bundled faces and their licence`() {
+    fun `the notices name the three bundled faces and their licence`() {
         assertTrue(Notices.entries.isNotEmpty(), "the notices list is empty")
         val text = Notices.entries.joinToString("\n") { "${it.name} — ${it.licence}" }
 
         assertTrue(text.contains("Spectral"), "Spectral is embedded and must be named:\n$text")
         assertTrue(text.contains("IBM Plex Sans"), "IBM Plex Sans is embedded and must be named")
+        assertTrue(text.contains("IBM Plex Mono"), "IBM Plex Mono is embedded and must be named")
         assertTrue(
-            Notices.entries.count { it.licence.contains("Open Font License") } >= 2,
-            "both faces must carry the OFL"
+            Notices.entries.count { it.licence.contains("Open Font License") } >= 3,
+            "all three faces must carry the OFL"
         )
+        // Named *and* licensed: an entry whose licence line had gone missing would still contain
+        // the words above, and would still be a licence violation.
+        listOf("Spectral", "IBM Plex Sans", "IBM Plex Mono").forEach { face ->
+            val notice = Notices.entries.firstOrNull { it.name.startsWith(face) }
+            assertTrue(notice != null, "$face has no notice at all")
+            assertTrue(
+                notice.licence.contains("Open Font License"),
+                "$face is named but carries \"${notice.licence}\" rather than the OFL"
+            )
+        }
     }
 
     @Test

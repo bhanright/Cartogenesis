@@ -404,12 +404,34 @@ class GlaciationTest {
                 " parallelBarShare=${"%.4f".format(combShare(world))}"
         )
         assertTrue("no water to measure", shape.cells > 1000)
+
+        // Against the same world with the ice switched off, rather than against zero.
+        //
+        // The claim this case carries is the ice's: the two-regime stage cuts regions three cells
+        // wide at their narrowest, so none of the standing water it makes can be a bar. It was
+        // written as `bars == 0` because on the world of the day the ice was the only thing making
+        // bars at all. It is not: this seed's standing water at 2048 is mostly tectonic and
+        // erosional (the third row of the table above), H1's tectonic history rewrote that ground,
+        // and one 15-cell body of it now happens to lie two cells across on a grid bearing.
+        // Measuring it against the un-glaciated world says what the stage is responsible for and
+        // nothing else - which is what the class doc above already says the guard must do for the
+        // lake counts, applied here too.
+        val bare = WorldGenerationEngine.generateBlocking(
+            config.copy(glaciation = config.glaciation.copy(enabled = false))
+        )
+        val bareShape = lakeShape(bare)
+        println(
+            "AUTHOR 2048 seed 718106 glaciation off: lakes=${bareShape.lakes}" +
+                " cells=${bareShape.cells} bars=${bareShape.bars} barCells=${bareShape.barCells}" +
+                " parallelBarShare=${"%.4f".format(combShare(bare))}"
+        )
         assertTrue(
             "seed 718106 at 2048 carries ${shape.bars} bodies of water at most two cells across" +
-                " and four or more long on a grid bearing (${shape.barCells} cells): a basin the" +
-                " ice cut is a region three cells wide at its narrowest, so none of them can be" +
-                " one of its basins",
-            shape.bars == 0
+                " and four or more long on a grid bearing (${shape.barCells} cells) against" +
+                " ${bareShape.bars} (${bareShape.barCells} cells) with the ice switched off: a" +
+                " basin the ice cut is a region three cells wide at its narrowest, so the stage" +
+                " must add none of them",
+            shape.bars <= bareShape.bars
         )
         assertTrue(
             "seed 718106 at 2048 has ${"%.1f".format(combShare(world) * 100)}% of its standing" +

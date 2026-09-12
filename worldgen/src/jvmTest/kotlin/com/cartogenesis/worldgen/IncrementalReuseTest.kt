@@ -62,6 +62,12 @@ class IncrementalReuseTest {
             "tectonics" to base.copy(
                 tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)
             ),
+            // H1's knobs live on the same section, so the tectonics guard already covers them —
+            // but only if a case actually moves one, and the history is the largest change that
+            // section can make: it rewrites the height field every later stage is built on.
+            "tectonicHistory" to base.copy(
+                tectonics = base.tectonics.copy(historyEpochs = 1)
+            ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
             "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
@@ -222,7 +228,8 @@ class IncrementalReuseTest {
                 boundaryDistance = field(world.plates.boundaryDistance),
                 nearestBoundaryType = world.plates.nearestBoundaryType.copyOf(),
                 nearestBoundaryClass = world.plates.nearestBoundaryClass.copyOf(),
-                height = field(world.plates.height)
+                height = field(world.plates.height),
+                crustAge = field(world.plates.crustAge)
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),
             sea = SeaLevelResult(

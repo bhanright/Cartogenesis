@@ -96,8 +96,18 @@ class DepositionTest {
      * Land held at 6226 for the seventh time: the shoreline is still a rank cut on a fixed
      * fraction of the cells, made before the shelf is remapped, and the plate field moved by far
      * too little to carry a cell of this world across it.
+     *
+     * And an eighth time for H1 (tectonic history), the largest terrain change of the lot: the
+     * stage now stamps three configurations of the same plates rather than one, so every world
+     * carries the worn belts of two boundaries that are gone as well as the sharp ones of the
+     * boundaries that are there, and `PlateStage` normalizes the whole field over its own range,
+     * which carries a little of that everywhere. The switch is
+     * [TectonicsConfig.historyEpochs] and setting it to 1 reproduces the *pre-H1* field bit for
+     * bit — `TectonicHistoryTest` pins exactly that — so what moved here is the shipped default
+     * and not the arithmetic. Land held at 6226 for the eighth time, for the reason it has held
+     * every other time: the shoreline is a rank cut on a fixed fraction of the cells.
      */
-    private val startingPointElevation = 2287847990008025508L
+    private val startingPointElevation = 6066437764702608027L
     private val startingPointLand = 6226
 
     @Test

@@ -34,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -505,8 +506,29 @@ private fun Application(
         if (screen == Screen.MAP) Color(options.style.backdrop)
         else MaterialTheme.colorScheme.background
 
+    /**
+     * The ink for anything the pane draws without naming a colour, which is most of its words.
+     *
+     * The panes are the one part of this application painted straight onto a background rather than
+     * laid inside a `Surface`, and a `Surface` is what otherwise says what ink its paper takes. So
+     * `LocalContentColor` here was Material's own default — plain black — and the library's two
+     * headings and every unstyled line of a realm's page were drawn in it. On paper that is very
+     * nearly right and nobody noticed for two rounds of review; on the fifteen chromes whose ground
+     * is not paper it ran from poor to invisible, and on High contrast it was black on pure black
+     * at exactly 1.0:1. The controls around them were never affected, because a text field, a
+     * button and a card each carry their own colour or their own `Surface`.
+     *
+     * Declared beside the ground it belongs to, and provided once for the whole pane, so this is a
+     * pairing rather than a colour written onto a heading — the fix has to hold for every word
+     * either pane draws, in all sixteen chromes, and for whatever a later one draws.
+     * `PhoneAtlasTest` measures it off the drawn pixels in each.
+     */
+    val paneInk =
+        if (screen == Screen.MAP) OverMap.Parchment
+        else MaterialTheme.colorScheme.onBackground
+
     /** Whichever of the three screens is up, drawn to fill whatever it is given. */
-    val pane: @Composable () -> Unit = {
+    val paneContents: @Composable () -> Unit = {
         val current = world
         if (screen == Screen.LIBRARY) {
             LibraryPane(
@@ -597,6 +619,11 @@ private fun Application(
                 onLabelClick = { label -> labels = labels.filterNot { it.id == label.id } }
             )
         }
+    }
+
+    /** The same, told what ink the ground it is being drawn on takes. See [paneInk]. */
+    val pane: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalContentColor provides paneInk, content = paneContents)
     }
 
     /** The progress banner, between the toolbar and the map while a world is being made. */

@@ -617,9 +617,10 @@ object NationStage {
      * re-tracing anything.
      *
      * This pins `RiverConfig.sourceFlowShare`'s default rather than reading the setting, so a
-     * world generated with the slider moved has a habitability field built against the default
-     * density. Left as it stands because changing it would move every world; noted here because it
-     * is a difference and not a design.
+     * world generated with that slider moved has a habitability field built against the default
+     * river density while the map draws a different one. Reading the setting would leave a default
+     * world untouched and move every other one, which is a change to what the generator produces
+     * and not a rename; noted here rather than made, because it is a difference and not a design.
      */
     private fun drawableRiverFlow(sea: SeaLevelResult, climate: ClimateResult): Float {
         var totalRunoff = 0f

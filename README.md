@@ -23,7 +23,10 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    with a volcanic arc inland of its trench (the Andes), continent against continent raises a
    broad flat-topped plateau instead of a line (Tibet), and ocean under ocean raises a trench and a
    chain of volcanic islands. Divergent boundaries under continental crust open a rift valley
-   between rebounding shoulders; under oceanic crust they stay a spreading ridge. A few oceanic
+   between rebounding shoulders: not one trough for the boundary's whole length but a chain of
+   half-grabens, each tilted the opposite way from its neighbour and parted by an accommodation
+   zone where the floor rises, so at a low sea level a rift is gulfs and lakes behind sills rather
+   than a single strait. Under oceanic crust they stay a spreading ridge. A few oceanic
    plates also carry a hotspot, a fixed point the plate drifts over, leaving a decaying line of
    seamounts along its path — the only islands the pipeline places away from a boundary.
 4. **Erosion** — rock does not stand at an arbitrary angle: past a critical slope it fails and
@@ -45,7 +48,15 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    where a range front meets the plain, fans at lake inflows, and deltas where the big rivers reach
    the sea. Mass balances round by round — everything taken off the land is either laid down again
    or carried out to sea — and no cell is ever raised as high as the ground feeding it, so nothing
-   ends up running uphill.
+   ends up running uphill. A delta lobe slopes seaward from its apex and the river runs across it
+   to open water rather than ending in a pocket behind it.
+
+   A basin that fills to its spill point overflows, and the overflow cuts its lip down. Each round
+   breaches the sill of every filled basin by the stream power of the outflow — the basin's whole
+   catchment over the outlet channel's slope — never below the basin floor, so the notch deepens
+   toward grade and the next fill is shallower. That is what drained Lake Bonneville and Lake
+   Agassiz, and it is why a filled tectonic basin no longer survives as a lake larger than the
+   Caspian's share of the map.
 
    Runs before sea level, since eroding the terrain changes which elevation the percentile lands
    on — and nothing cuts below that level, because it is the base level every river grades to.
@@ -83,7 +94,12 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    summer) apart from a temperate forest of the same annual rainfall.
 8. **Rivers** — depressions are filled with priority-flood so no water dead-ends inland, flow is
    routed downhill (D8), rainfall accumulates downstream, and channels are traced to the coast.
-   Basins the flood had to raise become lakes, with an outlet river leaving at the spill point.
+   Basins the flood had to raise become lakes — but only as much lake as the water balance allows.
+   Where the catchment's runoff cannot match evaporation from the full surface (Thornthwaite, from
+   the two seasonal temperature fields: about 2300 mm a year in a hot desert, 550 in cool temperate
+   country) the lake settles below its rim, is endorheic, and the rivers end in it; a basin too dry
+   to hold water at all is a playa. A basin that balances at the brim overflows as before, with an
+   outlet river leaving at the spill point.
 
 ## Styles
 

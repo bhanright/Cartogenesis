@@ -1,0 +1,462 @@
+package com.cartogenesis.desktop
+
+import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapStyle
+import com.cartogenesis.cartography.MapView
+import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverPen
+import com.cartogenesis.ui.MapImage
+import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
+import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.sqrt
+import kotlin.system.measureTimeMillis
+import kotlin.test.Test
+import kotlin.test.assertTrue
+
+/**
+ * Whether a river is drawn as wide as the water it carries.
+ *
+ * The complaint this answers is that every river looked alike (William, 2026-09-12). They did not
+ * quite — the old rule raised the discharge to the 0.28 power and clamped the answer between half a
+ * cell and 2.8 — but a thousandfold range of flow came out as one pixel beside three, which at a
+ * glance is one pen. What a channel's width actually does is Leopold and Maddock's: it goes as the
+ * square root of the discharge, so a trunk is unmistakable and a headwater is a thread.
+ *
+ * Every guard here is run twice, once against the drawing this build makes and once against the
+ * rule it replaced ([supersededPen]), and asserts that the old rule *fails* it. A guard that has
+ * only ever been green proves nothing, and keeping the superseded rule beside the new one is the
+ * cheapest way to keep proving that this one can discriminate.
+ */
+class RiverWidthTest {
+
+    private companion object {
+
+        /** Ground rule 1's seeds, at the size a preview is drawn at. */
+        val SEEDS = listOf(7L, 42L, 1234L)
+        const val SIDE = 512
+
+        /**
+         * How closely the drawn pen must track the square root of the discharge, as a Pearson
+         * correlation over every drawn point of every river on a seed.
+         *
+         * The law is a proportionality, so a drawing that obeys it has its width on a straight line
+         * in the square root of discharge and correlates at unity — the hairline moves that line's
+         * intercept off zero, which a correlation does not see. The bar is therefore unity to the
+         * precision the arithmetic offers rather than a figure fitted to anything: a rule that is
+         * some other power of the discharge cannot reach it, however nearly straight it looks.
+         */
+        const val MIN_CORRELATION = 0.999
+
+        /**
+         * How many times the widest drawn river must beat the narrowest, in pixels, on every seed.
+         *
+         * Four is the figure that separates "these vary" from "these are alike": below it the two
+         * ends of a map's drainage read as the same line with a different weight of ink. Earth is
+         * far past it — the Amazon at Óbidos is some ten kilometres of channel against a
+         * two-metre headwater — and no map can span that, which is what the hairline is for.
+         */
+        const val MIN_SPREAD = 4.0
+
+        /**
+         * What share of confluences must show the trunk *strictly* wider than either branch.
+         *
+         * Discharge sums at a junction, so every one of them should; a rule that ties at a clamp
+         * is a rule that has stopped answering. Short of every last one because two branches whose
+         * flows differ in the sixth digit can land on the same float.
+         */
+        const val MIN_WIDENING_JUNCTIONS = 0.99
+    }
+
+    /** One world, its drawn network flattened to what a guard needs to ask about. */
+    private class Network(val world: WorldMap) {
+        val discharge: FloatArray = world.rivers.flowAccumulation.data
+
+        /** Every cell any drawn river runs through, and how wide it is drawn there. */
+        val ratioByCell = HashMap<Int, Float>()
+
+        /** The smallest positive discharge on the network: the channel the pen's hairline is for. */
+        var smallest = Float.MAX_VALUE
+            private set
+
+        init {
+            world.rivers.rivers.forEach { river ->
+                river.cells.forEachIndexed { index, cell ->
+                    ratioByCell[cell] = river.widthRatio[index]
+                    val flow = discharge[cell]
+                    if (flow > 0f && flow < smallest) smallest = flow
+                }
+            }
+            if (smallest == Float.MAX_VALUE) smallest = 1f
+        }
+
+        /**
+         * Where two or more drawn channels meet, as the trunk cell below and the branches above.
+         *
+         * Only cells that carry water of their own. A river's last point sits in the sea, where the
+         * flow was never routed and there is no discharge to compare — and where two rivers reaching
+         * the coast side by side can share the cell, which would read as a confluence of one river
+         * with another it never meets.
+         */
+        fun confluences(): List<Pair<Int, List<Int>>> {
+            val feeding = HashMap<Int, MutableList<Int>>()
+            for (cell in ratioByCell.keys) {
+                if (discharge[cell] <= 0f) continue
+                val below = world.rivers.flowTarget[cell]
+                if (below < 0 || discharge[below] <= 0f || !ratioByCell.containsKey(below)) continue
+                feeding.getOrPut(below) { ArrayList() }.add(cell)
+            }
+            return feeding.entries
+                .filter { it.value.size >= 2 }
+                .map { it.key to it.value.sorted() }
+                .sortedBy { it.first }
+        }
+    }
+
+    /**
+     * The pen the 2.0.0 renderer drew with: `RiverStage`'s width in cells through
+     * `MapRasterizer`'s floor, at the scale a 512 preview used.
+     *
+     * The threshold it divided by was the world's total runoff times `RiverConfig.sourceThreshold`,
+     * which no world carries afterwards; the smallest discharge on the drawn network is the same
+     * quantity to within one source cell's overshoot of it, and that is well inside what any of
+     * these guards turn on.
+     */
+    private fun supersededPen(discharge: Float, smallest: Float): Float =
+        (0.55f * (discharge / smallest).pow(0.28f)).coerceIn(0.5f, 2.8f).coerceAtLeast(0.9f)
+
+    private fun pen(ratio: Float): Float = RiverPen.widthPixels(ratio)
+
+    private fun world(seed: Long, side: Int = SIDE): WorldMap =
+        WorldGenerationEngine.generateBlocking(
+            WorldGenConfig(seed = seed, width = side, height = side)
+        )
+
+    @Test
+    fun `the drawn width tracks the square root of the discharge`() {
+        var worstNow = 1.0
+        var bestBefore = 0.0
+        SEEDS.forEach { seed ->
+            val network = Network(world(seed))
+            val root = ArrayList<Double>()
+            val now = ArrayList<Double>()
+            val before = ArrayList<Double>()
+            network.ratioByCell.forEach { (cell, ratio) ->
+                val flow = network.discharge[cell]
+                if (flow <= 0f) return@forEach
+                root.add(sqrt(flow.toDouble()))
+                now.add(pen(ratio).toDouble())
+                before.add(supersededPen(flow, network.smallest).toDouble())
+            }
+
+            val nowCorrelation = correlation(root, now)
+            val beforeCorrelation = correlation(root, before)
+            worstNow = minOf(worstNow, nowCorrelation)
+            bestBefore = maxOf(bestBefore, beforeCorrelation)
+            println(
+                "RIVERWIDTH seed=$seed points=${root.size} correlation with sqrt(discharge): " +
+                    "%.4f now, %.4f under the superseded rule".format(nowCorrelation, beforeCorrelation)
+            )
+            assertTrue(
+                nowCorrelation >= MIN_CORRELATION,
+                ("seed $seed: the drawn width correlates %.4f with the square root of " +
+                    "discharge, under $MIN_CORRELATION").format(nowCorrelation)
+            )
+        }
+        assertTrue(
+            bestBefore < MIN_CORRELATION,
+            "the superseded rule now passes this guard at %.4f, so the guard has stopped discriminating"
+                .format(bestBefore)
+        )
+        println(
+            ("RIVERWIDTH worst correlation now %.4f, best under the superseded rule %.4f, " +
+                "bar $MIN_CORRELATION").format(worstNow, bestBefore)
+        )
+    }
+
+    @Test
+    fun `the widest river on a map is several times the narrowest`() {
+        var worstNow = Double.MAX_VALUE
+        var bestBefore = 0.0
+        SEEDS.forEach { seed ->
+            val network = Network(world(seed))
+            var narrowNow = Float.MAX_VALUE
+            var wideNow = 0f
+            var narrowBefore = Float.MAX_VALUE
+            var wideBefore = 0f
+            network.ratioByCell.forEach { (cell, ratio) ->
+                val flow = network.discharge[cell]
+                if (flow <= 0f) return@forEach
+                val nowPen = pen(ratio)
+                narrowNow = minOf(narrowNow, nowPen)
+                wideNow = maxOf(wideNow, nowPen)
+                val beforePen = supersededPen(flow, network.smallest)
+                narrowBefore = minOf(narrowBefore, beforePen)
+                wideBefore = maxOf(wideBefore, beforePen)
+            }
+
+            val spreadNow = wideNow.toDouble() / narrowNow
+            val spreadBefore = wideBefore.toDouble() / narrowBefore
+            worstNow = minOf(worstNow, spreadNow)
+            bestBefore = maxOf(bestBefore, spreadBefore)
+            println(
+                ("RIVERWIDTH seed=$seed pen %.2f-%.2f px, spread %.2fx; " +
+                    "superseded %.2f-%.2f px, spread %.2fx").format(
+                    narrowNow, wideNow, spreadNow, narrowBefore, wideBefore, spreadBefore
+                )
+            )
+            assertTrue(
+                spreadNow >= MIN_SPREAD,
+                "seed $seed: widest %.2f px against narrowest %.2f px is only %.2fx, under $MIN_SPREAD"
+                    .format(wideNow, narrowNow, spreadNow)
+            )
+        }
+        assertTrue(
+            bestBefore < MIN_SPREAD,
+            "the superseded rule now spreads %.2fx, so the guard has stopped discriminating"
+                .format(bestBefore)
+        )
+    }
+
+    @Test
+    fun `a trunk is wider than the branches that feed it, and never narrows downstream`() {
+        var worstShareNow = 1.0
+        var worstShareBefore = 1.0
+        SEEDS.forEach { seed ->
+            val network = Network(world(seed))
+
+            // Monotone downstream. A drawn river never crosses standing water — the trace stops at
+            // the shore and the outflow below a lake is a channel of its own — so there is no
+            // interruption to make an exception for, and the width must never fall while the water
+            // it stands for does not.
+            //
+            // It can still fall where the water does, and on rare occasions the water does: the
+            // routing hands a handful of cells a downstream neighbour that carries less than they
+            // do, five of the 100224 land cells of seed 1234 among them. That is the flow graph's
+            // own inconsistency and not the pen's — the superseded rule, monotone in the same
+            // quantity, narrows at exactly the same points — so it is counted and held to a
+            // thousandth of the drawn course rather than treated as a width failure.
+            var narrowings = 0
+            var againstTheWater = 0
+            var steps = 0
+            network.world.rivers.rivers.forEach { river ->
+                for (k in 1 until river.widthRatio.size) {
+                    steps++
+                    if (river.widthRatio[k] >= river.widthRatio[k - 1]) continue
+                    narrowings++
+                    val fell = network.discharge[river.cells[k]] <
+                        network.discharge[river.cells[k - 1]]
+                    if (!fell) againstTheWater++
+                }
+            }
+            assertTrue(
+                againstTheWater == 0,
+                "seed $seed: a drawn river narrowed at $againstTheWater points " +
+                    "where it carried no less water"
+            )
+            println(
+                "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water"
+            )
+            assertTrue(
+                narrowings * 1000 <= steps,
+                "seed $seed: $narrowings of $steps drawn steps run into less water than the " +
+                    "step above, past one in a thousand"
+            )
+
+            // Only the confluences the flow graph agrees are confluences: the same handful of cells
+            // that carry less water than the cell above them can sit under one, and there the claim
+            // being tested — the trunk is wider because discharge sums — has no premise.
+            val confluences = network.confluences()
+                .filter { (trunk, branches) ->
+                    branches.all { network.discharge[trunk] > network.discharge[it] }
+                }
+            var widerNow = 0
+            var widerBefore = 0
+            confluences.forEach { (trunk, branches) ->
+                val trunkNow = pen(network.ratioByCell.getValue(trunk))
+                val branchNow = branches.maxOf { pen(network.ratioByCell.getValue(it)) }
+                assertTrue(
+                    trunkNow >= branchNow,
+                    ("seed $seed: the trunk below the confluence at $trunk is %.3f px, " +
+                        "narrower than the %.3f px branch above it").format(trunkNow, branchNow)
+                )
+                if (trunkNow > branchNow) widerNow++
+
+                val trunkBefore = supersededPen(network.discharge[trunk], network.smallest)
+                val branchBefore =
+                    branches.maxOf { supersededPen(network.discharge[it], network.smallest) }
+                if (trunkBefore > branchBefore) widerBefore++
+            }
+
+            val shareNow = widerNow.toDouble() / confluences.size
+            val shareBefore = widerBefore.toDouble() / confluences.size
+            worstShareNow = minOf(worstShareNow, shareNow)
+            worstShareBefore = minOf(worstShareBefore, shareBefore)
+            println(
+                ("RIVERWIDTH seed=$seed confluences=${confluences.size}, trunk strictly wider at " +
+                    "%.1f%% now against %.1f%% under the superseded rule").format(
+                    shareNow * 100, shareBefore * 100
+                )
+            )
+            assertTrue(
+                shareNow >= MIN_WIDENING_JUNCTIONS,
+                ("seed $seed: only %.1f%% of confluences widen the trunk, under " +
+                    "%.1f%%").format(shareNow * 100, MIN_WIDENING_JUNCTIONS * 100)
+            )
+        }
+        // Weaker than the other two cross-checks, and it has to be: the clamp only bites where a
+        // map has a river big enough to reach it, so a seed of small drainages passes this under
+        // the old rule as well. Failing on any standard seed is enough to show the guard can tell
+        // the two apart.
+        assertTrue(
+            worstShareBefore < MIN_WIDENING_JUNCTIONS,
+            ("the superseded rule now widens at least %.1f%% of confluences on every standard " +
+                "seed, so the guard has stopped discriminating").format(worstShareBefore * 100)
+        )
+        println(
+            "RIVERWIDTH worst confluence share %.1f%% now, %.1f%% under the superseded rule, bar %.1f%%"
+                .format(worstShareNow * 100, worstShareBefore * 100, MIN_WIDENING_JUNCTIONS * 100)
+        )
+    }
+
+    /**
+     * The pen is a count of output pixels, so a bigger sheet must not draw a fatter line.
+     *
+     * The world is regenerated at the export's size rather than upscaled, so the two renders share
+     * no cell and cannot be compared pixel for pixel; what has to agree is the nib, which is the
+     * span of stroke widths the overlay asks for. The old renderer multiplied the width by the
+     * resolution ratio, so this same measurement at 1024 gave twice the pen it gave at 512.
+     */
+    @Test
+    fun `an export is drawn with the same pen as the preview`() {
+        val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
+        val spans = listOf(512, 1024).map { side ->
+            val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.width }
+            val span = widths.min() to widths.max()
+            println("RIVERWIDTH ${side}x$side draws %.2f-%.2f px".format(span.first, span.second))
+            span
+        }
+        assertTrue(
+            abs(spans[0].first - spans[1].first) < 1e-4f &&
+                abs(spans[0].second - spans[1].second) < 1e-4f,
+            "the pen changed with the resolution: ${spans[0]} at 512, ${spans[1]} at 1024"
+        )
+        assertTrue(
+            abs(spans[0].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
+                abs(spans[0].second - RiverPen.FULL_PIXELS) < 1e-4f,
+            "the drawn pen ${spans[0]} is not the pen RiverPen declares"
+        )
+    }
+
+    /**
+     * Whatever the river pen does, it must do it only where a river is.
+     *
+     * Rendered with the rivers on and with them off, in every style: a pixel that differs between
+     * the two is a pixel the river drawing touched, and every one of them has to lie within the
+     * pen's reach of a cell some river runs through. This is what makes a change of pen safe to
+     * make — a fingerprint that moves can only have moved on the water.
+     */
+    @Test
+    fun `the river pen touches nothing but the rivers`() {
+        val world = world(42L)
+        val reach = (RiverPen.FULL_PIXELS / 2f).toInt() + 2
+        val nearRiver = dilatedRiverMask(world, reach)
+
+        MapStyle.entries.forEach { style ->
+            val base = RenderOptions(view = MapView.FANTASY, style = style)
+            val withRivers = pixelsOf(world, base)
+            val without = pixelsOf(world, base.copy(showRivers = false))
+
+            var differing = 0
+            var strayed = 0
+            for (i in withRivers.indices) {
+                if (withRivers[i] == without[i]) continue
+                differing++
+                if (!nearRiver[i]) strayed++
+            }
+            println(
+                "RIVERWIDTH ${style.label}: $differing pixels differ with rivers on, " +
+                    "$strayed of them off the water"
+            )
+            assertTrue(
+                strayed == 0,
+                "${style.label}: $strayed pixels changed further than $reach px from any river cell"
+            )
+            assertTrue(differing > 0, "${style.label}: turning the rivers off changed nothing at all")
+        }
+    }
+
+    /** How long a world and its overlay cost, so a change of pen can be seen not to have. */
+    @Test
+    fun `how long the widths cost`() {
+        val options = RenderOptions()
+        var world: WorldMap? = null
+        val generateMs = measureTimeMillis { world = world(42L) }
+        val ready = world!!
+        MapRasterizer.overlay(ready, options)
+        var segments = 0
+        val overlayMs = measureTimeMillis {
+            segments = MapRasterizer.overlay(ready, options).rivers.size
+        }
+        println(
+            "RIVERWIDTH seed 42 at $SIDE: generated in $generateMs ms, " +
+                "$segments river segments laid out in $overlayMs ms"
+        )
+    }
+
+    /** True within [reach] pixels of a cell any drawn river runs through. */
+    private fun dilatedRiverMask(world: WorldMap, reach: Int): BooleanArray {
+        val w = world.width
+        val h = world.height
+        val mask = BooleanArray(w * h)
+        world.rivers.rivers.forEach { river ->
+            river.cells.forEach { cell ->
+                val cx = cell % w
+                val cy = cell / w
+                for (dy in -reach..reach) {
+                    val y = cy + dy
+                    if (y < 0 || y >= h) continue
+                    for (dx in -reach..reach) {
+                        var x = (cx + dx) % w
+                        if (x < 0) x += w
+                        mask[y * w + x] = true
+                    }
+                }
+            }
+        }
+        return mask
+    }
+
+    private fun pixelsOf(world: WorldMap, options: RenderOptions): IntArray {
+        val bitmap = MapImage.toBitmap(world, options)
+        val bytes = bitmap.readPixels()!!
+        bitmap.close()
+        return IntArray(bytes.size / 4) { i ->
+            val o = i * 4
+            (bytes[o].toInt() and 0xFF) or ((bytes[o + 1].toInt() and 0xFF) shl 8) or
+                ((bytes[o + 2].toInt() and 0xFF) shl 16) or ((bytes[o + 3].toInt() and 0xFF) shl 24)
+        }
+    }
+
+    private fun correlation(a: List<Double>, b: List<Double>): Double {
+        val n = a.size
+        if (n < 2) return 0.0
+        val meanA = a.sum() / n
+        val meanB = b.sum() / n
+        var covariance = 0.0
+        var varianceA = 0.0
+        var varianceB = 0.0
+        for (i in 0 until n) {
+            val da = a[i] - meanA
+            val db = b[i] - meanB
+            covariance += da * db
+            varianceA += da * da
+            varianceB += db * db
+        }
+        if (varianceA <= 0.0 || varianceB <= 0.0) return 0.0
+        return covariance / sqrt(varianceA * varianceB)
+    }
+}

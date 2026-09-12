@@ -43,7 +43,7 @@ class RiverEndingsTest {
                 val a = river.cells[k]
                 val b = river.cells[k + 1]
                 if (kotlin.math.abs(a % w - b % w) > w / 2) continue
-                g.stroke = java.awt.BasicStroke(river.widths[k].coerceAtLeast(1f))
+                g.stroke = java.awt.BasicStroke(debugRiverStroke(river.widthRatio[k]))
                 g.drawLine(a % w, a / w, b % w, b / w)
             }
         }

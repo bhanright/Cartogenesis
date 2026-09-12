@@ -305,7 +305,7 @@ class DepositionTest {
                     !world.sea.isLand[c] ||
                         neighboursOf(c, world.width, world.height).any { !world.sea.isLand[it] }
                 }
-                .sortedByDescending { it.widths.last() }
+                .sortedByDescending { it.widthRatio.last() }
                 .map { it.cells.last() }
                 .take(3)
 
@@ -375,7 +375,7 @@ class DepositionTest {
                 val a = river.cells[k]
                 val b = river.cells[k + 1]
                 if (abs(a % w - b % w) > w / 2) continue
-                g.stroke = java.awt.BasicStroke(river.widths[k].coerceAtLeast(1f) * scale / 2f)
+                g.stroke = java.awt.BasicStroke(debugRiverStroke(river.widthRatio[k]) * scale / 2f)
                 g.drawLine(
                     (a % w - x0) * scale, (a / w - y0) * scale,
                     (b % w - x0) * scale, (b / w - y0) * scale

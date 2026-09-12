@@ -2,15 +2,22 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class River(
     /** Cell indices from source to mouth. */
     val cells: IntArray,
-    /** Rendering width per point, in cells. */
-    val widths: FloatArray
+    /**
+     * How wide the channel runs at each point, as a fraction of the widest river on the map: 0 at
+     * the smallest channel drawn and 1 at the mouth of the biggest, on the square root of discharge.
+     * [RiverWidth] derives it and says why it is a ratio rather than a length.
+     *
+     * Empty only in a save written before rivers were sized this way, which carries a width in
+     * cells under the old rule instead and so has nothing here to read; `WorldSections` fills it
+     * in from the accumulation that same save carries.
+     */
+    val widthRatio: FloatArray = FloatArray(0)
 ) {
     val length: Int get() = cells.size
 }
@@ -452,17 +459,12 @@ object RiverStage {
                 continue
             }
 
-            val cells = path.toIntArray()
-            val widths = FloatArray(cells.size) { idx ->
-                // Width in cells, so it stays the same fraction of the map at any resolution.
-                // A gentle power keeps big trunks from swamping the map: a river carrying a
-                // thousand times more water than a headwater is only a few times wider.
-                val ratio = accumulation.data[cells[idx]] / threshold
-                (0.55f * ratio.pow(0.28f)).coerceIn(0.5f, 2.8f)
-            }
-            rivers.add(River(cells, widths))
+            rivers.add(River(path.toIntArray()))
         }
-        return rivers
+
+        // Sized last, because the scale a channel is measured against is the whole network's: what
+        // makes a trunk a trunk is that it carries more than anything else on this map.
+        return RiverWidth.sized(rivers, accumulation.data)
     }
 
 }

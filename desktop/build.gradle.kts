@@ -127,8 +127,14 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Cartogenesis"
             // Declared in gradle.properties so the build is the single source of truth for the
-            // version, rather than something to be kept in step by hand at release time.
+            // version, rather than something to be kept in step by hand at release time. The
+            // suffix is dropped here because the installer formats will not take one: MSI wants
+            // MAJOR.MINOR.BUILD and DMG wants MAJOR[.MINOR][.PATCH], and a development version
+            // such as `3.0.0-dev` fails *configuration* of this project, which with no
+            // configuration-on-demand takes down every task in the build including the tests.
+            // The suffix still reaches the app and the update check, which is where it matters.
             packageVersion = providers.gradleProperty("cartogenesisVersion").get()
+                .substringBefore('-')
 
             // jpackage runs jlink, which bundles only the modules it can prove are needed -- and
             // it cannot see through LWJGL's reflection, so it left out jdk.unsupported. That is

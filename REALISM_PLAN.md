@@ -966,6 +966,31 @@ follows tributaries and rainfall for free.
 - Render 718106 and 59758 at 2048 in Atlas and Pen and ink and look: trunks should read as
   rivers and headwaters as threads. Braided reaches and meanders stay with R2 in 3.0.
 
+### F11. Stop a generation — Opus, on `release/2.0`
+
+*William, 2026-09-12: "can we add an abort button to stop generation that is underway? Sometimes
+I notice I wanted to change a setting and I don't want to wait for it to finish to change it."*
+Queued behind F10 (same files).
+
+- A **Stop** button takes Generate's place while a world is being built, in both arrangements.
+  Pressing it cancels the generation's coroutine; the settings unlock at once; the previous world
+  stays on screen if there was one, otherwise the canvas returns to blank; the status says the
+  generation was stopped.
+- Cancellation is cooperative: `ensureActive()` at every stage boundary in
+  `WorldGenerationEngine` and inside the long stages at each hydraulic round, each thermal sweep
+  batch, each glaciation pass and each realm-expansion sweep, so a stop lands within one round on
+  the desktop. On the web the click is only seen when the engine yields, and F8's per-stage yield
+  already exists, so a stop lands at the next stage boundary; add a yield per hydraulic round on
+  wasm if the cost is under a percent, measured. The GPU erosion path stops at a round boundary
+  and releases its buffers, so the next generation starts on a sound context.
+- Restarting after a settings change reuses whatever finished stages the new settings still
+  allow, through the existing stage-reuse chain (`IncrementalReuseTest` covers the rule); say in
+  the report which stages survive a stop.
+- Guards: a test that a generation cancelled during erosion returns within one round's time,
+  leaves the previous world intact, and lets the next generation run to completion on the same
+  engine; `GpuErosionTest` gains a cancel-mid-run case on the desktop; `ChromeGalleryTest`'s
+  phone capture with the Stop button showing; the per-merge tier green.
+
 ### Release 2.0.0 checklist
 
 When F, H5 and H5b are green (G1 follows the release; G2 and G4 are in): version 2.0.0; full suite plus the audit tier once; William's
@@ -1592,6 +1617,7 @@ guard reported, so the next chunk knows its baseline.
 | F9 Pen and ink, redrawn | Opus | done, shipped in 2.0.1 | 2026-09-12 | 768e4bd (merge ca161da on release/2.0) | Engraving.kt: hachures by Lehmann's rule, one stroke per 8 px lattice cell oriented along the aspect (a stripe field keyed to the pixel's projection failed at 42.9 deg against a 44.8 deg control), coastal vignette of four lines from an exact Euclidean shore distance (Felzenszwalb-Huttenlocher, wrapping in x), ruled lakes, stippled ice, dotted borders, mirrored line for line in GLSL with 24 uniforms and a 16th SSBO; first version sized marks as a share of the map and read as a woodcut at 2048, resized to a pen in output pixels (pitch 8.96-9.03 px at 512-4096, stroke count per unit of map x3.97/15.90/63.55 against 4/16/64); aspect guard 20.0 deg engraved vs 47.0 deg fixed-bearing (bar 30); GpuRasterTest 15 views x 11 styles worst channel 1, 99.9th percentile 0; other ten styles' fingerprints identical; 2048 raster 161 -> 536 ms CPU, 111 -> 242 ms GPU path; left: the shore distance stays CPU-side and uploaded (parity), stipple and border lattices do not wrap at the date line, lakes under 2.4 px fill solid |
 | Site cartogenesis.com | Opus | done, first deployed with 2.0.1 | 2026-09-12 | 8ee3948 (merge 8fe06a1 on release/2.0) | site/ (standalone page without the campaign site's links or footer, MIT footer, Open Graph tags, the shell with a stamped loader), _headers (nosniff; immutable for /app/*.wasm and *.js; no-cache for the pages), _redirects; :web:assembleSite (a Sync dropping the map and the build's index.html, stamping the loader with the short SHA, failing if the placeholder survives) and SiteAssemblyTest (6 cases on the assembled tree) under :desktop:siteTest; .github/workflows/site.yml on v* tags and by hand, reading the Pages project's production branch from the API before deploying with wrangler; first run failed on missing repository secrets (William had put them in Cloudflare's Secrets Store), the rerun and the release/2.0 rerun succeeded; live checks: application/wasm with Brotli, hashed files immutable, HTML no-cache, app ready in 0.7 s |
 | F10 Rivers widen with their discharge | Opus | in progress on release/2.0 | 2026-09-12 | | |
+| F11 Stop a generation | Opus | queued behind F10, on release/2.0 | 2026-09-12 | | |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |

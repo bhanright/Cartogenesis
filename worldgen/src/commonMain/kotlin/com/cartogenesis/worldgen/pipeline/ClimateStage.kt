@@ -100,8 +100,8 @@ data class ClimateResult(
  *
  * Run twice over, for the warm season and the cold one. The whole of the seasonal machinery is one
  * number — [ClimateConfig.seasonalTiltDegrees], the distance the thermal equator migrates
- * toward whichever hemisphere is in summer — applied to the latitude that the temperature curve, the wind belts and
- * the rain belts are all read off. The annual fields are kept as they were, so every stage
+ * toward whichever hemisphere is in summer — applied to the latitude that the temperature
+ * curve, the wind belts and the rain belts are all read off. The annual fields are kept as they were, so every stage
  * downstream of this one sees exactly what it saw before seasons existed.
  */
 object ClimateStage {

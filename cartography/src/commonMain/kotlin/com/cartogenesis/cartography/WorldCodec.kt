@@ -192,7 +192,7 @@ object WorldCodec {
         return writer.bytes
     }
 
-    /** True when these bytes start with the container magic rather than being version-2 text. */
+    /** True when these bytes start with the container magic rather than being something else. */
     fun isContainer(bytes: ByteArray): Boolean =
         bytes.size >= PREFIX_BYTES && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 

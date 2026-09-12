@@ -875,7 +875,8 @@ object ClimateStage {
                         } else {
                             temperature.data[i]
                         }
-                        val step = marchSeaStep(cfg, moisture[r], seaTemperature)
+                        val currentAnomaly = if (config.ocean.enabled) ocean.anomaly.data[i] else 0f
+                        val step = marchSeaStep(cfg, moisture[r], seaTemperature, currentAnomaly)
                         moisture[r] = step.moisture
                         if (lap == 1) precip.data[i] = step.rain
                         continue
@@ -912,12 +913,26 @@ object ClimateStage {
      * each other by construction, which is the property the checksums this replaces used to give
      * only until the next chunk that touched anything upstream of the march.
      */
-    internal fun marchSeaStep(cfg: ClimateConfig, incomingMoisture: Float, seaTemperature: Float): MarchStep {
+    internal fun marchSeaStep(
+        cfg: ClimateConfig,
+        incomingMoisture: Float,
+        seaTemperature: Float,
+        currentAnomaly: Float = 0f
+    ): MarchStep {
         // Warm seas evaporate faster — and which seas are warm is a question about currents, not
         // latitude. Taking this from the ocean stage is what lets a cold current starve a coast of
         // rain while another at the same latitude, on the warm side of a gyre, soaks it.
         val warmth = ((seaTemperature + 10f) / 40f).coerceIn(0f, 1.4f)
-        val moisture = incomingMoisture + cfg.evaporationRate * warmth * (1f - incomingMoisture)
+        // H4: on top of that absolute warmth, scale the pickup by how far this cell's water
+        // departs from its latitude's own mean — Clausius-Clapeyron gives roughly +7% of
+        // saturation per degree, so a cold upwelling current (Atacama, Namib, Baja) starves the
+        // coast it washes and a warm one (the Gulf Stream, Norway) feeds it. One multiply inside
+        // the existing march, per rule 8. Floored at zero so a freak anomaly cannot make pickup
+        // negative. `currentMoisture = 0` collapses this to exactly 1, so the field this replaces
+        // is reproduced bit for bit whatever the anomaly.
+        val currentFactor = (1f + cfg.currentMoisture * currentAnomaly).coerceAtLeast(0f)
+        val moisture = incomingMoisture +
+            cfg.evaporationRate * warmth * currentFactor * (1f - incomingMoisture)
         return MarchStep(moisture, moisture * cfg.baseRainRate * 4f)
     }
 

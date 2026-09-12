@@ -62,10 +62,16 @@ a9dc5e31fe6bde545a85.wasm       3,873 KB    the application
 bccfa839aa4b38489c76.wasm       8,208 KB    Skia (the graphics engine)
 cartogenesis.js.map             1,710 KB    source map — safe to delete, see below
 cartogenesis.js.LICENSE.txt         4 KB    third-party licence notices
-composeResources/                  empty    empty directories, safe to delete
+composeResources/                 915 KB    the two bundled type faces - required
 ```
 
-**Total 15 MB on disk; 12.4 MB excluding the source map.**
+**Total 15.2 MB on disk; 13.6 MB excluding the source map.**
+
+Since 2.0.0 the interface is set in two bundled faces (Spectral and IBM Plex Sans) rather than in
+whatever the browser happens to have, so `composeResources/` is no longer empty and **must be
+uploaded with the rest**. The four `.ttf` files are fetched by the app after it starts, by a
+relative path, exactly as the `.wasm` files are; without them the text falls back to a default
+sans and nothing else breaks.
 
 I also have it as a zip: `Cartogenesis-1.0.0-web.zip`, 4.6 MB.
 
@@ -139,7 +145,8 @@ it, just slower. Any normal HTTPS setup is fine — no special certificate requi
 - `cartogenesis.js.map` (1.7 MB) — a source map, only useful for debugging the minified JS. Dropping
   it saves bandwidth and stops the original Kotlin source being trivially readable. **Your call:
   I don't mind either way.**
-- `composeResources/` — empty directories.
+- ~~`composeResources/`~~ — **not any more.** This held nothing in 1.0.0 and holds the two
+  bundled type faces now. Deleting it costs the app its typography.
 
 ---
 

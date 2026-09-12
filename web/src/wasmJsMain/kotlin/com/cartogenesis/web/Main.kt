@@ -1,6 +1,5 @@
 package com.cartogenesis.web
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import com.cartogenesis.ui.CartogenesisApp
+import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
 
 /**
@@ -50,7 +50,9 @@ fun main() {
         }
 
         val ready = platform
-        MaterialTheme {
+        // Follows the browser's prefers-color-scheme, and is the same theme the desktop build
+        // applies - including the two bundled faces, which is why the page needs no webfont.
+        CartogenesisTheme {
             if (ready != null) CartogenesisApp(ready)
         }
     }

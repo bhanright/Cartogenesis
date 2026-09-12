@@ -33,6 +33,10 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
+            // The two type faces the theme is set in travel with the module rather than being
+            // asked of the host, which is the only way the browser build renders in the same
+            // faces as the desktop one instead of in whatever the page happens to have.
+            implementation(compose.components.resources)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -43,4 +47,15 @@ kotlin {
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+/*
+ * Where the generated accessors for `src/commonMain/composeResources` land. Named explicitly
+ * rather than left to the plugin's default, which derives a package from the module coordinates
+ * and would change under the code if the module were ever renamed. Internal, because the fonts are
+ * an implementation detail of the theme.
+ */
+compose.resources {
+    packageOfResClass = "com.cartogenesis.ui.generated.resources"
+    publicResClass = false
 }

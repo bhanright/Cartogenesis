@@ -623,7 +623,7 @@ internal object HydraulicErosion {
                                 // however far out that edge happens to be.
                                 levelOf = { c, t ->
                                     val level = deltaTop + (rimTop - deltaTop) * t
-                                    if (rim.grooved(rim.dx(c), rim.dy(c))) {
+                                    if (rim.grooved(rim.columnOffset(c), rim.rowOffset(c))) {
                                         sea.shorelineHeight +
                                             (level - sea.shorelineHeight) * GROOVE_KEEP
                                     } else {

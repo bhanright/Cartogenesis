@@ -452,6 +452,49 @@ before — returns 0.6x, the margin then being the broader of the two because th
 oceanic-continental boundary four fifths of the height at the same width. Per seed the plateau is
 68–72 cells across at half height against the margin's 10–16.
 
+## Boundaries that are gone
+
+A drift vector that only classifies today's boundaries builds a world in which nothing has ever
+moved. Every range is young, every range is high, and every range sits exactly on a plate edge.
+Earth's continents are not like that: most of a continent is the wreckage of collisions whose
+boundary closed long ago. The Appalachians and the Urals are Palaeozoic sutures a thousand
+kilometres from any modern plate edge, worn to about half of Alpine height and spread over a wider
+province than the Alps occupy; the Benue trough, the North Sea graben and the Mississippi embayment
+are rifts that opened, stopped, and filled with their own sediment.
+
+So the stage runs itself several times. Each past epoch carries every plate seed back along minus
+its own drift, re-partitions the map into that older set of plates, classifies the pairs that met
+*then* by the same crust rules — the crusts themselves do not change, only which pairs meet and how
+squarely — and stamps the same five profiles. What it stamps is then aged: the height decays by
+roughly half per epoch, every belt half-width grows by half again, and the epoch's own uplift is
+blurred before it is added, so a crest and a toe become the smooth swell of a worn range. The
+present epoch stamps last and sharpest, and its boundaries, distances and classes are untouched, so
+everything downstream still reads today's plate edges where they are.
+
+A rift of a past epoch is not aged, it is buried: the fault dies, the flexural shoulders relax and
+the trough fills, leaving the broad shallow sag an aulacogen is rather than the chain of half-grabens
+a live rift is.
+
+The result also carries an **age of crust** per cell — how long ago the ground under it was last
+built, in bands that cannot overlap, with cratonic country no epoch ever deformed at the far end.
+Measured on seeds 7, 42 and 1234, a third of the map is present-epoch belt, a fifth to a quarter
+belongs to each older epoch, and 12–23% of the land is cratonic. Nothing reads it yet; it is the
+field [H3 Lithology](REALISM_PLAN.md#h3-lithology--opus) will erode by.
+
+Verified by `TectonicHistoryTest`, which isolates a past epoch's uplift by differencing two worlds
+brought into one frame on the cells no epoch touched, and measures it by the same radial profile
+`BoundaryPairTest` uses — against that epoch's own boundaries, since the boundary that built it has
+since moved. Pooled over the three seeds an old belt stands 2.2 times below a present one and is
+1.5 times broader at half height, and the tallest ground the history builds more than 52 cells from
+any present boundary (twice `boundaryFalloff`, about 1,200 km) stands 0.08–0.14 in normalized
+elevation. With the history switched off that difference field is identically zero and the guard
+finds nothing at all.
+
+One thing the blur must not do is close the gaps. A belt sags to nothing between massifs by design,
+and an isotropic blur wide enough to weld those saddles shut turns a worn province into one
+continuous upland — which is bad geography and, downstream, a corridor one people walks the length
+of. The blur radius is held below the saddle spacing for that reason.
+
 ## Not modelled, and probably shouldn't be
 
 Settlements below the capital, trade routes, and roads. The atlas invents exports and imports from

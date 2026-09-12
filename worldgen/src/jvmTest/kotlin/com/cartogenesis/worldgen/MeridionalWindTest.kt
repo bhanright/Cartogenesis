@@ -43,14 +43,13 @@ class MeridionalWindTest {
          * 26 until H1. The seed is a *sample*, not a bar: it was picked as the one world in
          * seventy whose monsoon region crossed the 2% line cleanly with the slant and missed it
          * without, and the tectonic history redraws every world's coasts and rain shadows, so the
-         * world that best shows the claim is a different one. Seed 26 now reads 1.36% zonal
-         * against 1.99% slanted — the same shape of result, a whisker below the line on both
-         * sides. Re-scanning 1..70 on the new terrain the same way found seed 51 at 1.90% against
-         * 2.99%, which is within a few hundredths of what seed 26 used to give (1.96% against
-         * 2.93%). Forty-eight of the seventy now clear 2% with the slant, so the sample is not a
-         * lucky one.
+         * world that best shows the claim is a different one — seed 26 now reads 1.36% against
+         * 1.99%, a whisker below the line on both sides. Re-scanning 1..70 on the new terrain with
+         * this class's own [monsoonMask] and [largestRegion] found seed 28 at 1.70% against 3.71%:
+         * the same signature seed 26 used to give (1.96% against 2.93%) with more room above the
+         * line. Seven of the seventy clear 2.5% with the slant.
          */
-        const val MONSOON_SEED = 51L
+        const val MONSOON_SEED = 28L
 
         /** How lopsided the year has to be to count, and how much rain the wet half must bring. */
         const val RATIO = 3f

@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -205,41 +204,6 @@ class TectonicHistoryTest {
                     .format(seed, text, bands[DEFAULT_EPOCHS] * 100.0 / cells)
             )
             assertTrue(bands[0] > 0, "seed $seed has no present-epoch crust")
-        }
-    }
-
-    /**
-     * Rule 8 of the plan asks for the measurement before the GPU decision, and this is it: the
-     * whole tectonic stage at 2048 with one epoch and with the default history, plus the same at
-     * 1024, so the growth per epoch is visible rather than inferred.
-     */
-    @Test
-    fun `report the cost of a history`() {
-        // Warm the JIT, so the first size measured is not paying for compilation.
-        val warm = WorldGenConfig(seed = 1L, width = 512, height = 512)
-        PlateStage.generate(warm, TerrainStage.generate(warm))
-
-        listOf(1024, 2048).forEach { size ->
-            val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-                .atResolution(size, size)
-            val terrain = TerrainStage.generate(base)
-            // Best of three, because a single run of a stage this size is at the mercy of a
-            // garbage collection and the numbers are being used to decide something.
-            fun best(times: Int = 3, body: () -> Unit): Long =
-                (1..times).minOf { measureTimeMillis(body) }
-
-            listOf(1, 2, 3, 4).forEach { epochs ->
-                val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
-                val ms = best { PlateStage.generate(config, terrain) }
-                println("HISTORY cost $size epochs=$epochs tectonics ${ms} ms")
-            }
-            // What an epoch is actually made of. Everything before the stamp — the Voronoi
-            // assignment and its domain warp, the pair classification, the jump-flood distance
-            // field — is graph, hash and label work that stays on the CPU by rule 8; only what is
-            // left over is the per-cell pass a GPU could take. Measured rather than assumed, which
-            // is what the rule asks for before the decision.
-            val setup = best { PlateStage.epochBoundaries(base, 1) }
-            println("HISTORY cost $size one epoch's assignment, classification and distance $setup ms")
         }
     }
 

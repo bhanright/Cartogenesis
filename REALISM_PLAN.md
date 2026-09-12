@@ -587,6 +587,26 @@ sections, toolbar), **Help** (Check for updates, About).
   the Mars theme is reviewed.
 - Screenshots of the menu open, Settings, and About in both themes and in Mars, reviewed.
 
+### F5. Phones — Opus
+
+*Dependencies: F4 (same file). Requested 2026-09-12: "revisit getting the web version to display
+better on phones."* The engine already runs at 512 in a phone browser and Compose for Wasm
+handles touch; what breaks is the three-column layout at fixed widths, a pointer-shaped panel, a
+toolbar of nine names, and a graphics-card switch for a device without WebGPU.
+
+- One layout tree, two arrangements. Below ~800 dp wide or with a coarse pointer, the map takes
+  the whole screen; the header (seed, name, Generate) and the pipeline sections live in a bottom
+  sheet that pulls up; the toolbar collapses to icons plus the current style's name; the view menu
+  stays a menu; the legend keeps the cartouche and Fit.
+- Touch: pinch to zoom, drag to pan, double-tap to fit. Touch targets from the theme (taller
+  sliders and switches under a coarse pointer), not per-control edits.
+- Phone defaults: 512, graphics card hidden when the platform reports no WebGPU, export capped
+  at 2048 by `exportCeiling`; the site's small-screen notice becomes "works on phones at 512".
+- Guards: `ChromeGalleryTest` captures 390x844 and 768x1024 alongside 1440x900 in light and dark,
+  reviewed; `PanelKnobsTest` proves the compact arrangement exposes every knob the wide one does;
+  the web bundle builds; and William checks it on his phone, because no capture tells you how a
+  bottom sheet feels.
+
 ## Track G — more of the pipeline on the graphics card
 
 *Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the
@@ -950,6 +970,17 @@ shorelines come from lacustrine fans laid to one flat level. Reported and left: 
 planar hillside holds one bearing for 20-35 cells with no flat involved; that is D8 itself.
 
 
+### Release 1.2.0 (2026-09-12)
+
+Cut from `release/1.2` (branched from main before F1, so it carries Track E, G4, F0, the atlas
+move and the realm-id guard but not the theme) at 9dfdf7a, E1's third pass cherry-picked on top.
+Full suite green on the branch (worldgen 109, cartography 18, desktop 10). William's two worlds at
+2048 through the app's renderer: 718106 37 lakes, 0.29% of land, largest 0.016% of the map;
+59758 74 lakes, 0.82%, largest 0.036%; rifts as chains, rivers to the coasts. Portable zip 96 MB,
+MSI 96 MB, web zip 4.5 MB; packaged exe passes --gpu-check; web build deployed from the branch
+(site eb88d9b, loader stamp 202609120356, app wasm 8e5e62ee served as application/wasm); site
+notes updated. main is the 2.0 line: F1-F3, G2, T1 are there and not in 1.2.0.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the
@@ -982,14 +1013,15 @@ guard reported, so the next chunk knows its baseline.
 | F2 Panel follows the pipeline | Opus | done | 2026-09-12 | d956bcd (merge, see log) | header (seed, Generate/New world, resolution chips, Library/Atlas, status) then World (ocean coverage, graphics-card switch moved here), Terrain (plates stepper 3-40, mountain height = andeanHeight 0.20-0.90, erosion strength = erodibility 0.011-0.110), Climate (seasonal tilt 0-25, rain shadow = orographicStrength 0-5, ice on/off), Water (rivers, lakes, dry basins hold less water), Peoples (realms stepper 0-40, one wilderness switch, borders), Cartography (relief, coastline, style, view - F3 lifts the last two); right column is Export alone; knobs declared as data in PanelKnobs.kt and PanelKnobsTest (13) walks them - coverage, per-knob copy equality, write-back identity, clamping, shown failing with a knob dropped; found and fixed a borders switch reading one field and writing another; ui 17/17, desktop 19/19 |
 | F3 The map is the instrument | Opus | done | 2026-09-12 | 01d7e16 + 3034cec (merge, see log) | translucent toolbar over the map: nine styles as a segmented row, views as a menu (fifteen names run past 1300 dp); legend strip at the foot: cartouche (generated world name from the largest people's language via NameForge, seed, size, generation time as a footnote - 'largest realm' dropped at William's request) and zoom/Fit; Export folded into the header, right column gone, map takes the width; a Name field beside the seed (WorldNaming: generated per seed, editable, stored as the save's title, kept across settings edits, round-trips through the codec header); graphics-card switch moved to the header under Working resolution; 8192 export chip disabled with a note behind Platform.exportCeiling = 4096 and Exports.clamp; ui/desktop tests green, PanelKnobsTest + 6 toolbar/camera, CartoucheTest 6, 4 ceiling and 5 naming tests |
 | F4 Menus, settings, updates, notices | Opus | in progress | 2026-09-12 | | |
+| F5 Phones | Opus | queued behind F4 | | | |
 | G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
 | G2 Export rendering on GPU | Opus | done | 2026-09-12 | 8dca89f | RasterAccelerator seam in cartography takes a RasterRecipe (colours and tables pre-packed, no palette logic in shaders); desktop GpuRaster on OpenGL compute, web left to a later WGSL port; every view and style, relief, coastline, borders, lakes, hatching; 4M-pixel tiles, fields uploaded once; GlContext extracted from GpuErosion (two contexts on one thread invalidate each other's programs), erosion arithmetic untouched; 99.9th-percentile drift 0 across 141.5M pixels, worst channel 2 on 0.0002% (GLSL sqrt at a ramp node); 4096 export 224 -> 210 s, raster 714 -> 368 ms - the raster was never the bottleneck, generation is; 8192 exhausts a 10 GB heap inside the generator before a pixel is drawn (the device rasters 8192 in 0.9 s); README export table corrected |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |
 | G4 Jump-flood distance fields | Opus | done | 2026-09-12 | 0228500 (merge, see log) | math/JumpFloodDistance propagates source coordinates (1, halving powers of two, 1), integer squared distances, ties to the lower index, row-parallel, exact against brute force; replaced the chamfer in ClimateStage.waterDistance, the shelf remap and PlateStage's boundary distance (plate assignment keeps chamfer: only the label is read); 23/93/367 ms at 512/1024/2048 vs chamfer 6/33/110, +0.77 s on a 2048 generation, so no GPU path (rule 8: measured and declined); eight-fold component lone source 0.083 -> 0.004, shelf break on seed 42 0.030 -> 0.000, both controls in-test; continentality gap 8.5C held; shelf near/far held, 0 land cells differ; BoundaryPair 3.47x -> 3.01x (belts up to 8% wider in cells because Euclid is shorter); rift 3/4/0.32 -> 4/5/0.32; DepositionTest pin re-recorded, land 6226 held; render: plateau margins lose their kinks and sweep, the shelf break rounds |
 | H4 Currents feed the rain | Sonnet | done | 2026-09-12 | 30e7dc1 (merge, see log) | marchSeaStep scales over-sea pickup by 1 + currentMoisture * anomaly (0.07/deg, Clausius-Clapeyron); 0 reproduces the field bit for bit; seed 26 cold west coast 1548 -> 1536 mm (-0.8%), warm east coast +0.1%; shown failing with the coupling off; MM_SCALE anchor unmoved (3160/172 mm); no guard moved. Honest finding: at the derived rate no west-coast cell flips to desert on 40 seeds because the march is near saturation before landfall - reduced evaporation is only half of the Atacama; the other half is the cold sea stabilising the air and suppressing rain-out over the coast. A later pass should scale the release rate over cold-current coasts, not the pickup; recorded in TODO |
-| H2 Snow mass balance | Opus | in progress | 2026-09-12 | | |
+| H2 Snow mass balance | Opus | done | 2026-09-12 | 801999a (merge 349c752) | SnowBalance: accumulation = each half-year's precipitation x a snow fraction ramped over -1..+3 C, ablation = positive-degree-day melt at 4.5 mm/degree-day (Braithwaite 1995, Hock 2003) with half-year means turned into degree-days by Calov and Greve 2005 (sigma 4.5 C); ClimateConfig.snowBalance, false reproduces main bit for bit (elevation and biome checksums pinned on 7/42/1234/99); provisional balance before glaciation reuses the seasonal fields on a still ocean (+66/298/1408 ms at 512/1024/2048; solving the gyres would cost 2.1 s and move 0.5-1.6% of the mask); balance 1/3/10 ms so no GPU, the seam cut and SnowBalanceAuditTest re-checks the 50 ms line; ice share of land 7/42/1234/99: 41.9/18.3/26.0/28.8 -> 8.4/3.9/12.0/12.6%, pooled 28.8 -> 9.2% vs Earth 10.1%; cold dry interior 39.9 -> 0.0% ice, wet quarter iced where the dry quarter is not (the control ran backwards), shown failing off; carving mask reads a Pleistocene world: GlaciationConfig.glacialMaximumC 6 C (Tierney 2020) as a polar-amplified ramp 2 C equator to 12 C pole, 26% of seed 42 under maximum ice vs Earth ~25% while the map draws today's 3.9%; lake-density guard restated at 1024 (6.93x, control 1.54x), resolution bar 1.7 -> 2.0 with derivation; desert-in-band, cultures, realms, comb unmoved; render: seed 7's northern third from white to tundra with ice on the polar margin and high wet ground, biome shares elsewhere identical to 0.1% |
 | H5 Sea-level history | Opus | in progress | 2026-09-12 | | |
-| H1 Tectonic history | Opus | in progress | 2026-09-12 | | |
+| H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind H1 and G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
 

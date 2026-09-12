@@ -110,14 +110,19 @@ class DepositionTest {
      * moved the shoreline), the structural cases below (mass conservation, deltas gaining land),
      * and the off-equals-on-at-zero-rates identity — is unchanged.
      *
-     * And then the land count moved, for the first time in ten changes, at H5: 6226 to 6342. This
-     * is the one kind of change that was always going to move it, and the comment above says so —
-     * "none of them moved the shoreline". H5 does. Water the ocean cannot reach is no longer sea:
-     * a body of water with no way out is a lake, and it is marked land at the height it already
-     * stands at so the river stage can decide what it holds. Only up to the size of the largest lake
-     * Earth has, which on seed 42 at 128 is 116 cells, 0.7% of the map; without that cap it would be
-     * 604. The cut itself is where it always was: exactly 62% of the cells still lie below it, and
-     * `PipelineTest`'s land-fraction promise still holds inside its own tolerance.
+     * H1 (the tectonic history) is the ninth such change and the largest of them, and it is the
+     * first that did not have to touch this file: land held at 6226 for the ninth time, for the
+     * reason it has held every other time.
+     *
+     * And then the land count moved, at H5, for the first time in ten changes. This is the one kind
+     * of change that was always going to move it, and the comment above says so — "none of them
+     * moved the shoreline". H5 does. Water the ocean cannot reach is no longer sea: a body of water
+     * with no way out is a lake, and it is marked land at the height it already stands at so the
+     * river stage can decide what it holds. Only up to the size of the largest lake Earth has,
+     * which on seed 42 at 128 comes to 116 cells, 0.7% of the map; without that cap it would be
+     * 604 cells and 3.7%. The cut itself is where it has always been — exactly 62% of the cells
+     * still lie below it — and `PipelineTest`'s land-fraction promise still holds inside its own
+     * tolerance.
      */
     private val startingPointLand = 6342
 

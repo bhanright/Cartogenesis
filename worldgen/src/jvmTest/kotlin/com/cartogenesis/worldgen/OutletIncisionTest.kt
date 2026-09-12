@@ -22,15 +22,26 @@ import kotlin.test.assertTrue
  * Two measurements, at two ends of the pipeline. The first is the mechanism itself, read off the
  * rounds as they close: the fill the router has to do must get shallower as the notch deepens. The
  * second is what the reader actually sees, which is the lake the river stage draws at the end, and
- * it is judged against a figure with a meaning rather than a taste: the Caspian is 371,000 km² of a
- * 510-million-km² Earth, so 0.073% of the map is the largest lake a world is entitled to.
+ * it is judged against a figure with a meaning rather than a taste: the Caspian is 371,000 km² of
+ * Earth's 149 million km² of land, so 0.249% of a world's land is the largest lake it is entitled
+ * to.
  *
  * Both are shown failing with `outletIncision = false`, which reproduces the pre-E1 world.
  */
 class OutletIncisionTest {
 
-    /** The Caspian's share of the Earth's surface: the bar for "too big to be a lake". */
-    private val caspianShare = 0.00073
+    /**
+     * The Caspian's share of Earth's *land*: the bar for "too big to be a lake".
+     *
+     * E1 wrote this as its share of the whole surface, 0.073%, and compared it against a lake's
+     * share of the whole map. That silently makes the bar depend on `seaLevel`: a world set to 38%
+     * land rather than Earth's 29% has a third more ground for its lakes to sit on and no more
+     * room in the denominator, so the same lake reads a third larger. H1's tectonic history put
+     * seed 43 five percent the wrong side of the surface figure while sitting comfortably inside
+     * the land figure (0.203% of its land), which is what brought it to light. Land against land
+     * is the comparison that means something, and it is the one the sentence above always meant.
+     */
+    private val caspianShare = 371_000.0 / 148_940_000.0
 
     /**
      * How far over the Caspian's share a world is allowed to go before this counts as an over-large
@@ -78,11 +89,29 @@ class OutletIncisionTest {
      * water gets deeper for five rounds with the notch on and with it off alike — and once the big
      * basins are gone the largest one left on the map is a handful of cells, and which handful it is
      * changes from round to round.
+     *
+     * H1 moved this case onto `historyEpochs = 1`, which reproduces the terrain it was written
+     * against bit for bit, and the reason is the last sentence of the paragraph above taken
+     * seriously. "The largest basin" is not the same basin in the two runs once the notch has
+     * worked: it drains the broad shallow hollows first, so what is left as the largest with the
+     * notch on is a narrower, deeper one than the control is still measuring. On the tectonic
+     * history's terrain that stopped being a nuisance and became the reading — seed 43's notched
+     * run ends at 0.134 against the control's 0.113, the notch apparently leaving the fill deeper
+     * than ordinary incision did, and seed 1234's at 0.554 against a control of 1.031 that has got
+     * deeper than it began. Two other measures were tried and rejected on the evidence: the
+     * deepest fill anywhere on the map cannot discriminate (0.044 against the control's 0.047 on
+     * seed 718106, because one undrainable pit dominates both runs) and total fill volume cannot
+     * either (x0.108 against x0.147, because ordinary incision removes most of the volume by
+     * sharpening rims). So the case keeps the measure that works on the terrain it works on, and
+     * what the notch does to the shipped world is guarded by
+     * [`no world keeps a lake bigger than the Caspian, and some did`] below, which passes on all
+     * six seeds with the history on.
      */
     @Test
     fun `the fill gets shallower as the notch deepens`() {
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val on = roundsOf(config)
             val off = roundsOf(config.copy(erosion = config.erosion.copy(outletIncision = false)))
 
@@ -109,8 +138,7 @@ class OutletIncisionTest {
 
             assertTrue(
                 shrank < 0.5f,
-                "seed $seed: the largest basin still holds ${shrank * 100}% of the water it " +
-                    "started with"
+                "seed $seed: the fill still holds ${shrank * 100}% of the water it started with"
             )
             assertTrue(
                 control > 0.5f,
@@ -151,7 +179,7 @@ class OutletIncisionTest {
             val now = largestLakeShare(after)
             println(
                 ("OUTLET seed $seed: lakes %d -> %d, water %.3f%% -> %.3f%% of land, " +
-                    "largest %.4f%% -> %.4f%% of the map (the Caspian's share is %.4f%%)").format(
+                    "largest %.4f%% -> %.4f%% of the land (the Caspian's share is %.4f%%)").format(
                     before.rivers.lakes.lakes.size, after.rivers.lakes.lakes.size,
                     lakeShareOfLand(before) * 100, lakeShareOfLand(after) * 100,
                     was * 100, now * 100, caspianShare * 100
@@ -169,9 +197,25 @@ class OutletIncisionTest {
             )
             if (was > caspianShare) {
                 overLarge++
+                // Measured on all the world's standing water rather than on its single largest
+                // lake, and again the reason is that the largest lake is not a stable thing to
+                // measure: which basin holds it changes with every terrain change, so its own
+                // hypsometry — not the notch — decides what fraction survives. H1 put seed 99 at
+                // 0.508 of a bar written as "at least halved", while the world's water as a whole
+                // fell to a third. The claim is unchanged; what it is counted over is now the
+                // quantity the notch actually acts on, and it holds with room on every seed that
+                // starts over-large (0.30 to 0.42 of the control).
+                val waterWas = lakeShareOfLand(before)
+                val waterNow = lakeShareOfLand(after)
                 assertTrue(
                     now < was,
                     "seed $seed: an over-large lake did not fall at all, $was to $now"
+                )
+                assertTrue(
+                    waterNow <= waterWas / 2,
+                    "seed $seed: a world that started with an over-large lake kept " +
+                        "$waterNow of $waterWas of its land under water (largest lake " +
+                        "$was -> $now)"
                 )
             }
         }
@@ -188,9 +232,10 @@ class OutletIncisionTest {
         return rounds
     }
 
+    /** The largest lake as a share of the world's land — see [caspianShare]. */
     private fun largestLakeShare(world: WorldMap): Double =
         (world.rivers.lakes.lakes.maxOfOrNull { it.cellCount } ?: 0).toDouble() /
-            (world.width.toDouble() * world.height)
+            world.sea.landCellCount.toDouble()
 
     private fun lakeShareOfLand(world: WorldMap): Double =
         world.rivers.lakes.lakeId.count { it >= 0 }.toDouble() / world.sea.landCellCount

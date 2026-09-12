@@ -125,7 +125,13 @@ object WorldGenerationEngine {
                     // reuse - and so is `climate`, because the freezing line is read off the
                     // climate section's own temperature curve two stages before that stage runs.
                     it.config.glaciation == config.glaciation &&
-                    (!config.glaciation.enabled || it.config.climate == config.climate)
+                    (!config.glaciation.enabled || it.config.climate == config.climate) &&
+                    // H2's provisional climate is a whole climate stage, so it reads the ocean
+                    // section the way the real one does - the coastal reach that continentality
+                    // and the maritime term are measured in, and the sea temperature the march
+                    // evaporates from. A change there now moves the ice as well as the rain.
+                    (!config.glaciation.enabled || !config.climate.snowBalance ||
+                        it.config.ocean == config.ocean)
             }
             ?.sea
             // Ice carves between the percentile cut and everything that reads the terrain, which is
@@ -134,9 +140,33 @@ object WorldGenerationEngine {
             // `GenerationStage` of its own would have meant a save section of its own, and it has
             // no field of its own to save - it rewrites `sea.relativeElevation`, which is already
             // stored and already the thing every later stage reads.
-            ?: GlaciationStage.apply(
-                config, SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
-            )
+            ?: run {
+                val cut = SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
+                // The provisional climate (H2). Ice is a mass balance, and a mass balance needs
+                // the rainfall as well as the temperature, so the ice can no longer be decided
+                // from latitude and altitude alone the way it was: the whole climate stage runs
+                // here, on the terrain as it stands before the carving, purely to produce the
+                // snow balance the mask is taken from. Nothing else in the pipeline sees it — the
+                // real ocean and the real climate are computed below, after the ice has cut, as
+                // they always were.
+                //
+                // On a still ocean, deliberately: the gyre solve is the expensive half of a
+                // climate (2.1 s at 2048 against the march's 1.5 s) and it is worth almost
+                // nothing to the ice. Measured on the four standard seeds at 512, giving the
+                // provisional march the real currents instead of a still sea moves 62-128 cells
+                // of a 4,000-13,000 cell ice mask, 0.5-1.6% of it. The finished map's ice, which
+                // is what the reader sees, is classified from the real climate below and does
+                // see them.
+                val provisional =
+                    if (config.glaciation.enabled && config.climate.snowBalance &&
+                        cut.landCellCount > 0
+                    ) {
+                        ClimateStage.provisionalSnowBalance(
+                            config, cut, OceanStage.withoutCurrents(config, cut)
+                        )
+                    } else null
+                GlaciationStage.apply(config, cut, provisional)
+            }
 
         report(GenerationStage.OCEAN)
         val ocean = reusable

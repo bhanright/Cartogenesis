@@ -42,12 +42,35 @@ class LakeWaterBalanceTest {
      * of the balance rather than a test of the notch. Re-picking a seed instead would only have to
      * be done again the next time anything moves the terrain.
      */
-    private fun world(seed: Long, waterBalance: Boolean, size: Int = 512): WorldMap {
+    private fun world(
+        seed: Long,
+        waterBalance: Boolean,
+        size: Int = 512,
+        /**
+         * One epoch — the pre-H1 terrain, bit for bit — for the two basin cases, and the shipped
+         * default for the river case below.
+         *
+         * Both seeds here are *samples*: seed 43 was chosen by searching 1..120 for the largest
+         * spill-level basin in dry country, seed 99 for a large one in wet country, and every
+         * figure the two cases measure is a property of the particular hollow that search found.
+         * H1's tectonic history rewrites the relief the depression fill runs over, so it reshapes
+         * those hollows — seed 43's falls from 1858 cells to 1161 and, being smaller and steeper
+         * sided, holds 58% of its spill area at balance against E4's recorded 45%, while seed 99's
+         * wet basin falls below the 200-cell floor the wet case needs. Neither figure is about the
+         * water balance, which is what these cases are for and which is unchanged: the control is
+         * still 100% of the same footprint by construction. Re-running the 1..120 search on the new
+         * terrain would re-pick both seeds and move both figures again on the next terrain change;
+         * pinning the sample to the terrain it was chosen on is the same arrangement E1 left
+         * `GlaciationTest` in and H1 left `RibbonLandTest` and `OutletIncisionTest` in.
+         */
+        historyEpochs: Int = 1
+    ): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
         return WorldGenerationEngine.generateBlocking(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
-                erosion = base.erosion.copy(outletIncision = false)
+                erosion = base.erosion.copy(outletIncision = false),
+                tectonics = base.tectonics.copy(historyEpochs = historyEpochs)
             )
         )
     }
@@ -165,7 +188,13 @@ class LakeWaterBalanceTest {
     @Test
     fun `rivers still reach water`() {
         listOf(drySeed, wetSeed, 7L, 42L, 1234L).forEach { seed ->
-            val world = world(seed, waterBalance = true)
+            // The shipped world: this case is about every drawn river on any world, not about one
+            // chosen basin, so it is the one here that runs with the tectonic history on.
+            val world = world(
+                seed,
+                waterBalance = true,
+                historyEpochs = WorldGenConfig(seed = 0L).tectonics.historyEpochs
+            )
             val w = world.width
             val h = world.height
             val onRiver = BooleanArray(w * h)

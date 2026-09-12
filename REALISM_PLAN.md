@@ -1409,6 +1409,25 @@ nested crescent-shaped lakes down a hotspot cone on 718106's southern rift (terr
 successive fill levels, TODO). F6's five chromes and the colour-blind style reviewed from the
 gallery screenshots: each distinct and readable, the map unchanged under all of them.
 
+### Release 2.0.0 (2026-09-12)
+
+Cut from `main` at 832d0b7 (F0–F7, G2, G4, H1, H2, H4, H5, H5b, E5, E6, E7, E8, T1, MIT) and
+tagged `v2.0.0`. Per-merge tier green on the release commit (worldgen 37 classes, cartography 5,
+ui 8, desktop 12); audit tier run once, 29 worldgen cases with one red carried into the release
+notes as a known deviation — `GlaciationAuditTest`'s 2048 comb on 718106 at 6.2% of standing
+water against 3.5%, the bars on the planar flank of the Andean margin E7 identified, the fill's or
+the routing's rather than deposition's (E6: 102 of 145 with deposition off) — and the desktop
+audit cases green. William's two worlds at 2048 through the app's renderer: 718106 17 lakes,
+1.09% of land, largest 0.106% of the map (the 4452-cell rift lake E7 measured at 24% of relief
+deep); 59758 19 lakes, 0.78%, largest 0.072%. Packaged exe passes `--gpu-check` for erosion and
+the export raster. Portable zip 97 MB, MSI 98 MB, web zip 5.1 MB, on the GitHub release with the
+notes. Web build deployed from `main` (site c8792d0, loader stamp 202609121528, app wasm
+000bc7aa, the six bundled faces kept), the description page's notice now "Works on phones", its
+spec list at eleven styles and sixteen themes, and its poster the top band of 718106's 2048
+render (1600x800 WebP, 150 KB); site notes 1a21532. Three Windows build traps hit during the
+release and recorded in rule 6. `release/2.0` cut from the tag for 2.0.x; `main` is the 3.0
+line and its version 3.0.0-dev.
+
 ## Realism audit II (2026-09-12)
 
 *William asked for a second audit of the climatology, geology, hydrology and presentation, "with a

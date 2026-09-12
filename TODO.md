@@ -276,6 +276,16 @@
 
 ## Open
 
+- **Habitability reads the river default, not the river setting.** `NationStage.drawableRiverFlow`
+  pins `RiverConfig.sourceFlowShare`'s default rather than reading the setting, so a world whose river
+  slider has been moved builds its habitability against a different river density than the map
+  draws. Found by the C2 sweep, named and documented, not fixed (a behaviour change wants its own
+  guard). 2026-09-12.
+- **Realm governments are decided by cell counts, not areas.** `Atlas.government`'s empire and
+  free-city bars count cells, so the same world exported at a finer grid promotes every realm: the
+  `minCells` class of defect again. Express them as shares of the land and pin with the resolution
+  contract. Found by the C2 sweep. 2026-09-12.
+
 - **Cold currents should suppress rain-out, not only pickup.** H4 scales the moisture march's
   over-sea pickup by sea-surface temperature, which is physically right and measurably tiny
   (-0.8% on a cold coast) because the march saturates before landfall. The Atacama and the Namib

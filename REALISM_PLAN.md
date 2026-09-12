@@ -589,6 +589,97 @@ component of the distance field's iso-contours drops below a stated floor; `Cont
 
 ---
 
+## Track H — forces the generator still lacks
+
+*Added 2026-09-12 after William asked for the five candidates from the GPU discussion to be
+judged on feasibility and visible realism. Verdicts: sea-level history and snow mass balance are
+cheap and change the map most; currents feeding rain is small and cheap; tectonic history is the
+biggest piece of work and the biggest structural gain; lithology is worth its erodibility half,
+and karst as such is below the map's scale. Ordered by dependency, not by value.*
+
+### H4. Currents feed the rain — Sonnet
+
+*Dependencies: G4 merged (it edits `ClimateStage`'s distance call).* The moisture march picks up
+sea moisture at one rate everywhere; on Earth evaporation follows sea-surface temperature, so a
+cold upwelling current starves the coast it washes (Atacama, Namib, Baja) and a warm one feeds
+it (the Gulf Stream and Norway). The ocean stage already produces a sea-temperature anomaly; scale
+the march's over-sea pickup by it (Clausius-Clapeyron: roughly +7% per degree, so a 5-degree
+cold anomaly cuts pickup by a third). Guard: on a seed with a cold current along a subtropical
+west coast (find one; report which), coastal rainfall on that coast falls and a coastal desert
+appears where the belt already made it dry, while a warm-current east coast at the same latitude
+is unchanged or wetter; shown failing with the coupling off. Desert-in-band and Mediterranean
+counts reported.
+
+### H2. Snow mass balance — Opus
+
+*Dependencies: H4 (shares `ClimateStage`).* Ice today is where the annual mean sits at or below
+freezing, so every cold interior is an ice sheet and seed 7 was 43% ice. On Earth a glacier exists
+where accumulation beats ablation: Siberia is colder than Norway's coast and has no ice sheet,
+because it is dry; Patagonia's snowline is at 1000 m and the Atacama's at 6000 m. Compute a
+balance per cell from the seasonal fields: accumulation = cold-season precipitation falling as
+snow (cold-season temperature below freezing), ablation = a positive-degree-day melt from the
+warm-season temperature (a published degree-day factor, stated). Ice where the balance is
+positive. Two consumers: the glaciation mask (which today runs on a provisional temperature
+before climate exists - run a provisional climate march before glaciation, the stage costs under
+a second at 2048, and the final climate after) and the ICE_SHEET / tundra split in `classify`.
+Guard: a cold dry interior (find one on the standard seeds) becomes tundra or cold desert, not ice;
+a wet maritime highland at the same latitude keeps ice lower than a dry one; ice share of land
+reported per seed against the Earth figure (about 10% of land, most of it Antarctica and
+Greenland); shown failing with the balance off. This will move the culture and realm guards; report
+them.
+
+### H5. Sea-level history — Opus
+
+*Dependencies: E1 merged (it owns the hydraulic rounds).* The hydraulic rounds grade every river
+to today's sea level, so no valley continues below it and every coast is a percentile cut through
+the land. On Earth the last lowstand was 120 m down and rivers cut to it; the rise since drowned
+their lower valleys into rias, estuaries and the sounds of the Atlantic seaboard, and left the
+shelf a flooded plain. Run the hydraulic rounds with the base level a seeded fraction below the
+final cut (Earth's 120 m is about 1.5% of relief; expose it as `SeaConfig.lowstand`), then cut sea
+level where it is today. Valleys below the cut flood: the coastline follows the drainage where the
+land is low, and the shelf inherits the drowned channels. Optionally a highstand terrace: a
+second, higher stand that planes a coastal bench (raised beaches) - do it only if it reads at 2048.
+Guard: count rivers whose mouth lies inside an inlet longer than three cells (an estuary) and the
+coastline's indentation ratio, before and after; shown failing with lowstand zero;
+RiverEndingsTest and the mass budget hold; the delta guard holds (deltas build at the present
+level). Render and look at 2048 on 718106 and 59758: the coasts should gain estuaries and sounds
+where rivers meet them, not everywhere.
+
+### H1. Tectonic history — Opus
+
+*Dependencies: G4 merged (it edits `PlateStage`'s distance calls).* Plates carry a drift vector
+that only classifies today's boundaries; nothing has ever moved, so every range is young and
+sits exactly on a boundary. Earth's continents carry the scars of boundaries that are gone: the
+Appalachians and Urals are old collisions far from any plate edge, worn low and rounded; failed
+rifts leave troughs and basins; a plateau has a history of arcs accreted onto it. Do not simulate
+plate motion cell by cell. Generate a *history* instead: K past epochs (three or four), each with
+the plate seeds displaced along minus their drift times the epoch's age, boundaries classified
+in that configuration and belts stamped with the same crust-pair profiles, then aged: height
+decays with age, width grows, the profile rounds (a blur whose radius grows with age), and the
+belt's erodibility rises for H3. The present epoch stamps last and sharpest. Rifts that opened in
+a past epoch and closed leave a sediment-filled trough. Guard: at least one belt on the standard
+seeds sits more than a stated distance from any present boundary, is lower and broader than the
+present belts by stated factors (Appalachians against Alps), and `BoundaryPairTest` still finds
+the present belts; `RibbonLandTest` holds; shown failing with K = 1. Cost: tectonics is 0.9 s at
+2048, so four epochs are affordable. Render and look: an old worn range inland of a young coastal
+one is the picture.
+
+### H3. Lithology — Opus
+
+*Dependencies: H1 and G1 (the hydraulic rounds must have their final form before they read an
+erodibility field).* Every cell erodes at the same rate, so a shield and a sedimentary basin
+dissect alike. Carry an erodibility field out of H1's history: old crust (shield, cratonic
+interiors) hard and low-relief with lakes; young orogens moderate; basins and coastal plains soft;
+flood-basalt plateaus from hotspot and rift epochs hard-capped (Deccan, Columbia) so they hold a
+flat top with steep edges. Feed it to the thermal critical slope and the hydraulic incision
+coefficient. Karst is deliberately not modelled as landforms - sinkholes and dry valleys are below
+the scale of a 20 km cell - but a carbonate flag on soft platform cells may suppress surface
+drainage below a threshold, so those plateaus show fewer rivers and springs at their edges; do
+this only if it reads at 2048. Guard: relief and drainage density differ between shield, orogen
+and basin cells by stated factors, shown failing with a uniform field; the mass budget holds.
+
+---
+
 ## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
 
 Looked at, not measured: seeds 7, 42, 1234 — fantasy, biome, summer and winter rainfall, winter
@@ -804,6 +895,11 @@ guard reported, so the next chunk knows its baseline.
 | G2 Export rendering on GPU | Opus | in progress | 2026-09-12 | | |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |
 | G4 Jump-flood distance fields | Opus | in progress | 2026-09-12 | | |
+| H4 Currents feed the rain | Sonnet | queued behind G4 | | | |
+| H2 Snow mass balance | Opus | queued behind H4 | | | |
+| H5 Sea-level history | Opus | queued behind E1 | | | |
+| H1 Tectonic history | Opus | queued behind G4 | | | |
+| H3 Lithology | Opus | queued behind H1 and G1 | | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

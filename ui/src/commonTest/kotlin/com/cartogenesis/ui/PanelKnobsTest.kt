@@ -349,8 +349,9 @@ class PanelKnobsTest {
     fun `the toolbar offers every style and every view`() {
         assertEquals(MapStyle.entries.toList(), MapChrome.styles)
         assertEquals(MapView.entries.toList(), MapChrome.views)
-        // Ten since F4 added Mars, which is the tenth cell in the segmented row.
-        assertEquals(10, MapChrome.styles.size)
+        // Eleven since F6 added Colour-blind, which is the eleventh cell in the segmented row
+        // (Mars was the tenth, added by F4).
+        assertEquals(11, MapChrome.styles.size)
         assertEquals(15, MapChrome.views.size)
     }
 

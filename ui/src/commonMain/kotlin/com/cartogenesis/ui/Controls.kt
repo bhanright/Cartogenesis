@@ -20,12 +20,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AssistChip as MaterialAssistChip
 import androidx.compose.material3.Button as MaterialButton
@@ -74,7 +80,10 @@ internal fun Slider(
     steps: Int = 0
 ) {
     val scheme = MaterialTheme.colorScheme
-    val accent = if (enabled) scheme.primary else scheme.outline
+    // The accent as a *mark* rather than as a word. Identical to `primary` in every chrome but
+    // High contrast, which keeps the saturated blue here and a lifted one for text — see
+    // [ChromeDetail.markAccent].
+    val accent = if (enabled) LocalChromeDetail.current.mark(scheme) else scheme.outline
     val rail = if (enabled) scheme.outline else scheme.outlineVariant
     // The two numbers that used to be literals here. Under a mouse they are still 26 and 13; under
     // a fingertip they are 44 and 20, and no call site knows the difference. See [TouchTargets].
@@ -122,6 +131,7 @@ internal fun Switch(
     enabled: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
+    val mark = LocalChromeDetail.current.mark(scheme)
     // Boxed rather than stretched: a Material switch draws itself at a fixed size and forcing a
     // taller one distorts the track, so what grows under a fingertip is the *target* around it.
     // With a mouse the minimum is zero, so the box wraps the switch exactly and nothing moves.
@@ -134,9 +144,9 @@ internal fun Switch(
             onCheckedChange = onCheckedChange,
             enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = scheme.primary,
+                checkedThumbColor = mark,
                 checkedTrackColor = scheme.secondaryContainer,
-                checkedBorderColor = scheme.primary,
+                checkedBorderColor = mark,
                 uncheckedThumbColor = scheme.outline,
                 uncheckedTrackColor = Color.Transparent,
                 uncheckedBorderColor = scheme.outline,
@@ -164,6 +174,7 @@ internal fun Button(
     content: @Composable RowScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val detail = LocalChromeDetail.current
     MaterialButton(
         onClick = onClick,
         modifier = modifier,
@@ -176,8 +187,43 @@ internal fun Button(
             disabledContentColor = scheme.outline
         ),
         elevation = null,
-        border = BorderStroke(1.dp, if (enabled) scheme.primary else scheme.outlineVariant),
+        border = BorderStroke(
+            detail.stroke,
+            if (enabled) detail.mark(scheme) else scheme.outlineVariant
+        ),
         contentPadding = contentPadding,
+        // Armed is otherwise a wash and a darker rule — two hues. Under the Colorblind chrome it
+        // is also a rule under the word, which is the only cue that survives every simulation.
+        content = { Underlined(detail.shapeCues && enabled) { content() } }
+    )
+}
+
+/** Underlines everything drawn inside it, by moving the text style rather than the words. */
+@Composable
+private fun Underlined(on: Boolean, content: @Composable () -> Unit) {
+    if (!on) {
+        content()
+        return
+    }
+    CompositionLocalProvider(
+        LocalTextStyle provides LocalTextStyle.current.copy(
+            textDecoration = TextDecoration.Underline
+        ),
+        content = content
+    )
+}
+
+/** Strikes everything drawn inside it. The Colorblind chrome's cue for "you cannot have this". */
+@Composable
+private fun Struck(on: Boolean, content: @Composable () -> Unit) {
+    if (!on) {
+        content()
+        return
+    }
+    CompositionLocalProvider(
+        LocalTextStyle provides LocalTextStyle.current.copy(
+            textDecoration = TextDecoration.LineThrough
+        ),
         content = content
     )
 }
@@ -202,7 +248,10 @@ internal fun OutlinedButton(
             contentColor = scheme.onSurface,
             disabledContentColor = scheme.outline
         ),
-        border = BorderStroke(1.dp, if (enabled) scheme.outline else scheme.outlineVariant),
+        border = BorderStroke(
+            LocalChromeDetail.current.stroke,
+            if (enabled) scheme.outline else scheme.outlineVariant
+        ),
         contentPadding = contentPadding,
         content = content
     )
@@ -222,10 +271,13 @@ internal fun FilterChip(
     enabled: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
+    val detail = LocalChromeDetail.current
     MaterialFilterChip(
         selected = selected,
         onClick = onClick,
-        label = label,
+        // The chosen one is ruled twice as heavily and the unavailable one is struck through, so
+        // that neither state is told by colour alone. Off in every chrome but Colorblind.
+        label = { Struck(detail.shapeCues && !enabled) { label() } },
         modifier = modifier,
         enabled = enabled,
         shape = RoundedCornerShape(2.dp),
@@ -238,10 +290,10 @@ internal fun FilterChip(
             disabledLabelColor = scheme.outline
         ),
         border = BorderStroke(
-            1.dp,
+            if (detail.shapeCues && selected && enabled) detail.stroke * 2 else detail.stroke,
             when {
                 !enabled -> scheme.outlineVariant
-                selected -> scheme.primary
+                selected -> detail.mark(scheme)
                 else -> scheme.outlineVariant
             }
         )
@@ -267,18 +319,66 @@ internal fun AssistChip(
             containerColor = Color.Transparent,
             labelColor = scheme.onSurfaceVariant
         ),
-        border = BorderStroke(1.dp, scheme.outlineVariant)
+        border = BorderStroke(LocalChromeDetail.current.stroke, scheme.outlineVariant)
     )
 }
 
-/** A ruled line, at the weight a pen would draw it. */
+/** A ruled line, at the weight a pen would draw it — or at the chrome's, where it asks. */
 @Composable
 internal fun HorizontalDivider(modifier: Modifier = Modifier) {
     MaterialHorizontalDivider(
         modifier = modifier,
-        thickness = 1.dp,
+        thickness = LocalChromeDetail.current.stroke,
         color = MaterialTheme.colorScheme.outlineVariant
     )
+}
+
+/**
+ * The rule under a section heading, drawn the way this chrome rules a section.
+ *
+ * The panel has six headings and every one of them used to draw a [HorizontalDivider] at the call
+ * site. Two of F6's chromes want something else there — Hallowed's hairline doubled in gold leaf,
+ * Baroque's double hairline with a lozenge centred on each end, which is the rule the author's site
+ * draws in CSS — and the point of putting the choice in [ChromeDetail] is that the six call sites
+ * do not change and cannot disagree. A chrome that says nothing gets the hairline it always had.
+ */
+@Composable
+internal fun SectionRule(modifier: Modifier = Modifier) {
+    val detail = LocalChromeDetail.current
+    if (detail.sectionRule == SectionRuleStyle.PLAIN) {
+        HorizontalDivider(modifier)
+        return
+    }
+    val ink = detail.rule(MaterialTheme.colorScheme)
+    val diamonds = detail.sectionRule == SectionRuleStyle.DOUBLED_WITH_DIAMONDS
+    Canvas(modifier.fillMaxWidth().height(7.dp)) {
+        val weight = 1.dp.toPx()
+        val gap = 3.dp.toPx()
+        val top = (size.height - (gap + weight)) / 2f
+        // A lozenge is as tall as the pair of rules is deep, so the ornament reads as one object
+        // rather than as two lines with something stuck on the end.
+        val half = if (diamonds) (gap + weight) else 0f
+        drawRect(ink, Offset(half, top), androidx.compose.ui.geometry.Size(size.width - half * 2, weight))
+        drawRect(
+            ink,
+            Offset(half, top + gap),
+            androidx.compose.ui.geometry.Size(size.width - half * 2, weight)
+        )
+        if (!diamonds) return@Canvas
+        val middle = top + gap / 2f + weight / 2f
+        listOf(half, size.width - half).forEach { x ->
+            drawPath(
+                Path().apply {
+                    moveTo(x, middle - half)
+                    lineTo(x + half, middle)
+                    lineTo(x, middle + half)
+                    lineTo(x - half, middle)
+                    close()
+                },
+                ink
+            )
+        }
+    }
 }
 
 /** A card is a bordered patch of the same paper: no shadow, no tint, no lift. */
@@ -296,7 +396,7 @@ internal fun Card(
             contentColor = scheme.onSurface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, scheme.outlineVariant),
+        border = BorderStroke(LocalChromeDetail.current.stroke, scheme.outlineVariant),
         content = content
     )
 }

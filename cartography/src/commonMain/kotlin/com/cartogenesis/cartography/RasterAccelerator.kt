@@ -130,6 +130,24 @@ class RasterRecipe(
     /** The unstyled ramps the diagnostic views use, which ignore the style on purpose. */
     val plainOceanRamp: IntArray,
     val plainLandRamp: IntArray,
+    /**
+     * The water and the relief the political and peoples views read.
+     *
+     * The plain ramps for every style but the one that declares its own realm set, which gets its
+     * own — see [MapStyle.realmRamp]. Carried as two more ramps rather than as a flag, so the
+     * device is still only looking colours up and the shader has no idea which style it is drawing.
+     */
+    val politicalOceanRamp: IntArray = plainOceanRamp,
+    val politicalLandRamp: IntArray = plainLandRamp,
+    /**
+     * How many colours the realm set holds, or 0 where there is no declared set.
+     *
+     * Non-zero means each further turn of the cycle is hatched: see [MapStyle.hatched], of which
+     * the shader's copy is the other half.
+     */
+    val realmSetSize: Int = 0,
+    /** How far a hatch stroke is dragged toward [coastline]. */
+    val hatchStrength: Float = MapStyle.HATCH_STRENGTH,
     val temperatureRamp: IntArray,
     val precipitationRamp: IntArray,
     val biomeColors: IntArray,
@@ -203,13 +221,13 @@ class RasterRecipe(
 
                 MapView.POLITICAL -> {
                     indexA = world.nations.nationId
-                    colorsA = colourTable(indexA) { MapPalette.nation(it) }
+                    colorsA = colourTable(indexA) { style.realm(it) }
                     RasterView.POLITICAL
                 }
 
                 MapView.CULTURES -> {
                     indexA = world.cultures.cultureId
-                    colorsA = colourTable(indexA) { MapPalette.culture(it) }
+                    colorsA = colourTable(indexA) { style.people(it) }
                     RasterView.CULTURES
                 }
 
@@ -310,6 +328,11 @@ class RasterRecipe(
                 landRamp = style.landRamp,
                 plainOceanRamp = MapPalette.plainOceanRamp,
                 plainLandRamp = MapPalette.plainLandRamp,
+                politicalOceanRamp =
+                    if (style.ownsRealms) style.oceanRamp else MapPalette.plainOceanRamp,
+                politicalLandRamp =
+                    if (style.ownsRealms) style.landRamp else MapPalette.plainLandRamp,
+                realmSetSize = style.realmRamp?.size ?: 0,
                 temperatureRamp = MapPalette.temperatureRamp,
                 precipitationRamp = MapPalette.precipitationRamp,
                 biomeColors = IntArray(Biome.entries.size) { MapPalette.biome(Biome.entries[it]) },

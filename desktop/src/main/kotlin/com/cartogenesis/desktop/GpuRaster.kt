@@ -180,7 +180,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         val ramps = listOf(
             recipe.oceanRamp, recipe.landRamp,
             recipe.plainOceanRamp, recipe.plainLandRamp,
-            recipe.temperatureRamp, recipe.precipitationRamp
+            recipe.temperatureRamp, recipe.precipitationRamp,
+            recipe.politicalOceanRamp, recipe.politicalLandRamp
         )
         val packed = IntArray(ramps.sumOf { it.size })
         var offset = 0
@@ -208,6 +209,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
+        GL43C.glUniform1i(uniform("uRealmSet"), recipe.realmSetSize)
+        GL43C.glUniform1f(uniform("uHatchStrength"), recipe.hatchStrength)
 
         colour("uPaper", recipe.paper)
         colour("uLake", recipe.lake)
@@ -336,9 +339,11 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform vec3 uAnomalyMid;
             uniform vec3 uAnomalyWarm;
             uniform vec3 uAnomalyCold;
+            uniform int uRealmSet;
+            uniform float uHatchStrength;
 
             // offset and length of each ramp within `ramps`
-            uniform ivec2 uRamp[6];
+            uniform ivec2 uRamp[8];
 
             const int RAMP_OCEAN = 0;
             const int RAMP_LAND = 1;
@@ -346,6 +351,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const int RAMP_PLAIN_LAND = 3;
             const int RAMP_TEMPERATURE = 4;
             const int RAMP_PRECIPITATION = 5;
+            // The water and the relief the political and peoples views read: the plain pair for
+            // every style but the one that declares its own realm set. See RasterRecipe.
+            const int RAMP_POLITICAL_OCEAN = 6;
+            const int RAMP_POLITICAL_LAND = 7;
 
             const int V_FANTASY = 0;
             const int V_POLITICAL = 1;
@@ -455,12 +464,26 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     return tint(rampAt(RAMP_LAND, clamp(relative, 0.0, 1.0)), biomeAt(i));
                 }
                 if (uView == V_POLITICAL || uView == V_CULTURES) {
-                    if (!land) return rampAt(RAMP_PLAIN_OCEAN, 1.0 - clamp(-relative, 0.0, 1.0));
+                    if (!land) {
+                        return rampAt(RAMP_POLITICAL_OCEAN, 1.0 - clamp(-relative, 0.0, 1.0));
+                    }
                     int owner = indexA[i];
                     if (owner < 0) return uWilderness;
+                    vec3 fill = unpack(colorsA[owner]);
+                    // MapStyle.hatched, to the letter. A declared realm set runs out of colours
+                    // and starts again, so each further turn of the cycle takes a texture instead
+                    // of a hue that is not there to be had. uRealmSet is 0 for every other style,
+                    // and then this whole block is dead.
+                    if (uRealmSet > 0) {
+                        int tier = (owner / uRealmSet) % 3;
+                        bool ink = false;
+                        if (tier == 1) ink = ((x + y) % 6) < 2;
+                        else if (tier == 2) ink = ((x + (6 - y % 6)) % 6) < 2;
+                        if (ink) fill = blend(fill, uCoastline, uHatchStrength);
+                    }
                     return blend(
-                        unpack(colorsA[owner]),
-                        rampAt(RAMP_PLAIN_LAND, clamp(relative, 0.0, 1.0)),
+                        fill,
+                        rampAt(RAMP_POLITICAL_LAND, clamp(relative, 0.0, 1.0)),
                         0.3
                     );
                 }

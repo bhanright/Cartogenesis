@@ -26,7 +26,26 @@ import org.junit.Test
  */
 class GlaciationTest {
 
+    /**
+     * Seed 42 at 1024, not at 512.
+     *
+     * The guard below was measured at 512 until H2, and H2 is why it moved: with ice decided by a
+     * snow mass balance the frozen mask is the size of a real glacial maximum's (26% of seed 42's
+     * land, against Earth's 25% at the last one) instead of a third to a half of the planet, and at
+     * 512 what is left of that seed's cold country holds three glacial lakes against the temperate
+     * zone's one. Three against one is not a density a ratio can be computed from — the answer
+     * moves by half its own value when one basin lands or does not — and the case's own note below
+     * had already recorded that 512 is the hardest grid this guard could have picked, because seed
+     * 42's cold ground fails the relief test there and passes at 1024, leaving no valley glacier on
+     * the map at all.
+     *
+     * So the guard is restated on the grid where it can discriminate rather than given a lower bar
+     * on the grid where it cannot: 1024 is the desktop's own default resolution, it is where the
+     * comb case below already measures this same seed, and both regimes — valley and sheet — are
+     * working there.
+     */
     private val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        .atResolution(1024, 1024)
 
     /**
      * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
@@ -354,369 +373,6 @@ class GlaciationTest {
         }
     }
 
-    /**
-     * The author's own world, at the resolution and the settings he generates it at.
-     *
-     * Two complaints, one test, because both are about the same world and generating it is not
-     * cheap. Seed 718106 at 2048, ocean at 62%, fourteen plates, twelve realms: the configuration
-     * from the desktop app, not a convenient one.
-     *
-     * **No narrow straight water.** A *bar* is a body of standing water at most two cells across
-     * and at least four cells long along one of the four grid bearings, measured over the whole
-     * body. That is the artefact by its own description — the comb of parallel gullies, the fan of
-     * troughs radiating from a confluence — and the guard's tolerance is zero, because after the
-     * fix no basin *can* be one: a basin is a region opened by a cell and dilated back, so it is a
-     * union of three-by-three blocks and three cells wide everywhere. A guard that can only be
-     * satisfied by construction is the only kind worth having here, since the last two attempts
-     * both set a threshold and both left the author looking at bars one level down.
-     *
-     * Measured on this seed and config, main against the fix:
-     *
-     * | | bars | lakes | lake cells | share of land | largest lake |
-     * |---|---|---|---|---|---|
-     * | main | 4 | 113 | 33,512 | 2.10% | 3,901 (0.093% of map) |
-     * | fixed | 0 | 70 | 23,070 | 1.45% | 3,489 (0.083% of map) |
-     * | glaciation off | 0 | 54 | 19,000 | 1.19% | 5,129 (0.122% of map) |
-     *
-     * The stage's own tally on the fixed code, printed above, says where the bars went: of the
-     * twenty stretches of ice that would have been given an over-deepened basin, **seventeen were
-     * refused for walking the straight-line distance from their head to their lip**. That is the
-     * comb, counted.
-     *
-     * The third row is why the lake *counts* are asserted only against the ice's own contribution.
-     * Most of this world's standing water at 2048 is not glacial at all — it is in tectonic and
-     * erosional basins that exist with the stage switched off — and the largest body on the map is
-     * one of those, at seven times [com.cartogenesis.worldgen.model.GlaciationConfig
-     * .maxLakeShareOfMap]. This stage can cap what it cuts and does; it cannot cap what it did not
-     * make, and a guard that pretended otherwise would be measuring the erosion stage.
-     */
-    @Test
-    fun `the author's 2048 world has no narrow straight water`() {
-        val config = authorConfig(2048)
-        val world = WorldGenerationEngine.generateBlocking(config)
-        reportBudget(config, world)
-        val shape = lakeShape(world)
-        val land = world.sea.landCellCount
-        println(
-            "AUTHOR 2048 seed 718106 sea 0.62: lakes=${shape.lakes} cells=${shape.cells}" +
-                " shareOfLand=${"%.4f".format(shape.cells.toFloat() / land)}" +
-                " largest=${shape.largest} (${"%.6f".format(shape.largestShareOfMap)} of map)" +
-                " bars=${shape.bars} barCells=${shape.barCells}" +
-                " filaments=${countFilaments(world)}" +
-                " parallelBarShare=${"%.4f".format(combShare(world))}"
-        )
-        assertTrue("no water to measure", shape.cells > 1000)
-        assertTrue(
-            "seed 718106 at 2048 carries ${shape.bars} bodies of water at most two cells across" +
-                " and four or more long on a grid bearing (${shape.barCells} cells): a basin the" +
-                " ice cut is a region three cells wide at its narrowest, so none of them can be" +
-                " one of its basins",
-            shape.bars == 0
-        )
-        assertTrue(
-            "seed 718106 at 2048 has ${"%.1f".format(combShare(world) * 100)}% of its standing" +
-                " water in thin grid-bearing bars with a parallel twin within ten cells",
-            combShare(world) < 0.035f
-        )
-    }
-
-    /**
-     * The same world at three grids carries the same lake country, not four times as much of it.
-     *
-     * The resolution contract of `flat frozen country…` extended to the size the author actually
-     * exports at, on his own settings, and the reason the three lake knobs are map fractions rather
-     * than counts of cells. Reported at each grid so the shape of the distribution can be compared
-     * as well as its total.
-     *
-     * Seed 718106 at sea 0.62, main against the fix — lakes, and standing water as a share of land:
-     *
-     * | | 512 | 1024 | 2048 |
-     * |---|---|---|---|
-     * | main | 18 / 1.06% | 72 / 1.66% | 113 / 2.10% |
-     * | fixed | 18 / 0.76% | 34 / 0.80% | 70 / 1.45% |
-     * | glaciation off | 11 / 0.56% | 18 / 0.38% | 54 / 1.19% |
-     *
-     * The residue that still grows with the grid is not this stage's. With the ice switched off
-     * the same world already goes 0.56% / 0.38% / 1.19% — its tectonic and erosional depressions
-     * being resolved — so the contract is stated against the *ice's own* share, 0.20% / 0.42% /
-     * 0.26%, which is what this stage controls and which is flat across a factor of sixteen in
-     * cell count. Before the fix the ice's share was 0.50% / 1.28% / 0.91%.
-     */
-    @Test
-    fun `the lake country is the same at 512, 1024 and 2048`() {
-        val rows = LinkedHashMap<Int, Pair<Float, Float>>()
-        listOf(512, 1024, 2048).forEach { size ->
-            val iced = WorldGenerationEngine.generateBlocking(authorConfig(size))
-            val bare = WorldGenerationEngine.generateBlocking(
-                authorConfig(size).let { it.copy(glaciation = it.glaciation.copy(enabled = false)) }
-            )
-            val icedShape = lakeShape(iced)
-            val bareShape = lakeShape(bare)
-            val land = iced.sea.landCellCount.toFloat()
-            val icedShare = icedShape.cells / land
-            val bareShare = bareShape.cells / land
-            rows[size] = icedShare to bareShare
-            println(
-                "RESOLUTION seed 718106 at $size: lakes ${icedShape.lakes} (${bareShape.lakes}" +
-                    " without ice) water ${"%.4f".format(icedShare)} of land" +
-                    " (${"%.4f".format(bareShare)} without), the ice's own share" +
-                    " ${"%.4f".format(icedShare - bareShare)}, largest ${icedShape.largest}" +
-                    " (${"%.6f".format(icedShape.largestShareOfMap)} of map)," +
-                    " bars ${icedShape.bars}"
-            )
-        }
-        val ice = rows.mapValues { (_, v) -> (v.first - v.second).coerceAtLeast(0f) }
-        // The floor was 1e-4, which is not a floor: the quantity below is a difference between two
-        // small numbers, and at a tenth of a percent of land it is two or three ponds. E4 moved
-        // seed 718106's cold country — segmenting its rifts changes where the water on it stands,
-        // in both the iced world and the bare one — and the 512 case came out at 0.0003, where the
-        // 2048 case is 0.0019 and the contract then reads as a factor of six on nothing at all.
-        // A tenth of a percent of the land is the least that can be called pond country; below it
-        // the ratio is noise and the floor stands in for it. Nothing this guard used to catch gets
-        // through: the world it was written against carried 0.50% of its land as the ice's own
-        // water at 512 and 1.28% at 1024, an order of magnitude above the floor either way.
-        val coarse = maxOf(ice.getValue(512), 0.001f)
-        val fine = ice.getValue(2048)
-        assertTrue(
-            "quadrupling the grid multiplies the ice's own share of standing water by" +
-                " ${"%.2f".format(fine / coarse)} (512: ${"%.4f".format(ice.getValue(512))}," +
-                " 1024: ${"%.4f".format(ice.getValue(1024))}," +
-                " 2048: ${"%.4f".format(fine)}) — glacial basins are being chosen per cell rather" +
-                " than per unit of map, so a finer grid grows more of them",
-            fine / coarse < 2.5f
-        )
-    }
-
-    /** Seed 718106 exactly as the desktop app is set up when the author generates it. */
-    private fun authorConfig(size: Int): WorldGenConfig {
-        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
-        return base.copy(
-            tectonics = base.tectonics.copy(plateCount = 14),
-            nations = base.nations.copy(nationCount = 12)
-        ).atResolution(size, size)
-    }
-
-    private class LakeShape(
-        val lakes: Int,
-        val cells: Int,
-        val largest: Int,
-        val largestShareOfMap: Float,
-        val bars: Int,
-        val barCells: Int
-    )
-
-    /**
-     * How many lakes there are, how big the biggest is, and how many of them are narrow straight
-     * runs along a grid bearing.
-     *
-     * A *bar* is measured over the whole body rather than cell by cell: the extent of the body
-     * along each of the four bearings against its extent across that bearing. Two cells or less
-     * across and four or more along is a bar, whatever else it does. Measured that way a curved
-     * one-cell thread is not a bar — it is a different complaint — and a two-by-four rectangle is,
-     * which is right: at 2048 that is eighty kilometres of dead-straight water eleven wide.
-     */
-    private fun lakeShape(world: WorldMap): LakeShape {
-        val w = world.width
-        val h = world.height
-        val lake = world.rivers.lakes.lakeId
-        val n = world.rivers.lakes.lakes.size
-        if (n == 0) return LakeShape(0, 0, 0, 0f, 0, 0)
-        val anchorX = IntArray(n) { Int.MIN_VALUE }
-        val uMin = Array(4) { IntArray(n) { Int.MAX_VALUE } }
-        val uMax = Array(4) { IntArray(n) { Int.MIN_VALUE } }
-        val vMin = Array(4) { IntArray(n) { Int.MAX_VALUE } }
-        val vMax = Array(4) { IntArray(n) { Int.MIN_VALUE } }
-        val count = IntArray(n)
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val id = lake[y * w + x]
-                if (id < 0) continue
-                if (anchorX[id] == Int.MIN_VALUE) anchorX[id] = x
-                var dx = x - anchorX[id]
-                if (dx > w / 2) dx -= w
-                if (dx < -w / 2) dx += w
-                val ux = anchorX[id] + dx
-                count[id]++
-                val u = intArrayOf(ux, ux + y, y, ux - y)
-                val v = intArrayOf(y, ux - y, ux, ux + y)
-                for (k in 0 until 4) {
-                    if (u[k] < uMin[k][id]) uMin[k][id] = u[k]
-                    if (u[k] > uMax[k][id]) uMax[k][id] = u[k]
-                    if (v[k] < vMin[k][id]) vMin[k][id] = v[k]
-                    if (v[k] > vMax[k][id]) vMax[k][id] = v[k]
-                }
-            }
-        }
-        var bars = 0
-        var barCells = 0
-        var cells = 0
-        var largest = 0
-        for (id in 0 until n) {
-            cells += count[id]
-            if (count[id] > largest) largest = count[id]
-            if (count[id] < 4) continue
-            var isBar = false
-            for (k in 0 until 4) {
-                val diagonal = k == 1 || k == 3
-                val length =
-                    if (diagonal) (uMax[k][id] - uMin[k][id]) / 2 + 1
-                    else uMax[k][id] - uMin[k][id] + 1
-                val across = vMax[k][id] - vMin[k][id] + 1
-                if (across <= 2 && length >= 4) isBar = true
-            }
-            if (isBar) {
-                bars++
-                barCells += count[id]
-            }
-        }
-        return LakeShape(n, cells, largest, largest.toFloat() / (w * h), bars, barCells)
-    }
-
-    /**
-     * The share of lake water in a thin bar at a grid bearing that has a parallel twin beside it.
-     *
-     * One straight lake is a trough. Several of them side by side at the same bearing is the grid.
-     */
-    /**
-     * Whether a cell's water is standing in a continental rift rather than in anything the ice
-     * made, which is the one thing both measurements below have to exclude.
-     *
-     * E4 broke every continental rift into half-grabens, and a half-graben is a closed basin that
-     * holds a long, narrow lake against the fault it hangs from — Tanganyika, Baikal, Turkana,
-     * Malawi. Two segments of opposite polarity put two such lakes on opposite sides of the same
-     * trough, a hundred-odd kilometres apart and parallel, because that is the shape of the
-     * landform. [combShare] is looking for the ice cutting a rank of parallel gullies down the flow
-     * grid and cannot tell those apart from a pair of rift lakes, and the resolution contract below
-     * compares the share of land under water at two grids, where a rift lake enters at 1024 and not
-     * at 512 for a reason that belongs to [com.cartogenesis.worldgen.model.LakesConfig.minCells] —
-     * a floor of twelve *cells*, not a map fraction, so the same small basin is a lake on the finer
-     * grid and a puddle on the coarser. Neither question is about ice, so neither measurement
-     * counts the rift's own water. Measured on seed 718106 at 1024: the exclusion takes the comb
-     * share from 4.1% to 2.4% and the 512-to-1024 growth of the lake share of land from 2.02 to
-     * 1.34, against 0.9% and 1.09 with the rifts left unsegmented.
-     */
-    private fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
-        val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
-        if (world.plates.nearestBoundaryClass[cell] != rift) return false
-        // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
-        val reach = WorldGenConfig().tectonics.riftShoulderOffset * (world.width / 512f)
-        return world.plates.boundaryDistance.data[cell] <= reach
-    }
-
-    private fun combShare(world: WorldMap): Float {
-        val w = world.width
-        val h = world.height
-        val lake = world.rivers.lakes.lakeId
-        fun at(x: Int, y: Int): Boolean {
-            if (y < 0 || y >= h) return false
-            var nx = x % w
-            if (nx < 0) nx += w
-            val i = y * w + nx
-            return lake[i] >= 0 && !inRiftTrough(world, i)
-        }
-        val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
-        val barAxis = IntArray(w * h) { -1 }
-        var lakeCells = 0
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                if (!at(x, y)) continue
-                lakeCells++
-                for ((k, a) in axes.withIndex()) {
-                    var run = 1
-                    var s = 1
-                    while (run < 64 && at(x + a[0] * s, y + a[1] * s)) { run++; s++ }
-                    s = 1
-                    while (run < 64 && at(x - a[0] * s, y - a[1] * s)) { run++; s++ }
-                    if (run < 4) continue
-                    var thick = 1
-                    s = 1
-                    while (thick <= 2 && at(x - a[1] * s, y + a[0] * s)) { thick++; s++ }
-                    s = 1
-                    while (thick <= 2 && at(x + a[1] * s, y - a[0] * s)) { thick++; s++ }
-                    if (thick <= 2) { barAxis[y * w + x] = k; break }
-                }
-            }
-        }
-        var paired = 0
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val k = barAxis[y * w + x]
-                if (k < 0) continue
-                val a = axes[k]
-                var found = false
-                for (sign in intArrayOf(1, -1)) {
-                    for (d in 3..10) {
-                        val ny = y + a[0] * d * sign
-                        if (ny < 0 || ny >= h) continue
-                        var nx = (x - a[1] * d * sign) % w
-                        if (nx < 0) nx += w
-                        if (barAxis[ny * w + nx] == k) { found = true; break }
-                    }
-                    if (found) break
-                }
-                if (found) paired++
-            }
-        }
-        return if (lakeCells == 0) 0f else paired.toFloat() / lakeCells
-    }
-
-    /**
-     * Lakes that are filaments: every cell of the body on one D8 line, one cell wide, four cells or
-     * more long.
-     *
-     * This is the residual the sheet-versus-valley split on its own did not reach. A range front
-     * carries a comb of parallel gullies, and the valley machinery run down every one of them
-     * leaves a group of short one-cell bars of water, all at exactly the same grid bearing — the
-     * lattice again, at the scale of a mountain flank instead of a continent. A real range has a
-     * handful of glaciers, in its trunk valleys, and no two trunk valleys are parallel straight
-     * lines. A body of water that is one cell wide for its whole length is not a lake in a valley;
-     * it is a line drawn along a flow path.
-     */
-    private fun countFilaments(world: WorldMap): Int {
-        val w = world.width
-        val h = world.height
-        val lake = world.rivers.lakes.lakeId
-        val n = world.rivers.lakes.lakes.size
-        if (n == 0) return 0
-        val count = IntArray(n)
-        val anchorX = IntArray(n) { Int.MIN_VALUE }
-        // Four collinearity invariants, one per grid bearing: same row, same column, same
-        // difference and same sum. A body is a filament when all its cells agree on any one of
-        // them, which for a one-cell-wide run is exactly what "on a single D8 line" means.
-        val sameRow = BooleanArray(n) { true }
-        val sameCol = BooleanArray(n) { true }
-        val sameDiff = BooleanArray(n) { true }
-        val sameSum = BooleanArray(n) { true }
-        val firstY = IntArray(n)
-        val firstX = IntArray(n)
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val id = lake[y * w + x]
-                if (id < 0) continue
-                if (anchorX[id] == Int.MIN_VALUE) {
-                    anchorX[id] = x
-                    firstX[id] = x
-                    firstY[id] = y
-                }
-                var dx = x - anchorX[id]
-                if (dx > w / 2) dx -= w
-                if (dx < -w / 2) dx += w
-                val ux = anchorX[id] + dx
-                count[id]++
-                if (y != firstY[id]) sameRow[id] = false
-                if (ux != firstX[id]) sameCol[id] = false
-                if (ux - y != firstX[id] - firstY[id]) sameDiff[id] = false
-                if (ux + y != firstX[id] + firstY[id]) sameSum[id] = false
-            }
-        }
-        var filaments = 0
-        for (id in 0 until n) {
-            if (count[id] < 4) continue
-            if (sameRow[id] || sameCol[id] || sameDiff[id] || sameSum[id]) filaments++
-        }
-        return filaments
-    }
-
     /** Land whose elevation range within [radius] cells is under [limit] of the land's range. */
     private fun flatGround(world: WorldMap, radius: Int, limit: Float): BooleanArray {
         val w = world.width
@@ -825,32 +481,6 @@ class GlaciationTest {
         const val COLD_LAKE_RATIO = 2.5f
     }
 
-    /** The stage's own tally, which is not required to balance but is required to be looked at. */
-    private fun reportBudget(config: WorldGenConfig, world: WorldMap) {
-        val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
-        // The same provisional snow balance the engine hands the stage (H2), or null for the
-        // pre-H2 temperature mask, so the tally reported here is the one the world was made with.
-        val balance = if (config.climate.snowBalance) {
-            ClimateStage.provisionalSnowBalance(config, sea, OceanStage.generate(config, sea))
-        } else null
-        GlaciationStage.apply(config, sea, balance) { mass ->
-            println(
-                "GLACIATION budget frozen=${mass.frozenCells}" +
-                    " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
-                    " trunks=${mass.trunks} parallelDropped=${mass.parallelCellsDropped}" +
-                    " sheet=${mass.sheetCells} budget=${mass.lakeBudget}" +
-                    " basins=${mass.basinCells}/${mass.basins}" +
-                    " refused(narrow/straight/small/budget)=${mass.basinsTooNarrow}/" +
-                    "${mass.basinsTooStraight}/${mass.basinsTooSmall}/${mass.basinsOverBudget}" +
-                    " scour=${mass.scourCells}/${mass.scourBasins}" +
-                    " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
-                    " excavated=${"%.2f".format(mass.excavated)}" +
-                    " deposited=${"%.2f".format(mass.deposited)}" +
-                    " seafloor=${"%.2f".format(mass.submarine)}"
-            )
-        }
-    }
-
     private class Zones(
         val coldLand: Int,
         val warmLand: Int,
@@ -917,4 +547,187 @@ class GlaciationTest {
         )
         return zones
     }
+}
+
+/**
+ * The stage's own tally, which is not required to balance but is required to be looked at.
+ *
+ * Top-level rather than a member of [GlaciationTest]: T1 split the 2048-scale cases into
+ * [GlaciationAuditTest] and both classes call this, so it is `internal` at file scope instead of
+ * being duplicated.
+ */
+internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
+    val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
+    // The same provisional snow balance the engine hands the stage (H2), or null for the pre-H2
+    // temperature mask, so the tally reported here is the one the world was actually made with.
+    val balance = if (config.climate.snowBalance) {
+        ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))
+    } else null
+    GlaciationStage.apply(config, sea, balance) { mass ->
+        println(
+            "GLACIATION budget frozen=${mass.frozenCells}" +
+                " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
+                " trunks=${mass.trunks} parallelDropped=${mass.parallelCellsDropped}" +
+                " sheet=${mass.sheetCells} budget=${mass.lakeBudget}" +
+                " basins=${mass.basinCells}/${mass.basins}" +
+                " refused(narrow/straight/small/budget)=${mass.basinsTooNarrow}/" +
+                "${mass.basinsTooStraight}/${mass.basinsTooSmall}/${mass.basinsOverBudget}" +
+                " scour=${mass.scourCells}/${mass.scourBasins}" +
+                " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +
+                " excavated=${"%.2f".format(mass.excavated)}" +
+                " deposited=${"%.2f".format(mass.deposited)}" +
+                " seafloor=${"%.2f".format(mass.submarine)}"
+        )
+    }
+}
+
+/**
+ * Whether a cell's water is standing in a continental rift rather than in anything the ice made,
+ * which is the one thing both measurements below have to exclude.
+ *
+ * E4 broke every continental rift into half-grabens, and a half-graben is a closed basin that
+ * holds a long, narrow lake against the fault it hangs from — Tanganyika, Baikal, Turkana, Malawi.
+ * Two segments of opposite polarity put two such lakes on opposite sides of the same trough, a
+ * hundred-odd kilometres apart and parallel, because that is the shape of the landform.
+ * [combShare] is looking for the ice cutting a rank of parallel gullies down the flow grid and
+ * cannot tell those apart from a pair of rift lakes, and a resolution contract comparing the share
+ * of land under water at two grids would find a rift lake entering at 1024 and not at 512 for a
+ * reason that belongs to [com.cartogenesis.worldgen.model.LakesConfig.minCells] — a floor of
+ * twelve *cells*, not a map fraction, so the same small basin is a lake on the finer grid and a
+ * puddle on the coarser. Neither question is about ice, so neither measurement counts the rift's
+ * own water. Measured on seed 718106 at 1024: the exclusion takes the comb share from 4.1% to 2.4%
+ * and the 512-to-1024 growth of the lake share of land from 2.02 to 1.34, against 0.9% and 1.09
+ * with the rifts left unsegmented.
+ *
+ * Top-level for the same reason as [reportBudget]: shared between [GlaciationTest] and
+ * [GlaciationAuditTest].
+ */
+internal fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
+    val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
+    if (world.plates.nearestBoundaryClass[cell] != rift) return false
+    // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
+    val reach = WorldGenConfig().tectonics.riftShoulderOffset * (world.width / 512f)
+    return world.plates.boundaryDistance.data[cell] <= reach
+}
+
+/**
+ * The share of lake water in a thin bar at a grid bearing that has a parallel twin beside it.
+ *
+ * One straight lake is a trough. Several of them side by side at the same bearing is the grid.
+ * Top-level for the same reason as [reportBudget].
+ */
+internal fun combShare(world: WorldMap): Float {
+    val w = world.width
+    val h = world.height
+    val lake = world.rivers.lakes.lakeId
+    fun at(x: Int, y: Int): Boolean {
+        if (y < 0 || y >= h) return false
+        var nx = x % w
+        if (nx < 0) nx += w
+        val i = y * w + nx
+        return lake[i] >= 0 && !inRiftTrough(world, i)
+    }
+    val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
+    val barAxis = IntArray(w * h) { -1 }
+    var lakeCells = 0
+    for (y in 0 until h) {
+        for (x in 0 until w) {
+            if (!at(x, y)) continue
+            lakeCells++
+            for ((k, a) in axes.withIndex()) {
+                var run = 1
+                var s = 1
+                while (run < 64 && at(x + a[0] * s, y + a[1] * s)) { run++; s++ }
+                s = 1
+                while (run < 64 && at(x - a[0] * s, y - a[1] * s)) { run++; s++ }
+                if (run < 4) continue
+                var thick = 1
+                s = 1
+                while (thick <= 2 && at(x - a[1] * s, y + a[0] * s)) { thick++; s++ }
+                s = 1
+                while (thick <= 2 && at(x + a[1] * s, y - a[0] * s)) { thick++; s++ }
+                if (thick <= 2) { barAxis[y * w + x] = k; break }
+            }
+        }
+    }
+    var paired = 0
+    for (y in 0 until h) {
+        for (x in 0 until w) {
+            val k = barAxis[y * w + x]
+            if (k < 0) continue
+            val a = axes[k]
+            var found = false
+            for (sign in intArrayOf(1, -1)) {
+                for (d in 3..10) {
+                    val ny = y + a[0] * d * sign
+                    if (ny < 0 || ny >= h) continue
+                    var nx = (x - a[1] * d * sign) % w
+                    if (nx < 0) nx += w
+                    if (barAxis[ny * w + nx] == k) { found = true; break }
+                }
+                if (found) break
+            }
+            if (found) paired++
+        }
+    }
+    return if (lakeCells == 0) 0f else paired.toFloat() / lakeCells
+}
+
+/**
+ * Lakes that are filaments: every cell of the body on one D8 line, one cell wide, four cells or
+ * more long.
+ *
+ * This is the residual the sheet-versus-valley split on its own did not reach. A range front
+ * carries a comb of parallel gullies, and the valley machinery run down every one of them leaves a
+ * group of short one-cell bars of water, all at exactly the same grid bearing — the lattice again,
+ * at the scale of a mountain flank instead of a continent. A real range has a handful of glaciers,
+ * in its trunk valleys, and no two trunk valleys are parallel straight lines. A body of water that
+ * is one cell wide for its whole length is not a lake in a valley; it is a line drawn along a flow
+ * path.
+ *
+ * Top-level for the same reason as [reportBudget].
+ */
+internal fun countFilaments(world: WorldMap): Int {
+    val w = world.width
+    val h = world.height
+    val lake = world.rivers.lakes.lakeId
+    val n = world.rivers.lakes.lakes.size
+    if (n == 0) return 0
+    val count = IntArray(n)
+    val anchorX = IntArray(n) { Int.MIN_VALUE }
+    // Four collinearity invariants, one per grid bearing: same row, same column, same
+    // difference and same sum. A body is a filament when all its cells agree on any one of
+    // them, which for a one-cell-wide run is exactly what "on a single D8 line" means.
+    val sameRow = BooleanArray(n) { true }
+    val sameCol = BooleanArray(n) { true }
+    val sameDiff = BooleanArray(n) { true }
+    val sameSum = BooleanArray(n) { true }
+    val firstY = IntArray(n)
+    val firstX = IntArray(n)
+    for (y in 0 until h) {
+        for (x in 0 until w) {
+            val id = lake[y * w + x]
+            if (id < 0) continue
+            if (anchorX[id] == Int.MIN_VALUE) {
+                anchorX[id] = x
+                firstX[id] = x
+                firstY[id] = y
+            }
+            var dx = x - anchorX[id]
+            if (dx > w / 2) dx -= w
+            if (dx < -w / 2) dx += w
+            val ux = anchorX[id] + dx
+            count[id]++
+            if (y != firstY[id]) sameRow[id] = false
+            if (ux != firstX[id]) sameCol[id] = false
+            if (ux - y != firstX[id] - firstY[id]) sameDiff[id] = false
+            if (ux + y != firstX[id] + firstY[id]) sameSum[id] = false
+        }
+    }
+    var filaments = 0
+    for (id in 0 until n) {
+        if (count[id] < 4) continue
+        if (sameRow[id] || sameCol[id] || sameDiff[id] || sameSum[id]) filaments++
+    }
+    return filaments
 }

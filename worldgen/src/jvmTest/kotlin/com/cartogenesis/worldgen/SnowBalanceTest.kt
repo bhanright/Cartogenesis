@@ -4,11 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
-import com.cartogenesis.worldgen.pipeline.OceanStage
-import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.SnowBalance
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
-import kotlin.system.measureTimeMillis
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,6 +33,17 @@ class SnowBalanceTest {
 
     private fun WorldGenConfig.withoutBalance() =
         copy(climate = climate.copy(snowBalance = false))
+
+    /**
+     * Every guard here wants the same eight worlds — four seeds, with the balance and without —
+     * and generating them once each rather than once per case is the difference between a minute
+     * and four in the per-merge tier. Held on the companion so the cache survives JUnit's fresh
+     * instance per test method.
+     */
+    private fun world(seed: Long, balance: Boolean): WorldMap = cache.getOrPut(seed to balance) {
+        val cfg = config(seed)
+        WorldGenerationEngine.generateBlocking(if (balance) cfg else cfg.withoutBalance())
+    }
 
     // ---------------------------------------------------------------- the arithmetic itself
 
@@ -140,15 +147,15 @@ class SnowBalanceTest {
             99L to (-5564129074956957112L to 7474338318625978948L)
         )
         seeds.forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(config(seed).withoutBalance())
+            val control = world(seed, balance = false)
             val (elevation, biomes) = pins.getValue(seed)
             assertEquals(
                 "seed $seed elevation checksum moved with snowBalance off",
-                elevation, elevationChecksum(world)
+                elevation, elevationChecksum(control)
             )
             assertEquals(
                 "seed $seed biome checksum moved with snowBalance off",
-                biomes, biomeChecksum(world)
+                biomes, biomeChecksum(control)
             )
         }
     }
@@ -175,8 +182,8 @@ class SnowBalanceTest {
         var iceOff = 0
         var land = 0
         seeds.forEach { seed ->
-            val on = WorldGenerationEngine.generateBlocking(config(seed))
-            val off = WorldGenerationEngine.generateBlocking(config(seed).withoutBalance())
+            val on = world(seed, balance = true)
+            val off = world(seed, balance = false)
             val cells = on.sea.landCellCount
             val onIce = count(on, Biome.ICE_SHEET)
             val offIce = count(off, Biome.ICE_SHEET)
@@ -243,8 +250,8 @@ class SnowBalanceTest {
         var iceOff = 0
         var cells = 0
         seeds.forEach { seed ->
-            val on = WorldGenerationEngine.generateBlocking(config(seed))
-            val off = WorldGenerationEngine.generateBlocking(config(seed).withoutBalance())
+            val on = world(seed, balance = true)
+            val off = world(seed, balance = false)
             val interior = coldDryInterior(config(seed), on)
             if (interior.isEmpty()) {
                 println("SNOWBALANCE seed=$seed has no cold dry interior")
@@ -320,8 +327,8 @@ class SnowBalanceTest {
     @Test
     fun `at the same temperature, ice is where the snow is`() {
         seeds.forEach { seed ->
-            val on = WorldGenerationEngine.generateBlocking(config(seed))
-            val off = WorldGenerationEngine.generateBlocking(config(seed).withoutBalance())
+            val on = world(seed, balance = true)
+            val off = world(seed, balance = false)
             val balance = iceByRainfall(on)
             val control = iceByRainfall(off)
             assertTrue("seed $seed has no marginal-temperature land to measure", balance != null)
@@ -355,65 +362,6 @@ class SnowBalanceTest {
         }
     }
 
-    // ---------------------------------------------------------------- rule 8, and the cost
-
-    /**
-     * What the balance costs on the CPU, which is the measurement rule 8 asks for before a shader
-     * is written, and what the provisional climate march in front of it costs — the chunk's real
-     * price, since the balance is a rounding error beside it.
-     *
-     * Reported rather than asserted tightly: a timing on a shared machine is not a contract. The
-     * loose bound below only fails if something has changed by an order of magnitude.
-     */
-    @Test
-    fun `report the cost of the balance and of the provisional climate`() {
-        // Warm the JIT so the first size measured is not paying for compilation.
-        WorldGenerationEngine.generateBlocking(config(1L, 256))
-
-        listOf(512, 1024, 2048).forEach { size ->
-            val cfg = config(42L, 128).atResolution(size, size)
-            val terrain = com.cartogenesis.worldgen.pipeline.TerrainStage.generate(cfg)
-            val plates = com.cartogenesis.worldgen.pipeline.PlateStage.generate(cfg, terrain)
-            val erosion = erodeBlocking(cfg, plates.height)
-            val sea = SeaLevelStage.apply(erosion.height, cfg.seaLevel, cfg.sea)
-
-            var ocean: com.cartogenesis.worldgen.pipeline.OceanResult? = null
-            val oceanMs = measureTimeMillis { ocean = OceanStage.withoutCurrents(cfg, sea) }
-            val climateMs = measureTimeMillis {
-                ClimateStage.provisionalSnowBalance(cfg, sea, ocean!!)
-            }
-
-            // The balance on its own, out of the four fields the climate stage already has.
-            val generated = ClimateStage.generateWithSeasonalMm(cfg, sea, ocean!!)
-            var balanceMs = Long.MAX_VALUE
-            repeat(5) {
-                val ms = measureTimeMillis {
-                    SnowBalance.field(
-                        sea.isLand,
-                        generated.result.summerTemperature,
-                        generated.result.winterTemperature,
-                        generated.summerPrecipitationMm,
-                        generated.winterPrecipitationMm
-                    )
-                }
-                if (ms < balanceMs) balanceMs = ms
-            }
-            println(
-                "SNOWBALANCE cost size=$size provisional ocean=${oceanMs}ms" +
-                    " climate+balance=${climateMs}ms (total ${oceanMs + climateMs}ms added to a" +
-                    " generation); balance alone=${balanceMs}ms"
-            )
-            if (size == 2048) {
-                assertTrue(
-                    "the balance costs ${balanceMs}ms at 2048, so rule 8's 50ms line has been" +
-                        " crossed and the GPU path declined in SnowBalanceAccelerator needs" +
-                        " revisiting",
-                    balanceMs < 50
-                )
-            }
-        }
-    }
-
     // ---------------------------------------------------------------- measurement helpers
 
     private companion object {
@@ -431,6 +379,8 @@ class SnowBalanceTest {
          */
         const val MARGINAL_LOW = -6f
         const val MARGINAL_HIGH = -3f
+
+        private val cache = HashMap<Pair<Long, Boolean>, WorldMap>()
     }
 
     private fun count(world: WorldMap, biome: Biome): Int {

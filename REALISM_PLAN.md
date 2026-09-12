@@ -1017,6 +1017,55 @@ and layer exports."* Queued behind F11 (same export code).
   export decodes at the export size; `ExportSmokeTest` and the codec tests hold; the phone's
   export ceiling applies to all of them; time and file sizes reported at 2048 and 4096.
 
+### F13. Tints by climate and shading by sky — Opus, on `release/2.0` (the audit's V1, pulled forward)
+
+*William, 2026-09-12, after F10: "the new rivers look immensely better - this is one of the most
+impactful updates we've done in recent days as far as giving a natural realistic look to human
+eyes", and then "queue the presentation chunks after the exports."* Renderer-only; no world
+changes; queued behind F12.
+
+- **Hypsometric tints that follow climate.** Imhof (1965): the land colour at a height is not one
+  ramp but a ramp modulated by what grows there. Each style's land ramp is blended by the cell's
+  biome and aridity — desert stays sand at any height, tundra and ice stay pale, forest darkens
+  the lowland greens — with the modulation strength a per-style number so Vellum and Ink wash keep
+  their character and Atlas gets the full effect. Per pixel from fields the recipe already carries
+  (height, biome, the climate's aridity), on both paths.
+- **Shading from a sky, not a lamp.** Multidirectional hillshading (Kennelly & Stewart 2014): the
+  relief lit from several azimuths weighted by slope aspect, plus a sky term (ambient light that
+  falls with the terrain's openness, a cheap horizon estimate over a small stencil), so ridges
+  read from every direction and valleys sit in soft shadow rather than one side black and one
+  white. Aerial perspective: distant, lower ground lightened slightly toward the paper. The single
+  lamp stays available as a setting for people who want it.
+- **Bathymetric contours** at a stated depth interval in the sea, drawn per pixel from the
+  distance-to-shore and depth fields the recipe carries since F9.
+- Guards: `GpuRasterTest` parity for every style and view; the colour-blind style's CIEDE2000
+  margins (F6) and the chrome contrast guards still hold; a test that a desert cell's tint never
+  reads green in any style (measured hue on the rendered pixel, shown failing today); the light
+  direction check: a synthetic cone shaded under the sky model has no unlit face (shown failing
+  with the lamp); time per 2048 and 4096 raster on both paths reported. Render both of William's
+  worlds at 2048 in Atlas, Vellum and Pen and ink, crop a desert, a forest and a range, and look.
+
+### F14. Generalisation, graticule and scale — Opus, on `release/2.0` (the audit's V2, pulled forward)
+
+*Queued behind F13.* Renderer and legend only; no world changes. What can be done without the
+audit's S1 units and P1 projection is done here; the north arrow and the projection wait.
+
+- **Generalisation by zoom.** Coastlines and rivers are drawn as polylines simplified by
+  Douglas–Peucker at a tolerance tied to the on-screen pixel size, so a 2048 world viewed at fit
+  does not carry every cell's stair-step, and the full detail returns as the reader zooms in.
+  Rivers below a discharge threshold that scales with zoom are dropped at whole-world scale and
+  return on zoom; the F10 pen stays.
+- **A graticule**: lines of latitude and longitude at 10 degrees on the equirectangular map, with
+  labelled edges, as a Cartography toggle, drawn on screen and on exports.
+- **A scale bar** in the legend and on exports, in kilometres from `worldWidthKm` (12,000 km
+  across) and the cell size at the export resolution, with the bar's length chosen from the
+  1–2–5 series to fit; and a line in the cartouche giving the map's scale at the export size.
+- Guards: the simplified coastline's Hausdorff distance from the full one below the tolerance;
+  the river count on screen at fit against at 4x zoom (shown failing today, where they are equal);
+  the scale bar's kilometres against the config's arithmetic; the graticule's spacing exact in
+  cells; `GpuRasterTest` unaffected (these are overlay and legend); phone captures with the
+  graticule on. Render both worlds at 2048 at fit and at 4x and look.
+
 ### Release 2.0.0 checklist
 
 When F, H5 and H5b are green (G1 follows the release; G2 and G4 are in): version 2.0.0; full suite plus the audit tier once; William's
@@ -1048,7 +1097,8 @@ can be made in the meantime."*
   after it is written against readable code; then M1, the yardstick; then S1, which every solid-earth chunk needs and which turns
   the resolution contracts into a property; then two lines in parallel — S2 → S3 → R1 → I1 on the
   solid earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with P1 slotted where it
-  touches the fewest open files; K4 once H5b is in; R2, R3, V1 and V2 whenever their inputs exist;
+  touches the fewest open files; K4 once H5b is in; R2 and R3 whenever their inputs exist; V1 and V2 pulled forward to the
+  2.0.x line as F13 and F14 (William, 2026-09-12);
   N1 and N2 alongside; P2 last. V3, the full atlas and its labels, moves to 4.0 (William,
   2026-09-12) and the cartogenesis.com page carries a notice saying so. G1 and H3 finish before 3.0 begins if they have not
   already.
@@ -1645,6 +1695,8 @@ guard reported, so the next chunk knows its baseline.
 | F10 Rivers widen with their discharge | Opus | done, for 2.0.2 | 2026-09-12 | 7549b16 (merge 71a2492 on release/2.0) | River.widths (cells) became River.widthRatio, unitless on the square root of discharge from the smallest drawn channel to the biggest mouth, sized after the whole network is traced and recomputable from the saved accumulation (no format bump); RiverPen in cartography draws it from 0.8 to 5.0 output pixels, riverScale retired so an HD export cannot fatten the pen; rivers are vector overlay geometry over both rasters so there is one pen and GpuRasterTest needed nothing; RiverWidthTest: correlation with sqrt(Q) 1.0000 on 7/42/1234 against 0.97/0.96/0.99 under the 0.28 power, widest/narrowest 6.25x against 2.1-2.9x (bar 4), trunk wider than either branch at 100% of confluences against 80-100%, width monotone in discharge, the same pen at 512 and 1024, and no river ink off the water in any style; ExportSmokeTest's WebP drift bar 72 -> 80 with the measurement (67 no rivers, 71 old pen, 76 new); found: on seed 1234 five cells drain into a neighbour carrying less accumulation than they do (149 cells disagree with a recomputation from the shipped flow graph, worst 106.6), suspected in the endorheic re-routing, one-cell notches, left in TODO |
 | F11 Stop a generation | Opus | in progress on release/2.0 | 2026-09-12 | | |
 | F12 JPEG, heightmap and layer exports | Opus | queued behind F11, on release/2.0 | 2026-09-12 | | |
+| F13 Tints by climate and shading by sky (V1) | Opus | queued behind F12, on release/2.0 | 2026-09-12 | | |
+| F14 Generalisation, graticule and scale (V2) | Opus | queued behind F13, on release/2.0 | 2026-09-12 | | |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
@@ -1667,8 +1719,8 @@ guard reported, so the next chunk knows its baseline.
 | I1 Ice sheets with a profile | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | P1 Metric-aware physics and a projection | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | P2 A spherical grid | | queued for 3.0 (REALISM_AUDIT.md) | | | |
-| V1 Tints by climate and sky-model shading | | queued for 3.0 (REALISM_AUDIT.md) | | | |
-| V2 Generalisation, graticule and scale | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| V1 Tints by climate and sky-model shading | | pulled forward as F13 on the 2.0.x line | | | |
+| V2 Generalisation, graticule and scale | | pulled forward as F14 on the 2.0.x line (projection and north arrow stay with P1) | | | |
 | V3 Labels | | queued for 4.0 (REALISM_AUDIT.md; William, 2026-09-12: the full atlas with named continents, seas, bays, straits and ranges targets 4.0, and the site says so) | | | |
 | N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N2 Scale-free suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |

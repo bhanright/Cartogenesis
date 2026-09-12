@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.MapStyle
@@ -62,10 +65,8 @@ import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
 import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.cartography.StoredTerrain
 import com.cartogenesis.cartography.TerrainSnapshot
-import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.min
@@ -116,6 +117,9 @@ fun CartogenesisApp(platform: Platform) {
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
     val gate = remember { GenerationGate() }
+    // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
+    // that a trip to the atlas or the library and back does not roll them all up again.
+    val sections = remember { SectionState() }
     // Click handlers are plain callbacks, not suspend functions, but the library now is - it
     // lives in IndexedDB on the web build, which is asynchronous throughout. This is how a
     // button press reaches a suspend call without making the composable itself suspend.
@@ -208,9 +212,9 @@ fun CartogenesisApp(platform: Platform) {
         )
     }
 
-    // The map is the point, so it takes the middle and the whole height, and the controls are
-    // split either side of it rather than stacked in one long column. Grouping is by what a
-    // control does: choosing what to look at on the left, choosing how to look at it on the right.
+    // The map is the point, so it takes the middle and the whole height. Everything about the
+    // world is on the left, in the order the generator makes it; the right is what happens to a
+    // finished map.
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(10.dp)) {
 
         Column(
@@ -218,15 +222,16 @@ fun CartogenesisApp(platform: Platform) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Panel {
-                WorldActions(
+                PanelHeader(
+                    config = config,
                     busy = busy,
                     status = status,
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
-                    seed = config.seed,
-                    onSeed = { config = config.copy(seed = it); gate.request() },
+                    onSeed = { config = Knobs.withSeed(config, it); gate.request() },
+                    onResolution = { config = Knobs.atResolution(config, it) },
                     onNewWorld = {
-                        config = config.copy(seed = Random.nextLong(1_000_000))
+                        config = Knobs.withSeed(config, Random.nextLong(1_000_000))
                         gate.request()
                     },
                     onGenerate = { gate.request() },
@@ -239,12 +244,18 @@ fun CartogenesisApp(platform: Platform) {
                 )
             }
 
-            Panel { ResolutionPicker(config, busy) { config = it } }
-
-            // The tallest panel, and the one that will keep growing: roads and trade routes will
-            // land here beside the rivers and the borders.
+            // Six sections in pipeline order, five of them rolled up. The panel it replaced was
+            // one undivided column of every control there was, ordered by nothing.
             Panel(Modifier.weight(1f)) {
-                WorldSettings(config, options, busy, { config = it }, { options = it })
+                SettingsPanel(
+                    config = config,
+                    options = options,
+                    busy = busy,
+                    platform = platform,
+                    sections = sections,
+                    onConfig = { config = it },
+                    onOptions = { options = it }
+                )
             }
         }
 
@@ -421,16 +432,18 @@ fun CartogenesisApp(platform: Platform) {
             }
         }
 
+        // Style and View used to live here. They are neither settings of the world nor things
+        // done to a finished one, they are how the map on screen is drawn, so F2 files them under
+        // Cartography and F3 lifts them onto the map itself. What is left on this side is the one
+        // thing that genuinely leaves the application: a rendered file.
         Column(
-            Modifier.width(250.dp).fillMaxHeight(),
+            Modifier.width(200.dp).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Panel(Modifier.weight(1f)) { ViewOptions(options) { options = it } }
             Panel {
-                OutputOptions(
-                    config, busy, world != null, platform, exportFormat,
-                    { config = it }, { exportFormat = it }
-                ) { pendingExport = it }
+                OutputOptions(busy, world != null, exportFormat, { exportFormat = it }) {
+                    pendingExport = it
+                }
             }
         }
     }
@@ -677,64 +690,52 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
     }
 }
 
+/**
+ * The slim header: which world, at what size, and the four things one can do with it.
+ *
+ * Nothing here is a setting of the world — the seed is which world, the resolution is how finely
+ * it is computed — so it sits above the sections rather than inside one, and it is the only part
+ * of the panel that never rolls up.
+ */
 @Composable
-private fun WorldActions(
+private fun PanelHeader(
+    config: WorldGenConfig,
     busy: Boolean,
     status: String,
     atlasLabel: String,
     libraryLabel: String,
-    seed: Long,
     onSeed: (Long) -> Unit,
+    onResolution: (Int) -> Unit,
     onNewWorld: () -> Unit,
     onGenerate: () -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleLarge)
-    SeedField(seed = seed, busy = busy, onSeed = onSeed)
-    // The one unambiguous "start" action - Go and New world both do change the seed and so also
-    // generate, but this is the button for someone who has touched nothing yet.
-    Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-        Text("Generate", maxLines = 1)
-    }
+    SeedField(seed = config.seed, busy = busy, onSeed = onSeed)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedButton(onClick = onNewWorld, enabled = !busy, contentPadding = TIGHT) {
-            Text("New world", maxLines = 1)
-        }
-        OutlinedButton(onClick = onToggleAtlas, enabled = !busy, contentPadding = TIGHT) {
-            Text(atlasLabel, maxLines = 1)
-        }
-        OutlinedButton(onClick = onToggleLibrary, enabled = !busy, contentPadding = TIGHT) {
-            Text(libraryLabel, maxLines = 1)
-        }
+        // The one unambiguous "start" action - Go and New world both change the seed and so also
+        // generate, but this is the button for someone who has touched nothing yet.
+        Button(
+            onClick = onGenerate,
+            enabled = !busy,
+            contentPadding = TIGHT,
+            modifier = Modifier.weight(1f)
+        ) { Text("Generate", maxLines = 1) }
+        OutlinedButton(
+            onClick = onNewWorld,
+            enabled = !busy,
+            contentPadding = TIGHT,
+            modifier = Modifier.weight(1f)
+        ) { Text("New world", maxLines = 1) }
     }
-    Text(
-        status.ifBlank {
-            if (busy) "Generating the first world…" else "Pick a seed and settings, then Generate."
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2
-    )
-}
 
-@Composable
-private fun ResolutionPicker(
-    config: WorldGenConfig,
-    busy: Boolean,
-    onConfig: (WorldGenConfig) -> Unit
-) {
     Labelled("Working resolution", "${config.width} px") {
-        // Powers of two, because the terrain integrator is FFT-based.
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(512, 1024, 2048, 4096).forEach { size ->
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Knobs.RESOLUTIONS.forEach { size ->
                 FilterChip(
                     selected = config.width == size,
-                    // atResolution, not a raw copy: settings measured in cells have to be
-                    // rescaled with the grid or the world changes character instead of just
-                    // gaining detail. A raw copy leaves mountain belts a fraction of their
-                    // proper width, which surfaces plate edges as straight cliffs.
-                    onClick = { onConfig(config.atResolution(size, size)) },
+                    onClick = { onResolution(size) },
                     label = { Text("$size", maxLines = 1) },
                     enabled = !busy,
                     modifier = Modifier.weight(1f)
@@ -742,81 +743,230 @@ private fun ResolutionPicker(
             }
         }
     }
+
+    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedButton(
+            onClick = onToggleLibrary,
+            enabled = !busy,
+            contentPadding = TIGHT,
+            modifier = Modifier.weight(1f)
+        ) { Text(libraryLabel, maxLines = 1) }
+        OutlinedButton(
+            onClick = onToggleAtlas,
+            enabled = !busy,
+            contentPadding = TIGHT,
+            modifier = Modifier.weight(1f)
+        ) { Text(atlasLabel, maxLines = 1) }
+    }
+
+    Text(
+        status.ifBlank {
+            if (busy) "Generating the first world…" else "Pick a seed and settings, then Generate."
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        modifier = Modifier.padding(top = 8.dp)
+    )
 }
 
 /**
- * What the world is made of, and which of its features are drawn.
+ * The settings, in the order the generator applies them.
  *
- * The two belong together: changing the number of realms and deciding whether to draw their
- * borders are the same question asked twice, and separating them would mean hunting in two places
- * for one answer.
+ * Every control is declared in [Knobs] and drawn from there, so this composable decides how a
+ * knob looks and never what a knob does. That is what lets `PanelKnobsTest` walk the panel: the
+ * list it walks is the list this draws.
  */
 @Composable
-private fun WorldSettings(
+private fun SettingsPanel(
     config: WorldGenConfig,
     options: RenderOptions,
     busy: Boolean,
+    platform: Platform,
+    sections: SectionState,
     onConfig: (WorldGenConfig) -> Unit,
     onOptions: (RenderOptions) -> Unit
 ) {
-    Text("World", style = MaterialTheme.typography.titleSmall)
-
-    Labelled("Ocean coverage", "${(config.seaLevel * 100).roundToInt()}%") {
-        Slider(
-            value = config.seaLevel,
-            onValueChange = { onConfig(config.copy(seaLevel = it)) },
-            valueRange = 0.05f..0.95f,
-            enabled = !busy
-        )
+    PANEL_SECTIONS.forEach { section ->
+        Section(
+            title = section.title,
+            expanded = sections.isOpen(section),
+            onToggle = { sections.toggle(section) }
+        ) {
+            Knobs.inSection(section).forEach { knob ->
+                KnobControl(knob, config, options, busy, platform, onConfig, onOptions)
+            }
+            // The two long lists of choices. They are drawn by hand rather than declared, because
+            // a list of nine styles is not a knob; F3 lifts both onto the map itself.
+            if (section == PanelSection.CARTOGRAPHY) StyleAndView(options, onOptions)
+        }
     }
+}
 
-    Labelled("Plates", "${config.tectonics.plateCount}") {
-        Slider(
-            value = config.tectonics.plateCount.toFloat(),
-            onValueChange = {
-                onConfig(config.copy(tectonics = config.tectonics.copy(plateCount = it.roundToInt())))
-            },
-            valueRange = 3f..40f,
-            enabled = !busy
-        )
-    }
-
-    Labelled("Realms", "${config.nations.nationCount}") {
-        Slider(
-            value = config.nations.nationCount.toFloat(),
-            onValueChange = {
-                onConfig(config.copy(nations = config.nations.copy(nationCount = it.roundToInt())))
-            },
-            valueRange = 0f..40f,
-            enabled = !busy
-        )
-    }
-
-    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        WildernessMode.entries.forEach { mode ->
-            FilterChip(
-                selected = config.nations.wilderness == mode,
-                onClick = { onConfig(config.copy(nations = config.nations.copy(wilderness = mode))) },
-                label = { Text(mode.label, maxLines = 1) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
+/**
+ * A division of the panel that rolls up, under a ruled heading in the theme's display face.
+ *
+ * A hairline under the title and a `+` or `–` at the right margin, and nothing else: the section
+ * is told from its neighbours by the rule, exactly as a panel is told from the page by its border.
+ * The whole row is the target, since a reader aiming at a 12dp glyph is a reader being tested.
+ */
+@Composable
+private fun Section(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (expanded) "–" else "+",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        HorizontalDivider()
+        if (expanded) {
+            Column(
+                Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                content = content
             )
         }
     }
-
-    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-    Text("Features", style = MaterialTheme.typography.titleSmall)
-
-    Toggle("Rivers", options.showRivers) { onOptions(options.copy(showRivers = it)) }
-    Toggle("Relief shading", options.showHillshade) { onOptions(options.copy(showHillshade = it)) }
-    Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
-    Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
 }
 
-/** Which layer of the world is on screen, and how it is drawn. */
+/** One declared knob, drawn as whatever kind of control it is. */
 @Composable
-private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
-    Text("Style", style = MaterialTheme.typography.titleSmall)
+private fun KnobControl(
+    knob: Knob,
+    config: WorldGenConfig,
+    options: RenderOptions,
+    busy: Boolean,
+    platform: Platform,
+    onConfig: (WorldGenConfig) -> Unit,
+    onOptions: (RenderOptions) -> Unit
+) {
+    when (knob) {
+        is Dial -> {
+            val value = knob.read(config)
+            Labelled(knob.label, knob.show(value)) {
+                Slider(
+                    value = value,
+                    onValueChange = { onConfig(knob.set(config, it)) },
+                    valueRange = knob.range,
+                    enabled = !busy
+                )
+            }
+        }
+
+        is Stepper -> StepperRow(knob, config, busy, onConfig)
+
+        is Latch -> {
+            val available = !knob.needsAccelerator || platform.accelerator != null
+            Toggle(knob.label, knob.read(config), enabled = available) {
+                onConfig(knob.set(config, it))
+            }
+            if (knob.needsAccelerator) AcceleratorNote(platform, knob.read(config))
+        }
+
+        is Mark -> Toggle(knob.label, knob.read(options)) { onOptions(knob.set(options, it)) }
+    }
+}
+
+/**
+ * `Plates    –  14  +`.
+ *
+ * A slider was the wrong instrument for these two. Eleven plates and twelve plates are different
+ * worlds rather than the same world adjusted, so what a reader wants is to ask for one more, not
+ * to sweep through every count between here and there regenerating each in turn.
+ */
+@Composable
+private fun StepperRow(
+    knob: Stepper,
+    config: WorldGenConfig,
+    busy: Boolean,
+    onConfig: (WorldGenConfig) -> Unit
+) {
+    val value = knob.read(config)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(knob.label, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StepButton("−", enabled = !busy && value > knob.range.first) {
+                onConfig(knob.set(config, value - 1))
+            }
+            Text(
+                "$value",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(min = 22.dp)
+            )
+            StepButton("+", enabled = !busy && value < knob.range.last) {
+                onConfig(knob.set(config, value + 1))
+            }
+        }
+    }
+}
+
+/** Material's own button insists on being 58dp wide, which is four times what a `+` needs. */
+@Composable
+private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(2.dp),
+        color = Color.Transparent,
+        contentColor = if (enabled) scheme.onSurface else scheme.outline,
+        border = BorderStroke(1.dp, if (enabled) scheme.outline else scheme.outlineVariant)
+    ) {
+        Text(
+            glyph,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+        )
+    }
+}
+
+/** What a machine with a graphics device can offer, or why it cannot. */
+@Composable
+private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
+    val note = when {
+        platform.accelerator == null ->
+            "Unavailable here: ${platform.accelerationUnavailableBecause}"
+        onGpu ->
+            "Erosion runs on ${platform.accelerator?.name}, which is many times faster at it."
+        else ->
+            "${platform.accelerator?.name} is available, and is many times faster at this."
+    }
+    Text(
+        note,
+        style = MaterialTheme.typography.labelSmall,
+        color = if (onGpu) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/** How the finished map is drawn, and which layer of it is on screen. */
+@Composable
+private fun StyleAndView(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
+    Text(
+        "Style",
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+    )
     MapStyle.entries.forEach { style ->
         FilterChip(
             selected = options.style == style,
@@ -840,8 +990,11 @@ private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Un
         )
     }
 
-    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-    Text("View", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "View",
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+    )
     MapView.entries.forEach { view ->
         FilterChip(
             selected = options.view == view,
@@ -852,45 +1005,21 @@ private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Un
     }
 }
 
-/** Where the work happens, and where the result goes. */
+/**
+ * Where a finished map goes.
+ *
+ * The graphics-card switch used to head this panel, under "Acceleration". It has moved to World:
+ * it decides how the world is *made*, and filing it beside the export buttons implied it was
+ * something about the picture.
+ */
 @Composable
 private fun OutputOptions(
-    config: WorldGenConfig,
     busy: Boolean,
     hasWorld: Boolean,
-    platform: Platform,
     exportFormat: ExportFormat,
-    onConfig: (WorldGenConfig) -> Unit,
     onExportFormat: (ExportFormat) -> Unit,
     onExport: (Int) -> Unit
 ) {
-    Text("Acceleration", style = MaterialTheme.typography.titleSmall)
-    val onGpu = config.erosion.acceleration == Acceleration.GPU
-    Toggle("Graphics card", onGpu, enabled = platform.accelerator != null) { wanted ->
-        onConfig(
-            config.copy(
-                erosion = config.erosion.copy(
-                    acceleration = if (wanted) Acceleration.GPU else Acceleration.CPU
-                )
-            )
-        )
-    }
-    val acceleratorNote = when {
-        platform.accelerator == null ->
-            "Unavailable here: ${platform.accelerationUnavailableBecause}"
-        onGpu ->
-            "Erosion runs on ${platform.accelerator?.name}, which is many times faster at it."
-        else ->
-            "${platform.accelerator?.name} is available, and is many times faster at this."
-    }
-    Text(
-        acceleratorNote,
-        style = MaterialTheme.typography.labelSmall,
-        color = if (onGpu) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    HorizontalDivider(Modifier.padding(vertical = 8.dp))
     Text("Export", style = MaterialTheme.typography.titleSmall)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         ExportFormat.entries.forEach { format ->

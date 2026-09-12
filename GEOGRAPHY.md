@@ -257,6 +257,20 @@ spill-level area holds water at balance, against 100% with the balance switched 
 author's world at 1024 the lake count falls 82 to 67 and the lake share of land 1.15% to 0.91%,
 with ten endorheic basins and 132 playa cells.
 
+**Realms of uneven size, and no world empire.** Realms are built from drainage catchments, so a
+border falls on a watershed or on a trunk river because there is nowhere else for it to fall. How
+much each realm takes is a draw with a long tail, which is what stops a world reading as a dozen
+equal slabs. But appetite is a *comparative* brake — a realm bids against its neighbours — so a
+realm that is the only bidder for a region takes it whatever its appetite: on seed 7 one realm
+ended up holding 42% of the world that way. Two fixes were measured. Forcing the seeds two rings
+apart instead of one worked, and cost the world its river borders: it halved how often a border
+follows a river on two of four seeds, because river valleys are the richest ground and spacing the
+seeds out of them leaves both banks to a single realm. So the spacing stayed at one ring and the
+sprawl is cut where it happens instead — a realm over `NationsConfig.maxRealmShare` is split in two
+along one of its own internal watersheds, largest first, until none is over. That split costs
+nothing to place, because the divide is already there, and it is the same mechanism as a voluntary
+schism. (Recorded here by C2, which found both figures in a code comment and nowhere else.)
+
 ## Known deviations
 
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,

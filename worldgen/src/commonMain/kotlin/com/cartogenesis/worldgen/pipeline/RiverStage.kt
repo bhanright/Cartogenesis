@@ -95,7 +95,7 @@ object RiverStage {
      * The smallest total runoff a source may be asked to carry, so that a world with almost no
      * rain on it still draws the few channels it has rather than every land cell at once.
      */
-    private const val MIN_SOURCE_FLOW = 1e-4f
+    internal const val MIN_SOURCE_FLOW = 1e-4f
 
     /**
      * Runoff a cell contributes over and above its own rainfall.
@@ -389,8 +389,11 @@ object RiverStage {
     /**
      * Runoff a single cell contributes, from its rainfall on the 0..1 scale. See [RUNOFF_FLOOR]
      * for why an arid cell still contributes something.
+     *
+     * Internal rather than private because `NationStage` has to reach the same figure to decide
+     * which cells are on a river, and the two must not drift apart.
      */
-    private fun runoffWeight(precipitation: Float): Float = RUNOFF_FLOOR + precipitation
+    internal fun runoffWeight(precipitation: Float): Float = RUNOFF_FLOOR + precipitation
 
     private fun accumulateFlow(
         cellsAcross: Int,

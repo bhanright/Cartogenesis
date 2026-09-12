@@ -89,3 +89,62 @@ internal external fun selfTestRequested(): Boolean
 
 @JsFun("(text) => { window.__selftest = text; console.log(text); }")
 internal external fun publishSelfTest(text: String)
+
+/**
+ * Opens a link in a new tab, with the two attributes that stop the opened page reaching back.
+ *
+ * `noopener` is not decoration: without it the release page gets a live `window.opener` handle to
+ * this one and could navigate it somewhere else.
+ */
+@JsFun("(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }")
+internal external fun openInNewTab(url: String)
+
+/**
+ * Whether this page is being pointed at with a fingertip rather than with a mouse.
+ *
+ * `(pointer: coarse)` is the media query for "the primary input has limited accuracy", which is a
+ * touchscreen and is not a trackpad, a stylus on a tablet PC, or a phone with a mouse plugged into
+ * it. Asked once at startup rather than watched: a device that changes its primary pointer
+ * mid-session is a laptop being folded into a tablet, and a reload is a fair price for that.
+ *
+ * Guarded because `matchMedia` is missing in a handful of embedded webviews and throws on a bad
+ * query string in older Safari; a browser that cannot answer is treated as a mouse, which is the
+ * answer that changes nothing.
+ */
+@JsFun(
+    """() => {
+        try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+        catch (e) { return false; }
+    }"""
+)
+internal external fun pointerIsCoarse(): Boolean
+
+/**
+ * One `GET`, resolving to the body as text or to null.
+ *
+ * The whole of the browser build's network reach, and it is called from exactly one place: the
+ * update check, which runs when a reader asks for it. Everything that can go wrong — offline, a
+ * CORS refusal, a status that is not a success, a body that never arrives — resolves to null here
+ * rather than rejecting, because the caller has one question and this is one of its answers. A
+ * ten-second abort keeps a hung request from leaving the dialog saying "Asking GitHub…" for ever.
+ */
+@JsFun(
+    """(url) => {
+        const abort = new AbortController();
+        const timer = setTimeout(() => abort.abort(), 10000);
+        return fetch(url, { signal: abort.signal, headers: { 'Accept': 'application/json' } })
+            .then((response) => response.ok ? response.text() : null)
+            .catch(() => null)
+            .finally(() => clearTimeout(timer));
+    }"""
+)
+private external fun fetchTextPromise(url: String): JsHandle
+
+@JsFun("(value) => String(value)")
+private external fun jsToString(value: JsHandle): String
+
+internal suspend fun fetchTextOrNull(url: String): String? {
+    val result = awaitPromise(fetchTextPromise(url)) ?: return null
+    if (isNullish(result)) return null
+    return jsToString(result)
+}

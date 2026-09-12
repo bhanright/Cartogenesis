@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -348,7 +349,8 @@ class PanelKnobsTest {
     fun `the toolbar offers every style and every view`() {
         assertEquals(MapStyle.entries.toList(), MapChrome.styles)
         assertEquals(MapView.entries.toList(), MapChrome.views)
-        assertEquals(9, MapChrome.styles.size)
+        // Ten since F4 added Mars, which is the tenth cell in the segmented row.
+        assertEquals(10, MapChrome.styles.size)
         assertEquals(15, MapChrome.views.size)
     }
 
@@ -467,6 +469,189 @@ class PanelKnobsTest {
         camera.fit()
         assertEquals(1f, camera.zoom)
         assertEquals(Offset.Zero, camera.pan)
+    }
+
+    // ---- F5: the second arrangement, and what it does and does not lose ----------------------
+
+    /**
+     * Which window gets which arrangement.
+     *
+     * The threshold is a width in dp and not a device: a desktop window dragged to 700 dp is a
+     * compact window and gets the sheet, because the question the layout is answering is whether
+     * the panel fits beside the map. The pointer is the second, independent reason — a tablet in
+     * landscape is as wide as a laptop and still cannot be driven with a 13 dp slider thumb.
+     */
+    @Test
+    fun `a narrow window or a coarse pointer asks for the compact arrangement`() {
+        assertEquals(WindowShape.WIDE, Layouts.shape(1440f, coarsePointer = false))
+        assertEquals(WindowShape.WIDE, Layouts.shape(1024f, coarsePointer = false))
+        assertEquals(WindowShape.WIDE, Layouts.shape(800f, coarsePointer = false))
+        assertEquals(WindowShape.COMPACT, Layouts.shape(799f, coarsePointer = false))
+        // The two sizes `ChromeGalleryTest` photographs: a phone and a tablet in portrait.
+        assertEquals(WindowShape.COMPACT, Layouts.shape(390f, coarsePointer = false))
+        assertEquals(WindowShape.COMPACT, Layouts.shape(768f, coarsePointer = false))
+        assertEquals(WindowShape.COMPACT, Layouts.shape(1180f, coarsePointer = true))
+    }
+
+    /**
+     * The guard F5 asks for: the sheet on a phone can set everything the 320 dp column can.
+     *
+     * [Arrangements] declares the two arrangements as two independently written lists, and the
+     * composables draw from those lists — so a control dropped from the compact arrangement is
+     * dropped from this comparison too. Deleting a section from `Arrangements.compact`, or
+     * shortening its style list to the six that fit, fails here.
+     */
+    @Test
+    fun `the compact arrangement exposes every knob the wide one does`() {
+        val platform = FakePlatform(accelerator = FakeAccelerator)
+        val wide = Arrangements.of(WindowShape.WIDE, platform)
+        val compact = Arrangements.of(WindowShape.COMPACT, platform)
+
+        assertEquals(
+            wide.knobs.map { it.label },
+            compact.knobs.map { it.label },
+            "the compact panel cannot reach every knob the wide one can"
+        )
+        // And what both reach is the whole panel: the header's knob and all six sections, in the
+        // order the generator runs. Spelled out against [Knobs] rather than against each other, or
+        // two arrangements that had both lost the same knob would agree with one another.
+        assertEquals(
+            Knobs.all.filterNot { it.section == PanelSection.ATLAS }.map { it.label },
+            wide.knobs.map { it.label }
+        )
+    }
+
+    @Test
+    fun `the compact arrangement reaches every style, view, size and menu command`() {
+        val platform = FakePlatform(canQuit = true, accelerator = FakeAccelerator)
+        val wide = Arrangements.of(WindowShape.WIDE, platform)
+        val compact = Arrangements.of(WindowShape.COMPACT, platform)
+
+        // Ten styles: a segmented row when there is room for one, a menu when there is not.
+        assertEquals(wide.styles, compact.styles)
+        assertEquals(MapChrome.styles, compact.styles)
+        // Fifteen views, a menu in both.
+        assertEquals(wide.views, compact.views)
+        // Three export sizes, whichever of them this build can finish.
+        assertEquals(wide.exportSizes, compact.exportSizes)
+        // Three menus folded into one button, with nothing dropped on the way.
+        assertEquals(wide.commands, compact.commands)
+        assertTrue(MenuCommand.SETTINGS in compact.commands)
+        assertTrue(MenuCommand.ABOUT in compact.commands)
+        assertTrue(MenuCommand.QUIT in compact.commands)
+    }
+
+    /**
+     * The one thing a phone deliberately loses, stated so that losing anything else is a failure.
+     *
+     * Pinch is what a phone already does for zoom and a double tap now fits, so a readout and two
+     * step buttons on a 390 dp strip are three targets spent on a gesture the device has. Fit
+     * stays: there is no gesture anybody would guess for "show me all of it".
+     */
+    @Test
+    fun `the phone's legend keeps the cartouche and Fit and loses the zoom steps`() {
+        val platform = FakePlatform()
+        val wide = Arrangements.of(WindowShape.WIDE, platform).legend
+        val compact = Arrangements.of(WindowShape.COMPACT, platform).legend
+
+        assertEquals(LegendPart.entries.toList(), wide)
+        assertEquals(listOf(LegendPart.CARTOUCHE, LegendPart.FIT), compact)
+        assertTrue(LegendPart.ZOOM_IN !in compact)
+        assertTrue(LegendPart.ZOOM_OUT !in compact)
+    }
+
+    /**
+     * A device with no graphics API at all is offered no graphics-card switch.
+     *
+     * Not the same as a device whose graphics card declined — that one keeps the switch, disabled,
+     * with [Platform.accelerationUnavailableBecause] printed beside it, which is why this asks
+     * [Platform.graphicsApiPresent] and not whether the accelerator is null. Most phone browsers
+     * have no `navigator.gpu`, and a disabled switch explaining a feature the device does not have
+     * is 60 dp of a 390 dp screen spent on nothing.
+     */
+    @Test
+    fun `a host with no graphics API is offered no graphics-card switch`() {
+        val none = FakePlatform(graphicsApiPresent = false)
+        val present = FakePlatform(graphicsApiPresent = true, accelerator = FakeAccelerator)
+        // Present but refused: the switch stays, because there is something to explain.
+        val refused = FakePlatform(graphicsApiPresent = true, accelerator = null)
+
+        listOf(WindowShape.WIDE, WindowShape.COMPACT).forEach { shape ->
+            assertTrue(
+                Arrangements.of(shape, none).knobs.none { it.needsGraphicsDevice },
+                "$shape still draws the graphics-card switch with no graphics API"
+            )
+            assertTrue(Arrangements.of(shape, present).knobs.any { it.needsGraphicsDevice })
+            assertTrue(Arrangements.of(shape, refused).knobs.any { it.needsGraphicsDevice })
+        }
+
+        // Exactly one knob goes, and it is that one.
+        assertEquals(
+            Arrangements.of(WindowShape.WIDE, present).knobs
+                .filterNot { it.needsGraphicsDevice }.map { it.label },
+            Arrangements.of(WindowShape.WIDE, none).knobs.map { it.label }
+        )
+        assertEquals(listOf(Knobs.graphicsCard), Knobs.all.filter { it.needsGraphicsDevice })
+    }
+
+    /**
+     * A phone exports at 2048, and the cap is the platform's rather than the panel's.
+     *
+     * Same mechanism as the 8192 ceiling above, asked with the window's shape: an export re-runs
+     * the whole pipeline at the target size on the page's only thread, and 4096 of that on a phone
+     * is a tab the browser kills. The desktop ignores the argument, so narrowing a desktop window
+     * does not narrow what it can export.
+     */
+    @Test
+    fun `a phone browser's export ceiling caps the size at 2048`() {
+        val phone = object : FakePlatform(coarsePointer = true) {
+            override fun exportCeiling(compact: Boolean): Int = if (compact) 2048 else 4096
+        }
+        assertEquals(2048, phone.exportCeiling(compact = true))
+        assertEquals(4096, phone.exportCeiling(compact = false))
+        assertEquals(2048, Exports.clamp(4096, phone.exportCeiling(compact = true)))
+        assertEquals(2048, Exports.clamp(8192, phone.exportCeiling(compact = true)))
+        assertFalse(Exports.reachable(4096, phone.exportCeiling(compact = true)))
+        // A platform that does not care answers the same either way.
+        assertEquals(4096, FakePlatform().exportCeiling(compact = true))
+    }
+
+    /** A phone starts at 512 whatever a settings file carried over from a desktop says. */
+    @Test
+    fun `a compact window starts at 512 however the preference was written`() {
+        val platform = FakePlatform(defaultResolution = 1024)
+        val big = AppSettings(workingResolution = 2048)
+
+        assertEquals(2048, SettingsEffects.resolution(big, platform, compact = false))
+        assertEquals(512, SettingsEffects.resolution(big, platform, compact = true))
+        assertEquals(1024, SettingsEffects.resolution(AppSettings(), platform, compact = false))
+        assertEquals(512, SettingsEffects.resolution(AppSettings(), platform, compact = true))
+        assertEquals(
+            512,
+            SettingsEffects.startingConfig(big, platform, seed = 1L, compact = true).width
+        )
+        // And it is a ceiling, not a setting: a preference already below it is left alone.
+        val small = AppSettings(workingResolution = 512)
+        assertEquals(512, SettingsEffects.resolution(small, platform, compact = true))
+    }
+
+    /**
+     * The touch targets are the theme's, and the mouse's are exactly what F1 shipped.
+     *
+     * The second half of that is what keeps the wide window pixel-for-pixel where it was: every
+     * control that grew under a fingertip reads these numbers, and under a pointer they are the
+     * literals that used to be written into `Controls.kt`.
+     */
+    @Test
+    fun `the pointer's touch targets are the numbers F1 drew with`() {
+        assertEquals(26.dp, TouchTargets.POINTER.sliderHeight)
+        assertEquals(13.dp, TouchTargets.POINTER.sliderThumb)
+        assertEquals(0.dp, TouchTargets.POINTER.minTarget)
+        assertEquals(0.dp, TouchTargets.POINTER.extraRowPadding)
+
+        assertTrue(TouchTargets.TOUCH.sliderHeight > TouchTargets.POINTER.sliderHeight)
+        assertTrue(TouchTargets.TOUCH.sliderThumb > TouchTargets.POINTER.sliderThumb)
+        assertTrue(TouchTargets.TOUCH.minTarget >= 48.dp)
     }
 
     /** Zooming about a point has to leave that point where it was, or the map slides away. */

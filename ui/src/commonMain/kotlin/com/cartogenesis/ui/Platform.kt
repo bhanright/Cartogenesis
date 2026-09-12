@@ -99,6 +99,31 @@ interface Platform {
     val accelerationUnavailableBecause: String?
 
     /**
+     * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.
+     *
+     * Not the same question as [accelerator] being non-null, and the difference is the whole reason
+     * this exists. A desktop whose driver refused the context has OpenGL and a reason; the switch
+     * is drawn disabled and the reason is printed beside it, which is what a reader is owed. A
+     * phone browser with no `navigator.gpu` has no such feature to explain, and 60 dp of a 390 dp
+     * screen spent saying so is 60 dp taken from the map — so the switch is not drawn at all. See
+     * [Arrangements.headerKnobs].
+     *
+     * True by default: a host that does not answer is assumed to have one, which leaves the switch
+     * where it was and lets [accelerationUnavailableBecause] do the explaining.
+     */
+    val graphicsApiPresent: Boolean get() = true
+
+    /**
+     * Whether the reader is pointing at this with a fingertip rather than a mouse.
+     *
+     * `(pointer: coarse)` in a browser, and false on the desktop. It decides two things: the
+     * arrangement (a tablet in landscape is wide enough for the panel and still cannot be driven
+     * with a 13 dp slider thumb — see [Layouts.arrangement]) and the size of every touch target in
+     * the theme.
+     */
+    val coarsePointer: Boolean get() = false
+
+    /**
      * The largest export this build can actually finish.
      *
      * Not a taste: 8192 does not complete. G2 measured it exhausting a 10 GB heap inside the
@@ -107,8 +132,13 @@ interface Platform {
      * to it. It is a value on the platform, and not a constant in the panel, so that the build
      * which fixes the memory can raise the ceiling without the interface being touched: the export
      * row draws whatever this says.
+     *
+     * [compact] is true in a phone-shaped window, and is a question rather than an assumption
+     * because the answer differs by host: a desktop window narrowed to 700 dp is still a desktop
+     * with every core and a 12 GB heap, while the same 700 dp in a browser is a phone with one
+     * thread. The web front end caps itself at 2048 there; the desktop ignores the argument.
      */
-    val exportCeiling: Int get() = 4096
+    fun exportCeiling(compact: Boolean): Int = 4096
 
     /**
      * Renders at [size] and puts the result wherever this platform puts finished files: a chosen
@@ -120,6 +150,101 @@ interface Platform {
         size: Int,
         format: ExportFormat
     ): ExportOutcome?
+
+    // ---- F4: what a menu strip, a settings file and an update check need from the host. ----
+
+    /**
+     * Where this platform keeps the settings, and how it reads and writes them.
+     *
+     * Deliberately a store of *text* rather than of [AppSettings]. Both hosts can keep a string
+     * somewhere durable and neither can be trusted with the shape of the settings object, so the
+     * serialising, the defaulting and the forward compatibility all stay in shared code where they
+     * are testable — see [SettingsCodec] — and the platform is left with the one thing only it can
+     * do, which is to put a string somewhere it survives a restart.
+     *
+     * The default is in memory, so a host that has not implemented it (and every test fake that
+     * does not care) still round-trips within a session instead of dropping writes.
+     */
+    val settingsStore: SettingsStore get() = EphemeralSettings
+
+    /** Whether "Quit" belongs on the File menu. A window can be closed; a browser tab cannot. */
+    val canQuit: Boolean get() = false
+
+    /** Closes the application. Only ever called when [canQuit]. */
+    fun quit() {}
+
+    /**
+     * Opens [url] outside the application — a release page, in practice.
+     *
+     * `Desktop.browse` on the desktop, `window.open` in a browser. False in [canOpenLinks] means
+     * the About and update dialogs print the address instead of offering a button, which is more
+     * use than a button that does nothing.
+     */
+    val canOpenLinks: Boolean get() = false
+
+    fun openLink(url: String) {}
+
+    /** Whether Settings can offer "Open folder" beside the library path. */
+    val canRevealFolder: Boolean get() = false
+
+    fun revealFolder(path: String) {}
+
+    /**
+     * Points the library at another folder, returning whether it took.
+     *
+     * A folder is a desktop idea: the browser's library is IndexedDB and has nowhere else to be,
+     * so it declines. Suspend because moving the library means listing the new place.
+     */
+    suspend fun useLibraryFolder(path: String): Boolean = false
+
+    /**
+     * Fetches [url] as text, or null if this platform cannot, the request failed, or the machine
+     * is offline.
+     *
+     * The one call the application makes over the network, and the only reason it exists is the
+     * update check. Null rather than an exception because every failure here — no network, a
+     * proxy, GitHub down, a platform with no HTTP client at all — is the same answer to the only
+     * question being asked, which is "is there a newer release?". [Updates] turns null into a
+     * sentence for the reader.
+     *
+     * Nothing calls this at launch unless [AppSettings.checkForUpdatesOnLaunch] is on, which is
+     * off by default: opening the application must not talk to GitHub because it was opened.
+     */
+    suspend fun fetchText(url: String): String? = null
+}
+
+/**
+ * Somewhere durable to keep one string.
+ *
+ * A JSON file under the user's configuration directory on the desktop; browser storage on the web.
+ * Both are asked for and given the whole document at once: the settings are a few hundred bytes
+ * and there is nothing to be gained by making this a key-value store, which would only move the
+ * question of what the keys are out of shared code and into two places.
+ */
+interface SettingsStore {
+
+    /** The stored text, or null if nothing has been written yet or it could not be read. */
+    suspend fun read(): String?
+
+    /** Writes [text], replacing whatever was there. Failures are swallowed by the caller. */
+    suspend fun write(text: String)
+
+    /** Where this is kept, in the host's own terms, for the dialog's small print. */
+    val location: String get() = "This session only"
+}
+
+/**
+ * The fallback store: durable for as long as the application is running, and no longer.
+ *
+ * An object rather than a class because an interface's default property has to return the *same*
+ * store on every call or a write and the read after it would land in different places.
+ */
+internal object EphemeralSettings : SettingsStore {
+    private var held: String? = null
+    override suspend fun read(): String? = held
+    override suspend fun write(text: String) {
+        held = text
+    }
 }
 
 /** Wall-clock milliseconds, for stamping a save. */

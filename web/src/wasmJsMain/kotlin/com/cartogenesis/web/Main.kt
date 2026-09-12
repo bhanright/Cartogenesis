@@ -7,8 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
-import com.cartogenesis.ui.CartogenesisApp
-import com.cartogenesis.ui.CartogenesisTheme
+import com.cartogenesis.ui.CartogenesisRoot
 import com.cartogenesis.ui.Platform
 
 /**
@@ -50,10 +49,10 @@ fun main() {
         }
 
         val ready = platform
-        // Follows the browser's prefers-color-scheme, and is the same theme the desktop build
-        // applies - including the two bundled faces, which is why the page needs no webfont.
-        CartogenesisTheme {
-            if (ready != null) CartogenesisApp(ready)
-        }
+        // The chrome, the interface scale and every other preference are read out of local storage
+        // by `CartogenesisRoot`, which follows prefers-color-scheme unless the reader has chosen
+        // otherwise - the same code, and therefore the same window, as the desktop build gets,
+        // including the two bundled faces, which is why the page needs no webfont.
+        if (ready != null) CartogenesisRoot(ready)
     }
 }

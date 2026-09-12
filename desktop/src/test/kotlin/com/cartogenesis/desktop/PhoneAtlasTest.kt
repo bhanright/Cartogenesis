@@ -1,8 +1,13 @@
 package com.cartogenesis.desktop
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.DesktopComposeUiTest
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
@@ -18,6 +23,9 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.ui.ThemeChoice
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -183,6 +191,150 @@ class PhoneAtlasTest {
         }
     }
 
+    /**
+     * That every chrome draws the panes' own words in an ink you can see.
+     *
+     * The library's two headings, "This world" and "Saved worlds", came out very nearly invisible
+     * in the dark chromes: a heading that asks for no colour takes `LocalContentColor`, Material's
+     * default for that is black, and the panes are the one part of this application drawn straight
+     * onto a painted background rather than inside a `Surface` — so nothing had ever told them what
+     * ink the ground they lie on wants. Everything around them was fine, which is why it survived
+     * two rounds of review: the name field, the buttons and the saved-world cards are all Surfaces
+     * or set their own colour, and in the light chromes black on paper is very nearly right.
+     *
+     * Measured rather than asserted by eye, and measured off the pixels rather than off the scheme:
+     * the question is what was *drawn*, not what the scheme would have supplied if anything had
+     * asked it. The heading's own bounding box holds ink and ground and nothing else, so the
+     * contrast between its lightest and darkest pixel is the contrast the reader gets. 4.5:1 is
+     * WCAG AA for text at this size, and is the bar `ChromeContrastTest` holds the schemes to.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `every chrome draws the library's headings legibly`() {
+        val illegible = mutableListOf<String>()
+        val measured = mutableMapOf<String, String>()
+        ThemeChoice.entries.forEach { choice ->
+            listOf("light" to false, "dark" to true).forEach { (tone, dark) ->
+                val ratio = libraryHeadingContrast(choice, dark)
+                measured["${choice.name}-$tone"] = ratio.round()
+                if (ratio < LEGIBLE) illegible += "${choice.name} in $tone at ${ratio.round()}:1"
+            }
+        }
+        println("F8 library heading contrast $measured")
+        assertTrue(
+            illegible.isEmpty(),
+            "the library's heading is below $LEGIBLE:1 against its own ground: $illegible"
+        )
+    }
+
+    /**
+     * The same question of the realm's own page, which is the other text the panes draw bare.
+     *
+     * `NationDetail` is a scrolling column, not a `Surface`, so its heading and its paragraphs of
+     * geography took the same default black. The four chromes here are the dark ones a reader would
+     * actually meet it in; one world apiece, because there is no realm to open without one.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `the dark chromes draw a realm's page legibly`() {
+        val illegible = mutableListOf<String>()
+        val measured = mutableMapOf<String, String>()
+        DARK_CHROMES.forEach { choice ->
+            val ratio = realmPageContrast(choice)
+            measured[choice.name] = ratio.round()
+            if (ratio < LEGIBLE) illegible += "${choice.name} at ${ratio.round()}:1"
+        }
+        println("F8 realm page contrast $measured")
+        assertTrue(
+            illegible.isEmpty(),
+            "a realm's page is below $LEGIBLE:1 against its own ground: $illegible"
+        )
+    }
+
+    /** The library open on a phone in one chrome, and what "This world" is drawn in. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun libraryHeadingContrast(choice: ThemeChoice, dark: Boolean): Double {
+        var ratio = 0.0
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = PhonePlatform()
+            setContent {
+                CartogenesisTheme(
+                    dark = dark,
+                    choice = choice,
+                    coarsePointer = platform.coarsePointer
+                ) { CartogenesisApp(platform) }
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Library").performScrollTo().performClick()
+            waitForIdle()
+            ratio = contrastAcross(onNodeWithText("This world"))
+        }
+        return ratio
+    }
+
+    /** A realm opened on a phone in one chrome, and what its "Geography" heading is drawn in. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun realmPageContrast(choice: ThemeChoice): Double {
+        var ratio = 0.0
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = PhonePlatform()
+            setContent {
+                CartogenesisTheme(
+                    dark = true,
+                    choice = choice,
+                    coarsePointer = platform.coarsePointer
+                ) { CartogenesisApp(platform) }
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Generate").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+            theAtlasButton().performScrollTo().performClick()
+            waitForIdle()
+            onAllNodes(REALM_ROW)[0].performClick()
+            waitForIdle()
+            // Below the fold on a 390 dp page, and a box that is off the bottom of the window is a
+            // box the capture does not contain.
+            onNodeWithText("Geography").performScrollTo()
+            waitForIdle()
+            ratio = contrastAcross(onNodeWithText("Geography"))
+        }
+        return ratio
+    }
+
+    /**
+     * The contrast between the lightest and the darkest pixel of one piece of text.
+     *
+     * A text node's bounds are tight around its glyphs, so the box holds the ink, the ground it is
+     * printed on and the antialiasing between them. The extremes of that are therefore the pair the
+     * reader is actually reading, whatever either of them turns out to be — which is the point:
+     * this measures what was drawn and not what some scheme says it should have been.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.contrastAcross(node: SemanticsNodeInteraction): Double {
+        val bounds = node.fetchSemanticsNode().boundsInRoot
+        val pixels = onRoot().captureToImage().toPixelMap()
+        var lightest = -1.0
+        var darkest = 2.0
+        for (y in bounds.top.toInt().coerceAtLeast(0) until
+            bounds.bottom.toInt().coerceAtMost(pixels.height)) {
+            for (x in bounds.left.toInt().coerceAtLeast(0) until
+                bounds.right.toInt().coerceAtMost(pixels.width)) {
+                val luminance = relativeLuminance(pixels[x, y])
+                if (luminance > lightest) lightest = luminance
+                if (luminance < darkest) darkest = luminance
+            }
+        }
+        check(lightest >= 0.0) { "the text's box is outside the window: $bounds" }
+        return (lightest + 0.05) / (darkest + 0.05)
+    }
+
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.theAtlasButton() = onNode(ATLAS_BUTTON)
 
@@ -219,6 +371,17 @@ class PhoneAtlasTest {
         /** A full 512 world on the CPU, on whatever machine is running the tests. */
         const val GENERATION_TIMEOUT_MS = 300_000L
 
+        /** WCAG AA for text at the size a heading in these panes is set. */
+        const val LEGIBLE = 4.5
+
+        /** The four a reader would meet a dark pane in, which is where this went wrong. */
+        val DARK_CHROMES = listOf(
+            ThemeChoice.DARK,
+            ThemeChoice.MIDNIGHT,
+            ThemeChoice.MATRIX,
+            ThemeChoice.HITCHCOCK
+        )
+
         /**
          * What the two map strips call themselves. Spelled out rather than imported, because the
          * constant is internal to `:ui` and this is the interface as the outside sees it — the same
@@ -227,6 +390,20 @@ class PhoneAtlasTest {
         const val MAP_TOOLBAR = "Map toolbar"
     }
 }
+
+/** sRGB relative luminance, WCAG 2.1's definition, which is what a contrast ratio is built from. */
+private fun relativeLuminance(colour: Color): Double {
+    fun channel(value: Float): Double {
+        val v = value.toDouble()
+        return if (v <= 0.03928) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+    }
+    return 0.2126 * channel(colour.red) +
+        0.7152 * channel(colour.green) +
+        0.0722 * channel(colour.blue)
+}
+
+/** Two decimals, for a ratio printed in a report rather than compared with anything. */
+private fun Double.round(): String = ((this * 100).roundToInt() / 100.0).toString()
 
 /**
  * The desktop reporting a fingertip and a phone's working resolution.

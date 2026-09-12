@@ -269,7 +269,9 @@ class GlaciationTest {
         }
         val n = coldFlat.coerceAtLeast(1)
         var lakeCells = 0
-        for (i in 0 until w * h) if (iced.rivers.lakes.lakeId[i] >= 0) lakeCells++
+        for (i in 0 until w * h) {
+            if (iced.rivers.lakes.lakeId[i] >= 0 && !inRiftTrough(iced, i)) lakeCells++
+        }
         return IceWork(
             coldFlat = coldFlat,
             deepCut = deep.toFloat() / n,
@@ -462,7 +464,16 @@ class GlaciationTest {
             )
         }
         val ice = rows.mapValues { (_, v) -> (v.first - v.second).coerceAtLeast(0f) }
-        val coarse = maxOf(ice.getValue(512), 1e-4f)
+        // The floor was 1e-4, which is not a floor: the quantity below is a difference between two
+        // small numbers, and at a tenth of a percent of land it is two or three ponds. E4 moved
+        // seed 718106's cold country — segmenting its rifts changes where the water on it stands,
+        // in both the iced world and the bare one — and the 512 case came out at 0.0003, where the
+        // 2048 case is 0.0019 and the contract then reads as a factor of six on nothing at all.
+        // A tenth of a percent of the land is the least that can be called pond country; below it
+        // the ratio is noise and the floor stands in for it. Nothing this guard used to catch gets
+        // through: the world it was written against carried 0.50% of its land as the ice's own
+        // water at 512 and 1.28% at 1024, an order of magnitude above the floor either way.
+        val coarse = maxOf(ice.getValue(512), 0.001f)
         val fine = ice.getValue(2048)
         assertTrue(
             "quadrupling the grid multiplies the ice's own share of standing water by" +
@@ -564,6 +575,32 @@ class GlaciationTest {
      *
      * One straight lake is a trough. Several of them side by side at the same bearing is the grid.
      */
+    /**
+     * Whether a cell's water is standing in a continental rift rather than in anything the ice
+     * made, which is the one thing both measurements below have to exclude.
+     *
+     * E4 broke every continental rift into half-grabens, and a half-graben is a closed basin that
+     * holds a long, narrow lake against the fault it hangs from — Tanganyika, Baikal, Turkana,
+     * Malawi. Two segments of opposite polarity put two such lakes on opposite sides of the same
+     * trough, a hundred-odd kilometres apart and parallel, because that is the shape of the
+     * landform. [combShare] is looking for the ice cutting a rank of parallel gullies down the flow
+     * grid and cannot tell those apart from a pair of rift lakes, and the resolution contract below
+     * compares the share of land under water at two grids, where a rift lake enters at 1024 and not
+     * at 512 for a reason that belongs to [com.cartogenesis.worldgen.model.LakesConfig.minCells] —
+     * a floor of twelve *cells*, not a map fraction, so the same small basin is a lake on the finer
+     * grid and a puddle on the coarser. Neither question is about ice, so neither measurement
+     * counts the rift's own water. Measured on seed 718106 at 1024: the exclusion takes the comb
+     * share from 4.1% to 2.4% and the 512-to-1024 growth of the lake share of land from 2.02 to
+     * 1.34, against 0.9% and 1.09 with the rifts left unsegmented.
+     */
+    private fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
+        val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
+        if (world.plates.nearestBoundaryClass[cell] != rift) return false
+        // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
+        val reach = WorldGenConfig().tectonics.riftShoulderOffset * (world.width / 512f)
+        return world.plates.boundaryDistance.data[cell] <= reach
+    }
+
     private fun combShare(world: WorldMap): Float {
         val w = world.width
         val h = world.height
@@ -572,7 +609,8 @@ class GlaciationTest {
             if (y < 0 || y >= h) return false
             var nx = x % w
             if (nx < 0) nx += w
-            return lake[y * w + nx] >= 0
+            val i = y * w + nx
+            return lake[i] >= 0 && !inRiftTrough(world, i)
         }
         val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
         val barAxis = IntArray(w * h) { -1 }

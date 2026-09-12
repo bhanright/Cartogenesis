@@ -80,8 +80,15 @@ class DepositionTest {
      * reproduces the number above it. Land held at 6226 for the fifth time, which is what it must
      * do — the shoreline is a rank cut on a fixed fraction of the cells and the notch moves no cell
      * across it on this world.
+     *
+     * And a sixth time for E4 (segmented rifts), which is a terrain change again: a continental
+     * rift is now a chain of half-grabens with an accommodation zone between each pair, so every
+     * rift floor on every world sits at a different depth than it did, and `PlateStage` normalizes
+     * the whole field over its own range, which carries a little of that change everywhere. Land
+     * held at 6226 for the sixth time — seed 42's rifts are all under water or well inland of the
+     * cut, so no cell crossed the shoreline.
      */
-    private val startingPointElevation = -4006153834021044631L
+    private val startingPointElevation = 7967346964201395220L
     private val startingPointLand = 6226
 
     @Test

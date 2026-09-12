@@ -34,7 +34,9 @@ run is what makes plate edges read as drawn on.
 well as by the relative motion, so an ocean going under a continent builds a narrow coastal range
 with a volcanic arc behind it and a trench in front, two continents meeting build a broad
 flat-topped plateau ringed by mountains, and two oceans meeting build a chain of volcanic islands.
-See "Three kinds of collision" below.
+Divergence under continental crust builds a rift, and the rift is segmented into half-grabens of
+alternating polarity, so a drowned one is a string of gulfs and lakes rather than a canal. See
+"Three kinds of collision" below.
 
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
@@ -410,9 +412,18 @@ why every range on its maps was the same range.
   the choice is arbitrary and has to be made by something that cannot vary between cells. It is
   built on oceanic crust, so most of it stays under water and only the swells of `rangeVariation`
   break the surface, which is what makes an arc a chain of islands rather than a ridge of land.
-- **Divergence under continental crust is a rift valley.** A trough on the axis between two
-  rebounding shoulders, rather than the simple groove it was; under oceanic crust it stays a
-  spreading ridge.
+- **Divergence under continental crust is a rift valley, and a rift valley is a chain.** A trough
+  on the axis between two rebounding shoulders, rather than the simple groove it was; under
+  oceanic crust it stays a spreading ridge. But no rift on Earth holds one depth between two
+  shoulders of one height for a thousand kilometres. A rift is a string of half-grabens: each
+  basin hangs from a fault on one flank, with the floor deepest against that footwall and rising
+  across to a low hinge on the other, and the polarity flips from one segment to the next, with an
+  accommodation zone between them where the floor rises to a sill. So the sea enters only the
+  segments that have subsided below it, and what a drowned rift gives is a string of gulfs and
+  lakes joined by sills and land bridges — the Red Sea, the Gulf of California, Baikal and
+  Tanganyika — rather than a canal. Each segment is a fraction of the map's width rather than a
+  count of cells, so the same rift breaks into the same basins at 512 and at 2048, and its
+  shoulders vary in height and width with the segment and with `rangeVariation` as ranges do.
 - **A few oceanic plates carry a hotspot**, a point that stays put while the plate drifts over it,
   leaving a line of seamounts along the drift vector that subside with age. It is the only thing
   in the pipeline that puts islands somewhere other than a plate boundary. Measured on seeds 7, 42

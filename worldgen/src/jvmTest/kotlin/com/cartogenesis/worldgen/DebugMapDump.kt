@@ -444,6 +444,111 @@ class DebugMapDump {
     }
 
     /**
+     * E4, before and after: seed 59758's long continental rift with the segmentation off and on.
+     *
+     * This is the seed the author circled at 2048 — a sinuous twenty-to-one strait of uniform width
+     * running the whole length of a rift. The whole-map fantasy view says whether the seam still
+     * reads as a channel, and the crop is aimed where the two worlds actually differ: the largest
+     * cluster of cells that changed between land and water when the rift was segmented. That finds
+     * the drowned segments and the sills between them wherever they fell, rather than at a
+     * remembered coordinate or at the rift's bounding-box centre, which is out in open ocean.
+     */
+    @Test
+    fun `dump the segmented rift`() {
+        outputDir.mkdirs()
+        val seed = 59758L
+        val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
+
+        listOf(512, 1024).forEach { size ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                .let { if (size == 512) it else it.atResolution(size, size) }
+            val worlds = listOf(false, true).map { segmented ->
+                WorldGenerationEngine.generateBlocking(
+                    base.copy(tectonics = base.tectonics.copy(riftSegmentation = segmented))
+                )
+            }
+
+            // Ground inside the rift trough that the segmentation lifted out of the water: the
+            // sills, and the shoulders the half-grabens raised. The largest connected cluster of
+            // it is the window both crops use, so the two pictures frame the same ground.
+            val changed = BooleanArray(size * size) { i ->
+                !worlds[0].sea.isLand[i] && worlds[1].sea.isLand[i] &&
+                    worlds[1].plates.nearestBoundaryClass[i] == rift &&
+                    worlds[1].plates.boundaryDistance.data[i] <= base.tectonics.riftShoulderOffset
+            }
+            val span = (size / 4).coerceAtLeast(64)
+            val seen = BooleanArray(size * size)
+            var best = 0
+            var cx = 0
+            var cy = 0
+            for (start in 0 until size * size) {
+                if (!changed[start] || seen[start]) continue
+                var count = 0
+                var sumX = 0L
+                var sumY = 0L
+                val stack = ArrayDeque<Int>()
+                seen[start] = true
+                stack.add(start)
+                while (stack.isNotEmpty()) {
+                    val i = stack.removeLast()
+                    count++
+                    sumX += (i % size).toLong()
+                    sumY += (i / size).toLong()
+                    val x = i % size
+                    val y = i / size
+                    for (dy in -2..2) {
+                        val ny = y + dy
+                        if (ny < 0 || ny >= size) continue
+                        for (dx in -2..2) {
+                            val n = ny * size + ((x + dx + size) % size)
+                            if (changed[n] && !seen[n]) { seen[n] = true; stack.add(n) }
+                        }
+                    }
+                }
+                if (count > best) {
+                    best = count
+                    cx = ((sumX / count).toInt() - span / 2).coerceIn(0, size - span)
+                    cy = ((sumY / count).toInt() - span / 2).coerceIn(0, size - span)
+                }
+            }
+
+            worlds.forEachIndexed { index, world ->
+                val tag = if (index == 0) "before" else "after"
+                write(render(world, Mode.FANTASY), "rift-seed$seed-$size-$tag-fantasy.png")
+                write(render(world, Mode.ELEVATION), "rift-seed$seed-$size-$tag-elevation.png")
+                write(
+                    crop(render(world, Mode.FANTASY), cx, cy, span, span, 4),
+                    "rift-seed$seed-$size-$tag-crop.png"
+                )
+                if (index == 1) {
+                    write(
+                        render(world, Mode.BOUNDARY_CLASS),
+                        "rift-seed$seed-$size-boundaries.png"
+                    )
+                }
+
+                var cells = 0
+                var flooded = 0
+                for (i in 0 until size * size) {
+                    if (world.plates.nearestBoundaryClass[i] != rift) continue
+                    if (world.plates.boundaryDistance.data[i] > base.tectonics.riftWidth) continue
+                    cells++
+                    if (!world.sea.isLand[i]) flooded++
+                }
+                println(
+                    ("RIFTMAP seed %d %d %s: trough %d cells, %d%% of it under water, %d%% land, " +
+                        "%d cells changed, crop at %d,%d")
+                        .format(
+                            seed, size, tag, cells, flooded * 100 / cells.coerceAtLeast(1),
+                            (world.landFraction() * 100).toInt(), best, cx, cy
+                        )
+                )
+            }
+        }
+        println("Rift maps written to ${outputDir.absolutePath}")
+    }
+
+    /**
      * E2, before and after: the same worlds with the lake water balance off and on.
      *
      * Seed 43 carries the largest basin in dry country found by searching 1..120 — 1775 cells at

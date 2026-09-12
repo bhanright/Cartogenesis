@@ -56,6 +56,7 @@ class OutletResolutionTest {
     @Test
     fun `the largest lake is the same lake at every grid`() {
         val overLarge = ArrayList<String>()
+        val overLargeDrowned = ArrayList<String>()
         val spread = ArrayList<String>()
         val unmeasured = ArrayList<String>()
         listOf(59758L, 42L).forEach { seed ->
@@ -87,13 +88,14 @@ class OutletResolutionTest {
 
                 val largest = largestOf(false)
                 val share = largest.toDouble() / (size.toDouble() * size)
+                val drownedShare = largestOf(true).toDouble() / world.sea.landCellCount
                 println(
                     ("OUTLET SCALE seed %d at %d: %d lakes, largest in the land %d cells " +
-                        "(%.4f%% of the map), largest drowned basin %d cells (%.4f%%), " +
-                        "water %.3f%% of land").format(
+                        "(%.4f%% of the map, %.4f%% of the land), largest drowned basin %d cells " +
+                        "(%.4f%% of the land, %.2fx the Caspian), water %.3f%% of land").format(
                         seed, size, world.rivers.lakes.lakes.size, largest, share * 100,
-                        largestOf(true),
-                        largestOf(true).toDouble() * 100 / (size.toDouble() * size),
+                        largest * 100.0 / world.sea.landCellCount,
+                        largestOf(true), drownedShare * 100, drownedShare / caspianShare,
                         world.rivers.lakes.lakeId.count { it >= 0 } * 100.0 /
                             world.sea.landCellCount
                     )
@@ -105,6 +107,14 @@ class OutletResolutionTest {
                 if (largest.toDouble() / world.sea.landCellCount >= caspianShare) {
                     overLarge.add("$seed at $size")
                 }
+                // H5b: the drowned basins are held to the same bar as the rest, where H5 could
+                // only print them. `SeaConfig.postCutOutlet` runs E1's breach once more after the
+                // cut, so a converted basin that overflows now cuts its own sill and a notch that
+                // reaches the waterline hands the basin back to the sea. Before that pass, seed 42
+                // read 79, 521 and 4499 cells at the three grids — 0.2820% of its land at 2048,
+                // 1.13 times the Caspian's share, growing 26-fold across the grids while the
+                // basins the notch owned held their share.
+                if (drownedShare >= caspianShare) overLargeDrowned.add("$seed at $size")
                 // The world's standing water rather than its single largest lake, which is the
                 // correction H1 made to `OutletIncisionTest`'s own halving clause and for the same
                 // reason: which basin ends up largest changes with every terrain change, so its own
@@ -154,6 +164,11 @@ class OutletResolutionTest {
         assertTrue(
             overLarge.isEmpty(),
             "these worlds keep a lake at or over the Caspian's share of their land: $overLarge"
+        )
+        assertTrue(
+            overLargeDrowned.isEmpty(),
+            "these worlds keep a basin below the sea-level cut at or over the Caspian's share of " +
+                "their land: $overLargeDrowned"
         )
         assertTrue(
             unmeasured.size < 2,

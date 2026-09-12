@@ -48,13 +48,18 @@ object ErosionStage {
 
     /**
      * @param onRound handed each hydraulic round's mass budget as it closes, for the guard that
-     *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing.
+     *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing,
+     *   except that the round's pit census is only counted when someone asked for it.
+     * @param receiverClamp whether the incision is bounded below by the receiver's new elevation.
+     *   Only ever false in `ReceiverClampTest`, which is where the guard is shown to fail without
+     *   it; nothing outside the tests can reach this.
      */
     internal suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
         accelerator: ErosionAccelerator?,
-        onRound: ((RoundMass) -> Unit)?
+        onRound: ((RoundMass) -> Unit)?,
+        receiverClamp: Boolean = true
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -76,7 +81,9 @@ object ErosionStage {
         val relaxConfig = config.copy(erosion = cfg.copy(passes = sweepsPerRound))
 
         return ErosionResult(
-            HydraulicErosion.apply(config, weathered.height, config.seaLevel, onRound) { field ->
+            HydraulicErosion.apply(
+                config, weathered.height, config.seaLevel, onRound, receiverClamp
+            ) { field ->
                 thermal(relaxConfig, field, accelerator).height
             }
         )

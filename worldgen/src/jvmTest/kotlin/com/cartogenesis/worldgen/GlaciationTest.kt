@@ -367,14 +367,30 @@ class GlaciationTest {
      */
     @Test
     fun `mountain flanks carry a few trunk glaciers, not a comb of them`() {
-        // 3.5% until H5. The lowstand grades the lower valleys to a sea a stand below today's,
-        // which cuts the D8 channels near the coast deeper than they were, and the fill ponds more
-        // of them: measured at 1024 on 718106/42/7, the share goes 2.5/2.8/1.7% before H5 to
-        // 2.3/4.5/2.6% after, and to 2.7/4.5/1.8% with the lowstand alone and the enclosure rule
-        // off, so it is the lowstand's doing and not the enclosure's. The bar moves to sit above
-        // the worst of the three rather than the claim weakening; it still fails the world this
-        // measurement was written against, which held 7.1% on seed 42 before the regime split.
-        val COMB_BAR = 0.05f
+        // 3.5% until H5, 5% after it, 4.5% after H5b, and the bar has only ever moved with a
+        // measurement beside it.
+        //
+        // H5's lowstand grades the lower valleys to a sea a stand below today's, which cuts the D8
+        // channels near the coast deeper than they were and leaves more of them for the fill to
+        // pond: measured at 1024 on 718106/42/7, the share went 2.5/2.8/1.7% before H5 to
+        // 2.3/4.5/2.6% after, and the bar went up to hold the worst of the three.
+        //
+        // H5b's receiver clamp is the repair for what that exposed — a channel cell cut below the
+        // cell it drains into is a hole the next fill has to pond, and the incision was making
+        // thousands of them a world (`ReceiverClampTest` has the census). With it the share reads
+        // 2.2/4.4/1.7%: seed 718106 and seed 7 are back below where they stood before H5, and the
+        // bar comes down to sit above the worst of the three again.
+        //
+        // It does not reach the 3.5% it was at, and the residual is measured rather than guessed.
+        // What is left on seed 42 is the *spoil*: with the incision clamped, the deposition laid at
+        // the end of the last round is what puts channel cells below their receivers — 420 of them
+        // over the rounds on that seed against 344 with the clamp off, because a less deeply
+        // incised channel leaves a floodplain standing relatively higher. That is an alluvial dam,
+        // which is a real landform, and the no-uphill rule that bounds it computes its margin in
+        // shoreline-relative units and spends it as a height-unit budget — so the margin is about
+        // four times what it means to be. Measured and handed on rather than fixed here: the
+        // deposition is E5's chunk and the erodibility that unit muddle calibrated is G1's.
+        val COMB_BAR = 0.045f
         var worst = 0f
         val over = ArrayList<String>()
         listOf(718106L, 42L, 7L).forEach { seed ->
@@ -639,7 +655,7 @@ class GlaciationTest {
  * being duplicated.
  */
 internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
-    val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
+    val sea = SeaLevelStage.apply(world.erosion.height, config)
     // The same provisional snow balance the engine hands the stage (H2), or null for the pre-H2
     // temperature mask, so the tally reported here is the one the world was actually made with.
     val balance = if (config.climate.snowBalance) {

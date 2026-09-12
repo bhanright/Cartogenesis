@@ -141,7 +141,7 @@ object WorldGenerationEngine {
             // no field of its own to save - it rewrites `sea.relativeElevation`, which is already
             // stored and already the thing every later stage reads.
             ?: run {
-                val cut = SeaLevelStage.apply(erosion.height, config.seaLevel, config.sea)
+                val cut = SeaLevelStage.apply(erosion.height, config)
                 // The provisional climate (H2). Ice is a mass balance, and a mass balance needs
                 // the rainfall as well as the temperature, so the ice can no longer be decided
                 // from latitude and altitude alone the way it was: the whole climate stage runs

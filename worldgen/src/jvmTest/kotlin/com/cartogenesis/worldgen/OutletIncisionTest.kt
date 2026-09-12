@@ -168,6 +168,7 @@ class OutletIncisionTest {
     @Test
     fun `no world keeps a lake bigger than the Caspian, and some did`() {
         var overLarge = 0
+        val overSizedDrowned = ArrayList<String>()
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val before = WorldGenerationEngine.generateBlocking(
@@ -199,6 +200,19 @@ class OutletIncisionTest {
                 "seed $seed: the largest lake is still ${now / caspianShare} times the Caspian's " +
                     "share of the map"
             )
+            // H5b: and the drowned basins are held to the same bar, where H5 only printed them.
+            // The notch inside the hydraulic rounds cannot reach one — it runs while that ground
+            // is still under the provisional sea — so until `SeaConfig.postCutOutlet` there was
+            // nothing that could, and seed 718106 came out at 0.6244% of its land, 2.5 times the
+            // Caspian's share. See [drownedLakes] for what the split means and
+            // `SeaLevelStage.drainDrownedBasins` for the pass that answers it.
+            val drownedNow = largestLakeShare(after, drowned = true)
+            if (drownedNow >= caspianShare * chaos) {
+                overSizedDrowned.add(
+                    "$seed at ${"%.4f".format(drownedNow * 100)}% of land, " +
+                        "${"%.2f".format(drownedNow / caspianShare)}x the Caspian"
+                )
+            }
             if (was > caspianShare) {
                 overLarge++
                 // Measured on all the world's standing water rather than on its single largest
@@ -231,6 +245,15 @@ class OutletIncisionTest {
         assertTrue(
             overLarge >= 2,
             "no seed had an over-large lake to begin with, so this guard proves nothing"
+        )
+        // Collected over every seed rather than asserted inside the loop, so a run reports all six
+        // figures. With `postCutOutlet = false` this reads
+        // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.
+        assertTrue(
+            overSizedDrowned.isEmpty(),
+            "these worlds keep a basin below the sea-level cut holding more water than the " +
+                "Caspian's ${"%.4f".format(caspianShare * 100)}% share of Earth's land: " +
+                overSizedDrowned
         )
     }
 

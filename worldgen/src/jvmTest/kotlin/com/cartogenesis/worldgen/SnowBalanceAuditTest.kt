@@ -36,7 +36,7 @@ class SnowBalanceAuditTest {
             val terrain = TerrainStage.generate(cfg)
             val plates = PlateStage.generate(cfg, terrain)
             val erosion = erodeBlocking(cfg, plates.height)
-            val sea = SeaLevelStage.apply(erosion.height, cfg.seaLevel, cfg.sea)
+            val sea = SeaLevelStage.apply(erosion.height, cfg)
 
             var ocean: OceanResult? = null
             val oceanMs = measureTimeMillis { ocean = OceanStage.withoutCurrents(cfg, sea) }

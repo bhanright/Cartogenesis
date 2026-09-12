@@ -53,7 +53,7 @@ class StageProfileTest {
                 erosion = erodeBlocking(config, plates!!.height)
             }
             timings["sea level"] = measureTimeMillis {
-                sea = SeaLevelStage.apply(erosion!!.height, config.seaLevel, config.sea)
+                sea = SeaLevelStage.apply(erosion!!.height, config)
             }
             timings["ocean currents"] = measureTimeMillis {
                 ocean = OceanStage.generate(config, sea!!)

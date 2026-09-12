@@ -1,5 +1,24 @@
 # To do
 
+- **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
+  outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
+  that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm
+  surge of the waterline is overtopped and scoured — the Bosporus is the case. E8 built the rule
+  (cut the exit to a surge below the waterline, by the sea rather than any river, then re-label)
+  and reverted it: it broke `DepositionTest`'s land pin, `GlaciationTest`'s ice control and
+  `DeltaMouthTest`'s vacuity check, none with an Earth figure to re-derive from, to buy 1517 cells
+  of 4.19 million at 2048. `WaterlineBasinTest` counts the population it would act on, which is
+  also the population S2's rift subsidence will move. 2026-09-12.
+- **A coastal rift's dry hinge shelf needs subsidence, not water.** Measured three ways now and the
+  third is E8's: the author's trough on 718106 at 2048 keeps 29% of its flat floor wet, and 30% is
+  the ceiling for *any* marine process, because only 2215 of its 7397 floor cells stand below the
+  sea-level cut. It is already an arm of the sea — 1635 of the 2158 wet cells are ocean — so there
+  is no sill to breach. To cover 60% of the floor the water must stand at 0.095 of the land's
+  relief, about 760 m up, which is a perched lake behind a dam and is the pre-H5b world whose
+  largest lake was four times the Caspian. E7 refused deepening the stamp and hashing sub-basins
+  onto the floor on the same bar. What is left is subsidence that scales with how far the rift has
+  opened (S2 in REALISM_AUDIT.md). 2026-09-12.
+
 ## Done
 
 - **The rift-mouth valley: pocket, moats and terrace** (2026-09-12, E6) — the three things in the

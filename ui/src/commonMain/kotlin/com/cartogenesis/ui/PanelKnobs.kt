@@ -282,20 +282,21 @@ internal object Knobs {
      * seasonal follows from it: the wind belts and the rain belts ride on it, so it is also the
      * monsoon dial. Zero is a world with no seasons at all; 25 is past Earth's own obliquity.
      */
-    val seasonalTilt = Dial(
+    val seasonalTiltDegrees = Dial(
         section = PanelSection.CLIMATE,
         label = "Seasonal tilt",
         range = 0f..25f,
         show = { "${it.roundToInt()}°" },
-        read = { it.climate.seasonalTilt },
-        write = { config, v -> config.copy(climate = config.climate.copy(seasonalTilt = v)) }
+        read = { it.climate.seasonalTiltDegrees },
+        write = { config, v -> config.copy(climate = config.climate.copy(seasonalTiltDegrees = v)) }
     )
 
     /**
      * How much moisture windward slopes wring out of passing air — the moisture knob of the
      * climate stage, and the one whose effect is unmistakable on the map, since it is what puts a
      * desert behind every range. Continentality would have been the other candidate, but it moves
-     * the *seasonal swing*, which is what [seasonalTilt] beside it already governs; this moves the
+     * the *seasonal swing*, which is what [seasonalTiltDegrees] beside it already governs; this
+     * moves the
      * rain. Zero flattens every rain shadow; 5 lets a range take essentially all the rain.
      */
     val rainShadow = Dial(
@@ -425,7 +426,7 @@ internal object Knobs {
         graphicsCard,
         oceanCoverage,
         plates, mountainHeight, erosionStrength,
-        seasonalTilt, rainShadow, ice,
+        seasonalTiltDegrees, rainShadow, ice,
         rivers, lakes, dryBasins,
         realms, wilderness, borders,
         hillshade, coastline,

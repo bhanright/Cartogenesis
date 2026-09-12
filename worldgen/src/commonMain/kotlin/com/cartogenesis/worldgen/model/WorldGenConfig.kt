@@ -136,14 +136,12 @@ data class TectonicsConfig(
      * A belt sagging near to nothing between massifs is right for a range and wrong for a plateau:
      * a plateau that broke into separate massifs would be a chain again, and uniform height over a
      * very wide area is the striking thing about Tibet. So it is damped — but only by half, and
-     * the reason for not damping it further is worth recording. A plateau that holds one altitude
-     * for its entire run is one continuous ice cap once the climate stage sees it, and on seed 7,
-     * where over half the land is already ice, that cap walls off the habitable ground behind it
-     * into a single region: at a fifth of the variation one people held 48% of the habitable world
-     * against `CultureRealmTest`'s 45% ceiling, and at half it holds 34%, better than the 38% the
-     * generator managed before this chunk. The same change lifts seed 1234's warm-against-cold
-     * coastal gap from 2.0% to 3.1%. A plateau that swells and sags is not only better geography,
-     * it is the difference between one ice cap and several.
+     * the reason for not damping it further is downstream rather than tectonic. A plateau that
+     * holds one altitude for its entire run is one continuous ice cap once the climate stage sees
+     * it, and a cap of that size walls the habitable ground behind it into a single region, which
+     * `CultureRealmTest` reads as one people holding too much of the world. A plateau that swells
+     * and sags is not only better geography, it is the difference between one ice cap and several.
+     * See REALISM_PLAN.md, B2, for the figures at a fifth of the variation and at a half.
      */
     val plateauAlongVariation: Float = 0.50f,
     /**
@@ -164,32 +162,22 @@ data class TectonicsConfig(
     /**
      * Depth of the floor of a continental rift valley, in normalized elevation units.
      *
-     * E7 was dispatched to raise this, on the belief that E4's floors sat "a few percent of the
-     * relief" below their shoulders, and measured it instead. They do not. The value is in the
-     * same units as [riftShoulderHeight] and [collisionHeight] — shares of a field that is
+     * Deeper is refused, and the refusal is a measurement rather than a preference. The value is
+     * in the same units as [riftShoulderHeight] and [collisionHeight] — shares of a field that is
      * normalized and then cut at a percentile — so what it comes out as on the finished map has to
-     * be measured; measured on the stamp over the five seeds `RiftDepthTest` runs, at 512 and at
-     * 2048, the floor already stands **45-72% of the land's relief** below its shoulder crest,
-     * against Earth's 21-50% (Baikal 3.2-4.0 km of crest-to-floor against 8 km of relief,
-     * Tanganyika 2.8-3.8, Malawi 1.7-2.7, the Dead Sea 1.7-1.9). The water the finished world holds
-     * in a rift is Earth's too: the deepest rift lake on seed 718106 measures 24.2% of the land's
-     * relief at 2048 against Baikal's 20%.
+     * be read off the map: measured over the five seeds `RiftDepthTest` runs, at 512 and at 2048,
+     * the floor already stands 45-72% of the land's relief below its shoulder crest, against
+     * Earth's 21-50% (Baikal 3.2-4.0 km of crest-to-floor against 8 km of relief, Tanganyika
+     * 2.8-3.8, Malawi 1.7-2.7, the Dead Sea 1.7-1.9), and the deepest rift lake a finished world
+     * holds is 24.2% of the land's relief against Baikal's 20%. Deeper still turns the rift from a
+     * chain of basins into one continuous axis that drains along itself, which is the opposite of
+     * what the segmentation exists to produce.
      *
-     * So it is left where E4 set it, and raising it is refused with the measurement. At 0.35 the
-     * rift stops being a chain of basins and becomes one continuous deep axis that drains along
-     * itself: on 718106 at 2048 the world's standing water falls from 17,412 cells to 8,200 and the
-     * deepest rift lake from 24.2% of the relief to 2.4%, which is the opposite of what this chunk
-     * exists to produce.
-     *
-     * The other half of E7 was to give this floor relief within itself, on the reading that it
-     * was a plane. It is not one — measured, E4's floor already rises and falls by 65-76% of the
-     * trough's own depth within half a segment — and the relief that was built, a chain of deeps
-     * and intra-rift highs hashed per half-graben, was written, measured and reverted: every
-     * amplitude from 0.12 to 0.45 of the segment's depth put a closed sub-basin below the
-     * sea-level cut that the post-cut outlet cannot open, and seeds 718106 and 99 came out
-     * holding a drowned basin of 0.46-0.54% of their land, about twice the Caspian's share of
-     * Earth's, against `OutletIncisionTest`'s bar. `RiftDepthTest` and `RiftDepthAuditTest` are
-     * what is left of it: the measurements, without the change.
+     * Giving the floor relief *within* itself was likewise written, measured and reverted: the
+     * floor is not the plane it looks like — it already rises and falls by 65-76% of the trough's
+     * own depth within half a segment — and every amplitude tried put a closed sub-basin below the
+     * sea-level cut that the post-cut outlet cannot open. `RiftDepthTest` and `RiftDepthAuditTest`
+     * are what is left of that: the measurements, without the change. See REALISM_PLAN.md, E7.
      */
     val riftDepth: Float = 0.25f,
     /** Half-width of the rift trough, in cells. */
@@ -288,9 +276,9 @@ data class TectonicsConfig(
      * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
      * ones the rest of the pipeline sees, unchanged.
      *
-     * 1 — or 0, which means the same thing — is the pre-H1 generator, bit for bit: the present
-     * epoch alone, with every ageing factor exactly 1 and never applied. `TectonicHistoryTest`
-     * pins that against checksums taken from the build before this chunk.
+     * 1 — or 0, which means the same thing — is the world before any history existed, bit for
+     * bit: the present epoch alone, with every ageing factor exactly 1 and never applied.
+     * `TectonicHistoryTest` pins that against checksums taken from that build.
      */
     val historyEpochs: Int = 3,
     /**
@@ -359,9 +347,9 @@ data class TectonicsConfig(
      * the crust beneath it its own age — the scale of [PlateResult.crustAge].
      *
      * A cell the epoch raised by this much or more takes that epoch's age outright; one it barely
-     * touched keeps whatever older age it had. H3 reads the field to decide erodibility, so what
-     * matters is that the bands are unambiguous, which is why the value is a relief rather than a
-     * distance.
+     * touched keeps whatever older age it had. Erosion reads the field to decide erodibility, so
+     * what matters is that the bands are unambiguous, which is why the value is a relief rather
+     * than a distance.
      */
     val crustAgeReference: Float = 0.05f,
     /**
@@ -465,7 +453,7 @@ data class SeaConfig(
      * it holds a lake (a lake below sea level is the Caspian, the Dead Sea, the Qattara) or dries
      * out into a salt flat.
      *
-     * Off is the control, and it is the pre-H5 behaviour exactly.
+     * Off is the control: the plain percentile cut, with every hollow below it drawn as ocean.
      */
     val enclosedSeaIsLand: Boolean = true,
     /**
@@ -479,18 +467,13 @@ data class SeaConfig(
      * Earth has is not a lake — it is a piece of the sea that the percentile cut has walled off with
      * a sliver of ground, and calling it land invents a landform nothing on Earth resembles.
      *
-     * The cap was not in H5's specification and was added after measuring what its absence costs,
-     * which was a great deal. Converting *every* unreachable body turns 3.2 to 4.6% of the map from
-     * sea into land: it hands seed 718106 a lake of 0.32% of the map, four times the Caspian, and
-     * seed 43 one of 0.83%; it turns E4's rift gulfs into lakes, so `RiftSegmentationTest` measures
-     * a different rift and reads one body where it wants three; it takes the pooled desert-in-band
-     * figure from 88% to 83%, below the 85-88% Earth itself manages, because it removes several
-     * percent of the map's worth of inland evaporation and dries the interiors that were drinking
-     * from it; and it takes `GlaciationTest`'s comb share on seed 7 from 1.6% to 5.6% against a bar
-     * of 3.5%, because the fill ponds the channels crossing a drowned tract in exactly the thin
-     * grid-bearing bars that measurement exists to catch. With the cap the mouths this chunk set out
-     * to rescue are still rescued — the pockets a river ends in are a handful of cells, not an
-     * inland sea — and none of that follows.
+     * The cap is not decoration: converting *every* unreachable body turns 3 to 5% of the map from
+     * sea into land, which hands one seed a lake four times the Caspian, turns a segmented rift's
+     * gulfs into lakes so the rift reads as one body again, dries the interiors that were drinking
+     * from the water it removed, and ponds the channels crossing a drowned tract into exactly the
+     * thin grid-bearing bars `GlaciationTest` exists to catch. With the cap the river mouths this
+     * rule was written for are still rescued — the pockets a river ends in are a handful of cells,
+     * not an inland sea — and none of that follows. See REALISM_PLAN.md, H5, for the figures.
      *
      * At or below the cap, not above it, so a body exactly the Caspian's size becomes a lake.
      */
@@ -520,7 +503,7 @@ data class SeaConfig(
      * the basin keeps whatever the water balance then allows it: a lake below sea level, which is
      * the Caspian, the Dead Sea and the Qattara.
      *
-     * Off is the control the guard needs, and reproduces the H5 world exactly.
+     * Off is the control the guard needs: the drowned basins keep whatever sill they were left.
      */
     val postCutOutlet: Boolean = true
 )
@@ -531,8 +514,8 @@ data class ClimateConfig(
     val poleTemperatureC: Float = -28f,
     /** Metres of altitude represented by the full 0..1 land elevation range. */
     val maxAltitudeMetres: Float = 6000f,
-    /** Temperature drop per 1000 m of altitude. */
-    val lapseRateC: Float = 6.5f,
+    /** Temperature drop per kilometre of altitude, in C. */
+    val lapseRateCPerKm: Float = 6.5f,
     /**
      * How much moisture windward slopes wring out of passing air. Raising this deepens rain
      * shadows; push it far above the base rate and mountains take essentially all the rain.
@@ -564,7 +547,7 @@ data class ClimateConfig(
      */
     val landRecoveryRate: Float = 0.010f,
     /**
-     * How far the thermal equator migrates toward the summer hemisphere, in degrees.
+     * How far the thermal equator migrates toward the summer hemisphere, in degrees of latitude.
      *
      * Everything seasonal follows from this one number: it is what the latitude term of the
      * temperature curve is offset by, and it is what carries the wind belts and the rain belts
@@ -572,13 +555,13 @@ data class ClimateConfig(
      * way they do on Earth. Ten degrees is the modest, oceanic figure; the great continents swing
      * further than that, which is continentality's business rather than this one's.
      */
-    val seasonalTilt: Float = 10f,
+    val seasonalTiltDegrees: Float = 10f,
     /**
      * Whether the year has seasons at all.
      *
      * Off is exactly a tilt of zero: every seasonal field collapses onto the annual mean and the
      * world is bit for bit the one this generator made before seasons existed. Kept as a setting
-     * rather than left to `seasonalTilt = 0` so that `SeasonsTest` can state plainly what it is
+     * rather than left to a tilt of zero so that `SeasonsTest` can state plainly what it is
      * turning off, and so the guard that needs seasons can be shown to fail without them.
      */
     val seasons: Boolean = true,
@@ -642,11 +625,11 @@ data class ClimateConfig(
      * before climate does. It is a fact about the climate; the engine runs a provisional climate
      * ahead of the ice to have it in time.
      *
-     * Off restores the pre-H2 world exactly: the classifier's ice gate goes back to an annual mean
-     * below -8 C, the glaciation mask back to a provisional annual mean at or below
-     * [GlaciationConfig.freezingC], and no provisional climate is run at all. That is the control
-     * `SnowBalanceTest` measures against, and it is bit-for-bit the old world — the checksum in
-     * that test is the proof.
+     * Off restores the world from before the balance existed, exactly: the classifier's ice gate
+     * goes back to an annual mean below -8 C, the glaciation mask back to a provisional annual mean
+     * at or below [GlaciationConfig.freezingC], and no provisional climate is run at all. That is
+     * the control `SnowBalanceTest` measures against, and the checksum in that test is the proof
+     * that it is the old world bit for bit.
      */
     val snowBalance: Boolean = true
 )
@@ -654,12 +637,15 @@ data class ClimateConfig(
 @Serializable
 data class RiverConfig(
     /**
-     * Minimum upstream flow accumulation (as a fraction of total land cells) for a cell to
-     * count as a river. Lower = denser river network.
+     * How much of the world's runoff a cell must carry before it is drawn as a river, as a share
+     * of the whole world's runoff rather than as a count of cells — which is what keeps the river
+     * network the same density at every grid.
      */
-    val sourceThreshold: Float = 0.0006f,
+    val sourceFlowShare: Float = 0.0006f,
+    /** The most channels drawn, longest first, so a very wet world does not become a thicket. */
     val maxRivers: Int = 400,
-    val minLength: Int = 8
+    /** Shortest channel worth drawing, in cells. Below this it is a rill, not a river. */
+    val minLengthCells: Int = 8
 )
 
 /** What happens to land no realm particularly wants. */
@@ -691,7 +677,7 @@ data class OceanConfig(
      */
     val relaxationPasses: Int = 3000,
     /** Scales stream-function gradients into cells of travel per advection pass. */
-    val speed: Float = 1.6f,
+    val speedCellsPerPass: Float = 1.6f,
     val advectionPasses: Int = 200,
     /** How much of the upstream temperature a cell takes each pass. */
     val advectionRate: Float = 0.5f,
@@ -704,7 +690,7 @@ data class OceanConfig(
      * How far inland a coast feels its water, in cells, and how strongly. This is what makes a
      * mild west coast at high latitude and an arid one beside a cold current.
      */
-    val coastalReach: Int = 10,
+    val coastalReachCells: Int = 10,
     val coastalInfluence: Float = 0.85f
 )
 
@@ -894,7 +880,7 @@ data class ErosionConfig(
      * in turn cut down. A lake is sized by the resistance of its outlet, not by the size of its
      * basin.
      *
-     * Off is the control the guard needs, and reproduces the pre-E1 world exactly.
+     * Off is the control the guard needs: a basin stays the size of its own hollow, for ever.
      */
     val outletIncision: Boolean = true,
     /**
@@ -1014,9 +1000,9 @@ data class ErosionConfig(
 @Serializable
 data class GlaciationConfig(
     /**
-     * Off reproduces the pre-B4 world bit for bit — the stage returns the sea-level result it was
-     * handed, the same object, so nothing downstream can even tell it ran. That is what makes the
-     * lake-density guard's "before" honest.
+     * Off reproduces the world from before there was any ice, bit for bit — the stage returns the
+     * sea-level result it was handed, the same object, so nothing downstream can even tell it ran.
+     * That is what makes the lake-density guard's "before" honest.
      */
     val enabled: Boolean = true,
     /**
@@ -1026,7 +1012,7 @@ data class GlaciationConfig(
      * curve [ClimateStage] uses, because it is literally the same function — since the climate
      * stage itself cannot run until the terrain this stage carves is final. Zero is the honest
      * line: it is where [ClimateStage.classify]'s own ice and tundra gates sit, so the mask is
-     * bounded by the classification the plan asked for rather than merely near it.
+     * bounded by the classification rather than merely near it.
      */
     val freezingC: Float = 0f,
     /**
@@ -1055,11 +1041,11 @@ data class GlaciationConfig(
      * own catchment, relief, length and sinuosity tests decide what is actually cut inside it, and
      * its run-out already reaches eight cells past the mask.
      *
-     * Zero makes the carving mask today's ice, which is what the first cut of H2 did: measured on
-     * seed 42 at 512 it left 4,047 frozen cells, 92 of them in channelled country and not one
-     * glacier, so the world had no glacial lakes at all and B4's whole guard collapsed to zero.
-     * That is the correct answer to the question "where are the glaciers today" and the wrong
-     * answer to "what does this landscape look like", and the distinction is what this setting is.
+     * Zero makes the carving mask today's ice, which was the first attempt and left one measured
+     * world with 4,047 frozen cells, 92 of them in channelled country and not one glacier — so it
+     * had no glacial lakes at all and the lake guard collapsed to zero. That is the correct answer
+     * to "where are the glaciers today" and the wrong answer to "what does this landscape look
+     * like", and the distinction is what this setting is. See REALISM_PLAN.md, H2.
      */
     val glacialMaximumC: Float = 6f,
     /**
@@ -1332,7 +1318,7 @@ data class GlaciationConfig(
      * trough, and the moraine at its end, belong a little way into ground that is not frozen. This
      * is the only licence the mask gets; nothing is carved further down than this.
      */
-    val runOut: Int = 8,
+    val runOutCells: Int = 8,
     /** Height of the ridge of spoil left at a land terminus, as a fraction of the range. */
     val moraineHeight: Float = 0.045f,
     /**
@@ -1439,7 +1425,6 @@ data class NationsConfig(
     val terrainResistance: Float = 3.5f,
     /** How much a climb costs. This is what pins borders onto mountain ranges. */
     val slopeResistance: Float = 26f,
-    /** Extra cost to cross a major river, so realms tend to stop at the near bank. */
     /** Water deeper than this is treated as open ocean and effectively impassable. */
     val navigableDepth: Float = 0.06f,
     /**
@@ -1507,10 +1492,22 @@ data class NationsConfig(
     /** How wide the world is taken to be, which is what turns cells into an area. */
     val worldWidthKm: Double = 12_000.0
 ) {
+    /**
+     * How much ground one cell stands for, which is what turns a cell count into a population.
+     *
+     * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
+     * longitude against 180 of latitude and is twice as wide as it is tall — hence
+     * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
+     */
     fun squareKilometresPerCell(width: Int, height: Int): Double {
-        val cellWidth = worldWidthKm / width
-        val cellHeight = (worldWidthKm / 2.0) / height
-        return cellWidth * cellHeight
+        val cellWidthKm = worldWidthKm / width
+        val cellHeightKm = worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH / height
+        return cellWidthKm * cellHeightKm
+    }
+
+    companion object {
+        /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
+        const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
     }
 }
 
@@ -1592,7 +1589,7 @@ data class WorldGenConfig(
     }
 
     /**
-     * Re-targets the same world at a different grid size â€” used by HD export.
+     * Re-targets the same world at a different grid size — used by HD export.
      *
      * Some settings are measured in cells and have to be rescaled, or the world changes character
      * rather than just gaining detail:
@@ -1606,8 +1603,8 @@ data class WorldGenConfig(
      *    [TectonicsConfig.riftShoulderWidth]) is measured in cells for the same reason, and so is
      *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLength],
      *    [TectonicsConfig.hotspotSpacing], [TectonicsConfig.hotspotRadius]). Left alone, a larger
-     *    grid would narrow Tibet to the width of the Andes and the distinction this chunk exists
-     *    for would quietly disappear at export resolution. The rift's *segmentation* knobs
+     *    grid would narrow Tibet to the width of the Andes and the distinction between the crust
+     *    pairs would quietly disappear at export resolution. The rift's *segmentation* knobs
      *    ([TectonicsConfig.riftSegmentMin], [TectonicsConfig.riftSegmentMax],
      *    [TectonicsConfig.riftAccommodation]) are the exception: they are map fractions already,
      *    so a rift breaks into the same half-grabens at every resolution and they are not touched.
@@ -1627,7 +1624,7 @@ data class WorldGenConfig(
      *    be a gully rather than a glacial valley.
      *  - [NationsConfig.slopeResistance] is charged against the climb between adjacent cells. That
      *    climb halves as cells halve, so the total cost of crossing a range stays flat while the
-     *    expansion budget grows with the map â€” mountains would stop holding borders.
+     *    expansion budget grows with the map — mountains would stop holding borders.
      *
      * Anything expressed as a frequency, or as a fraction of the whole world, already scales.
      */
@@ -1647,7 +1644,7 @@ data class WorldGenConfig(
                 riftWidth = tectonics.riftWidth * scale,
                 riftShoulderOffset = tectonics.riftShoulderOffset * scale,
                 riftShoulderWidth = tectonics.riftShoulderWidth * scale,
-                // H1. A displacement and a blur radius are both lengths on the ground, so they are
+                // A displacement and a blur radius are both lengths on the ground, so they are
                 // more cells on a finer grid; `historyEpochs` and the three dimensionless ageing
                 // factors are not and are left alone.
                 epochDrift = tectonics.epochDrift * scale,
@@ -1666,7 +1663,7 @@ data class WorldGenConfig(
                 valleyWidth = glaciation.valleyWidth * scale,
                 basinSpacing = glaciation.basinSpacing * scale,
                 cirqueRadius = glaciation.cirqueRadius * scale,
-                runOut = (glaciation.runOut * scale).toInt().coerceAtLeast(1),
+                runOutCells = (glaciation.runOutCells * scale).toInt().coerceAtLeast(1),
                 fjordReach = (glaciation.fjordReach * scale).toInt().coerceAtLeast(1),
                 // A trough is a length on the ground, so it is more cells on a finer grid.
                 // `reliefWindow` is a multiple of `valleyWidth`, `sheetBasinScale` a count of
@@ -1674,16 +1671,13 @@ data class WorldGenConfig(
                 // none of them is touched.
                 minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2)
             ),
-            // A lake is an area on the map, not a number of samples of it. `minCells` is a count of
-            // cells, so at 512 its twelve cells are some 3,300 km² of a 12,000 km world and at 2048
-            // they are 206 km² — which is why a 2048 render came out sprinkled with ponds that 512
-            // never had, and why `OutletResolutionTest` found the same world holding four times the
-            // water at four times the grid (seed 42, 0.20% of its land under water at 512 against
-            // 1.53% at 2048). `GlaciationConfig.minLakeShareOfMap` already fixed the ice's own
-            // version of this and recorded the reasoning; this is the same correction for the lakes
-            // the drainage makes. Scaled by the square of the grid ratio, because it is an area:
-            // twelve cells at 512, 48 at 1024, 192 at 2048, all of them the same piece of ground.
-            // Nothing moves at 512, which is where every guard in `:worldgen` is measured.
+            // A lake is an area on the map, not a number of samples of it, so `minCells` scales
+            // by the *square* of the grid ratio: twelve cells at 512, 48 at 1024, 192 at 2048, all
+            // of them the same piece of ground. Left as a flat count it lets a finer grid draw
+            // ponds a coarser one refused, which is what made the same world hold four times the
+            // water at four times the grid. Nothing moves at 512, where every guard in `:worldgen`
+            // is measured. `GlaciationConfig.minLakeShareOfMap` is the ice's own version of this.
+            // See REALISM_PLAN.md, H5, for the figures.
             lakes = lakes.copy(
                 minCells = (lakes.minCells * scale * scale).toInt().coerceAtLeast(1)
             ),

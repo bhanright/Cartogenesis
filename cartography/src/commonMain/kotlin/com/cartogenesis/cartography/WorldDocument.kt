@@ -139,10 +139,13 @@ data class WorldDocument(
     val overrides: WorldOverrides = WorldOverrides(),
     val labels: List<MapLabel> = emptyList(),
     /**
-     * Version 2 only, and never written any more: the eroded terrain of a world made on the
-     * graphics card, which the seed alone did not pin down. A version-3 save carries every stage,
-     * so this has nothing left to say — but an existing GPU save still has it, and replaying it
-     * through [StoredTerrain] is what keeps that save opening as the world it was.
+     * Always null now: the eroded terrain of a world made on the graphics card, which the seed
+     * alone did not pin down, carried in the save so it could be replayed through [StoredTerrain].
+     *
+     * A save has carried every stage since the container format, so nothing writes this; and the
+     * only files that ever had it are older than the format this build reads, so nothing can hand
+     * it back either. It is left in place because removing it is a change to the wire and to the
+     * app's own load path rather than a rename, and belongs to whoever takes that on.
      */
     val terrain: TerrainSnapshot? = null,
     val savedAt: Long

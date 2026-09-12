@@ -146,10 +146,6 @@ does not say that it is row-major and one entry per cell.
 
 ## What does not change
 
-- **Serialised names.** Every `@Serializable` property in `WorldGenConfig`, the save header and the
-  overrides keeps its wire name. If the Kotlin name has to move, `@SerialName` holds the old one,
-  so every 1.x and 2.x save opens unchanged. The section names in `WorldSections` are wire names
-  too.
 - **Shader source.** GLSL and WGSL identifiers are the shader's, and the uniform names the host
   code binds by string go with them.
 - **Public entry points the launchers call.** The desktop launcher's and the web page's entry
@@ -157,6 +153,25 @@ does not say that it is row-major and one entry per cell.
 - **Anything that would move a bit.** A rename that changes a generated world is not a rename.
   Every sweep commit is checked against `WorldFingerprintTest` before and after; if a change cannot
   be made without moving a bit, it is left alone and reported.
+
+## Serialised names, while nothing is distributed
+
+A `@Serializable` property's name is a wire name, and the section strings in `WorldSections` are
+wire names too: rename one and every file written before it stops meaning what its keys say. The
+header is parsed with unknown keys ignored, so an older file would not fail to open — it would
+open with this build's *defaults* wherever a name has moved, which is a world quietly unlike the
+one that was saved.
+
+Nothing has been distributed and there are no saves anyone needs to keep (William, 2026-09-12), so
+these names are swept like any others rather than frozen behind `@SerialName`. The price is paid
+once, in the open: **when a serialised name moves, `WorldCodec.FORMAT_VERSION` is bumped in the
+same commit**, and the codec refuses every older file by name instead of misreading it. The
+checked-in gzip fixture is a whole save, so it goes stale with the format and is regenerated in
+the same commit too.
+
+This paragraph is what changes if the program is ever released. From that point a wire name is
+frozen, `@SerialName` holds the old one when the Kotlin name moves, and the version bump gives way
+to a migration.
 
 ## Order of the sweep
 

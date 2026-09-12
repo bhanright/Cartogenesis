@@ -285,8 +285,8 @@ class RasterRecipe(
                 MapView.WIND -> RasterView.WIND
 
                 MapView.NORMALS -> {
-                    scalarA = world.terrain.normals.gx.data
-                    scalarB = world.terrain.normals.gy.data
+                    scalarA = world.terrain.normals.gradientX.data
+                    scalarB = world.terrain.normals.gradientY.data
                     RasterView.NORMALS
                 }
             }

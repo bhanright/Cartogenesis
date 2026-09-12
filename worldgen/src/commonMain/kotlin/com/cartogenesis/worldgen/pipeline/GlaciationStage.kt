@@ -130,7 +130,8 @@ internal data class GlacialMass(
  *
  * ### What it does not touch
  *
- * [SeaLevelResult.isLand] and [SeaLevelResult.threshold], neither of them, ever. The coastline is
+ * [SeaLevelResult.isLand] and [SeaLevelResult.shorelineHeight], neither of them, ever. The
+ * coastline is
  * a percentile cut through the whole field and moving one cell of it moves every other — the reason
  * [SeaLevelStage]'s shelf remap is careful to touch only water is the same reason this is careful
  * to touch only land. A fjord in the strict sense is a trough that the sea has *drowned*, and
@@ -269,7 +270,7 @@ object GlaciationStage {
             val f = fieldOf[i]
             val fieldShare = if (f >= 0) ice[i] / field.size[f].toFloat() else 0f
             if (share >= cfg.minCatchment && fieldShare >= cfg.trunkCatchment &&
-                runOut[i] <= cfg.runOut && channelled[i]
+                runOut[i] <= cfg.runOutCells && channelled[i]
             ) {
                 candidate[i] = true
             }

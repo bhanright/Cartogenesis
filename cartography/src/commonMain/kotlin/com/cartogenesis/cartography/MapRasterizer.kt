@@ -276,7 +276,8 @@ object MapRasterizer {
                                 flow.add(
                                     FlowArrow(
                                         x + 0.5f, y + 0.5f, dx / speed, dy / speed,
-                                        (speed / world.config.ocean.speed).coerceIn(0f, 1f),
+                                        (speed / world.config.ocean.speedCellsPerPass)
+                                            .coerceIn(0f, 1f),
                                         0xFFF2F6FA.toInt()
                                     )
                                 )

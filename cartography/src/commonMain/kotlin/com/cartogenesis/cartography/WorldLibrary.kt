@@ -45,9 +45,9 @@ data class LibraryEntry(val document: WorldDocument, val status: String)
  * reading all of it back from IndexedDB either, so its implementation keeps the header in a
  * second, small record instead — see the web module's `IndexedDbLibrary`.
  *
- * Version-2 saves — `<id>.json`, seed and settings only — are listed and opened alongside the new
- * ones. Saving replaces one with a full container and removes the old file, so nothing has to be
- * migrated by hand and nothing is lost if it never is.
+ * A save written under an older format is not opened — see [WorldCodec] for why an older header
+ * cannot be trusted — so it never appears in the listing. Saving under the same id overwrites it
+ * and removes any older file beside it, so the stale one does not linger.
  */
 abstract class ByteWorldLibrary(
     private val compressor: Compressor = NoCompression,
@@ -80,16 +80,13 @@ abstract class ByteWorldLibrary(
 
     override suspend fun save(document: WorldDocument, world: WorldMap?) {
         write(fileName(document.id), WorldCodec.encode(document, world, compressor, writtenBy))
-        // A world first saved by an older build leaves a version-2 file behind, which would then
-        // show up in the library a second time under the same name.
+        // A world first saved by a much older build left a JSON file behind under the same id.
+        // Nothing reads one any more, so it is cleared rather than left to sit in the directory.
         remove(legacyFileName(document.id))
     }
 
-    override suspend fun load(id: String): WorldSave? {
-        read(fileName(id))?.let { return WorldCodec.decodeOrNull(it, compressor) }
-        val legacy = read(legacyFileName(id)) ?: return null
-        return WorldCodec.decodeTextOrNull(legacy.decodeToString())?.let { WorldSave(it, null) }
-    }
+    override suspend fun load(id: String): WorldSave? =
+        read(fileName(id))?.let { WorldCodec.decodeOrNull(it, compressor) }
 
     override suspend fun delete(id: String) {
         remove(fileName(id))
@@ -105,13 +102,10 @@ abstract class ByteWorldLibrary(
      */
     private suspend fun header(name: String): SaveHeader? {
         val probe = readPrefix(name, HEADER_PROBE_BYTES) ?: return null
-        // A version-2 save is JSON all the way down, so there is no prefix to stop at — and one
-        // carrying a GPU terrain runs to several megabytes, well past the probe.
-        if (!WorldCodec.isContainer(probe)) {
-            return WorldCodec.decodeHeaderOrNull(read(name) ?: return null)
-        }
+        // Anything that is not a container is a file from before this format, which does not open.
+        if (!WorldCodec.isContainer(probe)) return null
 
-        val declared = ByteReader(probe, position = 8).getInt()
+        val declared = ByteReader(probe, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
         val needed = WorldCodec.PREFIX_BYTES + declared
         val bytes = if (probe.size >= needed) probe else readPrefix(name, needed) ?: return null
         return WorldCodec.decodeHeaderOrNull(bytes)
@@ -121,7 +115,10 @@ abstract class ByteWorldLibrary(
         /** A full-world save. */
         const val EXTENSION = ".cgw"
 
-        /** A version-2 save: JSON text, seed and settings only. */
+        /**
+         * A save from before the container format: JSON text, seed and settings only. Nothing
+         * reads or writes one; the name survives only so a stale file can be cleared away.
+         */
         const val LEGACY_EXTENSION = ".json"
 
         /**

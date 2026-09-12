@@ -7,6 +7,7 @@ package com.cartogenesis.worldgen.model
 class FloatField(
     val width: Int,
     val height: Int,
+    /** One entry per cell, row-major: cell `y * width + x`. Raw, because every stage sweeps it. */
     val data: FloatArray = FloatArray(width * height)
 ) {
     init {
@@ -20,8 +21,8 @@ class FloatField(
     }
 
     fun wrapX(x: Int): Int {
-        val m = x % width
-        return if (m < 0) m + width else m
+        val wrapped = x % width
+        return if (wrapped < 0) wrapped + width else wrapped
     }
 
     fun clampY(y: Int): Int = y.coerceIn(0, height - 1)
@@ -37,23 +38,23 @@ class FloatField(
 
     /** Rescales in place so values span exactly [0, 1]. A constant field becomes all zeroes. */
     fun normalize(): FloatField {
-        val lo = min()
-        val hi = max()
-        val range = hi - lo
+        val lowest = min()
+        val highest = max()
+        val range = highest - lowest
         if (range <= 0f) {
             data.fill(0f)
             return this
         }
-        for (i in data.indices) data[i] = (data[i] - lo) / range
+        for (cell in data.indices) data[cell] = (data[cell] - lowest) / range
         return this
     }
 
     inline fun forEachIndexed(action: (x: Int, y: Int, value: Float) -> Unit) {
-        var i = 0
+        var cell = 0
         for (y in 0 until height) {
             for (x in 0 until width) {
-                action(x, y, data[i])
-                i++
+                action(x, y, data[cell])
+                cell++
             }
         }
     }
@@ -61,11 +62,11 @@ class FloatField(
     companion object {
         fun of(width: Int, height: Int, init: (x: Int, y: Int) -> Float): FloatField {
             val field = FloatField(width, height)
-            var i = 0
+            var cell = 0
             for (y in 0 until height) {
                 for (x in 0 until width) {
-                    field.data[i] = init(x, y)
-                    i++
+                    field.data[cell] = init(x, y)
+                    cell++
                 }
             }
             return field

@@ -104,14 +104,14 @@ class SeaLevelHistoryAuditTest {
     /**
      * The largest lake standing on ground below the sea-level cut, as a share of the world's land.
      *
-     * Below the cut is read off `erosion.height` against `sea.threshold` rather than off the
+     * Below the cut is read off `erosion.height` against `sea.shorelineHeight` rather than off the
      * shoreline-relative field, because glaciation rewrites the second one between the cut and
      * here. The same split `OutletIncisionTest.drownedLakes` makes, for the same reason.
      */
     private fun largestDrownedShare(world: WorldMap): Double {
         val drowned = BooleanArray(world.rivers.lakes.lakes.size)
         val ground = world.erosion.height.data
-        val cut = world.sea.threshold
+        val cut = world.sea.shorelineHeight
         world.rivers.lakes.lakeId.forEachIndexed { cell, id ->
             if (id >= 0 && ground[cell] < cut) drowned[id] = true
         }

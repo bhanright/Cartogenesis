@@ -27,11 +27,13 @@ data class MapLabel(
 )
 
 /**
- * Everything a renderer or exporter needs to draw a finished world.
+ * Everything a renderer or exporter needs to draw a finished world: one result per stage, in the
+ * order the pipeline produces them, plus the settings they were produced from.
  *
  * Implements [PartialWorld] — every stage non-null here, by construction — which is what lets a
- * live, fully-generated world be handed straight back to [com.cartogenesis.worldgen.WorldGenerationEngine.generate]
- * as `previous` with no conversion: a `WorldMap` already *is* the complete case of a partial one.
+ * live, fully-generated world be handed straight back to
+ * [com.cartogenesis.worldgen.WorldGenerationEngine.generate] as `previous` with no conversion: a
+ * `WorldMap` already *is* the complete case of a partial one.
  */
 data class WorldMap(
     override val config: WorldGenConfig,
@@ -47,10 +49,11 @@ data class WorldMap(
     override val landmarks: LandmarkResult,
     override val labels: List<MapLabel> = emptyList()
 ) : PartialWorld {
+    /** Cells across and down. Every per-cell array in here is this size, row-major. */
     val width: Int get() = config.width
     val height: Int get() = config.height
 
-    /** Height with tectonics applied and erosion done, 0..1. */
+    /** Height with tectonics applied and erosion done, 0..1, before the shoreline was chosen. */
     val elevation: FloatField get() = erosion.height
 
     /** Elevation relative to the shoreline: positive on land, negative at sea. */
@@ -58,5 +61,6 @@ data class WorldMap(
 
     fun isLand(x: Int, y: Int): Boolean = sea.isLand[y * width + x]
 
+    /** Land as a share of the whole map, water included — not as a share of anything else. */
     fun landFraction(): Float = sea.landCellCount.toFloat() / (width * height)
 }

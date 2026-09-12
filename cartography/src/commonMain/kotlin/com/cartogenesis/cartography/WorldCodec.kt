@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.pipeline.Landmark
 import com.cartogenesis.worldgen.pipeline.Nation
 import com.cartogenesis.worldgen.pipeline.Plate
 import com.cartogenesis.worldgen.pipeline.River
+import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -22,8 +23,13 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class WorldLists(
     val plates: List<Plate>,
-    /** The raw height the shoreline sits at. Cheap to store, and not derivable from the arrays. */
-    val seaThreshold: Float,
+    /**
+     * Where the shoreline sits, in the height field's own units — see
+     * [SeaLevelResult.shorelineHeight]. Cheap to store, and not derivable from the arrays: the
+     * payload carries elevation *relative* to the shoreline, which is the one field that has
+     * already had this number subtracted out of it.
+     */
+    val shorelineHeight: Float,
     val landCellCount: Int,
     val rivers: List<River>,
     val lakes: List<Lake>,
@@ -34,7 +40,7 @@ data class WorldLists(
     companion object {
         fun of(world: WorldMap): WorldLists = WorldLists(
             plates = world.plates.plates,
-            seaThreshold = world.sea.threshold,
+            shorelineHeight = world.sea.shorelineHeight,
             landCellCount = world.sea.landCellCount,
             rivers = world.rivers.rivers,
             lakes = world.rivers.lakes.lakes,
@@ -110,25 +116,35 @@ val SaveHeader.openStatus: String
  *                          int32 element type, int32 element count, int32 byte length, elements
  * ```
  *
- * Version 2 saves are plain JSON with no magic and no payload. They still open: the world is
- * regenerated from the seed exactly as it was before, and the next save writes it in full.
+ * Only the current version opens. Anything older is refused by name rather than read, because a
+ * header is JSON decoded with unknown keys ignored: a file whose settings were written under the
+ * names an older build used would parse without complaint and come back with this build's
+ * *defaults* wherever a name has since moved, which is a world quietly unlike the one that was
+ * saved. Refusing is the only honest answer, and nothing has been distributed for the refusal to
+ * cost anybody a file.
  */
 object WorldCodec {
 
     /**
-     * 3: the container above. 2: JSON text, seed only, still read.
+     * The only version this build reads or writes.
      *
-     * This is finally load-bearing. Before, nothing ever looked at it.
+     * 4 because the sweep for human-readable names moved serialised property names — the shoreline
+     * height and the terrain gradients among them — with no compatibility shim, so a version-3
+     * file's header no longer means what its keys say. 3 was the container below, 2 the JSON text
+     * that preceded it; neither opens.
      */
-    const val FORMAT_VERSION = 3
-
-    /** What a version-2 file is. Nothing writes one any more; everything still reads one. */
-    const val LEGACY_TEXT_VERSION = 2
+    const val FORMAT_VERSION = 4
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 
     /** Magic, version and header length, before the header itself starts. */
     const val PREFIX_BYTES = 12
+
+    /** Where the format version sits in that prefix: straight after the magic. */
+    const val VERSION_OFFSET = 4
+
+    /** Where the header's own length sits: after the magic and the version. */
+    const val HEADER_LENGTH_OFFSET = 8
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -176,22 +192,21 @@ object WorldCodec {
         return writer.bytes
     }
 
-    /** True when these bytes start with the container magic rather than being version-2 text. */
+    /** True when these bytes start with the container magic rather than being something else. */
     fun isContainer(bytes: ByteArray): Boolean =
         bytes.size >= PREFIX_BYTES && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 
     /**
      * The header alone — no payload touched, so this stays cheap on a file of any size.
      *
-     * Also reads a version-2 save, since the library has to list both.
+     * Refuses anything that is not this build's format, in both directions. See the note above on
+     * why an older file is turned away rather than read with the keys it happens to share.
      */
     fun decodeHeader(bytes: ByteArray): SaveHeader {
         if (!isContainer(bytes)) {
-            return SaveHeader(
-                formatVersion = LEGACY_TEXT_VERSION,
-                document = decodeText(bytes.decodeToString()),
-                compression = NoCompression.name,
-                writtenBy = "version $LEGACY_TEXT_VERSION save"
+            throw WorldFormatException(
+                "this is not a Cartogenesis save, or it is one from before format $FORMAT_VERSION " +
+                    "(plain JSON, with no world in it); this build reads format $FORMAT_VERSION only"
             )
         }
         val reader = ByteReader(bytes, position = MAGIC.size)
@@ -199,6 +214,13 @@ object WorldCodec {
         if (version > FORMAT_VERSION) {
             throw WorldFormatException(
                 "this save was written by a newer build (format $version, this one reads $FORMAT_VERSION)"
+            )
+        }
+        if (version < FORMAT_VERSION) {
+            throw WorldFormatException(
+                "this save is format $version and this build reads $FORMAT_VERSION; the settings in " +
+                    "an older header are written under names this build no longer knows, so it " +
+                    "would open as a different world rather than as the one that was saved"
             )
         }
         val headerLength = reader.getInt()
@@ -211,25 +233,25 @@ object WorldCodec {
     /**
      * The whole thing.
      *
-     * A version-2 save comes back with a null world, which the caller regenerates from the config
-     * — the behaviour that build had. A container missing a *whole stage's* sections does not
-     * throw: [WorldSections.rebuild] hands back the stages it could build and `null` for the rest,
-     * and the reuse chain in [WorldGenerationEngine.generate] regenerates a missing stage and
+     * A header-only save comes back with a null world, which the caller regenerates from the
+     * config. A container missing a *whole stage's* sections does not throw:
+     * [WorldSections.rebuild] hands back the stages it could build and `null` for the rest, and
+     * the reuse chain in [WorldGenerationEngine.generate] regenerates a missing stage and
      * everything downstream of it, the same way it already regenerates anything whose settings
      * changed. So this always hands the caller a complete [WorldMap] — never a partial one — with
-     * an old save simply costing the recompute of whatever it could not carry forward, once, here,
+     * such a save simply costing the recompute of whatever it could not carry forward, once, here,
      * rather than every place that ever asks for `save.world` having to know the difference. A
      * corrupt section (wrong length, bad magic) still throws — see [WorldSections.rebuild].
      */
     suspend fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave {
         val header = decodeHeader(bytes)
-        if (!isContainer(bytes) || header.world == null || header.sections.isEmpty()) {
+        if (header.world == null || header.sections.isEmpty()) {
             return WorldSave(header.document, null)
         }
 
         // Where the payload starts comes from the prefix rather than from re-encoding the
         // header: a second encoding need not be byte-identical to the one in the file.
-        val reader = ByteReader(bytes, position = MAGIC.size + 4)
+        val reader = ByteReader(bytes, position = HEADER_LENGTH_OFFSET)
         val headerLength = reader.getInt()
         val stored = bytes.copyOfRange(PREFIX_BYTES + headerLength, bytes.size)
         if (header.payloadBytes != stored.size) {
@@ -257,13 +279,7 @@ object WorldCodec {
         return WorldSave(header.document, world)
     }
 
+    /** Null rather than throwing, so one unreadable file cannot take the whole library down. */
     suspend fun decodeOrNull(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave? =
         runCatching { decode(bytes, compressor) }.getOrNull()
-
-    /** A version-2 save: JSON text, seed and settings only. */
-    fun decodeText(text: String): WorldDocument = json.decodeFromString(text)
-
-    /** Null rather than throwing, so one unreadable file cannot take the whole library down. */
-    fun decodeTextOrNull(text: String): WorldDocument? =
-        runCatching { decodeText(text) }.getOrNull()
 }

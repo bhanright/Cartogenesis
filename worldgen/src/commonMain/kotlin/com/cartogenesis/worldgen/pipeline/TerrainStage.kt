@@ -9,19 +9,23 @@ import kotlin.math.PI
 import kotlin.math.sqrt
 
 /**
- * The random slope field the user thinks of as the "normal map": per-cell surface normals
- * derived from noise, stored as their x/y gradient components.
+ * The random slope field the user thinks of as the "normal map": per-cell surface normals derived
+ * from noise, stored as the two components of the slope rather than as the normal itself.
+ *
+ * Each field holds how much the surface rises per cell along that axis — [gradientX] eastward,
+ * [gradientY] southward, in the same units the height field is in. [normalAt] turns the pair back
+ * into a unit normal where a caller wants one; [TerrainStage.integrate] wants the gradients.
  */
-class NormalField(val gx: FloatField, val gy: FloatField) {
-    val width: Int get() = gx.width
-    val height: Int get() = gx.height
+class NormalField(val gradientX: FloatField, val gradientY: FloatField) {
+    val width: Int get() = gradientX.width
+    val height: Int get() = gradientX.height
 
-    /** Unit surface normal at a cell, as (nx, ny, nz) — the classic tangent-space normal. */
+    /** Unit surface normal at a cell, as (x, y, z) — the classic tangent-space normal. */
     fun normalAt(x: Int, y: Int): FloatArray {
-        val nx = -gx[x, y]
-        val ny = -gy[x, y]
-        val len = sqrt(nx * nx + ny * ny + 1f)
-        return floatArrayOf(nx / len, ny / len, 1f / len)
+        val normalX = -gradientX[x, y]
+        val normalY = -gradientY[x, y]
+        val length = sqrt(normalX * normalX + normalY * normalY + 1f)
+        return floatArrayOf(normalX / length, normalY / length, 1f / length)
     }
 }
 
@@ -97,9 +101,9 @@ object TerrainStage {
         val h = normals.height
         val fft = Fft2D(w, h)
 
-        val pRe = DoubleArray(w * h) { normals.gx.data[it].toDouble() }
+        val pRe = DoubleArray(w * h) { normals.gradientX.data[it].toDouble() }
         val pIm = DoubleArray(w * h)
-        val qRe = DoubleArray(w * h) { normals.gy.data[it].toDouble() }
+        val qRe = DoubleArray(w * h) { normals.gradientY.data[it].toDouble() }
         val qIm = DoubleArray(w * h)
 
         fft.forward(pRe, pIm)

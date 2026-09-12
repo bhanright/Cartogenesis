@@ -100,8 +100,10 @@ class IncrementalReuseTest {
             // above already covers them — but only if a case actually moves one. A change to the
             // tilt has to reach the ocean stage too, since the currents are driven by the wind
             // belts, which is exactly the kind of cross-stage staleness this test exists for.
-            "seasonalTilt" to base.copy(
-                climate = base.climate.copy(seasonalTilt = base.climate.seasonalTilt + 6f)
+            "seasonalTiltDegrees" to base.copy(
+                climate = base.climate.copy(
+                    seasonalTiltDegrees = base.climate.seasonalTiltDegrees + 6f
+                )
             ),
             "seasons" to base.copy(climate = base.climate.copy(seasons = false)),
             // The slant of the wind belts is the same section again, and the same cross-stage
@@ -238,7 +240,10 @@ class IncrementalReuseTest {
         return WorldMap(
             config = world.config,
             terrain = TerrainResult(
-                normals = NormalField(field(world.terrain.normals.gx), field(world.terrain.normals.gy)),
+                normals = NormalField(
+                    field(world.terrain.normals.gradientX),
+                    field(world.terrain.normals.gradientY)
+                ),
                 height = field(world.terrain.height)
             ),
             plates = PlateResult(
@@ -252,7 +257,7 @@ class IncrementalReuseTest {
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),
             sea = SeaLevelResult(
-                threshold = world.sea.threshold,
+                shorelineHeight = world.sea.shorelineHeight,
                 isLand = world.sea.isLand.copyOf(),
                 relativeElevation = field(world.sea.relativeElevation),
                 landCellCount = world.sea.landCellCount

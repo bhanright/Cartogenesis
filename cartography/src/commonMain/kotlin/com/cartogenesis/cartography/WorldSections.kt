@@ -26,7 +26,7 @@ import kotlinx.serialization.Serializable
 class WorldFormatException(message: String) : IllegalArgumentException(message)
 
 /** How a section's elements are laid out. Little-endian throughout, on every platform. */
-enum class SectionType(val code: Int, val width: Int) {
+enum class SectionType(val code: Int, val bytesPerElement: Int) {
     /** Heights and every other field that has to come back bit for bit. */
     F32(1, 4),
 
@@ -63,18 +63,28 @@ internal class Section(
     val type: SectionType,
     val floats: FloatArray? = null,
     val ints: IntArray? = null,
-    val raw: ByteArray? = null
+    val bytes: ByteArray? = null
 ) {
-    val count: Int get() = floats?.size ?: ints?.size ?: raw!!.size
+    val count: Int get() = floats?.size ?: ints?.size ?: bytes!!.size
 
     /** Name, element type, element count and byte length, so the payload parses on its own. */
-    val recordLength: Int get() = 16 + name.length + count * type.width
+    val recordLength: Int get() =
+        RECORD_PREFIX_BYTES + name.length + count * type.bytesPerElement
 
     fun floatsOrFail(): FloatArray = floats ?: throw WorldFormatException("$name is not float data")
 
     fun intsOrFail(): IntArray = ints ?: throw WorldFormatException("$name is not int data")
 
-    fun bytesOrFail(): ByteArray = raw ?: throw WorldFormatException("$name is not byte data")
+    fun bytesOrFail(): ByteArray = bytes ?: throw WorldFormatException("$name is not byte data")
+
+    companion object {
+        /**
+         * The four int32 fields in front of a section's elements: the name's length, the element
+         * type's code, the element count, and the byte length. The name's own characters are
+         * counted separately, since they are one byte each.
+         */
+        const val RECORD_PREFIX_BYTES = 4 * 4
+    }
 }
 
 /** Little-endian writes over a fixed buffer, since every length is known before anything is written. */
@@ -154,8 +164,14 @@ internal object WorldSections {
      * recomputes no stage, so a field that a stage merely *could* rebuild is still written.
      */
     fun of(world: WorldMap): List<Section> = listOf(
-        Section("terrain.normals.gx", SectionType.F32, floats = world.terrain.normals.gx.data),
-        Section("terrain.normals.gy", SectionType.F32, floats = world.terrain.normals.gy.data),
+        Section(
+            "terrain.normals.gradientX", SectionType.F32,
+            floats = world.terrain.normals.gradientX.data
+        ),
+        Section(
+            "terrain.normals.gradientY", SectionType.F32,
+            floats = world.terrain.normals.gradientY.data
+        ),
         Section("terrain.height", SectionType.F32, floats = world.terrain.height.data),
         Section("plates.plateId", SectionType.I32, ints = world.plates.plateId),
         Section("plates.boundaryDistance", SectionType.F32, floats = world.plates.boundaryDistance.data),
@@ -165,12 +181,12 @@ internal object WorldSections {
             ints = world.plates.nearestBoundaryClass
         ),
         Section("plates.height", SectionType.F32, floats = world.plates.height.data),
-        // H1. How long ago each cell's crust was last built. Not derivable from anything else in
-        // the file — it is the record of epochs that left no other trace — and H3 reads it, so it
+        // How long ago each cell's crust was last built. Not derivable from anything else in the
+        // file — it is the record of epochs that left no other trace — and erosion reads it, so it
         // is written like any other per-cell array rather than recomputed on open.
         Section("plates.crustAge", SectionType.F32, floats = world.plates.crustAge.data),
         Section("erosion.height", SectionType.F32, floats = world.erosion.height.data),
-        Section("sea.isLand", SectionType.U8, raw = ByteArray(world.sea.isLand.size) {
+        Section("sea.isLand", SectionType.U8, bytes = ByteArray(world.sea.isLand.size) {
             if (world.sea.isLand[it]) 1 else 0
         }),
         Section("sea.relativeElevation", SectionType.F32, floats = world.sea.relativeElevation.data),
@@ -205,17 +221,16 @@ internal object WorldSections {
             "climate.windMeridional", SectionType.F32,
             floats = world.climate.windMeridional.data
         ),
-        Section("climate.biome", SectionType.U8, raw = ByteArray(world.climate.biome.size) {
+        Section("climate.biome", SectionType.U8, bytes = ByteArray(world.climate.biome.size) {
             world.climate.biome[it].ordinal.toByte()
         }),
         Section("rivers.filledElevation", SectionType.F32, floats = world.rivers.filledElevation.data),
         Section("rivers.flowAccumulation", SectionType.F32, floats = world.rivers.flowAccumulation.data),
         Section("rivers.flowTarget", SectionType.I32, ints = world.rivers.flowTarget),
         Section("rivers.lakeId", SectionType.I32, ints = world.rivers.lakes.lakeId),
-        // E2. A byte per cell rather than a list of indices, because a playa is a per-cell fact
-        // exactly as a lake is, and the salt flats a later chunk draws will be read the same way
-        // the lake ids are.
-        Section("rivers.playa", SectionType.U8, raw = ByteArray(world.rivers.lakes.playa.size) {
+        // A byte per cell rather than a list of indices, because a playa is a per-cell fact
+        // exactly as a lake is, and salt flats will be drawn the same way lake ids are.
+        Section("rivers.playa", SectionType.U8, bytes = ByteArray(world.rivers.lakes.playa.size) {
             if (world.rivers.lakes.playa[it]) 1 else 0
         }),
         Section("nations.nationId", SectionType.I32, ints = world.nations.nationId),
@@ -233,18 +248,14 @@ internal object WorldSections {
      */
     private val SECTIONS_BY_STAGE: Map<GenerationStage, List<String>> = mapOf(
         GenerationStage.TERRAIN to listOf(
-            "terrain.normals.gx", "terrain.normals.gy", "terrain.height"
+            "terrain.normals.gradientX", "terrain.normals.gradientY", "terrain.height"
         ),
         GenerationStage.TECTONICS to listOf(
             "plates.plateId", "plates.boundaryDistance", "plates.nearestBoundaryType",
-            // Added by B2. A save written before it has the other four and not this one, which is
-            // exactly the case D4 exists for: the stage counts as absent and is regenerated,
-            // rather than the reader taking it as present and then failing to find the section.
-            "plates.nearestBoundaryClass", "plates.height",
-            // Added by H1, and here for the same reason: a save written before the tectonic
-            // history has every other section of this stage and not this one, so the stage counts
-            // as absent and is regenerated rather than half-built.
-            "plates.crustAge"
+            // Both of these were added to the stage after the others. A save written before one
+            // of them has every other section of this stage and not that one, so the stage counts
+            // as absent and is regenerated rather than half-built from what happens to be there.
+            "plates.nearestBoundaryClass", "plates.height", "plates.crustAge"
         ),
         GenerationStage.EROSION to listOf("erosion.height"),
         GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
@@ -259,8 +270,8 @@ internal object WorldSections {
         ),
         GenerationStage.RIVERS to listOf(
             "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget",
-            // Added by E2, and listed here for the same reason B2's boundary class is: a save
-            // written before it knows nothing of endorheic basins, so its river stage is absent
+            // Listed for the same reason the tectonic additions above are: a save written before
+            // endorheic basins existed knows nothing of them, so its river stage counts as absent
             // rather than partially present, and is regenerated on open.
             "rivers.lakeId", "rivers.playa"
         ),
@@ -288,7 +299,7 @@ internal object WorldSections {
             writer.putAscii(section.name)
             writer.putInt(section.type.code)
             writer.putInt(section.count)
-            writer.putInt(section.count * section.type.width)
+            writer.putInt(section.count * section.type.bytesPerElement)
             when (section.type) {
                 SectionType.F32 -> for (v in section.floatsOrFail()) writer.putInt(v.toRawBits())
                 SectionType.I32 -> for (v in section.intsOrFail()) writer.putInt(v)
@@ -299,7 +310,7 @@ internal object WorldSections {
                     name = section.name,
                     type = section.type.name,
                     count = section.count,
-                    bytes = section.count * section.type.width,
+                    bytes = section.count * section.type.bytesPerElement,
                     offset = offset
                 )
             )
@@ -315,7 +326,7 @@ internal object WorldSections {
             val type = SectionType.ofCode(reader.getInt())
             val count = reader.getInt()
             val length = reader.getInt()
-            if (length != count * type.width) {
+            if (length != count * type.bytesPerElement) {
                 throw WorldFormatException("section $name claims $length bytes for $count ${type.name}")
             }
             val raw = reader.getBytes(length)
@@ -328,7 +339,7 @@ internal object WorldSections {
                     val values = ByteReader(raw)
                     Section(name, type, ints = IntArray(count) { values.getInt() })
                 }
-                SectionType.U8 -> Section(name, type, raw = raw)
+                SectionType.U8 -> Section(name, type, bytes = raw)
             }
             sections[name] = section
         }
@@ -389,7 +400,9 @@ internal object WorldSections {
 
         val terrain = if (GenerationStage.TERRAIN in present) {
             TerrainResult(
-                normals = NormalField(field("terrain.normals.gx"), field("terrain.normals.gy")),
+                normals = NormalField(
+                    field("terrain.normals.gradientX"), field("terrain.normals.gradientY")
+                ),
                 height = field("terrain.height")
             )
         } else null
@@ -413,7 +426,7 @@ internal object WorldSections {
         val sea = if (GenerationStage.SEA_LEVEL in present) {
             val isLandBytes = bytes("sea.isLand")
             SeaLevelResult(
-                threshold = lists.seaThreshold,
+                shorelineHeight = lists.shorelineHeight,
                 isLand = BooleanArray(cells) { isLandBytes[it].toInt() != 0 },
                 relativeElevation = field("sea.relativeElevation"),
                 landCellCount = lists.landCellCount
@@ -478,8 +491,8 @@ internal object WorldSections {
             CultureResult(cultureId = ints("cultures.cultureId"), cultures = lists.cultures)
         } else null
 
-        // No section of its own - a landmark list lives entirely in WorldLists - so it is built
-        // whenever the header carries a world at all, same as before this chunk.
+        // No section of its own — a landmark list lives entirely in WorldLists — so it is built
+        // whenever the header carries a world at all.
         val landmarks = LandmarkResult(landmarks = lists.landmarks)
 
         return LoadedWorld(

@@ -222,7 +222,7 @@ object OceanStage {
         }
 
         if (fastest <= 1e-6f) return
-        val scale = config.ocean.speed / fastest
+        val scale = config.ocean.speedCellsPerPass / fastest
         parallelChunks(0, w * h) { start, end ->
             for (i in start until end) {
                 velocityX.data[i] *= scale

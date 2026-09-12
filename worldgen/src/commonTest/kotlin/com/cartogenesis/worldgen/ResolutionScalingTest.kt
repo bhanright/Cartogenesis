@@ -41,7 +41,7 @@ class ResolutionScalingTest {
         assertEquals(base.tectonics.plateCount, scaled.tectonics.plateCount)
         assertEquals(base.tectonics.detailFrequency, scaled.tectonics.detailFrequency)
         assertEquals(base.tectonics.rangeVariationScale, scaled.tectonics.rangeVariationScale)
-        assertEquals(base.rivers.sourceThreshold, scaled.rivers.sourceThreshold)
+        assertEquals(base.rivers.sourceFlowShare, scaled.rivers.sourceFlowShare)
         assertEquals(base.nations.reach, scaled.nations.reach)
     }
 

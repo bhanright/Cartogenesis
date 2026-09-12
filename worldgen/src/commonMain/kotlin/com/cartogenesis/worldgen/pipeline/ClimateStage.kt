@@ -99,9 +99,9 @@ data class ClimateResult(
  * shadow.
  *
  * Run twice over, for the warm season and the cold one. The whole of the seasonal machinery is one
- * number — [ClimateConfig.seasonalTilt], the distance the thermal equator migrates toward whichever
- * hemisphere is in summer — applied to the latitude that the temperature curve, the wind belts and
- * the rain belts are all read off. The annual fields are kept as they were, so every stage
+ * number — [ClimateConfig.seasonalTiltDegrees], the distance the thermal equator migrates
+ * toward whichever hemisphere is in summer — applied to the latitude that the temperature
+ * curve, the wind belts and the rain belts are all read off. The annual fields are kept as they were, so every stage
  * downstream of this one sees exactly what it saw before seasons existed.
  */
 object ClimateStage {
@@ -413,14 +413,14 @@ object ClimateStage {
         // One knob, used everywhere below. Switching seasons off is exactly a tilt of zero: every
         // seasonal field then collapses onto the annual one, bit for bit, and the world is the one
         // this generator made before this stage knew about seasons at all.
-        val tilt = if (cfg.seasons) cfg.seasonalTilt else 0f
+        val tilt = if (cfg.seasons) cfg.seasonalTiltDegrees else 0f
 
         val temperature = buildTemperature(config, sea)
         // The maritime-influence term and continentality both ask "how close is the sea", but they
         // need different answers to it. Influence wants a fast-fading field so a temperature
         // anomaly does not leak across a whole continent — the blurred exposure field. Continentality
         // wants an honest distance in cells, because a coast damped by "still 70% exposed at
-        // coastalReach" barely damps at all; a distance transform is exact and, at these
+        // coastalReachCells" barely damps at all; a distance transform is exact and, at these
         // resolutions, cheaper than the blur besides.
         val exposure = waterExposure(config, sea)
         applyMaritimeInfluence(config, sea, ocean, temperature, exposure)
@@ -472,7 +472,7 @@ object ClimateStage {
 
     /**
      * How much nearby water a land cell can feel: 1 in the open sea, fading to 0 over
-     * `OceanConfig.coastalReach` cells inland.
+     * `OceanConfig.coastalReachCells` cells inland.
      *
      * A blur of the land/sea mask rather than a distance transform — cheap, and it does what
      * [applyMaritimeInfluence] needs: land within reach of the coast reads high, land well beyond
@@ -482,7 +482,7 @@ object ClimateStage {
     private fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val w = config.width
         val h = config.height
-        val radius = config.ocean.coastalReach.coerceAtLeast(1)
+        val radius = config.ocean.coastalReachCells.coerceAtLeast(1)
 
         val water = FloatField(w, h)
         for (i in 0 until w * h) water.data[i] = if (sea.isLand[i]) 0f else 1f
@@ -501,11 +501,11 @@ object ClimateStage {
      *
      * Continentality first tried the blurred water-exposure field above, on the theory that "how
      * exposed to water" and "how close to water" were the same question asked two ways. They are
-     * not, at this radius: two box-blur passes leave a cell right at the edge of `coastalReach`
+     * not, at this radius: two box-blur passes leave a cell right at the edge of `coastalReachCells`
      * reading roughly 0.2 exposure, not the ~1 that would make a coast read as barely-continental —
      * a coast this measured as "still 70% of the way to fully continental" is not a coast in any
      * sense the plan meant. An honest distance says a cell at the shoreline is 0 cells from water
-     * and one three `coastalReach` inland is exactly that, which is what the amplitude formula
+     * and one three `coastalReachCells` inland is exactly that, which is what the amplitude formula
      * below actually needs.
      *
      * Internal rather than private so `ContinentalityTest` measures the same field the stage
@@ -552,7 +552,7 @@ object ClimateStage {
         // Spread the offshore anomaly over the land it touches.
         val spread = FloatField(w, h)
         ocean.anomaly.data.copyInto(spread.data)
-        BoxBlur.apply(spread, radius = cfg.coastalReach.coerceAtLeast(1), passes = 2)
+        BoxBlur.apply(spread, radius = cfg.coastalReachCells.coerceAtLeast(1), passes = 2)
 
         parallelChunks(0, w * h) { start, end ->
             for (i in start until end) {
@@ -595,7 +595,8 @@ object ClimateStage {
      * Raised from 1.25 by A6. The Koppen gate alone did not fix the high-latitude west coast (the
      * Bergen case): [ClimateStage.classify] now reads the coldest and warmest month instead of the
      * annual mean, but at 1.25 the curve put 45 degrees — the effective latitude a 55-degree
-     * coast's *summer* reads off, one [ClimateConfig.seasonalTilt] equatorward — at a mere 6.8 C,
+     * coast's *summer* reads off, one [ClimateConfig.seasonalTiltDegrees] equatorward — at a
+     * mere 6.8 C,
      * so even a strong warm-current anomaly could not lift a maritime coast's warmest month over
      * the 10 C tree line. Measured before this change: every one of seeds 7/42/1234's 50-60 degree
      * west-facing, warm-current coast classified taiga or tundra, 0.0-0.1% forest. At 1.8, that
@@ -654,7 +655,7 @@ object ClimateStage {
                     val i = y * w + x
                     val elevation = sea.relativeElevation.data[i]
                     val altitudeDrop = if (sea.isLand[i]) {
-                        elevation * cfg.maxAltitudeMetres / 1000f * cfg.lapseRateC
+                        elevation * cfg.maxAltitudeMetres / 1000f * cfg.lapseRateCPerKm
                     } else 0f
                     val variation = 3.5f * noise.fbm(x * 5f / w, y * 5f / h, 4, 5, 5)
                     field.data[i] = base - altitudeDrop + variation
@@ -679,7 +680,7 @@ object ClimateStage {
      *
      * Over land the departure is scaled by `1 + continentality * continentalityFactor`
      * ([ClimateConfig.continentality]), where `continentalityFactor` is [waterDistance] clamped to
-     * 0..1 over three [OceanConfig.coastalReach]: a cell at the shoreline reads 0 and keeps the
+     * 0..1 over three [OceanConfig.coastalReachCells]: a cell at the shoreline reads 0 and keeps the
      * amplitude at 1, swinging exactly as far as it did before this setting existed; a cell three
      * reaches inland or further reads 1 and swings up to `1 + continentality` as far. This is
      * Siberia versus Ireland at the same latitude.
@@ -696,7 +697,7 @@ object ClimateStage {
         val h = config.height
         val cfg = config.climate
         val field = FloatField(w, h)
-        val continentalReach = 3f * config.ocean.coastalReach.coerceAtLeast(1)
+        val continentalReach = 3f * config.ocean.coastalReachCells.coerceAtLeast(1)
 
         parallelChunks(0, h) { start, end ->
             for (y in start until end) {
@@ -789,7 +790,7 @@ object ClimateStage {
      * already done before seasons made the question harder.
      */
     internal fun seasonalBand(latitude: Float, climate: ClimateConfig, warm: Boolean): Float {
-        val tilt = if (climate.seasons) climate.seasonalTilt else 0f
+        val tilt = if (climate.seasons) climate.seasonalTiltDegrees else 0f
         val lat = abs(latitude)
         val effective = if (warm) abs(lat - tilt) else lat + tilt
         return latitudeBandAt(

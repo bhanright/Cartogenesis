@@ -651,8 +651,22 @@ data class ErosionConfig(
      * flow over a lip is concentrated into a notch rather than spread across a valley floor, it is
      * falling over a step rather than running down a grade, and the lip is the one place on the
      * network where every round's fill hands the water a fresh head to work with.
+     *
+     * Three, and the honest thing to say about the number is that the landscape it acts on is
+     * chaotic in it: measured at three, four, six and eight on seven seeds at 512, the largest lake
+     * on a given seed jumps by a factor of two between neighbouring rates, because which basin ends
+     * up largest changes. Three is chosen on the measurement that does not wander — the same world
+     * at 512, 1024 and 2048 — where it holds the largest lake to within 1.33x on seed 59758 and
+     * 1.01x on seed 42 and under the Caspian's share of the map at every grid. Six clears every
+     * seed at 512 and then leaves seed 59758 a lake of 0.122% of the map at 1024, which is the
+     * defect this rate exists to prevent.
+     *
+     * It was one until the rate was expressed against the land's own relief rather than against the
+     * height field, and had to rise with that change: the old units divided it by the range of the
+     * land, which is a different number at every grid, and that was what made the largest lake grow
+     * threefold from 512 to 2048.
      */
-    val outletIncisionRatio: Float = 1f,
+    val outletIncisionRatio: Float = 3f,
     /**
      * How far below the lip the notch is cut, in cells — rescaled with the grid by
      * [WorldGenConfig.atResolution], as [deltaReach] is.

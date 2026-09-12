@@ -616,7 +616,8 @@ cold anomaly cuts pickup by a third). Guard: on a seed with a cold current along
 west coast (find one; report which), coastal rainfall on that coast falls and a coastal desert
 appears where the belt already made it dry, while a warm-current east coast at the same latitude
 is unchanged or wetter; shown failing with the coupling off. Desert-in-band and Mediterranean
-counts reported.
+counts reported. Rule 8: the pickup scaling is one multiply inside the existing march, which is
+CPU work by design (lock-step wavefronts); no GPU path.
 
 ### H2. Snow mass balance — Opus
 
@@ -634,7 +635,9 @@ Guard: a cold dry interior (find one on the standard seeds) becomes tundra or co
 a wet maritime highland at the same latitude keeps ice lower than a dry one; ice share of land
 reported per seed against the Earth figure (about 10% of land, most of it Antarctica and
 Greenland); shown failing with the balance off. This will move the culture and realm guards; report
-them.
+them. Rule 8: the balance itself is per-cell arithmetic over four fields and goes behind the
+accelerator seam (OpenGL and WGSL) with a tolerance test; the provisional climate march it feeds
+stays on the CPU with the rest of the march.
 
 ### H5. Sea-level history — Opus
 
@@ -651,7 +654,9 @@ Guard: count rivers whose mouth lies inside an inlet longer than three cells (an
 coastline's indentation ratio, before and after; shown failing with lowstand zero;
 RiverEndingsTest and the mass budget hold; the delta guard holds (deltas build at the present
 level). Render and look at 2048 on 718106 and 59758: the coasts should gain estuaries and sounds
-where rivers meet them, not everywhere.
+where rivers meet them, not everywhere. Rule 8: nothing new per cell here - it changes the base
+level the hydraulic rounds read, and those rounds get their GPU path in G1, which this chunk must
+precede so G1 ports the final semantics.
 
 ### H1. Tectonic history — Opus
 
@@ -670,7 +675,9 @@ seeds sits more than a stated distance from any present boundary, is lower and b
 present belts by stated factors (Appalachians against Alps), and `BoundaryPairTest` still finds
 the present belts; `RibbonLandTest` holds; shown failing with K = 1. Cost: tectonics is 0.9 s at
 2048, so four epochs are affordable. Render and look: an old worn range inland of a young coastal
-one is the picture.
+one is the picture. Rule 8: belt stamping and the ageing blur are per-cell passes; specify them
+behind the accelerator seam, but measure first - at 0.9 s for one epoch the CPU may be enough,
+and the report says which.
 
 ### H3. Lithology — Opus
 
@@ -685,6 +692,8 @@ the scale of a 20 km cell - but a carbonate flag on soft platform cells may supp
 drainage below a threshold, so those plateaus show fewer rivers and springs at their edges; do
 this only if it reads at 2048. Guard: relief and drainage density differ between shield, orogen
 and basin cells by stated factors, shown failing with a uniform field; the mass budget holds.
+Rule 8: the erodibility field is an input texture to the G1 kernels; the thermal and hydraulic
+GPU paths read it, so both CPU and GPU erosion honour it and the tolerance test covers it.
 
 ---
 

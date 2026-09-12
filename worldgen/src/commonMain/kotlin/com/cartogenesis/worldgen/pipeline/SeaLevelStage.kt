@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.SeaConfig
+import com.cartogenesis.worldgen.model.WorldGenConfig
 
 data class SeaLevelResult(
     /** The raw height value that the shoreline sits at. */
@@ -52,13 +53,24 @@ object SeaLevelStage {
         return cutAt(height, threshold, maxHeight)
     }
 
-    /** Land, water and the shoreline-relative field, for a shoreline already decided. */
-    private fun cutAt(height: FloatField, threshold: Float, maxHeight: Float): SeaLevelResult {
+    /**
+     * Land, water and the shoreline-relative field, for a shoreline already decided.
+     *
+     * [minHeight] and [maxHeight] are handed in rather than measured, so that the post-cut outlet
+     * pass can re-cut a field it has just lowered a few sill cells in and get, for every cell it
+     * did not touch, the same float it got the first time. Both ends of the range are properties
+     * of the world the cut was taken from, not of the working copy.
+     */
+    private fun cutAt(
+        height: FloatField,
+        threshold: Float,
+        maxHeight: Float,
+        minHeight: Float = height.min()
+    ): SeaLevelResult {
         val size = height.data.size
         val isLand = BooleanArray(size)
         val relative = FloatField(height.width, height.height)
 
-        val minHeight = height.min()
         val landRange = (maxHeight - threshold).coerceAtLeast(1e-6f)
         val seaRange = (threshold - minHeight).coerceAtLeast(1e-6f)
 
@@ -100,12 +112,20 @@ object SeaLevelStage {
      *    clear of the coast (see `ContinentalShelfTest`'s `shelfWidth = 0` control); this only
      *    needed to fix the margin, not the abyss.
      */
-    fun apply(height: FloatField, seaLevel: Float, sea: SeaConfig): SeaLevelResult {
+    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult {
+        val sea = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this
         // is cutting, not to the map that is drawn.
+        val cut = apply(height, config.seaLevel)
+        val enclosed = if (sea.enclosedSeaIsLand) enclose(cut, height, sea) else cut
+        // H5b: and the basins the line above just turned into land get their outlets cut, once,
+        // now that there is a shoreline for them to be measured against. See [drainDrownedBasins].
         val base =
-            if (sea.enclosedSeaIsLand) enclose(apply(height, seaLevel), height, sea)
-            else apply(height, seaLevel)
+            if (sea.enclosedSeaIsLand && sea.postCutOutlet) {
+                drainDrownedBasins(enclosed, height, config)
+            } else {
+                enclosed
+            }
         if (sea.shelfWidth <= 0f) return base
 
         val w = base.relativeElevation.width
@@ -255,6 +275,137 @@ object SeaLevelStage {
         }
 
         return SeaLevelResult(base.threshold, isLand, relative, landCells)
+    }
+
+    /**
+     * The most times the outlet of a converted basin is cut, after the cut.
+     *
+     * A ceiling rather than a count: the loop stops as soon as a pass finds nothing left to cut,
+     * which on most seeds is well inside it. What the ceiling is for is the case that does not stop
+     * quickly — a sill standing high above the shoreline, which the outflow takes down by one
+     * stream-power bite per pass exactly as a knickpoint retreats over successive floods.
+     *
+     * Eight, from where the retreat stops rather than from where any guard turns green. Measured on
+     * seed 718106 at 512, the largest drowned basin's filled area over the passes runs 1883, 1195,
+     * 985, 838, 663, 515, 405, 366, 366 cells, its surface coming down from 0.227 of the land's
+     * relief above the shoreline to 0.018 — flat from the seventh, and a ninth moves neither
+     * figure. Seed 99's largest goes 1486 cells to 141 in a single pass, because its sill has the
+     * power to reach the waterline and the basin becomes an arm of the sea, and then to 88 and no
+     * further. Seed 43's does not move at all, because its outflow cannot cut its sill, which is
+     * the Caspian's own situation and the case this rule exists to leave alone.
+     *
+     * Eight rather than the twelve rounds the notch gets inside the hydraulic pass, for a reason of
+     * cost and not of principle: each pass is a priority flood and a D8 route over the whole grid,
+     * and four more would buy nothing the curve above says is left to buy.
+     */
+    private const val POST_CUT_PASSES = 8
+
+    /**
+     * Cuts the outlet of every basin the enclosure rule just made, on the far side of the cut.
+     *
+     * [enclose] hands the river stage a hollow whose floor lies below sea level and whose rim is
+     * ordinary land, and the depression fill then raises the hollow to that rim — which can be a
+     * great deal wider than the water that was there, because the ground around a coastal saucer is
+     * low. On seed 718106 at 512 the result was a lake covering 0.62% of the land, two and a half
+     * times the Caspian's share of Earth's, and at 2048 a Caspian-shaped lake filling a coastal
+     * rift trough. Neither mechanism that sizes the other lakes can reach it. E1's notch runs
+     * inside the hydraulic rounds, while that ground is still under the provisional sea: there is
+     * no lip for it to cut and no outflow to cut with. E2's water balance cannot drain a floor that
+     * is already below sea level, because there is nowhere for the water to go.
+     *
+     * So this is E1's breach again, on the same terms — [FlowRouting.spillways] over the filled
+     * surface, stream power with `ErosionConfig.outletIncisionRatio` and the basin's whole
+     * catchment as the discharge, drop limits in shoreline-relative units converted to the height
+     * field's own once at the point of cutting — with two differences, both of which follow from
+     * *where* it is running rather than from a change of mind about the physics.
+     *
+     *  - **Only the drowned basins.** A basin whose floor stands above the cut is E1's, was worked
+     *    by twelve rounds of the notch, and is none of this pass's business; cutting it again here
+     *    would drain the world's ordinary lakes a thirteenth time. The test is the basin's own
+     *    floor: below the shoreline, and it is one of the ones the enclosure made.
+     *  - **The notch may reach the waterline.** Inside the rounds the cut stops at the sea, which
+     *    is the base level a river grades to. Here the water behind the sill stands *below* the
+     *    sea and the river crossing the sill is grading to that, so the sea is not the floor — the
+     *    basin's own is. Where the outflow has the power to take the sill under the waterline, the
+     *    sill becomes water, the basin joins the ocean at the next labelling, and what the map
+     *    shows is an arm of the sea with a narrow mouth: a sound, a ria, the Bosphorus and the
+     *    Black Sea behind it. Where it has not, the sill stands lower than it did and the basin
+     *    keeps whatever the water balance then allows — a lake below sea level, which is the
+     *    Caspian, the Dead Sea and the Qattara.
+     *
+     * The terrain the cut makes lives in [SeaLevelResult.relativeElevation] and not in
+     * `ErosionResult.height`, which this stage is handed and must not rewrite: erosion is a stage
+     * of its own with its own reuse guard and its own section in a save, and a stage that edited
+     * its predecessor's result would be recomputed away the next time anything upstream changed.
+     * That is the same seam [GlaciationStage] carves its troughs through, and the relative field is
+     * what the renderer, the climate and the river stage all read. The height field is used here
+     * only as the working copy the drop limits are spent against, so that a rate written per unit
+     * of the land's relief means the same thing at every grid.
+     *
+     * What the notch takes leaves the model, as the closing breach's spoil does and for the same
+     * reason: there is no walk left to carry it downstream, the sediment ledger belongs to the
+     * hydraulic rounds, and this runs two stages after they closed. `DepositionTest`'s budget is
+     * measured over those rounds and is untouched by anything here.
+     *
+     * Deterministic, and re-runnable: the pass reads only the height field and the config, so
+     * `WorldGenerationEngine`'s stage reuse gets the same answer as a fresh generation
+     * (`IncrementalReuseTest` varies the sea section, which is where the switch lives).
+     */
+    private fun drainDrownedBasins(
+        enclosed: SeaLevelResult,
+        height: FloatField,
+        config: WorldGenConfig
+    ): SeaLevelResult {
+        val w = height.width
+        val h = height.height
+        val threshold = enclosed.threshold
+        // Both ends of the world's own range, so that re-cutting the working copy leaves every
+        // untouched cell on the float it already had.
+        val maxHeight = height.max()
+        val minHeight = height.min()
+        val landRange = (maxHeight - threshold).coerceAtLeast(1e-6f)
+
+        var current = enclosed
+        var working: FloatField? = null
+        repeat(POST_CUT_PASSES) {
+            if (current.landCellCount == 0) return current
+            // A copy, because the breach lowers the surface it is handed along with the terrain and
+            // the next pass takes its own from the re-cut.
+            val relative = current.relativeElevation.copy()
+            val isLand = current.isLand
+            val filled = FlowRouting.fillDepressions(w, h, isLand, relative)
+            val directions = FlowRouting.flowDirections(w, h, isLand, relative, filled)
+            val area = FlowRouting.accumulate(
+                w, h, isLand, filled, directions, current.landCellCount
+            ) { 1f }
+            val notch = FlowRouting.spillways(
+                w, h, isLand, relative.data, filled.data, directions, HydraulicErosion.POND_DEPTH
+            )
+
+            // Everything standing clear of the cut belongs to the notch inside the rounds. Marking
+            // the spill rather than filtering the arrays keeps this one specific set of basins
+            // rather than a renumbering of them.
+            var drowned = 0
+            for (b in 0 until notch.count) {
+                if (notch.floor[b] >= 0f) notch.spill[b] = -1
+                else if (notch.spill[b] >= 0) drowned++
+            }
+            if (drowned == 0) return current
+
+            val field = working ?: height.copy().also { working = it }
+            val cut = HydraulicErosion.breach(
+                config.erosion, w, notch, isLand, relative.data, filled.data, directions,
+                area.data, current.landCellCount.toFloat(), landRange, field.data,
+                settled = null, load = null, belowSea = true
+            )
+            // Nothing left that the outflow can take off a sill: every basin still here is one the
+            // water cannot open, and another pass would only cost a priority flood.
+            if (cut.cells == 0) return current
+            current = enclose(
+                cutAt(field, threshold, maxHeight, minHeight), field, config.sea
+            )
+        }
+        return current
     }
 
     /**

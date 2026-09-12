@@ -61,7 +61,24 @@ class SeaLevelHistoryTest {
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {
         var controlFailures = 0
         seeds.forEach { seed ->
+            // H5b's post-cut outlet pass held off in *both* arms, so this pair varies the lowstand
+            // and nothing else.
+            //
+            // Not a convenience. An estuary here is a river mouth lying more than three cells
+            // inside a narrow inlet, and H5b added a second mechanism that makes narrow inlets: a
+            // basin the enclosure rule converted, whose outflow has the power to cut its sill down
+            // to the waterline, opens as a sound with a narrow mouth. It makes them whether the sea
+            // ever stood lower or not, so it raises the *control* as much as the world under test —
+            // measured on seed 7 at 512, the world with the sea at today's level for every round
+            // goes from 22 estuary mouths to 33 with the pass on, and the ratio this case is about
+            // falls from 1.64 to 1.30 while the lowstand's own contribution is unchanged. Two
+            // mechanisms and one measurement is not a guard; the same reasoning `GlaciationTest`
+            // gives for switching the outlet notch off before it counts standing water.
+            //
+            // The shipped world's own pair, both mechanisms running, is printed by
+            // `report every corner of the pair` below.
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
                 WorldGenerationEngine.generateBlocking(base.copy(sea = base.sea.copy(lowstand = 0f))),
                 "seed $seed lowstand 0     "
@@ -154,10 +171,17 @@ class SeaLevelHistoryTest {
         seeds.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             listOf(
-                "PRE-H5      " to base.sea.copy(lowstand = 0f, enclosedSeaIsLand = false),
-                "lowstand    " to base.sea.copy(enclosedSeaIsLand = false),
-                "enclosure   " to base.sea.copy(lowstand = 0f),
-                "H5          " to base.sea
+                "PRE-H5      " to base.sea.copy(
+                    lowstand = 0f, enclosedSeaIsLand = false, postCutOutlet = false
+                ),
+                "lowstand    " to base.sea.copy(
+                    enclosedSeaIsLand = false, postCutOutlet = false
+                ),
+                "enclosure   " to base.sea.copy(lowstand = 0f, postCutOutlet = false),
+                "H5          " to base.sea.copy(postCutOutlet = false),
+                // And H5b's own pair: the post-cut outlet pass on the shipped world, and the same
+                // world without it, so the report can say what the second inlet-maker is worth.
+                "H5b outlet  " to base.sea
             ).forEach { (name, sea) ->
                 Coast(
                     WorldGenerationEngine.generateBlocking(base.copy(sea = sea)),

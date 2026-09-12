@@ -25,6 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * The whole application, in both themes, written out to be looked at.
@@ -339,9 +340,19 @@ class ChromeGalleryTest {
      * The expected values were recorded from `main` at 27fd260 by running this capture there,
      * before a line of F7 was written. `ChromeContrastTest` makes the other half of the claim, in
      * colours: the same eleven schemes, role by role.
+     *
+     * Recorded on Windows, and only comparable there. A pixel fingerprint of rendered text belongs
+     * to the font rasteriser that drew it: the first CI run after F7 merged, on a Linux runner,
+     * moved all eleven values with no code change at all. So the comparison is skipped off the
+     * platform it was recorded on, and the scheme-by-scheme guard in `ChromeContrastTest`, which
+     * has no pixels in it, is the claim that travels.
      */
     @Test
     fun `the eleven chromes before F7 are pixel-identical`() {
+        assumeTrue(
+            System.getProperty("os.name").startsWith("Windows"),
+            "the recorded fingerprints belong to Windows' font rasteriser"
+        )
         val moved = mutableListOf<String>()
         val measured = mutableMapOf<String, Int>()
         BEFORE_F7.forEach { (name, expected) ->

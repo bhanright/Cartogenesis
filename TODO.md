@@ -2,6 +2,24 @@
 
 ## Done
 
+- **The rift-mouth valley: pocket, moats and terrace** (2026-09-12, E6) — the three things in the
+  author's crop of 718106's southern rift turned out to be three different causes, found with the
+  deposition log. The rounded-square pocket and the concentric crescent moats are the spoil's: the
+  margin `headroom` allows an alluvial dam was measured in shoreline-relative units and spent as a
+  height, so a dam could stand about four times higher than the no-uphill rule allows, and the rule
+  it bounds has a flat for its fixed point anyway. Aggradation now stops at the slope the river
+  needs to carry its load. In his window: 563 cells of ringed water before, none after; 2675 cells
+  of standing water before, 1120 after, against 1535 with no deposition at all. The saw-tooth
+  fringe and the forty-five degree comb are almost none of them the spoil's — 102 of the 145 cells
+  are there with deposition switched off — and the dead-straight seaward front is none of it: the
+  deposition-off terrain cut at the deposited world's own sea level gives the same 31-cell straight
+  run, so what moved was the sea level, not the shape. That shoulder is E4's.
+
+- **A lacustrine fan's floor is charged per cell** (2026-09-12, E6) — fixed as E5 had written it and
+  reverted it: the floor is a fraction of the fan's rim, identical at 512 and held at every other
+  grid. It surfaced as B4's resolution contract, where the drainage's lake area per unit of map was
+  growing 2.38x between 512 and 1024; with the fan fixed it is 1.92x.
+
 - **Square-cornered coastal lobes** (2026-09-12, E5) — the fan walk handed its own breadth-first
   step count to the acceptance rule as though it were a distance, and over eight neighbours a step
   count is the Chebyshev metric whose iso-lines are squares. The lacustrine fan, whose rule was
@@ -13,6 +31,24 @@
   and from 30 to 15; at 512, per mechanism, the share of a fan's perimeter in runs longer than one
   lobe reach falls from 2.0%/1.8% to 0.7%/0.0%.
 
+- **Channels pond into thin grid-bearing lakes** (2026-09-12, H5b) — the incision is now a pass of
+  its own, walking the D8 tree from the outlets upstream so a cell's receiver is already final when
+  the cell is cut, and refusing the part of the cut that would take it below: Braun and Willett's
+  `z_i' >= z_r'`. The cap it replaces was written in shoreline-relative units and spent on the
+  height field, so it had been letting a well-fed channel cell be cut by about twice the height it
+  stood above its own receiver, every round. Census over the twelve rounds at 512: the incision made
+  6383 / 10 / 5 such holes on 718106 / 42 / 7 and now makes none; the channel cells the map draws as
+  standing water fall 1627 → 780, 106 → 54 and 323 → 265; the comb share at 1024 goes 2.4/4.9/2.6%
+  to 2.2/4.4/1.7% and its bar 5% → 4.5%. The residual is the alluvial-dam item above.
+- **Over-large filled basins, the drowned kind** (2026-09-12, H5b) — `SeaConfig.postCutOutlet` runs
+  the breach again on the far side of the cut, over the basins the enclosure rule made, with the
+  base-level limit lifted (the water behind one of these sills stands below the sea) and the cut
+  continued back across the lake bed, which is the other half of a sill once the target goes below
+  the old water surface. A basin whose outflow can take its sill to the waterline becomes an arm of
+  the sea; one whose cannot keeps a lake below sea level, which is the Caspian. Largest drowned
+  basin at 512 as a share of land: 718106 1.13% → 0.26%, 99 0.61% → 0.07%, 43 unmoved at 0.16%
+  because its outflow cannot cut its sill. Asserted against the Caspian's 0.249% of land in
+  `OutletIncisionTest`, `OutletResolutionTest` and `SeaLevelHistoryAuditTest`.
 - **`LakesConfig.minCells` scales as an area** (2026-09-12, H5) — twelve cells at 512, 48 at
   1024, 192 at 2048, the same piece of ground at every grid; the 2048 sprinkle of ponds that 512
   never had is gone, and `OutletResolutionTest` holds at 512/1024/2048 on both of the author's
@@ -233,39 +269,20 @@
   neighbour. Real channels wander. The cure is a routing that carries direction between cells
   (D-infinity, or D8 with a seeded low-amplitude perturbation of the surface it reads), pinned
   by a straight-run guard against the current figure. Found 2026-09-12.
-- **Over-large filled basins, the drowned kind.** E1's outlet incision and E2's water balance
-  size the lakes the drainage makes; what they cannot reach is a basin the sea-level cut converts
-  from unreachable sea to land (H5), because the notch ran while that ground was under the
-  provisional sea and the floor is below sea level. On 718106 at 512 one fills to 1.11% of the
-  land, four times the Caspian's share; at 2048 the same trough holds a Caspian-shaped lake of
-  0.13% of the map. The repair is E1's breach run once more after the cut, so a basin that
-  overflows cuts its sill and, if the notch reaches below sea level, becomes an arm of the sea
-  (H5b in REALISM_PLAN.md). Raised 2026-09-11, narrowed 2026-09-12.
-- **Channels pond into thin grid-bearing lakes.** The incision can leave a cell lower than its
-  D8 receiver, the fill ponds it, and along a channel the ponds line up into the bars the comb
-  measurement catches; H5's lowstand made it worse (2.8% → 4.5% of standing water on seed 42 at
-  1024). FastScape's bound, `z_i' ≥ z_r'` in downstream-to-upstream order, removes the class (H5b).
+- **The rift shoulder is a plane, so the sea cuts it in a straight line.** On 718106's southern
+  rift at 2048 the valley's seaward front is a 31-cell straight run of coast, and the same terrain
+  with no deposition at all, cut at the deposited world's own sea level, gives exactly 31 — the
+  straightness is a contour of E4's half-graben, not anything deposition draws. The pale bench of
+  constant width down the valley's west side is the same profile seen side-on. E4's geometry.
   2026-09-12.
-- **The raft at 718106's rift mouth is not a fan.** E5 recorded the mechanism of every raised cell
-  and rendered the mask at 2048: the flat straight-edged terrace immediately above the nested
-  crescent lakes on the southern rift — the one in the author's own crop, with the river running
-  across it — carries no fan sediment at all, only the thin dendritic threads of the floodplain
-  case, and it is pixel-for-pixel unmoved by the new outlines. It does disappear when deposition is
-  switched off entirely, so it is aggradation smoothed into a plain by the relaxation between
-  rounds rather than a lobe, and it sits on the same cone as the crescent lakes below it. Whether
-  that is one artefact or two is not yet measured. What E5 did remove at that grid are the
-  lacustrine squares — the mask shows a `2R+1` block with right-angle corners becoming a narrow
-  fringe along the shallow margin of the lake — and the Chebyshev lobes. 2026-09-12.
-- **A lacustrine fan's floor is charged per cell.** `HydraulicErosion.LAKE_FAN_SLOPE` deepens a
-  lake fan by a quarter of a pond depth per cell of distance from its inflow, so the far edge of a
-  fan lies two and a half pond depths down at 512, four at 1024 and seven at 2048: the same lake
-  has a different floor at every grid, which is what `atResolution` exists to prevent. E5 wrote the
-  fix (one and a half against the fraction of the rim — identical at 512, held everywhere else),
-  measured it and reverted it, because what it does at 1024 is shallow lakes enough to move two of
-  B4's marginal guards: seed 42's comb share 4.0% -> 5.2% against a 5.0% bar, and seed 42's cold
-  country from four lakes to three where the control clause asks for three times the un-glaciated
-  count. The fix is a line; what it needs is a chunk that can re-derive B4's bars against the lakes
-  it leaves. 2026-09-12.
+- **The ice's own added water is still charged per cell.** With the drainage's share separated out,
+  `GlaciationTest`'s resolution case measures the ice adding 2 cells of standing water at 512 and 51
+  at 1024 on seed 718106 — six times as much per unit of map, on a count too small at 512 to form a
+  ratio. The drainage's own share keeps the 2.0 contract at 1.92. B4's. 2026-09-12.
+- **Saw-tooth lake shores and forty-five degree bars.** Thin one- and two-cell bars of water along
+  the flow grid fringe the lakes in 718106's southern rift at 2048: 107 cells in the author's
+  window, of which 102 are there with deposition switched off entirely, so they are the depression
+  fill's or the routing's rather than the spoil's. Not yet traced further. 2026-09-12.
 - **Lakes never feed the moisture march.** Lakes are decided two stages after the climate, so no
   lake evaporates into the air above it: no lake-effect rain downwind of a Caspian or a Great
   Lake, and the interiors that used to drink from H5's spurious sea pockets are drier now that

@@ -69,9 +69,33 @@ class GpuErosionTest {
         println("GPU vs CPU terrain: mean difference %.6f, worst %.6f (elevation is 0..1)".format(mean, worst))
 
         assertTrue(gpuMs < cpuMs, "the GPU was not faster: ${gpuMs}ms vs ${cpuMs}ms")
+        // Two bounds since H5b, and the mean is the one that would catch a wrong kernel.
+        //
+        // The worst cell was held under 0.02 and now reads 0.0325 on this machine. What changed is
+        // not the GPU's arithmetic — the mean difference is 0.000003 of the elevation range, three
+        // parts in a million, and was 0.0000005 before — but how sharply a single cell can respond
+        // to a last-bit difference. H5b's receiver clamp bounds a cell's incision by the height of
+        // the cell it drains into, and which cell that is is a *discrete* function of the terrain:
+        // where two neighbours are within a float's last place of each other, the two runs pick
+        // different receivers and the clamped cut differs by the whole drop to one of them, then
+        // compounds over the remaining rounds. That is the same chaos sea level, depression filling
+        // and D8 routing already have — the case below measures it directly and finds the coastline
+        // differing in 0.006% of cells — arriving one stage earlier.
+        //
+        // So the worst-cell bound moves to 0.05, which is above the 0.0325 measured here and above
+        // the 0.034 this stage's own notes record the figure swinging to across parameter values
+        // that were otherwise indistinguishable; and a mean bound is added at a hundredth of that,
+        // which no run has come within two orders of magnitude of and which a kernel that had
+        // actually diverged could not clear.
         assertTrue(
-            worst < 0.02f,
-            "GPU terrain diverged from the CPU by $worst, which is more than a rounding difference"
+            mean < 5e-4,
+            "GPU terrain diverged from the CPU by $mean on average, which is a different world " +
+                "rather than a different rounding"
+        )
+        assertTrue(
+            worst < 0.05f,
+            "GPU terrain diverged from the CPU by $worst at its worst cell (mean $mean), which is " +
+                "more than one chaotic decision"
         )
     }
 

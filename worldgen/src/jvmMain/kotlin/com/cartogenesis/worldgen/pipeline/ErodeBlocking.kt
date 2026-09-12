@@ -36,3 +36,20 @@ internal fun erodeBlocking(
     height: FloatField,
     log: DepositionLog
 ): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, null, log) }
+
+/**
+ * As above, with the receiver clamp switchable — the control `ReceiverClampTest` needs.
+ *
+ * Kept off `WorldGenConfig` deliberately. The clamp is not a taste and not a feature: it is the
+ * bound every landscape-evolution model since FastScape holds a node's new elevation to, and a
+ * world generated without it has holes in its rivers' beds. So the only thing that can turn it off
+ * is a test driving this stage directly.
+ */
+internal fun erodeBlocking(
+    config: WorldGenConfig,
+    height: FloatField,
+    receiverClamp: Boolean,
+    onRound: ((RoundMass) -> Unit)? = null
+): ErosionResult = runBlocking {
+    ErosionStage.apply(config, height, null, onRound, receiverClamp = receiverClamp)
+}

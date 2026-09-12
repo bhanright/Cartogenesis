@@ -465,7 +465,35 @@ data class SeaConfig(
      *
      * At or below the cap, not above it, so a body exactly the Caspian's size becomes a lake.
      */
-    val enclosedSeaMaxShare: Float = 0.00073f
+    val enclosedSeaMaxShare: Float = 0.00073f,
+    /**
+     * Whether a basin the cut converts from unreachable sea to land gets its outlet cut, once,
+     * after the cut.
+     *
+     * [enclosedSeaIsLand] hands the river stage a hollow whose floor lies below sea level, and the
+     * depression fill then raises it to its lowest rim — which can be a good deal wider than the
+     * water that was there. On seed 718106 at 512 one such basin came out at 0.62% of the land,
+     * two and a half times the Caspian's share of Earth's, and at 2048 the same trough held a
+     * Caspian-shaped lake against a coastal rift. Neither of the two mechanisms that size the other
+     * lakes can reach it: `ErosionConfig.outletIncision` runs inside the hydraulic rounds, while
+     * that ground is still under the provisional sea, so there is no lip for it to cut and no
+     * outflow to cut with; and `LakesConfig.waterBalance` cannot drain a floor that is already
+     * below sea level, because there is nowhere for the water to go.
+     *
+     * So the notch is run once more on the far side of the cut, with the same stream power, the
+     * same [ErosionConfig.outletIncisionRatio] and the same units — see
+     * `SeaLevelStage.drainDrownedBasins`. One limit is lifted: inside the rounds the notch may
+     * never cut below the sea, which is the base level a river grades to, but the water behind one
+     * of these sills stands *below* the sea and the river flowing over the sill is grading to
+     * that. So the cut may reach the waterline, and where the outflow has the power to take it
+     * there, the sill becomes water and the basin is an arm of the sea — a sound, or a ria with a
+     * narrow mouth, which is the Bosphorus and the Black Sea. Where it has not, the sill stands and
+     * the basin keeps whatever the water balance then allows it: a lake below sea level, which is
+     * the Caspian, the Dead Sea and the Qattara.
+     *
+     * Off is the control the guard needs, and reproduces the H5 world exactly.
+     */
+    val postCutOutlet: Boolean = true
 )
 
 @Serializable

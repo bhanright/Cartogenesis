@@ -217,7 +217,6 @@ fun CartogenesisApp(platform: Platform) {
                 WorldActions(
                     busy = busy,
                     status = status,
-                    labelMode = labelMode,
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
                     seed = config.seed,
@@ -228,8 +227,7 @@ fun CartogenesisApp(platform: Platform) {
                     },
                     onToggleLibrary = {
                         screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
-                    },
-                    onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
+                    }
                 )
             }
 
@@ -344,7 +342,14 @@ fun CartogenesisApp(platform: Platform) {
                     onResetNation = { id -> overrides = overrides.withNation(id, NationOverride()) },
                     onEditLandmark = { id, transform ->
                         overrides = overrides.withLandmark(id, transform(overrides.forLandmark(id)))
-                    }
+                    },
+                    config = config,
+                    onConfig = { config = it },
+                    options = options,
+                    onOptions = { options = it },
+                    busy = busy,
+                    labelMode = labelMode,
+                    onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
                 )
             } else {
                 MapView(
@@ -637,15 +642,13 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
 private fun WorldActions(
     busy: Boolean,
     status: String,
-    labelMode: Boolean,
     atlasLabel: String,
     libraryLabel: String,
     seed: Long,
     onSeed: (Long) -> Unit,
     onNewWorld: () -> Unit,
     onToggleAtlas: () -> Unit,
-    onToggleLibrary: () -> Unit,
-    onToggleLabels: () -> Unit
+    onToggleLibrary: () -> Unit
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleMedium)
     SeedField(seed = seed, busy = busy, onSeed = onSeed)
@@ -659,9 +662,6 @@ private fun WorldActions(
         OutlinedButton(onClick = onToggleLibrary, enabled = !busy, contentPadding = TIGHT) {
             Text(libraryLabel, maxLines = 1)
         }
-    }
-    OutlinedButton(onClick = onToggleLabels, enabled = !busy, contentPadding = TIGHT) {
-        Text(if (labelMode) "Done labelling" else "Place a label", maxLines = 1)
     }
     Text(
         status.ifBlank { "Generating the first world…" },
@@ -745,17 +745,6 @@ private fun WorldSettings(
         )
     }
 
-    Labelled("Points of interest", "${config.landmarks.count}") {
-        Slider(
-            value = config.landmarks.count.toFloat(),
-            onValueChange = {
-                onConfig(config.copy(landmarks = config.landmarks.copy(count = it.roundToInt())))
-            },
-            valueRange = 0f..200f,
-            enabled = !busy
-        )
-    }
-
     Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         WildernessMode.entries.forEach { mode ->
             FilterChip(
@@ -774,7 +763,6 @@ private fun WorldSettings(
     Toggle("Rivers", options.showRivers) { onOptions(options.copy(showRivers = it)) }
     Toggle("Relief shading", options.showHillshade) { onOptions(options.copy(showHillshade = it)) }
     Toggle("Realm borders", options.bordersVisible) { onOptions(options.copy(showBorders = it)) }
-    Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
     Toggle("Lakes", options.showLakes) { onOptions(options.copy(showLakes = it)) }
 }
 
@@ -884,10 +872,10 @@ private fun OutputOptions(
 }
 
 /** Buttons here carry longer words than Material assumes, in narrower panels than it assumes. */
-private val TIGHT = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+internal val TIGHT = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
 
 @Composable
-private fun Labelled(label: String, value: String, content: @Composable () -> Unit) {
+internal fun Labelled(label: String, value: String, content: @Composable () -> Unit) {
     Column(Modifier.padding(top = 8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodyMedium)
@@ -898,7 +886,7 @@ private fun Labelled(label: String, value: String, content: @Composable () -> Un
 }
 
 @Composable
-private fun Toggle(
+internal fun Toggle(
     label: String,
     checked: Boolean,
     enabled: Boolean = true,

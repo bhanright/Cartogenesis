@@ -24,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,9 +36,12 @@ import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.LandmarkOverride
 import com.cartogenesis.cartography.MapPalette
 import com.cartogenesis.cartography.NationOverride
+import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.ResolvedLandmark
 import com.cartogenesis.cartography.ResolvedNation
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
+import kotlin.math.roundToInt
 
 /**
  * The atlas, laid out for a desktop window.
@@ -55,90 +59,138 @@ fun AtlasPane(
     onEditNation: (Int, (NationOverride) -> NationOverride) -> Unit,
     onResetNation: (Int) -> Unit,
     onEditLandmark: (Int, (LandmarkOverride) -> LandmarkOverride) -> Unit,
+    config: WorldGenConfig,
+    onConfig: (WorldGenConfig) -> Unit,
+    options: RenderOptions,
+    onOptions: (RenderOptions) -> Unit,
+    busy: Boolean,
+    labelMode: Boolean,
+    onToggleLabels: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier.fillMaxSize()) {
-        Surface(Modifier.width(320.dp).fillMaxHeight(), tonalElevation = 1.dp) {
-            LazyColumn(contentPadding = PaddingValues(12.dp)) {
-                item {
-                    Text(
-                        "Realms",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-                items(nations, key = { it.id }) { nation ->
-                    val active = nation.id == selected
-                    Surface(
-                        color = if (active) MaterialTheme.colorScheme.secondaryContainer
-                        else Color.Transparent,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp)
-                            .clickable { onSelect(nation.id) }
-                    ) {
-                        Row(
-                            Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+    Column(modifier.fillMaxSize()) {
+        AtlasSettings(config, options, busy, labelMode, onConfig, onOptions, onToggleLabels)
+        HorizontalDivider()
+        Row(Modifier.fillMaxSize()) {
+            Surface(Modifier.width(320.dp).fillMaxHeight(), tonalElevation = 1.dp) {
+                LazyColumn(contentPadding = PaddingValues(12.dp)) {
+                    item {
+                        Text(
+                            "Realms",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    items(nations, key = { it.id }) { nation ->
+                        val active = nation.id == selected
+                        Surface(
+                            color = if (active) MaterialTheme.colorScheme.secondaryContainer
+                            else Color.Transparent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
+                                .clickable { onSelect(nation.id) }
                         ) {
-                            Box(
-                                Modifier.size(14.dp)
-                                    .background(Color(MapPalette.nation(nation.id)), CircleShape)
+                            Row(
+                                Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    Modifier.size(14.dp)
+                                        .background(Color(MapPalette.nation(nation.id)), CircleShape)
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(nation.name, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "${nation.government} · ${people(nation.population)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (nation.edited) {
+                                    Text(
+                                        "•",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (landmarks.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Landmarks",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                             )
-                            Column(Modifier.weight(1f)) {
-                                Text(nation.name, style = MaterialTheme.typography.bodyLarge)
+                        }
+                        items(landmarks, key = { "lm-${it.id}" }) { landmark ->
+                            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                Text(landmark.name, style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    "${nation.government} · ${people(nation.population)}",
+                                    "${landmark.kind.label} · ${landmark.detail}" +
+                                        if (landmark.inWilderness) " · wild" else "",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (nation.edited) {
-                                Text(
-                                    "•",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            }
                         }
                     }
                 }
+            }
 
-                if (landmarks.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Landmarks",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
-                    }
-                    items(landmarks, key = { "lm-${it.id}" }) { landmark ->
-                        Column(Modifier.fillMaxWidth().padding(10.dp)) {
-                            Text(landmark.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "${landmark.kind.label} · ${landmark.detail}" +
-                                    if (landmark.inWilderness) " · wild" else "",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+            val nation = nations.firstOrNull { it.id == selected }
+            if (nation == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (nations.isEmpty()) "No realms — raise the realm count."
+                        else "Pick a realm.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+            } else {
+                NationDetail(nation, onEditNation, onResetNation)
             }
         }
+    }
+}
 
-        val nation = nations.firstOrNull { it.id == selected }
-        if (nation == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    if (nations.isEmpty()) "No realms — raise the realm count."
-                    else "Pick a realm.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+/**
+ * Everything about the atlas that is not the map itself: how many points of interest to generate,
+ * whether to draw them, and placing the reader's own labels. These used to sit in the main panel
+ * beside the settings that shape the map, which made the atlas look load-bearing when it is really
+ * a half-finished side feature — so they live here instead, under the button that opens this pane.
+ */
+@Composable
+private fun AtlasSettings(
+    config: WorldGenConfig,
+    options: RenderOptions,
+    busy: Boolean,
+    labelMode: Boolean,
+    onConfig: (WorldGenConfig) -> Unit,
+    onOptions: (RenderOptions) -> Unit,
+    onToggleLabels: () -> Unit
+) {
+    Surface(tonalElevation = 1.dp) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Atlas settings", style = MaterialTheme.typography.titleMedium)
+            Labelled("Points of interest", "${config.landmarks.count}") {
+                Slider(
+                    value = config.landmarks.count.toFloat(),
+                    onValueChange = {
+                        onConfig(config.copy(landmarks = config.landmarks.copy(count = it.roundToInt())))
+                    },
+                    valueRange = 0f..200f,
+                    enabled = !busy
                 )
             }
-        } else {
-            NationDetail(nation, onEditNation, onResetNation)
+            Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
+            OutlinedButton(onClick = onToggleLabels, enabled = !busy, contentPadding = TIGHT) {
+                Text(if (labelMode) "Done labelling" else "Place a label", maxLines = 1)
+            }
         }
     }
 }

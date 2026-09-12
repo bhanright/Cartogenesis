@@ -36,8 +36,8 @@ class RiftSegmentationTest {
 
     /**
      * Thresholds, measured before they were written down; both tests print the figures they were
-     * taken from. Segmented, seed 59758 at 512 gives 3 bodies of sea, 6 land bridges and a flooded
-     * width whose coefficient of variation along strike is 0.43, with 76% of the trough under
+     * taken from. Segmented, seed 59758 at 512 gives 3 bodies of sea, 4 land bridges and a flooded
+     * width whose coefficient of variation along strike is 0.32, with 82% of the corridor under
      * water; unsegmented the same rift gives 1 body, no land bridges and 0.03, 98% flooded end to
      * end at a width that barely moves. What is asserted is "several" of each and a variation an
      * order of magnitude above the canal's, not the measured figures themselves.
@@ -45,7 +45,7 @@ class RiftSegmentationTest {
      * The width is measured as the flooded share of the trough's cross-section rather than as a
      * raw count of cells, because a station's cell count wobbles by a cell or two with the
      * geometry of the walk and that wobble is noise on the question being asked. The raw-count
-     * figure is printed alongside: 0.75 against 0.63, which is the same comparison with the noise
+     * figure is printed alongside: 0.67 against 0.63, which is the same comparison with the noise
      * left in, and nearly unable to tell the two worlds apart.
      */
     private val minSeaBodies = 3

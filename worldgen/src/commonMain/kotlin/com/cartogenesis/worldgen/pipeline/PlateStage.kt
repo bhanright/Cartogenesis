@@ -442,6 +442,13 @@ object PlateStage {
                                         // The accommodation zone itself: ground that rises between
                                         // two half-grabens, which is where the sill and the land
                                         // bridge between two gulfs come from.
+                                        //
+                                        // Its height is what E1's outlet notch has to saw through
+                                        // where a rift stands on land, so it is deliberately
+                                        // modest: a sill high enough to dam a half-graben for
+                                        // twelve rounds of erosion leaves a lake the notch cannot
+                                        // drain, which on seed 43 came out nearly twice the
+                                        // Caspian's share of the map.
                                         val sill = cfg.riftSillHeight * strength *
                                             (1f - segment.taper) *
                                             beltFalloff(d, cfg.riftShoulderOffset)

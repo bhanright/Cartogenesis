@@ -222,7 +222,7 @@ data class TectonicsConfig(
      * map's width. Through it the trough's depth tapers to nothing and its asymmetry to symmetry,
      * so neighbouring half-grabens of opposite polarity meet without a step.
      */
-    val riftAccommodation: Float = 0.022f,
+    val riftAccommodation: Float = 0.016f,
     /**
      * Spread of the per-segment depth factor on [riftDepth]: a segment's trough is between
      * `1 - this` and `1 + this` times as deep as the nominal rift. This is what decides which
@@ -242,7 +242,7 @@ data class TectonicsConfig(
      * Height of the sill in an accommodation zone, in normalized elevation units — the ground that
      * rises between two half-grabens and becomes the land bridge between two gulfs.
      */
-    val riftSillHeight: Float = 0.09f,
+    val riftSillHeight: Float = 0.075f,
     /**
      * Share of plates that carry a hotspot — a point fixed in the mantle that the plate drifts
      * over, leaving a line of seamounts behind it.

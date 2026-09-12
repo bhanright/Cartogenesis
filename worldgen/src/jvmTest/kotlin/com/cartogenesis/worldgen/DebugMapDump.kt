@@ -102,6 +102,46 @@ class DebugMapDump {
     }
 
     /**
+     * H2: where the ice went, and where it stayed.
+     *
+     * Biomes for the three standard seeds at 512, before (`snowBalance = false`, ice wherever the
+     * annual mean is below -8 C) and after (a snow balance). Elevation alongside, because the
+     * question the renders answer is not only how much ice there is but whether what is left is in
+     * the places a glacier belongs — the wet highlands and the poles — rather than smeared over
+     * every cold interior.
+     */
+    @Test
+    fun `dump the H2 ice before and after`() {
+        outputDir.mkdirs()
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val after = WorldGenerationEngine.generateBlocking(base)
+            val before = WorldGenerationEngine.generateBlocking(
+                base.copy(climate = base.climate.copy(snowBalance = false))
+            )
+            write(render(before, Mode.BIOME), "seed$seed-h2-before-biome.png")
+            write(render(after, Mode.BIOME), "seed$seed-h2-after-biome.png")
+            write(render(after, Mode.ELEVATION), "seed$seed-h2-after-elevation.png")
+            listOf("before" to before, "after" to after).forEach { (tag, world) ->
+                val tally = HashMap<Biome, Int>()
+                for (i in world.climate.biome.indices) {
+                    if (world.sea.isLand[i]) {
+                        tally[world.climate.biome[i]] = (tally[world.climate.biome[i]] ?: 0) + 1
+                    }
+                }
+                val land = world.sea.landCellCount
+                println(
+                    "H2 render seed $seed $tag: " + tally.entries.sortedByDescending { it.value }
+                        .joinToString(", ") {
+                            "${it.key} ${"%.1f".format(it.value * 100.0 / land)}%"
+                        }
+                )
+            }
+        }
+        println("H2 renders written to ${outputDir.absolutePath}")
+    }
+
+    /**
      * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), before
      * (`currentMoisture = 0`, today's field) and after (the default 0.07/deg). Annual rainfall and
      * biome only, since the effect is on the annual march's over-sea pickup rather than anything
@@ -295,7 +335,11 @@ class DebugMapDump {
 
         // What each plate boundary is building, by crust pair: an Andean margin, a collision
         // plateau, an island arc, a spreading ridge, a continental rift or a transform fault.
-        BOUNDARY_CLASS
+        BOUNDARY_CLASS,
+
+        // H1: how long ago each cell's crust was last built, from the present epoch's belts
+        // through the older ones to the cratonic ground no epoch ever deformed.
+        CRUST_AGE
     }
 
     /**
@@ -728,6 +772,56 @@ class DebugMapDump {
      * at. The chosen corners are printed so a before-and-after pair can be checked to be looking
      * at the same ground.
      */
+    /**
+     * H1, before and after: the same worlds with the tectonic history off and on.
+     *
+     * "Off" is `historyEpochs = 1`, which is the generator this chunk replaced bit for bit, so the
+     * pair of elevation maps is a genuine before-and-after of the same seed rather than two
+     * different worlds. The plates view says where the present boundaries are, and the crust-age
+     * view says which epoch built which country — the picture to look for is an old worn range
+     * standing well inside a plate interior, with a young sharp one on the edge beyond it.
+     */
+    @Test
+    fun `dump the tectonic history`() {
+        outputDir.mkdirs()
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                .atResolution(1024, 1024)
+            listOf(1 to "before", base.tectonics.historyEpochs to "after").forEach { (epochs, tag) ->
+                val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
+                val world = WorldGenerationEngine.generateBlocking(config)
+                write(render(world, Mode.ELEVATION), "history-seed$seed-1024-$tag-elevation.png")
+                write(render(world, Mode.PLATES), "history-seed$seed-1024-$tag-plates.png")
+                write(render(world, Mode.FANTASY), "history-seed$seed-1024-$tag-fantasy.png")
+                if (epochs > 1) {
+                    write(render(world, Mode.CRUST_AGE), "history-seed$seed-1024-crustage.png")
+                }
+
+                // How much of the land each epoch built, and how much of it is cratonic — the
+                // tally behind the pictures.
+                val k = config.tectonics.historyEpochs.coerceAtLeast(1)
+                val bands = IntArray(k + 1)
+                var land = 0
+                for (i in world.sea.isLand.indices) {
+                    if (!world.sea.isLand[i]) continue
+                    land++
+                    val age = world.plates.crustAge.data[i]
+                    bands[if (age >= 1f) k else (age * k).toInt().coerceIn(0, k - 1)]++
+                }
+                val text = (0 until k).joinToString(" ") {
+                    "%d-ago %d%%".format(it, bands[it] * 100 / land.coerceAtLeast(1))
+                }
+                println(
+                    "HISTORYMAP seed %d %s: %d%% land, %d rivers, crust %s cratonic %d%%".format(
+                        seed, tag, (world.landFraction() * 100).toInt(),
+                        world.rivers.rivers.size, text, bands[k] * 100 / land.coerceAtLeast(1)
+                    )
+                )
+            }
+        }
+        println("History maps written to ${outputDir.absolutePath}")
+    }
+
     @Test
     fun `dump the distance field edges`() {
         outputDir.mkdirs()
@@ -1028,6 +1122,16 @@ class DebugMapDump {
                             if (land) 0xF2EFE6 else 0xB6C6D2,
                             fade
                         )
+                    }
+
+                    // Warm where the crust is young and cold where it is old, with cratonic
+                    // ground left grey: the map of what built each piece of country and when.
+                    Mode.CRUST_AGE -> {
+                        val age = world.plates.crustAge.data[i]
+                        val tint = if (age >= 1f) 0x8C8C86
+                        else if (age < 0.5f) mix(0xC1272D, 0xE0A020, age * 2f)
+                        else mix(0xE0A020, 0x2E6B8C, (age - 0.5f) * 2f)
+                        if (land) tint else mix(tint, 0x14202C, 0.62f)
                     }
 
                     Mode.BIOME -> biomeColor(world.climate.biome[i])

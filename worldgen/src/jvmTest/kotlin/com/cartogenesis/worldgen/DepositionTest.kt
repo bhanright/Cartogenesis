@@ -109,6 +109,10 @@ class DepositionTest {
      * the land count above (which *has* stayed put across all eight changes, because none of them
      * moved the shoreline), the structural cases below (mass conservation, deltas gaining land),
      * and the off-equals-on-at-zero-rates identity — is unchanged.
+     *
+     * H1 (the tectonic history) is the ninth such change and the largest of them, and it is the
+     * first that did not have to touch this file: land held at 6226 for the ninth time, for the
+     * reason it has held every other time.
      */
     private val startingPointLand = 6226
 

@@ -165,6 +165,10 @@ internal object WorldSections {
             ints = world.plates.nearestBoundaryClass
         ),
         Section("plates.height", SectionType.F32, floats = world.plates.height.data),
+        // H1. How long ago each cell's crust was last built. Not derivable from anything else in
+        // the file — it is the record of epochs that left no other trace — and H3 reads it, so it
+        // is written like any other per-cell array rather than recomputed on open.
+        Section("plates.crustAge", SectionType.F32, floats = world.plates.crustAge.data),
         Section("erosion.height", SectionType.F32, floats = world.erosion.height.data),
         Section("sea.isLand", SectionType.U8, raw = ByteArray(world.sea.isLand.size) {
             if (world.sea.isLand[it]) 1 else 0
@@ -236,7 +240,11 @@ internal object WorldSections {
             // Added by B2. A save written before it has the other four and not this one, which is
             // exactly the case D4 exists for: the stage counts as absent and is regenerated,
             // rather than the reader taking it as present and then failing to find the section.
-            "plates.nearestBoundaryClass", "plates.height"
+            "plates.nearestBoundaryClass", "plates.height",
+            // Added by H1, and here for the same reason: a save written before the tectonic
+            // history has every other section of this stage and not this one, so the stage counts
+            // as absent and is regenerated rather than half-built.
+            "plates.crustAge"
         ),
         GenerationStage.EROSION to listOf("erosion.height"),
         GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
@@ -393,7 +401,8 @@ internal object WorldSections {
                 boundaryDistance = field("plates.boundaryDistance"),
                 nearestBoundaryType = ints("plates.nearestBoundaryType"),
                 nearestBoundaryClass = ints("plates.nearestBoundaryClass"),
-                height = field("plates.height")
+                height = field("plates.height"),
+                crustAge = field("plates.crustAge")
             )
         } else null
 

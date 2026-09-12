@@ -86,15 +86,35 @@ relief to 0.010 across the twelve rounds, where with `outletIncision` off it end
 where it started. What the map keeps is bounded by a figure with a meaning — no world has a lake
 larger than the Caspian's 0.073% share of its surface, where two seeds in four did before.
 
-**Cold country is lake country.** Where the provisional mean annual temperature — latitude and
-altitude, from the same curve `ClimateStage` later uses — falls to freezing, ice takes over the
-valleys the water cut: a flat-floored U-shaped trough across the flow instead of a V, a cirque
-bitten out of every head, a staircase of over-deepened basins whose spacing is set by descent
-rather than distance, a recessional moraine barring the valley at the lower end of each reach and a
-terminal moraine at the snout. The signature is the standing water that leaves behind, because a
-river network cannot leave a hollow in its own bed and ice does nothing else: on seed 42
-`GlaciationTest` measures 52 lakes per 42,000 cells of ice, tundra and taiga against 3 per 30,000
-cells of temperate country — 12.5 times the density, against 0.0 times with the ice switched off.
+**A glacier is where the snow outlasts the year, not where it is cold.** Ice used to be simply
+"the mean annual temperature is at or below freezing", which made an ice sheet of every cold
+interior — 41.9% of seed 7's land, against the 10.1% of Earth's that carries glacier ice, nearly
+all of it in two places. `SnowBalance` weighs the two things that actually decide it, out of the
+four seasonal fields the climate stage already computes: accumulation, the share of each half
+year's precipitation that falls with that half year below freezing, and ablation, a positive
+degree-day melt at 4.5 mm water equivalent per degree-day (the middle of the published 3-5 for
+snow) with the seasonal means turned into degree-days by Calov and Greve's closed form for a
+normal spread of daily temperature about a mean. Ice is where the year ends in surplus. Siberia is
+colder than the Norwegian coast in every month and has no ice sheet because nothing falls on it,
+and that distinction is now available to the map: pooled over seeds 7, 42, 1234 and 99 the ice
+share of land falls from 28.8% to 9.2%, and at one summer temperature the wettest quarter of the
+land carries ice on every seed while the driest quarter carries none.
+
+**Cold country is lake country — and the cold that made it is not today's.** Where the ice is, it
+takes over the valleys the water cut: a flat-floored U-shaped trough across the flow instead of a
+V, a cirque bitten out of every head, a staircase of over-deepened basins whose spacing is set by
+descent rather than distance, a recessional moraine barring the valley at the lower end of each
+reach and a terminal moraine at the snout. But the ground that shows those landforms on Earth —
+Finland, the Canadian Shield, the Lake District, the Finger Lakes — carries no glacier now and has
+not for ten thousand years. So the mask the carving works from is the snow balance of a *colder*
+world, `GlaciationConfig.glacialMaximumC`: the last glacial maximum's 6.1 C of global mean cooling
+(Tierney et al. 2020), applied as the latitude ramp the proxies describe rather than as a uniform
+shift, since the tropics cooled 1.5-3 C and the high latitudes 10-20. That puts 26% of seed 42's
+land under ice at the maximum against Earth's roughly 25%, while the map still draws today's 4%.
+The signature is the standing water the ice leaves behind, because a river network cannot leave a
+hollow in its own bed and ice does nothing else: on seed 42 at 1024 `GlaciationTest` measures 9
+glacial lakes in 130,000 cells of ice, tundra and taiga against 2 with the ice switched off, in
+country whose temperate half holds none at all.
 
 **A dry basin is not a full one.** Depression filling raises every closed basin to its spill level,
 which is the right answer to a routing question and the wrong answer to a hydrological one: the
@@ -305,6 +325,15 @@ from tundra by moisture exactly as the old `t < 7` branch was; warmest above 10�
 above −3°C is temperate (C), keeping every existing moisture class including the Mediterranean one.
 The tropical line is Köppen's own, a coldest month at or above 18°C, taken verbatim.
 
+Above all of them sits the ice gate, and it is no longer thermal at all: H2 replaced "annual mean
+below −8°C" with `SnowBalance`'s surplus, so a cell falls through to the aridity line and the
+thermal groups unless a year's snow actually outlives the year. What that took away from ice it
+gave to tundra — on seed 7, ice 41.9% → 8.4% of land and tundra 17.9% → 50.3% — and to alpine
+where the ground stands high enough (0.2% → 1.3% on the same seed). Every other class is unmoved
+to within a tenth of a percent, which is the point: the change is about what the ice was hiding,
+not about the moisture axis. Sea ice is untouched, because frozen sea water is not a mass
+balance.
+
 Reading the coldest month at all needed the latitude curve to actually reach it: at the exponent
 seasons landed with, 45° — the effective latitude a 55° coast's summer reads off, one
 `seasonalTilt` equatorward — sat at a mere 6.8°C, below the 10°C tree line regardless of any
@@ -451,6 +480,49 @@ measurement with `crustPairProfiles` off — one belt profile for every converge
 before — returns 0.6x, the margin then being the broader of the two because the old code gave an
 oceanic-continental boundary four fifths of the height at the same width. Per seed the plateau is
 68–72 cells across at half height against the margin's 10–16.
+
+## Boundaries that are gone
+
+A drift vector that only classifies today's boundaries builds a world in which nothing has ever
+moved. Every range is young, every range is high, and every range sits exactly on a plate edge.
+Earth's continents are not like that: most of a continent is the wreckage of collisions whose
+boundary closed long ago. The Appalachians and the Urals are Palaeozoic sutures a thousand
+kilometres from any modern plate edge, worn to about half of Alpine height and spread over a wider
+province than the Alps occupy; the Benue trough, the North Sea graben and the Mississippi embayment
+are rifts that opened, stopped, and filled with their own sediment.
+
+So the stage runs itself several times. Each past epoch carries every plate seed back along minus
+its own drift, re-partitions the map into that older set of plates, classifies the pairs that met
+*then* by the same crust rules — the crusts themselves do not change, only which pairs meet and how
+squarely — and stamps the same five profiles. What it stamps is then aged: the height decays by
+roughly half per epoch, every belt half-width grows by half again, and the epoch's own uplift is
+blurred before it is added, so a crest and a toe become the smooth swell of a worn range. The
+present epoch stamps last and sharpest, and its boundaries, distances and classes are untouched, so
+everything downstream still reads today's plate edges where they are.
+
+A rift of a past epoch is not aged, it is buried: the fault dies, the flexural shoulders relax and
+the trough fills, leaving the broad shallow sag an aulacogen is rather than the chain of half-grabens
+a live rift is.
+
+The result also carries an **age of crust** per cell — how long ago the ground under it was last
+built, in bands that cannot overlap, with cratonic country no epoch ever deformed at the far end.
+Measured on seeds 7, 42 and 1234, a third of the map is present-epoch belt, a fifth to a quarter
+belongs to each older epoch, and 12–23% of the land is cratonic. Nothing reads it yet; it is the
+field [H3 Lithology](REALISM_PLAN.md#h3-lithology--opus) will erode by.
+
+Verified by `TectonicHistoryTest`, which isolates a past epoch's uplift by differencing two worlds
+brought into one frame on the cells no epoch touched, and measures it by the same radial profile
+`BoundaryPairTest` uses — against that epoch's own boundaries, since the boundary that built it has
+since moved. Pooled over the three seeds an old belt stands 2.2 times below a present one and is
+1.5 times broader at half height, and the tallest ground the history builds more than 52 cells from
+any present boundary (twice `boundaryFalloff`, about 1,200 km) stands 0.08–0.14 in normalized
+elevation. With the history switched off that difference field is identically zero and the guard
+finds nothing at all.
+
+One thing the blur must not do is close the gaps. A belt sags to nothing between massifs by design,
+and an isotropic blur wide enough to weld those saddles shut turns a worn province into one
+continuous upland — which is bad geography and, downstream, a corridor one people walks the length
+of. The blur radius is held below the saddle spacing for that reason.
 
 ## Not modelled, and probably shouldn't be
 

@@ -83,7 +83,18 @@ data class PlateResult(
      */
     val nearestBoundaryClass: IntArray,
     /** Terrain height with tectonic uplift applied, normalized to 0..1. */
-    val height: FloatField
+    val height: FloatField,
+    /**
+     * How long ago the crust under each cell was last built, from 0 (an active belt of the present
+     * epoch) to 1 (cratonic ground no epoch in the history ever deformed).
+     *
+     * The bands are unambiguous by construction: with `historyEpochs` epochs, a cell whose most
+     * recent orogeny was `n` epochs ago lands in `[n/K, (n+1)/K)`, and only untouched crust reads
+     * exactly 1. That is what lets a consumer tell an Appalachian belt from an Alpine one without
+     * measuring either, and it is why H3 gets an *age* rather than an erodibility: what a shield,
+     * a worn orogen and an active one should erode like is that chunk's question, not this one's.
+     */
+    val crustAge: FloatField
 )
 
 /**
@@ -159,6 +170,22 @@ object PlateStage {
         var segment: RiftSegment? = null
     )
 
+    /**
+     * The four noise fields every belt profile reads, built once and shared by every epoch.
+     *
+     * Shared on purpose: the swell of a belt along its own length, the jitter of its rim and the
+     * spacing of its volcanoes are properties of the ground, not of the epoch that happened to
+     * raise it, so an old belt and a young one crossing the same country swell in the same places.
+     * Reseeding per epoch would also have made a one-epoch history a different world from the
+     * generator this chunk replaced, which it must not be.
+     */
+    private class BeltNoise(seed: Long) {
+        val ridge = PerlinNoise(seed * 104729 + 5)
+        val range = PerlinNoise(seed * 104729 + 911)
+        val width = PerlinNoise(seed * 104729 + 1733)
+        val arc = PerlinNoise(seed * 104729 + 2477)
+    }
+
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
         val w = config.width
         val h = config.height
@@ -166,21 +193,96 @@ object PlateStage {
         val rnd = Random(config.seed * 7919 + 13)
 
         val plates = createPlates(cfg, w, h, rnd)
-        val plateId = assignPlates(config, plates)
-        val boundaries = classifyBoundaries(w, h, plateId, plates)
-        segmentRifts(config, boundaries)
 
-        // Euclidean, by jump flooding: every belt profile below is a function of this distance,
-        // so a metric whose contours are octagons hands its facets to the plateau rims and the
-        // trench walls. See [JumpFloodDistance].
-        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
-        val label = IntArray(w * h) { -1 }
-        boundaries.keys.forEach { cell ->
-            dist[cell] = 0f
-            label[cell] = cell
+        // The history: [TectonicsConfig.historyEpochs] configurations of the same plates, stamped
+        // oldest first so the modern belts lie over the worn ones rather than under them. Only the
+        // present epoch's assignment, distances and classes leave this function; the past epochs
+        // leave nothing behind but the ground they built and their mark on `crustAge`.
+        val epochs = cfg.historyEpochs.coerceAtLeast(1)
+        val noise = BeltNoise(config.seed)
+        val uplift = FloatField(w, h)
+        val crustAge = FloatField(w, h)
+        crustAge.data.fill(1f)
+
+        var plateId = IntArray(0)
+        var dist = FloatArray(0)
+        var nearestType = IntArray(0)
+        var nearestClass = IntArray(0)
+
+        for (epoch in 0 until epochs) {
+            val epochsAgo = epochs - 1 - epoch
+            val present = epochsAgo == 0
+
+            // Minus the drift, times the age: where these plates came from, not where they are
+            // headed. The crusts themselves do not change — a continent does not become an ocean
+            // floor between epochs — but which pairs meet, and how squarely, does.
+            val epochPlates =
+                if (present) plates else displacedPlates(plates, cfg.epochDrift * epochsAgo, w, h)
+            val epochPlateId = assignPlates(config, epochPlates)
+            val boundaries = classifyBoundaries(w, h, epochPlateId, epochPlates)
+            // Segmentation is a live rift's structure. A failed one is a filled sag (see the
+            // CONTINENTAL_RIFT arm of [stampEpoch]), so only the present epoch is walked — which
+            // also keeps E4's segments, and its guard's figures, exactly as they were.
+            if (present) segmentRifts(config, boundaries)
+
+            // Euclidean, by jump flooding: every belt profile below is a function of this distance,
+            // so a metric whose contours are octagons hands its facets to the plateau rims and the
+            // trench walls. See [JumpFloodDistance].
+            val epochDist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
+            val label = IntArray(w * h) { -1 }
+            boundaries.keys.forEach { cell ->
+                epochDist[cell] = 0f
+                label[cell] = cell
+            }
+            val hasBoundaries = boundaries.isNotEmpty()
+            if (hasBoundaries) JumpFloodDistance.run(w, h, epochDist, label)
+
+            if (present) {
+                plateId = epochPlateId
+                dist = epochDist
+                nearestType = IntArray(w * h) { -1 }
+                nearestClass = IntArray(w * h) { -1 }
+            }
+            if (!hasBoundaries) continue
+
+            // Ageing. Every factor is exactly 1 on the present epoch and the blur is skipped
+            // outright, so a one-epoch history is the pre-H1 arithmetic to the last bit — a
+            // multiply by 1f is the identity in IEEE-754 and a `copy` that multiplies nothing is
+            // never taken.
+            val ageHeight = cfg.beltAgeDecay.pow(epochsAgo)
+            val epochCfg =
+                if (present) cfg else widened(cfg, cfg.beltAgeWidening.pow(epochsAgo))
+            val target = if (present) uplift else FloatField(w, h)
+
+            stampEpoch(
+                config = config,
+                cfg = epochCfg,
+                noise = noise,
+                boundaries = boundaries,
+                label = label,
+                dist = epochDist,
+                plateId = epochPlateId,
+                uplift = target,
+                crustAge = crustAge,
+                ageHeight = ageHeight,
+                epochsAgo = epochsAgo,
+                epochs = epochs,
+                nearestType = if (present) nearestType else null,
+                nearestClass = if (present) nearestClass else null
+            )
+
+            if (!present) {
+                // The profile rounds with age: what was stamped with a crest and a toe comes out
+                // as a swell. Two passes rather than the usual three, because an old range should
+                // read as rounded and not as a stain.
+                BoxBlur.apply(
+                    target,
+                    radius = (cfg.beltAgeBlur * epochsAgo).roundToInt(),
+                    passes = 2
+                )
+                for (i in uplift.data.indices) uplift.data[i] += target.data[i]
+            }
         }
-        val hasBoundaries = boundaries.isNotEmpty()
-        if (hasBoundaries) JumpFloodDistance.run(w, h, dist, label)
 
         val plateBase = FloatField(w, h)
         for (i in plateBase.data.indices) {
@@ -192,15 +294,176 @@ object PlateStage {
         // Softens the step between plate interiors so ocean basins shelve into continents.
         BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloff / 3f).roundToInt().coerceAtLeast(1))
 
-        val ridgeNoise = PerlinNoise(config.seed * 104729 + 5)
-        val rangeNoise = PerlinNoise(config.seed * 104729 + 911)
-        val widthNoise = PerlinNoise(config.seed * 104729 + 1733)
-        val arcNoise = PerlinNoise(config.seed * 104729 + 2477)
-        val uplift = FloatField(w, h)
-        val nearestType = IntArray(w * h) { -1 }
-        val nearestClass = IntArray(w * h) { -1 }
+        stampHotspotChains(config, plates, plateId, uplift)
 
-        if (hasBoundaries) {
+        val weight = cfg.tectonicWeight.coerceIn(0f, 1f)
+        val result = FloatField(w, h)
+
+        // Fine relief, an order of magnitude below anything the eye picks out of the shading. Both
+        // the blurred plate base and the uplift falloff are very smooth, which leaves some plains
+        // locally planar; D8 routing over a plane sends every cell the same way, so rivers there
+        // come out as straight parallel lines that never join. This gives the water something to
+        // converge on.
+        val detailNoise = PerlinNoise(config.seed * 7919 + 13)
+        val detailFrequency = cfg.detailFrequency.toFloat()
+
+        // Position-derived detail noise; every cell writes its own index.
+        parallelChunks(0, h) { startY, endY ->
+            for (y in startY until endY) {
+                for (x in 0 until w) {
+                    val i = y * w + x
+                    val base = terrain.height.data[i] * (1f - weight) +
+                        (0.5f + plateBase.data[i]) * weight
+                    val detail = cfg.detailAmplitude * detailNoise.fbm(
+                        x * detailFrequency / w,
+                        y * detailFrequency / h,
+                        4,
+                        cfg.detailFrequency,
+                        cfg.detailFrequency
+                    )
+                    result.data[i] = base + uplift.data[i] + detail
+                }
+            }
+        }
+        result.normalize()
+
+        return PlateResult(
+            plates, plateId, FloatField(w, h, dist), nearestType, nearestClass, result, crustAge
+        )
+    }
+
+    /**
+     * Where one epoch's boundaries were, and what crust pair each cell's nearest one was — the two
+     * fields [generate] keeps for the present epoch and throws away for the past ones.
+     *
+     * Exists for the guard. An old belt can only be shown to be lower and broader than a young one
+     * if both are measured the same way, and the way `BoundaryPairTest` measures a belt is a mean
+     * radial profile away from the boundary that built it; for a past epoch that boundary is gone
+     * by the time the stage returns. Recomputing it costs one epoch's assignment and one distance
+     * field, which is cheaper and far less misleading than adding a field to [PlateResult] that
+     * nothing in the pipeline would ever read.
+     */
+    internal class EpochBoundaries(
+        /** Cells to the nearest boundary of that epoch. */
+        val distance: FloatArray,
+        /** [BoundaryClass] ordinal of that nearest boundary, or -1 where there was none. */
+        val nearestClass: IntArray
+    )
+
+    internal fun epochBoundaries(config: WorldGenConfig, epochsAgo: Int): EpochBoundaries {
+        val w = config.width
+        val h = config.height
+        val cfg = config.tectonics
+        val plates = createPlates(cfg, w, h, Random(config.seed * 7919 + 13))
+        val epochPlates =
+            if (epochsAgo == 0) plates
+            else displacedPlates(plates, cfg.epochDrift * epochsAgo, w, h)
+        val plateId = assignPlates(config, epochPlates)
+        val boundaries = classifyBoundaries(w, h, plateId, epochPlates)
+
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
+        val label = IntArray(w * h) { -1 }
+        boundaries.keys.forEach { cell ->
+            dist[cell] = 0f
+            label[cell] = cell
+        }
+        if (boundaries.isNotEmpty()) JumpFloodDistance.run(w, h, dist, label)
+
+        val nearestClass = IntArray(w * h) { -1 }
+        for (i in nearestClass.indices) {
+            val boundary = boundaries[label[i]] ?: continue
+            nearestClass[i] = boundary.interaction.pairClass.ordinal
+        }
+        return EpochBoundaries(dist, nearestClass)
+    }
+
+    /**
+     * Every plate seed carried back along minus its own drift by [distance] cells.
+     *
+     * X wraps, because the world is a cylinder. Y clamps, because it is not: a plate whose drift
+     * points at a pole was, far enough back, at the pole and no further, and a seed off the edge
+     * of the grid has no Voronoi cell to own. Two seeds clamped onto the same cell is harmless —
+     * the later id simply takes the cell and the earlier plate has no region in that epoch, which
+     * is a plate that had not yet rifted away from its neighbour.
+     */
+    private fun displacedPlates(
+        plates: List<Plate>,
+        distance: Float,
+        width: Int,
+        height: Int
+    ): List<Plate> = plates.map { plate ->
+        var x = (plate.seedX - plate.driftX * distance).roundToInt() % width
+        if (x < 0) x += width
+        val y = (plate.seedY - plate.driftY * distance).roundToInt().coerceIn(0, height - 1)
+        plate.copy(seedX = x, seedY = y)
+    }
+
+    /**
+     * Every belt half-width, offset and reach in [cfg] multiplied by [factor] — the "broader" half
+     * of ageing.
+     *
+     * Only the lengths move. The heights are handled by one multiply at the point of stamping, and
+     * the dimensionless shares (`plateauFlatShare`, `riftFloorShare`, the rim share) describe the
+     * shape of a profile rather than its size, so a wider belt keeps the same proportions.
+     */
+    private fun widened(cfg: TectonicsConfig, factor: Float): TectonicsConfig = cfg.copy(
+        boundaryFalloff = cfg.boundaryFalloff * factor,
+        andeanWidth = cfg.andeanWidth * factor,
+        arcOffset = cfg.arcOffset * factor,
+        arcWidth = cfg.arcWidth * factor,
+        collisionWidth = cfg.collisionWidth * factor,
+        islandArcOffset = cfg.islandArcOffset * factor,
+        islandArcWidth = cfg.islandArcWidth * factor,
+        riftWidth = cfg.riftWidth * factor,
+        riftShoulderOffset = cfg.riftShoulderOffset * factor,
+        riftShoulderWidth = cfg.riftShoulderWidth * factor
+    )
+
+    /**
+     * One epoch's belts, stamped into [uplift] and recorded in [crustAge].
+     *
+     * This is the per-cell pass that used to be the body of [generate], unchanged except for two
+     * things: what it writes is multiplied by [ageHeight], and every cell it touches at all has
+     * its crust age pulled down to this epoch's band. [cfg] is the epoch's own widened copy, so
+     * every profile below reads the aged width without knowing that it has been aged.
+     *
+     * The age bands: with [epochs] epochs, an epoch [epochsAgo] back owns `[epochsAgo/K,
+     * (epochsAgo+1)/K)`, a cell landing at the bottom of its band where the belt built it
+     * outright and near the top where the belt barely reached. Untouched crust is left at 1. The
+     * bands cannot overlap, so a later consumer can bucket the field without a threshold of its
+     * own — see [PlateResult.crustAge].
+     *
+     * Rule 8 of the plan: this is per-cell arithmetic and so is the ageing blur, and both were
+     * specified with a GPU path in mind. Measured first, as the spec asks — see
+     * `TectonicHistoryTest.report the cost of a history`.
+     */
+    private fun stampEpoch(
+        config: WorldGenConfig,
+        cfg: TectonicsConfig,
+        noise: BeltNoise,
+        boundaries: Map<Int, Boundary>,
+        label: IntArray,
+        dist: FloatArray,
+        plateId: IntArray,
+        uplift: FloatField,
+        crustAge: FloatField,
+        ageHeight: Float,
+        epochsAgo: Int,
+        epochs: Int,
+        nearestType: IntArray?,
+        nearestClass: IntArray?
+    ) {
+        val w = config.width
+        val h = config.height
+        val ridgeNoise = noise.ridge
+        val rangeNoise = noise.range
+        val widthNoise = noise.width
+        val arcNoise = noise.arc
+        val past = epochsAgo > 0
+        val ageBase = epochsAgo.toFloat() / epochs
+        val ageSpan = 1f / epochs
+
+        run {
             val range = cfg.boundaryFalloff
             // The farthest any profile below reaches from its boundary, so a cell out in a plate
             // interior can be skipped before any of the noise is sampled. The widest is whichever
@@ -222,8 +485,8 @@ object PlateStage {
                         val i = y * w + x
                         val boundary = boundaries[label[i]] ?: continue
                         val interaction = boundary.interaction
-                        nearestType[i] = interaction.type.ordinal
-                        nearestClass[i] = interaction.pairClass.ordinal
+                        nearestType?.set(i, interaction.type.ordinal)
+                        nearestClass?.set(i, interaction.pairClass.ordinal)
 
                         val d = dist[i]
                         if (d >= maxReach) continue
@@ -261,13 +524,14 @@ object PlateStage {
                             ((1f - amount) + amount * swollen * 1.9f).coerceIn(0f, 1.9f)
 
                         val strength = interaction.strength
+                        val value: Float
                         if (!cfg.crustPairProfiles) {
                             // The pre-B2 generator: one belt profile for every convergent pair,
                             // whatever the crusts. Kept so `BoundaryPairTest` can measure the
                             // world this chunk replaced rather than take its word for it.
                             val wide = beltFalloff(d, range * widthScale)
                             if (wide <= 0f && narrow <= 0f) continue
-                            uplift.data[i] += when (interaction.type) {
+                            value = when (interaction.type) {
                                 BoundaryType.CONVERGENT ->
                                     if (interaction.continentalCollision) {
                                         cfg.mountainHeight * strength * wide * roughness * alongRange
@@ -288,6 +552,8 @@ object PlateStage {
                                     cfg.mountainHeight * 0.12f * strength * narrow *
                                         (roughness - 0.75f)
                             }
+                            uplift.data[i] += value * ageHeight
+                            recordCrustAge(crustAge, i, value, cfg, ageBase, ageSpan)
                             continue
                         }
 
@@ -314,7 +580,7 @@ object PlateStage {
                             (0.5f + 0.5f * widthNoise.fbm(x * 17f / w, y * 17f / h, 3, 17, 17))
                                 .coerceIn(0f, 1f)
 
-                        uplift.data[i] += when (interaction.pairClass) {
+                        value = when (interaction.pairClass) {
                             // Oceanic under continental. The trench is the subducting plate's and
                             // the range the overriding one's, so the two sides of the same
                             // boundary get quite different ground — which is the asymmetry a
@@ -385,6 +651,21 @@ object PlateStage {
                             BoundaryClass.CONTINENTAL_RIFT ->
                                 if (boundary.oceanicSide) {
                                     cfg.mountainHeight * 0.22f * strength * narrow
+                                } else if (past) {
+                                    // A rift that opened in a past epoch and then stopped. It does
+                                    // not stay a canyon: the fault dies, the flexural shoulders
+                                    // relax, and the trough fills with its own erosion products
+                                    // until what is left is a broad shallow sag — an aulacogen,
+                                    // which is what the Benue trough, the Mississippi embayment
+                                    // and the North Sea graben are. Unsegmented on purpose: the
+                                    // half-grabens that made it a chain of deeps are exactly what
+                                    // the sediment has buried.
+                                    -cfg.riftDepth * cfg.failedRiftFill * strength *
+                                        plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
+                                        cfg.riftShoulderHeight * cfg.failedRiftShoulder *
+                                        strength * ridgeAt(
+                                            d, cfg.riftShoulderOffset, cfg.riftShoulderWidth
+                                        ) * roughness * alongRange
                                 } else {
                                     val segment = boundary.segment
                                     if (segment == null) {
@@ -467,47 +748,36 @@ object PlateStage {
                                 cfg.mountainHeight * 0.12f * strength * narrow *
                                     (roughness - 0.75f)
                         }
+                        uplift.data[i] += value * ageHeight
+                        recordCrustAge(crustAge, i, value, cfg, ageBase, ageSpan)
                     }
                 }
             }
         }
+    }
 
-        stampHotspotChains(config, plates, plateId, uplift)
-
-        val weight = cfg.tectonicWeight.coerceIn(0f, 1f)
-        val result = FloatField(w, h)
-
-        // Fine relief, an order of magnitude below anything the eye picks out of the shading. Both
-        // the blurred plate base and the uplift falloff are very smooth, which leaves some plains
-        // locally planar; D8 routing over a plane sends every cell the same way, so rivers there
-        // come out as straight parallel lines that never join. This gives the water something to
-        // converge on.
-        val detailNoise = PerlinNoise(config.seed * 7919 + 13)
-        val detailFrequency = cfg.detailFrequency.toFloat()
-
-        // Position-derived detail noise; every cell writes its own index.
-        parallelChunks(0, h) { startY, endY ->
-            for (y in startY until endY) {
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    val base = terrain.height.data[i] * (1f - weight) +
-                        (0.5f + plateBase.data[i]) * weight
-                    val detail = cfg.detailAmplitude * detailNoise.fbm(
-                        x * detailFrequency / w,
-                        y * detailFrequency / h,
-                        4,
-                        cfg.detailFrequency,
-                        cfg.detailFrequency
-                    )
-                    result.data[i] = base + uplift.data[i] + detail
-                }
-            }
-        }
-        result.normalize()
-
-        return PlateResult(
-            plates, plateId, FloatField(w, h, dist), nearestType, nearestClass, result
-        )
+    /**
+     * Pulls one cell's crust age down to this epoch's band, in proportion to how hard the epoch
+     * worked on it.
+     *
+     * A running minimum over the epochs, which is what makes the field the age of the *most
+     * recent* event rather than of the first: the present epoch stamps last, so wherever a modern
+     * belt overprints an old one the young age wins. A cell the epoch left untouched (a value of
+     * exactly zero, which is what every cell outside every profile's reach gets) is not claimed at
+     * all, so cratonic ground keeps the 1 it started with.
+     */
+    private fun recordCrustAge(
+        crustAge: FloatField,
+        i: Int,
+        value: Float,
+        cfg: TectonicsConfig,
+        ageBase: Float,
+        ageSpan: Float
+    ) {
+        if (value == 0f) return
+        val influence = (abs(value) / cfg.crustAgeReference).coerceAtMost(1f)
+        val age = ageBase + (1f - influence) * ageSpan
+        if (age < crustAge.data[i]) crustAge.data[i] = age
     }
 
     /**

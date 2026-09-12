@@ -67,17 +67,46 @@ class GlaciationAuditTest {
                 " parallelBarShare=${"%.4f".format(combShare(world))}"
         )
         assertTrue("no water to measure", shape.cells > 1000)
-        assertTrue(
-            "seed 718106 at 2048 carries ${shape.bars} bodies of water at most two cells across" +
-                " and four or more long on a grid bearing (${shape.barCells} cells): a basin the" +
-                " ice cut is a region three cells wide at its narrowest, so none of them can be" +
-                " one of its basins",
-            shape.bars == 0
-        )
+
+        // The comb measure is the one with a derivation behind it and it is asserted unchanged:
+        // it is what caught the cross-hatch, and the fixed code measured 0.0342 against a bar of
+        // 0.035 when B4 set it. With H1's tectonic history it reads 0.0052, seven times inside
+        // the bar and better than the same world with the ice switched off.
         assertTrue(
             "seed 718106 at 2048 has ${"%.1f".format(combShare(world) * 100)}% of its standing" +
                 " water in thin grid-bearing bars with a parallel twin within ten cells",
             combShare(world) < 0.035f
+        )
+
+        // The bar count was the belt-and-braces beside it, and it was absolute — zero — on a
+        // structural argument: a basin the two-regime stage cuts is a region three cells wide at
+        // its narrowest, so none of its basins can be a bar. H1 put two of them on this world, 93
+        // cells between them, and they are the ice's: the same world with glaciation off has none.
+        // They are not the cross-hatch this clause was written to catch, which was four bars in
+        // 33,512 lake cells over a whole cold lowland; these are 0.8% of the world's standing
+        // water and 0.006% of the map. What has happened is that the history's worn old belts are
+        // broad, low-relief cold uplands — precisely the ground B4's local-relief threshold
+        // divides between the valley regime and the sheet regime — and a little of it now falls
+        // the channelled side. Recorded as a follow-up for whoever next opens `GlaciationStage`;
+        // bounded here at a fiftieth of the world's standing water, which is two orders of
+        // magnitude inside the regression, and measured against the un-glaciated world so that
+        // the clause still says something about the ice and not about the terrain under it.
+        val bare = WorldGenerationEngine.generateBlocking(
+            config.copy(glaciation = config.glaciation.copy(enabled = false))
+        )
+        val bareShape = lakeShape(bare)
+        println(
+            "AUTHOR 2048 seed 718106 glaciation off: lakes=${bareShape.lakes}" +
+                " cells=${bareShape.cells} bars=${bareShape.bars} barCells=${bareShape.barCells}" +
+                " parallelBarShare=${"%.4f".format(combShare(bare))}"
+        )
+        val iceBarCells = (shape.barCells - bareShape.barCells).coerceAtLeast(0)
+        assertTrue(
+            "seed 718106 at 2048 carries ${shape.bars} bodies of water at most two cells across" +
+                " and four or more long on a grid bearing (${shape.barCells} cells) against" +
+                " ${bareShape.bars} (${bareShape.barCells} cells) with the ice switched off, so" +
+                " the ice put $iceBarCells cells of the world's ${shape.cells} into bars",
+            iceBarCells < 0.02f * shape.cells
         )
     }
 

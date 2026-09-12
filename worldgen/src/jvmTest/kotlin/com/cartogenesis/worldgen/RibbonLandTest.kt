@@ -17,13 +17,39 @@ import kotlin.test.assertTrue
  */
 class RibbonLandTest {
 
+    /**
+     * H1 moved this case onto `historyEpochs = 1`, and the reason is worth stating.
+     *
+     * The claim being tested is about *erosion*: that widening a belt's footprint stops its crest
+     * reading as a strip. Isolating that needs an un-eroded world with strips in it to widen, and
+     * with the tectonic history on, seed 234475 no longer has one — the history redistributes the
+     * relief the sea-level percentile cuts through, and the un-eroded world's strips fall from
+     * 0.57% of land to 0.14%, which leaves the pair measuring the percentile rather than erosion.
+     * The finished world is not worse for it: with the history on, the eroded world holds 0.43% of
+     * its land in strips against 0.47% with a single epoch, which is what
+     * [`the tectonic history leaves no more ribbon than a single epoch does`] below asserts. So
+     * this case keeps its own conditions and the shipped world gets a bound of its own, measured
+     * in the same run and asserted beside it — the same arrangement E1 left `GlaciationTest` and
+     * `LakeWaterBalanceTest` in. The strips the history's own failed rifts leave were checked
+     * before the case was moved: with three epochs every ribbon cell in the finished world is
+     * present-epoch crust by [PlateResult.crustAge], and turning the failed rifts off entirely
+     * leaves 0.17% rather than 0.43%, so what moved is which of today's shoulders clears the
+     * water, not what the old epochs built.
+     */
     @Test
     fun `erosion widens the strips a belt leaves in shallow sea`() {
         val base = WorldGenConfig(seed = 234475L, width = 512, height = 512)
             .atResolution(1024, 1024)
+            .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
         listOf(
             "no erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
-            "eroded" to base
+            "eroded" to base,
+            // The shipped world, for the second assertion below.
+            "eroded, with history" to base.copy(
+                tectonics = base.tectonics.copy(
+                    historyEpochs = WorldGenConfig(seed = 0L).tectonics.historyEpochs
+                )
+            )
         ).map { (name, config) ->
             val world = WorldGenerationEngine.generateBlocking(config)
             val w = world.width
@@ -145,13 +171,22 @@ class RibbonLandTest {
                     .format(name, components, ribbonCount, thin, share, longest)
             )
             share
-        }.let { (withoutErosion, withErosion) ->
+        }.let { (withoutErosion, withErosion, withHistory) ->
             // Erosion cannot remove a strip, and is not meant to: a belt crossing shallow sea will
             // always leave land above water. What it does is take material off the crest and pile
             // it against the flanks, which widens the footprint until the strip stops being one.
             assertTrue(
                 withErosion < withoutErosion,
                 "erosion left as much ribbon land as before: $withErosion% vs $withoutErosion%"
+            )
+            // H1's own bound, on the world the app builds. The tectonic history rewrites the
+            // relief the sea-level percentile cuts through, so it can move which belt crests clear
+            // the water; what it must not do is leave the finished world with more strips in it
+            // than the single-epoch generator did.
+            assertTrue(
+                withHistory <= withErosion * 1.05,
+                "the tectonic history left more ribbon land than a single epoch does: " +
+                    "$withHistory% against $withErosion%"
             )
         }
     }

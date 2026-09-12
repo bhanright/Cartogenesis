@@ -70,12 +70,17 @@ internal data class GlacialMass(
  * the terrain, so terrain that ice is going to carve has to be carved before the climate reads it,
  * or the biomes, the rivers and the lakes would all be answers about a world that no longer exists.
  *
- * The way out is that the two things ice depends on — latitude and altitude — are both known the
- * moment sea level is. So this stage computes a *provisional* mean annual temperature from
- * [ClimateStage.buildTemperature], the very function the climate stage will later use, and freezes
- * what that says is frozen. What it cannot see is the maritime and current anomalies climate adds
- * afterwards, so the mask is a little generous on a coast washed by a warm current. Tidewater
- * glaciers live on exactly such coasts, so the error runs the forgiving way.
+ * The way out is that everything ice depends on can be computed before this stage runs, because
+ * the climate stage reads only the terrain and the terrain is already here. So the engine runs a
+ * whole *provisional* climate — the same temperature curve, the same maritime and current
+ * anomalies, the same two seasonal moisture marches, all of it [ClimateStage]'s own code — on the
+ * pre-glaciation terrain, and hands this stage the snow balance that comes out of it. Ice is where
+ * that balance is positive. The final climate still runs after the carving, on the carved terrain,
+ * and it is the one the map shows; the provisional one exists only to say where the ice was.
+ *
+ * Before H2 the mask was cruder: a provisional mean annual temperature at or below freezing, which
+ * cannot tell a snowy highland from a frozen desert and so froze every cold interior on the map.
+ * That rule is still here, behind `ClimateConfig.snowBalance`, as the control the guard needs.
  *
  * ### Two regimes, decided by relief
  *
@@ -136,8 +141,16 @@ internal data class GlacialMass(
  */
 object GlaciationStage {
 
-    fun apply(config: WorldGenConfig, sea: SeaLevelResult): SeaLevelResult =
-        apply(config, sea, onBudget = null)
+    fun apply(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        /**
+         * The provisional snow balance, in millimetres of water equivalent a year, or null to fall
+         * back to the pre-H2 temperature mask. See [snowBalance] and
+         * [ClimateStage.provisionalSnowBalance].
+         */
+        snowBalance: FloatField? = null
+    ): SeaLevelResult = apply(config, sea, snowBalance, onBudget = null)
 
     /**
      * @param onBudget handed this stage's mass tally on the way out. An observer, like erosion's:
@@ -146,6 +159,7 @@ object GlaciationStage {
     internal fun apply(
         config: WorldGenConfig,
         sea: SeaLevelResult,
+        snowBalance: FloatField?,
         onBudget: ((GlacialMass) -> Unit)?
     ): SeaLevelResult {
         val cfg = config.glaciation
@@ -159,13 +173,31 @@ object GlaciationStage {
         val isLand = sea.isLand
         val relative = sea.relativeElevation.data
 
-        val temperature = ClimateStage.buildTemperature(config, sea)
+        // Where the ice is. Two rules, and which one applies is `ClimateConfig.snowBalance`:
+        //
+        //  - the balance, when the engine has run a provisional climate and handed one over. A
+        //    cell is frozen where a year's snow outlasts a year's melt, so a cold dry interior is
+        //    bare ground with no glacier to carve it and a wet maritime highland carries ice a
+        //    long way down its flanks. That is the H2 mask.
+        //  - the pre-H2 rule otherwise: a provisional annual mean at or below
+        //    [GlaciationConfig.freezingC], which called every cold place frozen whether or not
+        //    any snow ever reached it.
         var frozenCount = 0
         val frozen = BooleanArray(size)
-        for (i in 0 until size) {
-            if (isLand[i] && temperature.data[i] <= cfg.freezingC) {
-                frozen[i] = true
-                frozenCount++
+        if (snowBalance != null) {
+            for (i in 0 until size) {
+                if (isLand[i] && snowBalance.data[i] > 0f) {
+                    frozen[i] = true
+                    frozenCount++
+                }
+            }
+        } else {
+            val temperature = ClimateStage.buildTemperature(config, sea)
+            for (i in 0 until size) {
+                if (isLand[i] && temperature.data[i] <= cfg.freezingC) {
+                    frozen[i] = true
+                    frozenCount++
+                }
             }
         }
         if (frozenCount == 0) return sea

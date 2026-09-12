@@ -430,11 +430,13 @@ re-applied to `main` by hand.* Behaviour-preserving by construction, which is wh
   pointer left behind (`See REALISM_PLAN.md, H5.`); magic numbers become named constants with
   their derivation; comments that narrate mechanics line by line go; a short `CODE_STYLE.md`
   records the rules so later agents follow them (and rule 9 points at it).
-- **What must not change.** Serialised names: every `@Serializable` property in
-  `WorldGenConfig`, the save header and the overrides keeps its wire name via `@SerialName` if the
-  Kotlin name moves, so every 1.x and 2.0 save opens unchanged. Shader source names are theirs.
-  Public entry points the web page and the desktop launcher call are renamed only with their
-  callers.
+- **What must not change.** Shader source names are theirs. Public entry points the web page and
+  the desktop launcher call are renamed only with their callers. Serialised names *may* change:
+  William ruled on 2026-09-12 that save compatibility is not required while nothing has been
+  distributed and he holds no saves he cares about ("if we can save time and work by starting
+  from a clean slate that's fine"), so a renamed `@Serializable` property takes its proper name
+  outright and the codec's format version is bumped so an older file is refused clearly rather
+  than misread. Compatibility becomes a requirement the day the program is distributed.
 - **Guards.** World fingerprints (`WorldFingerprintTest` and the FINGERPRINT lines CI prints)
   bit-identical before and after on the standard seeds at 512 and on 718106 and 59758 at 2048 —
   a rename that moves a bit is not a rename; a 2.0.0 save opens and exports byte-identically
@@ -964,9 +966,9 @@ can be made in the meantime."*
   N1 and N2 alongside; P2 and V3 last. G1 and H3 finish before 3.0 begins if they have not
   already.
 - **What 3.0 must show.** The Earth-likeness suite green on the standard seeds; both of William's
-  worlds at 2048 and 4096 reviewed crop by crop against the 2.0 renders; 2.0 saves open unchanged
-  (a save carries its world, so a 3.0 build never regenerates a 2.0 world unless asked; the same
-  seed generated afresh under 3.0 is a different world, and the release notes say so).
+  worlds at 2048 and 4096 reviewed crop by crop against the 2.0 renders. 2.0 saves need not open
+  in 3.0 (William, 2026-09-12: nothing distributed, no saves worth keeping); the release notes say
+  so, and the same seed generated afresh under 3.0 is a different world.
 
 ## Track G — more of the pipeline on the graphics card
 

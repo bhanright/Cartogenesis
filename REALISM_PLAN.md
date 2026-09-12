@@ -607,6 +607,47 @@ toolbar of nine names, and a graphics-card switch for a device without WebGPU.
   the web bundle builds; and William checks it on his phone, because no capture tells you how a
   bottom sheet feels.
 
+### F6. Five more chromes, and a map style that survives colour blindness — Opus
+
+*Dependencies: F5 (same files). Requested 2026-09-12: "high contrast", "colorblind", "allied",
+"hallowed", "baroque" application themes, "what those look like is entirely up to you", plus a
+colour-blind-compatible map theme.* Each chrome is a complete Material scheme in `Theme.kt` in
+the F1 pattern (surfaceTint = surface, faces from the theme, no per-control styling), selectable
+in Settings and the View menu alongside System/Light/Dark/Nautical/Midnight/Mars.
+
+- **High contrast.** Pure black ground, pure white text, 2 dp rules and borders instead of
+  hairlines, a single accent of saturated blue (#1A6EFF) for the current item and focus, no
+  translucency anywhere (the map toolbar and legend strips go opaque), type one step larger.
+  Guard: every text-on-ground pair in the scheme at or above WCAG AAA (7:1), asserted.
+- **Colorblind.** A chrome that never carries meaning by hue alone: neutral warm greys with the
+  Okabe–Ito orange (#E69F00) for the current item and sky blue (#56B4E9) for focus, and every
+  state that was hue-only (the current style, the armed generate button, a disabled chip) also
+  gets a shape cue: an underline, a filled rather than outlined border, a strike. Guard: the
+  scheme's accent pairs stay distinguishable under simulated deuteranopia and protanopia (the
+  Machado 2009 matrices) by a stated CIEDE2000 margin.
+- **Allied.** A 1940s Army Map Service sheet: buff paper ground (#D9CBA3), olive-drab panels
+  (#4B5320), ivory text, the grid-numeral red (#B22222) as accent, rules in dark navy ink, the
+  display face set in small capitals, the cartouche boxed like a map margin.
+- **Hallowed.** An illuminated manuscript: deep lapis ground (#1B2A5B), ivory-vellum panels
+  (#F1E9D2) with ink text, gold-leaf accent (#C9A227 warmed to #D4AF37), a crimson secondary
+  (#8A1C1C) for danger, hairlines doubled in gold on section headings.
+- **Baroque.** A gilt-and-walnut room: walnut ground (#3B2415), cream marble panels (#EFE6D8),
+  oxblood velvet accent (#5D0000, lit #7E1414), gold rules, the display face in italic for
+  headings, double hairlines with a small diamond at the ends of section rules (the rule the site
+  already draws in CSS).
+- **Map style `MapStyle.CLEAR` ("Colour-blind").** Water in one dark slate (#1F2A3A) so it never
+  competes with land; land tints along a cividis-style ramp (dark olive lowland through amber to
+  pale yellow highland, white above the snowline) which stays ordered under both deuteranopia and
+  protanopia; a 1-cell black coastline; rivers in white so they read on every tint; lakes as the
+  water slate. Realm colours from Paul Tol's 9-colour "muted" set, and beyond nine realms the same
+  set with a hatch pattern (the raster already hatches for Ink wash), so no two realms differ by
+  hue alone. Biome and diagnostic views keep their colours. Guard: every adjacent pair of ramp
+  stops and every pair of realm fills, under both simulations, at or above a stated CIEDE2000
+  margin, asserted; the style renders every view at 512 and joins `StyleGalleryTest` and
+  `GpuRasterTest` (palette-only, so the GPU raster is identical).
+- Screenshots of the window in each of the five chromes, and the fantasy and political views in
+  the CLEAR style, captured by `ChromeGalleryTest`/`StyleGalleryTest` and reviewed.
+
 ## Track G — more of the pipeline on the graphics card
 
 *Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the
@@ -1014,6 +1055,7 @@ guard reported, so the next chunk knows its baseline.
 | F3 The map is the instrument | Opus | done | 2026-09-12 | 01d7e16 + 3034cec (merge, see log) | translucent toolbar over the map: nine styles as a segmented row, views as a menu (fifteen names run past 1300 dp); legend strip at the foot: cartouche (generated world name from the largest people's language via NameForge, seed, size, generation time as a footnote - 'largest realm' dropped at William's request) and zoom/Fit; Export folded into the header, right column gone, map takes the width; a Name field beside the seed (WorldNaming: generated per seed, editable, stored as the save's title, kept across settings edits, round-trips through the codec header); graphics-card switch moved to the header under Working resolution; 8192 export chip disabled with a note behind Platform.exportCeiling = 4096 and Exports.clamp; ui/desktop tests green, PanelKnobsTest + 6 toolbar/camera, CartoucheTest 6, 4 ceiling and 5 naming tests |
 | F4 Menus, settings, updates, notices | Opus | done | 2026-09-12 | 72b666a (merge 4b05eef) | menu strip drawn once in :ui (File: New world, Open library, Save, Save as, Export, Settings, Quit on desktop; View: theme System/Light/Dark/Nautical/Midnight/Mars, sections, toolbar; Help: Check for updates, About), declared as data in Menus.kt with MenusTest; desktop shortcuts Ctrl+N/O/S/Shift+S/E/,/Q; SettingsStore on the seam (desktop %APPDATA%\Cartogenesis\settings.json via temp-and-rename, web localStorage) with theme, resolution, card at launch, export defaults clamped by exportCeiling, library folder, scale, check-at-launch, reset; SettingsEffects tested by effect (10 + 5 desktop, including nothing reaches the network at launch); BuildInfo generated from gradle.properties; Updates.evaluate on the releases JSON with UpdatesTest (9, no socket); Notices.kt generated from the jvm and wasmJs runtime graphs plus LWJGL and the two OFL faces, 98 entries, NoticesTest; MapStyle.MARS (basalt sea, faint scarp coast, dark channels, rust-ochre-dust-white land, palette-only so the GPU raster is identical) and a Mars chrome; twelve screenshots. Found: no LICENSE file in the repo - About says so; William to decide. Found: OutletResolutionTest red on main since H1 (59758 at 2048, 1.69x Caspian) - handed to H5 |
 | F5 Phones | Opus | in progress | 2026-09-12 | | |
+| F6 Five chromes and a colour-blind map style | Opus | queued behind F5 | | | |
 | G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
 | G2 Export rendering on GPU | Opus | done | 2026-09-12 | 8dca89f | RasterAccelerator seam in cartography takes a RasterRecipe (colours and tables pre-packed, no palette logic in shaders); desktop GpuRaster on OpenGL compute, web left to a later WGSL port; every view and style, relief, coastline, borders, lakes, hatching; 4M-pixel tiles, fields uploaded once; GlContext extracted from GpuErosion (two contexts on one thread invalidate each other's programs), erosion arithmetic untouched; 99.9th-percentile drift 0 across 141.5M pixels, worst channel 2 on 0.0002% (GLSL sqrt at a ramp node); 4096 export 224 -> 210 s, raster 714 -> 368 ms - the raster was never the bottleneck, generation is; 8192 exhausts a 10 GB heap inside the generator before a pixel is drawn (the device rasters 8192 in 0.9 s); README export table corrected |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |

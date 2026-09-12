@@ -96,6 +96,37 @@ measures material incised against material deposited plus material carried out t
 twelve rounds on seed 42, and finds them equal to the last float. No cell is ever raised as high as
 the ground draining into it, so deposition cannot invent an uphill river.
 
+**A delta is a fan, and its outline is a curve.** Every fan this stage lays — the lobe at a river
+mouth, the cone at a lake inflow — is grown from its apex by a graph walk whose rim is
+`R·(sides + (1 − sides)·max(cos θ, 0))·(1 + a·s(θ))`, with θ measured from the direction the river
+was travelling when it arrived and `s` a wobble of four harmonics (orders two, three, five and
+seven) whose phases are a splitmix hash of the seed and the mouth. The distance compared against it
+is the true Euclidean distance from the apex, never the walk's own step count: over eight
+neighbours a step count is the Chebyshev metric and its iso-lines are squares, which is why the
+lacustrine fans used to cover the whole `2R+1` square around their inflow and leave flat rafts with
+right-angle corners when the water went away, and why a lobe that did shape itself by a cosine came
+out as a half-disc with its corners pulled along the diagonals. Measured at 512 on the author's two
+worlds, the share of a fan's perimeter lying in a straight grid-axis run longer than one lobe reach
+falls from 2.0% and 1.8% to 0.7% and 0.0%; at 2048, where the square a lacustrine fan takes is
+forty-nine cells on a side rather than thirteen, the longest single straight run of new coast falls
+from 34 cells to 13 on seed 718106 and from 30 to 15 on 59758. Of a lobe's rim measured about its
+own apex on open water, max against min is at least 3.1 where a half-disc gives 1.06, and the two
+sides of it differ by at least 10% of its mean radius where every shape a compass can draw about an
+axis gives under 4%.
+
+**A delta reaches further over a shelf than into deep water.** The cost of advancing into a cell is
+one, plus one for every 1.5% of the land's relief of water standing over it — 130 m against eight
+kilometres, which is Earth's shelf break, and Earth's shelf break is where it is because that is
+roughly where the shoreline stood at the last glacial maximum, the same figure `SeaConfig.lowstand`
+uses. So a lobe spends its budget on shallow ground and progrades across a shelf the way the Nile
+has, and stubs into a trench the way a delta at the head of a fjord does. On a synthetic coast with
+a shelf on one side of the mouth and water thirty times deeper on the other, the lobe reaches 3.1
+times further over the shelf; with the depth term off, 1.02 times. A lobe of more than four cells'
+reach also carries two to five distributary grooves radiating from its apex — hashed from the
+mouth, so the same delta has the same channels at every resolution — and any groove whose ray would
+run into the back of the coast rather than reach the water is not cut, because a channel that ends
+in a pit is not a channel.
+
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as
 the one piece of ground on the map the water never touched, so a tectonic hollow stayed a lake the

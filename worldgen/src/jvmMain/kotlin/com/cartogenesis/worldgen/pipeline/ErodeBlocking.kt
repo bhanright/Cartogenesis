@@ -29,3 +29,10 @@ internal fun erodeBlocking(
     height: FloatField,
     onRound: (RoundMass) -> Unit
 ): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, onRound) }
+
+/** As above, recording which mechanism laid sediment where, for the fan-outline guards. */
+internal fun erodeBlocking(
+    config: WorldGenConfig,
+    height: FloatField,
+    log: DepositionLog
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, null, log) }

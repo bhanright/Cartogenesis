@@ -2,6 +2,10 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.DepositionLog
+import com.cartogenesis.worldgen.pipeline.PlateStage
+import com.cartogenesis.worldgen.pipeline.TerrainStage
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -34,6 +38,27 @@ class DeltaMouthTest {
 
     private val seeds = listOf(59758L, 42L, 7L, 1234L)
 
+    /**
+     * Which cells the sea-mouth lobe built, from the same erosion the world was cut from.
+     *
+     * The measurement below used to be taken over every cell that became land, and E5 showed that
+     * conflates two mechanisms with nothing to do with each other. Measured on the four seeds at
+     * 512 with each cell's mechanism recorded: of the ground a *delta* laid, 0.4-1.2% has nowhere
+     * downhill; of the ground the *floodplain* laid along the coast, 8-23% has, and that figure is
+     * the same before and after E5 because E5 does not touch the floodplain. So a chunk that makes
+     * deltas smaller — which E5 does, by half, because a lobe no longer reaches into deep water —
+     * moves a measurement of the two pooled together without making a single delta flatter.
+     *
+     * The floodplain's own flats are real and are recorded in `TODO.md`; the cure is the receiver
+     * clamp H5b is fitting to the incision loop, not a change to the fan.
+     */
+    private fun lobeOf(config: WorldGenConfig, deltaLobe: Boolean): BooleanArray {
+        val cfg = config.copy(erosion = config.erosion.copy(deltaLobe = deltaLobe))
+        val log = DepositionLog(cfg.width * cfg.height)
+        erodeBlocking(cfg, PlateStage.generate(cfg, TerrainStage.generate(cfg)).height, log)
+        return BooleanArray(log.mechanism.size) { log.mechanism[it] == DepositionLog.SEA_LOBE }
+    }
+
     @Test
     fun `a delta slopes to the sea, where it used to be a slab`() {
         var controlStranded = 0
@@ -50,26 +75,30 @@ class DeltaMouthTest {
             )
 
             val cap = (2 * config.erosion.deltaReach + 1) * (2 * config.erosion.deltaReach + 1)
-            val was = Delta(before, bare, config.seaLevel, cap)
-            val now = Delta(after, bare, config.seaLevel, cap)
-            val floor = Delta(bare, bare, config.seaLevel, cap).inPocket
+            val was = Delta(before, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = false))
+            val now = Delta(after, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = true))
+            val floor = Delta(bare, bare, config.seaLevel, cap, BooleanArray(0)).inPocket
             controlStranded += was.stranded
             controlPockets += if (was.inPocket > floor) 1 else 0
             // 0.05 until H5, which moved every coastline on the map: the lowstand cuts the lower
             // valleys deeper and the sea then floods them, and water the ocean cannot reach below
             // the size of the largest lake Earth has is no longer sea at all. The old lobe's flat
-            // share now measures 5.2/6.6/4.0/4.4% on the four seeds where it was above 5% on all
-            // of them, and the sloping lobe's 0.8/0.8/1.2/1.1%. The bar moves under the worst of
-            // the four rather than the claim weakening: what is asserted is still the halving, and
-            // it is a fivefold fall.
+            // share measured 5.2/6.6/4.0/4.4% over all new land where it was above 5% on all of
+            // them, and the sloping lobe's 0.8/0.8/1.2/1.1%. E5 narrowed the measure to the ground
+            // the *delta* laid — see `lobeOf` — and the slab still fails it on every seed by a
+            // wider margin than before: 5.5/5.6/5.1/4.2%, against the sloping lobe's
+            // 1.1/0.6/0.8/0.6%. The bar stays where H5 left it. What is asserted is still the
+            // halving, and it is a fivefold to eightfold fall.
             if (was.flat > 0.03) controlFlat++
 
             println(
-                ("DELTA seed %d: rivers ending on a delta but not on open water %d -> %d; new " +
-                    "land with nowhere downhill %.1f%% -> %.1f%%; mouths in a pocket of any kind " +
-                    "%d -> %d, against %d with no deposition at all; pockets with delta land on " +
-                    "their shore %d -> %d").format(
+                ("DELTA seed %d: rivers ending on a delta but not on open water %d -> %d; delta " +
+                    "ground with nowhere downhill %.1f%% -> %.1f%% (over all new land of any " +
+                    "origin, %.1f%% -> %.1f%%); mouths in a pocket of any kind %d -> %d, against " +
+                    "%d with no deposition at all; pockets with delta land on their shore " +
+                    "%d -> %d").format(
                     seed, was.stranded, now.stranded, was.flat * 100, now.flat * 100,
+                    was.flatAnywhere * 100, now.flatAnywhere * 100,
                     was.inPocket, now.inPocket, floor, was.pockets, now.pockets
                 )
             )
@@ -93,7 +122,7 @@ class DeltaMouthTest {
             // Earth has, and a rift gulf is far larger than that and stays a gulf.
             assertTrue(
                 now.flat <= was.flat / 2,
-                "seed $seed: the new land at the mouths went from ${was.flat * 100}% with nowhere " +
+                "seed $seed: the delta ground at the mouths went from ${was.flat * 100}% with nowhere " +
                     "downhill to ${now.flat * 100}%, which is not the halving a sloping lobe owes"
             )
         }
@@ -119,11 +148,18 @@ class DeltaMouthTest {
      * elevation rank rather than at their own histogram thresholds, so what is measured is where
      * the land is rather than how much of it there is.
      */
-    private class Delta(world: WorldMap, bare: WorldMap, seaLevel: Float, cap: Int) {
+    private class Delta(
+        world: WorldMap,
+        bare: WorldMap,
+        seaLevel: Float,
+        cap: Int,
+        lobe: BooleanArray
+    ) {
         val stranded: Int
         val pockets: Int
         val inPocket: Int
         val flat: Double
+        val flatAnywhere: Double
 
         init {
             val w = world.width
@@ -200,14 +236,21 @@ class DeltaMouthTest {
             val height = world.erosion.height.data
             var gainedCells = 0
             var stuck = 0
+            var lobeCells = 0
+            var lobeStuck = 0
             for (i in 0 until size) {
                 if (!gained[i]) continue
                 gainedCells++
                 var lower = false
                 forEachNeighbour(w, h, i) { n -> if (height[n] < height[i]) lower = true }
                 if (!lower) stuck++
+                if (lobe[i]) {
+                    lobeCells++
+                    if (!lower) lobeStuck++
+                }
             }
-            flat = if (gainedCells == 0) 0.0 else stuck.toDouble() / gainedCells
+            flat = if (lobeCells == 0) 0.0 else lobeStuck.toDouble() / lobeCells
+            flatAnywhere = if (gainedCells == 0) 0.0 else stuck.toDouble() / gainedCells
         }
 
         private fun exactLandMask(height: FloatArray, seaLevel: Float): BooleanArray {

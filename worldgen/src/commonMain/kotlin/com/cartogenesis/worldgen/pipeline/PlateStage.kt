@@ -91,8 +91,9 @@ data class PlateResult(
      * The bands are unambiguous by construction: with `historyEpochs` epochs, a cell whose most
      * recent orogeny was `n` epochs ago lands in `[n/K, (n+1)/K)`, and only untouched crust reads
      * exactly 1. That is what lets a consumer tell an Appalachian belt from an Alpine one without
-     * measuring either, and it is why H3 gets an *age* rather than an erodibility: what a shield,
-     * a worn orogen and an active one should erode like is that chunk's question, not this one's.
+     * measuring either, and it is why this is an *age* rather than an erodibility: what a shield,
+     * a worn orogen and an active one should erode like is the lithology stage's question, not
+     * this one's. See REALISM_PLAN.md, H1 and H3.
      */
     val crustAge: FloatField
 )
@@ -187,27 +188,27 @@ object PlateStage {
     }
 
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
-        val w = config.width
-        val h = config.height
-        val cfg = config.tectonics
-        val rnd = Random(config.seed * 7919 + 13)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val tectonics = config.tectonics
+        val random = Random(config.seed * 7919 + 13)
 
-        val plates = createPlates(cfg, w, h, rnd)
+        val plates = createPlates(tectonics, cellsAcross, cellsDown, random)
 
         // The history: [TectonicsConfig.historyEpochs] configurations of the same plates, stamped
         // oldest first so the modern belts lie over the worn ones rather than under them. Only the
         // present epoch's assignment, distances and classes leave this function; the past epochs
         // leave nothing behind but the ground they built and their mark on `crustAge`.
-        val epochs = cfg.historyEpochs.coerceAtLeast(1)
+        val epochs = tectonics.historyEpochs.coerceAtLeast(1)
         val noise = BeltNoise(config.seed)
-        val uplift = FloatField(w, h)
-        val crustAge = FloatField(w, h)
+        val uplift = FloatField(cellsAcross, cellsDown)
+        val crustAge = FloatField(cellsAcross, cellsDown)
         crustAge.data.fill(1f)
 
         var plateId = IntArray(0)
-        var dist = FloatArray(0)
-        var nearestType = IntArray(0)
-        var nearestClass = IntArray(0)
+        var presentDistanceCells = FloatArray(0)
+        var nearestBoundaryType = IntArray(0)
+        var nearestBoundaryClass = IntArray(0)
 
         for (epoch in 0 until epochs) {
             val epochsAgo = epochs - 1 - epoch
@@ -217,58 +218,74 @@ object PlateStage {
             // headed. The crusts themselves do not change — a continent does not become an ocean
             // floor between epochs — but which pairs meet, and how squarely, does.
             val epochPlates =
-                if (present) plates else displacedPlates(plates, cfg.epochDriftCells * epochsAgo, w, h)
+                if (present) {
+                    plates
+                } else {
+                    displacedPlates(
+                        plates,
+                        tectonics.epochDriftCells * epochsAgo,
+                        cellsAcross,
+                        cellsDown
+                    )
+                }
             val epochPlateId = assignPlates(config, epochPlates)
-            val boundaries = classifyBoundaries(w, h, epochPlateId, epochPlates)
+            val boundaries = classifyBoundaries(cellsAcross, cellsDown, epochPlateId, epochPlates)
             // Segmentation is a live rift's structure. A failed one is a filled sag (see the
             // CONTINENTAL_RIFT arm of [stampEpoch]), so only the present epoch is walked — which
-            // also keeps E4's segments, and its guard's figures, exactly as they were.
+            // also keeps the present segments, and their guard's figures, exactly as they were.
             if (present) segmentRifts(config, boundaries)
 
             // Euclidean, by jump flooding: every belt profile below is a function of this distance,
             // so a metric whose contours are octagons hands its facets to the plateau rims and the
             // trench walls. See [JumpFloodDistance].
-            val epochDist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
-            val label = IntArray(w * h) { -1 }
+            val epochDistanceCells = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
+            val nearestBoundaryCell = IntArray(cellsAcross * cellsDown) { -1 }
             boundaries.keys.forEach { cell ->
-                epochDist[cell] = 0f
-                label[cell] = cell
+                epochDistanceCells[cell] = 0f
+                nearestBoundaryCell[cell] = cell
             }
             val hasBoundaries = boundaries.isNotEmpty()
-            if (hasBoundaries) JumpFloodDistance.run(w, h, epochDist, label)
+            if (hasBoundaries) {
+                JumpFloodDistance.run(
+                    cellsAcross,
+                    cellsDown,
+                    epochDistanceCells,
+                    nearestBoundaryCell
+                )
+            }
 
             if (present) {
                 plateId = epochPlateId
-                dist = epochDist
-                nearestType = IntArray(w * h) { -1 }
-                nearestClass = IntArray(w * h) { -1 }
+                presentDistanceCells = epochDistanceCells
+                nearestBoundaryType = IntArray(cellsAcross * cellsDown) { -1 }
+                nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
             }
             if (!hasBoundaries) continue
 
             // Ageing. Every factor is exactly 1 on the present epoch and the blur is skipped
-            // outright, so a one-epoch history is the pre-H1 arithmetic to the last bit — a
-            // multiply by 1f is the identity in IEEE-754 and a `copy` that multiplies nothing is
-            // never taken.
-            val ageHeight = cfg.beltAgeDecay.pow(epochsAgo)
-            val epochCfg =
-                if (present) cfg else widened(cfg, cfg.beltAgeWidening.pow(epochsAgo))
-            val target = if (present) uplift else FloatField(w, h)
+            // outright, so a one-epoch history is the arithmetic of the generator that had no
+            // history at all, to the last bit — a multiply by 1f is the identity in IEEE-754 and
+            // a `copy` that multiplies nothing is never taken.
+            val ageHeightFactor = tectonics.beltAgeDecay.pow(epochsAgo)
+            val epochTectonics =
+                if (present) tectonics else widened(tectonics, tectonics.beltAgeWidening.pow(epochsAgo))
+            val epochUplift = if (present) uplift else FloatField(cellsAcross, cellsDown)
 
             stampEpoch(
                 config = config,
-                cfg = epochCfg,
+                tectonics = epochTectonics,
                 noise = noise,
                 boundaries = boundaries,
-                label = label,
-                dist = epochDist,
+                nearestBoundaryCell = nearestBoundaryCell,
+                distanceCells = epochDistanceCells,
                 plateId = epochPlateId,
-                uplift = target,
+                uplift = epochUplift,
                 crustAge = crustAge,
-                ageHeight = ageHeight,
+                ageHeightFactor = ageHeightFactor,
                 epochsAgo = epochsAgo,
                 epochs = epochs,
-                nearestType = if (present) nearestType else null,
-                nearestClass = if (present) nearestClass else null
+                nearestBoundaryType = if (present) nearestBoundaryType else null,
+                nearestBoundaryClass = if (present) nearestBoundaryClass else null
             )
 
             if (!present) {
@@ -276,28 +293,28 @@ object PlateStage {
                 // as a swell. Two passes rather than the usual three, because an old range should
                 // read as rounded and not as a stain.
                 BoxBlur.apply(
-                    target,
-                    radius = (cfg.beltAgeBlurCells * epochsAgo).roundToInt(),
+                    epochUplift,
+                    radius = (tectonics.beltAgeBlurCells * epochsAgo).roundToInt(),
                     passes = 2
                 )
-                for (i in uplift.data.indices) uplift.data[i] += target.data[i]
+                for (cell in uplift.data.indices) uplift.data[cell] += epochUplift.data[cell]
             }
         }
 
-        val plateBase = FloatField(w, h)
-        for (i in plateBase.data.indices) {
-            val plate = plates[plateId[i]]
-            plateBase.data[i] =
-                if (plate.type == PlateType.CONTINENTAL) cfg.plateElevationBias / 2f
-                else -cfg.plateElevationBias / 2f
+        val plateBase = FloatField(cellsAcross, cellsDown)
+        for (cell in plateBase.data.indices) {
+            val plate = plates[plateId[cell]]
+            plateBase.data[cell] =
+                if (plate.type == PlateType.CONTINENTAL) tectonics.plateElevationBias / 2f
+                else -tectonics.plateElevationBias / 2f
         }
         // Softens the step between plate interiors so ocean basins shelve into continents.
-        BoxBlur.apply(plateBase, radius = (cfg.boundaryFalloffCells / 3f).roundToInt().coerceAtLeast(1))
+        BoxBlur.apply(plateBase, radius = (tectonics.boundaryFalloffCells / 3f).roundToInt().coerceAtLeast(1))
 
         stampHotspotChains(config, plates, plateId, uplift)
 
-        val weight = cfg.tectonicWeight.coerceIn(0f, 1f)
-        val result = FloatField(w, h)
+        val tectonicWeight = tectonics.tectonicWeight.coerceIn(0f, 1f)
+        val blended = FloatField(cellsAcross, cellsDown)
 
         // Fine relief, an order of magnitude below anything the eye picks out of the shading. Both
         // the blurred plate base and the uplift falloff are very smooth, which leaves some plains
@@ -305,30 +322,36 @@ object PlateStage {
         // come out as straight parallel lines that never join. This gives the water something to
         // converge on.
         val detailNoise = PerlinNoise(config.seed * 7919 + 13)
-        val detailFrequency = cfg.detailFrequency.toFloat()
+        val detailCyclesAcrossMap = tectonics.detailFrequency.toFloat()
 
         // Position-derived detail noise; every cell writes its own index.
-        parallelChunks(0, h) { startY, endY ->
-            for (y in startY until endY) {
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    val base = terrain.height.data[i] * (1f - weight) +
-                        (0.5f + plateBase.data[i]) * weight
-                    val detail = cfg.detailAmplitude * detailNoise.fbm(
-                        x * detailFrequency / w,
-                        y * detailFrequency / h,
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val blendedBase = terrain.height.data[cell] * (1f - tectonicWeight) +
+                        (0.5f + plateBase.data[cell]) * tectonicWeight
+                    val detail = tectonics.detailAmplitude * detailNoise.fbm(
+                        column * detailCyclesAcrossMap / cellsAcross,
+                        row * detailCyclesAcrossMap / cellsDown,
                         4,
-                        cfg.detailFrequency,
-                        cfg.detailFrequency
+                        tectonics.detailFrequency,
+                        tectonics.detailFrequency
                     )
-                    result.data[i] = base + uplift.data[i] + detail
+                    blended.data[cell] = blendedBase + uplift.data[cell] + detail
                 }
             }
         }
-        result.normalize()
+        blended.normalize()
 
         return PlateResult(
-            plates, plateId, FloatField(w, h, dist), nearestType, nearestClass, result, crustAge
+            plates = plates,
+            plateId = plateId,
+            boundaryDistance = FloatField(cellsAcross, cellsDown, presentDistanceCells),
+            nearestBoundaryType = nearestBoundaryType,
+            nearestBoundaryClass = nearestBoundaryClass,
+            height = blended,
+            crustAge = crustAge
         )
     }
 
@@ -345,36 +368,38 @@ object PlateStage {
      */
     internal class EpochBoundaries(
         /** Cells to the nearest boundary of that epoch. */
-        val distance: FloatArray,
+        val distanceCells: FloatArray,
         /** [BoundaryClass] ordinal of that nearest boundary, or -1 where there was none. */
-        val nearestClass: IntArray
+        val nearestBoundaryClass: IntArray
     )
 
     internal fun epochBoundaries(config: WorldGenConfig, epochsAgo: Int): EpochBoundaries {
-        val w = config.width
-        val h = config.height
-        val cfg = config.tectonics
-        val plates = createPlates(cfg, w, h, Random(config.seed * 7919 + 13))
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val tectonics = config.tectonics
+        val plates = createPlates(tectonics, cellsAcross, cellsDown, Random(config.seed * 7919 + 13))
         val epochPlates =
             if (epochsAgo == 0) plates
-            else displacedPlates(plates, cfg.epochDriftCells * epochsAgo, w, h)
+            else displacedPlates(plates, tectonics.epochDriftCells * epochsAgo, cellsAcross, cellsDown)
         val plateId = assignPlates(config, epochPlates)
-        val boundaries = classifyBoundaries(w, h, plateId, epochPlates)
+        val boundaries = classifyBoundaries(cellsAcross, cellsDown, plateId, epochPlates)
 
-        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
-        val label = IntArray(w * h) { -1 }
+        val distanceCells = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
+        val nearestBoundaryCell = IntArray(cellsAcross * cellsDown) { -1 }
         boundaries.keys.forEach { cell ->
-            dist[cell] = 0f
-            label[cell] = cell
+            distanceCells[cell] = 0f
+            nearestBoundaryCell[cell] = cell
         }
-        if (boundaries.isNotEmpty()) JumpFloodDistance.run(w, h, dist, label)
+        if (boundaries.isNotEmpty()) {
+            JumpFloodDistance.run(cellsAcross, cellsDown, distanceCells, nearestBoundaryCell)
+        }
 
-        val nearestClass = IntArray(w * h) { -1 }
-        for (i in nearestClass.indices) {
-            val boundary = boundaries[label[i]] ?: continue
-            nearestClass[i] = boundary.interaction.pairClass.ordinal
+        val nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
+        for (cell in nearestBoundaryClass.indices) {
+            val boundary = boundaries[nearestBoundaryCell[cell]] ?: continue
+            nearestBoundaryClass[cell] = boundary.interaction.pairClass.ordinal
         }
-        return EpochBoundaries(dist, nearestClass)
+        return EpochBoundaries(distanceCells, nearestBoundaryClass)
     }
 
     /**
@@ -388,35 +413,35 @@ object PlateStage {
      */
     private fun displacedPlates(
         plates: List<Plate>,
-        distance: Float,
+        distanceCells: Float,
         width: Int,
         height: Int
     ): List<Plate> = plates.map { plate ->
-        var x = (plate.seedX - plate.driftX * distance).roundToInt() % width
-        if (x < 0) x += width
-        val y = (plate.seedY - plate.driftY * distance).roundToInt().coerceIn(0, height - 1)
-        plate.copy(seedX = x, seedY = y)
+        var wrappedSeedX = (plate.seedX - plate.driftX * distanceCells).roundToInt() % width
+        if (wrappedSeedX < 0) wrappedSeedX += width
+        val clampedSeedY = (plate.seedY - plate.driftY * distanceCells).roundToInt().coerceIn(0, height - 1)
+        plate.copy(seedX = wrappedSeedX, seedY = clampedSeedY)
     }
 
     /**
-     * Every belt half-width, offset and reach in [cfg] multiplied by [factor] — the "broader" half
+     * Every belt half-width, offset and reach in [tectonics] multiplied by [factor] — the wider
      * of ageing.
      *
      * Only the lengths move. The heights are handled by one multiply at the point of stamping, and
      * the dimensionless shares (`plateauFlatShare`, `riftFloorShare`, the rim share) describe the
      * shape of a profile rather than its size, so a wider belt keeps the same proportions.
      */
-    private fun widened(cfg: TectonicsConfig, factor: Float): TectonicsConfig = cfg.copy(
-        boundaryFalloffCells = cfg.boundaryFalloffCells * factor,
-        andeanWidthCells = cfg.andeanWidthCells * factor,
-        arcOffsetCells = cfg.arcOffsetCells * factor,
-        arcWidthCells = cfg.arcWidthCells * factor,
-        collisionWidthCells = cfg.collisionWidthCells * factor,
-        islandArcOffsetCells = cfg.islandArcOffsetCells * factor,
-        islandArcWidthCells = cfg.islandArcWidthCells * factor,
-        riftWidthCells = cfg.riftWidthCells * factor,
-        riftShoulderOffsetCells = cfg.riftShoulderOffsetCells * factor,
-        riftShoulderWidthCells = cfg.riftShoulderWidthCells * factor
+    private fun widened(tectonics: TectonicsConfig, factor: Float): TectonicsConfig = tectonics.copy(
+        boundaryFalloffCells = tectonics.boundaryFalloffCells * factor,
+        andeanWidthCells = tectonics.andeanWidthCells * factor,
+        arcOffsetCells = tectonics.arcOffsetCells * factor,
+        arcWidthCells = tectonics.arcWidthCells * factor,
+        collisionWidthCells = tectonics.collisionWidthCells * factor,
+        islandArcOffsetCells = tectonics.islandArcOffsetCells * factor,
+        islandArcWidthCells = tectonics.islandArcWidthCells * factor,
+        riftWidthCells = tectonics.riftWidthCells * factor,
+        riftShoulderOffsetCells = tectonics.riftShoulderOffsetCells * factor,
+        riftShoulderWidthCells = tectonics.riftShoulderWidthCells * factor
     )
 
     /**
@@ -424,7 +449,8 @@ object PlateStage {
      *
      * This is the per-cell pass that used to be the body of [generate], unchanged except for two
      * things: what it writes is multiplied by [ageHeight], and every cell it touches at all has
-     * its crust age pulled down to this epoch's band. [cfg] is the epoch's own widened copy, so
+     * its crust age pulled down to this epoch's band. [tectonics] is the epoch's own widened copy,
+     * so
      * every profile below reads the aged width without knowing that it has been aged.
      *
      * The age bands: with [epochs] epochs, an epoch [epochsAgo] back owns `[epochsAgo/K,
@@ -439,81 +465,96 @@ object PlateStage {
      */
     private fun stampEpoch(
         config: WorldGenConfig,
-        cfg: TectonicsConfig,
+        tectonics: TectonicsConfig,
         noise: BeltNoise,
         boundaries: Map<Int, Boundary>,
-        label: IntArray,
-        dist: FloatArray,
+        nearestBoundaryCell: IntArray,
+        distanceCells: FloatArray,
         plateId: IntArray,
         uplift: FloatField,
         crustAge: FloatField,
-        ageHeight: Float,
+        ageHeightFactor: Float,
         epochsAgo: Int,
         epochs: Int,
-        nearestType: IntArray?,
-        nearestClass: IntArray?
+        nearestBoundaryType: IntArray?,
+        nearestBoundaryClass: IntArray?
     ) {
-        val w = config.width
-        val h = config.height
+        val cellsAcross = config.width
+        val cellsDown = config.height
         val ridgeNoise = noise.ridge
         val rangeNoise = noise.range
         val widthNoise = noise.width
         val arcNoise = noise.arc
         val past = epochsAgo > 0
-        val ageBase = epochsAgo.toFloat() / epochs
-        val ageSpan = 1f / epochs
+        val ageBandBase = epochsAgo.toFloat() / epochs
+        val ageBandSpan = 1f / epochs
 
         run {
-            val range = cfg.boundaryFalloffCells
+            val beltReachCells = tectonics.boundaryFalloffCells
             // The farthest any profile below reaches from its boundary, so a cell out in a plate
             // interior can be skipped before any of the noise is sampled. The widest is whichever
             // of the belts is broadest once the along-strike width swell is at its maximum.
-            val widest = MAX_WIDTH_SCALE * MAX_EDGE_JITTER
-            val maxReach = maxOf(
-                range * MAX_WIDTH_SCALE,
-                cfg.andeanWidthCells * widest,
-                cfg.collisionWidthCells * widest,
-                cfg.arcOffsetCells + cfg.arcWidthCells,
-                cfg.islandArcOffsetCells + cfg.islandArcWidthCells * widest,
-                cfg.riftShoulderOffsetCells +
-                    cfg.riftShoulderWidthCells * (1f + cfg.riftSegmentShoulderVariation)
+            val widestScale = MAX_WIDTH_SCALE * MAX_EDGE_JITTER
+            val maxReachCells = maxOf(
+                beltReachCells * MAX_WIDTH_SCALE,
+                tectonics.andeanWidthCells * widestScale,
+                tectonics.collisionWidthCells * widestScale,
+                tectonics.arcOffsetCells + tectonics.arcWidthCells,
+                tectonics.islandArcOffsetCells + tectonics.islandArcWidthCells * widestScale,
+                tectonics.riftShoulderOffsetCells +
+                    tectonics.riftShoulderWidthCells * (1f + tectonics.riftSegmentShoulderVariation)
             )
-            // Each cell writes only its own uplift entry, and the roughness comes from position rather than a running RNG, so this splits cleanly across cores.
-            parallelChunks(0, h) { startY, endY ->
-                for (y in startY until endY) {
-                    for (x in 0 until w) {
-                        val i = y * w + x
-                        val boundary = boundaries[label[i]] ?: continue
+            // Each cell writes only its own uplift entry, and the roughness comes from position
+            // rather than a running RNG, so this splits cleanly across cores.
+            parallelChunks(0, cellsDown) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    for (column in 0 until cellsAcross) {
+                        val cell = row * cellsAcross + column
+                        val boundary = boundaries[nearestBoundaryCell[cell]] ?: continue
                         val interaction = boundary.interaction
-                        nearestType?.set(i, interaction.type.ordinal)
-                        nearestClass?.set(i, interaction.pairClass.ordinal)
+                        nearestBoundaryType?.set(cell, interaction.type.ordinal)
+                        nearestBoundaryClass?.set(cell, interaction.pairClass.ordinal)
 
-                        val d = dist[i]
-                        if (d >= maxReach) continue
+                        val distanceFromBoundary = distanceCells[cell]
+                        if (distanceFromBoundary >= maxReachCells) continue
                         // A belt that keeps the same width for its whole length reads as drawn on
                         // even once its height varies, so the width swells and pinches too. The
                         // noise is sampled on position, so neighbouring cells agree and the belt
                         // stays continuous rather than dissolving into blotches.
-                        val widthScale = 0.55f + 0.85f *
-                            (0.5f + 0.5f * widthNoise.fbm(x * 7f / w, y * 7f / h, 3, 7, 7))
-                        val narrow = falloff(d, range * 0.45f)
+                        val widthScale = WIDTH_SWELL_MIN + WIDTH_SWELL_SPAN * (0.5f + 0.5f *
+                            widthNoise.fbm(
+                                column * WIDTH_SWELL_CYCLES / cellsAcross,
+                                row * WIDTH_SWELL_CYCLES / cellsDown,
+                                3,
+                                WIDTH_SWELL_CYCLES.toInt(),
+                                WIDTH_SWELL_CYCLES.toInt()
+                            ))
+                        val narrow = sharpFalloff(
+                            distanceFromBoundary,
+                            beltReachCells * NARROW_SHARE_OF_BELT
+                        )
 
                         // Breaks up the otherwise uniform ridge profile into distinct peaks.
-                        val roughness =
-                            0.75f + 0.5f * ridgeNoise.fbm(x * 12f / w, y * 12f / h, 4, 12, 12)
+                        val roughness = ROUGHNESS_MIN + ROUGHNESS_SPAN * ridgeNoise.fbm(
+                            column * ROUGHNESS_CYCLES / cellsAcross,
+                            row * ROUGHNESS_CYCLES / cellsDown,
+                            4,
+                            ROUGHNESS_CYCLES.toInt(),
+                            ROUGHNESS_CYCLES.toInt()
+                        )
 
                         // Slow variation along the length of a belt. Without it, every convergent
                         // boundary rises to the same height for its entire run — which is the one
                         // thing that makes plate edges read as drawn on rather than grown. Real
                         // ranges swell, sag, and break into separate massifs.
-                        val amount = cfg.rangeVariation.coerceIn(0f, 1f)
-                        val period = cfg.rangeVariationCycles.toInt().coerceAtLeast(1)
+                        val alongStrikeAmount = tectonics.rangeVariation.coerceIn(0f, 1f)
+                        val swellCycles = tectonics.rangeVariationCycles.toInt().coerceAtLeast(1)
                         val swell = rangeNoise.fbm(
-                            x * cfg.rangeVariationCycles / w,
-                            y * cfg.rangeVariationCycles / h,
+                            column * tectonics.rangeVariationCycles / cellsAcross,
+                            row * tectonics.rangeVariationCycles / cellsDown,
                             3,
-                            period,
-                            period
+                            swellCycles,
+                            swellCycles
                         )
                         // Raised to a power so the belt spends more of its length low and rises
                         // into discrete massifs, rather than undulating gently about its mean. A
@@ -521,97 +562,116 @@ object PlateStage {
                         // wall; one that sags near to nothing becomes a chain with gaps in it.
                         val swollen = (0.5f + 0.5f * swell).coerceIn(0f, 1f).pow(1.6f)
                         val alongRange =
-                            ((1f - amount) + amount * swollen * 1.9f).coerceIn(0f, 1.9f)
+                            ((1f - alongStrikeAmount) + alongStrikeAmount * swollen * 1.9f).coerceIn(0f, 1.9f)
 
                         val strength = interaction.strength
-                        val value: Float
-                        if (!cfg.crustPairProfiles) {
-                            // The pre-B2 generator: one belt profile for every convergent pair,
-                            // whatever the crusts. Kept so `BoundaryPairTest` can measure the
-                            // world this chunk replaced rather than take its word for it.
-                            val wide = beltFalloff(d, range * widthScale)
-                            if (wide <= 0f && narrow <= 0f) continue
-                            value = when (interaction.type) {
+                        val upliftHere: Float
+                        if (!tectonics.crustPairProfiles) {
+                            // The generator before the crust pairs: one belt profile for every
+                            // convergent pair, whatever the crusts. Kept so `BoundaryPairTest`
+                            // can measure the world that was replaced rather than take its word
+                            // for it. See REALISM_PLAN.md, B2.
+                            val broadFalloff = beltFalloff(distanceFromBoundary, beltReachCells * widthScale)
+                            if (broadFalloff <= 0f && narrow <= 0f) continue
+                            upliftHere = when (interaction.type) {
                                 BoundaryType.CONVERGENT ->
                                     if (interaction.continentalCollision) {
-                                        cfg.mountainHeight * strength * wide * roughness * alongRange
+                                        tectonics.mountainHeight * strength *
+                                            broadFalloff * roughness * alongRange
                                     } else if (boundary.oceanicSide) {
-                                        -cfg.trenchDepth * strength * narrow
+                                        -tectonics.trenchDepth * strength * narrow
                                     } else {
-                                        cfg.mountainHeight * 0.8f * strength * wide * roughness * alongRange
+                                        tectonics.mountainHeight * OVERRIDING_BELT_SHARE *
+                                            strength * broadFalloff * roughness * alongRange
                                     }
 
                                 BoundaryType.DIVERGENT ->
                                     if (boundary.oceanicSide) {
-                                        cfg.mountainHeight * 0.22f * strength * narrow
+                                        tectonics.mountainHeight * 0.22f * strength * narrow
                                     } else {
-                                        -cfg.mountainHeight * 0.3f * strength * narrow
+                                        -tectonics.mountainHeight * 0.3f * strength * narrow
                                     }
 
                                 BoundaryType.TRANSFORM ->
-                                    cfg.mountainHeight * 0.12f * strength * narrow *
+                                    tectonics.mountainHeight * 0.12f * strength * narrow *
                                         (roughness - 0.75f)
                             }
-                            uplift.data[i] += value * ageHeight
-                            recordCrustAge(crustAge, i, value, cfg, ageBase, ageSpan)
+                            uplift.data[cell] += upliftHere * ageHeightFactor
+                            recordCrustAge(crustAge, cell, upliftHere, tectonics, ageBandBase, ageBandSpan)
                             continue
                         }
 
                         // A plateau that sagged to nothing between massifs would be a chain again,
                         // so it feels only a fraction of the along-strike variation; an island arc
                         // wants the opposite, sagging hard so that only its swells clear the water.
-                        val plateauAmount = (amount * cfg.plateauAlongVariation).coerceIn(0f, 1f)
-                        val alongPlateau =
-                            ((1f - plateauAmount) + plateauAmount * swollen * 1.9f).coerceIn(0f, 1.9f)
-                        val sagged = (0.5f + 0.5f * swell).coerceIn(0f, 1f).pow(3f)
-                        val alongArc = ((1f - amount) + amount * sagged * 1.9f).coerceIn(0f, 1.9f)
+                        val plateauAmount =
+                            (alongStrikeAmount * tectonics.plateauAlongVariation).coerceIn(0f, 1f)
+                        val alongPlateau = ((1f - plateauAmount) + plateauAmount * swollen * 1.9f)
+                            .coerceIn(0f, 1.9f)
+                        val sagged = (0.5f + 0.5f * swell).coerceIn(0f, 1f).pow(ARC_SAG_EXPONENT)
+                        val alongArc = ((1f - alongStrikeAmount) + alongStrikeAmount * sagged * 1.9f)
+                            .coerceIn(0f, 1.9f)
 
-                        // A second, finer swell of the width, on top of `widthScale`.
-                        //
-                        // Written when the boundary distance was a chamfer approximation, whose
-                        // contours are octagons rather than circles: at the old belt width nobody
-                        // could see that, but a collision plateau is more than twice as wide and
-                        // its edge came out as a visible faceted polygon, which `widthScale`
-                        // varies too slowly to break up. G4 removed that cause — the distance is
-                        // Euclidean now — but the jitter is kept, because a rim that meanders
-                        // within itself at three times the frequency is what keeps a plateau edge
-                        // from reading as a drawn curve. It is scenery now rather than a patch.
-                        val edgeJitter = 0.72f + 0.56f *
-                            (0.5f + 0.5f * widthNoise.fbm(x * 17f / w, y * 17f / h, 3, 17, 17))
-                                .coerceIn(0f, 1f)
+                        // A second, finer swell of the width, on top of `widthScale`: a rim
+                        // that meanders within itself at three times the frequency is what keeps
+                        // a plateau edge from reading as a drawn curve. It was written to hide the
+                        // octagonal facets a chamfer distance left on the widest plateaus and is
+                        // kept as scenery now that the distance is Euclidean. See
+                        // REALISM_PLAN.md, G4.
+                        val edgeJitter = EDGE_JITTER_MIN + EDGE_JITTER_SPAN *
+                            (0.5f + 0.5f * widthNoise.fbm(
+                                column * EDGE_JITTER_CYCLES / cellsAcross,
+                                row * EDGE_JITTER_CYCLES / cellsDown,
+                                3,
+                                EDGE_JITTER_CYCLES.toInt(),
+                                EDGE_JITTER_CYCLES.toInt()
+                            )).coerceIn(0f, 1f)
 
-                        value = when (interaction.pairClass) {
+                        upliftHere = when (interaction.pairClass) {
                             // Oceanic under continental. The trench is the subducting plate's and
                             // the range the overriding one's, so the two sides of the same
                             // boundary get quite different ground — which is the asymmetry a
                             // symmetric distance profile could not express.
                             BoundaryClass.ANDEAN_MARGIN ->
                                 if (!boundary.overridingSide) {
-                                    -cfg.trenchDepth * strength * narrow
+                                    -tectonics.trenchDepth * strength * narrow
                                 } else {
-                                    cfg.andeanHeight * strength *
-                                        beltFalloff(d, cfg.andeanWidthCells * widthScale * edgeJitter) *
-                                        roughness * alongRange +
-                                        cfg.arcHeight * strength *
-                                        ridgeAt(d, cfg.arcOffsetCells, cfg.arcWidthCells) *
-                                        volcanicChain(arcNoise, x, y, w, h) * alongRange
+                                    tectonics.andeanHeight * strength *
+                                        beltFalloff(
+                                            distanceFromBoundary,
+                                            tectonics.andeanWidthCells * widthScale * edgeJitter
+                                        ) * roughness * alongRange +
+                                        tectonics.arcHeight * strength *
+                                        ridgeAt(
+                                            distanceFromBoundary,
+                                            tectonics.arcOffsetCells,
+                                            tectonics.arcWidthCells
+                                        ) *
+                                        volcanicChain(
+                                            arcNoise, column, row, cellsAcross, cellsDown
+                                        ) * alongRange
                                 }
 
                             // Continental against continental. Neither side will go under, so the
                             // crust thickens over a wide area instead of piling onto a line: broad,
                             // high, flat-topped and very nearly symmetric.
                             BoundaryClass.COLLISION_PLATEAU -> {
-                                val plateauWidth = cfg.collisionWidthCells * widthScale * edgeJitter
-                                val rimShare = cfg.plateauRimShare.coerceIn(0.1f, 0.95f)
-                                cfg.collisionHeight * strength *
-                                    plateauFalloff(d, plateauWidth, cfg.plateauFlatShare) *
+                                val plateauWidth = tectonics.collisionWidthCells * widthScale * edgeJitter
+                                val rimShare = tectonics.plateauRimShare.coerceIn(0.1f, 0.95f)
+                                tectonics.collisionHeight * strength *
+                                    plateauFalloff(
+                                        distanceFromBoundary,
+                                        plateauWidth,
+                                        tectonics.plateauFlatShare
+                                    ) *
                                     // Damped roughness: a plateau is a plain at altitude, and the
                                     // full ridge noise would make it a mountain range again.
-                                    (1f + (roughness - 1f) * 0.7f) * alongPlateau +
+                                    (1f + (roughness - 1f) * PLATEAU_ROUGHNESS_DAMPING) *
+                                    alongPlateau +
                                     // The rim ranges, which stand on the edge rather than in it.
-                                    cfg.plateauRimHeight * strength *
+                                    tectonics.plateauRimHeight * strength *
                                     ridgeAt(
-                                        d,
+                                        distanceFromBoundary,
                                         plateauWidth * rimShare,
                                         plateauWidth * (1f - rimShare)
                                     ) * roughness * alongRange
@@ -629,20 +689,20 @@ object PlateStage {
                                 // is also what keeps this boundary's share of the world's uplift
                                 // close to what the single profile gave it, so the sea-level
                                 // percentile does not move out from under every other coastline.
-                                -cfg.trenchDepth * strength * narrow +
+                                -tectonics.trenchDepth * strength * narrow +
                                     if (boundary.overridingSide) {
-                                        cfg.islandArcHeight * strength *
+                                        tectonics.islandArcHeight * strength *
                                             ridgeAt(
-                                                d,
-                                                cfg.islandArcOffsetCells,
-                                                cfg.islandArcWidthCells * widthScale * edgeJitter
+                                                distanceFromBoundary,
+                                                tectonics.islandArcOffsetCells,
+                                                tectonics.islandArcWidthCells * widthScale * edgeJitter
                                             ) * roughness * alongArc
                                     } else {
                                         0f
                                     }
 
                             BoundaryClass.OCEAN_RIDGE ->
-                                cfg.mountainHeight * 0.22f * strength * narrow
+                                tectonics.mountainHeight * 0.22f * strength * narrow
 
                             // Continental crust being pulled apart: the floor drops between two
                             // rebounding shoulders. Where such a pair has ocean on one side, that
@@ -650,7 +710,7 @@ object PlateStage {
                             // continental crust does.
                             BoundaryClass.CONTINENTAL_RIFT ->
                                 if (boundary.oceanicSide) {
-                                    cfg.mountainHeight * 0.22f * strength * narrow
+                                    tectonics.mountainHeight * 0.22f * strength * narrow
                                 } else if (past) {
                                     // A rift that opened in a past epoch and then stopped. It does
                                     // not stay a canyon: the fault dies, the flexural shoulders
@@ -664,40 +724,50 @@ object PlateStage {
                                     // The floor varies along strike, by the same `roughness *
                                     // alongRange` every other belt on this map varies by, and that
                                     // is not decoration. Without it the sag is a spirit level for
-                                    // the whole run of a boundary: no low end, no internal high,
-                                    // nowhere for the water in it to go. The outlet notch measures
+                                    // the whole run of a boundary, and the outlet notch measures
                                     // the slope below a basin's lip to decide how hard the outflow
-                                    // cuts, and on a level floor that slope is zero, so the notch
-                                    // cuts nothing however large the catchment and the trough
-                                    // holds a lake for the life of the world — on seed 59758 at
-                                    // 2048, one of 1.69 times the Caspian's share of the land,
-                                    // which `OutletResolutionTest` caught and 512 and 1024 did not
-                                    // (the trough is longer in cells than `outletReachCells` only at the
-                                    // fine grid). A varying floor gives it a low end to drain to
-                                    // and sills to break it into reaches the notch can finish. It
-                                    // is also what a filled sag looks like: the Mississippi
-                                    // embayment and the Benue trough carry a river down the axis,
-                                    // not a chain of lakes.
-                                    -cfg.riftDepth * cfg.failedRiftFill * strength *
+                                    // cuts: on a level floor that slope is zero, so the notch cuts
+                                    // nothing however large the catchment and the trough holds a
+                                    // lake for the life of the world. A varying floor gives it a
+                                    // low end to drain to and sills to break it into reaches the
+                                    // notch can finish. It is also what a filled sag looks like:
+                                    // the Mississippi embayment and the Benue trough carry a river
+                                    // down the axis, not a chain of lakes. See REALISM_PLAN.md,
+                                    // H5, for the lake this left at 2048 before it was added.
+                                    -tectonics.riftDepth * tectonics.failedRiftFill * strength *
                                         roughness * alongRange *
-                                        plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare) +
-                                        cfg.riftShoulderHeight * cfg.failedRiftShoulder *
+                                        plateauFalloff(
+                                            distanceFromBoundary,
+                                            tectonics.riftWidthCells,
+                                            tectonics.riftFloorShare
+                                        ) +
+                                        tectonics.riftShoulderHeight *
+                                        tectonics.failedRiftShoulder *
                                         strength * ridgeAt(
-                                            d, cfg.riftShoulderOffsetCells, cfg.riftShoulderWidthCells
+                                            distanceFromBoundary,
+                                            tectonics.riftShoulderOffsetCells,
+                                            tectonics.riftShoulderWidthCells
                                         ) * roughness * alongRange
                                 } else {
                                     val segment = boundary.segment
                                     if (segment == null) {
-                                        // Unsegmented: the pre-E4 rift, one trough of constant
-                                        // depth between two shoulders of constant height for the
-                                        // whole run of the boundary. Kept so
-                                        // `RiftSegmentationTest` can measure the world this chunk
-                                        // replaced rather than take its word for it.
-                                        -cfg.riftDepth * strength *
-                                            plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare) +
-                                            cfg.riftShoulderHeight * strength *
+                                        // Unsegmented: the rift before segmentation, one trough
+                                        // of constant depth between two shoulders of constant
+                                        // height for the whole run of the boundary. Kept so
+                                        // `RiftSegmentationTest` can measure the world that was
+                                        // replaced rather than take its word for it. See
+                                        // REALISM_PLAN.md, E4.
+                                        -tectonics.riftDepth * strength *
+                                            plateauFalloff(
+                                                distanceFromBoundary,
+                                                tectonics.riftWidthCells,
+                                                tectonics.riftFloorShare
+                                            ) +
+                                            tectonics.riftShoulderHeight * strength *
                                             ridgeAt(
-                                                d, cfg.riftShoulderOffsetCells, cfg.riftShoulderWidthCells
+                                                distanceFromBoundary,
+                                                tectonics.riftShoulderOffsetCells,
+                                                tectonics.riftShoulderWidthCells
                                             ) * roughness * alongRange
                                     } else {
                                         // Which flank of the half-graben this cell is on. The
@@ -706,69 +776,79 @@ object PlateStage {
                                         // lower id — a total order, never a hash order. A cell on
                                         // some third plate near a triple junction falls to the
                                         // hinge side, which is the quieter of the two.
-                                        val onLow = plateId[i] == interaction.lowId
-                                        val footwall = onLow == segment.footwallOnLow
+                                        val onLowIdPlate = plateId[cell] == interaction.lowId
+                                        val footwall = onLowIdPlate == segment.footwallOnLow
 
                                         // A half-graben is a wedge: the floor hangs from the fault
                                         // under the footwall and rises across to the hinge. The
                                         // signed across-strike coordinate saturates at the edge of
                                         // the flat floor, so the tilt is spent inside the trough
                                         // rather than out on the shoulder slope.
-                                        val flatHalf =
-                                            (cfg.riftWidthCells * cfg.riftFloorShare).coerceAtLeast(1f)
-                                        val across = (d / flatHalf).coerceAtMost(1f) *
-                                            (if (footwall) 1f else -1f)
-                                        val hinge = cfg.riftHingeFloorShare.coerceIn(0f, 1f)
-                                        val wedge = hinge + (1f - hinge) * (0.5f + 0.5f * across)
+                                        val flatFloorHalfWidthCells =
+                                            (tectonics.riftWidthCells * tectonics.riftFloorShare)
+                                                .coerceAtLeast(1f)
+                                        val acrossStrike =
+                                            (distanceFromBoundary / flatFloorHalfWidthCells)
+                                                .coerceAtMost(1f) * (if (footwall) 1f else -1f)
+                                        val hingeFloorShare =
+                                            tectonics.riftHingeFloorShare.coerceIn(0f, 1f)
+                                        val wedge = hingeFloorShare +
+                                            (1f - hingeFloorShare) * (0.5f + 0.5f * acrossStrike)
                                         // Symmetric again through the accommodation zone, so two
                                         // segments of opposite polarity meet without a step.
                                         val tilt = 1f + (wedge - 1f) * segment.taper
 
-                                        val floor = -cfg.riftDepth * segment.depthFactor *
+                                        val floor = -tectonics.riftDepth * segment.depthFactor *
                                             segment.taper * tilt * strength *
-                                            plateauFalloff(d, cfg.riftWidthCells, cfg.riftFloorShare)
+                                            plateauFalloff(
+                                                distanceFromBoundary,
+                                                tectonics.riftWidthCells,
+                                                tectonics.riftFloorShare
+                                            )
 
                                         // High footwall on one flank, low hinge on the other —
                                         // and both fade to their mean at the join, as the trough
                                         // does.
-                                        val flank = if (footwall) {
+                                        val flankShare = if (footwall) {
                                             1f
                                         } else {
-                                            cfg.riftHingeShoulderShare.coerceAtLeast(0f)
+                                            tectonics.riftHingeShoulderShare.coerceAtLeast(0f)
                                         }
-                                        val shoulder = cfg.riftShoulderHeight *
+                                        val shoulder = tectonics.riftShoulderHeight *
                                             segment.shoulderFactor *
-                                            (1f + (flank - 1f) * segment.taper) * strength *
+                                            (1f + (flankShare - 1f) * segment.taper) * strength *
                                             ridgeAt(
-                                                d,
-                                                cfg.riftShoulderOffsetCells,
-                                                cfg.riftShoulderWidthCells * segment.widthFactor
+                                                distanceFromBoundary,
+                                                tectonics.riftShoulderOffsetCells,
+                                                tectonics.riftShoulderWidthCells * segment.widthFactor
                                             ) * roughness * alongRange
 
                                         // The accommodation zone itself: ground that rises between
                                         // two half-grabens, which is where the sill and the land
                                         // bridge between two gulfs come from.
                                         //
-                                        // Its height is what E1's outlet notch has to saw through
+                                        // Its height is what the outlet notch has to saw through
                                         // where a rift stands on land, so it is deliberately
                                         // modest: a sill high enough to dam a half-graben for
                                         // twelve rounds of erosion leaves a lake the notch cannot
-                                        // drain, which on seed 43 came out nearly twice the
-                                        // Caspian's share of the map.
-                                        val sill = cfg.riftSillHeight * strength *
+                                        // drain. See REALISM_PLAN.md, E4, for what that measured.
+                                        val sill = tectonics.riftSillHeight * strength *
                                             (1f - segment.taper) *
-                                            beltFalloff(d, cfg.riftShoulderOffsetCells)
+                                            beltFalloff(
+                                                distanceFromBoundary,
+                                                tectonics.riftShoulderOffsetCells
+                                            )
 
                                         floor + shoulder + sill
                                     }
                                 }
 
                             BoundaryClass.TRANSFORM_FAULT ->
-                                cfg.mountainHeight * 0.12f * strength * narrow *
+                                tectonics.mountainHeight * 0.12f * strength * narrow *
                                     (roughness - 0.75f)
                         }
-                        uplift.data[i] += value * ageHeight
-                        recordCrustAge(crustAge, i, value, cfg, ageBase, ageSpan)
+                        uplift.data[cell] += upliftHere * ageHeightFactor
+                        recordCrustAge(crustAge, cell, upliftHere, tectonics, ageBandBase, ageBandSpan)
                     }
                 }
             }
@@ -787,16 +867,16 @@ object PlateStage {
      */
     private fun recordCrustAge(
         crustAge: FloatField,
-        i: Int,
-        value: Float,
-        cfg: TectonicsConfig,
-        ageBase: Float,
-        ageSpan: Float
+        cell: Int,
+        upliftHere: Float,
+        tectonics: TectonicsConfig,
+        ageBandBase: Float,
+        ageBandSpan: Float
     ) {
-        if (value == 0f) return
-        val influence = (abs(value) / cfg.crustAgeReference).coerceAtMost(1f)
-        val age = ageBase + (1f - influence) * ageSpan
-        if (age < crustAge.data[i]) crustAge.data[i] = age
+        if (upliftHere == 0f) return
+        val influence = (abs(upliftHere) / tectonics.crustAgeReference).coerceAtMost(1f)
+        val age = ageBandBase + (1f - influence) * ageBandSpan
+        if (age < crustAge.data[cell]) crustAge.data[cell] = age
     }
 
     /**
@@ -823,46 +903,55 @@ object PlateStage {
         plateId: IntArray,
         uplift: FloatField
     ) {
-        val cfg = config.tectonics
-        if (cfg.hotspotPlateFraction <= 0f || cfg.hotspotHeight == 0f) return
-        if (cfg.hotspotRadiusCells <= 0f || cfg.hotspotSpacingCells <= 0f) return
+        val tectonics = config.tectonics
+        if (tectonics.hotspotPlateFraction <= 0f || tectonics.hotspotHeight == 0f) return
+        if (tectonics.hotspotRadiusCells <= 0f || tectonics.hotspotSpacingCells <= 0f) return
 
-        val w = uplift.width
-        val h = uplift.height
-        val rnd = Random(config.seed * 31337 + 7)
+        val cellsAcross = uplift.width
+        val cellsDown = uplift.height
+        val random = Random(config.seed * 31337 + 7)
         val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
         var ventIndex = 0
 
         plates.forEach { plate ->
-            val roll = rnd.nextFloat()
+            val roll = random.nextFloat()
             // Offset from the plate's own seed point, not a free point on the map. A hotspot
             // placed anywhere at all lands on some other plate nineteen times in twenty, and the
             // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
             // exactly what the first version of this did, on every seed tried.
-            val spread = cfg.hotspotChainLengthCells * 0.3f
-            val originX = plate.seedX + (rnd.nextFloat() - 0.5f) * spread
-            val originY = plate.seedY + (rnd.nextFloat() - 0.5f) * spread
+            val spreadCells = tectonics.hotspotChainLengthCells * 0.3f
+            val originX = plate.seedX + (random.nextFloat() - 0.5f) * spreadCells
+            val originY = plate.seedY + (random.nextFloat() - 0.5f) * spreadCells
             if (plate.type != PlateType.OCEANIC) return@forEach
-            if (roll >= cfg.hotspotPlateFraction) return@forEach
+            if (roll >= tectonics.hotspotPlateFraction) return@forEach
 
-            var travelled = 0f
-            while (travelled <= cfg.hotspotChainLengthCells) {
+            var travelledCells = 0f
+            while (travelledCells <= tectonics.hotspotChainLengthCells) {
                 // The hotspot stays put and the plate slides over it, so the volcano it built a
                 // while ago has since been carried a while along the drift vector. Older means
                 // further along, and lower: the crust cools and the seamount subsides with it.
-                val cx = originX + plate.driftX * travelled
-                val cy = originY + plate.driftY * travelled
-                val age = travelled / cfg.hotspotChainLengthCells
-                val jitter = 0.6f + 0.8f *
-                    (0.5f + 0.5f * sizeNoise.fbm(cx * 9f / w, cy * 9f / h, 2, 9, 9))
+                val ventX = originX + plate.driftX * travelledCells
+                val ventY = originY + plate.driftY * travelledCells
+                val ageAlongChain = travelledCells / tectonics.hotspotChainLengthCells
+                val sizeJitter = 0.6f + 0.8f *
+                    (0.5f + 0.5f * sizeNoise.fbm(ventX * 9f / cellsAcross, ventY * 9f / cellsDown, 2, 9, 9))
                         .coerceIn(0f, 1f)
                 stampSeamount(
-                    uplift, plateId, plate.id, cx, cy,
-                    cfg.hotspotRadiusCells, cfg.hotspotHeight * (1f - age) * (1f - age) * jitter,
-                    config.seed, ventIndex, cfg.hotspotConeDetail
+                    uplift = uplift,
+                    plateId = plateId,
+                    plate = plate.id,
+                    ventX = ventX,
+                    ventY = ventY,
+                    radius = tectonics.hotspotRadiusCells,
+                    // The crust cools and the seamount subsides with it, as the square of age.
+                    amplitude = tectonics.hotspotHeight *
+                        (1f - ageAlongChain) * (1f - ageAlongChain) * sizeJitter,
+                    seed = config.seed,
+                    ventIndex = ventIndex,
+                    detail = tectonics.hotspotConeDetail
                 )
                 ventIndex++
-                travelled += cfg.hotspotSpacingCells
+                travelledCells += tectonics.hotspotSpacingCells
             }
         }
     }
@@ -870,31 +959,26 @@ object PlateStage {
     /**
      * One seamount: a smooth cone of [radius] cells, wrapping in x and clipped in y.
      *
-     * The falloff itself was always true Euclidean distance (`sqrt(dx*dx + dy*dy)`), never the
-     * chamfer approximation [DistanceTransform] uses elsewhere in this file for plate assignment
-     * (and used for boundary distance too, until G4 moved that to [JumpFloodDistance]) — that was
-     * checked directly, by walking sixteen bearings out from a
-     * vent with the old single-sample-per-cell code and computing the eight-fold component of the
-     * resulting radius curve, and it measures near zero (relative amplitude ~0.003) wherever a
-     * cone is read at sub-cell precision. What actually fails the same measurement read the plain
-     * way — one sample per cell, nearest neighbour, exactly how every other stage reads a
-     * [FloatField] — is small-radius rasterization: a stamp only four or five cells across does not
-     * have enough grid resolution to render a circle, and the compass and diagonal directions (the
-     * only ones a square grid can hit exactly) come out measurably larger than the directions in
-     * between, which is an eight-sided artefact regardless of how continuous the underlying formula
-     * is. [detail] fixes that by supersampling each cell — cheap, since the whole stamp is only a
-     * few cells across — and, while at it, breaks the perfect symmetry it would otherwise leave
-     * behind with a few low-amplitude harmonics of the rim radius, seeded from the world seed and
-     * this vent's own index so no two cones are the same without a shared [Random] or a hash order.
-     * Off reproduces the old single-sample, unmodulated stamp, which is what the guard's "before"
-     * numbers were measured against.
+     * The falloff is true Euclidean distance and always was, never the chamfer approximation
+     * [DistanceTransform] still uses in this file for plate assignment, so the eight-sided look a
+     * cone can have is not the metric's doing. It is rasterization: a stamp four or five cells
+     * across has too little grid to draw a circle, and the four compass and four diagonal
+     * bearings — the only ones a square grid hits exactly — come out measurably longer than the
+     * bearings between them however continuous the formula behind them is.
+     *
+     * [detail] answers that by supersampling each cell, which is cheap when the whole stamp is a
+     * few cells wide, and while there breaks the remaining perfect symmetry with a few
+     * low-amplitude harmonics of the rim radius, seeded from the world seed and this vent's own
+     * index so that no two cones match without a shared [Random] or a hash order. Off reproduces
+     * the single-sample, unmodulated stamp the guard measures its "before" against. See
+     * REALISM_PLAN.md, E3, for the eight-fold amplitudes at each grid.
      */
     private fun stampSeamount(
         uplift: FloatField,
         plateId: IntArray,
         plate: Int,
-        cx: Float,
-        cy: Float,
+        ventX: Float,
+        ventY: Float,
         radius: Float,
         amplitude: Float,
         seed: Long,
@@ -902,49 +986,49 @@ object PlateStage {
         detail: Boolean
     ) {
         if (amplitude <= 0f) return
-        val w = uplift.width
-        val h = uplift.height
-        val r = radius.toInt() + 1
+        val cellsAcross = uplift.width
+        val cellsDown = uplift.height
+        val boundingRadiusCells = radius.toInt() + 1
 
         val harmonics = if (detail) rimHarmonics(seedHash(seed, ventIndex.toLong())) else null
         // Sub-cell samples per axis, so a stamp only a few cells across is area-averaged rather
         // than point-sampled — the fix for the eight-fold artefact described above. Off (the old
         // behaviour) samples once, at the cell's own centre.
-        val subSamples = if (detail) 5 else 1
-        val subStep = 1f / subSamples
+        val subSamplesPerAxis = if (detail) 5 else 1
+        val subStep = 1f / subSamplesPerAxis
         val subOffset = (subStep - 1f) / 2f
-        val subTotal = (subSamples * subSamples).toFloat()
+        val subSampleCount = (subSamplesPerAxis * subSamplesPerAxis).toFloat()
 
-        for (yy in (cy.toInt() - r)..(cy.toInt() + r)) {
-            if (yy < 0 || yy >= h) continue
-            for (xx in (cx.toInt() - r)..(cx.toInt() + r)) {
-                var wrapped = xx % w
-                if (wrapped < 0) wrapped += w
-                val i = yy * w + wrapped
-                if (plateId[i] != plate) continue
+        for (row in (ventY.toInt() - boundingRadiusCells)..(ventY.toInt() + boundingRadiusCells)) {
+            if (row < 0 || row >= cellsDown) continue
+            for (column in (ventX.toInt() - boundingRadiusCells)..(ventX.toInt() + boundingRadiusCells)) {
+                var wrappedColumn = column % cellsAcross
+                if (wrappedColumn < 0) wrappedColumn += cellsAcross
+                val cell = row * cellsAcross + wrappedColumn
+                if (plateId[cell] != plate) continue
 
                 var sum = 0f
-                for (sy in 0 until subSamples) {
-                    for (sx in 0 until subSamples) {
-                        val px = xx + subOffset + sx * subStep
-                        val py = yy + subOffset + sy * subStep
-                        var dx = px - cx
-                        if (dx > w / 2f) dx -= w
-                        if (dx < -w / 2f) dx += w
-                        val dy = py - cy
-                        val distance = sqrt(dx * dx + dy * dy)
+                for (subRow in 0 until subSamplesPerAxis) {
+                    for (subColumn in 0 until subSamplesPerAxis) {
+                        val sampleX = column + subOffset + subColumn * subStep
+                        val sampleY = row + subOffset + subRow * subStep
+                        var offsetX = sampleX - ventX
+                        if (offsetX > cellsAcross / 2f) offsetX -= cellsAcross
+                        if (offsetX < -cellsAcross / 2f) offsetX += cellsAcross
+                        val offsetY = sampleY - ventY
+                        val distance = sqrt(offsetX * offsetX + offsetY * offsetY)
                         val rim = if (harmonics == null) {
                             radius
                         } else {
-                            radius * (1f + rimModulation(harmonics, dx, dy))
+                            radius * (1f + rimModulation(harmonics, offsetX, offsetY))
                         }
                         if (distance >= rim) continue
-                        val u = 1f - distance / rim
-                        sum += u * u * (3f - 2f * u)
+                        val inward = 1f - distance / rim
+                        sum += inward * inward * (3f - 2f * inward)
                     }
                 }
                 if (sum <= 0f) continue
-                uplift.data[i] += amplitude * (sum / subTotal)
+                uplift.data[cell] += amplitude * (sum / subSampleCount)
             }
         }
     }
@@ -970,52 +1054,57 @@ object PlateStage {
      */
     private fun rimHarmonics(hash: Long): FloatArray {
         val frequencies = intArrayOf(2, 3, 5)
-        val out = FloatArray(frequencies.size * 2)
-        var h = hash
-        for (idx in frequencies.indices) {
-            h = h * 6364136223846793005L + 1442695040888963407L
-            val ampBits = ((h ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
-            h = h * 6364136223846793005L + 1442695040888963407L
-            val phaseBits = ((h ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
-            // Amplitude in [0.015, 0.045]: individually visible, together never enough to push a
-            // cone's overall roundness past what the guard treats as faceted.
-            out[idx * 2] = 0.015f + 0.03f * ampBits
-            out[idx * 2 + 1] = phaseBits * (2f * PI.toFloat())
+        val amplitudeAndPhase = FloatArray(frequencies.size * 2)
+        var bits = hash
+        for (index in frequencies.indices) {
+            bits = bits * 6364136223846793005L + 1442695040888963407L
+            val amplitudeBits = ((bits ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
+            bits = bits * 6364136223846793005L + 1442695040888963407L
+            val phaseBits = ((bits ushr 40) and 0xFFFF).toFloat() / 0xFFFF.toFloat()
+            // Individually visible, together never enough to push a cone's overall roundness
+            // past what the guard treats as faceted.
+            amplitudeAndPhase[index * 2] =
+                RIM_HARMONIC_MIN + RIM_HARMONIC_SPAN * amplitudeBits
+            amplitudeAndPhase[index * 2 + 1] = phaseBits * (2f * PI.toFloat())
         }
-        return out
+        return amplitudeAndPhase
     }
 
     /** The fractional change to a cone's rim radius at the bearing of ([dx], [dy]) from its vent. */
-    private fun rimModulation(harmonics: FloatArray, dx: Float, dy: Float): Float {
+    private fun rimModulation(harmonics: FloatArray, offsetX: Float, offsetY: Float): Float {
         val frequencies = intArrayOf(2, 3, 5)
-        val theta = atan2(dy, dx)
-        var m = 0f
-        for (idx in frequencies.indices) {
-            val amp = harmonics[idx * 2]
-            val phase = harmonics[idx * 2 + 1]
-            m += amp * cos(frequencies[idx] * theta + phase)
+        val bearing = atan2(offsetY, offsetX)
+        var modulation = 0f
+        for (index in frequencies.indices) {
+            val amplitude = harmonics[index * 2]
+            val phase = harmonics[index * 2 + 1]
+            modulation += amplitude * cos(frequencies[index] * bearing + phase)
         }
-        return m
+        return modulation
     }
 
     private fun createPlates(
-        cfg: TectonicsConfig,
+        tectonics: TectonicsConfig,
         width: Int,
         height: Int,
-        rnd: Random
+        random: Random
     ): List<Plate> {
-        val count = cfg.plateCount.coerceAtLeast(2)
-        val oceanicCount = (count * cfg.oceanicFraction).roundToInt().coerceIn(0, count)
-        val types = MutableList(count) { if (it < oceanicCount) PlateType.OCEANIC else PlateType.CONTINENTAL }
-        types.shuffle(rnd)
+        val plateCount = tectonics.plateCount.coerceAtLeast(2)
+        val oceanicCount = (plateCount * tectonics.oceanicFraction).roundToInt().coerceIn(0, plateCount)
+        val types = MutableList(plateCount) {
+            if (it < oceanicCount) PlateType.OCEANIC else PlateType.CONTINENTAL
+        }
+        types.shuffle(random)
 
-        return List(count) { id ->
-            val angle = rnd.nextFloat() * 2f * PI.toFloat()
+        return List(plateCount) { id ->
+            val angle = random.nextFloat() * 2f * PI.toFloat()
             Plate(
                 id = id,
-                seedX = rnd.nextInt(width),
-                // Keeps plate seeds off the very edge, so polar rows belong to a real plate interior.
-                seedY = (height * 0.06f).toInt() + rnd.nextInt((height * 0.88f).toInt().coerceAtLeast(1)),
+                seedX = random.nextInt(width),
+                // Keeps plate seeds off the very edge, so polar rows belong to a real plate
+                // interior rather than to a seed sitting on the rim of the grid.
+                seedY = (height * SEED_POLE_MARGIN_SHARE).toInt() +
+                    random.nextInt((height * SEED_LATITUDE_SPAN).toInt().coerceAtLeast(1)),
                 driftX = cos(angle),
                 driftY = sin(angle),
                 type = types[id]
@@ -1027,42 +1116,57 @@ object PlateStage {
      * Chamfer-Voronoi assignment, then a noise domain-warp so boundaries meander instead of
      * looking like straight Voronoi edges.
      *
-     * Deliberately still the chamfer transform after G4 moved every *distance* to
-     * [JumpFloodDistance]. Nothing here reads the distance: only the label survives, and what the
-     * label decides is a partition of the map into plates — which cell belongs to which seed.
+     * Deliberately still the chamfer transform, where every consumer that reads a *distance* has
+     * moved to [JumpFloodDistance]. Nothing here reads the distance: only the label survives, and
+     * what the label decides is a partition of the map into plates — which cell belongs to which
+     * seed.
      * There is no contour to facet, so the octagonal metric costs nothing visible; and since a
      * Euclidean Voronoi would draw its cell walls in slightly different places, switching it would
      * redraw every plate of every world ever generated for no gain anybody could see. Left alone
      * on purpose.
      */
     private fun assignPlates(config: WorldGenConfig, plates: List<Plate>): IntArray {
-        val w = config.width
-        val h = config.height
+        val cellsAcross = config.width
+        val cellsDown = config.height
 
-        val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
-        val raw = IntArray(w * h) { -1 }
+        val distanceToSeed = FloatArray(cellsAcross * cellsDown) { DistanceTransform.INFINITE }
+        val nearestSeedPlate = IntArray(cellsAcross * cellsDown) { -1 }
         plates.forEach { plate ->
-            val i = plate.seedY * w + plate.seedX
-            dist[i] = 0f
-            raw[i] = plate.id
+            val cell = plate.seedY * cellsAcross + plate.seedX
+            distanceToSeed[cell] = 0f
+            nearestSeedPlate[cell] = plate.id
         }
-        DistanceTransform.run(w, h, dist, raw)
+        DistanceTransform.run(cellsAcross, cellsDown, distanceToSeed, nearestSeedPlate)
 
         val warpX = PerlinNoise(config.seed * 6151 + 3)
         val warpY = PerlinNoise(config.seed * 6151 + 9)
-        val amplitude = config.tectonics.boundaryFalloffCells * 1.6f
+        val warpAmplitudeCells =
+            config.tectonics.boundaryFalloffCells * WARP_AMPLITUDE_IN_BELT_WIDTHS
 
-        val warped = IntArray(w * h)
+        val warped = IntArray(cellsAcross * cellsDown)
         // Reads `raw`, writes its own cell of `warped` — no overlap between rows.
-        parallelChunks(0, h) { startY, endY ->
-            for (y in startY until endY) {
-                for (x in 0 until w) {
-                    val dx = amplitude * warpX.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
-                    val dy = amplitude * warpY.fbm(x * 6f / w, y * 6f / h, 4, 6, 6)
-                    var sx = (x + dx).roundToInt() % w
-                    if (sx < 0) sx += w
-                    val sy = (y + dy).roundToInt().coerceIn(0, h - 1)
-                    warped[y * w + x] = raw[sy * w + sx]
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    val warpAcross = warpAmplitudeCells * warpX.fbm(
+                        column * WARP_CYCLES / cellsAcross,
+                        row * WARP_CYCLES / cellsDown,
+                        4,
+                        WARP_CYCLES.toInt(),
+                        WARP_CYCLES.toInt()
+                    )
+                    val warpDown = warpAmplitudeCells * warpY.fbm(
+                        column * WARP_CYCLES / cellsAcross,
+                        row * WARP_CYCLES / cellsDown,
+                        4,
+                        WARP_CYCLES.toInt(),
+                        WARP_CYCLES.toInt()
+                    )
+                    var sourceColumn = (column + warpAcross).roundToInt() % cellsAcross
+                    if (sourceColumn < 0) sourceColumn += cellsAcross
+                    val sourceRow = (row + warpDown).roundToInt().coerceIn(0, cellsDown - 1)
+                    warped[row * cellsAcross + column] =
+                        nearestSeedPlate[sourceRow * cellsAcross + sourceColumn]
                 }
             }
         }
@@ -1081,34 +1185,38 @@ object PlateStage {
             intArrayOf(1, 0), intArrayOf(-1, 0), intArrayOf(0, 1), intArrayOf(0, -1)
         )
 
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                val a = plates[plateId[i]]
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val cell = row * width + column
+                val plate = plates[plateId[cell]]
                 var other: Plate? = null
 
-                for (n in neighbours) {
-                    val ny = y + n[1]
-                    if (ny < 0 || ny >= height) continue
-                    var nx = (x + n[0]) % width
-                    if (nx < 0) nx += width
+                for (step in neighbours) {
+                    val neighbourRow = row + step[1]
+                    if (neighbourRow < 0 || neighbourRow >= height) continue
+                    var neighbourColumn = (column + step[0]) % width
+                    if (neighbourColumn < 0) neighbourColumn += width
 
-                    val candidate = plates[plateId[ny * width + nx]]
-                    if (candidate.id != a.id) {
+                    val candidate = plates[plateId[neighbourRow * width + neighbourColumn]]
+                    if (candidate.id != plate.id) {
                         other = candidate
                         break
                     }
                 }
 
-                val b = other ?: continue
-                val key = if (a.id < b.id) a.id * plates.size + b.id else b.id * plates.size + a.id
+                val neighbourPlate = other ?: continue
+                // The pair's key, always taken in ascending id order, so the two cells either
+                // side of a boundary look up the same interaction.
+                val key =
+                    if (plate.id < neighbourPlate.id) plate.id * plates.size + neighbourPlate.id
+                    else neighbourPlate.id * plates.size + plate.id
                 val interaction = interactions.getOrPut(key) {
                     interactionOf(plates[key / plates.size], plates[key % plates.size], width)
                 }
-                boundaries[i] = Boundary(
+                boundaries[cell] = Boundary(
                     interaction,
-                    oceanicSide = a.type == PlateType.OCEANIC,
-                    overridingSide = a.id == interaction.overridingId
+                    oceanicSide = plate.type == PlateType.OCEANIC,
+                    overridingSide = plate.id == interaction.overridingId
                 )
             }
         }
@@ -1140,10 +1248,10 @@ object PlateStage {
      * breaks into the same segments at 512 and at 2048.
      */
     private fun segmentRifts(config: WorldGenConfig, boundaries: Map<Int, Boundary>) {
-        val cfg = config.tectonics
-        if (!cfg.riftSegmentation) return
-        val w = config.width
-        val h = config.height
+        val tectonics = config.tectonics
+        if (!tectonics.riftSegmentation) return
+        val cellsAcross = config.width
+        val cellsDown = config.height
 
         // Ascending index order: nothing below may depend on the iteration order of a hash map.
         val riftCells = boundaries.keys
@@ -1154,11 +1262,13 @@ object PlateStage {
         // Which pair each rift cell belongs to, as an index into first-encounter order. Two
         // different rift pairs can touch at a triple junction and must not be walked as one rift.
         val pairs = ArrayList<PairInteraction>()
-        val pairAt = IntArray(w * h) { NOT_RIFT }
+        val pairAt = IntArray(cellsAcross * cellsDown) { NOT_RIFT }
         riftCells.forEach { cell ->
             val interaction = boundaries[cell]!!.interaction
             var index = -1
-            for (k in pairs.indices) if (pairs[k] === interaction) { index = k; break }
+            for (known in pairs.indices) {
+                if (pairs[known] === interaction) { index = known; break }
+            }
             if (index < 0) {
                 pairs.add(interaction)
                 index = pairs.size - 1
@@ -1166,14 +1276,14 @@ object PlateStage {
             pairAt[cell] = index
         }
 
-        val arc = IntArray(w * h) { -1 }
-        val run = ArrayList<Int>()
+        val arc = IntArray(cellsAcross * cellsDown) { -1 }
+        val runCells = ArrayList<Int>()
         val queue = ArrayList<Int>()
 
         // Breadth-first over one run's cells, from [source]; leaves the hop count in `arc` and
         // returns the farthest cell, ties broken by the lower index.
         fun sweep(source: Int, pair: Int): Int {
-            run.forEach { arc[it] = -1 }
+            runCells.forEach { arc[it] = -1 }
             queue.clear()
             arc[source] = 0
             queue.add(source)
@@ -1181,32 +1291,32 @@ object PlateStage {
             var farthest = source
             while (head < queue.size) {
                 val cell = queue[head++]
-                val depth = arc[cell]
-                if (depth > arc[farthest] || (depth == arc[farthest] && cell < farthest)) {
+                val hops = arc[cell]
+                if (hops > arc[farthest] || (hops == arc[farthest] && cell < farthest)) {
                     farthest = cell
                 }
-                val x = cell % w
-                val y = cell / w
-                for (dy in -1..1) {
-                    val ny = y + dy
-                    if (ny < 0 || ny >= h) continue
-                    for (dx in -1..1) {
-                        if (dx == 0 && dy == 0) continue
-                        var nx = (x + dx) % w
-                        if (nx < 0) nx += w
-                        val n = ny * w + nx
-                        if (pairAt[n] != pair || arc[n] >= 0) continue
-                        arc[n] = depth + 1
-                        queue.add(n)
+                val column = cell % cellsAcross
+                val row = cell / cellsAcross
+                for (rowStep in -1..1) {
+                    val neighbourRow = row + rowStep
+                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    for (columnStep in -1..1) {
+                        if (columnStep == 0 && rowStep == 0) continue
+                        var neighbourColumn = (column + columnStep) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                        if (pairAt[neighbour] != pair || arc[neighbour] >= 0) continue
+                        arc[neighbour] = hops + 1
+                        queue.add(neighbour)
                     }
                 }
             }
             return farthest
         }
 
-        val minLength = (cfg.riftSegmentMin * w).coerceAtLeast(2f)
-        val maxLength = (cfg.riftSegmentMax * w).coerceAtLeast(minLength)
-        val accommodation = (cfg.riftAccommodation * w).coerceAtLeast(1f)
+        val minSegmentCells = (tectonics.riftSegmentMin * cellsAcross).coerceAtLeast(2f)
+        val maxSegmentCells = (tectonics.riftSegmentMax * cellsAcross).coerceAtLeast(minSegmentCells)
+        val accommodationCells = (tectonics.riftAccommodation * cellsAcross).coerceAtLeast(1f)
 
         riftCells.forEach { start ->
             val pair = pairAt[start]
@@ -1214,27 +1324,27 @@ object PlateStage {
 
             // Collect this connected run, then take its two passes. `start` is the run's lowest
             // index, since the cells are walked in ascending order and a run is claimed whole.
-            run.clear()
+            runCells.clear()
             queue.clear()
             queue.add(start)
             arc[start] = 0
             var head = 0
             while (head < queue.size) {
                 val cell = queue[head++]
-                run.add(cell)
-                val x = cell % w
-                val y = cell / w
-                for (dy in -1..1) {
-                    val ny = y + dy
-                    if (ny < 0 || ny >= h) continue
-                    for (dx in -1..1) {
-                        if (dx == 0 && dy == 0) continue
-                        var nx = (x + dx) % w
-                        if (nx < 0) nx += w
-                        val n = ny * w + nx
-                        if (pairAt[n] != pair || arc[n] >= 0) continue
-                        arc[n] = 0
-                        queue.add(n)
+                runCells.add(cell)
+                val column = cell % cellsAcross
+                val row = cell / cellsAcross
+                for (rowStep in -1..1) {
+                    val neighbourRow = row + rowStep
+                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    for (columnStep in -1..1) {
+                        if (columnStep == 0 && rowStep == 0) continue
+                        var neighbourColumn = (column + columnStep) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                        if (pairAt[neighbour] != pair || arc[neighbour] >= 0) continue
+                        arc[neighbour] = 0
+                        queue.add(neighbour)
                     }
                 }
             }
@@ -1251,62 +1361,68 @@ object PlateStage {
             }
 
             val joins = ArrayList<Float>()
-            val depth = ArrayList<Float>()
-            val shoulder = ArrayList<Float>()
-            val width = ArrayList<Float>()
+            val segmentDepthFactors = ArrayList<Float>()
+            val segmentShoulderFactors = ArrayList<Float>()
+            val segmentWidthFactors = ArrayList<Float>()
             joins.add(0f)
             var cursor = 0f
             while (cursor < length) {
-                cursor += minLength + (maxLength - minLength) * draw()
+                cursor += minSegmentCells + (maxSegmentCells - minSegmentCells) * draw()
                 joins.add(cursor.coerceAtMost(length))
-                depth.add(1f + cfg.riftSegmentDepthVariation * (2f * draw() - 1f))
+                segmentDepthFactors.add(1f + tectonics.riftSegmentDepthVariation * (2f * draw() - 1f))
                 // One draw for both the height and the width of the segment's shoulders, not two.
                 // Flexural uplift scales with the throw on the fault, so the footwall of a bigger
                 // half-graben stands both higher and broader — and, less prettily, two independent
-                // draws let a segment come out at 1.4 times the height and 0.6 times the width,
-                // which is a knife-edge ridge. Where such a ridge crosses shallow sea it clears
-                // the surface as a strip of land a couple of cells wide with a strait either side,
-                // the exact failure `RibbonLandTest` exists to catch: measured on seed 234475 at
-                // 1024, that combination left a 706-cell ribbon on a rift shoulder that survived
-                // erosion, and tying the two together removes it.
-                val spread = cfg.riftSegmentShoulderVariation
-                val size = (1f + spread * (2f * draw() - 1f)).coerceAtLeast(0.2f)
-                shoulder.add(size)
-                width.add(size)
+                // draws let a segment come out much taller than it is wide, which is a knife-edge
+                // ridge. Where such a ridge crosses shallow sea it clears the surface as a strip
+                // of land a couple of cells wide with a strait either side, the exact failure
+                // `RibbonLandTest` exists to catch. See REALISM_PLAN.md, E4, for the ribbon that
+                // measured.
+                val shoulderVariation = tectonics.riftSegmentShoulderVariation
+                val shoulderSize = (1f + shoulderVariation * (2f * draw() - 1f)).coerceAtLeast(0.2f)
+                segmentShoulderFactors.add(shoulderSize)
+                segmentWidthFactors.add(shoulderSize)
             }
             if (joins.size < 2) {
                 joins.add(length)
-                depth.add(1f)
-                shoulder.add(1f)
-                width.add(1f)
+                segmentDepthFactors.add(1f)
+                segmentShoulderFactors.add(1f)
+                segmentWidthFactors.add(1f)
             }
             // A sliver left over at the far end is not a half-graben; it joins its neighbour.
-            val last = joins.size - 1
-            if (joins.size > 2 && joins[last] - joins[last - 1] < minLength * 0.5f) {
-                joins.removeAt(last - 1)
-                depth.removeAt(depth.size - 1)
-                shoulder.removeAt(shoulder.size - 1)
-                width.removeAt(width.size - 1)
+            val lastJoin = joins.size - 1
+            if (joins.size > 2 && joins[lastJoin] - joins[lastJoin - 1] < minSegmentCells * 0.5f) {
+                joins.removeAt(lastJoin - 1)
+                segmentDepthFactors.removeAt(segmentDepthFactors.size - 1)
+                segmentShoulderFactors.removeAt(segmentShoulderFactors.size - 1)
+                segmentWidthFactors.removeAt(segmentWidthFactors.size - 1)
             }
             // Which flank the first segment hangs from; the rest alternate off it.
             val parity = ((bits ushr 17) and 1L) == 0L
 
-            run.forEach { cell ->
-                val s = arc[cell].toFloat()
-                var k = 0
-                while (k < joins.size - 2 && s >= joins[k + 1]) k++
-                val toJoin = minOf(s - joins[k], joins[k + 1] - s).coerceAtLeast(0f)
-                val u = (toJoin / accommodation).coerceIn(0f, 1f)
+            runCells.forEach { cell ->
+                val arcLengthCells = arc[cell].toFloat()
+                var segmentIndex = 0
+                while (segmentIndex < joins.size - 2 &&
+                    arcLengthCells >= joins[segmentIndex + 1]
+                ) {
+                    segmentIndex++
+                }
+                val toJoin = minOf(
+                    arcLengthCells - joins[segmentIndex],
+                    joins[segmentIndex + 1] - arcLengthCells
+                ).coerceAtLeast(0f)
+                val intoSegment = (toJoin / accommodationCells).coerceIn(0f, 1f)
                 boundaries[cell]!!.segment = RiftSegment(
-                    depthFactor = depth[k],
-                    shoulderFactor = shoulder[k],
-                    widthFactor = width[k],
-                    footwallOnLow = (k % 2 == 0) == parity,
-                    taper = u * u * (3f - 2f * u)
+                    depthFactor = segmentDepthFactors[segmentIndex],
+                    shoulderFactor = segmentShoulderFactors[segmentIndex],
+                    widthFactor = segmentWidthFactors[segmentIndex],
+                    footwallOnLow = (segmentIndex % 2 == 0) == parity,
+                    taper = intoSegment * intoSegment * (3f - 2f * intoSegment)
                 )
             }
 
-            run.forEach {
+            runCells.forEach {
                 arc[it] = -1
                 pairAt[it] = CLAIMED
             }
@@ -1323,35 +1439,39 @@ object PlateStage {
      * Projects the plates' relative motion onto the axis between their centres — the closest thing
      * to a boundary normal that holds for the whole shared edge.
      */
-    private fun interactionOf(a: Plate, b: Plate, width: Int): PairInteraction {
-        var dx = (b.seedX - a.seedX).toFloat()
+    private fun interactionOf(first: Plate, second: Plate, width: Int): PairInteraction {
+        var acrossCells = (second.seedX - first.seedX).toFloat()
         // Shortest way round the cylinder, so plates either side of the seam behave sanely.
-        if (dx > width / 2f) dx -= width
-        if (dx < -width / 2f) dx += width
-        val dy = (b.seedY - a.seedY).toFloat()
+        if (acrossCells > width / 2f) acrossCells -= width
+        if (acrossCells < -width / 2f) acrossCells += width
+        val downCells = (second.seedY - first.seedY).toFloat()
 
-        val length = sqrt(dx * dx + dy * dy).coerceAtLeast(1e-4f)
-        val nx = dx / length
-        val ny = dy / length
+        val separationCells = sqrt(acrossCells * acrossCells + downCells * downCells)
+            .coerceAtLeast(MIN_SEED_SEPARATION_CELLS)
+        val axisAcross = acrossCells / separationCells
+        val axisDown = downCells / separationCells
 
         // Positive when the pair is closing.
-        val convergence = ((a.driftX - b.driftX) * nx + (a.driftY - b.driftY) * ny) / 2f
+        val convergence = (
+            (first.driftX - second.driftX) * axisAcross +
+                (first.driftY - second.driftY) * axisDown
+            ) / 2f
         val type = when {
-            convergence > 0.15f -> BoundaryType.CONVERGENT
-            convergence < -0.15f -> BoundaryType.DIVERGENT
+            convergence > CONVERGENCE_THRESHOLD -> BoundaryType.CONVERGENT
+            convergence < -CONVERGENCE_THRESHOLD -> BoundaryType.DIVERGENT
             else -> BoundaryType.TRANSFORM
         }
-        val bothContinental = a.type == PlateType.CONTINENTAL && b.type == PlateType.CONTINENTAL
-        val bothOceanic = a.type == PlateType.OCEANIC && b.type == PlateType.OCEANIC
+        val bothContinental = first.type == PlateType.CONTINENTAL && second.type == PlateType.CONTINENTAL
+        val bothOceanic = first.type == PlateType.OCEANIC && second.type == PlateType.OCEANIC
 
         // Dense oceanic crust goes under buoyant continental crust, so where the pair is mixed the
         // continent overrides and there is nothing to choose. Where both are the same, the choice
         // is genuinely arbitrary and has to be made by something that cannot vary between cells or
         // between runs: the lower id, a total order on the pair.
         val overridingId = when {
-            a.type == b.type -> if (a.id < b.id) a.id else b.id
-            a.type == PlateType.CONTINENTAL -> a.id
-            else -> b.id
+            first.type == second.type -> if (first.id < second.id) first.id else second.id
+            first.type == PlateType.CONTINENTAL -> first.id
+            else -> second.id
         }
 
         val pairClass = when (type) {
@@ -1367,11 +1487,11 @@ object PlateStage {
 
         return PairInteraction(
             type = type,
-            strength = abs(convergence).coerceIn(0.12f, 1f),
+            strength = abs(convergence).coerceIn(MIN_BOUNDARY_STRENGTH, 1f),
             continentalCollision = bothContinental,
             pairClass = pairClass,
             overridingId = overridingId,
-            lowId = if (a.id < b.id) a.id else b.id
+            lowId = if (first.id < second.id) first.id else second.id
         )
     }
 
@@ -1379,9 +1499,9 @@ object PlateStage {
      * Sharp-crested profile, for features that really are narrow: trenches, rifts, ridges at
      * spreading centres.
      */
-    private fun falloff(distance: Float, range: Float): Float {
+    private fun sharpFalloff(distance: Float, range: Float): Float {
         if (distance >= range) return 0f
-        return (1f - distance / range).pow(1.6f)
+        return (1f - distance / range).pow(SHARP_FALLOFF_EXPONENT)
     }
 
     /**
@@ -1439,14 +1559,139 @@ object PlateStage {
      * Along-strike modulation for a volcanic arc: sampled fine and raised to a power, so the arc
      * is a row of separate cones rather than a continuous wall of the same height.
      */
-    private fun volcanicChain(noise: PerlinNoise, x: Int, y: Int, w: Int, h: Int): Float {
-        val n = 0.5f + 0.5f * noise.fbm(x * 26f / w, y * 26f / h, 2, 26, 26)
-        return n.coerceIn(0f, 1f).pow(2.5f) * 1.6f
+    private fun volcanicChain(
+        noise: PerlinNoise,
+        column: Int,
+        row: Int,
+        cellsAcross: Int,
+        cellsDown: Int
+    ): Float {
+        val alongStrike = 0.5f + 0.5f * noise.fbm(
+            column * ARC_CHAIN_CYCLES / cellsAcross,
+            row * ARC_CHAIN_CYCLES / cellsDown,
+            2,
+            ARC_CHAIN_CYCLES.toInt(),
+            ARC_CHAIN_CYCLES.toInt()
+        )
+        return alongStrike.coerceIn(0f, 1f).pow(ARC_CHAIN_EXPONENT) * ARC_CHAIN_PEAK
     }
 
-    /** The largest value the along-strike width swell can take; see `widthScale` in [generate]. */
+    /**
+     * The along-strike swell of a belt's width, as a factor on its nominal half-width: the noise
+     * runs it between these two.
+     *
+     * A belt that keeps one width for its whole length reads as drawn on even once its height
+     * varies. [WIDTH_SWELL_CYCLES] is how many times that swell repeats across the map — slow
+     * enough that neighbouring cells agree and the belt stays continuous rather than dissolving
+     * into blotches.
+     */
+    private const val WIDTH_SWELL_MIN = 0.55f
+    private const val WIDTH_SWELL_SPAN = 0.85f
+    private const val WIDTH_SWELL_CYCLES = 7f
+
+    /**
+     * [WIDTH_SWELL_MIN] plus [WIDTH_SWELL_SPAN], written out rather than added.
+     *
+     * Only [stampEpoch]'s reach test reads it, and the sum of the two floats rounds a hair above
+     * the literal, which would move the test's bound and with it a bit of the world.
+     */
     private const val MAX_WIDTH_SCALE = 1.4f
 
-    /** The largest value the finer width jitter can take; see `edgeJitter` in [generate]. */
+    /** The finer jitter of a belt's rim, on the same terms. See `edgeJitter` in [stampEpoch]. */
+    private const val EDGE_JITTER_MIN = 0.72f
+    private const val EDGE_JITTER_SPAN = 0.56f
+    private const val EDGE_JITTER_CYCLES = 17f
+
+    /** [EDGE_JITTER_MIN] plus [EDGE_JITTER_SPAN], written out for [MAX_WIDTH_SCALE]'s reason. */
     private const val MAX_EDGE_JITTER = 1.28f
+
+    /**
+     * How much of a belt's half-width the sharp-crested features use.
+     *
+     * A trench, a spreading ridge and a transform scarp are narrow next to the belt a collision
+     * raises, and they share [TectonicsConfig.boundaryFalloffCells] rather than carrying a knob
+     * apiece.
+     */
+    private const val NARROW_SHARE_OF_BELT = 0.45f
+
+    /** The exponent that gives [sharpFalloff] its peak on the boundary and its fast decay. */
+    private const val SHARP_FALLOFF_EXPONENT = 1.6f
+
+    /** Amplitude of one seeded rim harmonic, as a fraction of a seamount's radius. */
+    private const val RIM_HARMONIC_MIN = 0.015f
+    private const val RIM_HARMONIC_SPAN = 0.03f
+
+    /**
+     * How far a plate seed is kept from each pole, as a share of the grid's height, and the band
+     * of rows left for it between the two margins.
+     *
+     * A seed on the very first or last row owns a Voronoi cell that is all edge and no interior,
+     * so the polar rows would belong to a plate boundary rather than to a plate.
+     */
+    private const val SEED_POLE_MARGIN_SHARE = 0.06f
+    private const val SEED_LATITUDE_SPAN = 0.88f
+
+    /**
+     * How far the domain warp may push a plate boundary, in belt half-widths, and how many times
+     * its noise repeats across the map.
+     *
+     * Straight Voronoi edges are the one thing that makes a plate map look computed; the warp is
+     * what makes a boundary meander. Kept comparable to the belt it carries, so the meander is of
+     * the same scale as the mountains along it.
+     */
+    private const val WARP_AMPLITUDE_IN_BELT_WIDTHS = 1.6f
+    private const val WARP_CYCLES = 6f
+
+    /**
+     * The along-strike modulation of a volcanic arc: [ARC_CHAIN_CYCLES] repeats across the map,
+     * raised to [ARC_CHAIN_EXPONENT] and scaled to [ARC_CHAIN_PEAK].
+     *
+     * Sampled fine and raised to a power, so the arc is a row of separate cones rather than a
+     * continuous wall of one height. The peak above 1 is what lets the tallest cones in a chain
+     * stand above the arc's nominal crest.
+     */
+    private const val ARC_CHAIN_CYCLES = 26f
+    private const val ARC_CHAIN_EXPONENT = 2.5f
+    private const val ARC_CHAIN_PEAK = 1.6f
+
+    /**
+     * The convergence rate, as a share of a plate's own drift speed, above which a pair counts as
+     * converging or diverging rather than sliding past one another.
+     */
+    private const val CONVERGENCE_THRESHOLD = 0.15f
+
+    /**
+     * The least convergence a boundary is given credit for, so that a nearly transform pair still
+     * leaves a trace rather than vanishing where its relief would round to nothing.
+     */
+    private const val MIN_BOUNDARY_STRENGTH = 0.12f
+
+    /** Guards the division when two plate seeds land on the same cell. */
+    private const val MIN_SEED_SEPARATION_CELLS = 1e-4f
+
+    /**
+     * The per-cell roughness that breaks a belt's crest into peaks, between these two, repeating
+     * [ROUGHNESS_CYCLES] times across the map. Centred a little below 1 so it takes as much off a
+     * crest as it adds.
+     */
+    private const val ROUGHNESS_MIN = 0.75f
+    private const val ROUGHNESS_SPAN = 0.5f
+    private const val ROUGHNESS_CYCLES = 12f
+
+    /** How much of the full ridge roughness a plateau feels: a plain at altitude, not a range. */
+    private const val PLATEAU_ROUGHNESS_DAMPING = 0.7f
+
+    /**
+     * The exponent that makes an island arc sag between its volcanoes.
+     *
+     * Harder than the 1.6 a mountain belt gets: an arc is built on oceanic crust and is meant to
+     * stay mostly under water, so only its swells should clear the surface.
+     */
+    private const val ARC_SAG_EXPONENT = 3f
+
+    /**
+     * What the overriding plate's belt keeps of [TectonicsConfig.mountainHeight] where the crusts
+     * are mixed, in the one-profile control. Only [TectonicsConfig.crustPairProfiles] off reads it.
+     */
+    private const val OVERRIDING_BELT_SHARE = 0.8f
 }

@@ -324,9 +324,9 @@ class TectonicHistoryTest {
         val count = IntArray(bins)
         var cells = 0
         for (i in relief.indices) {
-            if (boundaries.nearestClass[i] !in wanted) continue
+            if (boundaries.nearestBoundaryClass[i] !in wanted) continue
             cells++
-            val bin = boundaries.distance[i].toInt()
+            val bin = boundaries.distanceCells[i].toInt()
             if (bin !in 0 until bins) continue
             total[bin] += relief[i].toDouble()
             count[bin]++

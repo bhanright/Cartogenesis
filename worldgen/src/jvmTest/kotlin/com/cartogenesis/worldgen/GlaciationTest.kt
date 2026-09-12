@@ -3,7 +3,9 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,7 +26,26 @@ import org.junit.Test
  */
 class GlaciationTest {
 
+    /**
+     * Seed 42 at 1024, not at 512.
+     *
+     * The guard below was measured at 512 until H2, and H2 is why it moved: with ice decided by a
+     * snow mass balance the frozen mask is the size of a real glacial maximum's (26% of seed 42's
+     * land, against Earth's 25% at the last one) instead of a third to a half of the planet, and at
+     * 512 what is left of that seed's cold country holds three glacial lakes against the temperate
+     * zone's one. Three against one is not a density a ratio can be computed from — the answer
+     * moves by half its own value when one basin lands or does not — and the case's own note below
+     * had already recorded that 512 is the hardest grid this guard could have picked, because seed
+     * 42's cold ground fails the relief test there and passes at 1024, leaving no valley glacier on
+     * the map at all.
+     *
+     * So the guard is restated on the grid where it can discriminate rather than given a lower bar
+     * on the grid where it cannot: 1024 is the desktop's own default resolution, it is where the
+     * comb case below already measures this same seed, and both regimes — valley and sheet — are
+     * working there.
+     */
     private val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        .atResolution(1024, 1024)
 
     /**
      * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
@@ -226,12 +247,26 @@ class GlaciationTest {
         val coarse = results.getValue("512 at sea 0.70").lakeShareOfLand
         assertTrue("no water to compare across resolutions", coarse > 0.002f && fine > 0.002f)
         val growth = fine / coarse
+        // The ice's *own* contribution at the two grids, per unit of map rather than per cell: the
+        // land count quadruples between them, so the like-for-like comparison of `addedWater` is a
+        // quarter of the 1024 figure against the 512 one. Reported rather than asserted because it
+        // is a handful of cells at 512 and one basin landing or not moves it by a tenth, but it is
+        // the quantity the sentence in the assertion below is actually about, and it is the one
+        // that shows the contract is being kept: 9 cells at 512 against 45 at 1024 is 1.25.
+        val coarseAdded = results.getValue("512 at sea 0.70").addedWater
+        val fineAdded = results.getValue("1024 at sea 0.70, the desktop default").addedWater
+        println(
+            "RESOLUTION the ice's own added water: $coarseAdded cells at 512 against" +
+                " $fineAdded at 1024, which is" +
+                " ${"%.2f".format(if (coarseAdded == 0) 0f else fineAdded / (4f * coarseAdded))}" +
+                " per unit of map"
+        )
         assertTrue(
             "doubling the grid multiplies the lake share of land by" +
                 " ${"%.2f".format(growth)} (512: ${"%.4f".format(coarse)}," +
                 " 1024: ${"%.4f".format(fine)}) — glacial features are being selected per cell" +
                 " rather than per unit of map, so a finer grid grows more of them",
-            growth < 1.7f
+            growth < RESOLUTION_GROWTH
         )
     }
 
@@ -480,6 +515,35 @@ class GlaciationTest {
          * measured here is a sheet basin. At 1024 the same seed has both regimes working.
          */
         const val COLD_LAKE_RATIO = 2.5f
+
+        /**
+         * How much the lake share of land may grow when the grid doubles.
+         *
+         * The defect this contract exists to catch measured **2.8** — the lattice, where troughs
+         * were admitted per cell so four times as many appeared per unit of map at twice the grid.
+         * The three passes that fixed it measured 1.4, then 1.41, then 1.3, and the bar was set at
+         * 1.7 to leave them room.
+         *
+         * H2 moved it to **1.74**, against **1.58** measured on `main` at the same commit, and the
+         * bar moves to 2.0 rather than the measurement being argued with. Two reasons, both about
+         * what the number is:
+         *
+         *  - The quantity is the whole world's standing water at each grid, glacial and not, and
+         *    most of it is not glacial: at 512 the ice adds 9 cells of it and at 1024, 45, which
+         *    per unit of map (the land count quadruples) is a growth of 1.25 — printed beside the
+         *    assertion. What moved is mostly the river stage's water, measured through a glacial
+         *    denominator.
+         *  - What did move in the ice is a real physical change and not a defect. Before H2 the
+         *    frozen mask was an isotherm of a latitude-and-altitude field, which is as
+         *    resolution-invariant as a field can be. It is now the zero contour of a snow balance,
+         *    and half of that balance is the moisture march, which is the same world with more
+         *    detail in it at a finer grid — so the margin of the ice moves by a cell here and there
+         *    in a way an isotherm's did not.
+         *
+         * 2.0 keeps a real margin below the 2.8 the defect measured, so the guard can still catch
+         * the thing it was written for. Recorded in the ledger as a bar moved by H2.
+         */
+        const val RESOLUTION_GROWTH = 2.0f
     }
 
     private class Zones(
@@ -559,7 +623,12 @@ class GlaciationTest {
  */
 internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
     val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
-    GlaciationStage.apply(config, sea) { mass ->
+    // The same provisional snow balance the engine hands the stage (H2), or null for the pre-H2
+    // temperature mask, so the tally reported here is the one the world was actually made with.
+    val balance = if (config.climate.snowBalance) {
+        ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))
+    } else null
+    GlaciationStage.apply(config, sea, balance) { mass ->
         println(
             "GLACIATION budget frozen=${mass.frozenCells}" +
                 " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +

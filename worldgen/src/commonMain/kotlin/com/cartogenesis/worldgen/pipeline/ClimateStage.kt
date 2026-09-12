@@ -282,11 +282,130 @@ object ClimateStage {
     fun generate(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult): ClimateResult =
         generateWithSeasonalMm(config, sea, ocean).result
 
+    /**
+     * Everything this stage computes before the biomes: the three temperature fields, the two
+     * seasonal rainfall marches in millimetres, and the annual wind.
+     *
+     * Split out of [generateWithSeasonalMm] because H2 needs the same fields two stages earlier
+     * than this stage runs — the glaciation mask is a snow balance now, and a snow balance is a
+     * question about temperature and rainfall in each half of the year. Sharing the computation
+     * rather than restating it is the same discipline [buildTemperature] was made `internal` for:
+     * a provisional climate that disagreed with the real one about where the snow falls would put
+     * troughs where the finished map shows none.
+     */
+    private class SeasonalFields(
+        val temperature: FloatField,
+        val summerTemperature: FloatField,
+        val winterTemperature: FloatField,
+        val summerPrecipitationMm: FloatField,
+        val winterPrecipitationMm: FloatField,
+        val wind: WindField
+    )
+
+    /**
+     * The snow balance for a world whose climate has not been computed yet, in millimetres of
+     * water equivalent a year — [SnowBalance]'s field, run on a full provisional march over the
+     * terrain as it stands before the ice has carved it.
+     *
+     * This is what [GlaciationStage] freezes on. It costs one extra run of this stage's own
+     * machinery (see the chunk's report for the measured figure) and nothing else: the same
+     * temperature curve, the same maritime and current anomalies, the same two seasonal marches.
+     * The alternative — the pre-H2 rule, a bare latitude-and-altitude annual mean at or below zero
+     * — could not see rainfall at all, and rainfall is half of what decides where a glacier is.
+     */
+    internal fun provisionalSnowBalance(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult,
+        /** See `GlaciationConfig.glacialMaximumC`: the ice that carved the ground is not today's. */
+        globalCoolingC: Float = config.glaciation.glacialMaximumC
+    ): FloatField {
+        val fields = seasonalFields(config, sea, ocean)
+        return SnowBalance.field(
+            sea.isLand,
+            fields.summerTemperature,
+            fields.winterTemperature,
+            fields.summerPrecipitationMm,
+            fields.winterPrecipitationMm,
+            SnowBalance.glacialCoolingByRow(config.height, globalCoolingC)
+        )
+    }
+
     internal fun generateWithSeasonalMm(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         ocean: OceanResult
     ): Generated {
+        val w = config.width
+        val h = config.height
+
+        val fields = seasonalFields(config, sea, ocean)
+        val temperature = fields.temperature
+        val summerTemperature = fields.summerTemperature
+        val winterTemperature = fields.winterTemperature
+        val summerPrecipitationMm = fields.summerPrecipitationMm
+        val winterPrecipitationMm = fields.winterPrecipitationMm
+
+        val precipitationMm = FloatField(w, h)
+        for (i in 0 until w * h) {
+            precipitationMm.data[i] =
+                (summerPrecipitationMm.data[i] + winterPrecipitationMm.data[i]) * 0.5f
+        }
+
+        // The 0..1 copy every pre-A4 consumer was built against: rendering, CultureStage's climate
+        // distance, RiverStage's and NationStage's runoff weighting, and classify's own
+        // seasonal-shape ratios. One fixed factor for all three fields, from ClimateResult's own
+        // doc comment: REFERENCE_MM maps to 1, clamped.
+        val precipitation = FloatField(w, h)
+        val summerPrecipitation = FloatField(w, h)
+        val winterPrecipitation = FloatField(w, h)
+        for (i in 0 until w * h) {
+            precipitation.data[i] = (precipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
+            summerPrecipitation.data[i] =
+                (summerPrecipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
+            winterPrecipitation.data[i] =
+                (winterPrecipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
+        }
+
+        // Recomputed here rather than carried down from the glaciation stage's provisional run:
+        // that one was measured on the terrain before the ice cut it, and this one has to agree
+        // with the map the reader is looking at. Cheap enough that sharing it would be a false
+        // economy — see [SnowBalanceAccelerator].
+        val snowBalance = if (config.climate.snowBalance) {
+            SnowBalance.field(
+                sea.isLand, summerTemperature, winterTemperature,
+                summerPrecipitationMm, winterPrecipitationMm
+            )
+        } else null
+
+        val biome = classify(
+            w, h, sea, temperature, summerTemperature, winterTemperature,
+            precipitationMm, summerPrecipitationMm, winterPrecipitationMm, snowBalance
+        )
+
+        return Generated(
+            result = ClimateResult(
+                temperature = temperature,
+                summerTemperature = summerTemperature,
+                winterTemperature = winterTemperature,
+                precipitation = precipitation,
+                summerPrecipitation = summerPrecipitation,
+                winterPrecipitation = winterPrecipitation,
+                precipitationMm = precipitationMm,
+                windDirection = fields.wind.zonal,
+                windMeridional = FloatField(w, h, fields.wind.meridional),
+                biome = biome
+            ),
+            summerPrecipitationMm = summerPrecipitationMm,
+            winterPrecipitationMm = winterPrecipitationMm
+        )
+    }
+
+    private fun seasonalFields(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult
+    ): SeasonalFields {
         val w = config.width
         val h = config.height
         val cfg = config.climate
@@ -336,50 +455,18 @@ object ClimateStage {
         // march it replaced.
         val summerPrecipitationMm = FloatField(w, h)
         val winterPrecipitationMm = FloatField(w, h)
-        val precipitationMm = FloatField(w, h)
         for (i in 0 until w * h) {
-            val summerMm = summerRaw.data[i] * MM_SCALE
-            val winterMm = winterRaw.data[i] * MM_SCALE
-            summerPrecipitationMm.data[i] = summerMm
-            winterPrecipitationMm.data[i] = winterMm
-            precipitationMm.data[i] = (summerMm + winterMm) * 0.5f
+            summerPrecipitationMm.data[i] = summerRaw.data[i] * MM_SCALE
+            winterPrecipitationMm.data[i] = winterRaw.data[i] * MM_SCALE
         }
 
-        // The 0..1 copy every pre-A4 consumer was built against: rendering, CultureStage's climate
-        // distance, RiverStage's and NationStage's runoff weighting, and classify's own
-        // seasonal-shape ratios. One fixed factor for all three fields, from ClimateResult's own
-        // doc comment: REFERENCE_MM maps to 1, clamped.
-        val precipitation = FloatField(w, h)
-        val summerPrecipitation = FloatField(w, h)
-        val winterPrecipitation = FloatField(w, h)
-        for (i in 0 until w * h) {
-            precipitation.data[i] = (precipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
-            summerPrecipitation.data[i] =
-                (summerPrecipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
-            winterPrecipitation.data[i] =
-                (winterPrecipitationMm.data[i] / REFERENCE_MM).coerceIn(0f, 1f)
-        }
-
-        val biome = classify(
-            w, h, sea, temperature, summerTemperature, winterTemperature,
-            precipitationMm, summerPrecipitationMm, winterPrecipitationMm
-        )
-
-        return Generated(
-            result = ClimateResult(
-                temperature = temperature,
-                summerTemperature = summerTemperature,
-                winterTemperature = winterTemperature,
-                precipitation = precipitation,
-                summerPrecipitation = summerPrecipitation,
-                winterPrecipitation = winterPrecipitation,
-                precipitationMm = precipitationMm,
-                windDirection = wind.zonal,
-                windMeridional = FloatField(w, h, wind.meridional),
-                biome = biome
-            ),
+        return SeasonalFields(
+            temperature = temperature,
+            summerTemperature = summerTemperature,
+            winterTemperature = winterTemperature,
             summerPrecipitationMm = summerPrecipitationMm,
-            winterPrecipitationMm = winterPrecipitationMm
+            winterPrecipitationMm = winterPrecipitationMm,
+            wind = wind
         )
     }
 
@@ -1100,6 +1187,17 @@ object ClimateStage {
      * arid interior from misreading as desert. That gate is gone: aridity is now decided on its
      * own terms, on its own line, before the thermal groups run at all.
      *
+     * ## Ice, before any of it (H2)
+     *
+     * The first question asked of a land cell is whether it is under ice, and the answer is
+     * [SnowBalance]'s: a glacier is where a year's snowfall outlives the year, not where the
+     * thermometer reads below freezing. That ordering is deliberate — ice covers whatever was
+     * underneath it — but so is what happens when the balance says no: the cell falls through to
+     * the aridity line and the thermal groups like any other, so a cold *dry* interior comes out
+     * as cold desert or tundra, which is what Siberia and the Gobi are. The pre-H2 rule (annual
+     * mean below -8 C) is still here behind `ClimateConfig.snowBalance` as the control the guard
+     * needs, and it is the rule that made 43% of seed 7 an ice sheet.
+     *
      * The four thermal groups below are Koppen's own, read on the seasonal temperature fields
      * once a cell has already cleared the aridity test: a place with [summerTemperature] below
      * 10 C never has a growing season and is tundra (ET) whatever its annual mean; above that,
@@ -1144,10 +1242,18 @@ object ClimateStage {
         winterTemperature: FloatField,
         precipitationMm: FloatField,
         summerPrecipitationMm: FloatField,
-        winterPrecipitationMm: FloatField
+        winterPrecipitationMm: FloatField,
+        /**
+         * [SnowBalance]'s field, or null when `ClimateConfig.snowBalance` is off and the ice gate
+         * is the pre-H2 annual-mean one.
+         */
+        snowBalance: FloatField?
     ): Array<Biome> {
         return Array(width * height) { i ->
             if (!sea.isLand[i]) {
+                // Sea ice, which is frozen sea water and not a mass balance at all: it forms
+                // because the water froze, and no amount of snowfall makes it and no amount of
+                // drought prevents it. H2's balance is about glaciers, so this line is untouched.
                 if (temperature.data[i] < -6f) Biome.ICE_SHEET
                 else if (sea.relativeElevation.data[i] > -0.12f) Biome.SHALLOW_OCEAN
                 else Biome.OCEAN
@@ -1167,7 +1273,14 @@ object ClimateStage {
                 val aridity =
                     koppenAridityThresholdMm(t, summerShare, winterShare, summerMm, winterMm)
                 when {
-                    t < -8f -> Biome.ICE_SHEET
+                    // Ice, by whichever rule this world was asked for. The balance is the honest
+                    // one — a glacier is where a year's snow survives the year, so a cold desert
+                    // falls through to the aridity and tundra gates below and comes out as cold
+                    // desert or tundra rather than as an ice cap. The annual-mean rule beneath it
+                    // is the pre-H2 gate, kept for the control the guard needs and for a world
+                    // saved before this chunk existed.
+                    if (snowBalance != null) snowBalance.data[i] > 0f else t < -8f ->
+                        Biome.ICE_SHEET
                     elevation > 0.72f -> Biome.ALPINE
                     // B: arid, decided before any of the thermal groups below — see the doc
                     // comment above. BW (desert) below half the threshold, BS (steppe) below it;

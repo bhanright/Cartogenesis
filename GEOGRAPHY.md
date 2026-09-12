@@ -120,6 +120,19 @@ with ten endorheic basins and 132 playa cells.
 
 ## Known deviations
 
+**The shoreline does not know whether the sea can reach it.** Sea level is a percentile and nothing
+else, so every hollow the erosion leaves below it is drawn as ocean whether or not a drop of ocean
+could get there, and a D8 river ends at the first one it meets. On seed 59758 at 2048 that is 475
+separate bodies of water outside the ocean, and a third of every seed's river mouths end in one —
+measured with deposition switched off entirely, so it is not the deltas' doing. Cutting an inlet
+from each such pocket to the sea was tried in the hydraulic pass and reverted: it works on the
+numbers (that seed's stranded mouths fell from 40 to 15 at 512) and it is the wrong place for it,
+because a small body of water the sea cannot reach is sometimes a landform rather than an artefact —
+the gulfs of a flooded rift are exactly such bodies, and joining them to the ocean turns the chain
+back into the channel `RiftSegmentationTest` exists to break up. The cure is connectedness in the
+sea-level cut itself: water the ocean cannot reach is land, or a lake, and the cut is the only place
+that can tell which without guessing.
+
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut
 down through its rim, which is why it is still there. The hydraulic pass cannot tell the difference,

@@ -389,8 +389,19 @@ internal object HydraulicErosion {
                             stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment, settled,
                             wholeCells = false,
                             accepts = { c, _ -> isLand[c] && ground[c] - relative[c] > POND_DEPTH },
-                            levelOf = { c, _ ->
-                                sea.threshold + (ground[c] - 2f * POND_DEPTH) * landRange
+                            // Deeper the further from the inflow, and uneven cell by cell.
+                            //
+                            // Laid to one depth below the surface — which is what this was — every
+                            // cell of a fan ends at exactly the same height, and a lake whose floor
+                            // is a plane has a level set that is a straight line: the water balance
+                            // then draws it with a ruler-straight shore. Measured on seed 59758 at
+                            // 2048, two lakes of 452 and 287 cells had a single distinct floor
+                            // height between them. A real fan slopes away from the river that
+                            // built it and is rough, so this one does too.
+                            levelOf = { c, d ->
+                                val depth = 2f * POND_DEPTH *
+                                    (1f + d * LAKE_FAN_SLOPE) * (0.9f + 0.35f * wobble(c))
+                                sea.threshold + (ground[c] - depth) * landRange
                             }
                         )
                         deposited += laid
@@ -402,6 +413,19 @@ internal object HydraulicErosion {
             }
 
             val closing = round == cfg.hydraulicRounds - 1
+            // Where the spoil went, kept before it stops being a layer of its own and becomes
+            // terrain: it is how the mouths below tell fresh ground from old.
+            //
+            // Empty rather than absent when nothing is being carried, so that the pass below runs
+            // either way. `DepositionTest` holds a world with deposition switched off and a world
+            // with it running and every rate at zero to be bit-identical, which is the assertion
+            // that says the deposition machinery is a layer on top of the erosion rather than part
+            // of it — and it caught this the first time too.
+            val spoil = if (closing) {
+                if (carryingSediment) sediment.copyOf() else FloatArray(w * h)
+            } else {
+                null
+            }
             if (closing) settle()
 
             // One last breach, over the spoil, once the terrain is otherwise finished.
@@ -461,6 +485,22 @@ internal object HydraulicErosion {
                     notched += cut.moved
                     notchCells += cut.cells
                 }
+            }
+
+            // And the last thing of all: give every river that ends on its own delta a way through
+            // it.
+            //
+            // Measured on seed 59758 at 2048, where the author found rivers stopping short of the
+            // water: the trunk's drawn chain ended at (640,267), a cell of *sea* — but sea in a
+            // body of its own, 105th of 475 on that map, with the delta's new land all round it.
+            // Within twelve cells of it, 336 of 614 land cells had no lower neighbour at all. So
+            // two things were wrong and neither was the lobe's outline: the water the river reached
+            // could not be reached from the ocean, and the ground it would have had to cross to
+            // find the ocean was dead flat.
+            if (closing && cfg.deltaLobe && spoil != null) {
+                val opened = openMouths(w, h, working, provisionalSeaLevel, spoil)
+                incised += opened.removed
+                lost += opened.removed
             }
 
             working = relax(working)
@@ -553,8 +593,135 @@ internal object HydraulicErosion {
     /** How much of the reach is given over to the per-cell wobble in the outline. */
     private const val LOBE_WOBBLE = 0.18f
 
+    /**
+     * How far a distributary falls per cell, as a share of the freeboard its lobe stands at.
+     *
+     * Enough that the D8 step across a lobe has one answer rather than the fill's epsilon and a
+     * coin toss — two orders of magnitude more than that epsilon — and little enough that a channel
+     * ten cells long is a groove across the delta rather than a canyon through it.
+     */
+    private const val DISTRIBUTARY_FALL = 0.15f
+
+    /**
+     * How much of the land a watercourse must drain before this stage treats it as a river.
+     *
+     * Deliberately the same figure as `RiversConfig.sourceThreshold`, and deliberately a constant
+     * rather than a read of that setting, for the same reason [POND_DEPTH] is: the rivers section
+     * is chosen long after erosion runs, and reading it here would mean adding `rivers` to
+     * erosion's reuse guard so that moving a river setting re-cut every valley. The two agree
+     * because the stage works to flat rain, so a share of the world's runoff and a share of its
+     * land are the same number.
+     */
+    private const val DRAWN_RIVER = 0.0006f
+
+    /**
+     * How much deeper a lacustrine fan lies per cell of distance from the river that built it, as a
+     * share of the two pond-depths it is held below the surface at its apex.
+     *
+     * A fan is a slope, not a shelf: the coarse material drops at the inflow and the fine carries
+     * further out, so the floor falls away from the mouth. Modest, because the whole fan sits in
+     * water a few pond-depths deep and the point is a floor with a shape rather than a canyon.
+     */
+    private const val LAKE_FAN_SLOPE = 0.25f
+
     /** What one pass of the outlet notch took off, and out of how many cells. */
     private class Breached(val moved: Double, val cells: Int)
+
+    /** What cutting the grooves took off the land, and out of how many cells. */
+    private class Opened(val removed: Double, val cuts: Int)
+
+    /**
+     * Cuts each drawn river one channel to follow wherever its own path crosses ground the fill had
+     * to raise.
+     *
+     * A delta lobe is built round after round around whichever cell the trunk was reaching at the
+     * time, laid a little at a time and then handed to the thermal sweeps, and what comes out is
+     * flat enough that the depression fill has to level it. The water then crosses it on the fill's
+     * epsilon, which is a coin toss cell by cell: the trunk arrives and breaks into a fan of
+     * one-cell threads lying at the grid's own bearings, none of them carrying enough accumulation
+     * to be drawn as a river. What the reader sees is a river stopping at the inner edge of a pale
+     * slab. Measured on seed 59758 at 2048, 336 of the 614 land cells within twelve of that mouth
+     * had no lower neighbour at all.
+     *
+     * So the river's own path is cut to a surface that falls by a fixed step at every cell, for as
+     * long as it is crossing raised ground. The walk is in drainage order, sources first, so each
+     * cell is cut against the level its upstream neighbour was left at and the groove descends the
+     * whole way. Standing water counts as raised ground where the river is running over its own
+     * fresh sediment — a puddle in a week-old fan is not a lake held in rock, and the spoil test is
+     * what keeps this off one.
+     *
+     * What it deliberately does not do is touch the water. An earlier version of this also opened
+     * every pocket of sea a river ended in, by cutting an inlet from it to the ocean, and the
+     * measurements were good — the mouths ending in a pocket fell below the count in a world with
+     * no deposition at all. It is reverted all the same: a small body of water the ocean cannot
+     * reach is not always an artefact. `RiftSegmentationTest` asks a flooded rift to be a chain of
+     * gulfs with land bridges between them, and those gulfs are exactly such bodies; joining them
+     * to the ocean turned the chain back into the channel that chunk existed to break up, and moved
+     * enough coastline besides to unsettle the ocean-current and culture guards. Water the sea
+     * cannot reach is a question for the sea-level cut, and GEOGRAPHY.md now records it as one.
+     */
+    private fun openMouths(
+        w: Int,
+        h: Int,
+        working: FloatField,
+        provisionalSeaLevel: Float,
+        spoil: FloatArray
+    ): Opened {
+        val size = w * h
+        val sea = SeaLevelStage.apply(working, provisionalSeaLevel)
+        if (sea.landCellCount == 0) return Opened(0.0, 0)
+        val isLand = sea.isLand
+        val height = working.data
+        val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
+        // Measured against the pond depth rather than against the delta's freeboard, though a
+        // freeboard is what it is cutting through. `DepositionTest` holds that no deposition knob
+        // may change a world with deposition switched off, and this pass runs either way; reading
+        // `deltaFreeboard` here let the fiddled-knobs case move the terrain. It caught that too.
+        val step = POND_DEPTH * landRange
+        val fall = (step * DISTRIBUTARY_FALL).coerceAtLeast(1e-7f)
+        val floor = sea.threshold + step * LOBE_RIM
+
+        val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
+        val flow = FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled)
+        val area = FlowRouting.accumulate(
+            w, h, isLand, filled, flow, sea.landCellCount
+        ) { 1f }
+        val land = sea.landCellCount.toFloat()
+
+        var removed = 0.0
+        var cuts = 0
+        val order = FlowRouting.drainageOrder(w, h, isLand, flow, sea.landCellCount)
+        // Mouths first. Reversed, the drainage order reaches a cell only after the cell it drains
+        // into, so each one is cut to sit one step above ground that is already final — and a
+        // groove built that way descends the whole way to the water by construction.
+        //
+        // Sources first was tried and is what a channel dug from the top down actually does: it
+        // reaches the level it is allowed to stop at, stops, and leaves a trench with a closed end
+        // for the next fill to pond. Two of those on seed 718106 at 2048, thirty-three cells
+        // between them, and `GlaciationTest` counted them as thin straight water at a grid bearing,
+        // which is exactly what they were.
+        for (k in order.indices.reversed()) {
+            val c = order[k]
+            // Every river the map will draw, not only the few big enough to build a delta. The
+            // rivers stage draws a channel once it carries `RiversConfig.sourceThreshold` of the
+            // world's runoff, and with the flat rain this stage works to that is the same figure as
+            // a share of the land. At `deltaMinCatchment` instead — five times as much — the trunk
+            // at the author's own mouth on seed 59758 did not qualify and nothing was cut.
+            if (area.data[c] / land < DRAWN_RIVER) continue
+            val standing = filled.data[c] - sea.relativeElevation.data[c]
+            val onFlat = standing > 0f && (standing <= POND_DEPTH || spoil[c] > 0f)
+            if (!onFlat) continue
+            val t = flow[c]
+            if (t < 0) continue
+            val below = if (isLand[t]) height[t] else sea.threshold
+            val want = minOf(height[c], below + fall).coerceAtLeast(floor)
+            if (height[c] > want) {
+                removed += -raise(height, c, (want - height[c]).toDouble())
+                cuts++
+            }
+        }
+        return Opened(removed, cuts)
+    }
 
     /**
      * Cuts every filled basin's lip down by what its own outflow can take, and cuts the sill below

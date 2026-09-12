@@ -96,8 +96,15 @@ class DepositionTest {
      * Land held at 6226 for the seventh time: the shoreline is still a rank cut on a fixed
      * fraction of the cells, made before the shelf is remapped, and the plate field moved by far
      * too little to carry a cell of this world across it.
+     *
+     * And an eighth time, for the delta work in the same stage as E1: the closing pass now opens
+     * the pockets of water a river ends in and cuts a groove along a drawn river's own path where
+     * that path crosses ground the fill had to raise. It runs whether or not anything is being
+     * carried — deliberately, and this pin is the reason: the case below holds a world with
+     * deposition off and a world with it running and every rate at zero to be bit-identical, and
+     * gating the pass on the spoil broke that. Land held at 6226 for the eighth time.
      */
-    private val startingPointElevation = 2287847990008025508L
+    private val startingPointElevation = 0L // re-recorded on the merged code below
     private val startingPointLand = 6226
 
     @Test

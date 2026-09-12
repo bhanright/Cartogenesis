@@ -11,6 +11,7 @@ import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.ui.SettingsStore
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -50,6 +51,36 @@ class WebPlatform(
             "anything worth keeping."
 
     override val supportsFileTransfer: Boolean = true
+
+    /**
+     * `localStorage`, which is exactly the right size for this and exactly the wrong size for a
+     * world.
+     *
+     * The library outgrew local storage the moment a save carried the world and moved to IndexedDB
+     * (see [IndexedDbLibrary]); the settings are a few hundred bytes of JSON and want the simplest
+     * durable thing there is, which is a synchronous key. It survives a reload and a restart, and
+     * goes when the reader clears site data — which is the same promise the library makes.
+     */
+    override val settingsStore: SettingsStore = LocalStorageSettings
+
+    /** A tab cannot close itself, so File offers no Quit here. */
+    override val canQuit: Boolean = false
+
+    override val canOpenLinks: Boolean = true
+
+    override fun openLink(url: String) {
+        openInNewTab(url)
+    }
+
+    /**
+     * One `fetch`, made only when a reader asks for it.
+     *
+     * GitHub's releases API sends `Access-Control-Allow-Origin: *`, so this is an ordinary
+     * cross-origin `GET` from the page with no proxy in the middle. Nothing calls it while the page
+     * is loading: the launch check is off by default and the menu item is the only other caller,
+     * which is what keeps the bundle's load path free of a request to another origin.
+     */
+    override suspend fun fetchText(url: String): String? = fetchTextOrNull(url)
 
     override suspend fun downloadWorld(document: WorldDocument, world: WorldMap?) {
         val bytes = WorldCodec.encode(document, world, compressor, "web")
@@ -93,4 +124,27 @@ class WebPlatform(
 
     private fun skiaFormat(format: ExportFormat): EncodedImageFormat =
         if (format == ExportFormat.PNG) EncodedImageFormat.PNG else EncodedImageFormat.WEBP
+}
+
+/**
+ * The settings document, under one key in `localStorage`.
+ *
+ * An object rather than a class: there is one settings document per origin, and two instances of a
+ * store over the same key would only invite the question of which one is authoritative. Both calls
+ * swallow their failures — a browser in private mode, or one with site data blocked, throws on
+ * `setItem` rather than declining it, and a preference that could not be saved is not a reason to
+ * stop the application.
+ */
+private object LocalStorageSettings : SettingsStore {
+
+    private const val KEY = "cartogenesis.settings"
+
+    override val location: String =
+        "This browser's local storage. Clearing site data resets them to the defaults."
+
+    override suspend fun read(): String? = runCatching { storageGet(KEY) }.getOrNull()
+
+    override suspend fun write(text: String) {
+        runCatching { storageSet(KEY, text) }
+    }
 }

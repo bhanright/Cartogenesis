@@ -9,8 +9,11 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,14 +56,70 @@ import org.jetbrains.compose.resources.Font
 @Composable
 fun CartogenesisTheme(
     dark: Boolean = isSystemInDarkTheme(),
+    choice: ThemeChoice = ThemeChoice.SYSTEM,
+    scale: Float = 1f,
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = if (dark) DarkAtlas else LightAtlas,
-        typography = cartogenesisTypography(),
-        shapes = AtlasShapes,
-        content = content
-    )
+    val density = LocalDensity.current
+    val scaled = remember(density, scale) {
+        // Only the density moves, not the font scale: a font scale is the reader's own accessibility
+        // setting and multiplying it here would apply this twice to text and once to everything
+        // else, so the interface would come apart rather than grow.
+        Density(density.density * scale, density.fontScale)
+    }
+    CompositionLocalProvider(LocalDensity provides scaled) {
+        MaterialTheme(
+            colorScheme = choice.scheme(dark),
+            typography = cartogenesisTypography(),
+            shapes = AtlasShapes,
+            content = content
+        )
+    }
+}
+
+/**
+ * Which chrome the window is dressed in.
+ *
+ * [SYSTEM] is the default and is what F1 shipped: the desktop's or the browser's own light/dark
+ * setting, followed live. The four named ones are a deliberate refusal of the usual "light, dark,
+ * auto" triple — the application already owns ten palettes, one per map style, and the two
+ * chromes F1 wrote are literally two of them (Vellum's paper, and the author's site). So the extra
+ * choices are lifted from the styles rather than invented: choosing Nautical dresses the window in
+ * the admiralty chart's buff and oxide, Midnight in its slate and brass-gold, Mars in basalt and
+ * rust. A reader who works in one style can put the whole window in it.
+ *
+ * The map is *not* restyled by this, and that separation is deliberate: which style a map is drawn
+ * in is a property of the map (and of the exported file), while this is a property of the room the
+ * map is being looked at in.
+ */
+enum class ThemeChoice(val label: String) {
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark"),
+    NAUTICAL("Nautical"),
+    MIDNIGHT("Midnight"),
+    MARS("Mars");
+
+    /** [systemDark] is consulted only by [SYSTEM]; every other choice is an answer already. */
+    internal fun scheme(systemDark: Boolean): ColorScheme = when (this) {
+        SYSTEM -> if (systemDark) DarkAtlas else LightAtlas
+        LIGHT -> LightAtlas
+        DARK -> DarkAtlas
+        NAUTICAL -> NauticalChrome
+        MIDNIGHT -> MidnightChrome
+        MARS -> MarsChrome
+    }
+
+    /**
+     * Whether this chrome is a dark one, for anything that has to know before the scheme exists.
+     *
+     * [SYSTEM] has no answer of its own, so it returns null and the caller falls back to the host.
+     */
+    internal fun isDark(): Boolean? = when (this) {
+        SYSTEM -> null
+        LIGHT, NAUTICAL -> false
+        DARK, MIDNIGHT, MARS -> true
+    }
 }
 
 // The two palettes, named once. Light is Vellum's; dark is the website's CSS variables verbatim.
@@ -197,6 +256,164 @@ private val DarkAtlas: ColorScheme = darkColorScheme(
     surfaceContainer = InkRaised,
     surfaceContainerHigh = Color(0xFF221B16),
     surfaceContainerHighest = Color(0xFF29211B)
+)
+
+// ---- The three chromes lifted from map styles, added by F4. ----
+//
+// Each is built the same way the two above are: the style's `paper` is the ground, its `coastline`
+// is the ink, its `border` is the accent, and a stop from its own ramp is the wash a selection
+// takes. Nothing is invented, so a chrome and the style it came from cannot drift apart, and the
+// rule that made the first two work — `surfaceTint` equal to the surface, so no tonal fill
+// survives — is kept in all three.
+
+// NAUTICAL: buff paper, the chart's near-black blue for ink, oxide red for the accent.
+private val ChartPaper = Color(0xFFF4EAD2)
+private val ChartRaised = Color(0xFFFAF3E2)
+private val ChartSunk = Color(0xFFE9DCBE)
+private val ChartInk = Color(0xFF1B2C3A)
+private val ChartInkFaded = Color(0xFF4C6172)
+private val ChartOxide = Color(0xFF8A3B2E)
+private val ChartWash = Color(0xFFD6E9F0)
+private val ChartRule = Color(0xFFB8A886)
+
+private val NauticalChrome: ColorScheme = lightColorScheme(
+    primary = ChartOxide,
+    onPrimary = ChartRaised,
+    primaryContainer = ChartWash,
+    onPrimaryContainer = ChartInk,
+    inversePrimary = Color(0xFF6E9DB5),
+    secondary = Color(0xFF3E6E8C),
+    onSecondary = ChartRaised,
+    secondaryContainer = ChartWash,
+    onSecondaryContainer = ChartInk,
+    tertiary = ChartInkFaded,
+    onTertiary = ChartRaised,
+    tertiaryContainer = Color(0xFFEDF6F9),
+    onTertiaryContainer = ChartInk,
+    background = ChartPaper,
+    onBackground = ChartInk,
+    surface = ChartRaised,
+    onSurface = ChartInk,
+    surfaceVariant = ChartSunk,
+    onSurfaceVariant = ChartInkFaded,
+    surfaceTint = ChartRaised,
+    inverseSurface = ChartInk,
+    inverseOnSurface = ChartRaised,
+    error = Color(0xFF9E2B20),
+    onError = ChartRaised,
+    errorContainer = Color(0xFFEED6CF),
+    onErrorContainer = Color(0xFF3A120C),
+    outline = ChartRule,
+    outlineVariant = Color(0xFFD3C4A4),
+    scrim = Color(0xFF10202C),
+    surfaceBright = Color(0xFFFDF8EC),
+    surfaceDim = Color(0xFFE6D9BC),
+    surfaceContainerLowest = Color(0xFFFEFAF1),
+    surfaceContainerLow = Color(0xFFFBF5E6),
+    surfaceContainer = ChartRaised,
+    surfaceContainerHigh = Color(0xFFF0E7D0),
+    surfaceContainerHighest = ChartSunk
+)
+
+// MIDNIGHT: the moonlit map's own indigo and slate, with its brass-gold border as the accent and
+// its deliberately bright river blue kept for anything secondary — the one thing that style
+// refuses to dim is the water, and the chrome keeps that promise.
+private val NightGround = Color(0xFF10151F)
+private val NightRaised = Color(0xFF161D2A)
+private val NightSunk = Color(0xFF1E2635)
+private val NightRule = Color(0xFF313C4E)
+private val NightText = Color(0xFFC8D2DE)
+private val NightTextDim = Color(0xFF8A94A2)
+private val NightGold = Color(0xFFD8A05A)
+private val NightWater = Color(0xFF7FC6E8)
+
+private val MidnightChrome: ColorScheme = darkColorScheme(
+    primary = NightGold,
+    onPrimary = NightGround,
+    primaryContainer = Color(0xFF2C2519),
+    onPrimaryContainer = NightGold,
+    inversePrimary = Color(0xFF8A5A20),
+    secondary = NightWater,
+    onSecondary = NightGround,
+    secondaryContainer = Color(0xFF1C2B38),
+    onSecondaryContainer = NightWater,
+    tertiary = NightTextDim,
+    onTertiary = NightGround,
+    tertiaryContainer = NightSunk,
+    onTertiaryContainer = NightText,
+    background = NightGround,
+    onBackground = NightText,
+    surface = NightRaised,
+    onSurface = NightText,
+    surfaceVariant = NightSunk,
+    onSurfaceVariant = NightTextDim,
+    surfaceTint = NightRaised,
+    inverseSurface = Color(0xFFAEB7C4),
+    inverseOnSurface = NightGround,
+    error = Color(0xFFD0705E),
+    onError = NightGround,
+    errorContainer = Color(0xFF4A1C15),
+    onErrorContainer = Color(0xFFF0D5CF),
+    outline = NightRule,
+    outlineVariant = Color(0xFF262F3D),
+    scrim = Color(0xFF070B12),
+    surfaceBright = Color(0xFF27303F),
+    surfaceDim = NightGround,
+    surfaceContainerLowest = Color(0xFF0C1017),
+    surfaceContainerLow = Color(0xFF131924),
+    surfaceContainer = NightRaised,
+    surfaceContainerHigh = Color(0xFF1C2431),
+    surfaceContainerHighest = Color(0xFF222B3A)
+)
+
+// MARS: basalt ground, rust and ochre accents, dust-pale text. The same faces, as the spec asks —
+// nothing about the typography changes with the chrome, only the colours.
+private val BasaltGround = Color(0xFF15100D)
+private val BasaltRaised = Color(0xFF1D1613)
+private val BasaltSunk = Color(0xFF261D18)
+private val BasaltRule = Color(0xFF453228)
+private val Dust = Color(0xFFE8D8C0)
+private val DustDim = Color(0xFFA8917A)
+private val Rust = Color(0xFFC2683A)
+private val Ochre = Color(0xFFD8A45A)
+
+private val MarsChrome: ColorScheme = darkColorScheme(
+    primary = Rust,
+    onPrimary = BasaltGround,
+    primaryContainer = Color(0xFF32211A),
+    onPrimaryContainer = Ochre,
+    inversePrimary = Color(0xFF7E3A20),
+    secondary = Ochre,
+    onSecondary = BasaltGround,
+    secondaryContainer = Color(0xFF32211A),
+    onSecondaryContainer = Dust,
+    tertiary = DustDim,
+    onTertiary = BasaltGround,
+    tertiaryContainer = BasaltSunk,
+    onTertiaryContainer = Dust,
+    background = BasaltGround,
+    onBackground = Dust,
+    surface = BasaltRaised,
+    onSurface = Dust,
+    surfaceVariant = BasaltSunk,
+    onSurfaceVariant = DustDim,
+    surfaceTint = BasaltRaised,
+    inverseSurface = Dust,
+    inverseOnSurface = BasaltGround,
+    error = Color(0xFFD4573A),
+    onError = BasaltGround,
+    errorContainer = Color(0xFF4A1A0E),
+    onErrorContainer = Color(0xFFF2D9CC),
+    outline = BasaltRule,
+    outlineVariant = Color(0xFF31241D),
+    scrim = Color(0xFF0A0705),
+    surfaceBright = Color(0xFF2E231C),
+    surfaceDim = BasaltGround,
+    surfaceContainerLowest = Color(0xFF0F0B09),
+    surfaceContainerLow = Color(0xFF181210),
+    surfaceContainer = BasaltRaised,
+    surfaceContainerHigh = Color(0xFF241B16),
+    surfaceContainerHighest = Color(0xFF2B211A)
 )
 
 /**

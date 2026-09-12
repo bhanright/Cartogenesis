@@ -1,0 +1,113 @@
+package com.cartogenesis.ui
+
+import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.NoCompression
+import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldLibrary
+import com.cartogenesis.cartography.WorldSave
+import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+
+/**
+ * A host that does nothing, so a test can ask what the shared code does with it.
+ *
+ * Every question [Platform] asks is answered here with the least interesting possible answer, and
+ * a test overrides the one it is about. It also *records*: [written] is what reached the settings
+ * store, [fetched] is every URL the update check asked for, and [openedFolders] and [links] are the
+ * two things the platform is asked to open — which is how a test observes an effect whose whole
+ * point is that it leaves the application.
+ */
+internal open class FakePlatform(
+    override val defaultResolution: Int = 512,
+    override val accelerator: ErosionAccelerator? = null,
+    override val exportCeiling: Int = 4096,
+    override val canQuit: Boolean = false,
+    private val stored: String? = null
+) : Platform {
+
+    override val library: WorldLibrary = EmptyLibrary
+    override val compressor: Compressor = NoCompression
+    override val libraryLocation: String = "nowhere in particular"
+    override val accelerationUnavailableBecause: String? = "this is a test"
+
+    /** Every settings document that has been written, in order. */
+    val written = mutableListOf<String>()
+
+    /** Every URL the application has asked for. Empty is the assertion F4 cares about most. */
+    val fetched = mutableListOf<String>()
+
+    val links = mutableListOf<String>()
+    val openedFolders = mutableListOf<String>()
+    val libraryFolders = mutableListOf<String>()
+    var quits: Int = 0
+        private set
+
+    /** What [fetchText] answers with. Null is offline, which is the default. */
+    var response: String? = null
+
+    override val settingsStore: SettingsStore = object : SettingsStore {
+        private var held: String? = stored
+        override val location: String = "a test"
+        override suspend fun read(): String? = held
+        override suspend fun write(text: String) {
+            held = text
+            written += text
+        }
+    }
+
+    override fun quit() {
+        quits += 1
+    }
+
+    override val canOpenLinks: Boolean = true
+
+    override fun openLink(url: String) {
+        links += url
+    }
+
+    override val canRevealFolder: Boolean = true
+
+    override fun revealFolder(path: String) {
+        openedFolders += path
+    }
+
+    override suspend fun useLibraryFolder(path: String): Boolean {
+        libraryFolders += path
+        return true
+    }
+
+    override suspend fun fetchText(url: String): String? {
+        fetched += url
+        return response
+    }
+
+    override suspend fun export(
+        config: WorldGenConfig,
+        options: RenderOptions,
+        size: Int,
+        format: ExportFormat
+    ): ExportOutcome? = null
+
+    private object EmptyLibrary : WorldLibrary {
+        override suspend fun list(): List<LibraryEntry> = emptyList()
+        override suspend fun save(document: WorldDocument, world: WorldMap?) = Unit
+        override suspend fun load(id: String): WorldSave? = null
+        override suspend fun delete(id: String) = Unit
+    }
+}
+
+/** A stand-in device, for the cases where the question is what happens when there *is* one. */
+internal object FakeAccelerator : ErosionAccelerator {
+    override val name: String = "a fake graphics card"
+    override suspend fun erode(
+        width: Int,
+        height: Int,
+        heights: FloatArray,
+        talus: Float,
+        passes: Int,
+        rate: Float
+    ): FloatArray? = null
+}

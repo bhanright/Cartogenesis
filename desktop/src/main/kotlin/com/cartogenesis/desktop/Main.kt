@@ -5,8 +5,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.cartogenesis.ui.CartogenesisApp
-import com.cartogenesis.ui.CartogenesisTheme
+import com.cartogenesis.ui.CartogenesisRoot
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -39,15 +38,19 @@ fun main(args: Array<String>) {
 }
 
 private fun launchWindow() = application {
-    val platform = remember { DesktopPlatform() }
+    // File ▸ Quit closes the window through Compose rather than by ending the process, so the
+    // window's own shutdown runs; the platform is handed the callback because `exitApplication`
+    // exists only inside this scope.
+    val platform = remember { DesktopPlatform(onQuit = ::exitApplication) }
     Window(
         onCloseRequest = ::exitApplication,
         title = "Cartogenesis",
         state = rememberWindowState(width = 1500.dp, height = 950.dp)
     ) {
-        // The theme follows the desktop's own light/dark setting; everything it decides lives in
-        // :ui, so the browser build is dressed identically.
-        CartogenesisTheme { CartogenesisApp(platform) }
+        // The chrome, the interface scale and every other preference are read through the platform
+        // by `CartogenesisRoot`, which puts the theme on before drawing anything — so the desktop
+        // and the browser are dressed identically, and by the same file.
+        CartogenesisRoot(platform)
     }
 }
 

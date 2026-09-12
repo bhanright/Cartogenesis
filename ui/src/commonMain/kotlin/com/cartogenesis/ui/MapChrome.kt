@@ -54,9 +54,9 @@ import kotlin.math.roundToInt
  *
  * Why the two are drawn differently is a matter of arithmetic at the width this application is
  * designed for. With the right-hand column folded away (F3 moved Export into the header panel) the
- * map is about 1080 dp wide at a 1440 dp window. The nine style names — Atlas, Vellum, Ink wash,
- * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink — measure some 630 dp set as cells,
- * so they fit on one row with room left for the small print. The fifteen view names run past 1300
+ * map is about 1080 dp wide at a 1440 dp window. The ten style names — Atlas, Vellum, Ink wash,
+ * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, and (since F4) Mars — measure some
+ * 660 dp set as cells, so they fit on one row with room left for the small print. The fifteen view names run past 1300
  * dp, largely because four of them are things like "Temperature, summer"; a second segmented row
  * would either wrap or be cut, and a wrapped segmented control is no longer a segmented control.
  * So the views are a menu, which also puts the current view in words at the right of the strip

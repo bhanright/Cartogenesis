@@ -1,7 +1,10 @@
 package com.cartogenesis.desktop
 
 import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -11,8 +14,10 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -83,6 +88,103 @@ class ChromeGalleryTest {
         )
     }
 
+    /**
+     * F4's additions — the window with its menu strip, the File menu open, Settings, About — in
+     * light, dark and Mars.
+     *
+     * Twelve shots, and none of them waits for a world: everything F4 draws is chrome, and a blank
+     * canvas photographs it in a tenth of the time a generated one does.
+     *
+     * The menu and the two dialogs are photographed *on their own* rather than over the window,
+     * and that is Compose's doing rather than a choice: a `DropdownMenu` and an `AlertDialog` are
+     * each drawn into a layer of their own, which is a second root in the semantics tree, and a
+     * capture of the window's root does not contain them. So each of those three is captured from
+     * its own root — which is also the assertion that it opened at all, since there is no second
+     * root until something does.
+     *
+     * What is asserted otherwise is what a screenshot can be asked: that each chrome produces a
+     * different picture of the same thing (a theme that ignored its argument would produce three
+     * identical files), and that nothing came out blank.
+     */
+    @Test
+    fun `the menus and the F4 dialogs are photographed in three chromes`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val chromes = listOf(
+            "light" to ThemeChoice.LIGHT,
+            "dark" to ThemeChoice.DARK,
+            "mars" to ThemeChoice.MARS
+        )
+        val subjects = listOf(
+            "window" to Opened.NOTHING,
+            "menu" to Opened.MENU,
+            "settings" to Opened.SETTINGS,
+            "about" to Opened.ABOUT
+        )
+
+        val fingerprints = mutableMapOf<String, Int>()
+        subjects.forEach { (what, opened) ->
+            chromes.forEach { (name, choice) ->
+                val shot = shootChrome(choice, opened)
+                File(dir, "f4-$what-$name.png").writeBytes(shot.png)
+                fingerprints["$what-$name"] = shot.fingerprint
+                assertTrue(shot.distinctColours > 3, "the $what shot in $name is a flat colour")
+            }
+            val three = chromes.map { fingerprints["$what-${it.first}"] }
+            assertEquals(
+                3,
+                three.toSet().size,
+                "$what looks the same in all three chromes, so the theme is not reaching it"
+            )
+        }
+        println("CHROME wrote twelve F4 shots (window, menu, settings, about x three chromes) to $dir")
+    }
+
+    private enum class Opened { NOTHING, MENU, SETTINGS, ABOUT }
+
+    /**
+     * The window in one chrome with one thing open, on a blank canvas.
+     *
+     * The dialogs are reached the way a reader reaches them — File, then Settings; Help, then
+     * About — rather than by being composed directly, so the shot also proves the menu items are
+     * wired to what they claim to open.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun shootChrome(choice: ThemeChoice, opened: Opened): Shot {
+        var shot: Shot? = null
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
+            setContent {
+                CartogenesisTheme(choice = choice) {
+                    CartogenesisApp(ChromePlatform())
+                }
+            }
+            waitForIdle()
+            when (opened) {
+                Opened.NOTHING -> Unit
+                Opened.MENU -> onNodeWithText("File").performClick()
+                Opened.SETTINGS -> {
+                    onNodeWithText("File").performClick()
+                    waitForIdle()
+                    onNodeWithText("Settings…").performClick()
+                }
+                Opened.ABOUT -> {
+                    onNodeWithText("Help").performClick()
+                    waitForIdle()
+                    onNodeWithText("About Cartogenesis").performClick()
+                }
+            }
+            waitForIdle()
+
+            val roots = onAllNodes(isRoot()).fetchSemanticsNodes().size
+            if (opened == Opened.NOTHING) {
+                assertEquals(1, roots, "something was open over an untouched window")
+            } else {
+                assertEquals(2, roots, "$opened did not open: there is no layer over the window")
+            }
+            shot = capture(onAllNodes(isRoot())[roots - 1])
+        }
+        return shot ?: error("the composition never produced a frame")
+    }
+
     private class Shot(val png: ByteArray, val fingerprint: Int, val distinctColours: Int)
 
     /**
@@ -121,21 +223,31 @@ class ChromeGalleryTest {
                 }
             }
 
-            val bitmap = onRoot().captureToImage().asSkiaBitmap()
-            val png = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!.bytes
-            val pixels = bitmap.readPixels()!!
-            var hash = 17
-            for (k in pixels.indices step 997) hash = hash * 31 + pixels[k]
-            val colours = HashSet<Int>()
-            // Every hundredth pixel, packed: enough to tell a drawn window from a filled one.
-            for (k in 0 until pixels.size - 4 step 400) {
-                colours += (pixels[k].toInt() and 0xFF shl 16) or
-                    (pixels[k + 1].toInt() and 0xFF shl 8) or
-                    (pixels[k + 2].toInt() and 0xFF)
-            }
-            shot = Shot(png, hash, colours.size)
+            shot = capture()
         }
         return shot ?: error("the composition never produced a frame")
+    }
+
+    /** The window as it stands: a PNG, a content hash, and how many colours are actually in it. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.capture(): Shot = capture(onRoot())
+
+    /** The same, of one node — a dialog's own layer, where that is what is being photographed. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun capture(node: SemanticsNodeInteraction): Shot {
+        val bitmap = node.captureToImage().asSkiaBitmap()
+        val png = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!.bytes
+        val pixels = bitmap.readPixels()!!
+        var hash = 17
+        for (k in pixels.indices step 997) hash = hash * 31 + pixels[k]
+        val colours = HashSet<Int>()
+        // Every hundredth pixel, packed: enough to tell a drawn window from a filled one.
+        for (k in 0 until pixels.size - 4 step 400) {
+            colours += (pixels[k].toInt() and 0xFF shl 16) or
+                (pixels[k + 1].toInt() and 0xFF shl 8) or
+                (pixels[k + 2].toInt() and 0xFF)
+        }
+        return Shot(png, hash, colours.size)
     }
 
     private companion object {

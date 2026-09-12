@@ -499,6 +499,96 @@ subsided below it and the result is a string of gulfs and lakes joined by sills 
 
 ---
 
+## Track F — the interface
+
+*Added 2026-09-12 at William's request: "revamp the UX a bit to make it look less generic and
+AI-developed", plus one behaviour change. Everything here is in `:ui` (Compose Multiplatform,
+shared by desktop and web) with the two front ends untouched except where a platform seam is
+needed. Ships as 2.0.0 together with Track G.*
+
+### F0. Blank canvas on launch — Sonnet
+
+The app generates a world the moment it opens. It must open on an empty canvas with the seed,
+settings and the graphics-card toggle ready, and generate only when the user presses Generate
+(or Go, or New world). The empty state says what to do in one line. Opening a saved world from the
+library still opens it. Guard: no generation runs in `App` until an explicit action; a test on
+the state holder shows the launch path never calls the engine.
+
+### F1. Ink on paper — Opus
+
+The chrome is stock Material 3: purple tonal buttons, default sliders, one sans face at one
+weight. Replace the theme with the atlas's own vocabulary. Light: a warm paper ground, sepia ink
+accent, thin rules instead of tonal cards. Dark: the bfunk.online palette (see the site repo's
+CSS; it is the dark variant William asked for on 2026-08-25). A serif display face for the title
+and section headings, a compact sans for values, both bundled as Compose resources so the web
+build matches the desktop. Sliders, switches and buttons restyled once through the theme so no
+control is styled by hand. Guard: `:ui` compiles for jvm and wasmJs; a screenshot at 1440x900 in
+each theme is rendered by the desktop test (`StyleGalleryTest` already renders styles; add a
+chrome shot) and reviewed by the orchestrator.
+
+### F2. The panel follows the pipeline — Opus
+
+*Dependencies: F1, and the landmarks/atlas move already in flight.* Sections named World,
+Terrain, Climate, Water, Peoples, Cartography, in the order the generator runs, each holding its
+two or three knobs, collapsed by default except World. Seed and resolution in a slim header.
+Atlas-only controls stay in the Atlas pane. Plates and Realms become steppers, not sliders (they
+are choices between a few worlds); wilderness is one switch. Guard: every config field the old
+panel could set is still settable (a test walks the panel's state and the config).
+
+### F3. The map is the instrument — Opus
+
+*Dependencies: F2.* Style and View move to a compact toolbar over the map (small icon toggles
+with the style name); zoom and the status line sit at the map's bottom edge as a chart legend;
+the side panels shrink to what F2 left them. The status line becomes a cartouche: world name (a
+generated one from the largest people's language), seed, largest realm, with the generation time
+as a muted footnote. Guard: compile both targets; screenshot reviewed.
+
+---
+
+## Track G — more of the pipeline on the graphics card
+
+*Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the
+graphics card on William's 2048 world takes 16.6 s, of which the CPU hydraulic rounds are about
+half and everything else the other half. Saves carry the world, so a GPU stage need not be
+bit-identical to its CPU twin; each keeps the `ErosionAccelerator` shape (a suspend seam that
+returns null to fall back) and a CPU-versus-GPU tolerance test like `GpuErosionTest`.*
+
+### G1. Hydraulic rounds on the GPU — Opus
+
+*Dependencies: E1 merged (it owns `HydraulicErosion.kt`).* Incision, transport capacity,
+deposition and sill breaching are per-cell over the flow network. Flow accumulation becomes an
+iterative sweep (or pointer jumping over the D8 tree); depression filling becomes the parallel
+Planchon–Darboux lowering from the edges, which converges to the same surface priority-flood
+gives. OpenGL compute on desktop, WGSL on web, behind a second seam. Guard: worst-cell and mean
+difference against the CPU rounds within the tolerance `GpuErosionTest` uses; the mass budget
+still 0.0000%; measured speedup at 2048 reported (target: the hydraulic share of a 2048 generation
+falls by at least half).
+
+### G2. Export rendering on the GPU — Opus
+
+*Dependencies: none.* Hillshade, hypsometric tints and the style passes are per-pixel; a 4096
+export is 50 s and 2.6 GB on the CPU. Render export tiles in a fragment shader and read back,
+desktop first (the web export is smaller). Guard: pixel difference against the CPU rasteriser
+under a stated bound; 4096 export time and peak heap before and after; 8192 attempted and
+reported.
+
+### G3. Ocean currents on the GPU — Sonnet
+
+*Dependencies: G2 (shares the context helper).* The stream-function solve is a Poisson problem;
+Jacobi or multigrid relaxation on the GPU. Guard: current field within tolerance of the CPU
+solve; time at 2048 and 4096 reported.
+
+### G4. Jump-flood distance fields — Opus
+
+*Dependencies: none (do not touch `PlateStage`'s rift code beyond the distance call).* The chamfer
+transform behind distance-from-water (continentality) and the boundary profiles is what leaves
+octagonal facets on plateau edges and the shelf. Replace it with a jump-flooding Euclidean
+distance field on the GPU, with the CPU chamfer kept as the fallback. Guard: the eight-fold
+component of the distance field's iso-contours drops below a stated floor; `ContinentalityTest`,
+`ContinentalShelfTest` and `BoundaryPairTest` hold; time reported.
+
+---
+
 ## Render review, 2026-09-11 (after A1, A2, A3, B1, D4)
 
 Looked at, not measured: seeds 7, 42, 1234 — fantasy, biome, summer and winter rainfall, winter
@@ -706,6 +796,14 @@ guard reported, so the next chunk knows its baseline.
 | E2 Lake water balance | Opus | done | 2026-09-11 | 667c956 (merge fec976d) | Thornthwaite on the two seasonal fields, unfitted: hot desert 2272 mm/yr, cool temperate 554, frozen 0 (glacial lakes stay at spill); runoffFraction 0.35 (Earth ~40k of 110k km3/yr; a constant flatters dry basins - Volga/Caspian is ~0.12); bisection over basin hypsometry; endorheic lakes become sinks with flow re-pointed, playa mask as section rivers.playa (33 sections, fixture regenerated); wet basins bit-identical; guard on dry seed 43 (1775-cell basin, 172 mm rain vs 577 evaporation): 18% of spill area at balance vs 100% measured with waterBalance=false; wet seed 99 at spill; 0 stranded rivers; seed 43 lake share 2.40 -> 0.91%, largest 0.677 -> 0.122% of map; 718106 at 1024 82 -> 67 lakes, 10 endorheic; border-on-river moved (42: 1.54 -> 1.10, 99: 1.30 -> 1.97, report-only); render: seed 43's rectangular basin becomes a small lake with a dendritic net across the exposed floor |
 | E3 Round hotspot cones | Sonnet | done | 2026-09-11 | 5a7377f (merge, see log) | the stamp already used true Euclidean distance; the eight-fold amplitude at 512 (0.083) is the grid floor of a 2.5-cell radius (supersampling 3x3/5x5/9x9 all read 0.053), and at 2048 it is 0.000 before and 0.004 after, so the distance metric was never the cause of what the orchestrator saw; stamp now supersampled 5x5 with three low-order seeded rim harmonics (k = 2, 3, 5 from a splitmix64 hash of seed and vent) so no two cones match, knob hotspotConeDetail; DepositionTest pin re-recorded, land 6226 unchanged. Open: the faceted look at 2048 on land cones is most likely erosion cutting radial gullies along the eight D8 bearings down a symmetric cone - not investigated, low priority |
 | E4 Segmented rifts | Opus | done | 2026-09-12 | 6a39b01 (merge 6b16e65) | every continental-rift boundary walked along strike (arc length by double BFS, because a rift meanders) and cut into seeded segments of 0.040-0.100 of map width, so 512 and 2048 break a rift the same way; per segment a seeded depth factor, a footwall that alternates flanks, a wedge floor deepest against the footwall rising to a low hinge, shoulders whose height and width come from one draw (independent draws made a tall narrow shoulder that surfaced as ribbon land) and vary with rangeVariation; depth and asymmetry taper through an accommodation zone with a modest sill at each join; deterministic (index order, splitmix-seeded LCG); nine TectonicsConfig knobs; other profiles untouched. RiftSegmentationTest on seed 59758 at 512, ocean 62%, 14 plates: sea bodies in the rift 1 -> 3, land bridges 0 -> 4, flooded-width CV 0.03 -> 0.32, corridor 98% -> 82% flooded; a second case shows the unsegmented world failing all three. BoundaryPairTest 3.47x held; RibbonLandTest held. Moved: DepositionTest pin (land 6226 held); GlaciationTest's comb and lake-share measures now exclude water in a rift trough (tectonic, not ice); its 512 denominator floor 1e-4 -> 0.001 with a written reason; LakeWaterBalanceTest's dry-basin bound 30% -> 45% (measures 39% because PlateStage renormalises the whole field; the basin holds no rift cells; control still 100%) - a bar moved under rule 5 with the reason stated, though not an Earth figure. Render at 2048: the ruler-edged strait is lagoons and gulfs behind sills with the ribbon joined to the mainland. Not verified: rift basins become lakes at 1024 and 2048 but not at 512 because LakesConfig.minCells is a fixed 12 cells, not a map fraction - follow-up |
+| F0 Blank canvas on launch | Sonnet | in progress | 2026-09-12 | | folded into the landmarks/atlas UI chunk |
+| F1 Ink on paper | Opus | queued behind F0 | | | |
+| F2 Panel follows the pipeline | Opus | queued behind F1 | | | |
+| F3 The map is the instrument | Opus | queued behind F2 | | | |
+| G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
+| G2 Export rendering on GPU | Opus | in progress | 2026-09-12 | | |
+| G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |
+| G4 Jump-flood distance fields | Opus | in progress | 2026-09-12 | | |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

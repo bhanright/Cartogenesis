@@ -29,10 +29,26 @@ class LakeWaterBalanceTest {
     private val drySeed = 43L
     private val wetSeed = 99L
 
+    /**
+     * Both worlds are generated with the outlet notch off, and that is not a convenience.
+     *
+     * E1 drains a filled basin by cutting its lip down, and the two basins this test is built
+     * around are the two largest found anywhere in seeds 1..120 — which makes them the first things
+     * it takes: on the finished code seed 43's dry basin falls from 1775 cells at spill level to
+     * 110, and seed 99's wet one from 433 to 31, so there is nothing left here to put a water
+     * balance on. The two mechanisms are orthogonal — one decides how much rock stands between a
+     * basin and its outlet, the other how much water a catchment can keep in it — and this test is
+     * about the second. Measuring it on terrain that still has basins in it is what keeps it a test
+     * of the balance rather than a test of the notch. Re-picking a seed instead would only have to
+     * be done again the next time anything moves the terrain.
+     */
     private fun world(seed: Long, waterBalance: Boolean, size: Int = 512): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
         return WorldGenerationEngine.generateBlocking(
-            base.copy(lakes = base.lakes.copy(waterBalance = waterBalance))
+            base.copy(
+                lakes = base.lakes.copy(waterBalance = waterBalance),
+                erosion = base.erosion.copy(outletIncision = false)
+            )
         )
     }
 

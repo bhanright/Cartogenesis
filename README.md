@@ -5,11 +5,6 @@
 A desktop app that procedurally generates fantasy world maps, built on a Kotlin Multiplatform
 generation engine that also runs in the browser.
 
-There was an Android build. It was retired in favour of desktop and web: a phone's memory ceiling
-capped exports at a fraction of what the pipeline can produce, and the erosion stage in particular
-wants far more compute than a handset will give it. The engine itself never depended on Android and
-is unchanged by its removal — see **Multiplatform status**.
-
 ## The pipeline
 
 Each stage feeds the next, and all of them are deterministic for a given seed.

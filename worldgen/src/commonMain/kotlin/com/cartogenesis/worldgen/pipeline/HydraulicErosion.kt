@@ -78,12 +78,14 @@ internal object HydraulicErosion {
      * in.
      *
      * A notch has to slope, or the D8 step out of the basin has nowhere to go and the next round's
-     * fill turns the whole channel back into part of the lake. It does not have to slope by much:
-     * ten times the epsilon the depression fill itself uses is enough to give every cell along the
-     * breach a strictly lower neighbour, and small enough that over the longest breach the map
-     * allows it is a rounding error against the depth of the water it is letting out.
+     * fill turns the whole channel back into part of the lake. It does not have to slope by much,
+     * and it must not slope by more at one grid than at another, so it is held per unit of map
+     * width and divided by the grid where it is used: at 512 cells that is ten times the epsilon
+     * the fill itself uses, enough to give every cell along the breach a strictly lower neighbour, and
+     * over the longest breach the map allows it is a rounding error against the depth of the water
+     * it is letting out.
      */
-    private const val NOTCH_GRADIENT = 1e-5f
+    private const val NOTCH_GRADIENT = 5e-3f
 
     /**
      * How many times the outlets are cut again on the finished surface, once the spoil has been
@@ -603,6 +605,15 @@ internal object HydraulicErosion {
     private const val DISTRIBUTARY_FALL = 0.15f
 
     /**
+     * The grid every figure in this file that is written per cell was measured at.
+     *
+     * Only two are, and both are gradients: dividing by the grid in use and multiplying by this
+     * keeps them fixed against the map rather than against the cell, which is the difference
+     * between a world with more detail in it and a different world.
+     */
+    private const val REFERENCE_GRID = 512f
+
+    /**
      * How much of the land a watercourse must drain before this stage treats it as a river.
      *
      * Deliberately the same figure as `RiversConfig.sourceThreshold`, and deliberately a constant
@@ -678,7 +689,9 @@ internal object HydraulicErosion {
         // may change a world with deposition switched off, and this pass runs either way; reading
         // `deltaFreeboard` here let the fiddled-knobs case move the terrain. It caught that too.
         val step = POND_DEPTH * landRange
-        val fall = (step * DISTRIBUTARY_FALL).coerceAtLeast(1e-7f)
+        // Per cell, from a gradient held against the map, so a groove of a given length on the
+        // ground is the same groove however fine the grid that cuts it.
+        val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / w).coerceAtLeast(1e-7f)
         val floor = sea.threshold + step * LOBE_RIM
 
         val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
@@ -794,14 +807,25 @@ internal object HydraulicErosion {
 
             // Never below the floor of its own basin, because past that there is no lake left to
             // let out; never below the sea, the base level everything grades to.
-            val drop = minOf(power, (level - floor) * landRange, (level * landRange))
-            if (drop <= 0f) continue
-
-            val newLevel = level - drop / landRange
+            //
+            // All three in the shoreline-relative units the basin is measured in, and converted to
+            // the height field's own units once, at the point of cutting. That is not tidiness: the
+            // range of the land is not the same number at every grid — on seed 718106 it is 0.25 at
+            // 512 and 0.39 at 1024, because a finer grid resolves finer and therefore steeper
+            // detail — so a rate written in one unit and applied in the other is a rate that
+            // depends on the cell size. It was, and the lake it left grew threefold from 512 to
+            // 2048 on seed 59758 while every other length in the stage held.
+            val dropRelative = minOf(power, level - floor, level)
+            if (dropRelative <= 0f) continue
+            val newLevel = level - dropRelative
             c = spill
             var step = 0
+            // The breach's own fall, per cell, from a gradient held against the map: a channel of a
+            // given length on the ground descends by the same amount however many cells that
+            // length is cut into.
+            val gradient = NOTCH_GRADIENT / w
             while (c >= 0 && isLand[c] && step < cfg.outletReach) {
-                val target = newLevel - step * NOTCH_GRADIENT
+                val target = newLevel - step * gradient
                 if (relative[c] <= target) break
                 val take = (relative[c] - target).toDouble() * landRange
                 val ponded = ground[c] - relative[c] > POND_DEPTH

@@ -103,8 +103,15 @@ class DepositionTest {
      * carried — deliberately, and this pin is the reason: the case below holds a world with
      * deposition off and a world with it running and every rate at zero to be bit-identical, and
      * gating the pass on the spoil broke that. Land held at 6226 for the eighth time.
+     *
+     * And a ninth time, for the outlet notch's units: its depth per round used to come out in the
+     * shoreline-relative field and be spent on the height field, so it was quietly divided by the
+     * range of the land — a different number at every grid — and the largest lake grew threefold
+     * from 512 to 2048. The rate is now in one unit throughout and `outletIncisionRatio` rose from
+     * one to three with it. Land held at 6226 for the ninth time; the notch cuts channels, and a
+     * channel does not move a cell across a rank cut taken over the whole field.
      */
-    private val startingPointElevation = 206288670059201627L
+    private val startingPointElevation = -7832442058128674233L
     private val startingPointLand = 6226
 
     @Test

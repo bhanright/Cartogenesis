@@ -453,7 +453,7 @@ private val RuleFaint = Color(0xFFD7C8A5)
 /** Nautical's `border`: an oxide red that belongs on the same page. */
 private val Oxide = Color(0xFF8A3B2E)
 
-// bfunk.online
+// The dark palette, from the author's site
 private val InkDark = Color(0xFF15110F)
 private val InkRaised = Color(0xFF1C1714)
 private val InkSunk = Color(0xFF241D18)
@@ -516,7 +516,7 @@ private val LightAtlas: ColorScheme = lightColorScheme(
 )
 
 /**
- * After dark: bfunk.online.
+ * After dark: the author's site palette.
  *
  * The author's site palette, exactly — ink, hairline, bone, bone-dim, parchment, brass, brass-dim,
  * oxblood, oxblood-lit — mapped onto the Material roles rather than reinvented. Brass is the only

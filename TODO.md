@@ -358,7 +358,7 @@
   screens off rather than blocking them. The interface was laid out for a desktop window: a fixed
   320px control column either side of the map does not fit a phone, so a real fix is a layout that
   collapses the panels rather than a tweak.
-- **Match the visual style to bfunk.online.** Requested 2026-08-25 for the next version. The app
+- **Match the visual style to the author's site.** Requested 2026-08-25 for the next version. The app
   currently uses stock Material 3 colours, which sit oddly next to the site it is embedded in. The
   theme is set in one place — `MaterialTheme` in the web and desktop entry points — so this is a
   colour scheme rather than a rewrite. Worth taking the palette from the site's own CSS rather than

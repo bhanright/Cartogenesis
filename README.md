@@ -468,7 +468,7 @@ Pages → `cartogenesis` → Custom domains, and the workflow asks the Pages API
 project treats as production so the upload lands on the deployment the domain actually serves.
 `site/README.md` covers the rest, including how to deploy by hand if Actions is down.
 
-The older mirror is <https://cartogenesis.bfunk.online>, served as static files from Porkbun and
+An older mirror on the author's personal site is served as static files from Porkbun and
 deployed from that site's own repository by copying `web/build/dist/wasmJs/productionExecutable` and
 discarding the source map, the empty `composeResources/` directories, and the emitted `index.html` —
 that site supplies its own shell, for the same reason and by the same means as `site/app/index.html`

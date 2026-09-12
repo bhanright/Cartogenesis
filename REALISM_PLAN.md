@@ -553,6 +553,32 @@ as a muted footnote. Guard: compile both targets; screenshot reviewed.
 
 ---
 
+### F4. Menus, settings, updates and notices — Opus
+
+*Dependencies: F3. Requested 2026-09-12.* A thin menu strip drawn once in `:ui` so both platforms
+have it (Compose Desktop's native menus would leave the web without one): **File** (New world,
+Open library, Save, Save as, Export, Settings, Quit on the desktop), **View** (theme, panel
+sections, toolbar), **Help** (Check for updates, About).
+
+- **Settings**, persisted through the `Platform` seam (a JSON file in the user's config directory
+  on the desktop, browser storage on the web): theme (System - the default, already followed by
+  F1 on both platforms - Light, Dark, and extra chromes lifted from map styles, at least Nautical
+  and Midnight); default working resolution; graphics card on at launch; default export format
+  and size; the library folder with Open folder (desktop); interface scale; check for updates on
+  launch; Reset to defaults. Guard: settings round-trip through the seam and every setting has an
+  effect a test can observe.
+- **Check for updates**: a build-info constant generated from `gradle.properties` at build time
+  (version and build date) compared with GitHub's releases API
+  (`https://api.github.com/repos/bhanright/Cartogenesis/releases/latest`, plain JSON, browser
+  requests allowed): desktop over HTTPS, web with fetch, both through the seam. If newer: the
+  release name, a summary of its notes, and a button opening the release page. No self-update.
+  Guard: the comparison tested against fake responses (older, same, newer, malformed, offline).
+- **About**: version and build date, the project licence, and third-party notices generated from
+  the dependency graph at build time rather than typed by hand (Compose Multiplatform, Skiko,
+  LWJGL, kotlinx, the two OFL fonts, anything the web loader bundles). The font notices are a
+  licence requirement, not a courtesy. Guard: the notices list is non-empty and names the fonts.
+- Screenshots of the menu open, Settings, and About in both themes, reviewed.
+
 ## Track G — more of the pipeline on the graphics card
 
 *Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the
@@ -947,6 +973,7 @@ guard reported, so the next chunk knows its baseline.
 | F1 Ink on paper | Opus | done | 2026-09-12 | 753d3e0 (merge, see log) | light palette lifted from MapStyle.VELLUM (paper EFE4C8/F6EEDB, ink 2B2117, sepia accent 6B3F2A, rules BFAD86), dark is bfunk.online verbatim (ink 15110F, hairline 3A2F28, bone, parchment, brass C9A227, oxblood); complete Material schemes with surfaceTint = surface so no tonal fill survives; Spectral for what names, IBM Plex Sans for what measures, bundled as Compose resources with OFL licences; ui/Controls.kt shadows Slider/Switch/Button/Chip/Divider/Card once; CartogenesisTheme at both entry points following the system theme; ChromeGalleryTest captures chrome-light/dark at 1440x900; web bundle +6.6% (four ttf, 937 KB) - the site deploy script was fixed to keep composeResources; ui/desktop tests green |
 | F2 Panel follows the pipeline | Opus | done | 2026-09-12 | d956bcd (merge, see log) | header (seed, Generate/New world, resolution chips, Library/Atlas, status) then World (ocean coverage, graphics-card switch moved here), Terrain (plates stepper 3-40, mountain height = andeanHeight 0.20-0.90, erosion strength = erodibility 0.011-0.110), Climate (seasonal tilt 0-25, rain shadow = orographicStrength 0-5, ice on/off), Water (rivers, lakes, dry basins hold less water), Peoples (realms stepper 0-40, one wilderness switch, borders), Cartography (relief, coastline, style, view - F3 lifts the last two); right column is Export alone; knobs declared as data in PanelKnobs.kt and PanelKnobsTest (13) walks them - coverage, per-knob copy equality, write-back identity, clamping, shown failing with a knob dropped; found and fixed a borders switch reading one field and writing another; ui 17/17, desktop 19/19 |
 | F3 The map is the instrument | Opus | in progress | 2026-09-12 | | |
+| F4 Menus, settings, updates, notices | Opus | queued behind F3 | | | |
 | G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
 | G2 Export rendering on GPU | Opus | done | 2026-09-12 | 8dca89f | RasterAccelerator seam in cartography takes a RasterRecipe (colours and tables pre-packed, no palette logic in shaders); desktop GpuRaster on OpenGL compute, web left to a later WGSL port; every view and style, relief, coastline, borders, lakes, hatching; 4M-pixel tiles, fields uploaded once; GlContext extracted from GpuErosion (two contexts on one thread invalidate each other's programs), erosion arithmetic untouched; 99.9th-percentile drift 0 across 141.5M pixels, worst channel 2 on 0.0002% (GLSL sqrt at a ramp node); 4096 export 224 -> 210 s, raster 714 -> 368 ms - the raster was never the bottleneck, generation is; 8192 exhausts a 10 GB heap inside the generator before a pixel is drawn (the device rasters 8192 in 0.9 s); README export table corrected |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |

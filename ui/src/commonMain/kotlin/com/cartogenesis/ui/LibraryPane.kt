@@ -53,22 +53,46 @@ fun LibraryPane(
     ) {
         item {
             Text("This world", style = MaterialTheme.typography.titleMedium)
-            Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+
+            // A 420 dp field and three buttons need something over 700 dp of row, and a Row that
+            // is handed less does not wrap — it draws its children past the edge of the window and
+            // they are simply gone. On a phone that took Save, Download and Upload off the screen
+            // with no sign they were ever there. So the field takes the width it is given up to the
+            // 420 dp it wanted, and where that leaves no room for the buttons they go underneath.
+            val stacked = LocalWindowShape.current == WindowShape.COMPACT
+            val name: @Composable (Modifier) -> Unit = { fieldModifier ->
                 OutlinedTextField(
                     value = title,
                     onValueChange = onTitleChange,
                     label = { Text("Name") },
                     singleLine = true,
-                    modifier = Modifier.width(420.dp)
+                    modifier = fieldModifier
                 )
+            }
+            val actions: @Composable () -> Unit = {
                 Button(onClick = onSave) { Text("Save") }
                 if (supportsFileTransfer) {
                     TextButton(onClick = onDownload) { Text("Download") }
                     TextButton(onClick = onUpload) { Text("Upload a file") }
+                }
+            }
+
+            if (stacked) {
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    name(Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    name(Modifier.width(420.dp))
+                    actions()
                 }
             }
             Text(

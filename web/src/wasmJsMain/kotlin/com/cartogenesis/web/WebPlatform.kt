@@ -51,6 +51,16 @@ class WebPlatform(
     override val coarsePointer: Boolean = pointerIsCoarse()
 
     /**
+     * Erosion alone, and that is not a simplification.
+     *
+     * The desktop draws the export raster on its device as well, through OpenGL compute; the WGSL
+     * port of that raster has not been written, so in a browser the device runs the erosion sweeps
+     * and nothing else. Saying otherwise here would be promising a speed-up that does not exist.
+     */
+    override fun acceleratedWork(device: String): String =
+        "Erosion runs on $device, many times faster."
+
+    /**
      * 2048 on a phone, 4096 otherwise.
      *
      * An export re-runs the whole pipeline at the target size and then rasterises it, which at 4096

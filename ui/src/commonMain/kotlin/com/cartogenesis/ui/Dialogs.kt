@@ -111,15 +111,17 @@ internal fun SettingsDialog(
                 // is the preference for is not drawn there either.
                 if (platform.graphicsApiPresent) {
                     SettingRow(
-                        "Graphics card at launch",
-                        platform.accelerator?.let { "Erosion starts on ${it.name}." }
+                        "Graphics acceleration at launch",
+                        // The same sentence the header switch prints, from the same seam, so the
+                        // dialog cannot end up claiming the device does more than the panel does.
+                        platform.accelerator?.let { platform.acceleratedWork(it.name) }
                             ?: "Unavailable here: ${platform.accelerationUnavailableBecause}"
                     ) {
                         Toggle(
-                            "Generate on the graphics card",
-                            settings.graphicsCardAtLaunch,
+                            "Graphics acceleration",
+                            settings.graphicsAccelerationAtLaunch,
                             enabled = platform.accelerator != null
-                        ) { onSettings(settings.copy(graphicsCardAtLaunch = it)) }
+                        ) { onSettings(settings.copy(graphicsAccelerationAtLaunch = it)) }
                     }
                 }
 

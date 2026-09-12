@@ -208,6 +208,13 @@ it finishes. Measured, 512 takes about 1.6 seconds of CPU work in Wasm against 1
 fifteen threads; 1024 would be over a minute and would read as a hang. With WebGPU enabled the
 erosion part of that drops to about 23 milliseconds.
 
+On a 2026 phone with WebGPU on — a Qualcomm handset, measured — a 1024 world generates in about
+twenty seconds and a 2048 world in about ninety, so both are worth offering there; the compact
+arrangement says so under the resolution chips. Because the page's one thread is the generator's,
+the interface is handed a frame before the first stage starts and again at every stage boundary, so
+the ten stage names are things that appear rather than things written to a variable nobody sees
+until the end. Without that the page simply stops, which reads as a crash rather than as work.
+
 ### Packaging
 
 ```bash
@@ -296,7 +303,12 @@ generating the world and under a second drawing it, so the raster was never the 
 profile suggested. Erosion, below, is.
 
 Erosion is a pure stencil over independent cells, so it is also the one stage worth running on a
-graphics card, and there is an opt-in toggle for it. On an RTX 3070 Ti the sweeps that take 1.3
+graphics device, and there is an opt-in toggle for it — **Graphics acceleration**, in the header
+and again in Settings as *Graphics acceleration at launch*. Not "graphics card": on a phone the
+device is a block of cores on the processor's own die, and the switch was reported from one. What
+it covers differs by host, and the panel says which through the `Platform` seam — the desktop runs
+the erosion sweeps *and* the export raster there, the browser only the sweeps, because the WGSL
+port of the raster has not been written. On an RTX 3070 Ti the sweeps that take 1.3
 seconds on fifteen CPU threads take 22 milliseconds — around 55x — through OpenGL compute shaders
 on the desktop, and about 70x through WGSL in the browser. Realm expansion is a Dijkstra over a
 priority queue and would not suit a GPU regardless.
@@ -397,7 +409,7 @@ Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+comma, Ctrl+Q — and the browser bui
 since a page quietly taking Ctrl+S from its host is how somebody loses a tab full of work.
 
 Settings are preferences rather than settings of a world: the chrome, the working resolution a new
-world starts at, whether erosion reaches for the graphics card without being asked, the default
+world starts at, whether graphics acceleration is on at launch without being asked for, the default
 export format and size, the library folder, the interface scale, and whether to check for updates at
 launch. They persist through the `Platform` seam — `%APPDATA%\Cartogenesis\settings.json` on Windows
 and the equivalent directory elsewhere, browser local storage on the web — as one JSON document that

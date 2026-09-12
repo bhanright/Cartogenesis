@@ -29,8 +29,18 @@ enum class GenerationStage(val label: String, val shortLabel: String) {
     LANDMARKS("Stocking the wilds", "landmarks")
 }
 
+/**
+ * Told which stage is starting, before it starts.
+ *
+ * [onStage] suspends, and that is the whole of what it buys. In a browser there is one thread: the
+ * page, the generator and every repaint share it, so a report that merely writes a string somewhere
+ * changes nothing a reader can see — the next stage takes the thread straight back and the browser
+ * never gets a frame. A suspending report lets the caller hand the thread back at each boundary,
+ * which is what turns ten stage names into ten things that actually appear. On the JVM, where the
+ * generation is already off the interface's thread, the callback simply does not suspend.
+ */
 fun interface GenerationProgress {
-    fun onStage(stage: GenerationStage, stageIndex: Int, stageCount: Int)
+    suspend fun onStage(stage: GenerationStage, stageIndex: Int, stageCount: Int)
 }
 
 /**
@@ -80,7 +90,8 @@ object WorldGenerationEngine {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
 
         val stages = GenerationStage.entries
-        fun report(stage: GenerationStage) = progress.onStage(stage, stage.ordinal, stages.size)
+        suspend fun report(stage: GenerationStage) =
+            progress.onStage(stage, stage.ordinal, stages.size)
 
         report(GenerationStage.TERRAIN)
         val terrain = reusable?.takeIf { it.config.terrain == config.terrain }?.terrain

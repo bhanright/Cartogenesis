@@ -211,9 +211,24 @@ private val DarkAtlas: ColorScheme = darkColorScheme(
 internal object OverMap {
     /** A wash of the dark ink, for anything laid over the chart. */
     val Veil = Color(0xE014100E)
+
+    /**
+     * Thinner than [Veil], for the two strips that sit on the map all the time.
+     *
+     * The progress banner is a moment and can afford to be nearly opaque; the toolbar and the
+     * legend are always there, and at the banner's weight they would read as two black bars with a
+     * map between them rather than as annotations on a chart.
+     */
+    val Strip = Color(0xC214100E)
     val Ink = Color(0xFF15110F)
     val Parchment = Color(0xFFF2E7CF)
     val ParchmentDim = Color(0xCCF2E7CF)
+
+    /** An unchosen name in the style strip: present, legible, plainly not the current one. */
+    val ParchmentFaint = Color(0x8CF2E7CF)
+
+    /** The hairlines that divide the strip into cells, and rule it off from the map. */
+    val Rule = Color(0x3DF2E7CF)
 }
 
 /**

@@ -101,18 +101,20 @@ class ChromeGalleryTest {
                 CartogenesisTheme(dark = dark) { CartogenesisApp(platform) }
             }
             onNodeWithText("Generate").performClick()
-            // Only the finished status line reads "… N realms · M rivers". Waiting on the word
-            // "rivers" alone would match the progress banner's "Carving rivers" and photograph a
-            // half-drawn world, which is exactly what the first run of this test did.
+            // The cartouche in the map's legend is written only once a world exists, and its
+            // "seed N · 512 × 512" is the only place the resolution appears written out that way —
+            // the panel's own chips say "512" alone. Waiting on anything vaguer than this
+            // photographs a half-drawn world, which is what the first run of this test did.
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("realms ·", substring = true).fetchSemanticsNodes().isNotEmpty()
+                onAllNodesWithText("512 × 512", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
 
             if (openSections) {
-                // In this order, because Cartography holds the style and view names and a couple
-                // of those are words a heading could be mistaken for. Rolled up, they are not in
-                // the tree at all; opened last, nothing after them is looked for.
+                // In the panel's own order. Since F3 took the style and view lists out of
+                // Cartography there is nothing inside a section whose name could be mistaken for
+                // a heading, but the order is still the reader's.
                 listOf("Terrain", "Climate", "Water", "Peoples", "Cartography").forEach {
                     onNodeWithText(it).performClick()
                     waitForIdle()

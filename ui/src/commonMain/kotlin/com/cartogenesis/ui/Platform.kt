@@ -99,6 +99,18 @@ interface Platform {
     val accelerationUnavailableBecause: String?
 
     /**
+     * The largest export this build can actually finish.
+     *
+     * Not a taste: 8192 does not complete. G2 measured it exhausting a 10 GB heap inside the
+     * generator after about nineteen minutes, before a single pixel of the map is drawn — so the
+     * chip for it is offered disabled rather than removed, and any size above this one falls back
+     * to it. It is a value on the platform, and not a constant in the panel, so that the build
+     * which fixes the memory can raise the ceiling without the interface being touched: the export
+     * row draws whatever this says.
+     */
+    val exportCeiling: Int get() = 4096
+
+    /**
      * Renders at [size] and puts the result wherever this platform puts finished files: a chosen
      * path on the desktop, a download in a browser. Returns null if the user backed out.
      */

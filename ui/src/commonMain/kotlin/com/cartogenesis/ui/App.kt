@@ -2,6 +2,9 @@ package com.cartogenesis.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
@@ -53,8 +56,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.LibraryEntry
-import com.cartogenesis.cartography.MapStyle
-import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldSave
@@ -71,7 +72,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.min
 import kotlin.random.Random
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,7 +90,12 @@ fun CartogenesisApp(platform: Platform) {
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     var stage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // Notices only, now: what an export or a save did. What used to be the status line — the seed,
+    // the size, the realm count and the time — is the cartouche in the map's legend, and is read
+    // off the world itself rather than accumulated into a sentence here.
     var status by remember { mutableStateOf("") }
+    /** How long the last generation took, for the cartouche's footnote. Zero for an opened save. */
+    var generationMillis by remember { mutableStateOf(0L) }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
     var exportFormat by remember { mutableStateOf(ExportFormat.PNG) }
 
@@ -110,7 +115,9 @@ fun CartogenesisApp(platform: Platform) {
     var pendingLabel by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var labelMode by remember { mutableStateOf(false) }
     var documentId by remember { mutableStateOf(randomId()) }
-    var title by remember { mutableStateOf("Untitled world") }
+    // The world's name: generated after each generation, editable in the header, and what the
+    // save is filed under. See [WorldNaming] for the rule about which of those wins when.
+    val naming = remember { WorldNaming() }
     var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
     val store = platform.library
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
@@ -120,6 +127,9 @@ fun CartogenesisApp(platform: Platform) {
     // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
     // that a trip to the atlas or the library and back does not roll them all up again.
     val sections = remember { SectionState() }
+    // Where the map is being looked at from. Hoisted out of the canvas because the zoom readout
+    // and its buttons are in the legend along the bottom edge now, not floating over the corner.
+    val camera = remember { MapCamera() }
     // Click handlers are plain callbacks, not suspend functions, but the library now is - it
     // lives in IndexedDB on the web build, which is asynchronous throughout. This is how a
     // button press reaches a suspend call without making the composable itself suspend.
@@ -130,13 +140,16 @@ fun CartogenesisApp(platform: Platform) {
     fun openSave(save: WorldSave) {
         val doc = save.document
         documentId = doc.id
-        title = doc.title
+        naming.opened(doc.config.seed, doc.title)
         overrides = doc.overrides
         labels = doc.labels
         nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
         storedTerrain = doc.terrain
         world = save.world
         config = doc.config
+        // Nothing was generated, so there is no time to quote: the footnote stays off until this
+        // world is next made rather than read.
+        generationMillis = 0L
         gate.request()
         screen = Screen.MAP
     }
@@ -173,9 +186,13 @@ fun CartogenesisApp(platform: Platform) {
         image = rendered
         stage = null
         busy = false
-        status = "Seed ${config.seed} · ${config.width}x${config.height} in " +
-            "${epochMillis() - started} ms · ${generated.nations.nations.size} realms · " +
-            "${generated.rivers.rivers.size} rivers"
+        generationMillis = epochMillis() - started
+        // A world nobody has named yet, or a world at a seed this name was not given to, takes the
+        // name its largest people would give it. A settings edit at the same seed keeps whatever
+        // is in the field.
+        naming.generated(config.seed, Cartouches.suggest(generated))
+        // Any notice from an earlier export or save is about a world that is no longer on screen.
+        status = ""
     }
 
     LaunchedEffect(options) {
@@ -212,9 +229,13 @@ fun CartogenesisApp(platform: Platform) {
         )
     }
 
-    // The map is the point, so it takes the middle and the whole height. Everything about the
-    // world is on the left, in the order the generator makes it; the right is what happens to a
-    // finished map.
+    // The map is the point, so it takes everything the panel does not. F3 gave it the right-hand
+    // column as well: Export was the only thing left over there after F2, a 200dp strip holding
+    // two chips and three buttons, and it is a thing done to a finished map rather than a thing
+    // about the map on screen — so it has folded into the header panel, under the resolution row,
+    // beside Library and Atlas which are the other two document actions. The alternative the spec
+    // offered was a popover from a toolbar button; both free the same 210dp, and this one needs no
+    // overlay machinery and keeps the map's own chrome to the two things that are about the map.
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(10.dp)) {
 
         Column(
@@ -226,8 +247,15 @@ fun CartogenesisApp(platform: Platform) {
                     config = config,
                     busy = busy,
                     status = status,
+                    hasWorld = world != null,
+                    exportFormat = exportFormat,
+                    exportCeiling = platform.exportCeiling,
+                    worldName = naming.name,
+                    platform = platform,
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
+                    onWorldName = naming::rename,
+                    onConfig = { config = it },
                     onSeed = { config = Knobs.withSeed(config, it); gate.request() },
                     onResolution = { config = Knobs.atResolution(config, it) },
                     onNewWorld = {
@@ -235,6 +263,11 @@ fun CartogenesisApp(platform: Platform) {
                         gate.request()
                     },
                     onGenerate = { gate.request() },
+                    onExportFormat = { exportFormat = it },
+                    // Clamped here as well as at the button. The disabled chip is a courtesy; this
+                    // is the guarantee, and it is what a size restored from an older build's
+                    // preference — which could still say 8192 — passes through.
+                    onExport = { pendingExport = Exports.clamp(it, platform.exportCeiling) },
                     onToggleAtlas = {
                         screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
                     },
@@ -272,11 +305,11 @@ fun CartogenesisApp(platform: Platform) {
             val current = world
             if (screen == Screen.LIBRARY) {
                 LibraryPane(
-                    title = title,
+                    title = naming.name,
                     worlds = saved,
                     location = platform.libraryLocation,
                     supportsFileTransfer = platform.supportsFileTransfer,
-                    onTitleChange = { title = it },
+                    onTitleChange = naming::rename,
                     onSave = {
                         // The world goes in the file, not the recipe for it. Nothing here depends
                         // on this machine reproducing the same world from the same seed, which is
@@ -289,7 +322,7 @@ fun CartogenesisApp(platform: Platform) {
                                 store.save(
                                     WorldDocument(
                                         id = documentId,
-                                        title = title.ifBlank { "Untitled world" },
+                                        title = naming.title,
                                         config = config,
                                         overrides = overrides,
                                         labels = labels,
@@ -298,9 +331,9 @@ fun CartogenesisApp(platform: Platform) {
                                     current
                                 )
                                 saved = store.list()
-                                "Saved \"$title\""
+                                "Saved \"${naming.title}\""
                             }.getOrElse {
-                                "Could not save \"$title\": ${it.message ?: it::class.simpleName}"
+                                "Could not save \"${naming.title}\": ${it.message ?: it::class.simpleName}"
                             }
                         }
                     },
@@ -312,7 +345,7 @@ fun CartogenesisApp(platform: Platform) {
                                 platform.downloadWorld(
                                     WorldDocument(
                                         id = documentId,
-                                        title = title.ifBlank { "Untitled world" },
+                                        title = naming.title,
                                         config = config,
                                         overrides = overrides,
                                         labels = labels,
@@ -320,9 +353,9 @@ fun CartogenesisApp(platform: Platform) {
                                     ),
                                     current
                                 )
-                                "Downloaded \"$title\""
+                                "Downloaded \"${naming.title}\""
                             }.getOrElse {
-                                "Could not download \"$title\": ${it.message ?: it::class.simpleName}"
+                                "Could not download \"${naming.title}\": ${it.message ?: it::class.simpleName}"
                             }
                         }
                     },
@@ -383,66 +416,62 @@ fun CartogenesisApp(platform: Platform) {
                     image = image,
                     labels = labels,
                     labelMode = labelMode,
+                    camera = camera,
                     onPlace = { x, y -> pendingLabel = x to y },
                     onLabelClick = { label -> labels = labels.filterNot { it.id == label.id } }
                 )
-                if (image == null && !busy) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "Pick a seed and settings, then Generate.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (labelMode) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    ) {
-                        Text(
-                            "Click the map to place a label. Click an existing one to remove it.",
-                            Modifier.padding(12.dp)
-                        )
+            }
+
+            // The two strips that make the map the instrument, and the progress banner between
+            // them and the map. Everything here is over the chart, in ink, so it is stacked rather
+            // than aligned piecemeal: the toolbar first, the banner under it while a world is
+            // being made, and the legend at the foot.
+            Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                if (screen == Screen.MAP) MapToolbar(options) { options = it }
+                if (busy) {
+                    Surface(color = OverMap.Veil, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.padding(14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                Modifier.width(20.dp),
+                                color = OverMap.Parchment,
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                stage ?: "Generating…",
+                                color = OverMap.Parchment,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
                 }
             }
 
-            if (busy) {
-                Surface(
-                    color = OverMap.Veil,
-                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                ) {
-                    Row(
-                        Modifier.padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            Modifier.width(20.dp),
-                            color = OverMap.Parchment,
-                            strokeWidth = 2.dp
-                        )
-                        Text(
-                            stage ?: "Generating…",
-                            color = OverMap.Parchment,
-                            style = MaterialTheme.typography.labelLarge
-                        )
+            if (screen == Screen.MAP) {
+                Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                    if (labelMode) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Click the map to place a label. Click an existing one to remove it.",
+                                Modifier.padding(12.dp)
+                            )
+                        }
                     }
-                }
-            }
-        }
-
-        // Style and View used to live here. They are neither settings of the world nor things
-        // done to a finished one, they are how the map on screen is drawn, so F2 files them under
-        // Cartography and F3 lifts them onto the map itself. What is left on this side is the one
-        // thing that genuinely leaves the application: a rendered file.
-        Column(
-            Modifier.width(200.dp).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Panel {
-                OutputOptions(busy, world != null, exportFormat, { exportFormat = it }) {
-                    pendingExport = it
+                    ChartLegend(
+                        // No world, no cartouche: an empty sheet is named by nothing, so the
+                        // legend carries F0's one line of instruction instead.
+                        cartouche = world?.let {
+                            Cartouches.of(it, naming.title, generationMillis)
+                        },
+                        prompt = "Pick a seed and settings, then Generate.",
+                        camera = camera
+                    )
                 }
             }
         }
@@ -480,25 +509,18 @@ private fun MapView(
     image: ImageBitmap?,
     labels: List<MapLabel>,
     labelMode: Boolean,
+    camera: MapCamera,
     onPlace: (Float, Float) -> Unit,
     onLabelClick: (MapLabel) -> Unit
 ) {
-    var zoom by remember { mutableStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
-
-    // Zooming about a point rather than about the origin: whatever is under the cursor, or between
-    // the fingers, has to stay under it, or the map slides away from whatever is being examined.
-    fun zoomAbout(anchor: Offset, factor: Float, panChange: Offset = Offset.Zero) {
-        val next = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
-        pan = (pan - anchor) * (next / zoom) + anchor + panChange
-        zoom = next
-    }
+    val zoom = camera.zoom
+    val pan = camera.pan
 
     Canvas(
         Modifier.fillMaxSize()
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                    zoomAbout(centroid, zoomChange, panChange)
+                    camera.about(centroid, zoomChange, panChange)
                 }
             }
             .pointerInput(Unit) {
@@ -512,7 +534,10 @@ private fun MapView(
                         val scrolled = change.scrollDelta.y
                         if (scrolled == 0f) continue
                         // Scrolling down is positive, and should zoom out.
-                        zoomAbout(change.position, if (scrolled < 0f) WHEEL_STEP else 1f / WHEEL_STEP)
+                        camera.about(
+                            change.position,
+                            if (scrolled < 0f) MapCamera.STEP else 1f / MapCamera.STEP
+                        )
                         change.consume()
                     }
                 }
@@ -572,49 +597,9 @@ private fun MapView(
         }
     }
 
-    // The wheel and the pinch are both invisible, so the same thing is offered where it can be
-    // seen. Zooming from here uses the middle of the view as the anchor, there being no cursor
-    // position to work from.
-    Box(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.align(Alignment.BottomEnd).padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "${(zoom * 100).roundToInt()}%",
-                style = MaterialTheme.typography.labelSmall,
-                color = OverMap.ParchmentDim
-            )
-            ZoomButton("-") { zoom = (zoom / WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
-            ZoomButton("+") { zoom = (zoom * WHEEL_STEP).coerceIn(MIN_ZOOM, MAX_ZOOM) }
-            ZoomButton("Fit") { zoom = 1f; pan = Offset.Zero }
-        }
-    }
+    // The zoom readout and its three buttons used to float here, over the bottom-right corner of
+    // the map. They are the right-hand half of the legend now; see [ChartLegend].
 }
-
-/** Deliberately plain: these sit over the map and should not compete with it. */
-@Composable
-private fun ZoomButton(label: String, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(4.dp),
-        color = OverMap.Veil,
-        contentColor = OverMap.Parchment
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-    }
-}
-
-private const val MIN_ZOOM = 0.2f
-private const val MAX_ZOOM = 40f
-
-/** One wheel notch, or one press of a button. Compounds, so it should be a modest step. */
-private const val WHEEL_STEP = 1.15f
 
 @Composable
 private fun LabelChip(label: MapLabel) {
@@ -691,28 +676,64 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
 }
 
 /**
- * The slim header: which world, at what size, and the four things one can do with it.
+ * What the world is called.
  *
- * Nothing here is a setting of the world — the seed is which world, the resolution is how finely
- * it is computed — so it sits above the sections rather than inside one, and it is the only part
- * of the panel that never rolls up.
+ * Filled in after every generation with a name in the language of the world's largest people, and
+ * editable from that moment on. Unlike [SeedField] this applies as it is typed: a name costs
+ * nothing to change, where a seed costs a generation, so there is nothing to defer to Enter.
+ *
+ * It is the same string the save is filed under, so what is typed here is what the library lists
+ * and what comes back when the file is opened — the cartouche on the map, the library listing and
+ * the save header are three views of this one field.
+ */
+@Composable
+private fun NameField(name: String, onName: (String) -> Unit) {
+    OutlinedTextField(
+        value = name,
+        onValueChange = { onName(it.take(60)) },
+        label = { Text("Name") },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * The slim header: which world, what it is called, at what size and on what hardware.
+ *
+ * Almost nothing here is a setting of the world — the seed is which world, the name is what it is
+ * called, the resolution is how finely it is computed and the graphics-card switch is what does
+ * the computing — so it sits above the sections rather than inside one, and it is the only part of
+ * the panel that never rolls up. The one knob it draws it draws through [KnobControl], the same
+ * renderer the sections use, from the same declaration in [Knobs]: the header is a place a knob
+ * can be, not a second way of writing one.
  */
 @Composable
 private fun PanelHeader(
     config: WorldGenConfig,
     busy: Boolean,
     status: String,
+    hasWorld: Boolean,
+    exportFormat: ExportFormat,
+    exportCeiling: Int,
+    worldName: String,
+    platform: Platform,
     atlasLabel: String,
     libraryLabel: String,
+    onWorldName: (String) -> Unit,
+    onConfig: (WorldGenConfig) -> Unit,
     onSeed: (Long) -> Unit,
     onResolution: (Int) -> Unit,
     onNewWorld: () -> Unit,
     onGenerate: () -> Unit,
+    onExportFormat: (ExportFormat) -> Unit,
+    onExport: (Int) -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleLarge)
     SeedField(seed = config.seed, busy = busy, onSeed = onSeed)
+    NameField(name = worldName, onName = onWorldName)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // The one unambiguous "start" action - Go and New world both change the seed and so also
         // generate, but this is the button for someone who has touched nothing yet.
@@ -744,6 +765,17 @@ private fun PanelHeader(
         }
     }
 
+    // Where the work runs, directly under how finely it is done. The only knob the header draws,
+    // and it is drawn from the declaration rather than by hand. Nothing in this section is a
+    // [Mark] — a knob that writes `RenderOptions` — which `PanelKnobsTest` holds to, so the
+    // options handed in here are never read and the writer is never called.
+    Knobs.inSection(PanelSection.HEADER).forEach { knob ->
+        KnobControl(knob, config, RenderOptions(), busy, platform, onConfig) {}
+    }
+
+    // Export, which had a 200dp column of its own on the far side of the map until F3.
+    OutputOptions(busy, hasWorld, exportFormat, exportCeiling, onExportFormat, onExport)
+
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
             onClick = onToggleLibrary,
@@ -759,15 +791,18 @@ private fun PanelHeader(
         ) { Text(atlasLabel, maxLines = 1) }
     }
 
-    Text(
-        status.ifBlank {
-            if (busy) "Generating the first world…" else "Pick a seed and settings, then Generate."
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2,
-        modifier = Modifier.padding(top = 8.dp)
-    )
+    // Notices only — what an export or a save just did. The running commentary on the world moved
+    // to the cartouche in the map's legend, so an empty line here means nothing has happened
+    // rather than that there is nothing to say.
+    if (status.isNotBlank()) {
+        Text(
+            status,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
 }
 
 /**
@@ -796,9 +831,6 @@ private fun SettingsPanel(
             Knobs.inSection(section).forEach { knob ->
                 KnobControl(knob, config, options, busy, platform, onConfig, onOptions)
             }
-            // The two long lists of choices. They are drawn by hand rather than declared, because
-            // a list of nine styles is not a knob; F3 lifts both onto the map itself.
-            if (section == PanelSection.CARTOGRAPHY) StyleAndView(options, onOptions)
         }
     }
 }
@@ -959,90 +991,70 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
     )
 }
 
-/** How the finished map is drawn, and which layer of it is on screen. */
-@Composable
-private fun StyleAndView(options: RenderOptions, onOptions: (RenderOptions) -> Unit) {
-    Text(
-        "Style",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
-    )
-    MapStyle.entries.forEach { style ->
-        FilterChip(
-            selected = options.style == style,
-            onClick = { onOptions(options.copy(style = style)) },
-            label = { Text(style.label, maxLines = 1) },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-    Text(
-        options.style.detail,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    // Only the fantasy and political views are drawn in a style; the rest carry meaning in their
-    // colours, so it would be a lie to restyle them.
-    if (!options.view.showsTerrain) {
-        Text(
-            "The ${options.view.label.lowercase()} view ignores the style, since its colours mean something.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    Text(
-        "View",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
-    )
-    MapView.entries.forEach { view ->
-        FilterChip(
-            selected = options.view == view,
-            onClick = { onOptions(options.copy(view = view)) },
-            label = { Text(view.label, maxLines = 1) },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
 /**
  * Where a finished map goes.
  *
  * The graphics-card switch used to head this panel, under "Acceleration". It has moved to World:
  * it decides how the world is *made*, and filing it beside the export buttons implied it was
- * something about the picture.
+ * something about the picture. F3 moved what was left of the panel into the header, so this is
+ * three rows in a 320dp column rather than a 200dp column of its own — the heading and the two
+ * format chips share a line, which is the row the narrower home cost it.
  */
 @Composable
 private fun OutputOptions(
     busy: Boolean,
     hasWorld: Boolean,
     exportFormat: ExportFormat,
+    exportCeiling: Int,
     onExportFormat: (ExportFormat) -> Unit,
     onExport: (Int) -> Unit
 ) {
-    Text("Export", style = MaterialTheme.typography.titleSmall)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ExportFormat.entries.forEach { format ->
-            FilterChip(
-                selected = exportFormat == format,
-                onClick = { onExportFormat(format) },
-                label = { Text(format.label, maxLines = 1) },
-                modifier = Modifier.weight(1f)
-            )
+    // Which size the pointer is over, if it is over one that cannot be run. Only that case needs
+    // remembering: the small print for a size that works is the format's own line.
+    var reachingFor by remember { mutableStateOf<Int?>(null) }
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Export", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ExportFormat.entries.forEach { format ->
+                FilterChip(
+                    selected = exportFormat == format,
+                    onClick = { onExportFormat(format) },
+                    label = { Text(format.label, maxLines = 1) }
+                )
+            }
         }
     }
+    // One line of small print, which the unreachable size borrows while the pointer is on it. In
+    // the same slot rather than under the row, so nothing moves when it changes.
+    val unreachable = reachingFor
     Text(
-        exportFormat.detail,
+        if (unreachable != null) Exports.unreachableNote(unreachable) else exportFormat.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf(2048, 4096, 8192).forEach { size ->
+        Exports.SIZES.forEach { size ->
+            // A size this build cannot finish keeps its chip — the row would otherwise change
+            // width when the ceiling moves, and a missing control says nothing about why it is
+            // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
+            // says what is wrong.
+            val reachable = Exports.reachable(size, exportCeiling)
+            val hover = remember { MutableInteractionSource() }
+            val hovered by hover.collectIsHoveredAsState()
+            LaunchedEffect(hovered, reachable) {
+                if (!reachable && hovered) reachingFor = size
+                else if (reachingFor == size) reachingFor = null
+            }
             Button(
-                onClick = { onExport(size) },
-                enabled = !busy && hasWorld,
+                onClick = { onExport(Exports.clamp(size, exportCeiling)) },
+                enabled = reachable && !busy && hasWorld,
                 contentPadding = TIGHT,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).hoverable(hover)
             ) { Text("$size", maxLines = 1) }
         }
     }

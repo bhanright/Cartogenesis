@@ -31,6 +31,20 @@ class ExportSmokeTest {
     }
 
 
+    /**
+     * The sizes this test renders are the sizes the interface offers, and no more.
+     *
+     * 8192 is offered as a disabled chip because it does not complete: G2 measured it exhausting a
+     * 10 GB heap inside the generator after about nineteen minutes, before a pixel is drawn. The
+     * ceiling lives on the platform so that the build which fixes the memory raises it in one
+     * place — and this is the assertion that will fail, correctly, when it does, so that this test
+     * is extended to render the size it has started letting through.
+     */
+    @Test
+    fun `the desktop build's export ceiling is 4096`() {
+        assertEquals(4096, DesktopPlatform().exportCeiling)
+    }
+
     @Test
     fun `render at the sizes the desktop build exists for`() {
         val outputDir = File("build/exports").apply { mkdirs() }

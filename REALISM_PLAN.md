@@ -652,6 +652,19 @@ which surface on land at 62% ocean and show the chamfer faceting as eight-sided 
 Lesson, now in the working method: review renders at 1024 or above through the app's renderer, on
 a seed chosen to have the terrain the chunk acts on.
 
+### Render review after Track E (2026-09-12)
+
+Looked at William's two worlds at 2048 (ocean 62%, 14 plates, 12 realms) through the app's
+renderer with river cells painted: seed 59758's rift seam and delta mouth, seed 718106's northern
+lake country. Verdict: two of four right. The rift is no longer a ruler-edged strait; it holds a
+trough lake and a flooded segment behind sills, which is the Baikal outcome. Lake abundance on
+718106 is 0.38% of land with nothing above 0.04% of the map, irregular and scattered. Not right:
+the delta at (640, 266) is rounder but the drawn river still stops at its inner edge with a pocket
+of sea inside the lobe (sent back to E1); and rivers crossing the exposed floor of a balanced
+lake run as dead-straight horizontal or vertical lines, one lake on 718106 has a ruler-straight
+edge - the re-routing toward the water assigns targets in scan order on a flat (a fix-up agent is
+on it). Release 1.2.0 waits for both.
+
 ## Ledger
 
 Update the entry when the chunk's commit is on `main` and CI is green. Record the numbers the

@@ -609,17 +609,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return coverage * fade * uLakeLineStrength;
             }
 
-            /* Engraving.stipple: one dot a lattice cell, on integer centres so both paths agree. */
+            /*
+             * Engraving.stipple: one dot a lattice cell, nudged into the middle two fifths of it so
+             * a dot and its soft edge never cross the cell's boundary and the two paths cannot draw
+             * a different dot even where they disagree about which cell a pixel is in.
+             */
             float stippleInk(int x, int y) {
                 int pitch = uStipplePitch;
                 int cellX = x / pitch;
                 int cellY = y / pitch;
                 uint bits = hashBits(cellX, cellY);
-                int spread = max(pitch / 2, 1);
-                int centreX = cellX * pitch + pitch / 4 + int((bits >> 8u) & 0xFFFu) % spread;
-                int centreY = cellY * pitch + pitch / 4 + int((bits >> 20u) & 0xFFFu) % spread;
-                float dx = float(x - centreX);
-                float dy = float(y - centreY);
+                precise float centreX =
+                    float(cellX * pitch) + float(pitch) * (0.3 + 0.4 * unitFrom(bits, 8u));
+                precise float centreY =
+                    float(cellY * pitch) + float(pitch) * (0.3 + 0.4 * unitFrom(bits, 20u));
+                precise float dx = float(x) - centreX;
+                precise float dy = float(y) - centreY;
                 precise float away = sqrt(dx * dx + dy * dy);
                 return 1.0 - smoothstep(
                     uStippleRadius - uAntialias, uStippleRadius + uAntialias, away);

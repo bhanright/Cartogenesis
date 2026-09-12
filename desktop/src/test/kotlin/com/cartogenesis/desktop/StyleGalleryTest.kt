@@ -115,13 +115,15 @@ class StyleGalleryTest {
     }
 
     /**
-     * F9's style, at the two sizes it has to be the same drawing at.
+     * F9's style, at the two sizes it has to be drawn by the same pen at.
      *
-     * The engraving's whole claim is that a stroke is a share of the sheet rather than a count of
-     * pixels, so the pair of details below is the review that matters: the same square of the same
-     * world, one from a 512 render and one from a 2048 render of a different world at four times the
-     * scale, and what a reader should see is one hand at two magnifications. `PenAndInkTest`
-     * measures the same thing; this is what it looks like.
+     * The engraving's claim is that a mark is a fixed number of pixels whatever the sheet, so the
+     * two details below are the review that matters: a square of a 512 render and a square four
+     * times the side of a 2048 render, each shown at its own pixels. What a reader should see is
+     * the *same nib* in both — hachures a hair wide and a dozen pixels long — with four times as
+     * many of them across the larger crop, the way a bigger plate carries more of the country
+     * rather than a bigger picture of less of it. `PenAndInkTest` measures the same thing; this is
+     * what it looks like.
      *
      * The 2048 world is the author's own probe — 62% ocean, fourteen plates, twelve realms — which
      * is a rougher, more crowded world than the gallery's and therefore the harder case for a

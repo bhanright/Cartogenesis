@@ -164,8 +164,8 @@ class RasterRecipe(
     val lineArt: Boolean,
     val inkGain: Float,
     /**
-     * How big each mark of the engraving is on a sheet of this width, or null where the style does
-     * not engrave. Built once here so neither path can derive a different pitch from the same width.
+     * How big each mark of the engraving is, in pixels, or null where the style does not engrave.
+     * Built once here so neither path can derive a different pitch from the same width.
      */
     val engraving: EngravingPlan? = null,
     /**

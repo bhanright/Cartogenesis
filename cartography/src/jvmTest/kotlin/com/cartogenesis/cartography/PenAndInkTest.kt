@@ -25,10 +25,13 @@ import kotlin.test.assertTrue
  *    the *rendered pixels*, recovers the direction the ink actually runs in with a structure
  *    tensor, and compares it with the aspect. The old rule is reproduced here as the control and
  *    fails by the width of the whole answer.
- *  - **A stroke is a share of the map, not a count of pixels.** The old comb had a five-cell
- *    period, so a 2048 render carried four times as many strokes as a 512 one over the same ground
- *    and the two were not the same drawing. The measurement below is in map fractions and the
- *    control fails it by a factor of four.
+ *  - **A mark is a fixed count of pixels, not a share of the sheet.** A pen does not grow with the
+ *    plate: an engraver handed a larger one draws the same hachure with the same nib and fits more
+ *    of them on it. So the pitch below is measured in pixels and asserted identical at 512, 1024,
+ *    2048 and 4096, and the stroke *count* over the same ground is asserted to grow as the square
+ *    of the grid ratio. The control is the drawing enlarged with the sheet, which is what F9
+ *    shipped first and what the review sent back: at 2048 its hachures are dashes thirty pixels
+ *    long and its stipple is polka dots.
  */
 class PenAndInkTest {
 
@@ -43,7 +46,7 @@ class PenAndInkTest {
          * and every valley floor is a place where two directions meet inside one window and the
          * answer is the average of them. What the bar has to separate is ink that follows the
          * ground from ink that ignores it, and those two are nowhere near each other: the engraving
-         * measures 19.4 degrees over 6110 windows and the fixed-bearing comb it replaced measures
+         * measures 20.0 degrees over 6110 windows and the fixed-bearing comb it replaced measures
          * 47.0, which is what a bearing chosen at random scores against an aspect that is uniform.
          * The bar sits at 30, giving away a third of the headroom, so a change that halved how well
          * the strokes followed the ground would still be caught.
@@ -51,16 +54,30 @@ class PenAndInkTest {
         const val MAX_MEAN_ASPECT_ERROR_DEGREES = 30.0
 
         /**
-         * How far the stroke spacing may drift between resolutions, as a share of the smaller.
+         * How far the stroke pitch may drift between resolutions, measured in pixels.
          *
-         * The lattice is a whole number of cells and every other length is a float multiple of it,
-         * so the drawing scales exactly and the only thing that can move the answer is the soft
-         * edge, which is a fixed six tenths of a cell because antialiasing belongs to the pixel
-         * grid rather than to the map. Measured at 1.1% across 512, 1024, 2048 and 4096; the bar is
-         * 5%. The comb it replaced had a five-cell period at every size — a twentieth of the map at
-         * 512 and an eightieth at 2048 — and wanders by a factor of two under the same ruler.
+         * Nought, near enough, and that is the point: every mark is a fixed count of pixels, so the
+         * only thing that can move this is how the cone's own geometry falls across the grid.
+         * Measured at 0.7% across 512, 1024, 2048 and 4096 — 8.96, 9.02, 9.02 and 9.03 pixels —
+         * and the bar is 5%. The control, the same drawing enlarged with the sheet, which is what
+         * F9 shipped first and what the review sent back, goes 8.96, 17.69, 35.18, 70.13: out by
+         * a factor of nearly eight over the same range.
          */
-        const val MAX_SPACING_DRIFT = 0.05
+        const val MAX_PITCH_DRIFT = 0.05
+
+        /**
+         * How far the stroke *count* may fall from the square of the grid ratio.
+         *
+         * The other half of the same property, and the half a reader sees: a pitch fixed in pixels
+         * over a grid four times finer puts sixteen strokes where there was one, so the larger plate
+         * carries more of the country at the same weight of line. Asserted rather than assumed,
+         * because a mark that quietly kept a share of the width would hold the count instead and
+         * this is what would catch it. Measured at 3.97, 15.90 and 63.55 times the 512 count for
+         * 1024, 2048 and 4096, against four, sixteen and sixty-four. Bar 8%, which is loose enough
+         * for the run-counting to miss the odd stroke where two nearly touch and tight enough that
+         * a factor of four or of one fails outright.
+         */
+        const val MAX_DENSITY_DRIFT = 0.08
 
         /**
          * Every style's 512 fantasy render, hashed, as it stood at v2.0.0 — before F9 touched
@@ -99,7 +116,7 @@ class PenAndInkTest {
         /** A quarter turn: the angle from the strokes to the steepest change in the picture. */
         val QUARTER_TURN = Math.PI / 2
 
-        /** Every fourth pixel each way: sixteen times fewer windows, and the mean does not move. */
+        /** Every second pixel each way: four times fewer windows, and the mean does not move. */
         const val SAMPLE_STEP = 2
 
         /** Where two neighbouring strokes stop reading as one stroke and start reading as a break. */
@@ -165,36 +182,52 @@ class PenAndInkTest {
     }
 
     @Test
-    fun `a stroke is the same share of the map at every size`() {
+    fun `the pen is the same size at every resolution, and lays more strokes on a bigger plate`() {
         val sizes = listOf(512, 1024, 2048, 4096)
-        val engraved = sizes.associateWith { strokeSpacingFraction(it, engraved = true) }
-        val comb = sizes.associateWith { strokeSpacingFraction(it, engraved = false) }
+        val pen = sizes.associateWith { strokeScan(it, enlarged = false) }
+        val enlarged = sizes.associateWith { strokeScan(it, enlarged = true) }
 
         println(
-            "PENINK stroke spacing, share of the map (and in cells) — engraved " +
+            "PENINK stroke pitch in pixels (and strokes over the same share of the map) — the pen " +
+                sizes.joinToString(", ") { "$it: %.2f (%d)".format(pen[it]!!.pixelPitch, pen[it]!!.runs) }
+        )
+        println(
+            "PENINK stroke pitch in pixels (and strokes over the same share of the map) — enlarged " +
+                "with the sheet " +
                 sizes.joinToString(", ") {
-                    "$it: %.5f (%.1f)".format(engraved[it], engraved[it]!! * it)
+                    "$it: %.2f (%d)".format(enlarged[it]!!.pixelPitch, enlarged[it]!!.runs)
                 }
         )
-        println(
-            "PENINK stroke spacing, share of the map (and in cells) — the comb it replaced " +
-                sizes.joinToString(", ") { "$it: %.5f (%.1f)".format(comb[it], comb[it]!! * it) }
+
+        val drift = pen.values.maxOf { it.pixelPitch } / pen.values.minOf { it.pixelPitch } - 1.0
+        println("PENINK the pen's pitch drifts %.1f%% across 512..4096".format(drift * 100))
+        assertTrue(
+            drift <= MAX_PITCH_DRIFT,
+            "the stroke pitch drifts %.1f%% in pixels across 512..4096, past %.1f%%"
+                .format(drift * 100, MAX_PITCH_DRIFT * 100)
         )
 
-        val smallest = engraved.values.min()
-        val largest = engraved.values.max()
-        val drift = largest / smallest - 1.0
-        println("PENINK engraved spacing drifts %.1f%% across 512..4096".format(drift * 100))
-        assertTrue(
-            drift <= MAX_SPACING_DRIFT,
-            "the engraved stroke spacing drifts %.1f%% across 512..4096, past %.1f%%"
-                .format(drift * 100, MAX_SPACING_DRIFT * 100)
-        )
+        // The other half of the same property, and the one a reader sees: a fixed pitch in pixels
+        // over a grid n times finer means n squared times as many strokes on the same ground.
+        sizes.filter { it != 512 }.forEach { side ->
+            val ratio = pen[side]!!.runs.toDouble() / pen[512]!!.runs
+            val expected = (side.toDouble() / 512) * (side.toDouble() / 512)
+            println(
+                "PENINK $side lays %.2f times as many strokes as 512 over the same ground, against %.0f"
+                    .format(ratio, expected)
+            )
+            assertTrue(
+                abs(ratio / expected - 1.0) <= MAX_DENSITY_DRIFT,
+                ("$side lays %.2f times as many strokes as 512 over the same ground, not %.0f — " +
+                    "the marks are not a fixed size in pixels").format(ratio, expected)
+            )
+        }
 
-        val combDrift = comb.values.max() / comb.values.min() - 1.0
+        val enlargedDrift =
+            enlarged.values.maxOf { it.pixelPitch } / enlarged.values.minOf { it.pixelPitch } - 1.0
         assertTrue(
-            combDrift > MAX_SPACING_DRIFT,
-            "the control passed, so the measurement cannot tell a map fraction from a pixel count"
+            enlargedDrift > MAX_PITCH_DRIFT,
+            "the control passed, so the measurement cannot tell a pen from a magnifying glass"
         )
     }
 
@@ -412,18 +445,25 @@ class PenAndInkTest {
         )
     }
 
+    /** What one scan of the cone found: how far apart the marks are, and how many there were. */
+    private class StrokeScan(val pixelPitch: Double, val runs: Long)
+
     /**
-     * The mean distance between one mark and the next, as a share of the map's width.
+     * How far apart the marks are in pixels, and how many of them fall on the same share of the map.
      *
      * Measured on a cone rather than on a world, because a cone is the same shape at every
-     * resolution: whatever the drawing does to it at 2048 ought to be exactly the 512 picture
-     * magnified, so any difference is the drawing's and not the ground's. The cone also turns the
-     * aspect through every bearing, so the measurement is not an artefact of one direction — a
-     * horizontal scan crosses the strokes at every angle and what it counts is how often ink
-     * starts.
+     * resolution: the ground is identical at 512 and at 4096, so anything that differs between the
+     * two answers belongs to the drawing. The cone also turns the aspect through every bearing, so
+     * the measurement is not an artefact of one direction — a horizontal scan crosses the strokes
+     * at every angle and what it counts is how often ink starts.
+     *
+     * [enlarged] is the control: the same drawing blown up with the sheet, which is what sizing a
+     * mark as a share of the width does and what F9 shipped first. It is the 512 plan's ink read at
+     * map coordinates, so a stroke that is twelve pixels long at 512 is forty-eight at 2048 — which
+     * is exactly the woodcut the review sent back.
      */
-    private fun strokeSpacingFraction(width: Int, engraved: Boolean): Double {
-        val plan = EngravingPlan(width)
+    private fun strokeScan(width: Int, enlarged: Boolean): StrokeScan {
+        val plan = if (enlarged) EngravingPlan(512) else EngravingPlan(width)
         val gain = MapStyle.PEN_AND_INK.inkGain
         // Half way up the ink ramp, so the strokes are neither hairlines nor a solid mass.
         val slope = EngravingPlan.SLOPE_FLOOR + 0.5f / gain
@@ -431,42 +471,31 @@ class PenAndInkTest {
         val inner = width * 0.12f
         val outer = width * 0.45f
 
-        // Sampled at the same *map* positions whatever the resolution — every cell at 512, every
-        // fourth at 2048 — so the measurement's own pixel quantisation is identical at each size
-        // and any drift left in the answer belongs to the drawing rather than to the ruler.
-        val step = (width / 512).coerceAtLeast(1)
-
         var runs = 0L
         var scanned = 0L
-        var y = 0
-        while (y < width) {
+        for (y in 0 until width) {
             var wasInk = false
-            var x = 0
-            while (x < width) {
+            for (x in 0 until width) {
                 val dx = x - centre
                 val dy = y - centre
                 val radius = sqrt(dx * dx + dy * dy)
                 if (radius in inner..outer) {
-                    val ink = if (engraved) {
-                        Engraving.hachure(
-                            x, y, dx / radius * slope, dy / radius * slope, plan, gain
-                        ) > 0.5f
-                    } else {
-                        // The comb this replaced: a five-cell diagonal period, in cells, whatever
-                        // the map's size.
-                        0.5f * OLD_INK_GAIN > (((x + y) % 5) + 1) / 6f
-                    }
-                    scanned += step
+                    // Under the control the same map position is read at the 512 grid's coordinates,
+                    // so the whole picture arrives magnified by the grid ratio.
+                    val readX = if (enlarged) x * 512 / width else x
+                    val readY = if (enlarged) y * 512 / width else y
+                    val ink = Engraving.hachure(
+                        readX, readY, dx / radius * slope, dy / radius * slope, plan, gain
+                    ) > 0.5f
+                    scanned++
                     if (ink && !wasInk) runs++
                     wasInk = ink
                 } else {
                     wasInk = false
                 }
-                x += step
             }
-            y += step
         }
-        return scanned.toDouble() / runs.coerceAtLeast(1) / width
+        return StrokeScan(scanned.toDouble() / runs.coerceAtLeast(1), runs)
     }
 
 }

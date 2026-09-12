@@ -59,7 +59,8 @@ enum class MapStyle(
      * instead of a lake fill, stipple on the ice and a dotted border. Nothing is tinted by height
      * at all — the paper shows through everywhere, and the shape is carried by where the strokes
      * fall and how heavily. See [Engraving], which draws all of it, and [EngravingPlan], which
-     * decides how big each mark is on a sheet of this width.
+     * holds the size of the pen's marks — in pixels, the same at every resolution, so a larger
+     * plate carries more strokes rather than bigger ones.
      *
      * It stops short of the thing it is imitating. A hand-drawn map draws each range as a little
      * picture of a mountain, repeated and shaded by eye; this hachures by slope, so the texture is

@@ -5,14 +5,23 @@ import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
- * The stroke geometry of an engraved map, in cells, for one map width.
+ * The stroke geometry of an engraved map: how big each mark of the pen is, in pixels.
  *
- * Everything a pen draws has a size, and on a map that size is a share of the sheet rather than a
- * count of pixels: a hachure pitch of four pixels on a 512-cell map and of sixteen on a 2048-cell
- * one are the *same* pitch, and a reader looking at the two pictures side by side sees one drawing
- * at two magnifications. So every length here is derived from the width and none of them is a
- * constant number of cells. The exceptions are the softness figures, which are antialiasing and so
- * belong to the pixel grid rather than to the map.
+ * In pixels, and that is the whole of the idea. A pen does not grow with the sheet. An engraver
+ * handed a plate twice the size does not draw the same picture twice as large; he draws the same
+ * hachure with the same nib and fits four times as many strokes on it, so the larger plate carries
+ * more of the country rather than a bigger version of less of it. Every figure here is therefore a
+ * fixed count of output pixels at every resolution, and what grows with the grid is the *number* of
+ * marks — as the square of the grid ratio, so a 2048 render lays sixteen strokes over the ground a
+ * 512 render gives one.
+ *
+ * Sizing them as a share of the width instead was tried first and reviewed: at 2048 the hachures
+ * came out as black dashes thirty pixels long and the ice stipple as polka dots, which is a woodcut
+ * and not an engraving.
+ *
+ * Only two figures still depend on the map's width, and neither of them is a mark: how many lattice
+ * columns fit across it, which is what lets the strokes meet at the date line, and what a central
+ * difference has to be multiplied by to mean the same slope at any resolution.
  *
  * Built once per render and handed to both paths — the rasteriser reads it directly, the graphics
  * card gets the same numbers as uniforms (see [RasterRecipe.engraving]) — so neither can derive a
@@ -21,109 +30,124 @@ import kotlin.math.sqrt
 class EngravingPlan(width: Int) {
 
     /**
-     * Side of the lattice one stroke is drawn on, in cells.
+     * Side of the lattice one stroke is drawn on, in pixels.
      *
      * The strokes are placed rather than combed. Every lattice cell holds one stroke, nudged off
      * the cell's centre by a hash of the cell so the field does not read as a grid, and a pixel
      * asks the nine cells around it whether any of their strokes covers it. That is the whole of
      * the arrangement, and it is what makes the drawing possible at all: a stripe field whose phase
      * is the pixel's position projected onto the local contour cannot work, because the position is
-     * hundreds of cells from the origin and a single degree of turn in the aspect then slides the
-     * phase by a whole stripe. Measured, before this was replaced: the ink came out as isolated
-     * specks with no direction in it at all, and the guard below scored it 42.9 degrees against a
-     * random bearing's 44.8. Anchoring each stroke to its own lattice cell bounds the arm at one
-     * cell, so a turn in the aspect bends a stroke instead of shattering the field.
+     * hundreds of pixels from the origin and a single degree of turn in the aspect then slides the
+     * phase by a whole stripe. Measured, before that was replaced: the ink came out as isolated
+     * specks with no direction in it at all, and the guard scored it 42.9 degrees against a random
+     * bearing's 44.8. Anchoring each stroke to its own lattice cell bounds the arm at one cell, so a
+     * turn in the aspect bends a stroke instead of shattering the field.
      */
-    val hachureLatticeCells: Int = ((width + 32) / 64).coerceAtLeast(4)
+    val hachureLatticeCells: Int = HACHURE_LATTICE_PIXELS
 
     /**
      * How many lattice cells fit across the map.
      *
      * The east-west axis wraps, so the hash that places a stroke is taken on the column index
-     * modulo this and the pattern meets itself at the date line instead of showing a seam.
+     * modulo this and the pattern meets itself at the date line instead of showing a seam. Exact
+     * whenever the width divides by the pitch, which every power of two does.
      */
     val hachureLatticeColumns: Int = (width / hachureLatticeCells).coerceAtLeast(1)
 
-    /** Half the length of one stroke, down the slope. */
-    val strokeHalfLengthCells: Float = hachureLatticeCells * 0.75f
+    /** Half the length of one stroke, down the slope: three quarters of the lattice pitch. */
+    val strokeHalfLengthCells: Float = HACHURE_LATTICE_PIXELS * 0.75f
 
     /**
      * Half the width of one stroke at full steepness, across the slope.
      *
-     * Lehmann's rule lives here: the width is this times the steepness, so flat ground draws
-     * nothing and a cliff draws the widest stroke the lattice can hold without its neighbours
-     * merging into a black mass.
+     * A hairline, and deliberately: Lehmann's rule is carried by how black a stroke runs and by how
+     * many of them there are, not by how fat each one is. The width is this times the steepness, so
+     * flat ground draws nothing and a cliff draws a two-pixel line.
      */
-    val strokeHalfWidthCells: Float = hachureLatticeCells * 0.16f
+    val strokeHalfWidthCells: Float = 1f
 
     /**
-     * How far the central difference that gives the slope and the aspect reaches, in cells.
+     * How far the central difference that gives the slope and the aspect reaches, in pixels.
      *
-     * One lattice cell, which is both the resolution-independent figure and the physically right
-     * one: a drawing whose strokes are a cell apart cannot express a change of direction finer than
-     * a cell, and reading the aspect off a single pair of neighbouring cells on eroded ground gives
-     * a direction that changes every cell.
+     * One lattice pitch, which is the physically right figure: a drawing whose strokes are a pitch
+     * apart cannot express a change of direction finer than a pitch, and reading the aspect off a
+     * single pair of neighbouring cells on eroded ground gives a direction that changes every cell.
      */
-    val gradientStencilCells: Int = hachureLatticeCells
+    val gradientStencilCells: Int = HACHURE_LATTICE_PIXELS
 
     /**
      * What the central difference is multiplied by to become a slope.
      *
-     * `MapRasterizer.hillshadeScale` over the stencil's reach, so the number is the same physical
-     * gradient the hillshade sees, measured over a longer baseline, and does not change with
-     * resolution.
+     * `MapRasterizer.hillshadeScale` over the stencil's reach. This is the one figure that has to
+     * scale with the width, and for the opposite reason to everything else here: eight pixels of a
+     * 2048 grid cover a quarter of the ground eight pixels of a 512 grid cover, so without the scale
+     * the same hillside would read four times flatter on the larger plate and take four times less
+     * ink.
      */
     val gradientScale: Float = MapRasterizer.hillshadeScale(width) / gradientStencilCells
 
     /**
-     * Where the first coastal line sits, in cells from the shore.
+     * Where the first coastal line sits, in pixels from the shore.
      *
      * Line `k` sits at `base * (k + 1) * (k + 2) / 2`, so the four lines fall at one, three, six
-     * and ten times this and the gap between them widens the way an engraver's does.
+     * and ten times this — four, twelve, twenty-four and forty pixels — and the gap between them
+     * widens the way an engraver's does.
      */
-    val vignetteBaseCells: Float = width / 170f
+    val vignetteBaseCells: Float = 4f
 
     /** Half the thickness of a coastal line. */
-    val vignetteHalfWidthCells: Float = width / 900f
+    val vignetteHalfWidthCells: Float = 0.6f
 
     /** How many lines follow the coast out to sea. Engravers drew three to five. */
     val vignetteLineCount: Int = 4
 
     /** How far the solid shore ink reaches out over the water from the coast. */
-    val shoreInkCells: Float = (width / 341f).coerceAtLeast(1.5f)
+    val shoreInkCells: Float = 1.5f
 
     /**
      * How far the same firm ink reaches in from a lake's bank.
      *
-     * Half the coast's, because a lake is a small thing: at the coast's width every lake narrower
-     * than a dozen cells would come out as a solid blot, which is one of the things this style was
-     * redrawn to stop doing. Lakes narrower than twice this still fill, and at that size an
-     * engraver filled them too.
+     * Thinner than the coast's, because a lake is a small thing and at the coast's width a narrow
+     * one would come out as a solid blot, which is one of the things this style was redrawn to stop
+     * doing. Lakes narrower than twice this still fill, and at that size an engraver filled them too.
      */
-    val lakeRimCells: Float = (width / 682f).coerceAtLeast(1.2f)
+    val lakeRimCells: Float = 1.2f
 
     /** Distance between the horizontal water lines inside a lake. */
-    val lakeLinePitchCells: Float = width / 150f
+    val lakeLinePitchCells: Float = 6f
 
     /** Half the thickness of one water line. */
-    val lakeLineHalfWidthCells: Float = width / 1100f
+    val lakeLineHalfWidthCells: Float = 0.45f
 
-    /** How far from the shore a lake's water lines have faded to nothing. */
-    val lakeFadeCells: Float = width / 26f
+    /**
+     * How far from the bank a lake's water lines have faded to nothing.
+     *
+     * Eight rulings' worth. A lake wider than twice this keeps a blank middle, which is what an
+     * engraver left: the ruling says "water" at the bank rather than filling the basin.
+     */
+    val lakeFadeCells: Float = 48f
 
-    /** Distance between stipple dots on the ice, in cells. Whole cells: the dots sit on integers. */
-    val stipplePitchCells: Int = (width / 60).coerceAtLeast(4)
+    /** Distance between stipple dots on the ice. */
+    val stipplePitchCells: Int = 6
 
-    /** Radius of one stipple dot. Kept under a quarter of the pitch so a dot fits inside its cell. */
-    val stippleRadiusCells: Float = width / 420f
+    /** Radius of one stipple dot. Small enough that a dot always sits clear of its cell's edges. */
+    val stippleRadiusCells: Float = 1f
 
     /** Side of the block a dotted border is broken into. */
-    val borderDashCells: Int = (width / 170).coerceAtLeast(1)
+    val borderDashCells: Int = 4
 
     companion object {
 
         /**
-         * How wide the soft edge of a drawn line is, in cells.
+         * Side of the hachure lattice, in output pixels.
+         *
+         * Eight, which is what the 512 plate was drawn at and reviewed at. Every other mark here is
+         * this or a fraction of it, and none of them changes with the size of the sheet.
+         */
+        const val HACHURE_LATTICE_PIXELS: Int = 8
+
+        /**
+         * How wide the soft edge of a drawn line is, in pixels.
          *
          * A pen leaves a soft edge, and a hard one-bit threshold reads as a dither rather than as
          * ink. It is also what keeps the two paths within a channel of each other: a hard threshold
@@ -296,21 +320,21 @@ internal object Engraving {
     /**
      * Ice, as stipple: a dot per lattice cell, each nudged off centre by a hash of the cell.
      *
-     * Whole-cell arithmetic on purpose. A dot's centre is an integer pair, so the only rounded
-     * quantity in the whole figure is the square root of an exact integer, and the two paths cannot
-     * put a dot in different places. The nudge keeps the dot clear of its cell's edges, so a pixel
-     * on a boundary is outside every dot whichever cell it is counted in.
+     * The nudge is kept to the middle two fifths of the cell, so a dot together with its soft edge
+     * always sits clear of the cell's own boundary: a pixel one side of a boundary is outside every
+     * dot the other side of it, whichever cell it is counted in, and the two paths cannot draw a
+     * different dot even where they disagree about the cell. The offset is an exact fraction of a
+     * power of two, so both place the centre on the same spot to the bit.
      */
     fun stipple(x: Int, y: Int, plan: EngravingPlan): Float {
         val pitch = plan.stipplePitchCells
         val cellX = x / pitch
         val cellY = y / pitch
         val bits = hashBits(cellX, cellY)
-        val spread = (pitch / 2).coerceAtLeast(1)
-        val centreX = cellX * pitch + pitch / 4 + (bits ushr 8 and 0xFFF) % spread
-        val centreY = cellY * pitch + pitch / 4 + (bits ushr 20 and 0xFFF) % spread
-        val dx = (x - centreX).toFloat()
-        val dy = (y - centreY).toFloat()
+        val centreX = cellX * pitch + pitch * (0.3f + 0.4f * unitFrom(bits, 8))
+        val centreY = cellY * pitch + pitch * (0.3f + 0.4f * unitFrom(bits, 20))
+        val dx = x - centreX
+        val dy = y - centreY
         val distance = sqrt(dx * dx + dy * dy)
         return 1f - smoothstep(
             plan.stippleRadiusCells - EngravingPlan.ANTIALIAS_CELLS,

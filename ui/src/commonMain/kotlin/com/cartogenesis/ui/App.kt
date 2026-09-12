@@ -2,6 +2,9 @@ package com.cartogenesis.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
@@ -112,7 +115,9 @@ fun CartogenesisApp(platform: Platform) {
     var pendingLabel by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var labelMode by remember { mutableStateOf(false) }
     var documentId by remember { mutableStateOf(randomId()) }
-    var title by remember { mutableStateOf("Untitled world") }
+    // The world's name: generated after each generation, editable in the header, and what the
+    // save is filed under. See [WorldNaming] for the rule about which of those wins when.
+    val naming = remember { WorldNaming() }
     var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
     val store = platform.library
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
@@ -135,7 +140,7 @@ fun CartogenesisApp(platform: Platform) {
     fun openSave(save: WorldSave) {
         val doc = save.document
         documentId = doc.id
-        title = doc.title
+        naming.opened(doc.config.seed, doc.title)
         overrides = doc.overrides
         labels = doc.labels
         nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
@@ -182,6 +187,10 @@ fun CartogenesisApp(platform: Platform) {
         stage = null
         busy = false
         generationMillis = epochMillis() - started
+        // A world nobody has named yet, or a world at a seed this name was not given to, takes the
+        // name its largest people would give it. A settings edit at the same seed keeps whatever
+        // is in the field.
+        naming.generated(config.seed, Cartouches.suggest(generated))
         // Any notice from an earlier export or save is about a world that is no longer on screen.
         status = ""
     }
@@ -240,8 +249,13 @@ fun CartogenesisApp(platform: Platform) {
                     status = status,
                     hasWorld = world != null,
                     exportFormat = exportFormat,
+                    exportCeiling = platform.exportCeiling,
+                    worldName = naming.name,
+                    platform = platform,
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
+                    onWorldName = naming::rename,
+                    onConfig = { config = it },
                     onSeed = { config = Knobs.withSeed(config, it); gate.request() },
                     onResolution = { config = Knobs.atResolution(config, it) },
                     onNewWorld = {
@@ -250,7 +264,10 @@ fun CartogenesisApp(platform: Platform) {
                     },
                     onGenerate = { gate.request() },
                     onExportFormat = { exportFormat = it },
-                    onExport = { pendingExport = it },
+                    // Clamped here as well as at the button. The disabled chip is a courtesy; this
+                    // is the guarantee, and it is what a size restored from an older build's
+                    // preference — which could still say 8192 — passes through.
+                    onExport = { pendingExport = Exports.clamp(it, platform.exportCeiling) },
                     onToggleAtlas = {
                         screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
                     },
@@ -288,11 +305,11 @@ fun CartogenesisApp(platform: Platform) {
             val current = world
             if (screen == Screen.LIBRARY) {
                 LibraryPane(
-                    title = title,
+                    title = naming.name,
                     worlds = saved,
                     location = platform.libraryLocation,
                     supportsFileTransfer = platform.supportsFileTransfer,
-                    onTitleChange = { title = it },
+                    onTitleChange = naming::rename,
                     onSave = {
                         // The world goes in the file, not the recipe for it. Nothing here depends
                         // on this machine reproducing the same world from the same seed, which is
@@ -305,7 +322,7 @@ fun CartogenesisApp(platform: Platform) {
                                 store.save(
                                     WorldDocument(
                                         id = documentId,
-                                        title = title.ifBlank { "Untitled world" },
+                                        title = naming.title,
                                         config = config,
                                         overrides = overrides,
                                         labels = labels,
@@ -314,9 +331,9 @@ fun CartogenesisApp(platform: Platform) {
                                     current
                                 )
                                 saved = store.list()
-                                "Saved \"$title\""
+                                "Saved \"${naming.title}\""
                             }.getOrElse {
-                                "Could not save \"$title\": ${it.message ?: it::class.simpleName}"
+                                "Could not save \"${naming.title}\": ${it.message ?: it::class.simpleName}"
                             }
                         }
                     },
@@ -328,7 +345,7 @@ fun CartogenesisApp(platform: Platform) {
                                 platform.downloadWorld(
                                     WorldDocument(
                                         id = documentId,
-                                        title = title.ifBlank { "Untitled world" },
+                                        title = naming.title,
                                         config = config,
                                         overrides = overrides,
                                         labels = labels,
@@ -336,9 +353,9 @@ fun CartogenesisApp(platform: Platform) {
                                     ),
                                     current
                                 )
-                                "Downloaded \"$title\""
+                                "Downloaded \"${naming.title}\""
                             }.getOrElse {
-                                "Could not download \"$title\": ${it.message ?: it::class.simpleName}"
+                                "Could not download \"${naming.title}\": ${it.message ?: it::class.simpleName}"
                             }
                         }
                     },
@@ -449,7 +466,9 @@ fun CartogenesisApp(platform: Platform) {
                     ChartLegend(
                         // No world, no cartouche: an empty sheet is named by nothing, so the
                         // legend carries F0's one line of instruction instead.
-                        cartouche = world?.let { Cartouches.of(it, overrides, generationMillis) },
+                        cartouche = world?.let {
+                            Cartouches.of(it, naming.title, generationMillis)
+                        },
                         prompt = "Pick a seed and settings, then Generate.",
                         camera = camera
                     )
@@ -657,11 +676,37 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
 }
 
 /**
- * The slim header: which world, at what size, and the four things one can do with it.
+ * What the world is called.
  *
- * Nothing here is a setting of the world — the seed is which world, the resolution is how finely
- * it is computed — so it sits above the sections rather than inside one, and it is the only part
- * of the panel that never rolls up.
+ * Filled in after every generation with a name in the language of the world's largest people, and
+ * editable from that moment on. Unlike [SeedField] this applies as it is typed: a name costs
+ * nothing to change, where a seed costs a generation, so there is nothing to defer to Enter.
+ *
+ * It is the same string the save is filed under, so what is typed here is what the library lists
+ * and what comes back when the file is opened — the cartouche on the map, the library listing and
+ * the save header are three views of this one field.
+ */
+@Composable
+private fun NameField(name: String, onName: (String) -> Unit) {
+    OutlinedTextField(
+        value = name,
+        onValueChange = { onName(it.take(60)) },
+        label = { Text("Name") },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * The slim header: which world, what it is called, at what size and on what hardware.
+ *
+ * Almost nothing here is a setting of the world — the seed is which world, the name is what it is
+ * called, the resolution is how finely it is computed and the graphics-card switch is what does
+ * the computing — so it sits above the sections rather than inside one, and it is the only part of
+ * the panel that never rolls up. The one knob it draws it draws through [KnobControl], the same
+ * renderer the sections use, from the same declaration in [Knobs]: the header is a place a knob
+ * can be, not a second way of writing one.
  */
 @Composable
 private fun PanelHeader(
@@ -670,8 +715,13 @@ private fun PanelHeader(
     status: String,
     hasWorld: Boolean,
     exportFormat: ExportFormat,
+    exportCeiling: Int,
+    worldName: String,
+    platform: Platform,
     atlasLabel: String,
     libraryLabel: String,
+    onWorldName: (String) -> Unit,
+    onConfig: (WorldGenConfig) -> Unit,
     onSeed: (Long) -> Unit,
     onResolution: (Int) -> Unit,
     onNewWorld: () -> Unit,
@@ -683,6 +733,7 @@ private fun PanelHeader(
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleLarge)
     SeedField(seed = config.seed, busy = busy, onSeed = onSeed)
+    NameField(name = worldName, onName = onWorldName)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // The one unambiguous "start" action - Go and New world both change the seed and so also
         // generate, but this is the button for someone who has touched nothing yet.
@@ -714,8 +765,16 @@ private fun PanelHeader(
         }
     }
 
+    // Where the work runs, directly under how finely it is done. The only knob the header draws,
+    // and it is drawn from the declaration rather than by hand. Nothing in this section is a
+    // [Mark] — a knob that writes `RenderOptions` — which `PanelKnobsTest` holds to, so the
+    // options handed in here are never read and the writer is never called.
+    Knobs.inSection(PanelSection.HEADER).forEach { knob ->
+        KnobControl(knob, config, RenderOptions(), busy, platform, onConfig) {}
+    }
+
     // Export, which had a 200dp column of its own on the far side of the map until F3.
-    OutputOptions(busy, hasWorld, exportFormat, onExportFormat, onExport)
+    OutputOptions(busy, hasWorld, exportFormat, exportCeiling, onExportFormat, onExport)
 
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -946,9 +1005,14 @@ private fun OutputOptions(
     busy: Boolean,
     hasWorld: Boolean,
     exportFormat: ExportFormat,
+    exportCeiling: Int,
     onExportFormat: (ExportFormat) -> Unit,
     onExport: (Int) -> Unit
 ) {
+    // Which size the pointer is over, if it is over one that cannot be run. Only that case needs
+    // remembering: the small print for a size that works is the format's own line.
+    var reachingFor by remember { mutableStateOf<Int?>(null) }
+
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -965,18 +1029,32 @@ private fun OutputOptions(
             }
         }
     }
+    // One line of small print, which the unreachable size borrows while the pointer is on it. In
+    // the same slot rather than under the row, so nothing moves when it changes.
+    val unreachable = reachingFor
     Text(
-        exportFormat.detail,
+        if (unreachable != null) Exports.unreachableNote(unreachable) else exportFormat.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf(2048, 4096, 8192).forEach { size ->
+        Exports.SIZES.forEach { size ->
+            // A size this build cannot finish keeps its chip — the row would otherwise change
+            // width when the ceiling moves, and a missing control says nothing about why it is
+            // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
+            // says what is wrong.
+            val reachable = Exports.reachable(size, exportCeiling)
+            val hover = remember { MutableInteractionSource() }
+            val hovered by hover.collectIsHoveredAsState()
+            LaunchedEffect(hovered, reachable) {
+                if (!reachable && hovered) reachingFor = size
+                else if (reachingFor == size) reachingFor = null
+            }
             Button(
-                onClick = { onExport(size) },
-                enabled = !busy && hasWorld,
+                onClick = { onExport(Exports.clamp(size, exportCeiling)) },
+                enabled = reachable && !busy && hasWorld,
                 contentPadding = TIGHT,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).hoverable(hover)
             ) { Text("$size", maxLines = 1) }
         }
     }

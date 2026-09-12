@@ -45,6 +45,26 @@ class PanelKnobsTest {
         assertTrue(Knobs.inSection(PanelSection.ATLAS).isNotEmpty())
     }
 
+    /**
+     * The graphics-card switch is in the header now, not in World.
+     *
+     * It spent F2 under Ocean coverage, where it read as something about the sea. It is not a
+     * setting of the world at all — the same seed makes the same world on either processor — so it
+     * sits with the working resolution, which is the other half of "how is this computed".
+     */
+    @Test
+    fun `where the work runs is in the header, not in World`() {
+        assertFalse(PanelSection.HEADER in PANEL_SECTIONS)
+        assertEquals(
+            listOf("Generate on the graphics card"),
+            Knobs.inSection(PanelSection.HEADER).map { it.label }
+        )
+        assertEquals(listOf("Ocean coverage"), Knobs.inSection(PanelSection.WORLD).map { it.label })
+        // The header draws its knobs through the same renderer the sections use, and hands it no
+        // usable `RenderOptions`, so nothing filed there may be a Mark.
+        assertTrue(Knobs.inSection(PanelSection.HEADER).none { it is Mark })
+    }
+
     @Test
     fun `only World is unrolled to begin with, and a section remembers being opened`() {
         assertEquals(
@@ -64,9 +84,20 @@ class PanelKnobsTest {
         assertFalse(state.isOpen(PanelSection.WORLD))
     }
 
+    /**
+     * No section of the panel is empty.
+     *
+     * It was two knobs apiece until the graphics-card switch left World for the header, which is
+     * the one section that is now a single control — and correctly so: how much of the world is
+     * sea is the only thing decided before the pipeline starts. An empty section, on the other
+     * hand, is a heading that rolls up to show nothing, and is always a mistake.
+     */
     @Test
-    fun `every section of the panel holds at least two knobs`() {
+    fun `no section of the panel is empty`() {
         PANEL_SECTIONS.forEach { section ->
+            assertTrue(Knobs.inSection(section).isNotEmpty(), "${section.title} holds nothing")
+        }
+        PANEL_SECTIONS.filterNot { it == PanelSection.WORLD }.forEach { section ->
             val held = Knobs.inSection(section)
             assertTrue(held.size >= 2, "${section.title} holds only ${held.size}")
         }
@@ -360,6 +391,59 @@ class PanelKnobsTest {
         val note = MapChrome.note(view.copy(view = MapView.RAINFALL))
         assertTrue("rainfall" in note, note)
         assertTrue("ignores the style" in note, note)
+    }
+
+    // ---- the export ceiling -------------------------------------------------------------------
+
+    /**
+     * 8192 does not complete on this build: G2 measured it exhausting a 10 GB heap inside the
+     * generator after about nineteen minutes, before a pixel of the map is drawn. So the size that
+     * reaches the platform can never be 8192 while the ceiling stands at 4096 — not from the
+     * button, which is disabled, and not from a preference written by an older build, which is why
+     * [Exports.clamp] and not the button is what this test asks.
+     *
+     * The ceiling is [Platform.exportCeiling] rather than a constant here, so the build that fixes
+     * the memory raises one number on the platform and this test starts letting 8192 through.
+     */
+    @Test
+    fun `the export size can never be 8192 while the ceiling is 4096`() {
+        val ceiling = 4096
+        Exports.SIZES.forEach { offered ->
+            assertTrue(
+                Exports.clamp(offered, ceiling) != 8192,
+                "$offered reached the platform as 8192"
+            )
+            assertTrue(Exports.clamp(offered, ceiling) <= ceiling)
+        }
+        // The two that do work are passed through untouched, and the one that does not falls back
+        // to the largest that does.
+        assertEquals(2048, Exports.clamp(2048, ceiling))
+        assertEquals(4096, Exports.clamp(4096, ceiling))
+        assertEquals(4096, Exports.clamp(8192, ceiling))
+        // Whatever an old preference held, including a size the row never offered.
+        assertEquals(4096, Exports.clamp(16384, ceiling))
+    }
+
+    @Test
+    fun `the row still offers three sizes, and says why one of them is out of reach`() {
+        assertEquals(listOf(2048, 4096, 8192), Exports.SIZES)
+        assertTrue(Exports.reachable(2048, 4096))
+        assertTrue(Exports.reachable(4096, 4096))
+        assertFalse(Exports.reachable(8192, 4096))
+        assertEquals(
+            "8192 needs more memory than this build can hold",
+            Exports.unreachableNote(8192)
+        )
+    }
+
+    /** Raising the ceiling is the whole of the fix, and it needs nothing from the interface. */
+    @Test
+    fun `a build that can hold 8192 gets 8192`() {
+        assertTrue(Exports.reachable(8192, 8192))
+        assertEquals(8192, Exports.clamp(8192, 8192))
+        // And a build that could not even manage 4096 still has something to fall back to.
+        assertEquals(2048, Exports.clamp(8192, 2048))
+        assertEquals(2048, Exports.clamp(4096, 1024))
     }
 
     // ---- the camera, whose readout is the other half of the legend ---------------------------

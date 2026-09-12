@@ -1,11 +1,11 @@
 package com.cartogenesis.ui
 
-import com.cartogenesis.cartography.WorldOverrides
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.pipeline.Culture
-import com.cartogenesis.worldgen.pipeline.Nation
-import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -20,8 +20,11 @@ import kotlin.random.Random
  * Three parts, in descending weight:
  *
  *  - the **name of the world**, set in the display face. Worlds had no names at all before this;
- *    a seed is how you *return* to one, not what you call it.
- *  - the **facts**: seed, working resolution, and the largest realm with its share of the land.
+ *    a seed is how you *return* to one, not what you call it. The name is generated but not
+ *    fixed — [WorldNaming] holds it, the header's Name field edits it, and it is what the save is
+ *    filed under.
+ *  - the **facts**: the seed and the working resolution, and nothing else. The largest realm and
+ *    its share were here for a draft and read as a statistic rather than as a caption.
  *  - the **footnote**: how long the world took to make, in the muted colour, because it is a fact
  *    about this machine rather than about the world.
  *
@@ -61,11 +64,8 @@ internal object Cartouches {
         return NameForge.styleFor(language).word(Random(seed), 3)
     }
 
-    /** `seed 59758 · 2048 × 2048 · largest realm Kelmaria (23%)`. */
-    fun facts(seed: Long, width: Int, height: Int, largestRealm: String?, share: Int): String {
-        val head = "seed $seed · $width × $height"
-        return if (largestRealm == null) head else "$head · largest realm $largestRealm ($share%)"
-    }
+    /** `seed 59758 · 2048 × 2048`: which world, and how finely it was computed. */
+    fun facts(seed: Long, width: Int, height: Int): String = "seed $seed · $width × $height"
 
     /** `generated in 1.8 s`. Sub-second worlds are quoted in milliseconds, as they were. */
     fun footnote(millis: Long): String = when {
@@ -74,33 +74,79 @@ internal object Cartouches {
         else -> "generated in ${(millis / 100L) / 10.0} s"
     }
 
-    /** Whole percent of the world's *land* — the sea is nobody's, so it is not in the divisor. */
-    fun share(cellCount: Int, landCellCount: Int): Int =
-        if (landCellCount <= 0) 0 else (cellCount * 100f / landCellCount).roundToInt()
+    /**
+     * The name this world would be given if nobody renamed it: the language of the people who
+     * hold most of its land, and the world's own seed.
+     */
+    fun suggest(world: WorldMap): String {
+        val people = world.cultures.cultures.maxWithOrNull(
+            compareBy<Culture> { it.cellCount }.thenByDescending { it.id }
+        )
+        return worldName(world.config.seed, people?.nameSeed)
+    }
 
     /**
-     * The cartouche for a finished world.
+     * The cartouche for a finished world, under whatever [name] the header's field holds.
      *
      * [millis] is how long the last generation took, or zero for a world that was opened from the
      * library rather than made here — there is no honest time to quote for those.
      */
-    fun of(world: WorldMap, overrides: WorldOverrides, millis: Long): Cartouche {
-        val people = world.cultures.cultures.maxWithOrNull(
-            compareBy<Culture> { it.cellCount }.thenByDescending { it.id }
-        )
-        val realm = world.nations.nations.maxWithOrNull(
-            compareBy<Nation> { it.cellCount }.thenByDescending { it.id }
-        )
-        return Cartouche(
-            worldName = worldName(world.config.seed, people?.nameSeed),
-            facts = facts(
-                seed = world.config.seed,
-                width = world.config.width,
-                height = world.config.height,
-                largestRealm = realm?.let { overrides.forNation(it.id).name ?: it.name },
-                share = realm?.let { share(it.cellCount, world.sea.landCellCount) } ?: 0
-            ),
-            footnote = footnote(millis)
-        )
+    fun of(world: WorldMap, name: String, millis: Long): Cartouche = Cartouche(
+        worldName = name,
+        facts = facts(world.config.seed, world.config.width, world.config.height),
+        footnote = footnote(millis)
+    )
+}
+
+/**
+ * The world's name, as the header's field holds it and as the save is filed under it.
+ *
+ * Three rules, and the awkward one is the third:
+ *
+ *  1. a world that has just been generated is named, so nothing is ever called "Untitled world"
+ *     by default;
+ *  2. whatever the reader types wins, and goes into the save's `title`, so it survives the file
+ *     and shows in the library listing;
+ *  3. **a new world takes a new name, and an adjusted one keeps its own.** Moving the seed makes a
+ *     different world and a name someone typed for the old one would be a lie; turning the ocean
+ *     up is the same world adjusted, and silently renaming it there would throw away what they
+ *     typed. The seed is what tells those two apart, so this remembers which seed the name in hand
+ *     belongs to.
+ *
+ * Compose state in a plain class, like [GenerationGate] and [MapCamera] beside it, so the rule can
+ * be tested without a composition — which is where the third one is worth having a test of.
+ */
+internal class WorldNaming {
+
+    /** Exactly what the field holds, including blank while someone is retyping it. */
+    var name by mutableStateOf("")
+        private set
+
+    /** The seed [name] was generated for, so an adjusted world can be told from a new one. */
+    private var namedSeed: Long? = null
+
+    /** What a save is filed under. A cleared field is still a file that has to be called something. */
+    val title: String get() = name.ifBlank { UNTITLED }
+
+    /** The reader typed. From this moment the name is theirs until the seed moves. */
+    fun rename(typed: String) {
+        name = typed
+    }
+
+    /** A generation finished: name the world, unless this is a world that already has a name. */
+    fun generated(seed: Long, suggestion: String) {
+        if (namedSeed == seed && name.isNotBlank()) return
+        name = suggestion
+        namedSeed = seed
+    }
+
+    /** A save was opened. Its title is its name, and the generation that follows must not touch it. */
+    fun opened(seed: Long, title: String) {
+        name = title
+        namedSeed = seed
+    }
+
+    private companion object {
+        const val UNTITLED = "Untitled world"
     }
 }

@@ -34,7 +34,19 @@ import kotlin.math.roundToInt
  * the panel at all: its two settings live in the Atlas pane, under the button that opens it.
  */
 internal enum class PanelSection(val title: String) {
-    /** Before anything: how much of the world is sea, and where the work runs. */
+    /**
+     * Not a section: the slim header above them all, which never rolls up.
+     *
+     * It holds the two things that are not settings of the world — which world (the seed and the
+     * name) and how finely it is computed — and, since this change, the one setting that is not
+     * about the world either: where the work runs. The graphics-card switch spent F2 in [WORLD],
+     * directly under Ocean coverage, where it read as something to do with the sea. It decides
+     * which processor erodes the terrain, which is a fact about this machine, and it belongs with
+     * the resolution it is the other half of.
+     */
+    HEADER("Header"),
+
+    /** Before anything: how much of the world is sea. */
     WORLD("World"),
 
     /** Plates, and the two dials that decide how tall and how worn the land comes out. */
@@ -58,7 +70,7 @@ internal enum class PanelSection(val title: String) {
      */
     CARTOGRAPHY("Cartography"),
 
-    /** Not on the panel. Declared here so the guard can see the whole interface at once. */
+    /** Not on the panel either. Declared here so the guard can see the whole interface at once. */
     ATLAS("Atlas");
 
     /**
@@ -71,7 +83,10 @@ internal enum class PanelSection(val title: String) {
     val openByDefault: Boolean get() = this == WORLD
 }
 
-/** The panel's own sections, in pipeline order. [PanelSection.ATLAS] is deliberately absent. */
+/**
+ * The panel's own sections, in pipeline order. [PanelSection.HEADER] and [PanelSection.ATLAS] are
+ * deliberately absent: both are drawn, but neither is a division of the panel that rolls up.
+ */
 internal val PANEL_SECTIONS: List<PanelSection> = listOf(
     PanelSection.WORLD,
     PanelSection.TERRAIN,
@@ -190,13 +205,17 @@ internal object Knobs {
     )
 
     /**
-     * Where erosion runs. In the World section rather than beside the export buttons, where it
-     * used to sit under the heading "Acceleration": it decides how the world is *made*, not how
-     * it is drawn, and on a large world it is most of the difference between a minute and a
-     * quarter of an hour.
+     * Where erosion runs. In the header, directly under the working resolution, which is the other
+     * half of the same question: how finely the world is computed, and by what.
+     *
+     * It has moved twice. Before F2 it sat beside the export buttons under "Acceleration", which
+     * implied it was something about the picture; F2 filed it in World, where it fell under Ocean
+     * coverage and read as if it applied to the sea. It is not a setting of the world at all — the
+     * world is the same world either way — it is a fact about this machine, and on a large one it
+     * is most of the difference between a minute and a quarter of an hour.
      */
     val graphicsCard = Latch(
-        section = PanelSection.WORLD,
+        section = PanelSection.HEADER,
         label = "Generate on the graphics card",
         needsAccelerator = true,
         read = { it.erosion.acceleration == Acceleration.GPU },
@@ -394,7 +413,8 @@ internal object Knobs {
 
     /** Every knob there is, panel and atlas alike, in the order they are drawn. */
     val all: List<Knob> = listOf(
-        oceanCoverage, graphicsCard,
+        graphicsCard,
+        oceanCoverage,
         plates, mountainHeight, erosionStrength,
         seasonalTilt, rainShadow, ice,
         rivers, lakes, dryBasins,
@@ -404,6 +424,42 @@ internal object Knobs {
     )
 
     fun inSection(section: PanelSection): List<Knob> = all.filter { it.section == section }
+}
+
+/**
+ * What sizes a finished map can be written at, and which of them this build can actually reach.
+ *
+ * Declared here for the same reason the knobs are: the ceiling is a *rule*, and a rule drawn only
+ * inside a composable can only be checked by looking at it. The rule is that no export ever runs
+ * above [Platform.exportCeiling] — 8192 exhausts a 10 GB heap inside the generator after about
+ * nineteen minutes and never draws a pixel, so the chip for it is disabled and any request for it,
+ * including one restored from a preference written by an older build, comes back as 4096.
+ *
+ * [clamp] is on the path every export takes rather than only on the button, because a disabled
+ * control is a courtesy and not a guarantee: the size that reaches the platform is the one that
+ * went through here.
+ */
+internal object Exports {
+
+    /** The three the row offers. Powers of two, as the working resolutions are. */
+    val SIZES: List<Int> = listOf(2048, 4096, 8192)
+
+    fun reachable(size: Int, ceiling: Int): Boolean = size <= ceiling
+
+    /**
+     * The largest offered size this build can finish — what an unreachable request falls back to.
+     *
+     * A ceiling below the smallest offered size would leave nothing to fall back *to*, so that
+     * case returns the smallest rather than nothing: a build that cannot manage 2048 has a worse
+     * problem than the export row.
+     */
+    fun clamp(size: Int, ceiling: Int): Int = when {
+        reachable(size, ceiling) -> size
+        else -> SIZES.filter { it <= ceiling }.maxOrNull() ?: SIZES.min()
+    }
+
+    /** Why a size is greyed out, in the small print, when someone reaches for it. */
+    fun unreachableNote(size: Int): String = "$size needs more memory than this build can hold"
 }
 
 /**

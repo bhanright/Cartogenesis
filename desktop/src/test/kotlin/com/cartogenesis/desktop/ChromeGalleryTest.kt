@@ -101,12 +101,12 @@ class ChromeGalleryTest {
                 CartogenesisTheme(dark = dark) { CartogenesisApp(platform) }
             }
             onNodeWithText("Generate").performClick()
-            // The cartouche in the map's legend is written only once a world exists, and the words
-            // "largest realm" appear nowhere else — not in the progress banner, whose stage names
-            // include "Carving rivers", and not in the panel. Waiting on anything vaguer than this
+            // The cartouche in the map's legend is written only once a world exists, and its
+            // "seed N · 512 × 512" is the only place the resolution appears written out that way —
+            // the panel's own chips say "512" alone. Waiting on anything vaguer than this
             // photographs a half-drawn world, which is what the first run of this test did.
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("largest realm", substring = true)
+                onAllNodesWithText("512 × 512", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()

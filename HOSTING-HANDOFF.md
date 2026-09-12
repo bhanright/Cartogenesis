@@ -5,7 +5,7 @@ project. Everything in the "Facts" sections was measured on the actual build, no
 verification steps are given so they can be repeated.*
 
 > **This brief has been answered and the app is deployed** at
-> <https://cartogenesis.bfunk.online>, in a subdirectory served by a subdomain, behind a
+> the older mirror on the author's personal site, in a subdirectory served by a subdomain, behind a
 > description page. Kept as written rather than rewritten, because the measurements below are still
 > the ones a future host would need, and because the six questions at the end record what was
 > actually undecided at the time.

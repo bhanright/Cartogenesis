@@ -21,7 +21,7 @@ import com.cartogenesis.ui.Platform
  * Must match the container in index.html. Compose attaches a shadow root to it and puts its canvas
  * inside, so the canvas will not be found by an ordinary DOM query on the page.
  *
- * **A deployed website depends on this name.** cartogenesis.bfunk.online replaces the emitted
+ * **A deployed website depends on this name.** The deployed site replaces the emitted
  * index.html with its own shell and creates the div itself, so renaming this leaves the app with
  * nothing to mount into. `WebDeploymentContractTest` fails if it changes; if it genuinely must,
  * that is a coordinated change with the site rather than a rename.

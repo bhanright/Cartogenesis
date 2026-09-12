@@ -992,7 +992,8 @@ can be made in the meantime."*
   the resolution contracts into a property; then two lines in parallel — S2 → S3 → R1 → I1 on the
   solid earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with P1 slotted where it
   touches the fewest open files; K4 once H5b is in; R2, R3, V1 and V2 whenever their inputs exist;
-  N1 and N2 alongside; P2 and V3 last. G1 and H3 finish before 3.0 begins if they have not
+  N1 and N2 alongside; P2 last. V3, the full atlas and its labels, moves to 4.0 (William,
+  2026-09-12) and the cartogenesis.com page carries a notice saying so. G1 and H3 finish before 3.0 begins if they have not
   already.
 - **What 3.0 must show.** The Earth-likeness suite green on the standard seeds; both of William's
   worlds at 2048 and 4096 reviewed crop by crop against the 2.0 renders. 2.0 saves need not open
@@ -1594,7 +1595,7 @@ guard reported, so the next chunk knows its baseline.
 | P2 A spherical grid | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | V1 Tints by climate and sky-model shading | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | V2 Generalisation, graticule and scale | | queued for 3.0 (REALISM_AUDIT.md) | | | |
-| V3 Labels | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| V3 Labels | | queued for 4.0 (REALISM_AUDIT.md; William, 2026-09-12: the full atlas with named continents, seas, bays, straits and ranges targets 4.0, and the site says so) | | | |
 | N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N2 Scale-free suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | Audit II Realism audit, literature-backed | Fable | done | 2026-09-12 | see log | REALISM_AUDIT.md: five structural absences (scale, coupled uplift/isostasy, prescribed atmosphere, rectangular planet, coast as a line) plus presentation and determinism findings; twenty-three chunks S/W/R/K/I/P/V/N/M with dependencies, effort, visual weight, rigour and GPU applicability; an Earth-likeness metric table (hypsometry, coastline fractal dimension, Hack and Horton, lake and island size laws, desert, ice, lake and wetland shares, reef limit, delta class mix); sources listed with what was read and what is cited from memory to be checked at dispatch |

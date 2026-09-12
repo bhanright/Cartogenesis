@@ -29,7 +29,13 @@ These are the habits that have found every substantive bug in this project. They
    `WorldGenConfig`, add it to that stage's guard in `WorldGenerationEngine` and to the variant
    list in `IncrementalReuseTest`, which compares reuse against fresh generation for every section.
 5. **Measure, do not tune.** Report the number before and after. Never move a threshold to make a
-   guard green; if a guard cannot discriminate, say so and fall back to the render.
+   guard green; if a guard cannot discriminate, say so and fall back to the render. The bars
+   themselves are not sacred, though (William, 2026-09-12): they were set by earlier sessions
+   from whatever the generator then produced, and the goal is realism. When a guard fails because
+   of a real physical change rather than a defect, the question is what Earth measures; the bar
+   moves to that figure, the derivation is written beside the assertion, and the ledger says so.
+   The first case was desert-in-band: Earth keeps roughly 85-88% of its desert within 15-45
+   degrees, so the bar is held on the seeds pooled at 85% with a 75% floor per seed.
 6. **Windows file locks, and never `gradlew --stop`.** Gradle on this machine locks `build/`
    subdirectories between runs. The cure is to delete the affected module's `build` directory
    *inside your own worktree* (`Remove-Item -LiteralPath <module>uild -Recurse -Force`, in a

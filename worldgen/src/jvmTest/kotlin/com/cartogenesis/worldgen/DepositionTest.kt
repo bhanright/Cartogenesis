@@ -104,7 +104,7 @@ class DepositionTest {
      * deposition off and a world with it running and every rate at zero to be bit-identical, and
      * gating the pass on the spoil broke that. Land held at 6226 for the eighth time.
      */
-    private val startingPointElevation = 0L // re-recorded on the merged code below
+    private val startingPointElevation = 206288670059201627L
     private val startingPointLand = 6226
 
     @Test

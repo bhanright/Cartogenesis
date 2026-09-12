@@ -25,11 +25,6 @@ A generated world carries:
 
 MIT licensed; see [LICENSE](LICENSE).
 
-There was an Android build. It was retired in favour of desktop and web: a phone's memory ceiling
-capped exports well below what the pipeline can produce, and erosion wants more compute than a
-handset gives it. The engine itself never depended on Android, and the web build runs fine in a
-phone's own browser instead (see the phone figures under **Running it**).
-
 ## The pipeline
 
 Each stage feeds the next, and all of them are deterministic for a given seed.

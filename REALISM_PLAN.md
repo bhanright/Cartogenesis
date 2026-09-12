@@ -986,6 +986,10 @@ Queued behind F10 (same files).
 - Restarting after a settings change reuses whatever finished stages the new settings still
   allow, through the existing stage-reuse chain (`IncrementalReuseTest` covers the rule); say in
   the report which stages survive a stop.
+- Also from William (2026-09-12): the seed field applied its value on losing focus, so clicking
+  out of it to change another setting started a world at once. The orchestrator removed the
+  focus-loss apply on `release/2.0` (Enter or Go only); F11 adds the guard, a UI test that typing
+  a seed and clicking elsewhere starts nothing, shown failing on 2.0.1.
 - Guards: a test that a generation cancelled during erosion returns within one round's time,
   leaves the previous world intact, and lets the next generation run to completion on the same
   engine; `GpuErosionTest` gains a cancel-mid-run case on the desktop; `ChromeGalleryTest`'s

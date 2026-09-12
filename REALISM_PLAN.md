@@ -991,7 +991,7 @@ guard reported, so the next chunk knows its baseline.
 | H5 Sea-level history | Opus | in progress | 2026-09-12 | | |
 | H1 Tectonic history | Opus | in progress | 2026-09-12 | | |
 | H3 Lithology | Opus | queued behind H1 and G1 | | | |
-| T1 Two test tiers | Sonnet | in progress | 2026-09-12 | | approved by William after a reboot interrupted E1's third pass, H4, H1 and F2 (all resumed from their worktrees) |
+| T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform
 identity stops mattering, and it touches the codec that C1 will package. Then **D2 and A0 and B1

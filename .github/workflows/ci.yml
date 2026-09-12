@@ -25,11 +25,16 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # T1: -i (info logging) makes each test's println output — including WorldFingerprintTest's
+      # `FINGERPRINT` lines — appear in the console of this one run, so the comparison step below
+      # can read it back rather than paying for a second `--rerun-tasks` run of the same tests.
+      # That took CI from three engine test runs (JVM, Wasm, and a rerun of each for the
+      # fingerprint) to two.
       - name: JVM tests
-        run: ./gradlew :worldgen:jvmTest --console=plain
+        run: ./gradlew :worldgen:jvmTest -i --console=plain | tee jvm-test-output.log
 
       - name: WebAssembly tests
-        run: ./gradlew :worldgen:wasmJsNodeTest --console=plain
+        run: ./gradlew :worldgen:wasmJsNodeTest -i --console=plain | tee wasm-test-output.log
 
       # The renderer is shared, so it has to keep compiling for the web target too even while
       # only Android and desktop consume it today.
@@ -40,15 +45,13 @@ jobs:
 
       # Comparing the JVM and Wasm fingerprints catches platform drift — a difference usually
       # signals a platform-dependent bug rather than a harmless variation. This comparison is
-      # informational; a save carries the world, so platforms may differ.
+      # informational; a save carries the world, so platforms may differ. The fingerprints
+      # themselves come from the two steps above's own console output, not a fresh test run.
       - name: JVM and Wasm generation comparison
         continue-on-error: true
         run: |
-          ./gradlew :worldgen:jvmTest --tests '*WorldFingerprintTest*' --rerun-tasks -i --console=plain \
-            | grep 'FINGERPRINT' | sed 's/^[[:space:]]*//' > jvm-fingerprint.txt
-          ./gradlew :worldgen:wasmJsNodeTest --rerun-tasks -i --console=plain \
-            | grep 'FINGERPRINT' | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
-          sort -u jvm-fingerprint.txt -o jvm-fingerprint.txt
+          grep 'FINGERPRINT' jvm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
+          grep 'FINGERPRINT' wasm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
 
           echo "--- JVM ---";  cat jvm-fingerprint.txt
           echo "--- Wasm ---"; cat wasm-fingerprint.txt

@@ -10,11 +10,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Renders at the sizes the desktop build exists for, in both formats it offers.
+ * Renders at a size the desktop build offers, in both formats it offers.
  *
- * 4096 is the one that matters: it wants roughly 2GB. This records how long it takes, how big
- * each format comes out, and what WebP costs in fidelity — the UI makes a claim about that, and a
- * claim about an image format is exactly the sort that should not be taken on trust.
+ * This records how big each format comes out and what WebP costs in fidelity — the UI makes a
+ * claim about that, and a claim about an image format is exactly the sort that should not be
+ * taken on trust. The larger exports (2048, 4096 — 4096 is the one that matters: it wants roughly
+ * 2GB) moved to `ExportAuditTest` in T1, so this stays a fast per-merge smoke check; the audit
+ * tier still proves the sizes the app actually ships.
  */
 class ExportSmokeTest {
 
@@ -43,27 +45,6 @@ class ExportSmokeTest {
     @Test
     fun `the desktop build's export ceiling is 4096`() {
         assertEquals(4096, DesktopPlatform().exportCeiling)
-    }
-
-    @Test
-    fun `render at the sizes the desktop build exists for`() {
-        val outputDir = File("build/exports").apply { mkdirs() }
-        val base = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
-
-        listOf(2048, 4096).forEach { size ->
-            val destination = File(outputDir, Exporter.defaultName(base, size, ExportFormat.PNG))
-            val result = runBlocking {
-                Exporter.export(base, RenderOptions(), size, destination, ExportFormat.PNG)
-            }
-
-            println(
-                "EXPORT %d x %d -> %.1f MB in %.1f s".format(
-                    size, size, result.bytes / 1024.0 / 1024.0, result.millis / 1000.0
-                )
-            )
-            println("EXPORT   peak heap: ${peakHeapMb()} MB")
-            assertTrue(result.bytes > 0, "wrote an empty file at $size")
-        }
     }
 
     @Test
@@ -156,10 +137,5 @@ class ExportSmokeTest {
                 ((bytes[o + 2].toInt() and 0xFF) shl 16) or
                 ((bytes[o + 3].toInt() and 0xFF) shl 24)
         }
-    }
-
-    private fun peakHeapMb(): Long {
-        val runtime = Runtime.getRuntime()
-        return (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
     }
 }

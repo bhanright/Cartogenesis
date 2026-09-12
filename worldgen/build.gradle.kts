@@ -7,23 +7,20 @@ plugins {
 
 /**
  * The generation engine is plain Kotlin with no platform dependencies, so it is built for the JVM
- * (which the Android app consumes) and for the browser via Wasm and JS.
+ * (which the Android app consumes) and for the browser via Wasm.
  *
  * `commonTest` holds the correctness suite and runs on every target â€” which is what proves the
  * engine really is portable, rather than merely compiling. `jvmTest` holds `DebugMapDump`, which
  * renders PNGs through `java.awt` and so cannot be shared.
+ *
+ * There used to be a Kotlin/JS target too, kept only for reference: Kotlin/JS routes sin/cos/pow
+ * through JavaScript's Math, whose results differ from the JVM in the last bit, which compounds
+ * through the FFT and fails the resolution-consistency test, where Kotlin/Wasm matches the JVM
+ * exactly. Nothing consumed it once the web build moved to Wasm, so T1 removed it (2026-09-12).
  */
 kotlin {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
-    }
-
-    // Kept for reference, but NOT save-compatible: Kotlin/JS routes sin/cos/pow through
-    // JavaScript's Math, whose results differ from the JVM in the last bit. Those feed the FFT,
-    // the difference compounds, and the same seed yields a measurably different world — enough to
-    // fail the resolution-consistency test. Kotlin/Wasm matches the JVM exactly. Use wasmJs.
-    js(IR) {
-        nodejs()
     }
 
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
@@ -58,4 +55,57 @@ java {
 // audit tests run the pipeline at export resolutions. The default test heap cannot take 2048.
 tasks.withType<Test>().configureEach {
     maxHeapSize = "8g"
+}
+
+/*
+ * T1: two tiers of test, split by class name rather than by `@Tag`.
+ *
+ * `jvmTest` runs on the JUnit4 vintage runner (`kotlin("test-junit")` above), which has no `@Tag`
+ * — that is a JUnit5 idea, its own equivalent is `@Category`, and wiring `useJUnit { excludeCategories
+ * (...) }` through a marker interface is more machinery than a plain class-name filter for a
+ * fixed, known list of classes. `:desktop:test` runs on JUnit5, but the same filter mechanism
+ * works unchanged there too, so one approach covers both runners instead of two.
+ *
+ * A generic suffix convention (e.g. every class ending `AuditTest`) was considered and rejected:
+ * `GeographyAuditTest` already carries that name for an unrelated reason — the desert-in-band
+ * audit — and is one of the fast, per-merge guards, not one of these. So the classes below are
+ * named explicitly rather than matched by a pattern that would also catch it.
+ *
+ * Heavy, whole classes moved to the audit tier: `DebugMapDump` (the render harness, 259s, always
+ * run with `--rerun` anyway), `StageProfileTest` (158s), `GenerationSpeedTest`, `DesertCauseTest`,
+ * `ColdCapReportTest` and `ErosionConvergenceTest` (55s together — the last of those asserts
+ * thread-splitting that fails on CI's small runners). `GlaciationAuditTest` and
+ * `RealmIdRangeAuditTest` are new classes holding just the 2048-scale cases split out of
+ * `GlaciationTest` and `RealmIdRangeTest`; their 512/1024 siblings stay in the per-merge classes.
+ * `LakeWaterBalanceTest` has no 2048-scale case today (only comments describing one), so nothing
+ * moved out of it — noted rather than invented.
+ */
+val auditOnlyClasses = listOf(
+    "com.cartogenesis.worldgen.DebugMapDump",
+    "com.cartogenesis.worldgen.StageProfileTest",
+    "com.cartogenesis.worldgen.GenerationSpeedTest",
+    "com.cartogenesis.worldgen.DesertCauseTest",
+    "com.cartogenesis.worldgen.ColdCapReportTest",
+    "com.cartogenesis.worldgen.ErosionConvergenceTest",
+    "com.cartogenesis.worldgen.GlaciationAuditTest",
+    "com.cartogenesis.worldgen.RealmIdRangeAuditTest"
+)
+
+tasks.named<Test>("jvmTest") {
+    filter {
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+    }
+}
+
+tasks.register<Test>("audit") {
+    group = "verification"
+    description = "Runs the on-demand / nightly audit tier: renders, profiles, reports and the " +
+        "2048-scale cases excluded from jvmTest."
+    val jvmTestTask = tasks.named<Test>("jvmTest").get()
+    testClassesDirs = jvmTestTask.testClassesDirs
+    classpath = jvmTestTask.classpath
+    filter {
+        auditOnlyClasses.forEach { includeTestsMatching(it) }
+        isFailOnNoMatchingTests = true
+    }
 }

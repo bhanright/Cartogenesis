@@ -100,18 +100,16 @@ class DepositionTest {
      * And an eighth time, for the delta work in the same stage as E1: the closing pass now opens
      * the pockets of water a river ends in and cuts a groove along a drawn river's own path where
      * that path crosses ground the fill had to raise. It runs whether or not anything is being
-     * carried — deliberately, and this pin is the reason: the case below holds a world with
-     * deposition off and a world with it running and every rate at zero to be bit-identical, and
-     * gating the pass on the spoil broke that. Land held at 6226 for the eighth time.
+     * carried. Land held at 6226 for the eighth time.
      *
-     * And a ninth time, for the outlet notch's units: its depth per round used to come out in the
-     * shoreline-relative field and be spent on the height field, so it was quietly divided by the
-     * range of the land — a different number at every grid — and the largest lake grew threefold
-     * from 512 to 2048. The rate is now in one unit throughout and `outletIncisionRatio` rose from
-     * one to three with it. Land held at 6226 for the ninth time; the notch cuts channels, and a
-     * channel does not move a cell across a rank cut taken over the whole field.
+     * The elevation checksum this pinned was re-recorded nine times in two days — every one of the
+     * changes above touches some terrain field upstream of the hydraulic pass, so the exact
+     * fingerprint moves whenever anything does, and re-recording it proved nothing beyond "this is
+     * still whatever the code currently produces". T1 dropped it. What actually guards this class —
+     * the land count above (which *has* stayed put across all eight changes, because none of them
+     * moved the shoreline), the structural cases below (mass conservation, deltas gaining land),
+     * and the off-equals-on-at-zero-rates identity — is unchanged.
      */
-    private val startingPointElevation = -7832442058128674233L
     private val startingPointLand = 6226
 
     @Test
@@ -221,10 +219,6 @@ class DepositionTest {
 
         assertEquals(
             startingPointLand, world.sea.landCellCount, "land count moved with the switch off"
-        )
-        assertEquals(
-            startingPointElevation, checksum(world),
-            "the elevation fingerprint moved with deposition off"
         )
 
         // And the switch really is a switch: with it off, none of the knobs beside it can leak.

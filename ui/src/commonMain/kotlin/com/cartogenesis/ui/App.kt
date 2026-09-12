@@ -77,12 +77,60 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
+/**
+ * The application, with its preferences read and its chrome put on: what a front end launches.
+ *
+ * The split between this and [CartogenesisApp] is the whole of how F4's settings reach the
+ * interface. Preferences are read through the [Platform] seam, which is asynchronous on both hosts
+ * (a file on one, browser storage on the other), and two of them — the chrome and the interface
+ * scale — are properties of the theme rather than of the application, so they have to be applied
+ * *outside* it. So this loads them, wraps [CartogenesisTheme] around the application in whatever
+ * they say, and hands them down; [CartogenesisApp] itself takes settings as an argument and applies
+ * no theme, which is what lets `ChromeGalleryTest` photograph it in a theme of the test's choosing.
+ *
+ * Nothing is drawn until the settings have been read. That is a few milliseconds on the desktop and
+ * one asynchronous storage read in a browser, and the alternative — draw with the defaults, then
+ * re-theme and re-default when the file arrives — is a visible flash of the wrong chrome and a
+ * working resolution that changes under the reader's hands.
+ */
 @Composable
-fun CartogenesisApp(platform: Platform) {
+fun CartogenesisRoot(platform: Platform) {
+    var settings by remember { mutableStateOf<AppSettings?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(platform) {
+        settings = SettingsCodec.decode(
+            runCatching { platform.settingsStore.read() }.getOrNull()
+        )
+    }
+
+    val current = settings ?: return
+    CartogenesisTheme(choice = current.theme, scale = current.interfaceScale) {
+        CartogenesisApp(
+            platform = platform,
+            settings = current,
+            onSettings = { updated ->
+                settings = updated
+                // Written straight through rather than on a Save button: every control in the
+                // dialog is a preference that has already taken effect, so a dialog that could be
+                // cancelled would be offering to undo something already done.
+                scope.launch {
+                    runCatching { platform.settingsStore.write(SettingsCodec.encode(updated)) }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun CartogenesisApp(
+    platform: Platform,
+    settings: AppSettings = AppSettings(),
+    onSettings: (AppSettings) -> Unit = {}
+) {
     var config by remember {
         mutableStateOf(
-            WorldGenConfig(seed = Random.nextLong(1_000_000), width = 512, height = 512)
-                .atResolution(platform.defaultResolution, platform.defaultResolution)
+            SettingsEffects.startingConfig(settings, platform, Random.nextLong(1_000_000))
         )
     }
     var options by remember { mutableStateOf(RenderOptions()) }
@@ -97,7 +145,19 @@ fun CartogenesisApp(platform: Platform) {
     /** How long the last generation took, for the cartouche's footnote. Zero for an opened save. */
     var generationMillis by remember { mutableStateOf(0L) }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
-    var exportFormat by remember { mutableStateOf(ExportFormat.PNG) }
+    // The preference is the *starting* format, not a live binding: changing the default in the
+    // dialog must not change the format of an export the reader has already set up.
+    var exportFormat by remember { mutableStateOf(settings.exportFormat) }
+
+    // ---- F4: what the menu strip opens, and what it opens onto. ----
+    var showSettings by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
+    var updateOpen by remember { mutableStateOf(false) }
+    /** Null while GitHub has not answered yet, which the dialog draws as "Asking GitHub…". */
+    var updateStatus by remember { mutableStateOf<Updates.Status?>(null) }
+    var saveAs by remember { mutableStateOf(false) }
+    /** The toolbar over the map, which View can put away for an uncluttered picture. */
+    var toolbarVisible by remember { mutableStateOf(true) }
 
     // Probed once. A machine with no usable device gets the toggle disabled and told why, rather
     // than a switch that silently does nothing.
@@ -154,7 +214,92 @@ fun CartogenesisApp(platform: Platform) {
         screen = Screen.MAP
     }
 
+    /** The document as it stands, which is what both Save and Download hand to the platform. */
+    fun document() = WorldDocument(
+        id = documentId,
+        title = naming.title,
+        config = config,
+        overrides = overrides,
+        labels = labels,
+        savedAt = epochMillis()
+    )
+
+    /**
+     * Writes the world to the library.
+     *
+     * A save is tens of megabytes now, so it can fail where it never used to — a browser's storage
+     * quota, a full disk. That is a message, not a crash. The world goes in the file, not the
+     * recipe for it: nothing here depends on this machine reproducing the same world from the same
+     * seed, which is what the whole format was changed for.
+     */
+    fun saveWorld() {
+        val current = world
+        scope.launch {
+            status = runCatching {
+                store.save(document(), current)
+                saved = store.list()
+                "Saved \"${naming.title}\""
+            }.getOrElse {
+                "Could not save \"${naming.title}\": ${it.message ?: it::class.simpleName}"
+            }
+        }
+    }
+
     LaunchedEffect(Unit) { saved = store.list() }
+
+    /**
+     * The update check, run on demand and never on its own unless asked.
+     *
+     * [AppSettings.checkForUpdatesOnLaunch] is off by default, so on both platforms the only thing
+     * that reaches GitHub is a reader choosing Help ▸ Check for updates — which is what keeps the
+     * web bundle from making a cross-origin request in the page's load path.
+     */
+    suspend fun runUpdateCheck() {
+        updateStatus = null
+        val body = runCatching { platform.fetchText(Updates.LATEST_RELEASE_URL) }.getOrNull()
+        updateStatus = Updates.evaluate(BuildInfo.VERSION, body)
+    }
+
+    LaunchedEffect(Unit) {
+        if (!SettingsEffects.checksAtLaunch(settings)) return@LaunchedEffect
+        runUpdateCheck()
+        // Only worth interrupting for if there is actually something to say.
+        if (updateStatus is Updates.Status.Available) updateOpen = true
+    }
+
+    /** What a menu item, or the keystroke that stands for it, actually does. */
+    fun perform(command: MenuCommand) {
+        when (command) {
+            MenuCommand.NEW_WORLD -> {
+                config = Knobs.withSeed(config, Random.nextLong(1_000_000))
+                gate.request()
+                screen = Screen.MAP
+            }
+
+            MenuCommand.OPEN_LIBRARY ->
+                screen = if (screen == Screen.LIBRARY) Screen.MAP else Screen.LIBRARY
+
+            MenuCommand.SAVE -> saveWorld()
+
+            MenuCommand.SAVE_AS -> saveAs = true
+
+            MenuCommand.EXPORT ->
+                pendingExport = SettingsEffects.exportSizeWithin(settings, platform.exportCeiling)
+
+            MenuCommand.SETTINGS -> showSettings = true
+
+            MenuCommand.QUIT -> platform.quit()
+
+            MenuCommand.TOOLBAR -> toolbarVisible = !toolbarVisible
+
+            MenuCommand.CHECK_UPDATES -> {
+                updateOpen = true
+                scope.launch { runUpdateCheck() }
+            }
+
+            MenuCommand.ABOUT -> showAbout = true
+        }
+    }
 
     // Regenerate whenever the settings change - but only once a generation has been asked for.
     // The app opens on a blank canvas, so the very first run must wait for Go, New world, or
@@ -218,6 +363,50 @@ fun CartogenesisApp(platform: Platform) {
         pendingExport = null
     }
 
+    if (showSettings) {
+        SettingsDialog(
+            settings = settings,
+            platform = platform,
+            onSettings = { updated ->
+                onSettings(updated)
+                // The one preference that is not merely a default for next time: the library has
+                // to actually move, and the listing has to be of the new place.
+                if (updated.libraryFolder != settings.libraryFolder &&
+                    updated.libraryFolder.isNotBlank()
+                ) {
+                    scope.launch {
+                        if (platform.useLibraryFolder(updated.libraryFolder)) {
+                            saved = platform.library.list()
+                            status = "Library folder is now ${updated.libraryFolder}"
+                        } else {
+                            status = "Could not use ${updated.libraryFolder} as the library folder"
+                        }
+                    }
+                }
+            },
+            onDismiss = { showSettings = false }
+        )
+    }
+
+    if (showAbout) AboutDialog(platform) { showAbout = false }
+
+    if (updateOpen) UpdateDialog(updateStatus, platform) { updateOpen = false }
+
+    if (saveAs) {
+        SaveAsDialog(
+            initial = naming.title,
+            onDismiss = { saveAs = false },
+            onConfirm = { title ->
+                // A new document rather than a new name on the old one, which is the difference
+                // between Save as and renaming: the world already in the library stays there.
+                documentId = randomId()
+                naming.rename(title)
+                saveAs = false
+                saveWorld()
+            }
+        )
+    }
+
     pendingLabel?.let { (x, y) ->
         NameLabelDialog(
             onDismiss = { pendingLabel = null },
@@ -236,7 +425,34 @@ fun CartogenesisApp(platform: Platform) {
     // beside Library and Atlas which are the other two document actions. The alternative the spec
     // offered was a popover from a toolbar button; both free the same 210dp, and this one needs no
     // overlay machinery and keeps the map's own chrome to the two things that are about the map.
-    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(10.dp)) {
+    // The strip is drawn once, above everything, on both platforms — see [MenuStrip] for why it is
+    // drawn rather than hung off the window. The keyboard shortcuts are previewed at the root so
+    // that Ctrl+S works wherever the focus happens to be; they are filtered on a modifier being
+    // held, so typing a seed or a name never reaches them, and [Menus.shortcuts] hands back an
+    // empty list on the web, where these keystrokes belong to the browser.
+    val shortcuts = remember(platform) { Menus.shortcuts(platform) }
+    Column(
+        Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .onPreviewKeyEvent { event ->
+                val command = Menus.match(event, shortcuts) ?: return@onPreviewKeyEvent false
+                if (command.needsWorld && world == null) return@onPreviewKeyEvent false
+                perform(command)
+                true
+            }
+    ) {
+        MenuStrip(
+            platform = platform,
+            hasWorld = world != null,
+            settings = settings,
+            sections = sections,
+            toolbarVisible = toolbarVisible,
+            onCommand = { perform(it) },
+            onTheme = { onSettings(settings.copy(theme = it)) }
+        )
+
+    // Everything below the strip: the panel and the map, taking whatever height is left.
+    Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp)) {
 
         Column(
             Modifier.width(320.dp).fillMaxHeight(),
@@ -310,49 +526,15 @@ fun CartogenesisApp(platform: Platform) {
                     location = platform.libraryLocation,
                     supportsFileTransfer = platform.supportsFileTransfer,
                     onTitleChange = naming::rename,
-                    onSave = {
-                        // The world goes in the file, not the recipe for it. Nothing here depends
-                        // on this machine reproducing the same world from the same seed, which is
-                        // what the whole format was changed for.
-                        //
-                        // A save is tens of megabytes now, so it can fail where it never used to —
-                        // a browser's storage quota, a full disk. That is a message, not a crash.
-                        scope.launch {
-                            status = runCatching {
-                                store.save(
-                                    WorldDocument(
-                                        id = documentId,
-                                        title = naming.title,
-                                        config = config,
-                                        overrides = overrides,
-                                        labels = labels,
-                                        savedAt = epochMillis()
-                                    ),
-                                    current
-                                )
-                                saved = store.list()
-                                "Saved \"${naming.title}\""
-                            }.getOrElse {
-                                "Could not save \"${naming.title}\": ${it.message ?: it::class.simpleName}"
-                            }
-                        }
-                    },
+                    // The same call File ▸ Save makes, so there is one way to write a world to the
+                    // library rather than a pane's way and a menu's way.
+                    onSave = { saveWorld() },
                     onDownload = {
                         // Handing over the same bytes a save would have written - the format is
                         // shared, so this is the whole of moving a world to the other front end.
                         scope.launch {
                             status = runCatching {
-                                platform.downloadWorld(
-                                    WorldDocument(
-                                        id = documentId,
-                                        title = naming.title,
-                                        config = config,
-                                        overrides = overrides,
-                                        labels = labels,
-                                        savedAt = epochMillis()
-                                    ),
-                                    current
-                                )
+                                platform.downloadWorld(document(), current)
                                 "Downloaded \"${naming.title}\""
                             }.getOrElse {
                                 "Could not download \"${naming.title}\": ${it.message ?: it::class.simpleName}"
@@ -427,7 +609,7 @@ fun CartogenesisApp(platform: Platform) {
             // than aligned piecemeal: the toolbar first, the banner under it while a world is
             // being made, and the legend at the foot.
             Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
-                if (screen == Screen.MAP) MapToolbar(options) { options = it }
+                if (screen == Screen.MAP && toolbarVisible) MapToolbar(options) { options = it }
                 if (busy) {
                     Surface(color = OverMap.Veil, modifier = Modifier.fillMaxWidth()) {
                         Row(
@@ -475,6 +657,7 @@ fun CartogenesisApp(platform: Platform) {
                 }
             }
         }
+    }
     }
 }
 

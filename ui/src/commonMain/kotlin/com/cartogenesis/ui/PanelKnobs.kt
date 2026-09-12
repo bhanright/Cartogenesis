@@ -477,7 +477,7 @@ internal object Exports {
  */
 internal object MapChrome {
 
-    /** Nine, in the order [MapStyle] declares them, which runs modern to hand-drawn. */
+    /** Ten, in the order [MapStyle] declares them: modern, through hand-drawn, to Mars. */
     val styles: List<MapStyle> = MapStyle.entries
 
     /** Fifteen, the two readable ones first and the diagnostics behind them. */

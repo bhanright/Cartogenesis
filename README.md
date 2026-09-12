@@ -103,12 +103,20 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 
 ## Styles
 
-Nine ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+Ten ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
 parchment and sepia ink), **Ink wash** (sumi-e, grey ink on pale paper), **Nautical** (an admiralty
 chart with depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (the
 saturated pull-down physical map from a classroom wall), **Verdant** (illustrated fantasy: teal sea,
-cream land, deep woods), **Scroll** (painted parchment with a jade sea and vermilion marks) and
-**Pen and ink** (line art: no fill at all, relief hatched, borders in red).
+cream land, deep woods), **Scroll** (painted parchment with a jade sea and vermilion marks),
+**Pen and ink** (line art: no fill at all, relief hatched, borders in red) and **Mars** (the same
+world as a dry planet).
+
+Mars is the one that changes what the map *says* rather than only how it looks. The world beneath
+it still has a sea, rivers and lakes — the generator is untouched — but the ocean basins are drawn
+as basalt plains instead of water, the old shoreline is a faint scarp rather than a coastline, the
+rivers are dark channels in the dust, and the land climbs from rust through ochre to pale dust and
+white. All of it is palette, which is why the graphics card draws it identically: the accelerator is
+handed pre-packed colours and knows nothing about which style they came from.
 
 Pen and ink is the one that is a different *way* of drawing rather than a different palette:
 nothing is tinted by height, the paper shows through everywhere, and relief is hatched — diagonal
@@ -116,7 +124,7 @@ strokes laid where the ground is steep and left off where it is flat. It stops s
 imitates, in one honest respect: a hand-drawn map draws each range as a little picture shaded by
 eye, where this hatches by slope, so the texture is right and the pictograms are not there.
 
-A style changes appearance and nothing else — the same seed gives the same world in all five — and
+A style changes appearance and nothing else — the same seed gives the same world in all ten — and
 the diagnostic views ignore styles entirely, because their colours mean something and a prettier
 ramp would make them lie.
 
@@ -127,7 +135,7 @@ chart looking like a modern one with a filter over it — old inks are earths, n
 how hard the hillshade is exaggerated is why the ink style works at all: with the colour gone,
 relief is the only thing left describing the mountains.
 
-`StyleGalleryTest` writes all five out to be looked at, since no number says whether something
+`StyleGalleryTest` writes all ten out to be looked at, since no number says whether something
 resembles vellum. What it does assert is that they differ from one another — a style quietly
 falling back to the default would pass any test that only asked whether rendering succeeded.
 
@@ -376,6 +384,40 @@ actually held, exports from the biomes people actually farm (habitability-weight
 a realm can be mostly polar waste and still be a temperate farming nation), imports from the
 staples it cannot supply. Names come from per-culture syllable inventories, so neighbouring realms
 sound like different peoples.
+
+## Menus, settings, updates and notices
+
+A thin strip along the top of the window carries **File** (New world, Open library, Save, Save as,
+Export, Settings, and Quit on the desktop), **View** (the chrome, which panel sections are unrolled,
+and the toolbar over the map) and **Help** (Check for updates, About). It is drawn in `:ui` rather
+than hung off the window as a native menu bar, because a native one would leave the browser build
+with no menus at all. The desktop also binds the File items to the obvious keystrokes — Ctrl+N,
+Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+comma, Ctrl+Q — and the browser build binds none of them,
+since a page quietly taking Ctrl+S from its host is how somebody loses a tab full of work.
+
+Settings are preferences rather than settings of a world: the chrome (System, Light, Dark, and
+Nautical, Midnight and Mars lifted from the map styles of those names), the working resolution a new
+world starts at, whether erosion reaches for the graphics card without being asked, the default
+export format and size, the library folder, the interface scale, and whether to check for updates at
+launch. They persist through the `Platform` seam — `%APPDATA%\Cartogenesis\settings.json` on Windows
+and the equivalent directory elsewhere, browser local storage on the web — as one JSON document that
+shared code serialises, so neither front end owns the shape of it. A file written by a later build,
+an older one, or a hand that mistyped a theme name all open, because the failure mode of a strict
+parser here is an application that will not start.
+
+**Check for updates** reads GitHub's `releases/latest` for the repository and compares its tag with
+this build's version, which is generated at build time from `gradle.properties` rather than typed
+into source. If there is a newer one it shows the release name, the opening of its notes, and a
+button that opens the release page: nothing is downloaded and nothing updates itself. The check is
+off at launch by default and is otherwise a menu item, so opening the application — and in
+particular loading the web bundle — never talks to GitHub on its own.
+
+**About** shows the version, the build date, the project licence, and the third-party notices. The
+notices are generated by a Gradle task from the build's own resolved dependency graph, with each
+component's licence read out of its POM, plus the two bundled OFL type faces; a hand-written list
+would stop being true the first time a dependency changed. There is **no licence file in this
+repository**, so the About dialog says so in as many words rather than claiming terms nobody has
+granted.
 
 ## Deploying the web build
 

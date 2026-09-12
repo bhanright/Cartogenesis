@@ -366,6 +366,72 @@ enum class MapStyle(
         // all crossed the threshold on every hatch line, and whole ranges came out as black mass.
         inkGain = 1.15f,
         backdrop = 0xFF262320.toInt()
+    ),
+
+    /**
+     * The same world as a dry planet: rust and ochre ground rising to pale dust and white, and no
+     * water anywhere.
+     *
+     * Every other style paints the sea because the sea is water. Here it is not: the ocean basins
+     * are drawn as basalt plains, dark and flat, the way Mars's northern lowlands are drawn on a
+     * shaded-relief chart of a body that lost its ocean. The generator is untouched — the world
+     * underneath still has a sea, rivers and lakes, exactly as it does under Vellum — and this is
+     * the whole point of a style: the same world, read as somewhere else.
+     *
+     * Four decisions carry it, and each is a palette entry rather than a new pass through the
+     * rasterizer, which is what lets the graphics card draw it identically (see [RasterRecipe]:
+     * the accelerator is handed pre-packed colours and knows nothing about which style they came
+     * from):
+     *
+     *  - the **ocean ramp** runs from near-black basalt in the abyssal plains to a dusty grey at
+     *    the shelf, so depth still reads as depth without a drop of blue;
+     *  - the **coastline** is a faint scarp rather than a shoreline — the ink is a weak umber at
+     *    [coastlineStrength] 0.3, which draws the old sea's edge as the eroded step it would be
+     *    after the water went, instead of as a drawn line around a body of water;
+     *  - **rivers and lakes** are darker than the ground they cross rather than lighter, which is
+     *    what a dry channel looks like from above: a shadow in the dust, not a ribbon of water;
+     *  - the **land ramp** is the hypsometric sequence of an iron world — dark rust in the
+     *    lowlands through ochre to pale dust, and white where a chart would put the snow line,
+     *    which is also what puts a pale cap over the ice at each pole.
+     *
+     * The biome wash is left low and the muting high, so vegetation shows only as a change in the
+     * dust rather than as green: a forest on Mars is a slightly darker plain. The diagnostic views
+     * ignore all of this, as they ignore every style.
+     */
+    MARS(
+        label = "Mars",
+        detail = "A dry world: rust and ochre, basalt where the sea was",
+        // Basalt, abyss first. Warm-grey rather than neutral, because the dust gets everywhere.
+        oceanRamp = intArrayOf(
+            0xFF1F1917.toInt(), 0xFF29211D.toInt(), 0xFF352A24.toInt(),
+            0xFF43352C.toInt(), 0xFF544336.toInt()
+        ),
+        // Rust at the shore, ochre through the middle, dust high up, white at the top.
+        landRamp = intArrayOf(
+            0xFF7E3A20.toInt(), 0xFF8F4A26.toInt(), 0xFFA35C2E.toInt(), 0xFFB77439.toInt(),
+            0xFFC78F4C.toInt(), 0xFFD5A868.toInt(), 0xFFE2C79B.toInt(), 0xFFF4EEE4.toInt()
+        ),
+        paper = 0xFFC8A67E.toInt(),
+        biomeWash = 0.22f,
+        biomeMuting = 0.68f,
+        // Dry channels: darker than everything around them, which is the only way a riverbed reads
+        // on a world with no water to make it brighter.
+        river = 0xFF3B2A20.toInt(),
+        lake = 0xFF352A24.toInt(),
+        lakeDeep = 0xFF211A17.toInt(),
+        coastline = 0xFF6B4A31.toInt(),
+        // A third of the usual weight. The old shoreline is a scarp the wind has been working on,
+        // not an inked edge.
+        coastlineStrength = 0.30f,
+        // Pale dust, so a border reads over rust ground and over basalt alike.
+        border = 0xFFF0E2CC.toInt(),
+        wilderness = 0xFF6E5241.toInt(),
+        // Pushed hard: with no water and no vegetation the relief is most of what there is to see.
+        reliefStrength = 1.4f,
+        glyphMuting = 0.25f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF17100D.toInt()
     );
 
     internal fun ocean(depth: Float): Int =

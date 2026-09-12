@@ -73,7 +73,7 @@ internal fun downloadBytes(name: String, bytes: ByteArray, mime: String) {
  * inside a shadow root attached to the viewport div, so from the page there is nothing to watch:
  * `document.querySelector("canvas")` is null, the div reports no children, and a MutationObserver
  * on it never fires, all while a live canvas is generating a world. That cost a debugging session
- * on cartogenesis.bfunk.online, where the app was working perfectly behind a loading overlay that
+ * on the deployed site, where the app was working perfectly behind a loading overlay that
  * had no way to know.
  *
  * So the site keeps an empty `<div id="loading">` in the page purely so this can delete it, and

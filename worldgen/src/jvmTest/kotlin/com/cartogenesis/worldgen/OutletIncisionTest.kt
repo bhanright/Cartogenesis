@@ -5,7 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RoundMass
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingReportingRounds
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -260,7 +260,7 @@ class OutletIncisionTest {
     private fun roundsOf(config: WorldGenConfig): List<RoundMass> {
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
         val rounds = ArrayList<RoundMass>()
-        erodeBlocking(config, uplift) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, uplift) { rounds.add(it) }
         return rounds
     }
 

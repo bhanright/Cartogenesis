@@ -162,7 +162,7 @@
 
 - **Terrain realism** (2026-09-11) — oceanic crust now carries a continental shelf: after the
   sea-level cut, near-coast sea floor remaps onto a shallow platform, measured at 100% shallow
-  within `shelfWidth` of a coast against 60.3% unremapped, falling to 0-2.5% beyond twice that
+  within `shelfWidthCells` of a coast against 60.3% unremapped, falling to 0-2.5% beyond twice that
   distance, with zero land cells moved on any seed. Convergent boundaries are classified by crust
   pair instead of sharing one profile: an Andean margin (narrow coastal range, volcanic arc inland
   of its trench), a collision plateau (broad and flat, 3.47x broader for its height than a margin,
@@ -295,7 +295,7 @@
   half-graben. They are the trench, whose profile is `trenchDepth * strength * narrow` — a function
   of the distance to the boundary and of nothing else, which is a plane along strike, and every
   contour of a plane is a straight line. Every other belt on the map varies along its own length.
-  Giving the trench the same swell was written, run and reverted: at `rangeVariationScale`'s
+  Giving the trench the same swell was written, run and reverted: at `rangeVariationCycles`'s
   wavelength (about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
   different straight contour instead of bending it, and the window went from 108 cells of thin
   grid-bearing water and a 31-cell run to 146 and 39. Wants a shorter wavelength on the trench, or
@@ -358,7 +358,7 @@
   screens off rather than blocking them. The interface was laid out for a desktop window: a fixed
   320px control column either side of the map does not fit a phone, so a real fix is a layout that
   collapses the panels rather than a tweak.
-- **Match the visual style to bfunk.online.** Requested 2026-08-25 for the next version. The app
+- **Match the visual style to the author's site.** Requested 2026-08-25 for the next version. The app
   currently uses stock Material 3 colours, which sit oddly next to the site it is embedded in. The
   theme is set in one place — `MaterialTheme` in the web and desktop entry points — so this is a
   colour scheme rather than a rewrite. Worth taking the palette from the site's own CSS rather than

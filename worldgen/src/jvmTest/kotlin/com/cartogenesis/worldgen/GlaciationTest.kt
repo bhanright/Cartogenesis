@@ -317,7 +317,7 @@ class GlaciationTest {
         // there — two trough-widths, written out rather than read from
         // [com.cartogenesis.worldgen.model.GlaciationConfig.reliefWindow], so that the region the
         // guard looks at cannot be moved by the settings it is guarding.
-        val radius = (2f * config.glaciation.valleyWidth).toInt()
+        val radius = (2f * config.glaciation.valleyWidthCells).toInt()
         val flat = flatGround(bare, radius, FLAT_RELIEF)
         val before = bare.sea.relativeElevation.data
         val after = iced.sea.relativeElevation.data
@@ -741,7 +741,7 @@ internal fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
     val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
     if (world.plates.nearestBoundaryClass[cell] != rift) return false
     // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
-    val reach = WorldGenConfig().tectonics.riftShoulderOffset * (world.width / 512f)
+    val reach = WorldGenConfig().tectonics.riftShoulderOffsetCells * (world.width / 512f)
     return world.plates.boundaryDistance.data[cell] <= reach
 }
 

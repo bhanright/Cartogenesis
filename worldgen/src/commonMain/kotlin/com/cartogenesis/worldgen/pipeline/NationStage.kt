@@ -179,7 +179,11 @@ object NationStage {
     /** Smallest useful blur radius, so a small map still averages more than a single cell. */
     private const val MIN_BLUR_RADIUS = 2
 
-    /** Two box passes approximate a Gaussian; a third costs a sweep for no visible difference. */
+    /**
+     * Two, one short of [BoxBlur.PASSES_FOR_GAUSSIAN]. What these two blurs feed is a comparison
+     * between neighbouring cells' scores, not a picture, so the square kernel's corners never
+     * reach anything a reader sees.
+     */
     private const val BLUR_PASSES = 2
 
     /**

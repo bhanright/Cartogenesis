@@ -249,9 +249,10 @@ object ClimateStage {
     /**
      * Passes of [BoxBlur] used wherever this stage spreads a field over its neighbourhood.
      *
-     * Two, because two box passes are the cheapest approximation to a Gaussian that does not leave
-     * the square kernel's corners visible in the result. A third costs another full sweep of the
-     * grid for a difference nothing downstream can see.
+     * Two, one short of [BoxBlur.PASSES_FOR_GAUSSIAN]: what is being spread here is a land/sea mask
+     * and a sea-surface anomaly, both of which the march then integrates over many cells, so the
+     * square kernel's corners never survive into anything a reader sees and a third pass would be
+     * two more sweeps of the grid for nothing.
      */
     private const val BLUR_PASSES = 2
 

@@ -7,7 +7,7 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RoundMass
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingWithReceiverClamp
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -84,7 +84,7 @@ class ReceiverClampTest {
 
             listOf(false to loose, true to tight).forEach { (clamp, into) ->
                 val rounds = ArrayList<RoundMass>()
-                val eroded = erodeBlocking(config, uplift, clamp) { rounds.add(it) }
+                val eroded = erodeBlockingWithReceiverClamp(config, uplift, clamp) { rounds.add(it) }
                 val totals = IntArray(PitStage.COUNT)
                 rounds.forEach { r ->
                     for (s in 0 until PitStage.COUNT) totals[s] += r.channelPits[s]

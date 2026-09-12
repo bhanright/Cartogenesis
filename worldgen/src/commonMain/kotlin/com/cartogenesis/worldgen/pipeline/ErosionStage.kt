@@ -7,7 +7,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
 
 data class ErosionResult(
-    /** Height after erosion, in the same 0..1 range the uplift produced. */
+    /** Height after erosion, one entry per cell, row-major, in the 0..1 range uplift produced. */
     val height: FloatField
 )
 
@@ -38,8 +38,40 @@ object ErosionStage {
      * Side of the activity tiles, in cells. Small enough that a settled ocean floor is skipped in
      * useful pieces, large enough that the bookkeeping stays a rounding error.
      */
-    private const val TILE = 32
+    private const val TILE_CELLS = 32
 
+    /** Neighbours every cell trades material with: the four orthogonal ones, then the diagonals. */
+    private const val NEIGHBOUR_COUNT = 8
+
+    /** How many of those come first in the tables below, and so cost one step rather than sqrt(2). */
+    private const val ORTHOGONAL_NEIGHBOURS = 4
+
+    /**
+     * The excess a cell may still hold and be called settled, as a share of the critical slope.
+     *
+     * Each sweep moves a fraction of the excess, so the excess decays geometrically and never
+     * reaches zero — without a floor, ground that is done moving in any meaningful sense still
+     * reports itself as active for ever and nothing can be skipped. A thousandth of the critical
+     * slope is about five centimetres of rock against a six-kilometre range.
+     */
+    private const val SETTLED_SHARE_OF_CRITICAL_SLOPE = 1e-3f
+
+    /**
+     * The most of the steepest drop away from a cell that the cell may hand over in one sweep.
+     *
+     * Half, or a cell could give a neighbour more than it stands above that neighbour and invert
+     * the very slope it was relaxing.
+     */
+    private const val MAX_SHARE_OF_STEEPEST_DROP = 0.5f
+
+    /**
+     * The whole stage: the thermal sweeps, then the hydraulic rounds with a share of the sweeps
+     * relaxing the terrain between each of them.
+     *
+     * [height] is the uplifted terrain in its own 0..1 units and is not modified; the result is a
+     * separate field in the same units. [accelerator] is offered the sweeps and may decline them,
+     * in which case they run on the CPU.
+     */
     suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
@@ -68,87 +100,94 @@ object ErosionStage {
 
         // Rock first, then water. The flanks have to exist before anything can cut into them, and
         // the channels the water carves are the ones the river stage will later find and draw.
-        val weathered = thermal(config, height, accelerator)
+        val weathered = thermalErosion(config, height, accelerator)
 
-        // The relaxation between rounds is charged against the same sweep budget, so it scales
-        // with the grid exactly as the main thermal pass does -- material still moves one cell per
-        // sweep however fine the grid.
-        val cfg = config.erosion
-        // A full thermal budget again, spread across the rounds. Halving it to save nine seconds
-        // at 2048 was tried and put back: the resolution-consistency guard failed at 1.32x, because
-        // walls left short of the critical slope are steeper on a finer grid, which is the exact
-        // failure this relaxation exists to prevent. Correctness at the resolution the user exports
-        // at is worth more than the time.
+        // A full thermal budget again, spread across the rounds, so material still moves one cell
+        // per sweep however fine the grid. Halving it was tried and put back: walls left short of
+        // the critical slope are steeper on a finer grid, and at half the budget the same world
+        // came out 1.32 times steeper at 2048 than at 512 — the exact failure this relaxation
+        // exists to prevent, and `ResolutionScalingTest`'s to catch.
+        val erosion = config.erosion
         val sweepsPerRound =
-            (cfg.passes / cfg.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
-        val relaxConfig = config.copy(erosion = cfg.copy(passes = sweepsPerRound))
+            (erosion.passes / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
+        val relaxConfig = config.copy(erosion = erosion.copy(passes = sweepsPerRound))
 
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, onRound, log, receiverClamp
             ) { field ->
-                thermal(relaxConfig, field, accelerator).height
+                thermalErosion(relaxConfig, field, accelerator).height
             }
         )
     }
 
-    /** Slope-limited failure: the sweeps that give a mountain its flanks. */
-    private suspend fun thermal(
+    /**
+     * Slope-limited failure — the sweeps that give a mountain its flanks — wherever the world is
+     * set to run them, which is the accelerator if it will take the job and the CPU otherwise.
+     */
+    private suspend fun thermalErosion(
         config: WorldGenConfig,
         height: FloatField,
         accelerator: ErosionAccelerator?
     ): ErosionResult {
-        val cfg = config.erosion
-        if (cfg.passes <= 0) return ErosionResult(height)
+        val erosion = config.erosion
+        if (erosion.passes <= 0) return ErosionResult(height)
 
-        if (cfg.acceleration == Acceleration.GPU && accelerator != null) {
+        if (erosion.acceleration == Acceleration.GPU && accelerator != null) {
             // A null result means the accelerator looked at the job and declined it, which is a
             // normal outcome rather than a failure, so the CPU simply picks it up.
             val accelerated = accelerator.erode(
-                config.width, config.height, height.data, cfg.talus, cfg.passes, cfg.rate
+                config.width,
+                config.height,
+                height.data,
+                erosion.talus,
+                erosion.passes,
+                erosion.rate
             )
             if (accelerated != null) {
                 return ErosionResult(FloatField(config.width, config.height, accelerated))
             }
         }
-        return apply(config, height, skipSettled = true)
+        return thermalSweep(config, height, skipSettled = true)
     }
 
     /**
+     * The thermal sweeps on the CPU, and nothing else — not the hydraulic rounds, which is what
+     * [apply] adds on top.
+     *
+     * [height] is not modified; the result is a separate field in the same units. Named apart from
+     * [apply] rather than overloading it: a caller that wanted the whole stage and reached this by
+     * accident would silently lose the water.
+     *
      * @param skipSettled leave the settled parts of the map alone instead of re-scanning them.
      *   Only ever false in the test that proves doing so changes nothing.
      */
-    internal fun apply(
+    internal fun thermalSweep(
         config: WorldGenConfig,
         height: FloatField,
         skipSettled: Boolean
     ): ErosionResult {
-        val cfg = config.erosion
-        if (!cfg.enabled || cfg.passes <= 0) return ErosionResult(height)
+        val erosion = config.erosion
+        if (!erosion.enabled || erosion.passes <= 0) return ErosionResult(height)
 
-        val w = config.width
-        val h = config.height
+        val cellsAcross = config.width
+        val cellsDown = config.height
 
         // Three grid-sized buffers and no more: at export resolutions each one is tens of
         // megabytes, and this stage runs while the rest of the pipeline is still holding its own.
-        var read = height.data.copyOf()
-        var write = FloatArray(w * h)
+        var heights = height.data.copyOf()
+        var nextHeights = FloatArray(cellsAcross * cellsDown)
         // How much material each cell hands over per unit of excess it holds. Storing the ratio
         // rather than the total and the divisor saves a whole buffer, since the receiving pass
         // only ever needs the product.
-        val giveRate = FloatArray(w * h)
+        val giveRate = FloatArray(cellsAcross * cellsDown)
 
         // The critical slope is held in elevation per unit of map width, not per cell, so the same
         // terrain wears to the same shape whatever grid it is computed on. Cells are treated as
         // square here, as they are everywhere else in the pipeline.
-        val orthogonal = cfg.talus / w
-        val diagonal = orthogonal * SQRT2
-
-        // Each sweep moves a fraction of the excess, so the excess decays geometrically and never
-        // reaches zero — without a floor, ground that is done moving in any meaningful sense still
-        // reports itself as active forever, and nothing can ever be skipped. A thousandth of the
-        // critical slope is about five centimetres of rock against a six-kilometre range.
-        val settled = orthogonal * 1e-3f
+        val maxOrthogonalDrop = erosion.talus / cellsAcross
+        val maxDiagonalDrop = maxOrthogonalDrop * SQRT2
+        val settled = maxOrthogonalDrop * SETTLED_SHARE_OF_CRITICAL_SLOPE
 
         // Most of a map reaches the critical slope early and then never moves again — ocean floor,
         // plains, anything the uplift left gentle. Re-scanning all of it every sweep is what made
@@ -158,50 +197,55 @@ object ErosionStage {
         // above the critical slope or a neighbour does, and material moves one cell per sweep, so
         // a tile can only be disturbed by its immediate neighbours. Dilating the set of tiles that
         // still hold excess therefore covers every cell that can possibly change.
-        val tilesX = (w + TILE - 1) / TILE
-        val tilesY = (h + TILE - 1) / TILE
-        val hasExcess = BooleanArray(tilesX * tilesY)
-        var canChange = BooleanArray(tilesX * tilesY) { true }
-        var canHoldExcess = BooleanArray(tilesX * tilesY) { true }
+        val tilesAcross = (cellsAcross + TILE_CELLS - 1) / TILE_CELLS
+        val tilesDown = (cellsDown + TILE_CELLS - 1) / TILE_CELLS
+        val hasExcess = BooleanArray(tilesAcross * tilesDown)
+        var canChange = BooleanArray(tilesAcross * tilesDown) { true }
+        var canHoldExcess = BooleanArray(tilesAcross * tilesDown) { true }
 
-        repeat(cfg.passes) {
-            val current = read
+        repeat(erosion.passes) {
+            val current = heights
             val scan = canHoldExcess
 
-            parallelChunks(0, tilesY) { startTile, endTile ->
-                for (ty in startTile until endTile) {
-                    for (tx in 0 until tilesX) {
-                        val tile = ty * tilesX + tx
+            parallelChunks(0, tilesDown) { startTile, endTile ->
+                for (tileRow in startTile until endTile) {
+                    for (tileColumn in 0 until tilesAcross) {
+                        val tile = tileRow * tilesAcross + tileColumn
                         if (skipSettled && !scan[tile]) continue
                         var tileExcess = false
 
-                        val y1 = minOf((ty + 1) * TILE, h)
-                        val x1 = minOf((tx + 1) * TILE, w)
-                        for (y in ty * TILE until y1) {
-                            for (x in tx * TILE until x1) {
-                                val i = y * w + x
-                                val here = current[i]
+                        val rowEnd = minOf((tileRow + 1) * TILE_CELLS, cellsDown)
+                        val columnEnd = minOf((tileColumn + 1) * TILE_CELLS, cellsAcross)
+                        for (row in tileRow * TILE_CELLS until rowEnd) {
+                            for (column in tileColumn * TILE_CELLS until columnEnd) {
+                                val cell = row * cellsAcross + column
+                                val here = current[cell]
                                 var excess = 0f
-                                var steepest = 0f
+                                var steepestDrop = 0f
 
-                                for (n in 0 until 8) {
-                                    val ny = y + NEIGHBOUR_DY[n]
-                                    if (ny < 0 || ny >= h) continue
-                                    val nx = (x + NEIGHBOUR_DX[n] + w) % w
-                                    val drop = here - current[ny * w + nx]
+                                for (neighbour in 0 until NEIGHBOUR_COUNT) {
+                                    val neighbourRow = row + NEIGHBOUR_ROW_STEP[neighbour]
+                                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                                    val neighbourColumn =
+                                        (column + NEIGHBOUR_COLUMN_STEP[neighbour] + cellsAcross) %
+                                            cellsAcross
+                                    val drop =
+                                        here - current[neighbourRow * cellsAcross + neighbourColumn]
                                     if (drop <= 0f) continue
-                                    if (drop > steepest) steepest = drop
-                                    val limit = if (n < 4) orthogonal else diagonal
+                                    if (drop > steepestDrop) steepestDrop = drop
+                                    val limit =
+                                        if (neighbour < ORTHOGONAL_NEIGHBOURS) maxOrthogonalDrop
+                                        else maxDiagonalDrop
                                     if (drop > limit) excess += drop - limit
                                 }
 
-                                // Capped at half the steepest drop, or a cell could hand over more
-                                // than it stands above its neighbour and invert the very slope it
-                                // was trying to relax.
                                 if (excess <= settled) {
-                                    giveRate[i] = 0f
+                                    giveRate[cell] = 0f
                                 } else {
-                                    giveRate[i] = minOf(cfg.rate * excess, steepest * 0.5f) / excess
+                                    giveRate[cell] = minOf(
+                                        erosion.rate * excess,
+                                        steepestDrop * MAX_SHARE_OF_STEEPEST_DROP
+                                    ) / excess
                                     tileExcess = true
                                 }
                             }
@@ -214,73 +258,85 @@ object ErosionStage {
             // Cells change only in tiles holding excess or bordering one; and the sweep after this
             // has to look one tile wider still, because a tile next to a changed tile sees new
             // drops across its own edge.
-            canChange = dilate(hasExcess, tilesX, tilesY)
-            canHoldExcess = dilate(canChange, tilesX, tilesY)
+            canChange = dilate(hasExcess, tilesAcross, tilesDown)
+            canHoldExcess = dilate(canChange, tilesAcross, tilesDown)
 
-            val out = write
-            val change = canChange
-            parallelChunks(0, tilesY) { startTile, endTile ->
-                for (ty in startTile until endTile) {
-                    for (tx in 0 until tilesX) {
-                        val tile = ty * tilesX + tx
-                        val y1 = minOf((ty + 1) * TILE, h)
-                        val x1 = minOf((tx + 1) * TILE, w)
+            val writeTo = nextHeights
+            val changeable = canChange
+            parallelChunks(0, tilesDown) { startTile, endTile ->
+                for (tileRow in startTile until endTile) {
+                    for (tileColumn in 0 until tilesAcross) {
+                        val tile = tileRow * tilesAcross + tileColumn
+                        val rowEnd = minOf((tileRow + 1) * TILE_CELLS, cellsDown)
+                        val columnEnd = minOf((tileColumn + 1) * TILE_CELLS, cellsAcross)
 
-                        if (skipSettled && !change[tile]) {
-                            for (y in ty * TILE until y1) {
-                                val row = y * w
-                                current.copyInto(out, row + tx * TILE, row + tx * TILE, row + x1)
+                        if (skipSettled && !changeable[tile]) {
+                            for (row in tileRow * TILE_CELLS until rowEnd) {
+                                val rowStart = row * cellsAcross
+                                current.copyInto(
+                                    writeTo,
+                                    rowStart + tileColumn * TILE_CELLS,
+                                    rowStart + tileColumn * TILE_CELLS,
+                                    rowStart + columnEnd
+                                )
                             }
                             continue
                         }
 
-                        for (y in ty * TILE until y1) {
-                            for (x in tx * TILE until x1) {
-                                val i = y * w + x
-                                val here = current[i]
+                        for (row in tileRow * TILE_CELLS until rowEnd) {
+                            for (column in tileColumn * TILE_CELLS until columnEnd) {
+                                val cell = row * cellsAcross + column
+                                val here = current[cell]
                                 var received = 0f
                                 var given = 0f
 
-                                for (n in 0 until 8) {
-                                    val ny = y + NEIGHBOUR_DY[n]
-                                    if (ny < 0 || ny >= h) continue
-                                    val nx = (x + NEIGHBOUR_DX[n] + w) % w
-                                    val limit = if (n < 4) orthogonal else diagonal
+                                for (neighbour in 0 until NEIGHBOUR_COUNT) {
+                                    val neighbourRow = row + NEIGHBOUR_ROW_STEP[neighbour]
+                                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                                    val neighbourColumn =
+                                        (column + NEIGHBOUR_COLUMN_STEP[neighbour] + cellsAcross) %
+                                            cellsAcross
+                                    val limit =
+                                        if (neighbour < ORTHOGONAL_NEIGHBOURS) maxOrthogonalDrop
+                                        else maxDiagonalDrop
+                                    val neighbourCell = neighbourRow * cellsAcross + neighbourColumn
 
-                                    val incoming = current[ny * w + nx] - here
+                                    val incoming = current[neighbourCell] - here
                                     if (incoming > limit) {
-                                        received += giveRate[ny * w + nx] * (incoming - limit)
+                                        received += giveRate[neighbourCell] * (incoming - limit)
                                     } else if (-incoming > limit) {
-                                        given += giveRate[i] * (-incoming - limit)
+                                        given += giveRate[cell] * (-incoming - limit)
                                     }
                                 }
 
-                                out[i] = here - given + received
+                                writeTo[cell] = here - given + received
                             }
                         }
                     }
                 }
             }
 
-            val swap = read
-            read = write
-            write = swap
+            val previous = heights
+            heights = nextHeights
+            nextHeights = previous
         }
 
-        return ErosionResult(FloatField(w, h, read))
+        return ErosionResult(FloatField(cellsAcross, cellsDown, heights))
     }
 
     /** Grows a tile mask by one tile in every direction, wrapping in x as the world does. */
-    private fun dilate(mask: BooleanArray, tilesX: Int, tilesY: Int): BooleanArray {
+    private fun dilate(mask: BooleanArray, tilesAcross: Int, tilesDown: Int): BooleanArray {
         val grown = BooleanArray(mask.size)
-        for (ty in 0 until tilesY) {
-            for (tx in 0 until tilesX) {
-                if (!mask[ty * tilesX + tx]) continue
-                for (dy in -1..1) {
-                    val ny = ty + dy
-                    if (ny < 0 || ny >= tilesY) continue
-                    for (dx in -1..1) {
-                        grown[ny * tilesX + ((tx + dx + tilesX) % tilesX)] = true
+        for (tileRow in 0 until tilesDown) {
+            for (tileColumn in 0 until tilesAcross) {
+                if (!mask[tileRow * tilesAcross + tileColumn]) continue
+                for (rowStep in -1..1) {
+                    val neighbourRow = tileRow + rowStep
+                    if (neighbourRow < 0 || neighbourRow >= tilesDown) continue
+                    for (columnStep in -1..1) {
+                        val neighbourColumn =
+                            (tileColumn + columnStep + tilesAcross) % tilesAcross
+                        grown[neighbourRow * tilesAcross + neighbourColumn] = true
                     }
                 }
             }
@@ -291,6 +347,6 @@ object ErosionStage {
     private val SQRT2 = sqrt(2f)
 
     // Orthogonal neighbours first, so the loop can tell them from the diagonals by index alone.
-    private val NEIGHBOUR_DX = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
-    private val NEIGHBOUR_DY = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
+    private val NEIGHBOUR_COLUMN_STEP = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
+    private val NEIGHBOUR_ROW_STEP = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
 }

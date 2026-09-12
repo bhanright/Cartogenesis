@@ -1,13 +1,26 @@
 package com.cartogenesis.worldgen.math
 
-import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
 
 /** Separable box blur with running sums: O(width * height) per pass regardless of radius. */
 object BoxBlur {
 
-    /** Repeated box passes approximate a Gaussian; three is the usual sweet spot. */
-    fun apply(field: FloatField, radius: Int, passes: Int = 3) {
+    /**
+     * Box passes that approximate a Gaussian.
+     *
+     * Three, because summing three box windows is already close enough to a Gaussian that a fourth
+     * moves nothing anybody can see — the central limit theorem converging fast on a bounded
+     * kernel — and each pass is another two sweeps of the whole grid.
+     */
+    const val PASSES_FOR_GAUSSIAN = 3
+
+    /**
+     * Blurs [field] in place with a square window of `2 * radius + 1` cells a side, [passes] times.
+     *
+     * [radius] is in cells and a radius of zero or less is a no-op. X wraps, so the blur joins up
+     * across the map's east-west seam; Y clamps at the poles.
+     */
+    fun apply(field: FloatField, radius: Int, passes: Int = PASSES_FOR_GAUSSIAN) {
         if (radius <= 0) return
         val scratch = FloatArray(field.data.size)
         repeat(passes) {
@@ -17,52 +30,57 @@ object BoxBlur {
     }
 
     private fun horizontal(field: FloatField, radius: Int, scratch: FloatArray) {
-        val w = field.width
-        val h = field.height
+        val cellsAcross = field.width
+        val cellsDown = field.height
         val data = field.data
-        val window = 2 * radius + 1
-        val inv = 1f / window
+        val windowCells = 2 * radius + 1
+        val inverseWindowCells = 1f / windowCells
 
-        for (y in 0 until h) {
-            val row = y * w
+        for (row in 0 until cellsDown) {
+            val rowStart = row * cellsAcross
+            // A running sum, primed on the window centred at column zero and then slid one cell at
+            // a time: what leaves the window on the left is subtracted, what enters on the right
+            // is added, so the cost per cell does not grow with the radius.
             var sum = 0f
-            for (k in -radius..radius) {
-                sum += data[row + wrap(k, w)]
+            for (offset in -radius..radius) {
+                sum += data[rowStart + wrap(offset, cellsAcross)]
             }
-            for (x in 0 until w) {
-                scratch[row + x] = sum * inv
-                sum -= data[row + wrap(x - radius, w)]
-                sum += data[row + wrap(x + radius + 1, w)]
+            for (column in 0 until cellsAcross) {
+                scratch[rowStart + column] = sum * inverseWindowCells
+                sum -= data[rowStart + wrap(column - radius, cellsAcross)]
+                sum += data[rowStart + wrap(column + radius + 1, cellsAcross)]
             }
         }
         scratch.copyInto(data, 0, 0, data.size)
     }
 
     private fun vertical(field: FloatField, radius: Int, scratch: FloatArray) {
-        val w = field.width
-        val h = field.height
+        val cellsAcross = field.width
+        val cellsDown = field.height
         val data = field.data
-        val window = 2 * radius + 1
-        val inv = 1f / window
+        val windowCells = 2 * radius + 1
+        val inverseWindowCells = 1f / windowCells
 
-        for (x in 0 until w) {
+        for (column in 0 until cellsAcross) {
             var sum = 0f
-            for (k in -radius..radius) {
-                sum += data[clamp(k, h) * w + x]
+            for (offset in -radius..radius) {
+                sum += data[clampRow(offset, cellsDown) * cellsAcross + column]
             }
-            for (y in 0 until h) {
-                scratch[y * w + x] = sum * inv
-                sum -= data[clamp(y - radius, h) * w + x]
-                sum += data[clamp(y + radius + 1, h) * w + x]
+            for (row in 0 until cellsDown) {
+                scratch[row * cellsAcross + column] = sum * inverseWindowCells
+                sum -= data[clampRow(row - radius, cellsDown) * cellsAcross + column]
+                sum += data[clampRow(row + radius + 1, cellsDown) * cellsAcross + column]
             }
         }
         scratch.copyInto(data, 0, 0, data.size)
     }
 
-    private fun wrap(v: Int, n: Int): Int {
-        val m = v % n
-        return if (m < 0) m + n else m
+    /** Wraps a column index into the grid, because the map joins up east to west. */
+    private fun wrap(column: Int, cellsAcross: Int): Int {
+        val remainder = column % cellsAcross
+        return if (remainder < 0) remainder + cellsAcross else remainder
     }
 
-    private fun clamp(v: Int, n: Int): Int = v.coerceIn(0, n - 1)
+    /** Clamps a row index to the grid: the map does not join up over the poles. */
+    private fun clampRow(row: Int, cellsDown: Int): Int = row.coerceIn(0, cellsDown - 1)
 }

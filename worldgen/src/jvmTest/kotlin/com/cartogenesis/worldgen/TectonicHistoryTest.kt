@@ -324,9 +324,9 @@ class TectonicHistoryTest {
         val count = IntArray(bins)
         var cells = 0
         for (i in relief.indices) {
-            if (boundaries.nearestClass[i] !in wanted) continue
+            if (boundaries.nearestBoundaryClass[i] !in wanted) continue
             cells++
-            val bin = boundaries.distance[i].toInt()
+            val bin = boundaries.distanceCells[i].toInt()
             if (bin !in 0 until bins) continue
             total[bin] += relief[i].toDouble()
             count[bin]++
@@ -358,7 +358,7 @@ class TectonicHistoryTest {
          * How far from a present boundary an old belt's crest has to stand to count as a scar
          * rather than as the modern belt beside it.
          *
-         * Stated as twice `boundaryFalloff` (26 cells at 512), which is where the present epoch's
+         * Stated as twice `boundaryFalloffCells` (26 cells at 512), which is where the present epoch's
          * own uplift has fallen to nothing on every profile the stage builds — so a crest beyond
          * it cannot be a present belt under another name. On a 12,000 km world at 512 that is
          * about 1,200 km; the Appalachian front stands some 2,000 km from the Mid-Atlantic ridge.

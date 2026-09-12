@@ -8,7 +8,7 @@ import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import com.cartogenesis.worldgen.pipeline.growFan
 import kotlin.math.abs
 import kotlin.math.ln
@@ -49,7 +49,7 @@ class DeltaOutlineTest {
 
     /**
      * The author's own settings, at a size the per-merge tier can afford. The artefacts were seen
-     * at 2048; `deltaReach` is scaled by `atResolution`, so the same lobe is six cells across here
+     * at 2048; `deltaReachCells` is scaled by `atResolution`, so the same lobe is six cells across here
      * and twenty-four there, and every figure below is expressed against the reach rather than
      * against the cell.
      */
@@ -65,14 +65,14 @@ class DeltaOutlineTest {
     private class Run(config: WorldGenConfig) {
         val w = config.width
         val h = config.height
-        val reach = config.erosion.deltaReach
+        val reach = config.erosion.deltaReachCells
         val log = DepositionLog(w * h)
         val height: FloatField
         val isLand: BooleanArray
 
         init {
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
-            height = erodeBlocking(config, uplift, log).height
+            height = erodeBlockingLoggingDeposition(config, uplift, log).height
             isLand = SeaLevelStage.percentileCut(height, config.seaLevel).isLand
         }
 
@@ -288,7 +288,7 @@ class DeltaOutlineTest {
                 val sediment = FloatArray(w * h)
                 val scratch = DeltaFan.Scratch(w * h, reach.toInt())
                 val rim = DeltaFan.Rim(
-                    apex = apex, width = w, reach = reach, outX = outX, outY = outY,
+                    apex = apex, width = w, reachCells = reach, outX = outX, outY = outY,
                     hash = hash, grooved = false, wobble = wobble
                 )
                 growFan(
@@ -546,7 +546,7 @@ class DeltaOutlineTest {
                 val settled = FloatArray(w * h)
                 val scratch = DeltaFan.Scratch(w * h, reach.toInt())
                 val rim = DeltaFan.Rim(
-                    apex = apexY * w + apexX, width = w, reach = reach,
+                    apex = apexY * w + apexX, width = w, reachCells = reach,
                     outX = 1f, outY = 0f, hash = hash, grooved = false
                 )
                 growFan(

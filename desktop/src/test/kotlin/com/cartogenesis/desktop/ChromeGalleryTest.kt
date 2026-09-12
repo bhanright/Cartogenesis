@@ -215,6 +215,49 @@ class ChromeGalleryTest {
         assertTrue(missingFromPhone.isEmpty(), "the phone's sheet cannot reach: $missingFromPhone")
     }
 
+    /**
+     * F6's five, each with a world on screen at 1440x900.
+     *
+     * With a map in the window rather than on the blank canvas the F4 shots use, and that is the
+     * point of these five: three of them change something *over* the chart — High contrast makes
+     * the toolbar and legend strips opaque, Allied boxes the cartouche — and two change the rule
+     * under a section heading, which is only worth photographing beside the rest of the interface.
+     * The panel is left rolled up, as a reader first sees it, because that is where the six ruled
+     * headings are.
+     *
+     * What can be asserted is the little a screenshot allows: that each chrome produced a different
+     * picture of the same world (a chrome whose scheme never reached the composition would produce
+     * a copy of another), and that none came out flat.
+     */
+    @Test
+    fun `the five F6 chromes are photographed with a world in the window`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val chromes = listOf(
+            "highcontrast" to ThemeChoice.HIGH_CONTRAST,
+            "colorblind" to ThemeChoice.COLORBLIND,
+            "allied" to ThemeChoice.ALLIED,
+            "hallowed" to ThemeChoice.HALLOWED,
+            "baroque" to ThemeChoice.BAROQUE
+        )
+
+        val fingerprints = mutableMapOf<String, Int>()
+        chromes.forEach { (name, choice) ->
+            // `dark` is only consulted by ThemeChoice.SYSTEM, and none of these is that; it is
+            // passed as false so nothing here depends on the machine's own light/dark setting.
+            val shot = shoot(dark = false, choice = choice)
+            File(dir, "f6-$name.png").writeBytes(shot.png)
+            fingerprints[name] = shot.fingerprint
+            assertTrue(shot.distinctColours > 200, "the $name shot is nearly blank")
+        }
+        println("CHROME wrote five ${WIDTH}x$HEIGHT F6 shots to ${dir.absolutePath}")
+        println("CHROME F6 fingerprints $fingerprints")
+        assertEquals(
+            chromes.size,
+            fingerprints.values.toSet().size,
+            "two of the five chromes rendered identically: $fingerprints"
+        )
+    }
+
     private enum class Opened { NOTHING, MENU, SETTINGS, ABOUT }
 
     /**
@@ -271,12 +314,16 @@ class ChromeGalleryTest {
      * exercises the same path a reader takes.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shoot(dark: Boolean, openSections: Boolean = false): Shot {
+    private fun shoot(
+        dark: Boolean,
+        openSections: Boolean = false,
+        choice: ThemeChoice = ThemeChoice.SYSTEM
+    ): Shot {
         var shot: Shot? = null
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             val platform = ChromePlatform()
             setContent {
-                CartogenesisTheme(dark = dark) { CartogenesisApp(platform) }
+                CartogenesisTheme(dark = dark, choice = choice) { CartogenesisApp(platform) }
             }
             onNodeWithText("Generate").performClick()
             // The cartouche in the map's legend is written only once a world exists, and its

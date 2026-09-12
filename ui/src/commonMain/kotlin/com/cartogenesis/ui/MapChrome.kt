@@ -2,6 +2,7 @@ package com.cartogenesis.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,9 +63,10 @@ import kotlin.math.roundToInt
  *
  * Why the two are drawn differently is a matter of arithmetic at the width this application is
  * designed for. With the right-hand column folded away (F3 moved Export into the header panel) the
- * map is about 1080 dp wide at a 1440 dp window. The ten style names — Atlas, Vellum, Ink wash,
- * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, and (since F4) Mars — measure some
- * 660 dp set as cells, so they fit on one row with room left for the small print. The fifteen view names run past 1300
+ * map is about 1080 dp wide at a 1440 dp window. The eleven style names — Atlas, Vellum, Ink wash,
+ * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars (F4) and Colour-blind (F6) —
+ * measure some 740 dp set as cells, so they still fit on one row with room left for the small
+ * print, which is the first thing to be elided as the row fills. The fifteen view names run past 1300
  * dp, largely because four of them are things like "Temperature, summer"; a second segmented row
  * would either wrap or be cut, and a wrapped segmented control is no longer a segmented control.
  * So the views are a menu, which also puts the current view in words at the right of the strip
@@ -81,7 +83,7 @@ internal fun MapToolbar(
     views: List<MapView>,
     onOptions: (RenderOptions) -> Unit
 ) {
-    Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
+    Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -112,10 +114,10 @@ internal fun MapToolbar(
 }
 
 /**
- * The same toolbar on a phone: three targets and one name, instead of ten names and a menu.
+ * The same toolbar on a phone: three targets and one name, instead of eleven names and a menu.
  *
  * The segmented row above is a chart's key — every style named, the current one inked — and it
- * needs about 660 dp to be that. At 390 dp the same information has to be a menu, so the row
+ * needs about 740 dp to be that. At 390 dp the same information has to be a menu, so the row
  * becomes: the single menu button that replaces the whole menu strip, a palette glyph carrying the
  * current style's *name* (the one word worth its width, since it is the answer to "what am I
  * looking at"), and the view menu, which was already a menu and stays one. The small print goes: it
@@ -133,7 +135,7 @@ internal fun CompactMapToolbar(
     onOptions: (RenderOptions) -> Unit,
     menu: @Composable () -> Unit
 ) {
-    Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
+    Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -150,10 +152,10 @@ internal fun CompactMapToolbar(
 }
 
 /**
- * `◑ Vellum ▾`, and the other nine behind it.
+ * `◑ Vellum ▾`, and the other ten behind it.
  *
  * The compact counterpart of the segmented row, and the only place in the application where a
- * choice of ten is offered as a menu rather than as a key — which is a loss, and is why the current
+ * choice of eleven is offered as a menu rather than as a key — which is a loss, and is why the current
  * style's name is spelled out on the button rather than left to an icon.
  */
 @Composable
@@ -339,13 +341,21 @@ internal fun ChartLegend(
      */
     parts: List<LegendPart>
 ) {
-    Surface(color = OverMap.Strip, contentColor = OverMap.Parchment) {
+    Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            Column(Modifier.weight(1f)) {
+            // Boxed where the chrome asks — Allied, whose subject is a map margin, and where the
+            // title block of a sheet is always ruled off from the sheet.
+            val boxed = LocalChromeDetail.current.boxedCartouche
+            Column(
+                Modifier.weight(1f).then(
+                    if (boxed) Modifier.border(1.dp, OverMap.Rule).padding(horizontal = 7.dp, vertical = 4.dp)
+                    else Modifier
+                )
+            ) {
                 if (cartouche == null) {
                     Text(
                         prompt,

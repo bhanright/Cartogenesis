@@ -68,7 +68,23 @@ enum class MapStyle(
     /** How readily the hatching darkens as the ground steepens. Only used when [lineArt]. */
     internal val inkGain: Float,
     /** Drawn behind the map, and used by a front end for the surround. */
-    val backdrop: Int
+    val backdrop: Int,
+    /**
+     * This style's own set of realm colours, or null to take the shared ones.
+     *
+     * Null in every style but [CLEAR], and that is the whole of the mechanism: the political and
+     * peoples views ordinarily draw from [MapPalette.nation] and [MapPalette.culture] — hue wheels
+     * with a fixed step — and a style that declares a set here replaces them with it, cycling when
+     * there are more realms than colours and hatching each further turn of the cycle (see
+     * [hatched]). Declaring a set also hands those two views this style's *own* water and land,
+     * rather than the shared ramps they otherwise share with the diagnostic views, because a set
+     * chosen to be told apart is worth nothing under a sea that competes with it.
+     *
+     * Still palette-only: a realm colour has always reached the graphics card as a lookup table
+     * (see [RasterRecipe]), so all that changes on the device is what is in the table and which
+     * two ramps the political branch reads.
+     */
+    internal val realmRamp: IntArray? = null
 ) {
     ATLAS(
         label = "Atlas",
@@ -432,6 +448,92 @@ enum class MapStyle(
         lineArt = false,
         inkGain = 0f,
         backdrop = 0xFF17100D.toInt()
+    ),
+
+    /**
+     * The same world drawn so that nothing in it is told by hue alone.
+     *
+     * About one man in twelve cannot separate a red from a green, and every other style in this
+     * list asks him to: Atlas puts green lowlands against brown uplands, Verdant puts a teal sea
+     * against a cream shore, and the political view hands out realm colours off a hue wheel, which
+     * is the worst case there is — nine countries that differ in hue and in nothing else. This
+     * style is the answer, and it is built out of four decisions rather than a filter over the
+     * others:
+     *
+     *  - **The sea is one flat slate** (#1F2A3A). Depth banding is a second ordered variable
+     *    competing with the land's, and under a simulation the two run together at the shore; a
+     *    single dark tone means the coastline is the only thing the eye has to find, and it finds
+     *    it instantly.
+     *  - **The land ramp is ordered by lightness, not by hue** — dark olive at the shore through
+     *    amber to a pale yellow highland and white above the snow line. It runs along the blue-
+     *    yellow axis that both dichromacies keep, and every stop is lighter than the one below it,
+     *    so height still reads as height when the hues collapse. Adjacent stops are at least
+     *    8.00 CIEDE2000 apart under deuteranopia and protanopia both, which `ClearStyleTest`
+     *    measures.
+     *  - **The vegetation wash is off entirely** ([biomeWash] 0). It is the one thing in the
+     *    fantasy view that carries meaning by hue, and washing it over the ramp would also mean
+     *    the colour on the page was no longer the colour the guard measured.
+     *  - **Realms come from Paul Tol's nine "muted" colours**, which were chosen for exactly this
+     *    and are the best nine anyone has published, with a hatch over each further turn of the
+     *    cycle so that a tenth realm is told from the first by its texture rather than by a
+     *    tenth hue nobody could find. Rivers are white, which is the only ink that reads over
+     *    every stop of the ramp and over the slate as well; the coastline is a single black cell
+     *    at full strength.
+     *
+     * The diagnostic views are untouched, as they are by every style: their colours mean specific
+     * things — a temperature, a biome, a plate — and a legend is what makes those readable.
+     */
+    CLEAR(
+        label = "Colour-blind",
+        detail = "Ordered by lightness: safe under deuteranopia and protanopia",
+        // One slate, five times over. A flat sea is a decision, not an omission: see the note.
+        oceanRamp = intArrayOf(
+            0xFF1F2A3A.toInt(), 0xFF1F2A3A.toInt(), 0xFF1F2A3A.toInt(),
+            0xFF1F2A3A.toInt(), 0xFF1F2A3A.toInt()
+        ),
+        // Cividis's own ordering — monotone lightness along the blue-yellow axis — recoloured as a
+        // hypsometric sequence: dark olive shore, amber middle, pale yellow highland, white snow.
+        landRamp = intArrayOf(
+            0xFF2B2E1C.toInt(), 0xFF454326.toInt(), 0xFF615A2E.toInt(), 0xFF7F7038.toInt(),
+            0xFF9E8842.toInt(), 0xFFBFA34E.toInt(), 0xFFDCC271.toInt(), 0xFFF7F4E6.toInt()
+        ),
+        paper = 0xFFF7F4E6.toInt(),
+        // Off, not merely low. See the note: the biome wash is the one hue-carried variable left
+        // in the fantasy view, and turning it off is also what makes the ramp the guard measures
+        // the ramp the reader sees.
+        biomeWash = 0f,
+        biomeMuting = 1f,
+        // White, because it is the only ink that reads over the dark shore, the pale highland and
+        // the slate sea alike.
+        river = 0xFFFFFFFF.toInt(),
+        lake = 0xFF1F2A3A.toInt(),
+        lakeDeep = 0xFF1F2A3A.toInt(),
+        coastline = 0xFF000000.toInt(),
+        // Full strength: one black cell, not a blend of black with whatever it crosses.
+        coastlineStrength = 1f,
+        border = 0xFF000000.toInt(),
+        // A neutral no realm's colour comes near, since unclaimed land has to be told from claimed
+        // land as surely as one realm is told from another.
+        wilderness = 0xFF9A9A9A.toInt(),
+        // Enough to keep the mountains, short of enough to push a stop into its neighbour.
+        reliefStrength = 0.9f,
+        glyphMuting = 0.2f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF10161F.toInt(),
+        // Paul Tol's "muted" qualitative scheme, in his order. Nine colours is where a qualitative
+        // scheme stops being separable at all, which is why the tenth realm is hatched instead.
+        realmRamp = intArrayOf(
+            0xFF332288.toInt(), // indigo
+            0xFF88CCEE.toInt(), // cyan
+            0xFF44AA99.toInt(), // teal
+            0xFF117733.toInt(), // green
+            0xFF999933.toInt(), // olive
+            0xFFDDCC77.toInt(), // sand
+            0xFFCC6677.toInt(), // rose
+            0xFF882255.toInt(), // wine
+            0xFFAA4499.toInt()  // purple
+        )
     );
 
     internal fun ocean(depth: Float): Int =
@@ -472,4 +574,75 @@ enum class MapStyle(
 
     /** Relief, exaggerated or softened. 1 leaves the hillshade exactly as computed. */
     internal fun relief(shade: Float): Float = 1f + (shade - 1f) * reliefStrength
+
+    /**
+     * Whether the political and peoples views take this style's own water, land and realm set.
+     *
+     * False for every style but [CLEAR], which is what leaves the other ten drawing exactly the
+     * pixels they drew before F6.
+     */
+    internal val ownsRealms: Boolean get() = realmRamp != null
+
+    /** The colour of realm [id], cycling through the declared set where there is one. */
+    internal fun realm(id: Int): Int {
+        val ramp = realmRamp ?: return MapPalette.nation(id)
+        return ramp[id.mod(ramp.size)]
+    }
+
+    /**
+     * The colour of people [id].
+     *
+     * The same set, entered four colours further along. [MapPalette.culture] deliberately differs
+     * from [MapPalette.nation] in step and in saturation so that flipping between the two layers
+     * reads as a change of subject; a set chosen for separability has no spare saturation to give
+     * away, so the change of subject is carried by the reshuffle alone.
+     */
+    internal fun people(id: Int): Int {
+        val ramp = realmRamp ?: return MapPalette.culture(id)
+        return ramp[(id + 4).mod(ramp.size)]
+    }
+
+    /**
+     * Whether this cell of realm [id] takes the hatch.
+     *
+     * The nine colours run out at nine realms and the tenth begins the set again, so each further
+     * turn of the cycle is given a texture instead of a hue: diagonal strokes for the second nine,
+     * the other diagonal for the third. The comb is the one [inked] draws for line art, at a
+     * coarser pitch — two cells of ink in six — so that it reads as a hatch at map scale rather
+     * than as a dither.
+     */
+    internal fun hatched(id: Int, x: Int, y: Int): Boolean {
+        val ramp = realmRamp ?: return false
+        return when ((id / ramp.size) % 3) {
+            1 -> (x + y) % 6 < 2
+            // Written with no negative operand anywhere, rather than as (x - y) mod 6: GLSL
+            // leaves % undefined when either side is negative, and the shader has to agree with
+            // this to the bit. (x + (6 - y mod 6)) mod 6 is the same anti-diagonal.
+            2 -> (x + (6 - y % 6)) % 6 < 2
+            else -> false
+        }
+    }
+
+    /** A realm fill with its hatch applied, where the cell takes one. */
+    internal fun realmFill(id: Int, x: Int, y: Int): Int {
+        val fill = realm(id)
+        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+    }
+
+    /** The same for a people. */
+    internal fun peopleFill(id: Int, x: Int, y: Int): Int {
+        val fill = people(id)
+        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+    }
+
+    companion object {
+        /**
+         * How dark a hatch stroke runs over the fill beneath it.
+         *
+         * Far enough to be a texture at a glance (7.52 CIEDE2000 at worst against the fill it
+         * crosses, over every ground and under both red-green deficiencies, measured in
+         * `ClearStyleTest`), short of far enough to swallow which colour is underneath it. Public only because [RasterRecipe] carries it to the graphics card.
+         */
+        const val HATCH_STRENGTH: Float = 0.45f
+    }
 }

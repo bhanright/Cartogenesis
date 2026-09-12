@@ -346,6 +346,22 @@ object MapRasterizer {
         LandmarkKind.SANCTUARY -> 0xFFE8E2D0.toInt()
     }
 
+    /**
+     * The water on the two views that colour land by who holds it.
+     *
+     * Ordinarily the shared ocean ramp, because these views are about the land and their sea is
+     * only the shape around it — and because a political map that changed colour with the style
+     * would make ten political maps out of one. A style that declares its own realm set gets its
+     * own sea here as well: the set is chosen so that no two realms can be confused, which is
+     * worth nothing if the water competes with them. See [MapStyle.realmRamp].
+     */
+    private fun politicalSea(style: MapStyle, relative: Float): Int =
+        if (style.ownsRealms) style.ocean(-relative) else MapPalette.ocean(-relative)
+
+    /** The relief the realm colour is blended toward, from the same style-or-shared rule. */
+    private fun politicalLand(style: MapStyle, relative: Float): Int =
+        if (style.ownsRealms) style.land(relative) else MapPalette.land(relative)
+
     private fun baseColor(world: WorldMap, view: MapView, style: MapStyle, i: Int): Int {
         val isLand = world.sea.isLand[i]
         val relative = world.sea.relativeElevation.data[i]
@@ -364,23 +380,29 @@ object MapRasterizer {
             MapView.POLITICAL -> {
                 val owner = world.nations.nationId[i]
                 when {
-                    !isLand -> MapPalette.ocean(-relative)
+                    !isLand -> politicalSea(style, relative)
                     owner == NationResult.UNCLAIMED -> style.wilderness
                     // Keep some relief showing through, so the political map still reads as a map
                     // of somewhere rather than a flat chart.
-                    else -> MapPalette.blend(MapPalette.nation(owner), MapPalette.land(relative), 0.3f)
+                    else -> MapPalette.blend(
+                        style.realmFill(owner, i % world.width, i / world.width),
+                        politicalLand(style, relative),
+                        0.3f
+                    )
                 }
             }
 
             MapView.CULTURES -> {
                 val people = world.cultures.cultureId[i]
                 when {
-                    !isLand -> MapPalette.ocean(-relative)
+                    !isLand -> politicalSea(style, relative)
                     people == CultureResult.UNSETTLED -> style.wilderness
                     // Same relief bleed as the political map, so the two read as the same world
                     // seen two ways rather than as two unrelated charts.
                     else -> MapPalette.blend(
-                        MapPalette.culture(people), MapPalette.land(relative), 0.3f
+                        style.peopleFill(people, i % world.width, i / world.width),
+                        politicalLand(style, relative),
+                        0.3f
                     )
                 }
             }

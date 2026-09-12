@@ -1302,14 +1302,19 @@ private fun Section(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            // Capitals where the chrome asks for them, which is Allied and its 1940s sheet. The
+            // words are the panel's own either way — a heading is uppercased, never rewritten.
+            Text(
+                if (LocalChromeDetail.current.smallCapsHeadings) title.uppercase() else title,
+                style = MaterialTheme.typography.titleSmall
+            )
             Text(
                 if (expanded) "–" else "+",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        HorizontalDivider()
+        SectionRule()
         if (expanded) {
             Column(
                 Modifier.fillMaxWidth().padding(bottom = 12.dp),

@@ -289,9 +289,15 @@ world's standing water and its hypsometry where they were, but at every amplitud
 45% of the segment's depth, it leaves a closed basin below the sea-level cut that the post-cut
 outlet cannot open — seeds 718106 and 99 came out holding a drowned basin of 0.46–0.54% of their
 land, about twice the Caspian's share of Earth's, over `OutletIncisionTest`'s bar. A rift lake
-larger than the largest lake Earth has is not the improvement that was wanted. The repair both
-attempts are standing in for is subsidence that scales with how far the rift has opened, which is a
-process rather than a stamp (S2 in `REALISM_AUDIT.md`).
+larger than the largest lake Earth has is not the improvement that was wanted. A third was measured
+at E8 and does not apply: letting the sea in through a sill at the waterline cannot help here,
+because there is no sill — 1635 of the trough's 2158 wet cells are already ocean, the post-cut
+outlet having cut through — and because the sea can flood only what lies below itself, and just
+2215 of the 7397 floor cells do. What the dry 71% would need is water standing at 0.095 of the
+land's relief, some 760 m above the sea, which is a lake perched behind a dam and is the world
+this generator held before H5b. The repair all three attempts are standing in for is subsidence
+that scales with how far the rift has opened, which is a process rather than a stamp (S2 in
+`REALISM_AUDIT.md`).
 
 **A subduction margin draws a coast of constant width.** Every belt on this map varies along its own
 length except the trench, whose depth is `trenchDepth * strength * narrow` — a function of the
@@ -319,6 +325,22 @@ decided two stages after the climate. The repair is a provisional lake mask befo
 way the ice already gets a provisional climate before it (W3 in `REALISM_AUDIT.md`, and "Lakes never
 feed the moisture march" in TODO.md). Measured, printed with Earth's figure beside it and left
 un-asserted until then, rather than given a bar wide enough to pass.
+
+**A basin can be left standing at the waterline behind a sill at the waterline.** The outlet pass
+cuts a converted basin's sill by what the basin's own outflow can take off it and stops when it
+reaches the shoreline, which is right — a lake whose surface is at sea level has no fall left to cut
+with. What it leaves is a hollow with its brim a few metres above the waterline behind ground of the
+same height, and on Earth that is not a barrier: a spring tide is two to four metres on an open
+coast, a severe cyclone surge eight to nine (Katrina 8.5 m, Bhola about nine, the record 13.7 at
+Bathurst Bay in 1899), and the sea has stood where it stands for six thousand years. The Bosporus
+sill let the Mediterranean into the Black Sea. Measured at 512 on seeds 7/42/1234/99, 10/5/23/22
+such basins survive the cut, over 15/12/189/47 cells; `WaterlineBasinTest` counts them and separates
+them from the ones behind a sill a surge cannot climb, which are the Caspian's and the Qattara's
+case and right to keep. The rule that would take them — cut the exit to a surge below the waterline,
+by the sea rather than by any river, and let the labelling find the basin connected — was built at
+E8 and reverted: it cannot reach the scene it was built for (see the rift deviation below), and it
+broke three guards with no Earth figure behind them to buy 1517 cells of 4.19 million on the
+author's world at 2048. The figures are in that test and in E8's ledger row.
 
 **The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
 everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the

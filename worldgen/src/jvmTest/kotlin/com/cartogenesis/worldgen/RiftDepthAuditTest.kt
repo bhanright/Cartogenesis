@@ -106,6 +106,11 @@ class RiftDepthAuditTest {
         var cells = 0
         var wet = 0
         var lake = 0
+        var belowTheCut = 0
+        var belowTheCutNow = 0
+        val ground = world.erosion.height.data
+        val cut = world.sea.threshold
+        val heights = ArrayList<Float>()
         for (y in troughWindow[1] until troughWindow[3]) {
             for (x in troughWindow[0] until troughWindow[2]) {
                 val i = y * w + x
@@ -114,12 +119,56 @@ class RiftDepthAuditTest {
                 cells++
                 if (!world.sea.isLand[i] || world.rivers.lakes.isLake(i)) wet++
                 if (world.rivers.lakes.isLake(i)) lake++
+                if (ground[i] < cut) belowTheCut++
+                val relative = world.sea.relativeElevation.data[i]
+                if (world.sea.isLand[i] && relative < 0f) belowTheCutNow++
+                if (world.sea.isLand[i]) heights.add(relative)
             }
         }
+        // How high the water would have to stand to cover a given share of the floor, in the
+        // shoreline-relative units the rest of the stage works in. The floor of a half-graben is a
+        // wedge, so this is the curve that decides how much of it any water level wets — and since
+        // the sea stands at zero by definition, everything above zero here is out of the sea's
+        // reach whatever is done to the sill.
+        heights.sort()
+        fun levelFor(share: Int): Float {
+            if (heights.isEmpty()) return 0f
+            val k = (cells * share / 100).coerceIn(0, heights.size - 1)
+            return heights[k]
+        }
+        println(
+            ("E7 AUDIT: the trough's floor stands at %.5f / %.5f / %.5f / %.5f of the land's " +
+                "relief at its 40th / 50th / 60th / 70th percentile, where the sea is at 0")
+                .format(levelFor(40), levelFor(50), levelFor(60), levelFor(70))
+        )
+        // The last two figures are E8's ceiling, and measuring them is what settled that chunk.
+        //
+        // E8 set out to wet 60% of this floor by letting the sea through a sill at the waterline.
+        // Neither half of that survives the measurement. The trough is *already* an arm of the sea
+        // — of the 2158 floor cells under water, 1635 are ocean and only 523 a lake, because H5b's
+        // post-cut outlet cut its sill through — so there is no sill holding the sea out. And the
+        // sea can only ever flood what lies below itself: 2215 of the 7397 floor cells stand below
+        // the cut on the eroded terrain and 2232 on the field the map is drawn from, which is 30%,
+        // so 29% wet is already 97% of everything any marine process can reach.
+        //
+        // What the other 70% would need is written out by the percentile line below: to cover 60%
+        // of this floor the water must stand at 0.095 of the land's relief, which against the eight
+        // kilometres this map is calibrated to is some 760 m *above* sea level. That is a lake
+        // perched behind a dam, which is what the world held before H5b and why its largest lake
+        // was four times the Caspian. The only lever that would put this wedge under water without
+        // one is to put the trough itself below the cut — subsidence under the rift, which is
+        // tectonics and not hydrology, and which E7 already showed cannot be had by deepening the
+        // floor alone without breaking the Caspian bound.
         println(
             ("E7 AUDIT: the trough's flat floor is %d cells, %d of them under water (%d%%), %d of " +
-                "that lake and the rest an arm of the sea")
-                .format(cells, wet, wet * 100 / cells.coerceAtLeast(1), lake)
+                "that lake and the rest an arm of the sea; %d cells (%d%%) stand below the " +
+                "sea-level cut on the eroded terrain, %d (%d%%) on the field the map is drawn from")
+                .format(
+                    cells, wet, wet * 100 / cells.coerceAtLeast(1), lake,
+                    belowTheCut, belowTheCut * 100 / cells.coerceAtLeast(1),
+                    belowTheCutNow + (cells - heights.size),
+                    (belowTheCutNow + (cells - heights.size)) * 100 / cells.coerceAtLeast(1)
+                )
         )
     }
 

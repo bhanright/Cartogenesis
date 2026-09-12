@@ -577,7 +577,15 @@ sections, toolbar), **Help** (Check for updates, About).
   the dependency graph at build time rather than typed by hand (Compose Multiplatform, Skiko,
   LWJGL, kotlinx, the two OFL fonts, anything the web loader bundles). The font notices are a
   licence requirement, not a courtesy. Guard: the notices list is non-empty and names the fonts.
-- Screenshots of the menu open, Settings, and About in both themes, reviewed.
+- **Mars** (William, 2026-09-12): a Martian theme in both senses, from one palette so they match.
+  A `MapStyle.MARS` in `:cartography`: rust and ochre hypsometric tints rising to pale dust and
+  white polar caps, seas drawn as dark basalt plains rather than blue (a dry Mars) with the
+  coastline as a faint scarp, rivers as dark channels, lakes as the same basalt; the biome and
+  diagnostic views keep their own colours. And a `Mars` chrome theme in `Theme.kt`: dark basalt
+  ground, rust and ochre accents, dust-pale text, the same faces. Guard: the style renders every
+  view without error at 512 and appears in `StyleGalleryTest`'s gallery; the chrome screenshot in
+  the Mars theme is reviewed.
+- Screenshots of the menu open, Settings, and About in both themes and in Mars, reviewed.
 
 ## Track G — more of the pipeline on the graphics card
 

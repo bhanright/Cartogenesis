@@ -1243,7 +1243,7 @@ class DebugMapDump {
                 val x0 = from % w
                 val x1 = to % w
                 if (abs(x1 - x0) > w / 2) continue
-                g.stroke = BasicStroke(river.widths[k].coerceAtLeast(0.9f))
+                g.stroke = BasicStroke(debugRiverStroke(river.widthRatio[k]))
                 g.drawLine(x0, from / w, x1, to / w)
             }
         }
@@ -1364,3 +1364,13 @@ class DebugMapDump {
     private fun rgbOf(r: Int, g: Int, b: Int): Int =
         (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
 }
+
+/**
+ * A stroke for a debug render, from a river's [com.cartogenesis.worldgen.pipeline.River.widthRatio].
+ *
+ * The map's own pen lives in `:cartography` (`RiverPen`), which this module cannot see and should
+ * not: what a world knows about a river is how big it is against the others, and how wide a line
+ * that becomes is the renderer's business. These dumps only need something that varies the same
+ * way, so they draw across the same span of pixels the map does.
+ */
+internal fun debugRiverStroke(widthRatio: Float): Float = 0.8f + 4.2f * widthRatio.coerceIn(0f, 1f)

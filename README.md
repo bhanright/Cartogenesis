@@ -99,7 +99,10 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    the two seasonal temperature fields: about 2300 mm a year in a hot desert, 550 in cool temperate
    country) the lake settles below its rim, is endorheic, and the rivers end in it; a basin too dry
    to hold water at all is a playa. A basin that balances at the brim overflows as before, with an
-   outlet river leaving at the spill point.
+   outlet river leaving at the spill point. A channel is drawn as wide as the water it carries:
+   Leopold and Maddock's downstream hydraulic geometry has width going as the square root of
+   discharge, so the map's smallest stream is a 0.8-pixel thread and its biggest river a 5-pixel
+   channel, with the same pen at every resolution and export size.
 
 ## Styles
 
@@ -271,9 +274,10 @@ The app requests `-Xmx12g`, which is what makes those sizes reachable at all —
 
 Exports are written as PNG or WebP. PNG is lossless. WebP comes out around a quarter of the size,
 but Skia exposes no lossless WebP encoder, and the loss lands where a map can least afford it: the
-average pixel drifts about 4 of 255, while the worst 0.1% drift by nearly 70, and those are the
-river lines and borders, because that is where the sharp edges are. `ExportSmokeTest` measures
-both numbers so the description in the UI stays true.
+average pixel drifts about 4 of 255, while the worst 0.1% drift by about 75, and those are the
+river lines and borders, because that is where the sharp edges are — and more so since rivers were
+sized by their discharge, which draws every headwater as a sub-pixel thread. `ExportSmokeTest`
+measures both numbers so the description in the UI stays true.
 
 Where the time goes, at 2048 (see `StageProfileTest`): erosion 82%, realms 6%, ocean currents 4%,
 tectonics 2%, landmarks 2%, terrain 2%, rivers and climate 1% each. A 2048 world takes about 36

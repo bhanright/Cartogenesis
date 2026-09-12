@@ -371,13 +371,13 @@ class PanelKnobsTest {
     /** Neither one regenerates: both are `RenderOptions`, so the world is untouched by both. */
     @Test
     fun `the toolbar's two choices leave the marks beside them alone`() {
-        val marked = view.copy(showBorders = true, showHillshade = false, riverScale = 2f)
+        val marked = view.copy(showBorders = true, showHillshade = false, showLakes = false)
         val restyled = MapChrome.withView(MapChrome.withStyle(marked, MapStyle.SCROLL), MapView.WIND)
         assertEquals(MapStyle.SCROLL, restyled.style)
         assertEquals(MapView.WIND, restyled.view)
         assertTrue(restyled.showBorders)
         assertFalse(restyled.showHillshade)
-        assertEquals(2f, restyled.riverScale)
+        assertFalse(restyled.showLakes)
     }
 
     /**

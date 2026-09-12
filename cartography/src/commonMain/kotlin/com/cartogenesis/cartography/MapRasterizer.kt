@@ -65,15 +65,20 @@ data class RenderOptions(
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
     val showLandmarks: Boolean = false,
-    val showLakes: Boolean = true,
-    /** Multiplies river widths; HD exports scale this up with resolution. */
-    val riverScale: Float = 1f
+    val showLakes: Boolean = true
 ) {
     /** The political view is realm colour — borders are implied by it and always drawn. */
     val bordersVisible: Boolean get() = showBorders || view == MapView.POLITICAL
 }
 
-/** One straight run of a river, in cell coordinates. */
+/**
+ * One straight run of a river: its ends in cell coordinates, its [width] in output pixels.
+ *
+ * A run is one cell long, so the stroke changes by a hair from run to run and the taper down a
+ * river is drawn by the sequence rather than by any single segment. It is also why a confluence
+ * needs no taper of its own: the step up to the trunk's width happens over a single cell, and a
+ * round cap blends it.
+ */
 class RiverSegment(
     val x0: Float,
     val y0: Float,
@@ -300,7 +305,7 @@ object MapRasterizer {
                     val x1 = to % w
                     val y0 = (from / w) + 0.5f
                     val y1 = (to / w) + 0.5f
-                    val width = (river.widths[k] * options.riverScale).coerceAtLeast(0.9f)
+                    val width = RiverPen.widthPixels(river.widthRatio[k])
 
                     // Inside a lake the river *is* the lake. Drawing it would put a channel across
                     // open water — and these are exactly the segments that run uphill on raw
@@ -379,9 +384,8 @@ object MapRasterizer {
         val glyphs = ArrayList<LandmarkGlyph>()
         if (options.showLandmarks && !options.view.showsFlow) {
             // Purely a fraction of the map, so a glyph covers the same share of the picture at
-            // every size. It must NOT also take riverScale: rivers need that because their widths
-            // are fixed in cells, but this radius already derives from the width, and applying
-            // both made glyphs four times too big on a 4096 export.
+            // every size — unlike the river pen beside it, which is a fixed count of output pixels
+            // and grows with nothing.
             val radius = (w / 190f).coerceAtLeast(2f)
             world.landmarks.landmarks.forEach { landmark ->
                 glyphs.add(

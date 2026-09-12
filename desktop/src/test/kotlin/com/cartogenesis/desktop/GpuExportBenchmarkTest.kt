@@ -101,7 +101,7 @@ class GpuExportBenchmarkTest {
         }
 
         val world = WorldGenerationEngine.generateBlocking(CONFIG.atResolution(SIZE, SIZE))
-        val options = RenderOptions(riverScale = 4f)
+        val options = RenderOptions()
         val recipe = requireNotNull(RasterRecipe.of(world, options))
         // Once to warm the driver, then the measurement.
         runBlocking { gpu.rasterize(recipe) }
@@ -188,7 +188,7 @@ class GpuExportBenchmarkTest {
             }
             note("generated the world in %.1f s, heap now %d MB".format(generateMs / 1000.0, usedHeapMb()))
 
-            val options = RenderOptions(riverScale = 8f)
+            val options = RenderOptions()
             var pixels: IntArray? = null
             val rasterMs = measureTimeMillis {
                 val recipe = RasterRecipe.of(world, options)

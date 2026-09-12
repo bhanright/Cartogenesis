@@ -18,6 +18,7 @@ import com.cartogenesis.worldgen.pipeline.NormalField
 import com.cartogenesis.worldgen.pipeline.OceanResult
 import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.RiverResult
+import com.cartogenesis.worldgen.pipeline.RiverWidth
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.TerrainResult
 import kotlinx.serialization.Serializable
@@ -453,11 +454,19 @@ internal object WorldSections {
         } else null
 
         val rivers = if (GenerationStage.RIVERS in present) {
+            val accumulation = field("rivers.flowAccumulation")
             RiverResult(
                 filledElevation = field("rivers.filledElevation"),
-                flowAccumulation = field("rivers.flowAccumulation"),
+                flowAccumulation = accumulation,
                 flowTarget = ints("rivers.flowTarget"),
-                rivers = lists.rivers,
+                // A save written before rivers were sized by their discharge carries a width in
+                // cells under the old rule, which this build has no use for, so its rivers arrive
+                // with no ratio at all. Sizing them again from the accumulation the same file
+                // carries gives exactly what a fresh world of that seed would have, because the
+                // scale is read off the network rather than from a threshold the save omits.
+                rivers = if (lists.rivers.any { it.widthRatio.size != it.cells.size }) {
+                    RiverWidth.sized(lists.rivers, accumulation.data)
+                } else lists.rivers,
                 lakes = LakeResult(
                     lakeId = ints("rivers.lakeId"),
                     lakes = lists.lakes,

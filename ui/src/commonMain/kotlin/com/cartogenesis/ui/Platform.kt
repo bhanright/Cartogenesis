@@ -14,8 +14,8 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
  *
  * PNG is lossless. WebP is about a quarter the size but is *not* lossless: Skia exposes only the
  * lossy encoder, and even at maximum quality the loss falls where it is least welcome on a map.
- * Measured against the PNG of the same world, the average pixel drifts about 3 of 255 — invisible
- * — but the worst 0.1% drift by nearly 60, and those are the river lines, borders and coastlines,
+ * Measured against the PNG of the same world, the average pixel drifts about 4 of 255 — invisible
+ * — but the worst 0.1% drift by about 75, and those are the river lines, borders and coastlines,
  * because that is where the sharp edges are.
  */
 enum class ExportFormat(val label: String, val extension: String, val detail: String) {

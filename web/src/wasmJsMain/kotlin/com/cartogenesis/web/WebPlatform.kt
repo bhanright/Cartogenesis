@@ -140,11 +140,9 @@ class WebPlatform(
         val exportConfig = config.atResolution(size, size)
         val world = WorldGenerationEngine.generate(exportConfig, accelerator = accelerator)
 
-        val scale = size.toFloat() / config.width
-        val bitmap = MapImage.toBitmap(
-            world,
-            options.copy(riverScale = options.riverScale * scale.coerceAtLeast(1f))
-        )
+        // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
+        // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
+        val bitmap = MapImage.toBitmap(world, options)
         val encoded = Image.makeFromBitmap(bitmap)
             .encodeToData(skiaFormat(format), quality = 100)
             ?: error("Could not encode the map as ${format.label}")

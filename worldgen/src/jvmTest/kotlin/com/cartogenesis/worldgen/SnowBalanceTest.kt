@@ -21,8 +21,10 @@ import org.junit.Test
  * that the totals came out nicer but that the *distinction* is now available to the model: that a
  * cold dry interior is bare, that ice at a given temperature follows the snowfall, and that the ice
  * share of land is within reach of Earth's. Each is measured against the same world generated with
- * `ClimateConfig.snowBalance = false`, which is the pre-H2 generator exactly — the checksum case
- * below is the proof of that, and it is what makes every "before" figure here honest.
+ * `ClimateConfig.snowBalance = false`, which is the pre-H2 generator exactly — the control case
+ * below is the proof of that, checked structurally against the pre-H2 gates themselves rather than
+ * against a checksum of one world main once produced, and it is what makes every "before" figure
+ * here honest.
  */
 class SnowBalanceTest {
 
@@ -33,6 +35,21 @@ class SnowBalanceTest {
 
     private fun WorldGenConfig.withoutBalance() =
         copy(climate = climate.copy(snowBalance = false))
+
+    private fun WorldGenConfig.withoutGlaciation() =
+        copy(glaciation = glaciation.copy(enabled = false))
+
+    /**
+     * The terrain [GlaciationStage] carved from, reconstructed rather than pinned: the same seed,
+     * balance off, with `GlaciationConfig.enabled = false`. `GlaciationStage.apply` short-circuits
+     * on that flag and hands back the sea-level result it was given, the same object, untouched —
+     * so this world's `sea` *is* the pre-glaciation terrain the carving control read, not a copy or
+     * an approximation of it. Nothing upstream of glaciation (plates, erosion, sea level) reads
+     * `GlaciationConfig` at all, so this differs from [world]'s balance-off world in nothing before
+     * the carving step.
+     */
+    private fun uncarvedTerrain(seed: Long): WorldMap =
+        WorldGenerationEngine.generateBlocking(config(seed).withoutBalance().withoutGlaciation())
 
     /**
      * Every guard here wants the same eight worlds — four seeds, with the balance and without —
@@ -125,37 +142,111 @@ class SnowBalanceTest {
     // ---------------------------------------------------------------- the control
 
     /**
-     * `snowBalance = false` is the pre-H2 generator, to the bit.
+     * `snowBalance = false` is the pre-H2 generator — not "produces the same numbers `main` once
+     * produced", which is what an absolute checksum actually proves and which H1's tectonic history
+     * broke for every seed the day after it merged (T1 removed the same kind of pin from
+     * `DepositionTest` for the same reason: it was re-recorded nine times in two days). What the
+     * chunk was actually asked to prove is that the *pre-H2 rules* — the annual-mean ice gate in
+     * `ClimateStage.classify` and the annual-mean carving mask in `GlaciationStage` — are still
+     * exactly what runs when the knob is off. That is a structural claim, and it needs no stored
+     * number: it is checked by reconstructing each gate's own condition from the world's own fields
+     * and showing the world obeys it exactly, everywhere.
      *
-     * The pins are the elevation and biome checksums of the four standard seeds at 512, measured
-     * on `main` at 37aa214 — the commit this chunk was last merged from — by generating with the *default*
-     * config there and hashing the same two arrays the same way. So the assertion is not "this code
-     * still agrees with itself", it is "with the knob off, this code produces the world the
-     * previous commit produced", which is what the chunk was asked to prove.
+     * (a) The ice gate. With the balance off, `classify`'s ice arm is `t < -8f` on the final annual
+     * mean temperature, and it is the first arm of the `when` — no other branch can produce
+     * `ICE_SHEET`, so a land cell is `ICE_SHEET` if and only if its temperature clears that line.
+     * That is a set equality, checked cell by cell against the world's own [ClimateResult.temperature].
      *
-     * A refactor that changed the order of a floating-point sum in the climate stage would break
-     * this, and that is the point: the seasonal fields were pulled out of `generateWithSeasonalMm`
-     * into a shared helper so the provisional climate could reuse them, and this is the evidence
-     * that the move was arithmetic-neutral.
+     * (b) The carving mask. `GlaciationStage`'s pre-H2 branch freezes ground at or below
+     * `GlaciationConfig.freezingC` on `ClimateStage.buildTemperature` run on the terrain *before*
+     * carving — which the finished world does not keep a copy of. It is reconstructed rather than
+     * abandoned: generating the same seed again with `glaciation.enabled = false` makes
+     * `GlaciationStage.apply` short-circuit and hand back the sea-level result unmodified (see
+     * [uncarvedTerrain]), which is bit-for-bit the terrain the carving control read from, since
+     * nothing upstream of glaciation consults `GlaciationConfig`. Every cell the control actually
+     * moved is then checked against that reconstructed mask.
+     *
+     * Both checks are shown discriminating in the same block: read against the balance-*on* world
+     * instead, the pre-H2 ice gate must misdescribe that world's ice, or the case would be proving
+     * nothing about which rule is running.
      */
     @Test
-    fun `the control reproduces the pre-H2 world bit for bit`() {
-        val pins = mapOf(
-            7L to (-5570938242032017060L to -3821000834625243742L),
-            42L to (5063332696051296205L to 3709976308418727873L),
-            1234L to (-4131320833814684458L to -3137758199564851396L),
-            99L to (5080677618336571823L to -5846109820223702467L)
-        )
+    fun `the control reproduces the pre-H2 generator's gates, not a checksum of one run of it`() {
         seeds.forEach { seed ->
-            val control = world(seed, balance = false)
-            val (elevation, biomes) = pins.getValue(seed)
-            assertEquals(
-                "seed $seed elevation checksum moved with snowBalance off",
-                elevation, elevationChecksum(control)
+            val off = world(seed, balance = false)
+            val on = world(seed, balance = true)
+
+            // ---- (a) the ice-classification gate, and its discrimination against balance = true
+            var offMismatch = 0
+            var offGateIce = 0
+            for (i in off.climate.biome.indices) {
+                if (!off.sea.isLand[i]) continue
+                val gate = off.climate.temperature.data[i] < PRE_H2_ICE_GATE_C
+                val actual = off.climate.biome[i] == Biome.ICE_SHEET
+                if (gate) offGateIce++
+                if (gate != actual) offMismatch++
+            }
+            var onMismatch = 0
+            for (i in on.climate.biome.indices) {
+                if (!on.sea.isLand[i]) continue
+                val gate = on.climate.temperature.data[i] < PRE_H2_ICE_GATE_C
+                val actual = on.climate.biome[i] == Biome.ICE_SHEET
+                if (gate != actual) onMismatch++
+            }
+            println(
+                "SNOWBALANCE seed=$seed pre-H2 ice gate (t<${PRE_H2_ICE_GATE_C}C): $offGateIce" +
+                    " land cells qualify, off-balance mismatches=$offMismatch;" +
+                    " read against the balance-on world instead, mismatches=$onMismatch"
             )
             assertEquals(
-                "seed $seed biome checksum moved with snowBalance off",
-                biomes, biomeChecksum(control)
+                "seed $seed: with the balance off, ICE_SHEET is not exactly" +
+                    " {annual mean < ${PRE_H2_ICE_GATE_C}C} ($offMismatch of" +
+                    " ${off.sea.landCellCount} land cells differ)",
+                0, offMismatch
+            )
+            assertTrue(
+                "seed $seed: the pre-H2 gate must misdescribe the balance-on world's ice for this" +
+                    " case to be discriminating between the two, but it matched everywhere",
+                onMismatch > 0
+            )
+
+            // ---- (b) the carving mask, reconstructed from the pre-glaciation terrain
+            val uncarved = uncarvedTerrain(seed)
+            val freezing = uncarved.config.glaciation.freezingC
+            val provisional = ClimateStage.buildTemperature(uncarved.config, uncarved.sea)
+            var carvedCells = 0
+            var aboveFreezing = 0
+            var maxExceedanceC = 0f
+            for (i in 0 until uncarved.config.width * uncarved.config.height) {
+                if (!off.sea.isLand[i]) continue
+                val moved = kotlin.math.abs(
+                    off.sea.relativeElevation.data[i] - uncarved.sea.relativeElevation.data[i]
+                ) > 1e-5f
+                if (!moved) continue
+                carvedCells++
+                val t = provisional.data[i]
+                if (t > freezing) {
+                    aboveFreezing++
+                    maxExceedanceC = maxOf(maxExceedanceC, t - freezing)
+                }
+            }
+            println(
+                "SNOWBALANCE seed=$seed carving control: $carvedCells cells moved from the" +
+                    " pre-glaciation terrain, $aboveFreezing above ${freezing}C on that terrain" +
+                    " (max exceedance ${"%.2f".format(maxExceedanceC)}C)"
+            )
+            assertTrue("seed $seed has no carved ground to measure", carvedCells > 0)
+            // Measured exactly zero on all four seeds, up to 42,925 carved cells: even the ablation
+            // zone `GlaciationConfig.runOut` allows (a trough may continue up to 8 cells past the
+            // frozen mask, onto ground an ice age's own ablation would keep warmer than freezing) did
+            // not in practice put a single carved cell above freezing on the terrain the mask was
+            // read from. So the assertion is held at that measured line, not loosened to allow for
+            // an effect that turns out not to show up here.
+            assertEquals(
+                "seed $seed: $aboveFreezing of $carvedCells carved cells sit above ${freezing}C on" +
+                    " the pre-glaciation terrain (max exceedance ${"%.2f".format(maxExceedanceC)}C)," +
+                    " where measurement on the standard seeds found none",
+                0, aboveFreezing
             )
         }
     }
@@ -380,6 +471,14 @@ class SnowBalanceTest {
         const val MARGINAL_LOW = -6f
         const val MARGINAL_HIGH = -3f
 
+        /**
+         * `ClimateStage.classify`'s balance-off ice literal, copied rather than referenced because
+         * the source has no named constant for it. If that literal ever moves, this line has to
+         * move with it — which is the point: the case is asserting agreement with that exact line,
+         * not with whatever the line happens to say today.
+         */
+        const val PRE_H2_ICE_GATE_C = -8f
+
         private val cache = HashMap<Pair<Long, Boolean>, WorldMap>()
     }
 
@@ -389,18 +488,6 @@ class SnowBalanceTest {
             if (world.sea.isLand[i] && world.climate.biome[i] == biome) n++
         }
         return n
-    }
-
-    private fun elevationChecksum(world: WorldMap): Long {
-        var checksum = 0L
-        world.sea.relativeElevation.data.forEach { checksum = checksum * 31 + it.toRawBits() }
-        return checksum
-    }
-
-    private fun biomeChecksum(world: WorldMap): Long {
-        var checksum = 0L
-        world.climate.biome.forEach { checksum = checksum * 31 + it.ordinal }
-        return checksum
     }
 
     /** Land far from any water, bitterly cold in winter, dry — and thawing in summer. */

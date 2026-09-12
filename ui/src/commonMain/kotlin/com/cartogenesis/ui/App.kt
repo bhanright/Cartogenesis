@@ -118,6 +118,10 @@ fun CartogenesisApp(platform: Platform) {
     var title by remember { mutableStateOf("Untitled world") }
     var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
     val store = platform.library
+    // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
+    // the library arms it too, since a world is then on screen and later edits should live-update
+    // it exactly as if it had been generated here.
+    val gate = remember { GenerationGate() }
     // Click handlers are plain callbacks, not suspend functions, but the library now is - it
     // lives in IndexedDB on the web build, which is asynchronous throughout. This is how a
     // button press reaches a suspend call without making the composable itself suspend.
@@ -135,14 +139,20 @@ fun CartogenesisApp(platform: Platform) {
         storedTerrain = doc.terrain
         world = save.world
         config = doc.config
+        gate.request()
         screen = Screen.MAP
     }
 
     LaunchedEffect(Unit) { saved = store.list() }
 
-    // Regenerate whenever the settings change. No debounce: on desktop a generation is fast
-    // enough that the settings panel uses explicit buttons rather than live-dragging sliders.
-    LaunchedEffect(config) {
+    // Regenerate whenever the settings change - but only once a generation has been asked for.
+    // The app opens on a blank canvas, so the very first run must wait for Go, New world, or
+    // Generate; after that, no debounce, since on desktop a generation is fast enough that the
+    // settings panel uses explicit buttons rather than live-dragging sliders. Keyed on
+    // gate.hasGenerated too, not just config, because pressing Generate with nothing changed
+    // still has to run - the one case a key on the settings alone would miss.
+    LaunchedEffect(config, gate.hasGenerated) {
+        if (!gate.hasGenerated) return@LaunchedEffect
         busy = true
         val started = epochMillis()
         // The world we already have, so the engine can skip any stage whose settings did not
@@ -220,8 +230,12 @@ fun CartogenesisApp(platform: Platform) {
                     atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
                     libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
                     seed = config.seed,
-                    onSeed = { config = config.copy(seed = it) },
-                    onNewWorld = { config = config.copy(seed = Random.nextLong(1_000_000)) },
+                    onSeed = { config = config.copy(seed = it); gate.request() },
+                    onNewWorld = {
+                        config = config.copy(seed = Random.nextLong(1_000_000))
+                        gate.request()
+                    },
+                    onGenerate = { gate.request() },
                     onToggleAtlas = {
                         screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
                     },
@@ -351,6 +365,14 @@ fun CartogenesisApp(platform: Platform) {
                     labelMode = labelMode,
                     onToggleLabels = { labelMode = !labelMode; screen = Screen.MAP }
                 )
+            } else if (screen == Screen.ATLAS) {
+                // Reachable now that the app opens blank: nothing to browse until a world exists.
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Generate a world to see its atlas.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
                 MapView(
                     image = image,
@@ -359,6 +381,14 @@ fun CartogenesisApp(platform: Platform) {
                     onPlace = { x, y -> pendingLabel = x to y },
                     onLabelClick = { label -> labels = labels.filterNot { it.id == label.id } }
                 )
+                if (image == null && !busy) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Pick a seed and settings, then Generate.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 if (labelMode) {
                     Surface(
                         color = MaterialTheme.colorScheme.tertiary,
@@ -394,7 +424,12 @@ fun CartogenesisApp(platform: Platform) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Panel(Modifier.weight(1f)) { ViewOptions(options) { options = it } }
-            Panel { OutputOptions(config, busy, platform, exportFormat, { config = it }, { exportFormat = it }) { pendingExport = it } }
+            Panel {
+                OutputOptions(
+                    config, busy, world != null, platform, exportFormat,
+                    { config = it }, { exportFormat = it }
+                ) { pendingExport = it }
+            }
         }
     }
 }
@@ -647,11 +682,17 @@ private fun WorldActions(
     seed: Long,
     onSeed: (Long) -> Unit,
     onNewWorld: () -> Unit,
+    onGenerate: () -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit
 ) {
     Text("Cartogenesis", style = MaterialTheme.typography.titleMedium)
     SeedField(seed = seed, busy = busy, onSeed = onSeed)
+    // The one unambiguous "start" action - Go and New world both do change the seed and so also
+    // generate, but this is the button for someone who has touched nothing yet.
+    Button(onClick = onGenerate, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+        Text("Generate", maxLines = 1)
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(onClick = onNewWorld, enabled = !busy, contentPadding = TIGHT) {
             Text("New world", maxLines = 1)
@@ -664,7 +705,9 @@ private fun WorldActions(
         }
     }
     Text(
-        status.ifBlank { "Generating the first world…" },
+        status.ifBlank {
+            if (busy) "Generating the first world…" else "Pick a seed and settings, then Generate."
+        },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 2
@@ -810,6 +853,7 @@ private fun ViewOptions(options: RenderOptions, onOptions: (RenderOptions) -> Un
 private fun OutputOptions(
     config: WorldGenConfig,
     busy: Boolean,
+    hasWorld: Boolean,
     platform: Platform,
     exportFormat: ExportFormat,
     onConfig: (WorldGenConfig) -> Unit,
@@ -863,11 +907,18 @@ private fun OutputOptions(
         listOf(2048, 4096, 8192).forEach { size ->
             Button(
                 onClick = { onExport(size) },
-                enabled = !busy,
+                enabled = !busy && hasWorld,
                 contentPadding = TIGHT,
                 modifier = Modifier.weight(1f)
             ) { Text("$size", maxLines = 1) }
         }
+    }
+    if (!hasWorld) {
+        Text(
+            "Generate a world first.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

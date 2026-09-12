@@ -589,7 +589,7 @@ data class ClimateConfig(
      * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
      * applied to the seasonal departure from the annual mean is `1 + continentality *
      * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
-     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReach] — a shoreline cell
+     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReachCells] — a shoreline cell
      * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
      * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
      * field here instead, on the theory that "exposed to water" and "close to water" were the same

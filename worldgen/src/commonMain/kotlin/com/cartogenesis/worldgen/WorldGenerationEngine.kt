@@ -16,6 +16,12 @@ import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 
+/**
+ * The steps of the pipeline, in the order they run.
+ *
+ * [label] is the sentence shown while a stage is running and [shortLabel] the noun used where
+ * there is no room for one — a tooltip, a log line, an error naming which stage failed.
+ */
 enum class GenerationStage(val label: String, val shortLabel: String) {
     TERRAIN("Shaping terrain", "terrain"),
     TECTONICS("Drifting plates", "plate tectonics"),
@@ -29,6 +35,13 @@ enum class GenerationStage(val label: String, val shortLabel: String) {
     LANDMARKS("Stocking the wilds", "landmarks")
 }
 
+/**
+ * Told which stage is about to run, so a caller can draw a progress bar.
+ *
+ * Called on whatever thread generation is running on, once per stage and *before* the stage does
+ * its work — so [stageIndex] is how many stages are finished, out of [stageCount]. A stage that is
+ * reused rather than recomputed is still reported, because from the outside it did happen.
+ */
 fun interface GenerationProgress {
     fun onStage(stage: GenerationStage, stageIndex: Int, stageCount: Int)
 }
@@ -38,8 +51,10 @@ fun interface GenerationProgress {
  *
  * Suspending only because of [ErosionAccelerator]: everything here is ordinary blocking work, but
  * a GPU accelerator has to await its device and its results, so the one call that might do so
- * makes the whole chain suspend. Nothing suspends when generating on the CPU. Generation is fully deterministic for a given config, which is
- * what lets HD export re-run at a higher resolution instead of upscaling a preview bitmap.
+ * makes the whole chain suspend. Nothing suspends when generating on the CPU.
+ *
+ * Generation is fully deterministic for a given config, which is what lets HD export re-run at a
+ * higher resolution instead of upscaling a preview bitmap.
  */
 object WorldGenerationEngine {
 
@@ -66,6 +81,14 @@ object WorldGenerationEngine {
      * fully-generated world keeps compiling unchanged.
      */
 
+    /**
+     * Generates a whole world from [config] — every stage's result, in the order the enum above
+     * lists them — or reuses the stages of [previous] that [config] cannot have changed.
+     *
+     * [previous] is only consulted when it was generated at the same seed and resolution; any
+     * other difference falls through to a full generation. Labels are carried across from it,
+     * since they are the user's and not the generator's.
+     */
     suspend fun generate(
         config: WorldGenConfig,
         previous: PartialWorld? = null,
@@ -101,8 +124,8 @@ object WorldGenerationEngine {
                     // sea sits changes what gets carved. Guarding on `erosion` alone reused a
                     // stale height field whenever sea level moved.
                     it.config.seaLevel == config.seaLevel &&
-                    // H5: and the shoreline the rounds grade to is not today's, it is the stand
-                    // the sea was at while they were cutting. That one field of the sea section is
+                    // And the shoreline the rounds grade to is not today's, it is the stand the
+                    // sea was at while they were cutting. That one field of the sea section is
                     // named rather than the whole of it on purpose — the shelf remap and the
                     // enclosed-water rule both happen after erosion, and re-running twelve
                     // hydraulic rounds because someone moved a shelf slider would undo the whole
@@ -126,10 +149,10 @@ object WorldGenerationEngine {
                     // climate section's own temperature curve two stages before that stage runs.
                     it.config.glaciation == config.glaciation &&
                     (!config.glaciation.enabled || it.config.climate == config.climate) &&
-                    // H2's provisional climate is a whole climate stage, so it reads the ocean
-                    // section the way the real one does - the coastal reach that continentality
+                    // The provisional climate below is a whole climate stage, so it reads the
+                    // ocean section the way the real one does - the coastal reach continentality
                     // and the maritime term are measured in, and the sea temperature the march
-                    // evaporates from. A change there now moves the ice as well as the rain.
+                    // evaporates from. A change there moves the ice as well as the rain.
                     (!config.glaciation.enabled || !config.climate.snowBalance ||
                         it.config.ocean == config.ocean)
             }
@@ -142,21 +165,17 @@ object WorldGenerationEngine {
             // stored and already the thing every later stage reads.
             ?: run {
                 val cut = SeaLevelStage.apply(erosion.height, config)
-                // The provisional climate (H2). Ice is a mass balance, and a mass balance needs
-                // the rainfall as well as the temperature, so the ice can no longer be decided
-                // from latitude and altitude alone the way it was: the whole climate stage runs
-                // here, on the terrain as it stands before the carving, purely to produce the
-                // snow balance the mask is taken from. Nothing else in the pipeline sees it — the
-                // real ocean and the real climate are computed below, after the ice has cut, as
-                // they always were.
+                // The provisional climate. Ice is a mass balance, and a mass balance needs the
+                // rainfall as well as the temperature, so the ice cannot be decided from latitude
+                // and altitude alone: the whole climate stage runs here, on the terrain as it
+                // stands before the carving, purely to produce the snow balance the mask is taken
+                // from. Nothing else in the pipeline sees it — the real ocean and the real climate
+                // are computed below, after the ice has cut.
                 //
                 // On a still ocean, deliberately: the gyre solve is the expensive half of a
-                // climate (2.1 s at 2048 against the march's 1.5 s) and it is worth almost
-                // nothing to the ice. Measured on the four standard seeds at 512, giving the
-                // provisional march the real currents instead of a still sea moves 62-128 cells
-                // of a 4,000-13,000 cell ice mask, 0.5-1.6% of it. The finished map's ice, which
-                // is what the reader sees, is classified from the real climate below and does
-                // see them.
+                // climate and it is worth well under two per cent of the ice mask. The finished
+                // map's ice, which is what the reader sees, is classified from the real climate
+                // below and does see the currents. See REALISM_PLAN.md, H2, for both figures.
                 val provisional =
                     if (config.glaciation.enabled && config.climate.snowBalance &&
                         cut.landCellCount > 0

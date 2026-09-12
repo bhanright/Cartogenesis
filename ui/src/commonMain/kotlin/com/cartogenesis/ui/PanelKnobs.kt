@@ -1,6 +1,8 @@
 package com.cartogenesis.ui
 
 import androidx.compose.runtime.mutableStateMapOf
+import com.cartogenesis.cartography.MapStyle
+import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
@@ -47,7 +49,13 @@ internal enum class PanelSection(val title: String) {
     /** Who lives there. */
     PEOPLES("Peoples"),
 
-    /** Nothing about the world; everything about the drawing of it. */
+    /**
+     * Nothing about the world; everything about the drawing of it.
+     *
+     * Style and view used to be here, as two stacked columns of chips twenty-four rows long. F3
+     * lifts both onto the map, where what they do can be seen — see [MapChrome]. What is left is
+     * the pair of marks that are about the drawing and not about the world.
+     */
     CARTOGRAPHY("Cartography"),
 
     /** Not on the panel. Declared here so the guard can see the whole interface at once. */
@@ -396,6 +404,48 @@ internal object Knobs {
     )
 
     fun inSection(section: PanelSection): List<Knob> = all.filter { it.section == section }
+}
+
+/**
+ * The two choices that moved out of the panel and onto the map: which style, which view.
+ *
+ * They are not knobs, and forcing them into [Knob] would have been a lie — a knob is a row in a
+ * section, and these are a segmented control and a menu over the chart itself. But the same
+ * argument that made the panel data applies to them: [PanelKnobsTest] has to be able to ask "can
+ * the interface still set the style?" without driving a composition, and the guard F2 wrote must
+ * not go quiet merely because the control it was watching moved. So the toolbar is declared here
+ * too, and `MapChrome` draws exactly this.
+ *
+ * Both writers are `RenderOptions.copy`, so neither ever regenerates a world: changing the style
+ * or the view re-renders the picture the world already is.
+ */
+internal object MapChrome {
+
+    /** Nine, in the order [MapStyle] declares them, which runs modern to hand-drawn. */
+    val styles: List<MapStyle> = MapStyle.entries
+
+    /** Fifteen, the two readable ones first and the diagnostics behind them. */
+    val views: List<MapView> = MapView.entries
+
+    fun withStyle(options: RenderOptions, style: MapStyle): RenderOptions =
+        options.copy(style = style)
+
+    fun withView(options: RenderOptions, view: MapView): RenderOptions =
+        options.copy(view = view)
+
+    /**
+     * Whether the style has any say over what is on screen.
+     *
+     * The diagnostic views carry meaning in their colours — a rainfall map drawn in Vellum's
+     * earths would be a lie — so they ignore the style. The toolbar says so rather than leaving a
+     * row of controls that quietly do nothing.
+     */
+    fun styleApplies(view: MapView): Boolean = view.showsTerrain
+
+    /** The one line of small print the toolbar carries: what this style is, or why it is unused. */
+    fun note(options: RenderOptions): String =
+        if (styleApplies(options.view)) options.style.detail
+        else "The ${options.view.label.lowercase()} view ignores the style: its colours mean something."
 }
 
 /**

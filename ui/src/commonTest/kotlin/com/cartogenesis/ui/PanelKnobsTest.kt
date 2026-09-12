@@ -1,5 +1,8 @@
 package com.cartogenesis.ui
 
+import androidx.compose.ui.geometry.Offset
+import com.cartogenesis.cartography.MapStyle
+import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
@@ -283,5 +286,116 @@ class PanelKnobsTest {
     fun `no two knobs are called the same thing`() {
         val labels = Knobs.all.map { it.label }
         assertEquals(labels.size, labels.toSet().size, "duplicate label in $labels")
+    }
+
+    // ---- the toolbar over the map, which is where style and view went ------------------------
+
+    /**
+     * F3's half of the same guard.
+     *
+     * Style and view were two of the things the old panel could set, and F3 took them off the
+     * panel. That is exactly the move this test exists to catch, so the coverage does not lapse
+     * because the control moved: it now asks the *toolbar* whether the interface can still reach
+     * every style and every view, in the same walk-the-declaration way. Deleting a style from
+     * `MapChrome.styles`, or having `withStyle` write the view by mistake, fails here.
+     */
+    @Test
+    fun `style and view are no longer knobs on the panel`() {
+        assertTrue(
+            Knobs.inSection(PanelSection.CARTOGRAPHY).none {
+                it.label == "Style" || it.label == "View"
+            }
+        )
+        // Cartography keeps its own two marks, so the section is not left empty.
+        assertEquals(
+            listOf("Relief shading", "Coastline"),
+            Knobs.inSection(PanelSection.CARTOGRAPHY).map { it.label }
+        )
+    }
+
+    @Test
+    fun `the toolbar offers every style and every view`() {
+        assertEquals(MapStyle.entries.toList(), MapChrome.styles)
+        assertEquals(MapView.entries.toList(), MapChrome.views)
+        assertEquals(9, MapChrome.styles.size)
+        assertEquals(15, MapChrome.views.size)
+    }
+
+    @Test
+    fun `the toolbar can still set every style and every view, and nothing else`() {
+        MapChrome.styles.forEach { style ->
+            assertEquals(view.copy(style = style), MapChrome.withStyle(view, style), style.label)
+        }
+        MapChrome.views.forEach { seen ->
+            assertEquals(view.copy(view = seen), MapChrome.withView(view, seen), seen.label)
+        }
+        // Writing back what is already showing changes nothing, the cheap general form.
+        assertEquals(view, MapChrome.withStyle(view, view.style))
+        assertEquals(view, MapChrome.withView(view, view.view))
+    }
+
+    /** Neither one regenerates: both are `RenderOptions`, so the world is untouched by both. */
+    @Test
+    fun `the toolbar's two choices leave the marks beside them alone`() {
+        val marked = view.copy(showBorders = true, showHillshade = false, riverScale = 2f)
+        val restyled = MapChrome.withView(MapChrome.withStyle(marked, MapStyle.SCROLL), MapView.WIND)
+        assertEquals(MapStyle.SCROLL, restyled.style)
+        assertEquals(MapView.WIND, restyled.view)
+        assertTrue(restyled.showBorders)
+        assertFalse(restyled.showHillshade)
+        assertEquals(2f, restyled.riverScale)
+    }
+
+    /**
+     * The toolbar's small print. A diagnostic view's colours mean something, so the style is not
+     * applied to it and the strip has to say so rather than leaving nine controls that do nothing.
+     */
+    @Test
+    fun `the toolbar says when the style is not being used`() {
+        assertTrue(MapChrome.styleApplies(MapView.FANTASY))
+        assertTrue(MapChrome.styleApplies(MapView.POLITICAL))
+        assertFalse(MapChrome.styleApplies(MapView.RAINFALL))
+
+        assertEquals(MapStyle.ATLAS.detail, MapChrome.note(view))
+        val note = MapChrome.note(view.copy(view = MapView.RAINFALL))
+        assertTrue("rainfall" in note, note)
+        assertTrue("ignores the style" in note, note)
+    }
+
+    // ---- the camera, whose readout is the other half of the legend ---------------------------
+
+    @Test
+    fun `the zoom buttons step and clamp, and Fit returns to the whole sheet`() {
+        val camera = MapCamera()
+        assertEquals(100, camera.percent)
+
+        camera.step(MapCamera.STEP)
+        assertEquals(115, camera.percent)
+        camera.step(1f / MapCamera.STEP)
+        assertEquals(100, camera.percent)
+
+        repeat(100) { camera.step(MapCamera.STEP) }
+        assertEquals(MapCamera.MAX_ZOOM, camera.zoom)
+        repeat(200) { camera.step(1f / MapCamera.STEP) }
+        assertEquals(MapCamera.MIN_ZOOM, camera.zoom)
+
+        camera.about(Offset(120f, 80f), 2f)
+        camera.fit()
+        assertEquals(1f, camera.zoom)
+        assertEquals(Offset.Zero, camera.pan)
+    }
+
+    /** Zooming about a point has to leave that point where it was, or the map slides away. */
+    @Test
+    fun `zooming about a point keeps that point under the cursor`() {
+        val camera = MapCamera()
+        val anchor = Offset(300f, 200f)
+        // The point of the map that is under the anchor: it must be the same point afterwards.
+        val before = (anchor - camera.pan) / camera.zoom
+        camera.about(anchor, 2f)
+        val after = (anchor - camera.pan) / camera.zoom
+        assertEquals(2f, camera.zoom)
+        assertEquals(before.x, after.x, 0.01f)
+        assertEquals(before.y, after.y, 0.01f)
     }
 }

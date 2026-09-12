@@ -49,6 +49,14 @@ These are the habits that have found every substantive bug in this project. They
 7. **Reports carry numbers.** A subagent's final report says what changed, the before/after
    figures its guard measured, what the render showed, and anything it could not verify. The
    orchestrator decides from the report; the diff is there if the report raises a question.
+8. **The graphics card is part of the design, not an afterthought.** (William, 2026-09-12.) Any
+   new stage or pass whose cost is per-cell or per-pixel arithmetic - a sweep, a relaxation, a
+   distance field, a raster - is specified with a GPU path from the start, behind the same seam
+   erosion uses (`ErosionAccelerator`-shaped: suspend, returns null to fall back to the CPU),
+   OpenGL compute on the desktop and WGSL on the web, with a CPU-versus-GPU tolerance test and a
+   measured speedup in the report. Work that is a graph walk, a priority queue or a region labelling
+   stays on the CPU and the spec says so. The CPU path remains the reference; saves carry the
+   world, so the two need not be bit-identical.
 
 ## Session protocol
 

@@ -507,6 +507,43 @@ subsided below it and the result is a string of gulfs and lakes joined by sills 
 
 ---
 
+### E5. Deltas and fans with natural outlines — Opus
+
+*Dependencies: E1, H5 merged. Requested 2026-09-12: William, looking at 718106 at 2048, "some
+of these deltas and features in your example are too square and artificial looking" — a lobe
+that is a perfect half-disc and, beside it, flat rafts of new land with straight edges and
+right-angle corners, one with the river running across it. The 2048 review found the same on
+59758's north and east coasts, identical before and after H5, so it is B3/E1's deposition.* A
+delta is a fan: its outline follows distance from the mouth bent by the depth it builds into,
+not the grid and not a compass.
+
+- Measure first: a mask of deposition per mechanism (sea-mouth lobe, lake-inflow fan, alluvial
+  fan, anything else) on 718106 and 59758 at 1024 and 2048, to find which makes the half-discs
+  and which the rafts. Two hypotheses to test: `fan` hands `accepts`/`levelOf` a breadth-first
+  step count as "distance", which over eight neighbours is Chebyshev and its iso-lines are
+  squares, so any fan not shaped by `lobeReach` grows square; and `lobeReach` is a cosine lobe
+  with per-cell wobble too fine to read, so a river arriving along a grid axis lays a half-disc.
+- Outlines from Euclidean distance bent by depth: reach(θ) = R·(sides + (1−sides)·max(cos θ,0)^p)
+  ·(1 + a·s(θ)) with s a two-to-four-harmonic wobble whose phases are hashed from the mouth id,
+  and the sediment filling shallow cells first (the cost of a cell is its depth below the lobe's
+  level), so a delta progrades across a shelf and stubbily into deep water. Every fan, including
+  the lacustrine and alluvial ones, uses Euclidean distance — cone segments, not squares.
+- A delta plain that reads as a delta at 2048: `lobeLevel`'s seaward slope and the trunk's groove
+  kept; two to five distributary grooves per lobe above a stated size, hashed from the mouth id,
+  radiating apex to rim, that the D8 routing follows — or nothing.
+- Guards, each shown failing on the current code: the share of deposition perimeter in straight
+  grid-axis runs longer than a stated fraction of the lobe reach below a bar (the rafts give runs
+  of ten cells and more); per-lobe rim radius max/min at or above a stated ratio with harmonic
+  content beyond the first order (a half-disc fails); on a synthetic coast with a shelf on one
+  side of the mouth and deep water on the other, the lobe reaches further over the shelf by a
+  stated factor; lobe area against catchment reported against Syvitski & Saito (2007); mass
+  budget exact; `DeltaMouthTest`, `RiverEndingsTest`, `DepositionTest` and H5's estuary and
+  pocket guards hold; time at 2048 reported. Rule 8: the fan is a graph walk from the mouth and
+  stays on the CPU.
+- Render 718106 and 59758 at 2048, crop every delta and raft before and after, look, and put the
+  crops in the report. Runs in parallel with H5b, which owns the incision loop, the post-cut
+  outlet and the desert guard; E5 stays in the deposition and fan code.
+
 ## Track F — the interface
 
 *Added 2026-09-12 at William's request: "revamp the UX a bit to make it look less generic and
@@ -1168,6 +1205,7 @@ guard reported, so the next chunk knows its baseline.
 | H2 Snow mass balance | Opus | done | 2026-09-12 | 801999a (merge 349c752) | SnowBalance: accumulation = each half-year's precipitation x a snow fraction ramped over -1..+3 C, ablation = positive-degree-day melt at 4.5 mm/degree-day (Braithwaite 1995, Hock 2003) with half-year means turned into degree-days by Calov and Greve 2005 (sigma 4.5 C); ClimateConfig.snowBalance, false reproduces main bit for bit (elevation and biome checksums pinned on 7/42/1234/99); provisional balance before glaciation reuses the seasonal fields on a still ocean (+66/298/1408 ms at 512/1024/2048; solving the gyres would cost 2.1 s and move 0.5-1.6% of the mask); balance 1/3/10 ms so no GPU, the seam cut and SnowBalanceAuditTest re-checks the 50 ms line; ice share of land 7/42/1234/99: 41.9/18.3/26.0/28.8 -> 8.4/3.9/12.0/12.6%, pooled 28.8 -> 9.2% vs Earth 10.1%; cold dry interior 39.9 -> 0.0% ice, wet quarter iced where the dry quarter is not (the control ran backwards), shown failing off; carving mask reads a Pleistocene world: GlaciationConfig.glacialMaximumC 6 C (Tierney 2020) as a polar-amplified ramp 2 C equator to 12 C pole, 26% of seed 42 under maximum ice vs Earth ~25% while the map draws today's 3.9%; lake-density guard restated at 1024 (6.93x, control 1.54x), resolution bar 1.7 -> 2.0 with derivation; desert-in-band, cultures, realms, comb unmoved; render: seed 7's northern third from white to tundra with ice on the polar margin and high wet ground, biome shares elsewhere identical to 0.1% |
 | H5 Sea-level history | Opus | done | 2026-09-12 | 3cc827e + 8e24cd3 (merge 84216d9) | SeaConfig.lowstand 0.015 (Earth's 120 m against 8 km of relief) holds the hydraulic base level down for rounds 0-8 and walks it up over 9-11, one scalar per round so G1 ports it free; after the cut every water body is 8-labelled wrapping in x and any non-ocean body no larger than the Caspian (enclosedSeaMaxShare 0.00073 of the map) becomes land at its own height, the fill and the water balance deciding lake or playa - the cap added after measuring its absence (3-5% of the map flipping, a lake 4x the Caspian, rift gulfs turned to lakes, desert-in-band to 82%); solving the cut for ocean coverage written and reverted (drowns E4's bridges); H1's aulacogens gained along-strike roughness so the notch measures a slope, LakesConfig.minCells scales as an area, OutletResolutionTest green at 512/1024/2048 on both seeds; 512 estuary mouths 12/14/3 -> 35/52/62, pockets 87/85/533 -> 0, 2048 estuaries 3 -> 32 and 1 -> 9, pockets 925/305 -> 0; shown failing with lowstand 0 and enclosure off; moved: DepositionTest land 6226 -> 6382, rift bridges 3 -> 2, ribbon 1.05 -> 1.10, meridional pooled, comb 0.035 -> 0.05 and desert 85/75 -> 80/65 (both handed to H5b as defects, not bars); new deviations: drowned basins to 1.1% of land, lowstand roughens every coast, inland seas above the cap stay sea |
 | H5b Channels cannot pond, drowned basins get an outlet, desert guard by band | Opus | queued | | | |
+| E5 Deltas and fans with natural outlines | Opus | queued, parallel with H5b | | | |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |

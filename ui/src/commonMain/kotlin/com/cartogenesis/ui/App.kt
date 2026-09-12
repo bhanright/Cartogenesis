@@ -1199,9 +1199,10 @@ private fun LabelChip(label: MapLabel) {
  * listing for worlds already saved - so a world you were looking at could not be named or returned
  * to without saving it first.
  *
- * Typed text is held locally and only applied on Enter or on losing focus, rather than on every
- * keystroke: regenerating is expensive, and applying as you type would kick off a generation for
- * each digit of a six-digit number.
+ * Typed text is held locally and applied only on Enter or on the Go button, never on every
+ * keystroke and never on losing focus: regenerating is expensive, applying as you type would
+ * kick off a generation for each digit of a six-digit number, and applying on focus loss started
+ * a world the moment the reader clicked elsewhere to change another setting (William, 2.0.1).
  */
 @Composable
 private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
@@ -1230,7 +1231,6 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
             textStyle = MaterialTheme.typography.bodySmall,
             modifier = Modifier
                 .weight(1f)
-                .onFocusChanged { if (!it.isFocused) apply() }
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                         apply()

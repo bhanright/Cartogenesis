@@ -80,6 +80,11 @@ class IncrementalReuseTest {
             // is land, so this moves `isLand` and everything downstream of it without touching a
             // single height.
             "enclosedSea" to base.copy(sea = base.sea.copy(enclosedSeaIsLand = false)),
+            // H5b: the outlet pass that runs on the far side of the cut. Like the enclosure rule
+            // above it changes only the sea stage's own two fields — the notch it cuts lives in
+            // `relativeElevation`, and where the notch reaches the waterline it moves `isLand` too
+            // — so a stale sea stage would carry an undrained basin through every stage below it.
+            "postCutOutlet" to base.copy(sea = base.sea.copy(postCutOutlet = false)),
             // Glaciation carves the sea stage's own field, in the same step, so its guard is the
             // sea stage's guard. Turning it off rather than nudging a number, because off is the
             // largest change the section can make and so the loudest failure if it went stale.

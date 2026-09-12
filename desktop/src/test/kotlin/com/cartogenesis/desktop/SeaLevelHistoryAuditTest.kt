@@ -74,8 +74,51 @@ class SeaLevelHistoryAuditTest {
                 "seed $seed at 2048: ${now.estuaries} river mouths inside an inlet against " +
                     "${was.estuaries} before the chunk"
             )
+            // H5b, at the size the author exports at. A basin the enclosure rule converts from
+            // unreachable sea to land is filled by the drainage to its sill, and until
+            // `SeaConfig.postCutOutlet` nothing could cut that sill: the notch inside the
+            // hydraulic rounds ran while the ground was still under the provisional sea, and the
+            // water balance has nowhere to drain a floor that is already below sea level. On
+            // 718106 at 2048 that left a Caspian-shaped lake filling a coastal rift trough, which
+            // is what the render review after H5 and F6 singled out. The bar is the same one
+            // `OutletIncisionTest` and `OutletResolutionTest` hold every other lake to: the
+            // Caspian's 0.249% share of Earth's land.
+            val drowned = largestDrownedShare(after)
+            println(
+                "SEA HISTORY 2048 seed %d: largest drowned basin %.4f%% of land, %.2fx the Caspian"
+                    .format(seed, drowned * 100, drowned / caspianShare)
+            )
+            assertTrue(
+                drowned < caspianShare,
+                "seed $seed at 2048 keeps a basin below the sea-level cut holding " +
+                    "${"%.4f".format(drowned * 100)}% of its land, " +
+                    "${"%.2f".format(drowned / caspianShare)} times the Caspian's share"
+            )
         }
         println("SEA HISTORY 2048 wrote ${dir.absolutePath}; $gains")
+    }
+
+    /** The Caspian's 371,000 km² against Earth's 148.94 M km² of land, as `OutletIncisionTest`. */
+    private val caspianShare = 371_000.0 / 148_940_000.0
+
+    /**
+     * The largest lake standing on ground below the sea-level cut, as a share of the world's land.
+     *
+     * Below the cut is read off `erosion.height` against `sea.threshold` rather than off the
+     * shoreline-relative field, because glaciation rewrites the second one between the cut and
+     * here. The same split `OutletIncisionTest.drownedLakes` makes, for the same reason.
+     */
+    private fun largestDrownedShare(world: WorldMap): Double {
+        val drowned = BooleanArray(world.rivers.lakes.lakes.size)
+        val ground = world.erosion.height.data
+        val cut = world.sea.threshold
+        world.rivers.lakes.lakeId.forEachIndexed { cell, id ->
+            if (id >= 0 && ground[cell] < cut) drowned[id] = true
+        }
+        val largest = world.rivers.lakes.lakes
+            .filterIndexed { id, _ -> drowned[id] }
+            .maxOfOrNull { it.cellCount } ?: 0
+        return largest.toDouble() / world.sea.landCellCount
     }
 
     /** The same measurement `SeaLevelHistoryTest` makes at 512, copied because modules cannot share tests. */

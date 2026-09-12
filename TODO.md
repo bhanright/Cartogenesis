@@ -13,6 +13,24 @@
   and from 30 to 15; at 512, per mechanism, the share of a fan's perimeter in runs longer than one
   lobe reach falls from 2.0%/1.8% to 0.7%/0.0%.
 
+- **Channels pond into thin grid-bearing lakes** (2026-09-12, H5b) — the incision is now a pass of
+  its own, walking the D8 tree from the outlets upstream so a cell's receiver is already final when
+  the cell is cut, and refusing the part of the cut that would take it below: Braun and Willett's
+  `z_i' >= z_r'`. The cap it replaces was written in shoreline-relative units and spent on the
+  height field, so it had been letting a well-fed channel cell be cut by about twice the height it
+  stood above its own receiver, every round. Census over the twelve rounds at 512: the incision made
+  6383 / 10 / 5 such holes on 718106 / 42 / 7 and now makes none; the channel cells the map draws as
+  standing water fall 1627 → 780, 106 → 54 and 323 → 265; the comb share at 1024 goes 2.4/4.9/2.6%
+  to 2.2/4.4/1.7% and its bar 5% → 4.5%. The residual is the alluvial-dam item above.
+- **Over-large filled basins, the drowned kind** (2026-09-12, H5b) — `SeaConfig.postCutOutlet` runs
+  the breach again on the far side of the cut, over the basins the enclosure rule made, with the
+  base-level limit lifted (the water behind one of these sills stands below the sea) and the cut
+  continued back across the lake bed, which is the other half of a sill once the target goes below
+  the old water surface. A basin whose outflow can take its sill to the waterline becomes an arm of
+  the sea; one whose cannot keeps a lake below sea level, which is the Caspian. Largest drowned
+  basin at 512 as a share of land: 718106 1.13% → 0.26%, 99 0.61% → 0.07%, 43 unmoved at 0.16%
+  because its outflow cannot cut its sill. Asserted against the Caspian's 0.249% of land in
+  `OutletIncisionTest`, `OutletResolutionTest` and `SeaLevelHistoryAuditTest`.
 - **`LakesConfig.minCells` scales as an area** (2026-09-12, H5) — twelve cells at 512, 48 at
   1024, 192 at 2048, the same piece of ground at every grid; the 2048 sprinkle of ponds that 512
   never had is gone, and `OutletResolutionTest` holds at 512/1024/2048 on both of the author's
@@ -233,19 +251,6 @@
   neighbour. Real channels wander. The cure is a routing that carries direction between cells
   (D-infinity, or D8 with a seeded low-amplitude perturbation of the surface it reads), pinned
   by a straight-run guard against the current figure. Found 2026-09-12.
-- **Over-large filled basins, the drowned kind.** E1's outlet incision and E2's water balance
-  size the lakes the drainage makes; what they cannot reach is a basin the sea-level cut converts
-  from unreachable sea to land (H5), because the notch ran while that ground was under the
-  provisional sea and the floor is below sea level. On 718106 at 512 one fills to 1.11% of the
-  land, four times the Caspian's share; at 2048 the same trough holds a Caspian-shaped lake of
-  0.13% of the map. The repair is E1's breach run once more after the cut, so a basin that
-  overflows cuts its sill and, if the notch reaches below sea level, becomes an arm of the sea
-  (H5b in REALISM_PLAN.md). Raised 2026-09-11, narrowed 2026-09-12.
-- **Channels pond into thin grid-bearing lakes.** The incision can leave a cell lower than its
-  D8 receiver, the fill ponds it, and along a channel the ponds line up into the bars the comb
-  measurement catches; H5's lowstand made it worse (2.8% → 4.5% of standing water on seed 42 at
-  1024). FastScape's bound, `z_i' ≥ z_r'` in downstream-to-upstream order, removes the class (H5b).
-  2026-09-12.
 - **The raft at 718106's rift mouth is not a fan.** E5 recorded the mechanism of every raised cell
   and rendered the mask at 2048: the flat straight-edged terrace immediately above the nested
   crescent lakes on the southern rift — the one in the author's own crop, with the river running
@@ -266,6 +271,15 @@
   country from four lakes to three where the control clause asks for three times the un-glaciated
   count. The fix is a line; what it needs is a chunk that can re-derive B4's bars against the lakes
   it leaves. 2026-09-12.
+- **An alluvial dam may stand four times higher than the rule allows.** Deposition is forbidden to
+  raise a cell as high as the ground draining into it, and the margin is computed off `settled`,
+  which is seeded from the shoreline-relative field and then updated with height-unit amounts — so
+  the room a cell is given is about `1/landRange` times the room the rule means, four-odd on a
+  typical world. Found by H5b's pit census: with the incision clamped, the spoil is what puts
+  channel cells below their receivers (420 over the rounds on seed 42 at 512, against 344 with the
+  clamp off), and that residual is what keeps the comb share at 4.4% on that seed rather than the
+  3.5% H5b aimed at. The fix is to hold `settled` in the height field's own units; it belongs with
+  E5's deposition work or G1's, both of which touch the same arithmetic. 2026-09-12. Handed to E6 on 2026-09-12.
 - **Lakes never feed the moisture march.** Lakes are decided two stages after the climate, so no
   lake evaporates into the air above it: no lake-effect rain downwind of a Caspian or a Great
   Lake, and the interiors that used to drink from H5's spurious sea pockets are drier now that

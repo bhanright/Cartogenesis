@@ -123,8 +123,18 @@ class DepositionTest {
      * several times that. The cut itself is where it has always been — exactly 62% of the cells
      * still lie below it — and `PipelineTest`'s land-fraction promise still holds inside its own
      * tolerance.
+     *
+     * And again at H5b, which moves the shoreline twice over and in both directions. The receiver
+     * clamp changes how deep the incision may cut in a round — the cap it replaces was written in
+     * the shoreline-relative units the drop is measured in and spent on the height field, so it
+     * allowed a well-fed channel cell to be cut by about twice the height it stood above its own
+     * receiver — and a less deeply incised land is cut differently by a percentile. The post-cut
+     * outlet pass then hands part of what the enclosure rule gave back: a converted basin whose
+     * outflow can cut its sill to the waterline becomes an arm of the sea again. Measured at 128 on
+     * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
+     * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
      */
-    private val startingPointLand = 6382
+    private val startingPointLand = 6327
 
     @Test
     fun `every round conserves mass`() {

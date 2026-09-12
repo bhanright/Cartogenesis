@@ -81,6 +81,30 @@ Caspian, the Dead Sea, the Qattara) or dries to a playa. Measured at 512: 73/78/
 358/430/2093 cells on seeds 7/42/1234 before, none after, and 37/41/60 river mouths ending in one
 before, none after. At 2048, 925 pockets on 718106 and 305 on 59758, none after.
 
+**A drowned basin gets its outlet cut too.** What the rule above hands the river stage is a hollow
+whose floor lies below sea level and whose rim is ordinary land, and the depression fill then raises
+the hollow to that rim — which can be a great deal wider than the water that was there, because the
+ground around a coastal saucer is low. Neither of the two mechanisms that size the other lakes can
+reach it: the outlet notch runs inside the hydraulic rounds, while that ground is still under the
+provisional sea, so there is no lip for it to cut and no outflow to cut with, and the water balance
+cannot drain a floor that is already below sea level. So the notch is run again on the far side of
+the cut, on the same terms — the same stream power, the same `outletIncisionRatio`, the same drop
+limits in the land's own relief — with one limit lifted and one addition. The limit is the sea:
+inside the rounds a river may not cut below it, because it is the base level a river grades to, but
+the water behind one of these sills stands *below* the sea and the river crossing the sill is
+grading to that, so here the cut may reach the waterline, and where the outflow has the power to
+take it there the sill becomes water and the basin is an arm of the sea — a sound, or a ria with a
+narrow mouth, which is the Bosphorus and the Black Sea behind it. The addition follows from the
+same lift: once the target is below the old lake surface, the lake bed between the deep water and
+the lip is part of the sill too, so the channel is cut back across it, up the inflow with the
+largest catchment, exactly as an outlet incises headward across a draining floor. Where the outflow
+has not the power, the sill stands lower than it did and the basin keeps whatever the balance then
+allows: a lake below sea level, which is the Caspian, the Dead Sea and the Qattara. Measured at 512,
+the largest such basin covers 1.13% of seed 718106's land with the pass off and 0.26% with it on,
+0.61% and 0.07% on seed 99; seed 43's does not move at all, because its outflow cannot cut its sill.
+Eight passes at most, the loop stopping when a pass finds nothing left to cut: 718106's takes seven
+to stop retreating, seed 99's one.
+
 **Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidth` of a
 coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
 `shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
@@ -126,6 +150,26 @@ reach also carries two to five distributary grooves radiating from its apex — 
 mouth, so the same delta has the same channels at every resolution — and any groove whose ray would
 run into the back of the coast rather than reach the water is not cut, because a channel that ends
 in a pit is not a channel.
+
+**A river cannot end a round below its own bed.** Stream-power incision lowers a cell by what its
+own discharge and its own slope allow and says nothing about what the cell below it is doing in the
+same round, so two neighbours on one channel are cut by different amounts and often enough the upper
+one is cut further — it carries nearly the same catchment down a steeper reach. The round then ends
+with a hole in the river's bed, the next round's depression fill has to raise that hole to route
+through it, and along a channel the holes line up into a rank of thin bars of standing water lying
+at a grid bearing. Every landscape-evolution model since Braun and Willett (2013, the FastScape
+scheme) bounds a node's new elevation below by its receiver's new elevation, and so does this one:
+the incision is a pass of its own, walking the D8 tree from the outlets upstream so that a cell's
+receiver is already final when the cell is cut, and refusing the part of the cut that would take it
+below. Ties do not arise — each cell has one receiver and the network is a tree. The census that
+justified it counted the holes each of a round's mechanisms makes, on seeds 718106, 42 and 7 at 512
+over the twelve rounds: the incision made 6383, 10 and 5, the outlet notch none at all on any seed
+in any round, the thermal relaxation none it did not also take away, and the spoil a few hundred
+where a floodplain laid at the very end stands above the channel feeding it — an alluvial dam, which
+is a real landform and is left alone. With the clamp the incision makes none, and the channel cells
+the map ends up drawing as standing water fall from 1627 to 780 on seed 718106, 106 to 54 on 42 and
+323 to 265 on 7. On the author's own world at 1024 the lakes go from 25 to 17 and the standing water
+from 1.60% of the land to 0.49%. See `ReceiverClampTest`.
 
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as
@@ -198,20 +242,32 @@ with ten endorheic basins and 132 playa cells.
 
 ## Known deviations
 
-**An inland sea is left as sea, and a drowned basin can hold more water than the Caspian.** The
-enclosure rule above stops at the largest lake Earth has, 0.073% of the surface: a body of
-unreachable water larger than that is a piece of the sea walled off by a sliver of ground, and
-calling it land invents a landform Earth has no example of — it would also turn a flooded rift's
-gulfs into lakes and take `RiftSegmentationTest`'s chain apart. So one to five such inland seas
-survive on each of the standard seeds, holding 767 to 8386 cells at 512, and they are drawn as
-ocean. The bodies that *are* converted are then filled by the drainage, and a saucer no larger than
-the cap can flood a good deal wider than itself once the water reaches its rim: on seed 718106 at
-512 one comes out at 1.11% of the land, four times the Caspian's share of Earth's. Neither the
-outlet notch nor the water balance can help — the notch runs inside the hydraulic pass, while that
-ground is still under the provisional sea, so there is no lip for it to cut, and the basin's floor
-is below sea level, so there is nowhere for the water to drain to. The repair is a second outlet
-pass after the cut rather than only inside the rounds; until then `OutletIncisionTest` and
-`OutletResolutionTest` measure the drowned basins apart from the ones the notch owns and print both.
+**An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
+0.073% of the surface: a body of unreachable water larger than that is a piece of the sea walled off
+by a sliver of ground, and calling it land invents a landform Earth has no example of — it would
+also turn a flooded rift's gulfs into lakes and take `RiftSegmentationTest`'s chain apart. So one to
+five such inland seas survive on each of the standard seeds, holding 767 to 8386 cells at 512, and
+they are drawn as ocean rather than as the Caspians they might be. The bodies below the cap are
+converted, and since H5b their outlets are cut like everyone else's, so a converted saucer no longer
+floods far wider than itself: `OutletIncisionTest` and `OutletResolutionTest` still measure the
+drowned basins apart from the ones the in-round notch owns, but both figures are now held to the
+same bar. The cap itself is still a share of the map rather than an area in square kilometres, which
+is S1's business in `REALISM_AUDIT.md`; 0.073% is the Caspian's share of *Earth's* surface, and this
+map's surface is not Earth's.
+
+**There is two and a half times as much cold desert as Earth carries.** Measured as a share of the
+land poleward of 45 degrees and divided by each world's own desert share of all its land, seeds
+7/42/1234/99 read 0.25, 0.55, 0.14 and 0.34 against Earth's 0.12, pooling to 0.31 — over the factor
+of three this audit holds a seed to and the factor of two it holds the pool to. The tropics, which
+are the defect the desert guard was written for, are at exactly zero on every seed. What the
+poleward figure is, on the evidence, is the interiors drying: the enclosure rule took several
+thousand cells of *inland evaporation* out of the moisture march — hollows below the percentile cut
+that no ocean could reach, which the march had been drinking from as though they were open water —
+and every one of them that now holds a lake is water the march still does not see, because lakes are
+decided two stages after the climate. The repair is a provisional lake mask before the march, the
+way the ice already gets a provisional climate before it (W3 in `REALISM_AUDIT.md`, and "Lakes never
+feed the moisture march" in TODO.md). Measured, printed with Earth's figure beside it and left
+un-asserted until then, rather than given a bar wide enough to pass.
 
 **The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
 everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the
@@ -276,10 +332,25 @@ dry. Getting them there took two mechanisms rather than a tuned constant.
   moisture — remove that scaling and every latitude re-moistens alike, at which point deserts stop
   preferring the subtropics at all. Measured: placement falls from 90% to 34%.
 
-Verified by `GeographyAuditTest`, which asserts at least 85% of desert falls between 15 and 45
-degrees; all four audited seeds manage 100%. Desert covers about 4.6% of land without seasons
-and about 2% with them — see "The year has two halves" below for why, and for the third mechanism
-seasons made necessary.
+Verified by `GeographyAuditTest`, by bands since H5b. The old measure asked what share of a world's
+desert *cells* fell between 15 and 45 degrees, which counts desert against desert — so the answer
+moved whenever a world got wetter or drier for reasons that had nothing to do with placement, and
+its bar walked 88 → 85 → 82 over three chunks. Worse, it pooled Earth's two out-of-band categories,
+which are not the same thing: Earth's out-of-band desert is essentially all *poleward* of 45 — the
+Gobi's north, Patagonia, the Kazakh deserts — and essentially none of it equatorward of 15, while
+the defect the guard was written for was desert on the wettest rows of the map. So desert is now
+measured as a share of the land in each of three bands, 0–15, 15–45 and 45–90 degrees with the
+hemispheres pooled, divided by that world's own desert share of all its land, against the same
+ratio for Earth. Earth's figures come from Peel, Finlayson and McMahon (2007): BW is 19.1% of its
+land (BWh 14.2 + BWk 4.9), and a census of the named deserts against the land in each band puts
+5.2% of the tropics, 39.2% of the horse latitudes and 2.2% of the poleward band under desert —
+ratios of 0.27, 2.05 and 0.12. Measured on seeds 7/42/1234/99 at 512: **0.00** in the tropics on
+every seed, 2.83/2.52/2.91/2.40 in the horse latitudes against Earth's 2.05, and 0.25/0.55/0.14/0.34
+poleward against Earth's 0.12. The first two are asserted, within a factor of two pooled and three
+per seed; the third is a deviation, recorded below. Shown to bite on a world with
+`landRecoveryRate` at zero, where the tropics go to 1.15/2.30/2.46/2.46 against Earth's 0.27.
+Desert covers about 4.6% of land without seasons and about 2% with them — see "The year has two
+halves" below for why, and for the third mechanism seasons made necessary.
 `DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,
 its upwind climb, and how far its air travelled over land.
 

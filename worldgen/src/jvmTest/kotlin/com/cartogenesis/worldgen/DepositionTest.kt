@@ -119,12 +119,12 @@ class DepositionTest {
      * moved the shoreline". H5 does. Water the ocean cannot reach is no longer sea: a body of water
      * with no way out is a lake, and it is marked land at the height it already stands at so the
      * river stage can decide what it holds. Only up to the size of the largest lake Earth has,
-     * which on seed 42 at 128 comes to 116 cells, 0.7% of the map; without that cap it would be
-     * 604 cells and 3.7%. The cut itself is where it has always been — exactly 62% of the cells
+     * which on seed 42 at 128 comes to 156 cells, 1.0% of the map; without that cap it would be
+     * several times that. The cut itself is where it has always been — exactly 62% of the cells
      * still lie below it — and `PipelineTest`'s land-fraction promise still holds inside its own
      * tolerance.
      */
-    private val startingPointLand = 6342
+    private val startingPointLand = 6382
 
     @Test
     fun `every round conserves mass`() {

@@ -1573,6 +1573,19 @@ data class WorldGenConfig(
                 // none of them is touched.
                 minTroughLength = (glaciation.minTroughLength * scale).toInt().coerceAtLeast(2)
             ),
+            // A lake is an area on the map, not a number of samples of it. `minCells` is a count of
+            // cells, so at 512 its twelve cells are some 3,300 km² of a 12,000 km world and at 2048
+            // they are 206 km² — which is why a 2048 render came out sprinkled with ponds that 512
+            // never had, and why `OutletResolutionTest` found the same world holding four times the
+            // water at four times the grid (seed 42, 0.20% of its land under water at 512 against
+            // 1.53% at 2048). `GlaciationConfig.minLakeShareOfMap` already fixed the ice's own
+            // version of this and recorded the reasoning; this is the same correction for the lakes
+            // the drainage makes. Scaled by the square of the grid ratio, because it is an area:
+            // twelve cells at 512, 48 at 1024, 192 at 2048, all of them the same piece of ground.
+            // Nothing moves at 512, which is where every guard in `:worldgen` is measured.
+            lakes = lakes.copy(
+                minCells = (lakes.minCells * scale * scale).toInt().coerceAtLeast(1)
+            ),
             climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
             nations = nations.copy(slopeResistance = nations.slopeResistance * scale)
         )

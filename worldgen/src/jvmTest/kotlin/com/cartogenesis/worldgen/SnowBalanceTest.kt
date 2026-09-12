@@ -137,27 +137,37 @@ class SnowBalanceTest {
      * this, and that is the point: the seasonal fields were pulled out of `generateWithSeasonalMm`
      * into a shared helper so the provisional climate could reuse them, and this is the evidence
      * that the move was arithmetic-neutral.
+     *
+     * Re-recorded at H5, which is a terrain change and so moves them legitimately: the hydraulic
+     * rounds now grade to a sea a stand below today's, water the ocean cannot reach is land, and
+     * H5 also gave the aulacogens of H1's past epochs an along-strike varying floor. Every one of
+     * those changes the rock the climate is read off, so the pinned world is a different world.
+     * What the pin can still say after that is what it says now — that `snowBalance = false` adds
+     * none of H2's arithmetic to the pipeline — and the proof that H2's refactor was
+     * arithmetic-neutral stands where it was made, in H2's own report.
      */
     @Test
     fun `the control reproduces the pre-H2 world bit for bit`() {
         val pins = mapOf(
-            7L to (-5570938242032017060L to -3821000834625243742L),
-            42L to (5063332696051296205L to 3709976308418727873L),
-            1234L to (-4131320833814684458L to -3137758199564851396L),
-            99L to (5080677618336571823L to -5846109820223702467L)
+            7L to (-8562146537330195503L to 9104443856414927535L),
+            42L to (1012402023801667400L to -7602467893653674969L),
+            1234L to (7278985542260197860L to -4531422742676477445L),
+            99L to (5870418170978420414L to 3497781553044956947L)
         )
+        val moved = ArrayList<String>()
         seeds.forEach { seed ->
             val control = world(seed, balance = false)
             val (elevation, biomes) = pins.getValue(seed)
-            assertEquals(
-                "seed $seed elevation checksum moved with snowBalance off",
-                elevation, elevationChecksum(control)
-            )
-            assertEquals(
-                "seed $seed biome checksum moved with snowBalance off",
-                biomes, biomeChecksum(control)
-            )
+            val measured = elevationChecksum(control) to biomeChecksum(control)
+            println("SNOWPIN ${seed}L to (${measured.first}L to ${measured.second}L),")
+            // Collected and reported for every seed before anything is asserted, so a run that has
+            // to re-record these hands over all four pairs at once instead of one per run.
+            if (measured != (elevation to biomes)) moved.add("$seed")
         }
+        assertEquals(
+            "checksums moved with snowBalance off on seeds $moved",
+            emptyList<String>(), moved.toList()
+        )
     }
 
     // ---------------------------------------------------------------- the guards proper

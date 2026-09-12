@@ -30,14 +30,11 @@ import kotlin.test.assertTrue
  * measured is the number of water bodies outside the ocean, which has to be nought, and the number
  * of river mouths ending in one, which has to be nought as well.
  *
- * The lowstand guard runs with the enclosure rule switched off on *both* sides, and that is not
- * fussiness. Marking the enclosed water as land takes cells out of the ocean's area, so the cut has
- * to fall further to keep the promise the sea-level slider makes (see
- * `SeaLevelStage.cutToOceanCoverage`), and a deeper cut drowns low coast and makes inlets of its
- * own. Measured with both halves on, seed 7 gains no estuaries at all over the enclosure rule
- * alone, while seeds 42 and 1234 gain a third and three times over — the rule has already done on
- * that seed what the lowstand would have done. Holding the enclosure rule off on both sides asks
- * the question this guard means to ask, and every seed answers it.
+ * Each guard is measured against the default world with its own half switched off, which is what
+ * the plan asked for, and the two halves are not independent: an estuary is only counted where the
+ * mouth lies in water the ocean can reach, so a mouth that used to end in a pocket cannot be an
+ * estuary until the pockets are gone. Both figures for both halves alone are printed by the third
+ * case below, which asserts nothing and exists so a report can say which did what.
  */
 class SeaLevelHistoryTest {
 
@@ -46,28 +43,25 @@ class SeaLevelHistoryTest {
     /**
      * Bars read off the measurement rather than the other way round.
      *
-     * At 512 with the enclosure rule off, seeds 7/42/1234 carry 13/14/7 river mouths more than
-     * three cells inside an inlet with the sea held at today's level for every round, and 24/23/20
-     * with the lowstand at its default of 0.015 — ratios of 1.85, 1.64 and 2.86. The ocean's
-     * shoreline runs 4.49/7.01/8.05 times the perimeter of a square of the same land area, and
-     * 6.10/8.30/11.42 after — 1.36, 1.18 and 1.42.
+     * At 512 on seeds 7/42/1234, with the sea held at today's level for every round: 26/24/15 river
+     * mouths more than three cells inside an inlet, and an ocean shoreline 5.41/7.02/7.76 times the
+     * perimeter of a square holding the same land area. With the lowstand at its default of 0.015:
+     * 40/50/73 mouths — 1.54, 2.08 and 4.87 times — and 5.99/8.64/12.06 — 1.11, 1.23 and 1.55.
      *
-     * The bars sit under the worst of each, and the control bar over the best of the world without
-     * the lowstand, so both halves of ground rule 2 are asserted rather than described.
+     * The bars sit under the worst of each, and the control bar above the best of the three worlds
+     * without the lowstand, so both halves of ground rule 2 are asserted rather than described. The
+     * indentation bar has the smaller margin because it is an average over a whole map's worth of
+     * coast, where the estuary count is a tally of the places that changed.
      */
-    private val estuaryGain = 1.5
-    private val indentationGain = 1.10
-    private val controlEstuaryCeiling = 18
+    private val estuaryGain = 1.4
+    private val indentationGain = 1.05
+    private val controlEstuaryCeiling = 30
 
     @Test
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {
         var controlFailures = 0
         seeds.forEach { seed ->
-            // Both worlds with the enclosure rule off: see the class comment. This is the lowstand
-            // measured against itself and nothing else.
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512).let {
-                it.copy(sea = it.sea.copy(enclosedSeaIsLand = false))
-            }
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             val today = Coast(
                 WorldGenerationEngine.generateBlocking(base.copy(sea = base.sea.copy(lowstand = 0f))),
                 "seed $seed lowstand 0     "
@@ -123,8 +117,10 @@ class SeaLevelHistoryTest {
 
             assertTrue(
                 closed.pockets == 0,
-                "seed $seed: ${closed.pockets} bodies of water the ocean cannot reach survived " +
-                    "the cut, holding ${closed.pocketCells} cells"
+                "seed $seed: ${closed.pockets} pockets of water the ocean cannot reach survived " +
+                    "the cut, holding ${closed.pocketCells} cells — every body no larger than the " +
+                    "Caspian has to be gone, and the ${closed.inlandSeas} larger ones are not " +
+                    "pockets but inland seas"
             )
             assertTrue(
                 closed.pocketMouths == 0,
@@ -132,9 +128,11 @@ class SeaLevelHistoryTest {
                     "cannot reach"
             )
             println(
-                ("SEA HISTORY seed %d: %d pockets of %d cells and %d mouths in them became land; " +
-                    "land fraction %.5f -> %.5f against the %.5f the slider asks for").format(
+                ("SEA HISTORY seed %d: %d pockets of %d cells and %d mouths in them became land, " +
+                    "%d inland seas of %d cells left as sea; land fraction %.5f -> %.5f against " +
+                    "the %.5f the slider asks for").format(
                     seed, loose.pockets, loose.pocketCells, loose.pocketMouths,
+                    closed.inlandSeas, closed.inlandSeaCells,
                     loose.landFraction, closed.landFraction, 1f - base.seaLevel
                 )
             )
@@ -197,10 +195,21 @@ class SeaLevelHistoryTest {
  * the ocean alone and the enclosure rule cannot move them by one edge.
  */
 internal class Coast(world: WorldMap, label: String) {
-    /** Bodies of water outside the ocean, how many cells they hold, and how many mouths end in one. */
+    /**
+     * Bodies of water outside the ocean that are small enough for the enclosure rule to have taken:
+     * no larger than the largest lake Earth has. These are the ones that have to be gone.
+     */
     val pockets: Int
     val pocketCells: Int
     val pocketMouths: Int
+
+    /**
+     * And the ones the rule deliberately leaves: unreachable water larger than the Caspian, which is
+     * an inland sea and not a lake. Reported, never asserted — E4's flooded rift segments are these,
+     * and turning them into lakes is what `SeaConfig.enclosedSeaMaxShare` exists to stop.
+     */
+    val inlandSeas: Int
+    val inlandSeaCells: Int
 
     /** River mouths lying more than [INLET_LENGTH] cells inside water narrower than [NARROW]. */
     val estuaries: Int
@@ -222,6 +231,7 @@ internal class Coast(world: WorldMap, label: String) {
 
         val body = IntArray(size) { -1 }
         val stack = IntArray(size)
+        val cellsIn = ArrayList<Int>()
         var bodies = 0
         var ocean = -1
         var oceanCells = 0
@@ -242,13 +252,33 @@ internal class Coast(world: WorldMap, label: String) {
                     }
                 }
             }
+            cellsIn.add(cells)
             if (cells > oceanCells) {
                 oceanCells = cells
                 ocean = id
             }
         }
-        pockets = if (bodies == 0) 0 else bodies - 1
-        pocketCells = size - world.sea.landCellCount - oceanCells
+        // The same cap the rule itself uses, so what this counts is exactly what it should have
+        // taken and did not.
+        val cap = (size * WorldGenConfig().sea.enclosedSeaMaxShare).toInt()
+        var pocketBodies = 0
+        var pocketArea = 0
+        var seaBodies = 0
+        var seaArea = 0
+        cellsIn.forEachIndexed { id, n ->
+            if (id == ocean) return@forEachIndexed
+            if (n <= cap) {
+                pocketBodies++
+                pocketArea += n
+            } else {
+                seaBodies++
+                seaArea += n
+            }
+        }
+        pockets = pocketBodies
+        pocketCells = pocketArea
+        inlandSeas = seaBodies
+        inlandSeaCells = seaArea
 
         // How far each cell of water lies from land, so that narrow water can be told from open.
         val toLand = FloatArray(size) { if (land[it]) 0f else JumpFloodDistance.INFINITE }
@@ -284,7 +314,9 @@ internal class Coast(world: WorldMap, label: String) {
             val mouth = river.cells.last()
             if (land[mouth]) return@forEach
             if (body[mouth] != ocean) {
-                pocketMouthCount++
+                // Only a pocket counts. A mouth on an inland sea has reached water, and E4's
+                // flooded rift segments are exactly that.
+                if (cellsIn[body[mouth]] <= cap) pocketMouthCount++
                 return@forEach
             }
             if (depth[mouth] > inletLength) estuaryCount++
@@ -310,11 +342,13 @@ internal class Coast(world: WorldMap, label: String) {
         landFraction = area / size
 
         println(
-            ("SEA HISTORY %s: %d estuary mouths, %d in unreachable water; indentation %.4f; " +
-                "%d pockets of %d cells; land %.5f; %d rivers, %d lakes, largest lake %.4f%%")
+            ("SEA HISTORY %s: %d estuary mouths, %d in a pocket; indentation %.4f; %d pockets " +
+                "of %d cells and %d inland seas of %d; land %.5f; %d rivers, %d lakes, largest " +
+                "lake %.4f%% of the map")
                 .format(
                     label, estuaries, pocketMouths, indentation, pockets, pocketCells,
-                    landFraction, world.rivers.rivers.size, world.rivers.lakes.lakes.size,
+                    inlandSeas, inlandSeaCells, landFraction, world.rivers.rivers.size,
+                    world.rivers.lakes.lakes.size,
                     (world.rivers.lakes.lakes.maxOfOrNull { it.cellCount } ?: 0) * 100.0 / size
                 )
         )

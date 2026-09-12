@@ -54,6 +54,33 @@ alike. On seed 42 at 50° the interior-versus-coast gap in the seasonal swing is
 0.2 and 7.5, and the chunks between have moved the coastline under it), and the annual mean is
 bit-identical either way, because the scaling applies to the departure and never to the mean.
 
+**The sea has not always been where it is.** The hydraulic rounds grade every channel to the sea
+they can see, so with the sea fixed at today's level no valley may continue below it and every
+coastline is a clean percentile cut. Earth's rivers cut to a stand about 120 m lower and the sea
+came back up their valleys when the ice melted, which is the Chesapeake, the Severn, Galicia's rias
+and the sounds of the Atlantic seaboard. `SeaConfig.lowstand` puts the base level 1.5% of the land's
+relief down — Earth's 120 m against eight kilometres of relief — for the first nine of the twelve
+rounds and walks it up to today over the last three, so the drowned valleys collect some of the
+sediment coming down them as a real estuary does, and the deltas are built at the level the map is
+drawn at. Measured at 512 on seeds 7, 42 and 1234: river mouths lying more than three cells inside a
+narrow inlet run 26/24/15 with the stand at zero and 40/50/73 with it at the default, and the
+ocean's shoreline runs 1.11, 1.23 and 1.55 times as long against a compact coast of the same land
+area. At 2048 on the author's own two worlds, 3 estuary mouths become 32 on seed 718106 and 1
+becomes 9 on 59758.
+
+**Water the ocean cannot reach is not sea.** Sea level is a percentile over the height field, so
+every hollow below it used to be drawn as ocean whether a drop of ocean could get there or not, and
+a D8 river ended at the first one it met: a third of every seed's mouths did, and seed 59758 at 2048
+carried 475 separate bodies of water outside the ocean. After the cut, each body of water is
+labelled by an eight-connected walk that wraps in x as every other neighbour walk here does — the
+sill of a flooded rift can be one cell wide and a diagonal step is a step — and any body that is not
+the ocean and is no larger than the largest lake Earth has is marked land at the height it already
+stands at. What it becomes is the river stage's business: the depression fill raises it to its
+lowest outlet and the water balance decides whether it holds a lake (a lake below sea level is the
+Caspian, the Dead Sea, the Qattara) or dries to a playa. Measured at 512: 73/78/558 pockets holding
+358/430/2093 cells on seeds 7/42/1234 before, none after, and 37/41/60 river mouths ending in one
+before, none after. At 2048, 925 pockets on 718106 and 305 on 59758, none after.
+
 **Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidth` of a
 coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
 `shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
@@ -140,18 +167,30 @@ with ten endorheic basins and 132 playa cells.
 
 ## Known deviations
 
-**The shoreline does not know whether the sea can reach it.** Sea level is a percentile and nothing
-else, so every hollow the erosion leaves below it is drawn as ocean whether or not a drop of ocean
-could get there, and a D8 river ends at the first one it meets. On seed 59758 at 2048 that is 475
-separate bodies of water outside the ocean, and a third of every seed's river mouths end in one —
-measured with deposition switched off entirely, so it is not the deltas' doing. Cutting an inlet
-from each such pocket to the sea was tried in the hydraulic pass and reverted: it works on the
-numbers (that seed's stranded mouths fell from 40 to 15 at 512) and it is the wrong place for it,
-because a small body of water the sea cannot reach is sometimes a landform rather than an artefact —
-the gulfs of a flooded rift are exactly such bodies, and joining them to the ocean turns the chain
-back into the channel `RiftSegmentationTest` exists to break up. The cure is connectedness in the
-sea-level cut itself: water the ocean cannot reach is land, or a lake, and the cut is the only place
-that can tell which without guessing.
+**An inland sea is left as sea, and a drowned basin can hold more water than the Caspian.** The
+enclosure rule above stops at the largest lake Earth has, 0.073% of the surface: a body of
+unreachable water larger than that is a piece of the sea walled off by a sliver of ground, and
+calling it land invents a landform Earth has no example of — it would also turn a flooded rift's
+gulfs into lakes and take `RiftSegmentationTest`'s chain apart. So one to five such inland seas
+survive on each of the standard seeds, holding 767 to 8386 cells at 512, and they are drawn as
+ocean. The bodies that *are* converted are then filled by the drainage, and a saucer no larger than
+the cap can flood a good deal wider than itself once the water reaches its rim: on seed 718106 at
+512 one comes out at 1.11% of the land, four times the Caspian's share of Earth's. Neither the
+outlet notch nor the water balance can help — the notch runs inside the hydraulic pass, while that
+ground is still under the provisional sea, so there is no lip for it to cut, and the basin's floor
+is below sea level, so there is nowhere for the water to drain to. The repair is a second outlet
+pass after the cut rather than only inside the rounds; until then `OutletIncisionTest` and
+`OutletResolutionTest` measure the drowned basins apart from the ones the notch owns and print both.
+
+**The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
+everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the
+shoreline is cut, and what the rise then floods is a fringe of small bays all round a continent as
+well as the rias at the river mouths. The renders at 2048 show both: seed 718106's middle island
+goes from a smooth outline to a crenulated one along its whole perimeter, and the shoreline
+development index rises 1.7 times where the estuary count rises tenfold. Earth's own drowned coasts
+are more selective than that — the Atlantic seaboard is indented where the rivers are and straight
+where they are not — and the likely repair is to scale the stand by the local drainage rather than
+applying it flat.
 
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut

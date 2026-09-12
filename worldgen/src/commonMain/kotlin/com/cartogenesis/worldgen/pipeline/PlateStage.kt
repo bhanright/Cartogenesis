@@ -111,7 +111,41 @@ object PlateStage {
          * same kind the choice is arbitrary and is made by the lower id, a total order on the
          * pair, so that it never depends on which cell asked or on any hash order.
          */
-        val overridingId: Int
+        val overridingId: Int,
+        /**
+         * The lower of the pair's two plate ids. A rift's half-grabens alternate their polarity
+         * along strike, and "which flank is the footwall" has to be said in terms that hold for
+         * the whole pair; the lower id is the same total order [overridingId] uses.
+         */
+        val lowId: Int
+    )
+
+    /**
+     * Where along a segmented rift one boundary cell sits, and what that segment is shaped like.
+     *
+     * Filled in by [segmentRifts] for the cells of a [BoundaryClass.CONTINENTAL_RIFT] boundary and
+     * null everywhere else. Every cell in the corridor either side of the rift reads its segment
+     * off its *nearest* boundary cell — the label the distance transform already carries — so the
+     * whole width of a half-graben agrees about which one it is without a second walk.
+     */
+    private class RiftSegment(
+        /** This segment's trough depth, as a factor on `riftDepth`. */
+        val depthFactor: Float,
+        /** This segment's shoulder height, as a factor on `riftShoulderHeight`. */
+        val shoulderFactor: Float,
+        /** This segment's shoulder half-width, as a factor on `riftShoulderWidth`. */
+        val widthFactor: Float,
+        /**
+         * Whether the high footwall stands on the pair's [PairInteraction.lowId] plate. Alternates
+         * from segment to segment, which is what makes the chain a chain rather than one trough.
+         */
+        val footwallOnLow: Boolean,
+        /**
+         * 0 at the centre of an accommodation zone, 1 well inside the segment. The trough's depth
+         * and its asymmetry are both multiplied by it, so a half-graben dies out at each end into
+         * a symmetric sill rather than meeting its neighbour's opposite polarity at a step.
+         */
+        val taper: Float
     )
 
     private class Boundary(
@@ -119,7 +153,9 @@ object PlateStage {
         /** Whether this particular cell sits on the oceanic plate of the pair. */
         val oceanicSide: Boolean,
         /** Whether this particular cell sits on the pair's overriding plate. */
-        val overridingSide: Boolean
+        val overridingSide: Boolean,
+        /** Set by [segmentRifts]; null unless this is a continental rift being segmented. */
+        var segment: RiftSegment? = null
     )
 
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
@@ -131,6 +167,7 @@ object PlateStage {
         val plates = createPlates(cfg, w, h, rnd)
         val plateId = assignPlates(config, plates)
         val boundaries = classifyBoundaries(w, h, plateId, plates)
+        segmentRifts(config, boundaries)
 
         val dist = FloatArray(w * h) { DistanceTransform.INFINITE }
         val label = IntArray(w * h) { -1 }
@@ -171,7 +208,8 @@ object PlateStage {
                 cfg.collisionWidth * widest,
                 cfg.arcOffset + cfg.arcWidth,
                 cfg.islandArcOffset + cfg.islandArcWidth * widest,
-                cfg.riftShoulderOffset + cfg.riftShoulderWidth
+                cfg.riftShoulderOffset +
+                    cfg.riftShoulderWidth * (1f + cfg.riftSegmentShoulderVariation)
             )
             // Each cell writes only its own uplift entry, and the roughness comes from position rather than a running RNG, so this splits cleanly across cores.
             parallelChunks(0, h) { startY, endY ->
@@ -342,11 +380,74 @@ object PlateStage {
                                 if (boundary.oceanicSide) {
                                     cfg.mountainHeight * 0.22f * strength * narrow
                                 } else {
-                                    -cfg.riftDepth * strength *
-                                        plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
-                                        cfg.riftShoulderHeight * strength *
-                                        ridgeAt(d, cfg.riftShoulderOffset, cfg.riftShoulderWidth) *
-                                        roughness * alongRange
+                                    val segment = boundary.segment
+                                    if (segment == null) {
+                                        // Unsegmented: the pre-E4 rift, one trough of constant
+                                        // depth between two shoulders of constant height for the
+                                        // whole run of the boundary. Kept so
+                                        // `RiftSegmentationTest` can measure the world this chunk
+                                        // replaced rather than take its word for it.
+                                        -cfg.riftDepth * strength *
+                                            plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare) +
+                                            cfg.riftShoulderHeight * strength *
+                                            ridgeAt(
+                                                d, cfg.riftShoulderOffset, cfg.riftShoulderWidth
+                                            ) * roughness * alongRange
+                                    } else {
+                                        // Which flank of the half-graben this cell is on. The
+                                        // distance transform gives distance and not side, so the
+                                        // side comes from the cell's own plate against the pair's
+                                        // lower id — a total order, never a hash order. A cell on
+                                        // some third plate near a triple junction falls to the
+                                        // hinge side, which is the quieter of the two.
+                                        val onLow = plateId[i] == interaction.lowId
+                                        val footwall = onLow == segment.footwallOnLow
+
+                                        // A half-graben is a wedge: the floor hangs from the fault
+                                        // under the footwall and rises across to the hinge. The
+                                        // signed across-strike coordinate saturates at the edge of
+                                        // the flat floor, so the tilt is spent inside the trough
+                                        // rather than out on the shoulder slope.
+                                        val flatHalf =
+                                            (cfg.riftWidth * cfg.riftFloorShare).coerceAtLeast(1f)
+                                        val across = (d / flatHalf).coerceAtMost(1f) *
+                                            (if (footwall) 1f else -1f)
+                                        val hinge = cfg.riftHingeFloorShare.coerceIn(0f, 1f)
+                                        val wedge = hinge + (1f - hinge) * (0.5f + 0.5f * across)
+                                        // Symmetric again through the accommodation zone, so two
+                                        // segments of opposite polarity meet without a step.
+                                        val tilt = 1f + (wedge - 1f) * segment.taper
+
+                                        val floor = -cfg.riftDepth * segment.depthFactor *
+                                            segment.taper * tilt * strength *
+                                            plateauFalloff(d, cfg.riftWidth, cfg.riftFloorShare)
+
+                                        // High footwall on one flank, low hinge on the other —
+                                        // and both fade to their mean at the join, as the trough
+                                        // does.
+                                        val flank = if (footwall) {
+                                            1f
+                                        } else {
+                                            cfg.riftHingeShoulderShare.coerceAtLeast(0f)
+                                        }
+                                        val shoulder = cfg.riftShoulderHeight *
+                                            segment.shoulderFactor *
+                                            (1f + (flank - 1f) * segment.taper) * strength *
+                                            ridgeAt(
+                                                d,
+                                                cfg.riftShoulderOffset,
+                                                cfg.riftShoulderWidth * segment.widthFactor
+                                            ) * roughness * alongRange
+
+                                        // The accommodation zone itself: ground that rises between
+                                        // two half-grabens, which is where the sill and the land
+                                        // bridge between two gulfs come from.
+                                        val sill = cfg.riftSillHeight * strength *
+                                            (1f - segment.taper) *
+                                            beltFalloff(d, cfg.riftShoulderOffset)
+
+                                        floor + shoulder + sill
+                                    }
                                 }
 
                             BoundaryClass.TRANSFORM_FAULT ->
@@ -704,6 +805,210 @@ object PlateStage {
     }
 
     /**
+     * Breaks every continental rift into half-grabens along its own length.
+     *
+     * A rift is not a canal. It is a chain of asymmetric basins fifty to a hundred and fifty
+     * kilometres long, each hanging from a fault on one flank and hinged on the other, with the
+     * polarity flipping from one to the next and an accommodation zone between them where the
+     * floor rises back toward the hinge. The sea then enters only the segments that have subsided
+     * below it, which is why the Red Sea is a string of deeps, why Tanganyika and Baikal are
+     * strings of deeps on land, and why no rift on Earth is one trough of constant depth for a
+     * thousand kilometres.
+     *
+     * The along-strike coordinate is a walk, not a projection: a rift meanders, so distance along
+     * any straight axis is not distance along the rift. Each connected run of a pair's boundary
+     * cells is traversed breadth-first from one of its ends — found by the usual double sweep,
+     * farthest cell from an arbitrary start, then farthest from that — and the resulting geodesic
+     * distance in cells is the arc length every cell of the run is cut by.
+     *
+     * Determinism, in the terms rule 4 of the plan asks for: the cells are taken in ascending
+     * index order (never in the hash order of the boundary map), each connected run is keyed by
+     * its own lowest cell index, every tie in the double sweep is broken by the lower index, and
+     * the per-segment draws come from a splitmix-seeded linear congruential stream rather than
+     * from a shared [Random]. Segment lengths are fractions of the map's width, so the same rift
+     * breaks into the same segments at 512 and at 2048.
+     */
+    private fun segmentRifts(config: WorldGenConfig, boundaries: Map<Int, Boundary>) {
+        val cfg = config.tectonics
+        if (!cfg.riftSegmentation) return
+        val w = config.width
+        val h = config.height
+
+        // Ascending index order: nothing below may depend on the iteration order of a hash map.
+        val riftCells = boundaries.keys
+            .filter { boundaries[it]!!.interaction.pairClass == BoundaryClass.CONTINENTAL_RIFT }
+            .sorted()
+        if (riftCells.isEmpty()) return
+
+        // Which pair each rift cell belongs to, as an index into first-encounter order. Two
+        // different rift pairs can touch at a triple junction and must not be walked as one rift.
+        val pairs = ArrayList<PairInteraction>()
+        val pairAt = IntArray(w * h) { NOT_RIFT }
+        riftCells.forEach { cell ->
+            val interaction = boundaries[cell]!!.interaction
+            var index = -1
+            for (k in pairs.indices) if (pairs[k] === interaction) { index = k; break }
+            if (index < 0) {
+                pairs.add(interaction)
+                index = pairs.size - 1
+            }
+            pairAt[cell] = index
+        }
+
+        val arc = IntArray(w * h) { -1 }
+        val run = ArrayList<Int>()
+        val queue = ArrayList<Int>()
+
+        // Breadth-first over one run's cells, from [source]; leaves the hop count in `arc` and
+        // returns the farthest cell, ties broken by the lower index.
+        fun sweep(source: Int, pair: Int): Int {
+            run.forEach { arc[it] = -1 }
+            queue.clear()
+            arc[source] = 0
+            queue.add(source)
+            var head = 0
+            var farthest = source
+            while (head < queue.size) {
+                val cell = queue[head++]
+                val depth = arc[cell]
+                if (depth > arc[farthest] || (depth == arc[farthest] && cell < farthest)) {
+                    farthest = cell
+                }
+                val x = cell % w
+                val y = cell / w
+                for (dy in -1..1) {
+                    val ny = y + dy
+                    if (ny < 0 || ny >= h) continue
+                    for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) continue
+                        var nx = (x + dx) % w
+                        if (nx < 0) nx += w
+                        val n = ny * w + nx
+                        if (pairAt[n] != pair || arc[n] >= 0) continue
+                        arc[n] = depth + 1
+                        queue.add(n)
+                    }
+                }
+            }
+            return farthest
+        }
+
+        val minLength = (cfg.riftSegmentMin * w).coerceAtLeast(2f)
+        val maxLength = (cfg.riftSegmentMax * w).coerceAtLeast(minLength)
+        val accommodation = (cfg.riftAccommodation * w).coerceAtLeast(1f)
+
+        riftCells.forEach { start ->
+            val pair = pairAt[start]
+            if (pair < 0) return@forEach
+
+            // Collect this connected run, then take its two passes. `start` is the run's lowest
+            // index, since the cells are walked in ascending order and a run is claimed whole.
+            run.clear()
+            queue.clear()
+            queue.add(start)
+            arc[start] = 0
+            var head = 0
+            while (head < queue.size) {
+                val cell = queue[head++]
+                run.add(cell)
+                val x = cell % w
+                val y = cell / w
+                for (dy in -1..1) {
+                    val ny = y + dy
+                    if (ny < 0 || ny >= h) continue
+                    for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) continue
+                        var nx = (x + dx) % w
+                        if (nx < 0) nx += w
+                        val n = ny * w + nx
+                        if (pairAt[n] != pair || arc[n] >= 0) continue
+                        arc[n] = 0
+                        queue.add(n)
+                    }
+                }
+            }
+
+            val end = sweep(sweep(start, pair), pair)
+            // `arc` now holds arc length from the far end of the run; `end` is its other end.
+            val length = arc[end].toFloat()
+
+            // Where the joins fall, and what each segment between them looks like.
+            var bits = seedHash(config.seed, start.toLong() * 131L + pair.toLong())
+            fun draw(): Float {
+                bits = bits * 6364136223846793005L + 1442695040888963407L
+                return ((bits ushr 40) and 0xFFFFFF).toFloat() / 0x1000000.toFloat()
+            }
+
+            val joins = ArrayList<Float>()
+            val depth = ArrayList<Float>()
+            val shoulder = ArrayList<Float>()
+            val width = ArrayList<Float>()
+            joins.add(0f)
+            var cursor = 0f
+            while (cursor < length) {
+                cursor += minLength + (maxLength - minLength) * draw()
+                joins.add(cursor.coerceAtMost(length))
+                depth.add(1f + cfg.riftSegmentDepthVariation * (2f * draw() - 1f))
+                // One draw for both the height and the width of the segment's shoulders, not two.
+                // Flexural uplift scales with the throw on the fault, so the footwall of a bigger
+                // half-graben stands both higher and broader — and, less prettily, two independent
+                // draws let a segment come out at 1.4 times the height and 0.6 times the width,
+                // which is a knife-edge ridge. Where such a ridge crosses shallow sea it clears
+                // the surface as a strip of land a couple of cells wide with a strait either side,
+                // the exact failure `RibbonLandTest` exists to catch: measured on seed 234475 at
+                // 1024, that combination left a 706-cell ribbon on a rift shoulder that survived
+                // erosion, and tying the two together removes it.
+                val spread = cfg.riftSegmentShoulderVariation
+                val size = (1f + spread * (2f * draw() - 1f)).coerceAtLeast(0.2f)
+                shoulder.add(size)
+                width.add(size)
+            }
+            if (joins.size < 2) {
+                joins.add(length)
+                depth.add(1f)
+                shoulder.add(1f)
+                width.add(1f)
+            }
+            // A sliver left over at the far end is not a half-graben; it joins its neighbour.
+            val last = joins.size - 1
+            if (joins.size > 2 && joins[last] - joins[last - 1] < minLength * 0.5f) {
+                joins.removeAt(last - 1)
+                depth.removeAt(depth.size - 1)
+                shoulder.removeAt(shoulder.size - 1)
+                width.removeAt(width.size - 1)
+            }
+            // Which flank the first segment hangs from; the rest alternate off it.
+            val parity = ((bits ushr 17) and 1L) == 0L
+
+            run.forEach { cell ->
+                val s = arc[cell].toFloat()
+                var k = 0
+                while (k < joins.size - 2 && s >= joins[k + 1]) k++
+                val toJoin = minOf(s - joins[k], joins[k + 1] - s).coerceAtLeast(0f)
+                val u = (toJoin / accommodation).coerceIn(0f, 1f)
+                boundaries[cell]!!.segment = RiftSegment(
+                    depthFactor = depth[k],
+                    shoulderFactor = shoulder[k],
+                    widthFactor = width[k],
+                    footwallOnLow = (k % 2 == 0) == parity,
+                    taper = u * u * (3f - 2f * u)
+                )
+            }
+
+            run.forEach {
+                arc[it] = -1
+                pairAt[it] = CLAIMED
+            }
+        }
+    }
+
+    /** [segmentRifts]: a cell that is not on a continental rift boundary at all. */
+    private const val NOT_RIFT = -1
+
+    /** [segmentRifts]: a rift cell whose run has already been walked. */
+    private const val CLAIMED = -2
+
+    /**
      * Projects the plates' relative motion onto the axis between their centres — the closest thing
      * to a boundary normal that holds for the whole shared edge.
      */
@@ -754,7 +1059,8 @@ object PlateStage {
             strength = abs(convergence).coerceIn(0.12f, 1f),
             continentalCollision = bothContinental,
             pairClass = pairClass,
-            overridingId = overridingId
+            overridingId = overridingId,
+            lowId = if (a.id < b.id) a.id else b.id
         )
     }
 

@@ -187,6 +187,63 @@ data class TectonicsConfig(
      */
     val riftShoulderHeight: Float = 0.10f,
     /**
+     * Whether a continental rift is broken along its length into half-grabens.
+     *
+     * A rift is not one trough of constant depth between two shoulders of constant height. It is a
+     * chain of half-grabens fifty to a hundred and fifty kilometres long, each tilted the opposite
+     * way from its neighbour — a high footwall on one flank, a low hinge on the other, the floor
+     * deepening toward the footwall — separated by accommodation zones where the floor rises back
+     * toward the hinge. That is why the Red Sea, the Gulf of California, Baikal and Tanganyika are
+     * strings of deeps and sills rather than canals, and why the sea enters only the segments that
+     * have subsided below it.
+     *
+     * Off reproduces the uniform trough this generator built before, which is what
+     * `RiftSegmentationTest` measures its "before" against: on seed 59758 the whole rift floods as
+     * one twenty-to-one strait of very nearly constant width.
+     */
+    val riftSegmentation: Boolean = true,
+    /**
+     * Shortest and longest half-graben segment, as a fraction of the map's width.
+     *
+     * A map fraction rather than a count of cells, so a rift breaks into the same segments at 512
+     * and at 2048 — which is also why [WorldGenConfig.atResolution] leaves both alone.
+     *
+     * Real half-grabens run 50 to 150 km. On the 12,000 km world this generator's other knobs are
+     * calibrated against, that is two to six cells at 512, which is below the size at which a grid
+     * this coarse can draw a basin at all: the rift would alternate polarity faster than its own
+     * trough is wide and read as noise. So the segments are set to the largest structures a real
+     * rift is built from rather than to its smallest — roughly 500 to 1200 km, the spacing of the
+     * Red Sea's separate deeps and of Tanganyika's basins — which is what this grid can show.
+     */
+    val riftSegmentMin: Float = 0.040f,
+    val riftSegmentMax: Float = 0.100f,
+    /**
+     * Half-length of the accommodation zone at each join between segments, as a fraction of the
+     * map's width. Through it the trough's depth tapers to nothing and its asymmetry to symmetry,
+     * so neighbouring half-grabens of opposite polarity meet without a step.
+     */
+    val riftAccommodation: Float = 0.022f,
+    /**
+     * Spread of the per-segment depth factor on [riftDepth]: a segment's trough is between
+     * `1 - this` and `1 + this` times as deep as the nominal rift. This is what decides which
+     * segments flood and which stay dry.
+     */
+    val riftSegmentDepthVariation: Float = 0.45f,
+    /** The same spread, applied to each segment's shoulder height and shoulder half-width. */
+    val riftSegmentShoulderVariation: Float = 0.40f,
+    /**
+     * Depth of the floor against the hinge flank of a half-graben, as a share of its depth against
+     * the footwall. The basin is a wedge, deepest along the fault it hangs from.
+     */
+    val riftHingeFloorShare: Float = 0.28f,
+    /** Height of the hinge shoulder as a share of the footwall shoulder, for the same reason. */
+    val riftHingeShoulderShare: Float = 0.32f,
+    /**
+     * Height of the sill in an accommodation zone, in normalized elevation units — the ground that
+     * rises between two half-grabens and becomes the land bridge between two gulfs.
+     */
+    val riftSillHeight: Float = 0.09f,
+    /**
      * Share of plates that carry a hotspot — a point fixed in the mantle that the plate drifts
      * over, leaving a line of seamounts behind it.
      *
@@ -1146,7 +1203,10 @@ data class WorldGenConfig(
      *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLength],
      *    [TectonicsConfig.hotspotSpacing], [TectonicsConfig.hotspotRadius]). Left alone, a larger
      *    grid would narrow Tibet to the width of the Andes and the distinction this chunk exists
-     *    for would quietly disappear at export resolution.
+     *    for would quietly disappear at export resolution. The rift's *segmentation* knobs
+     *    ([TectonicsConfig.riftSegmentMin], [TectonicsConfig.riftSegmentMax],
+     *    [TectonicsConfig.riftAccommodation]) are the exception: they are map fractions already,
+     *    so a rift breaks into the same half-grabens at every resolution and they are not touched.
      *  - [SeaConfig.shelfWidth] is the width of the continental shelf, in the same cell terms as
      *    [TectonicsConfig.boundaryFalloff] and for the same reason: left alone, a larger grid
      *    would shrink it to nothing and every coast would drop straight into deep water again.

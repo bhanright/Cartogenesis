@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sqrt
@@ -18,7 +19,8 @@ import kotlin.math.sqrt
  * was falling. Siberia is colder than the Norwegian coast in every month and carries no ice sheet,
  * because almost no snow reaches it; Patagonia's snowline stands at about 1000 m and the Atacama's,
  * at the same latitude on the far side of a desert, at about 6000 m. A temperature threshold
- * cannot tell those two apart and calls every cold interior an ice cap — seed 7 was 43% ice.
+ * cannot tell those two apart and calls every cold interior an ice cap — see REALISM_PLAN.md, H2,
+ * for what that measured against Earth's own ice share.
  *
  * So: accumulation against ablation, per cell, out of the four seasonal fields the climate stage
  * already computes.
@@ -35,7 +37,7 @@ import kotlin.math.sqrt
  * The rain/snow split is a ramp rather than a step, between [SNOW_ALL_C] and [RAIN_ALL_C]. A
  * half-year mean of -0.1 C and one of +0.1 C do not really differ in how much of their weather
  * arrived frozen, and a step there would draw the ice margin along an isotherm — the very artefact
- * this chunk exists to remove.
+ * a balance exists to remove.
  *
  * ### Ablation
  *
@@ -77,10 +79,10 @@ import kotlin.math.sqrt
  * ice, which is a maritime temperate glacier and is roughly what Norway's get. At -5 C it is 249 mm
  * and at -10 C, 17 mm.
  *
- * ### Rule 8
+ * ### Where it runs
  *
- * Per-cell arithmetic over four fields, so the seam is [SnowBalanceAccelerator] — but measured
- * first, as rule 8 requires, and declined: see that interface's own note for the figures.
+ * Per-cell arithmetic over four fields, so the seam for somewhere other than the CPU is
+ * [SnowBalanceAccelerator] — cut, measured, and left unimplemented: see that interface's own note.
  */
 object SnowBalance {
 
@@ -140,24 +142,24 @@ object SnowBalance {
         winterPrecipitationMm: FloatField,
         coolingByRow: FloatArray? = null
     ): FloatField {
-        val w = summerTemperature.width
-        val h = summerTemperature.height
-        val out = FloatField(w, h)
-        parallelChunks(0, h) { start, end ->
-            for (y in start until end) {
-                val cooling = coolingByRow?.get(y) ?: 0f
-                for (i in y * w until (y + 1) * w) {
-                    if (!isLand[i]) continue
-                    out.data[i] = balanceMm(
-                        summerTemperature.data[i] - cooling,
-                        winterTemperature.data[i] - cooling,
-                        summerPrecipitationMm.data[i],
-                        winterPrecipitationMm.data[i]
+        val cellsAcross = summerTemperature.width
+        val cellsDown = summerTemperature.height
+        val balance = FloatField(cellsAcross, cellsDown)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val coolingC = coolingByRow?.get(row) ?: 0f
+                for (cell in row * cellsAcross until (row + 1) * cellsAcross) {
+                    if (!isLand[cell]) continue
+                    balance.data[cell] = balanceMm(
+                        summerTemperature.data[cell] - coolingC,
+                        winterTemperature.data[cell] - coolingC,
+                        summerPrecipitationMm.data[cell],
+                        winterPrecipitationMm.data[cell]
                     )
                 }
             }
         }
-        return out
+        return balance
     }
 
     /**
@@ -178,15 +180,19 @@ object SnowBalance {
      * to the 6.1 ± 0.4 C Tierney et al. put the global mean at, so the knob keeps meaning what it
      * says it means.
      */
-    fun glacialCoolingByRow(height: Int, globalMeanC: Float): FloatArray =
-        FloatArray(height) { y ->
-            val x = (abs(ClimateStage.latitudeOf(y, height)) / 90f).coerceIn(0f, 1f)
-            globalMeanC * (EQUATOR_SHARE + (POLE_SHARE - EQUATOR_SHARE) * x)
+    fun glacialCoolingByRow(rows: Int, globalMeanC: Float): FloatArray =
+        FloatArray(rows) { row ->
+            val towardsPole =
+                (abs(ClimateStage.latitudeOf(row, rows)) / POLE_DEGREES).coerceIn(0f, 1f)
+            globalMeanC * (EQUATOR_SHARE + (POLE_SHARE - EQUATOR_SHARE) * towardsPole)
         }
 
     /** The glacial cooling at the equator and at the pole, as multiples of the global mean. */
     private const val EQUATOR_SHARE = 1f / 3f
     private const val POLE_SHARE = 2f
+
+    /** Latitude of a pole in degrees, which is what turns a latitude into a 0..1 ramp. */
+    private const val POLE_DEGREES = 90f
 
     /**
      * The fraction of a season's precipitation that arrives as snow, ramped over
@@ -201,51 +207,51 @@ object SnowBalance {
      */
     internal fun positiveDegreeDaysPerDay(meanC: Float): Float {
         val sigma = PDD_SIGMA_C.toDouble()
-        val t = meanC.toDouble()
-        val first = sigma / sqrt(2.0 * PI) * exp(-(t * t) / (2.0 * sigma * sigma))
-        val second = t / 2.0 * erfc(-t / (sigma * sqrt(2.0)))
-        return (first + second).toFloat()
+        val mean = meanC.toDouble()
+        // The two halves of Calov and Greve's expression: the first is what a spread of daily
+        // temperatures contributes when the mean itself is below freezing, the second what the
+        // mean contributes once it is above it.
+        val spreadTerm = sigma / sqrt(2.0 * PI) * exp(-(mean * mean) / (2.0 * sigma * sigma))
+        val meanTerm = mean / 2.0 * erfc(-mean / (sigma * sqrt(2.0)))
+        return (spreadTerm + meanTerm).toFloat()
     }
 
-    private const val PI = 3.141592653589793
-
     /**
-     * The complementary error function, by Abramowitz and Stegun 7.1.26 (maximum absolute error
-     * 1.5e-7, which is well inside a float).
+     * The complementary error function, by Abramowitz and Stegun 7.1.26 — the rational
+     * substitution and the five polynomial coefficients below are that formula's own, in Horner
+     * form. Maximum absolute error 1.5e-7, which is well inside a float.
      *
      * Written out here rather than taken from a library because Kotlin's common standard library
      * has no `erf` and the whole of this file has to run on the JVM and in a browser alike.
      */
-    private fun erfc(x: Double): Double {
-        val sign = if (x < 0.0) -1.0 else 1.0
-        val a = abs(x)
-        val t = 1.0 / (1.0 + 0.3275911 * a)
-        val poly = t * (0.254829592 +
-            t * (-0.284496736 +
-                t * (1.421413741 +
-                    t * (-1.453152027 + t * 1.061405429))))
-        val erf = sign * (1.0 - poly * exp(-a * a))
+    private fun erfc(argument: Double): Double {
+        val sign = if (argument < 0.0) -1.0 else 1.0
+        val magnitude = abs(argument)
+        val substitution = 1.0 / (1.0 + 0.3275911 * magnitude)
+        val polynomial = substitution * (0.254829592 +
+            substitution * (-0.284496736 +
+                substitution * (1.421413741 +
+                    substitution * (-1.453152027 + substitution * 1.061405429))))
+        val erf = sign * (1.0 - polynomial * exp(-magnitude * magnitude))
         return 1.0 - erf
     }
 }
 
 /**
- * Somewhere other than the CPU to run [SnowBalance.field] — the shape rule 8 asks every new
- * per-cell pass to be specified behind, the same shape [ErosionAccelerator] has: suspending,
- * returning null to fall back to the CPU.
+ * Somewhere other than the CPU to run [SnowBalance.field] — the same shape [ErosionAccelerator]
+ * has: suspending, returning null to fall back to the CPU.
  *
- * **Measured, and declined.** Rule 8 says measure first, and the balance is four multiplies, two
- * exponentials and two error functions per cell with no neighbourhood and no iteration. Timed on
- * this machine inside `SnowBalanceTest`, over land only, it costs single-digit milliseconds at
- * 2048 — far inside the 50 ms the chunk's spec set as the line below which the shader is not worth
- * writing, and far inside the cost of the buffer upload it would need. So there is no OpenGL
- * implementation and no WGSL one; this interface is here so that a later chunk which finds a
- * reason to want one — a much larger grid, or a balance that grows an iterative firn model — has
- * the seam already cut and does not have to reach into [ClimateStage] to add it.
+ * **Measured, and declined.** The balance is four multiplies, two exponentials and two error
+ * functions per cell, with no neighbourhood and no iteration. Timed on this machine inside
+ * `SnowBalanceTest`, over land only, it costs single-digit milliseconds at 2048 — far inside the
+ * 50 ms below which a shader is not worth writing, and far inside the cost of the buffer upload it
+ * would need. So there is no OpenGL implementation and no WGSL one; this interface is here so that
+ * a later chunk which finds a reason to want one — a much larger grid, or a balance that grows an
+ * iterative firn model — has the seam already cut and does not have to reach into [ClimateStage]
+ * to add it.
  *
  * The provisional climate march that feeds the balance stays on the CPU regardless: it is the
- * moisture march, whose lock-step wavefronts are the reason H4 declined a GPU path for the same
- * code.
+ * moisture march, whose lock-step wavefronts are why that pass has no GPU path either.
  */
 interface SnowBalanceAccelerator {
 

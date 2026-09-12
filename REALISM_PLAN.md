@@ -587,6 +587,26 @@ sections, toolbar), **Help** (Check for updates, About).
   the Mars theme is reviewed.
 - Screenshots of the menu open, Settings, and About in both themes and in Mars, reviewed.
 
+### F5. Phones — Opus
+
+*Dependencies: F4 (same file). Requested 2026-09-12: "revisit getting the web version to display
+better on phones."* The engine already runs at 512 in a phone browser and Compose for Wasm
+handles touch; what breaks is the three-column layout at fixed widths, a pointer-shaped panel, a
+toolbar of nine names, and a graphics-card switch for a device without WebGPU.
+
+- One layout tree, two arrangements. Below ~800 dp wide or with a coarse pointer, the map takes
+  the whole screen; the header (seed, name, Generate) and the pipeline sections live in a bottom
+  sheet that pulls up; the toolbar collapses to icons plus the current style's name; the view menu
+  stays a menu; the legend keeps the cartouche and Fit.
+- Touch: pinch to zoom, drag to pan, double-tap to fit. Touch targets from the theme (taller
+  sliders and switches under a coarse pointer), not per-control edits.
+- Phone defaults: 512, graphics card hidden when the platform reports no WebGPU, export capped
+  at 2048 by `exportCeiling`; the site's small-screen notice becomes "works on phones at 512".
+- Guards: `ChromeGalleryTest` captures 390x844 and 768x1024 alongside 1440x900 in light and dark,
+  reviewed; `PanelKnobsTest` proves the compact arrangement exposes every knob the wide one does;
+  the web bundle builds; and William checks it on his phone, because no capture tells you how a
+  bottom sheet feels.
+
 ## Track G — more of the pipeline on the graphics card
 
 *Added 2026-09-12. Profiled on the CPU, seed 42: at 2048 erosion is 89% of 75.7 s; with the
@@ -993,6 +1013,7 @@ guard reported, so the next chunk knows its baseline.
 | F2 Panel follows the pipeline | Opus | done | 2026-09-12 | d956bcd (merge, see log) | header (seed, Generate/New world, resolution chips, Library/Atlas, status) then World (ocean coverage, graphics-card switch moved here), Terrain (plates stepper 3-40, mountain height = andeanHeight 0.20-0.90, erosion strength = erodibility 0.011-0.110), Climate (seasonal tilt 0-25, rain shadow = orographicStrength 0-5, ice on/off), Water (rivers, lakes, dry basins hold less water), Peoples (realms stepper 0-40, one wilderness switch, borders), Cartography (relief, coastline, style, view - F3 lifts the last two); right column is Export alone; knobs declared as data in PanelKnobs.kt and PanelKnobsTest (13) walks them - coverage, per-knob copy equality, write-back identity, clamping, shown failing with a knob dropped; found and fixed a borders switch reading one field and writing another; ui 17/17, desktop 19/19 |
 | F3 The map is the instrument | Opus | done | 2026-09-12 | 01d7e16 + 3034cec (merge, see log) | translucent toolbar over the map: nine styles as a segmented row, views as a menu (fifteen names run past 1300 dp); legend strip at the foot: cartouche (generated world name from the largest people's language via NameForge, seed, size, generation time as a footnote - 'largest realm' dropped at William's request) and zoom/Fit; Export folded into the header, right column gone, map takes the width; a Name field beside the seed (WorldNaming: generated per seed, editable, stored as the save's title, kept across settings edits, round-trips through the codec header); graphics-card switch moved to the header under Working resolution; 8192 export chip disabled with a note behind Platform.exportCeiling = 4096 and Exports.clamp; ui/desktop tests green, PanelKnobsTest + 6 toolbar/camera, CartoucheTest 6, 4 ceiling and 5 naming tests |
 | F4 Menus, settings, updates, notices | Opus | in progress | 2026-09-12 | | |
+| F5 Phones | Opus | queued behind F4 | | | |
 | G1 Hydraulic rounds on GPU | Opus | queued behind E1 | | | |
 | G2 Export rendering on GPU | Opus | done | 2026-09-12 | 8dca89f | RasterAccelerator seam in cartography takes a RasterRecipe (colours and tables pre-packed, no palette logic in shaders); desktop GpuRaster on OpenGL compute, web left to a later WGSL port; every view and style, relief, coastline, borders, lakes, hatching; 4M-pixel tiles, fields uploaded once; GlContext extracted from GpuErosion (two contexts on one thread invalidate each other's programs), erosion arithmetic untouched; 99.9th-percentile drift 0 across 141.5M pixels, worst channel 2 on 0.0002% (GLSL sqrt at a ramp node); 4096 export 224 -> 210 s, raster 714 -> 368 ms - the raster was never the bottleneck, generation is; 8192 exhausts a 10 GB heap inside the generator before a pixel is drawn (the device rasters 8192 in 0.9 s); README export table corrected |
 | G3 Ocean currents on GPU | Sonnet | queued behind G2 | | | |

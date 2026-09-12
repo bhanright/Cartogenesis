@@ -49,12 +49,15 @@ object ErosionStage {
     /**
      * @param onRound handed each hydraulic round's mass budget as it closes, for the guard that
      *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing.
+     * @param log handed which mechanism laid sediment on which cell, for the guards that ask what
+     *   shape each of them makes. An observer on the same terms.
      */
     internal suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
         accelerator: ErosionAccelerator?,
-        onRound: ((RoundMass) -> Unit)?
+        onRound: ((RoundMass) -> Unit)?,
+        log: DepositionLog? = null
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -76,7 +79,7 @@ object ErosionStage {
         val relaxConfig = config.copy(erosion = cfg.copy(passes = sweepsPerRound))
 
         return ErosionResult(
-            HydraulicErosion.apply(config, weathered.height, config.seaLevel, onRound) { field ->
+            HydraulicErosion.apply(config, weathered.height, config.seaLevel, onRound, log) { field ->
                 thermal(relaxConfig, field, accelerator).height
             }
         )

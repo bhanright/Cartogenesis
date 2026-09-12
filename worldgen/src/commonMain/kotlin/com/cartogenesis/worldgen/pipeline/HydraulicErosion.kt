@@ -141,6 +141,9 @@ internal object HydraulicErosion {
      *   level the sea *will* take.
      * @param onRound handed the mass budget for each round as it closes. Diagnostics only; nothing
      *   here reads it back, so it cannot affect the world.
+     * @param log filled in with which mechanism laid sediment on which cell, if a caller wants to
+     *   know. Diagnostics only, on the same terms as [onRound]; E5 added it because "which of the
+     *   four things that lay sediment made that shape" cannot be answered from the finished map.
      * @param relax a few thermal sweeps, run after every round.
      *
      *   Not decoration, and not merely for looks. Incision on its own cuts a slot one cell wide,
@@ -156,6 +159,7 @@ internal object HydraulicErosion {
         height: FloatField,
         provisionalSeaLevel: Float,
         onRound: ((RoundMass) -> Unit)? = null,
+        log: DepositionLog? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val cfg = config.erosion
@@ -194,10 +198,21 @@ internal object HydraulicErosion {
         val sediment = if (carryingSediment) FloatArray(w * h) else FloatArray(0)
         // Scratch for the little flood fills that build a delta. One stamp per mouth, so a cell
         // cannot be visited twice; the ids only ever increase, so the array never needs clearing.
-        val stamp = if (carryingSediment) IntArray(w * h) else IntArray(0)
+        //
+        // Two sets of them, because there are two ways to grow a fan and one of them is the
+        // control the other is measured against: the breadth-first walk with its Chebyshev step
+        // count, and E5's best-first walk over Euclidean distance bent by depth. Only one is ever
+        // allocated. See `ErosionConfig.deltaOutline`.
+        // The breadth-first walk is still needed when the outline is switched off, and also when
+        // the *lobe* is switched off — `deltaLobe = false` is the pre-E1 slab and E5 leaves it
+        // exactly as it was, because `DeltaMouthTest` measures against it.
+        val squareFans = carryingSediment && (!cfg.deltaOutline || !cfg.deltaLobe)
+        val stamp = if (squareFans) IntArray(w * h) else IntArray(0)
         val fanCapacity = (2 * reach + 1) * (2 * reach + 1)
-        val fanQueue = IntArray(if (carryingSediment) fanCapacity else 0)
-        val fanDistance = IntArray(if (carryingSediment) fanCapacity else 0)
+        val fanQueue = IntArray(if (squareFans) fanCapacity else 0)
+        val fanDistance = IntArray(if (squareFans) fanCapacity else 0)
+        val scratch =
+            if (carryingSediment && cfg.deltaOutline) DeltaFan.Scratch(w * h, reach) else null
         var mouthId = 0
 
         // Lays the accumulated spoil on the rock. Called once, on the way out, and always before
@@ -254,6 +269,10 @@ internal object HydraulicErosion {
             // shoreline in units of the land's range, so converting back needs that range.
             val landRange = (working.max() - sea.threshold).coerceAtLeast(1e-6f)
             val deltaTop = sea.threshold + cfg.deltaFreeboard * landRange
+            // Where the rim of a lobe stands, and how deep the water has to be before the lobe
+            // stops wanting to cross it. See [SHELF_BREAK].
+            val rimTop = sea.threshold + (deltaTop - sea.threshold) * LOBE_RIM
+            val shelfDepth = (SHELF_BREAK * landRange).coerceAtLeast(1e-9f)
 
             var incised = 0.0
             var deposited = 0.0
@@ -377,6 +396,7 @@ internal object HydraulicErosion {
                             settled[i] += moved.toFloat()
                             carried -= moved
                             deposited += moved
+                            log?.record(i, DepositionLog.FLOODPLAIN, -1, moved)
                         }
                     }
                 }
@@ -395,24 +415,72 @@ internal object HydraulicErosion {
                         // out in front of the river rather than equally in every direction.
                         val outX = shortestX(target % w - i % w, w).toFloat()
                         val outY = (target / w - i / w).toFloat()
-                        val laid = fan(
-                            w, h, target, if (river) carried * cfg.deltaShare else 0.0, reach,
-                            stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment, settled,
-                            wholeCells = cfg.deltaLobe,
-                            accepts = { c, d ->
-                                !isLand[c] && (
-                                    !cfg.deltaLobe ||
-                                        d <= lobeReach(reach, target, c, outX, outY, w)
-                                    )
-                            },
-                            levelOf = { _, d ->
-                                if (cfg.deltaLobe) {
-                                    lobeLevel(deltaTop, sea.threshold, reach, d)
-                                } else {
-                                    deltaTop
+                        val budget = if (river) carried * cfg.deltaShare else 0.0
+                        // Shaped only when the lobe is a lobe at all: `deltaLobe = false` is the
+                        // pre-E1 slab and stays exactly that, because `DeltaMouthTest` measures
+                        // against it.
+                        val laid = if (cfg.deltaLobe && cfg.deltaOutline) {
+                            val rim = DeltaFan.Rim(
+                                apex = target,
+                                width = w,
+                                reach = reach.toFloat(),
+                                outX = outX,
+                                outY = outY,
+                                hash = DeltaFan.hash(config.seed, mouthKey(target, reach, w)),
+                                grooved = true
+                            )
+                            rim.pruneGrooves(h) { c -> !isLand[c] }
+                            growFan(
+                                w, h, budget, rim, scratch!!, ++mouthId,
+                                surfaceOf, sediment, settled,
+                                wholeCells = true,
+                                log = log,
+                                mark = DepositionLog.SEA_LOBE,
+                                accepts = { c -> !isLand[c] },
+                                // The cost of building into a cell is the accommodation space it
+                                // offers, which is its depth. Held against the shelf break rather
+                                // than against the cell beside it, so the same delta bends the same
+                                // way whatever the sea floor happens to be doing elsewhere.
+                                advance = { c ->
+                                    val depth = sea.threshold - (surfaceOf[c] + sediment[c])
+                                    1f + DEPTH_COST *
+                                        (if (depth > 0f) depth else 0f) / shelfDepth
+                                },
+                                // Apex to rim as a fraction of the rim in this cell's own
+                                // direction, so the whole edge of the lobe stands at the rim level
+                                // however far out that edge happens to be.
+                                levelOf = { c, t ->
+                                    val level = deltaTop + (rimTop - deltaTop) * t
+                                    if (rim.grooved(rim.dx(c), rim.dy(c))) {
+                                        sea.threshold + (level - sea.threshold) * GROOVE_KEEP
+                                    } else {
+                                        level
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        } else {
+                            fan(
+                                w, h, target, budget, reach,
+                                stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment,
+                                settled,
+                                wholeCells = cfg.deltaLobe,
+                                log = log,
+                                mark = DepositionLog.SEA_LOBE,
+                                accepts = { c, d ->
+                                    !isLand[c] && (
+                                        !cfg.deltaLobe ||
+                                            d <= lobeReach(reach, target, c, outX, outY, w)
+                                        )
+                                },
+                                levelOf = { _, d ->
+                                    if (cfg.deltaLobe) {
+                                        lobeLevel(deltaTop, sea.threshold, reach, d)
+                                    } else {
+                                        deltaTop
+                                    }
+                                }
+                            )
+                        }
                         deposited += laid
                         lost += carried - laid
                     }
@@ -426,26 +494,74 @@ internal object HydraulicErosion {
                         // every cell it touches is still standing water afterwards. A lacustrine
                         // delta shallows a lake; it is not allowed to abolish one, which is what
                         // filling to the brim did — seed 99 lost every lake it had.
-                        val laid = fan(
-                            w, h, target, carried * cfg.lakeShare, reach,
-                            stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment, settled,
-                            wholeCells = false,
-                            accepts = { c, _ -> isLand[c] && ground[c] - relative[c] > POND_DEPTH },
-                            // Deeper the further from the inflow, and uneven cell by cell.
-                            //
-                            // Laid to one depth below the surface — which is what this was — every
-                            // cell of a fan ends at exactly the same height, and a lake whose floor
-                            // is a plane has a level set that is a straight line: the water balance
-                            // then draws it with a ruler-straight shore. Measured on seed 59758 at
-                            // 2048, two lakes of 452 and 287 cells had a single distinct floor
-                            // height between them. A real fan slopes away from the river that
-                            // built it and is rough, so this one does too.
-                            levelOf = { c, d ->
-                                val depth = 2f * POND_DEPTH *
-                                    (1f + d * LAKE_FAN_SLOPE) * (0.9f + 0.35f * wobble(c))
-                                sea.threshold + (ground[c] - depth) * landRange
-                            }
-                        )
+                        //
+                        // The direction the inflow was travelling, so a lacustrine fan is a cone in
+                        // front of its river exactly as a delta is. Without it the fan's own
+                        // acceptance rule — "any ponded cell" — takes the whole breadth-first
+                        // square, which is where the rafts with right-angle corners came from.
+                        val inX = shortestX(target % w - i % w, w).toFloat()
+                        val inY = (target / w - i / w).toFloat()
+                        val laid = if (cfg.deltaOutline) {
+                            val rim = DeltaFan.Rim(
+                                apex = target,
+                                width = w,
+                                reach = reach.toFloat(),
+                                outX = inX,
+                                outY = inY,
+                                hash = DeltaFan.hash(config.seed, mouthKey(target, reach, w)),
+                                grooved = false
+                            )
+                            growFan(
+                                w, h, carried * cfg.lakeShare, rim, scratch!!, ++mouthId,
+                                surfaceOf, sediment, settled,
+                                wholeCells = false,
+                                log = log,
+                                mark = DepositionLog.LAKE_FAN,
+                                accepts = { c ->
+                                    isLand[c] && ground[c] - relative[c] > POND_DEPTH
+                                },
+                                advance = { c ->
+                                    val depth = (ground[c] - relative[c]) * landRange
+                                    1f + DEPTH_COST *
+                                        (if (depth > 0f) depth else 0f) / shelfDepth
+                                },
+                                levelOf = { c, t ->
+                                    val depth = 2f * POND_DEPTH *
+                                        (1f + LAKE_FAN_SLOPE * t * reach) *
+                                        (0.9f + 0.35f * wobble(c))
+                                    sea.threshold + (ground[c] - depth) * landRange
+                                }
+                            )
+                        } else {
+                            fan(
+                                w, h, target, carried * cfg.lakeShare, reach,
+                                stamp, ++mouthId, fanQueue, fanDistance, surfaceOf, sediment,
+                                settled,
+                                wholeCells = false,
+                                log = log,
+                                mark = DepositionLog.LAKE_FAN,
+                                accepts = { c, _ ->
+                                    isLand[c] && ground[c] - relative[c] > POND_DEPTH
+                                },
+                                // Deeper the further from the inflow, and uneven cell by cell.
+                                //
+                                // Laid to one depth below the surface — which is what this was —
+                                // every cell of a fan ends at exactly the same height, and a lake
+                                // whose floor is a plane has a level set that is a straight line:
+                                // the water balance then draws it with a ruler-straight shore.
+                                // Measured on seed 59758 at 2048, two lakes of 452 and 287 cells
+                                // had a single distinct floor height between them. A real fan
+                                // slopes away from the river that built it and is rough, so this
+                                // one does too. The taper is per cell, which is a resolution
+                                // dependence in itself; see [LAKE_FAN_SLOPE] for the measurement
+                                // and for why E5 left it where it found it.
+                                levelOf = { c, d ->
+                                    val depth = 2f * POND_DEPTH *
+                                        (1f + d * LAKE_FAN_SLOPE) * (0.9f + 0.35f * wobble(c))
+                                    sea.threshold + (ground[c] - depth) * landRange
+                                }
+                            )
+                        }
                         deposited += laid
                         load[target] += carried - laid
                     }
@@ -610,6 +726,20 @@ internal object HydraulicErosion {
         return (reach * (shape + LOBE_WOBBLE * wobble(cell))).toInt()
     }
 
+    /**
+     * The identity of a mouth, for the purpose of hashing its lobe's outline.
+     *
+     * Not the cell itself. A lobe is rebuilt every round and the cell its trunk arrives at migrates
+     * as the delta grows, so hashing the cell would give the same delta a different set of bays
+     * every round and twelve rounds of different bays average out to a disc. Quantising the apex to
+     * a block the size of the lobe's own reach means a mouth that wanders inside its own delta
+     * keeps one outline, and two mouths a delta apart get different ones.
+     */
+    private fun mouthKey(apex: Int, reach: Int, w: Int): Int {
+        val block = reach.coerceAtLeast(1)
+        return (apex / w / block) * 0x2000 + (apex % w / block)
+    }
+
     /** A fixed, repeatable number in 0..1 for a cell, from its index and nothing else. */
     private fun wobble(cell: Int): Float {
         var x = cell * -0x61c88647
@@ -672,8 +802,49 @@ internal object HydraulicErosion {
      * A fan is a slope, not a shelf: the coarse material drops at the inflow and the fine carries
      * further out, so the floor falls away from the mouth. Modest, because the whole fan sits in
      * water a few pond-depths deep and the point is a floor with a shape rather than a canyon.
+     *
+     * Charged **per cell**, which is a resolution dependence and is now known to be one. At 512 the
+     * far edge of a six-cell fan lies two and a half pond depths under the surface; at 1024, where
+     * the reach is twelve cells, four down; at 2048, seven — the same lake has a different floor at
+     * every grid, which is the thing `atResolution` exists to prevent. E5 found it, rewrote it as
+     * one and a half against the fraction of the rim (identical at 512, held at every other grid),
+     * measured it, and put it back. What the rewrite does at 1024 is lift the outer half of every
+     * lacustrine fan by up to a pond depth and a half, which shallows lakes, which moves two of
+     * B4's marginal guards: seed 42's comb share 4.0% to 5.2% against a 5.0% bar, and the cold
+     * country's lakes from four to three where the control clause asks for at least three times the
+     * un-glaciated count and three is 2.99998 times one. Neither is E5's to move and the one-line
+     * fix is not E5's either: it belongs with whoever can re-derive B4's bars against the lakes it
+     * leaves. Recorded in `TODO.md`.
      */
     private const val LAKE_FAN_SLOPE = 0.25f
+
+    /**
+     * How deep the water has to be, as a share of the land's relief, before a fan finds it as
+     * expensive to build into as it finds one whole cell of distance.
+     *
+     * Earth's shelf break stands at about 130 m, and 130 m against the eight kilometres of relief
+     * this model's land spans is 0.016 — the same figure as `SeaConfig.lowstand`, and not by
+     * coincidence: the shelf break is roughly where the shoreline stood at the last glacial
+     * maximum. It is the right scale for the question this constant answers, which is how much
+     * accommodation space a fan has to fill before it can advance. On a shelf a delta walks out
+     * almost freely and builds the Nile's two hundred kilometres of new land; over the lip it is
+     * paying eight or ten times as much per cell and stops, which is why a fjord-head delta is a
+     * step and not a fan. `DeltaOutlineTest` measures the ratio on a synthetic coast.
+     */
+    private const val SHELF_BREAK = 0.015f
+
+    /** How many cells of distance one shelf-break depth of water costs a fan. */
+    private const val DEPTH_COST = 1f
+
+    /**
+     * How much of a lobe's freeboard a distributary groove keeps, as a share.
+     *
+     * Deep enough that the D8 step across a delta follows the groove rather than the fill's
+     * epsilon, so what the rivers stage draws is a bird's foot; shallow enough that the groove is
+     * still dry land, because a groove cut below the waterline would be a finger of sea reaching
+     * into the lobe and the delta would come apart into islands.
+     */
+    private const val GROOVE_KEEP = 0.45f
 
     /** What one pass of the outlet notch took off, and out of how many cells. */
     private class Breached(val moved: Double, val cells: Int)
@@ -962,6 +1133,8 @@ internal object HydraulicErosion {
         sediment: FloatArray,
         settled: FloatArray,
         wholeCells: Boolean,
+        log: DepositionLog?,
+        mark: Byte,
         accepts: (Int, Int) -> Boolean,
         levelOf: (Int, Int) -> Float
     ): Double {
@@ -998,6 +1171,7 @@ internal object HydraulicErosion {
                 settled[c] += moved.toFloat()
                 remaining -= moved
                 laid += moved
+                log?.record(c, mark, start, moved)
             }
 
             if (d >= reach) continue

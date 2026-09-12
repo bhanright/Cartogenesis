@@ -894,7 +894,30 @@ data class ErosionConfig(
      *
      * Off is also the control `DeltaMouthTest` measures against.
      */
-    val deltaLobe: Boolean = true
+    val deltaLobe: Boolean = true,
+    /**
+     * Whether a fan's outline is a curve about its apex — Euclidean distance, bent by the depth of
+     * the water it builds into, wobbled by a few harmonics hashed from the mouth — or the square
+     * the breadth-first growth ran out at.
+     *
+     * Off, it is what [deltaLobe] left: the growth's *step count* stands in for a distance, and
+     * over eight neighbours a step count is the Chebyshev metric, whose iso-lines are squares. A
+     * lacustrine fan, whose acceptance rule says only "any ponded cell", therefore covers the whole
+     * `2·deltaReach+1` square around its inflow and leaves a flat raft with straight edges and
+     * right-angle corners when the water goes away — the rafts the author found beside a rift mouth
+     * on seed 718106 at 2048, ten and more cells of dead-straight coast at a stretch. A sea lobe
+     * does shape itself, by a cosine of the angle to its trunk, but it compares that shape against
+     * the same step count, so what it draws is a half-disc with its corners pulled out along the
+     * diagonals, and its only irregularity is a per-cell hash one cell deep that nobody can see.
+     *
+     * On, the rim is `R · (sides + (1 − sides) · max(cos θ, 0)) · (1 + a · s(θ))` about the apex,
+     * the walk fills shallow cells before deep ones so a delta progrades over a shelf and stubs
+     * into a trench, and a lobe with enough cells to hold them is cut two to five distributary
+     * grooves that the D8 routing then follows. See `DeltaFan`.
+     *
+     * Off is the control `DeltaOutlineTest` measures against.
+     */
+    val deltaOutline: Boolean = true
 )
 
 /**

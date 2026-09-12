@@ -102,6 +102,46 @@ class DebugMapDump {
     }
 
     /**
+     * H2: where the ice went, and where it stayed.
+     *
+     * Biomes for the three standard seeds at 512, before (`snowBalance = false`, ice wherever the
+     * annual mean is below -8 C) and after (a snow balance). Elevation alongside, because the
+     * question the renders answer is not only how much ice there is but whether what is left is in
+     * the places a glacier belongs — the wet highlands and the poles — rather than smeared over
+     * every cold interior.
+     */
+    @Test
+    fun `dump the H2 ice before and after`() {
+        outputDir.mkdirs()
+        listOf(7L, 42L, 1234L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val after = WorldGenerationEngine.generateBlocking(base)
+            val before = WorldGenerationEngine.generateBlocking(
+                base.copy(climate = base.climate.copy(snowBalance = false))
+            )
+            write(render(before, Mode.BIOME), "seed$seed-h2-before-biome.png")
+            write(render(after, Mode.BIOME), "seed$seed-h2-after-biome.png")
+            write(render(after, Mode.ELEVATION), "seed$seed-h2-after-elevation.png")
+            listOf("before" to before, "after" to after).forEach { (tag, world) ->
+                val tally = HashMap<Biome, Int>()
+                for (i in world.climate.biome.indices) {
+                    if (world.sea.isLand[i]) {
+                        tally[world.climate.biome[i]] = (tally[world.climate.biome[i]] ?: 0) + 1
+                    }
+                }
+                val land = world.sea.landCellCount
+                println(
+                    "H2 render seed $seed $tag: " + tally.entries.sortedByDescending { it.value }
+                        .joinToString(", ") {
+                            "${it.key} ${"%.1f".format(it.value * 100.0 / land)}%"
+                        }
+                )
+            }
+        }
+        println("H2 renders written to ${outputDir.absolutePath}")
+    }
+
+    /**
      * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), before
      * (`currentMoisture = 0`, today's field) and after (the default 0.07/deg). Annual rainfall and
      * biome only, since the effect is on the annual march's over-sea pickup rather than anything

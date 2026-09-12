@@ -86,15 +86,35 @@ relief to 0.010 across the twelve rounds, where with `outletIncision` off it end
 where it started. What the map keeps is bounded by a figure with a meaning — no world has a lake
 larger than the Caspian's 0.073% share of its surface, where two seeds in four did before.
 
-**Cold country is lake country.** Where the provisional mean annual temperature — latitude and
-altitude, from the same curve `ClimateStage` later uses — falls to freezing, ice takes over the
-valleys the water cut: a flat-floored U-shaped trough across the flow instead of a V, a cirque
-bitten out of every head, a staircase of over-deepened basins whose spacing is set by descent
-rather than distance, a recessional moraine barring the valley at the lower end of each reach and a
-terminal moraine at the snout. The signature is the standing water that leaves behind, because a
-river network cannot leave a hollow in its own bed and ice does nothing else: on seed 42
-`GlaciationTest` measures 52 lakes per 42,000 cells of ice, tundra and taiga against 3 per 30,000
-cells of temperate country — 12.5 times the density, against 0.0 times with the ice switched off.
+**A glacier is where the snow outlasts the year, not where it is cold.** Ice used to be simply
+"the mean annual temperature is at or below freezing", which made an ice sheet of every cold
+interior — 41.9% of seed 7's land, against the 10.1% of Earth's that carries glacier ice, nearly
+all of it in two places. `SnowBalance` weighs the two things that actually decide it, out of the
+four seasonal fields the climate stage already computes: accumulation, the share of each half
+year's precipitation that falls with that half year below freezing, and ablation, a positive
+degree-day melt at 4.5 mm water equivalent per degree-day (the middle of the published 3-5 for
+snow) with the seasonal means turned into degree-days by Calov and Greve's closed form for a
+normal spread of daily temperature about a mean. Ice is where the year ends in surplus. Siberia is
+colder than the Norwegian coast in every month and has no ice sheet because nothing falls on it,
+and that distinction is now available to the map: pooled over seeds 7, 42, 1234 and 99 the ice
+share of land falls from 28.8% to 9.2%, and at one summer temperature the wettest quarter of the
+land carries ice on every seed while the driest quarter carries none.
+
+**Cold country is lake country — and the cold that made it is not today's.** Where the ice is, it
+takes over the valleys the water cut: a flat-floored U-shaped trough across the flow instead of a
+V, a cirque bitten out of every head, a staircase of over-deepened basins whose spacing is set by
+descent rather than distance, a recessional moraine barring the valley at the lower end of each
+reach and a terminal moraine at the snout. But the ground that shows those landforms on Earth —
+Finland, the Canadian Shield, the Lake District, the Finger Lakes — carries no glacier now and has
+not for ten thousand years. So the mask the carving works from is the snow balance of a *colder*
+world, `GlaciationConfig.glacialMaximumC`: the last glacial maximum's 6.1 C of global mean cooling
+(Tierney et al. 2020), applied as the latitude ramp the proxies describe rather than as a uniform
+shift, since the tropics cooled 1.5-3 C and the high latitudes 10-20. That puts 26% of seed 42's
+land under ice at the maximum against Earth's roughly 25%, while the map still draws today's 4%.
+The signature is the standing water the ice leaves behind, because a river network cannot leave a
+hollow in its own bed and ice does nothing else: on seed 42 at 1024 `GlaciationTest` measures 9
+glacial lakes in 130,000 cells of ice, tundra and taiga against 2 with the ice switched off, in
+country whose temperate half holds none at all.
 
 **A dry basin is not a full one.** Depression filling raises every closed basin to its spill level,
 which is the right answer to a routing question and the wrong answer to a hydrological one: the
@@ -304,6 +324,15 @@ this boundary at all.
 from tundra by moisture exactly as the old `t < 7` branch was; warmest above 10°C with coldest
 above −3°C is temperate (C), keeping every existing moisture class including the Mediterranean one.
 The tropical line is Köppen's own, a coldest month at or above 18°C, taken verbatim.
+
+Above all of them sits the ice gate, and it is no longer thermal at all: H2 replaced "annual mean
+below −8°C" with `SnowBalance`'s surplus, so a cell falls through to the aridity line and the
+thermal groups unless a year's snow actually outlives the year. What that took away from ice it
+gave to tundra — on seed 7, ice 41.9% → 8.4% of land and tundra 17.9% → 50.3% — and to alpine
+where the ground stands high enough (0.2% → 1.3% on the same seed). Every other class is unmoved
+to within a tenth of a percent, which is the point: the change is about what the ice was hiding,
+not about the moisture axis. Sea ice is untouched, because frozen sea water is not a mass
+balance.
 
 Reading the coldest month at all needed the latitude curve to actually reach it: at the exponent
 seasons landed with, 45° — the effective latitude a 55° coast's summer reads off, one

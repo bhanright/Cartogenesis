@@ -128,7 +128,7 @@ class SnowBalanceTest {
      * `snowBalance = false` is the pre-H2 generator, to the bit.
      *
      * The pins are the elevation and biome checksums of the four standard seeds at 512, measured
-     * on `main` at 10a749c — the commit this chunk branched from — by generating with the *default*
+     * on `main` at 37aa214 — the commit this chunk was last merged from — by generating with the *default*
      * config there and hashing the same two arrays the same way. So the assertion is not "this code
      * still agrees with itself", it is "with the knob off, this code produces the world the
      * previous commit produced", which is what the chunk was asked to prove.
@@ -141,10 +141,10 @@ class SnowBalanceTest {
     @Test
     fun `the control reproduces the pre-H2 world bit for bit`() {
         val pins = mapOf(
-            7L to (2966414997367459592L to -1484980012174225885L),
-            42L to (6523592596473112901L to 3352327864221578930L),
-            1234L to (6235285917395248960L to 4674515218256002600L),
-            99L to (-5564129074956957112L to 7474338318625978948L)
+            7L to (-5570938242032017060L to -3821000834625243742L),
+            42L to (5063332696051296205L to 3709976308418727873L),
+            1234L to (-4131320833814684458L to -3137758199564851396L),
+            99L to (5080677618336571823L to -5846109820223702467L)
         )
         seeds.forEach { seed ->
             val control = world(seed, balance = false)

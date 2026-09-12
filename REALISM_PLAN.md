@@ -660,6 +660,18 @@ across and a notch empties.
   hypsometry reported before and after (the floors move it). Render both worlds at 2048, crop
   every rift lake before and after, and look — the trough should read as one long deep lake with
   a small delta where the river enters, which is what William preferred in the left-hand crop.
+- The floor is a plane, and that is the other half of what William sees. E6 measured the valley
+  in his crop with deposition switched off: the dead-straight seaward front of the terrace and
+  the pale bench of constant width down the west side are the sea-level cut running along one
+  contour of E4's planar half-graben, and two thirds of the saw-tooth and forty-five-degree bars
+  of standing water survive without any deposition at all, because D8 flow on a plane runs
+  straight and the fill ponds it in rows. So the floor gets relief as well as depth: a seeded
+  roughness along and across strike at a stated share of the floor's depth (H1 gave its
+  aulacogens roughness along strike for the same reason), enough that no contour of the floor is
+  a straight line longer than a stated fraction of the segment. Guard: on the valley in William's
+  window, lake cells in thin grid-bearing or diagonal bars fall from E6's 102-with-deposition-off
+  to a stated figure, and the longest straight run of shore falls under E5's bar, both shown
+  failing on the planar floor.
 - Out of scope: subsidence under sediment load, which is S2 in `REALISM_AUDIT.md` and makes this
   a process rather than a stamp.
 

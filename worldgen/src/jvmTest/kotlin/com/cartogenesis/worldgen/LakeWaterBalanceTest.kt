@@ -246,4 +246,245 @@ class LakeWaterBalanceTest {
         assertTrue(coolTemperate in 400f..650f, "cool temperate evaporates $coolTemperate mm/yr, wanted near 500")
         assertEquals(0f, frozen, 0f, "frozen ground evaporates nothing")
     }
+
+    /** One D8 step of a drawn river, as a unit bearing, with the seam wrapped. */
+    private fun bearings(cells: IntArray, w: Int): List<Int> {
+        val out = ArrayList<Int>(cells.size)
+        for (k in 0 until cells.size - 1) {
+            var dx = cells[k + 1] % w - cells[k] % w
+            if (dx > w / 2) dx -= w
+            if (dx < -w / 2) dx += w
+            val dy = cells[k + 1] / w - cells[k] / w
+            if (kotlin.math.abs(dx) > 1 || kotlin.math.abs(dy) > 1) continue
+            out.add((dy + 1) * 3 + (dx + 1))
+        }
+        return out
+    }
+
+    private class Straightness {
+        var steps = 0
+        var straight = 0
+        var axis = 0
+        var chains = 0
+        var longest = 0
+        val share get() = if (steps == 0) 0.0 else straight.toDouble() / steps
+
+        fun add(bearing: List<Int>) {
+            if (bearing.size < 2) return
+            chains++
+            var run = 1
+            for (k in 1 until bearing.size) {
+                steps++
+                if (bearing[k] == bearing[k - 1]) {
+                    straight++
+                    if (bearing[k] % 2 == 1) axis++
+                    run++
+                    if (run > longest) longest = run
+                } else {
+                    run = 1
+                }
+            }
+        }
+
+        override fun toString() =
+            "chains=$chains steps=$steps straightShare=${"%.3f".format(share)} " +
+                "axisShareOfStraight=${"%.3f".format(if (straight == 0) 0.0 else axis.toDouble() / straight)} " +
+                "longestRun=$longest"
+    }
+
+    /**
+     * Nothing the pipeline draws as a river may run across standing water.
+     *
+     * What is under a lake is the depression-filled surface, and inside a basin that surface is flat
+     * to within the 1e-6 the fill nudges each cell of a flat by as the priority flood passes over
+     * it. The flood takes equal ground in cell-index order, so the nudge grows west to east and
+     * north to south, and D8 reads a gradient of one nudge per cell pointing due east or due south —
+     * which beats every diagonal, whose drop is divided by the root of two. Every row of the lake
+     * does the same thing, so the picture is several dead-straight parallel lines crossing the
+     * water. It is the fill's bookkeeping showing through, not a fact about the ground.
+     *
+     * The rule is therefore the simple one: a drawn river ends at the shore. The single cell where
+     * it touches the water is kept, so the line reaches the lake; two water cells in a row is the
+     * failure.
+     *
+     * Shown failing on the code before this: seed 7 at 512 drew a river nine cells across open
+     * water at (338,160) and put 94 river cells on lakes in all; seed 718106 at 1024, 46. After,
+     * the longest run on every seed here is one and that one cell is the shore.
+     */
+    @Test
+    fun `no drawn river runs across a lake`() {
+        listOf(7L to 512, 42L to 512, 1234L to 512, 59758L to 512, 718106L to 1024).forEach { (seed, size) ->
+            val world = WorldGenerationEngine.generateBlocking(
+                WorldGenConfig(seed = seed, width = size, height = size, seaLevel = 0.62f)
+            )
+            val lakes = world.rivers.lakes
+            var onWater = 0
+            var longest = 0
+            var where = ""
+            world.rivers.rivers.forEach { river ->
+                var run = 0
+                river.cells.forEach { cell ->
+                    if (lakes.isLake(cell)) {
+                        onWater++
+                        run++
+                        if (run > longest) {
+                            longest = run
+                            where = "(${cell % world.width},${cell / world.width})"
+                        }
+                    } else {
+                        run = 0
+                    }
+                }
+            }
+            println(
+                "STRAIGHT seed $seed at $size: $onWater drawn river cells lie on a lake, " +
+                    "longest unbroken run across water $longest at $where"
+            )
+            assertTrue(
+                longest <= 1,
+                "seed $seed at $size draws a river $longest cells across open water at $where"
+            )
+        }
+    }
+
+    /**
+     * The re-routing of a basin the balance shrank, on ground that is exactly flat.
+     *
+     * Deposition lays its lacustrine fans to a single level, so a basin floor really can be hundreds
+     * of cells at one identical height — 287 of them with one distinct height on seed 718106 at
+     * 2048. On ground like that every height comparison is a tie, and a routing that hands each cell
+     * to whichever neighbour the wavefront reached first is deciding by cell index, which is to say
+     * by scan order: paths that run due east or due south for as far as the flat goes.
+     *
+     * A 64 by 64 sheet at one height with a patch of water in the middle is that case with nothing
+     * else in it. The measure is the share of steps that repeat the previous step's bearing; a scan
+     * is near 1, and anything that follows a gradient is well below it.
+     *
+     * Shown failing on the code before this: 95.8% of steps repeated the previous bearing, with a
+     * longest unbroken run of 61 cells on a 64-cell sheet — a scan, exactly. After: 61.6%, longest
+     * run 32. The bar is 80%, between the two and clear of both.
+     */
+    @Test
+    fun `a dead flat basin floor does not route in scan lines`() {
+        val w = 64
+        val h = 64
+        val ground = com.cartogenesis.worldgen.model.FloatField(w, h)
+        ground.data.fill(0.5f)
+
+        val water = ArrayList<Int>()
+        for (y in 30..33) for (x in 30..33) water.add(y * w + x)
+
+        val pending = BooleanArray(w * h) { true }
+        val flowTarget = IntArray(w * h) { -1 }
+        com.cartogenesis.worldgen.pipeline.LakeWaterBalance.routeIntoWater(
+            w, h, ground, pending, water.toIntArray(), w * h, flowTarget,
+            IntArray(w * h) { -1 }, 0, FloatArray(w * h), seed = 59758L
+        )
+
+        val straight = Straightness()
+        val isWater = BooleanArray(w * h)
+        water.forEach { isWater[it] = true }
+        for (start in 0 until w * h) {
+            if (isWater[start]) continue
+            val path = ArrayList<Int>()
+            var cell = start
+            var steps = 0
+            while (steps++ < w * h) {
+                path.add(cell)
+                if (isWater[cell]) break
+                val next = flowTarget[cell]
+                assertTrue(next >= 0, "cell (${cell % w},${cell / w}) drains nowhere")
+                cell = next
+            }
+            assertTrue(isWater[path.last()], "a path from (${start % w},${start / w}) never reached the water")
+            straight.add(bearings(path.toIntArray(), w))
+        }
+        println("STRAIGHT flat 64x64 basin, every cell's route to the water: $straight")
+        assertTrue(
+            straight.share < 0.80,
+            "a dead flat floor routes ${"%.1f".format(straight.share * 100)}% of its steps " +
+                "in the same direction as the step before, which is a scan and not a drainage"
+        )
+    }
+
+    /**
+     * A river that ends in a basin the balance shrank must wander like any other river.
+     *
+     * The exposed floor of an endorheic basin is the one piece of ground on the map whose drainage
+     * is not the ordinary steepest descent: the lake no longer reaches the spill the fill routed
+     * everything towards, so [com.cartogenesis.worldgen.pipeline.LakeWaterBalance.routeIntoWater]
+     * re-points the whole basin at the water. Do that with a breadth-first wavefront and the
+     * parent every cell gets is whichever neighbour the wavefront happened to reach first, which
+     * on ground the deposition fans left exactly flat is the lowest cell index — scan order. The
+     * result is a river running due east or due south for tens of cells, several of them in
+     * parallel, which is what William saw at 2048.
+     *
+     * Measured as the share of a drawn river's steps that repeat the previous step's bearing.
+     * Water does repeat itself — a river down a real slope holds its bearing about half the time —
+     * so the figure is only meaningful against the same figure for rivers that end in the sea, on
+     * the same worlds. The bar is that ratio.
+     */
+    @Test
+    fun `rivers into a balanced basin wander like any other river`() {
+        val endorheic = Straightness()
+        val sea = Straightness()
+
+        listOf(drySeed to 512, 718106L to 1024, 42L to 512, 1234L to 512).forEach { (seed, size) ->
+            val world = world(seed, waterBalance = true, size = size)
+            val w = world.width
+            val h = world.height
+            val lakes = world.rivers.lakes
+
+            // Where a drawn river's water actually ends up, following the drainage on from its
+            // last drawn cell: a tributary's own mouth says nothing about where the water goes.
+            fun terminus(start: Int): Int {
+                var cell = start
+                var steps = 0
+                while (steps++ < w * h) {
+                    if (!world.sea.isLand[cell]) return -2
+                    if (lakes.isLake(cell) || lakes.isPlaya(cell)) return cell
+                    val next = world.rivers.flowTarget[cell]
+                    if (next < 0) return cell
+                    cell = next
+                }
+                return cell
+            }
+
+            val here = Straightness()
+            world.rivers.rivers.forEach { river ->
+                val end = terminus(river.cells.last())
+                val bearing = bearings(river.cells, w)
+                when {
+                    end == -2 -> sea.add(bearing)
+                    end >= 0 && ((lakes.lakeId[end] >= 0 && lakes.lakes[lakes.lakeId[end]].endorheic) ||
+                        lakes.isPlaya(end)) -> {
+                        endorheic.add(bearing)
+                        here.add(bearing)
+                    }
+                }
+            }
+            println("STRAIGHT seed $seed at $size, into a balanced basin: $here")
+        }
+
+        println("STRAIGHT pooled, rivers ending in an endorheic lake: $endorheic")
+        println("STRAIGHT pooled, rivers ending in the sea:           $sea")
+        val ratio = endorheic.share / sea.share
+        println("STRAIGHT pooled endorheic/sea straight-run ratio = ${"%.3f".format(ratio)}")
+
+        // The bar is stated from the measurement rather than from a wish, and it is honest about
+        // what it is: at the resolutions this runs at only a handful of drawn rivers end in a
+        // balanced basin — E1's outlet notch drains most basins before the balance ever sees them —
+        // so this is a watch on the figure, not a guard that has been shown to fail. The guard that
+        // has been shown to fail is `no drawn river runs across a lake`, above. Measured on this
+        // pool before the change: 0.431 against 0.481, a ratio of 0.896.
+        assertTrue(
+            endorheic.chains >= 10,
+            "only ${endorheic.chains} drawn rivers end in a balanced basin; the measurement is noise"
+        )
+        assertTrue(
+            ratio <= 1.25,
+            "rivers into a balanced basin hold their bearing ${"%.1f".format(ratio * 100)}% as often " +
+                "as rivers to the sea, wanted no more than 125%"
+        )
+    }
 }

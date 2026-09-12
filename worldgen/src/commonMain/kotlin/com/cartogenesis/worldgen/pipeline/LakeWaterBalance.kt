@@ -151,6 +151,63 @@ internal object LakeWaterBalance {
     }
 
     /**
+     * A seeded, low-amplitude, spatially coherent perturbation of the ground, in the same units as
+     * the relative elevation.
+     *
+     * It exists for one case: ground that is *exactly* flat. Deposition lays its lacustrine fans to
+     * a single level, so the floor of a basin that has been silting up for a while can be hundreds
+     * of cells holding one identical elevation to the last bit — measured on seed 718106 at 2048,
+     * a 287-cell basin floor with one distinct height in it, and 41% of all exposed basin floor on
+     * seed 59758 has a neighbour at exactly the same height. On ground like that every comparison
+     * of two heights is a tie, every tie falls to the cell index, and anything that walks the grid
+     * comes out as a scan: paths that run due east or due south for as far as the flat goes, several
+     * of them side by side.
+     *
+     * Value noise on a lattice of [JITTER_PERIOD] cells rather than per-cell white noise, because
+     * the point is to give the flat a *gradient* to follow. White noise would make each cell pick
+     * an unrelated direction and the path would stagger; a smooth field gives it a slope that turns
+     * gently, so the path meanders the way water on a floodplain does.
+     *
+     * The amplitude is chosen, not tuned: ten times the 1e-6 the depression fill nudges a flat cell
+     * by, so it decides wherever the fill's own staircase would have, and a hundredth of the
+     * smallest real cell-to-cell drop the routing has to respect — a basin floor measured at 2048
+     * falls by 3e-3 to 1.3e-2 per cell — so nowhere with genuine relief in it is moved at all.
+     */
+    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float {
+        val lattice = (width / JITTER_PERIOD).coerceAtLeast(1)
+        val gx = x / JITTER_PERIOD
+        val gy = y / JITTER_PERIOD
+        val fx = (x - gx * JITTER_PERIOD).toFloat() / JITTER_PERIOD
+        val fy = (y - gy * JITTER_PERIOD).toFloat() / JITTER_PERIOD
+        // Smoothstep, so the field has no creases on the lattice lines for a path to follow.
+        val sx = fx * fx * (3f - 2f * fx)
+        val sy = fy * fy * (3f - 2f * fy)
+        val x0 = gx % lattice
+        val x1 = (gx + 1) % lattice
+        val top = lerp(hash(x0, gy, seed), hash(x1, gy, seed), sx)
+        val bottom = lerp(hash(x0, gy + 1, seed), hash(x1, gy + 1, seed), sx)
+        return lerp(top, bottom, sy) * JITTER_AMPLITUDE
+    }
+
+    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+    /** One lattice corner's value in -1..1. Integer mixing only, so every platform agrees. */
+    private fun hash(ix: Int, iy: Int, seed: Long): Float {
+        var h = seed xor (ix.toLong() * -0x61c8864680b583ebL) xor (iy.toLong() * 0x27220a95_1d5a2b1fL)
+        h = h xor (h ushr 30)
+        h *= -0x40a7b892e31b1a47L
+        h = h xor (h ushr 27)
+        h *= -0x6b2fb644ecceee15L
+        h = h xor (h ushr 31)
+        return (h ushr 40).toInt() / 8388608f - 1f
+    }
+
+    /** Cells across one period of the jitter field: short enough to bend a path inside one basin. */
+    private const val JITTER_PERIOD = 8
+
+    private const val JITTER_AMPLITUDE = 1e-5f
+
+    /**
      * Re-points every cell of an endorheic basin at the water, instead of at the spill it no longer
      * reaches.
      *
@@ -161,17 +218,34 @@ internal object LakeWaterBalance {
      * the lake like any other hillside — so the routing inside the basin has to be redone on the
      * true ground.
      *
-     * A priority-flood outward from the shore does it: pop the lowest cell reached so far, hand its
-     * unvisited neighbours a flow target pointing back at it, and key each of them by the highest
-     * ground the path to it had to cross. Every cell then drains to the water by the lowest route
-     * there is, which is the route water would take, and the tree it builds cannot contain a cycle.
+     * A priority-flood outward from the shore reaches every cell in the right order: pop the lowest
+     * cell settled so far and offer its unsettled neighbours a place in the queue, keyed by the
+     * highest ground the path to them had to cross, so each one is reached over its lowest saddle
+     * and no cell is reached before the route to it exists.
+     *
+     * What the flood must *not* decide is which neighbour a cell drains into. Handing a cell to
+     * whichever neighbour happened to reach it first makes the answer a property of the wavefront
+     * rather than of the ground, and a wavefront on flat ground is a scan — which is how a basin
+     * floor ends up with several parallel rivers running dead straight across it. So the parent is
+     * chosen at pop time instead, by steepest descent over the real ground among the neighbours
+     * already settled, distance-weighted so a diagonal has to be half again as deep to win. Ties
+     * fall to the lower cell index, and on ground flat enough for a tie the [jitter] has already
+     * decided, so the index almost never gets a say.
+     *
+     * Choosing among *settled* neighbours only is what keeps the result a tree: a settled neighbour
+     * was popped earlier than this cell, so following the targets walks strictly backwards through
+     * the pop order and must end at the water.
      *
      * @param water the cells that hold the lake (or the playa), which become sinks.
      * @param pending one flag per cell of the whole map, true for exactly this basin's cells. It is
-     *   how a cell is known to be unsettled, and it is left all-false for this basin afterwards —
+     *   how a cell is known to be unqueued, and it is left all-false for this basin afterwards —
      *   the caller hands the same array to the next basin without clearing it. A flat array rather
      *   than a map because a hash container's iteration order must never reach a decision here, and
      *   the cheapest way to be sure of that is not to have one.
+     * @param settled which cells this flood has already popped, stamped with [mark] so the same
+     *   array serves every basin without being cleared between them.
+     * @param pathKey scratch, one float per cell: the highest ground on the route to that cell.
+     * @param seed the world's seed, so the [jitter] is this world's and not every world's.
      * @param flowTarget modified in place.
      */
     fun routeIntoWater(
@@ -181,27 +255,57 @@ internal object LakeWaterBalance {
         pending: BooleanArray,
         water: IntArray,
         cellCount: Int,
-        flowTarget: IntArray
+        flowTarget: IntArray,
+        settled: IntArray,
+        mark: Int,
+        pathKey: FloatArray,
+        seed: Long
     ) {
+        fun surfaceAt(cell: Int): Float =
+            ground.data[cell] + jitter(width, cell % width, cell / width, seed)
+
         val heap = LongMinHeap(cellCount.coerceAtLeast(16))
         for (cell in water) {
             if (!pending[cell]) continue
             pending[cell] = false
+            settled[cell] = mark
             flowTarget[cell] = -1
-            heap.push(FlowRouting.encode(ground.data[cell], cell))
+            val here = surfaceAt(cell)
+            pathKey[cell] = here
+            heap.push(FlowRouting.encode(here, cell))
         }
 
         while (!heap.isEmpty()) {
-            val popped = heap.pop()
-            val cell = FlowRouting.decodeIndex(popped)
-            val level = ground.data[cell]
-            FlowRouting.forEachNeighbour(width, height, cell % width, cell / width) { n ->
+            val cell = FlowRouting.decodeIndex(heap.pop())
+            val x = cell % width
+            val y = cell / width
+            val here = surfaceAt(cell)
+
+            // Water cells are sinks and were settled with the seeds; everything else drains.
+            if (settled[cell] != mark) {
+                settled[cell] = mark
+                var best = -1
+                var bestDrop = -Float.MAX_VALUE
+                FlowRouting.forEachNeighbourWithDistance(width, height, x, y) { n, distance ->
+                    if (settled[n] != mark) return@forEachNeighbourWithDistance
+                    val drop = (here - surfaceAt(n)) / distance
+                    if (drop > bestDrop || (drop == bestDrop && n < best)) {
+                        bestDrop = drop
+                        best = n
+                    }
+                }
+                flowTarget[cell] = best
+            }
+
+            val level = pathKey[cell]
+            FlowRouting.forEachNeighbour(width, height, x, y) { n ->
                 if (!pending[n]) return@forEachNeighbour
                 pending[n] = false
-                flowTarget[n] = cell
                 // Keyed by the highest ground on the way down, so the route out of a side hollow
                 // is the one over its lowest saddle.
-                val key = if (ground.data[n] > level) ground.data[n] else level
+                val there = surfaceAt(n)
+                val key = if (there > level) there else level
+                pathKey[n] = key
                 heap.push(FlowRouting.encode(key, n))
             }
         }

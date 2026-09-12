@@ -43,6 +43,20 @@ data class OceanResult(
  */
 object OceanStage {
 
+    /**
+     * A sea with its temperature but without its currents: the base sea-surface temperature by
+     * latitude and nothing else, no gyres and a zero anomaly everywhere.
+     *
+     * For H2's provisional climate, which runs before the ice is carved and only to say where the
+     * ice is. The gyre solve is the expensive half of that provisional climate — 2.1 s at 2048
+     * against the moisture march's 1.5 s — and it is worth 0.5-1.6% of the ice mask (measured on
+     * the four standard seeds at 512, 62-128 cells of 4,000-13,000). The real ocean, currents and
+     * all, is solved once as it always was, on the carved terrain, and the climate that classifies
+     * the map the reader sees is computed from it.
+     */
+    internal fun withoutCurrents(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
+        generate(config.copy(ocean = config.ocean.copy(enabled = false)), sea)
+
     fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult {
         val w = config.width
         val h = config.height

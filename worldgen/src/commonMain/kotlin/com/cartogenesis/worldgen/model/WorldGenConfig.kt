@@ -406,7 +406,25 @@ data class ClimateConfig(
      * 5-degree cold anomaly cuts pickup by 35% ("cuts it by a third"). Zero reproduces the field
      * from before this setting existed, bit for bit, whatever the anomaly.
      */
-    val currentMoisture: Float = 0.07f
+    val currentMoisture: Float = 0.07f,
+    /**
+     * Whether ice is decided by a snow mass balance rather than by a temperature.
+     *
+     * On, [com.cartogenesis.worldgen.pipeline.SnowBalance] weighs a year's snowfall against a
+     * year's melt in each cell, and ice is where the year ends in surplus. Two things read it: the
+     * `ICE_SHEET` gate in [com.cartogenesis.worldgen.pipeline.ClimateStage]'s classifier, and the
+     * frozen mask [com.cartogenesis.worldgen.pipeline.GlaciationStage] carves from — which is why
+     * this setting lives in the climate section although one of its consumers runs two stages
+     * before climate does. It is a fact about the climate; the engine runs a provisional climate
+     * ahead of the ice to have it in time.
+     *
+     * Off restores the pre-H2 world exactly: the classifier's ice gate goes back to an annual mean
+     * below -8 C, the glaciation mask back to a provisional annual mean at or below
+     * [GlaciationConfig.freezingC], and no provisional climate is run at all. That is the control
+     * `SnowBalanceTest` measures against, and it is bit-for-bit the old world — the checksum in
+     * that test is the proof.
+     */
+    val snowBalance: Boolean = true
 )
 
 @Serializable
@@ -729,6 +747,39 @@ data class GlaciationConfig(
      * bounded by the classification the plan asked for rather than merely near it.
      */
     val freezingC: Float = 0f,
+    /**
+     * How much colder the world that *carved* this terrain was than the world the map shows, in C.
+     *
+     * The ice a map draws and the ice that shaped the ground beneath it are not the same ice, and
+     * this is the number that separates them. Finland's two hundred thousand lakes, the Canadian
+     * Shield, the Lake District and the Finger Lakes were all cut by the Laurentide and Fennoscandian
+     * sheets, which are gone: at the last glacial maximum ice covered about a quarter of the land
+     * and today it covers a tenth, nearly all of it in two places neither of those lake countries
+     * is near. So the mask this stage carves from is the snow balance of a *colder* world, while
+     * `ClimateStage.classify` paints today's ice from today's balance, and the difference between
+     * the two is the country that was glaciated and is not now — which is exactly where a map
+     * should show lakes.
+     *
+     * 6 C, from the estimate of the last glacial maximum's *global mean* cooling: Tierney et al.,
+     * *Glacial cooling and climate sensitivity revisited* (Nature 584, 2020), put it at 6.1 ± 0.4 C
+     * below pre-industrial, and earlier proxy syntheses at 4-7. It is not applied uniformly — the
+     * glacial cooling was strongly polar-amplified and applying its mean everywhere gets the
+     * geography of the ice wrong; see
+     * [com.cartogenesis.worldgen.pipeline.SnowBalance.glacialCoolingByRow], which turns this one
+     * figure into the latitude ramp the proxies actually describe.
+     *
+     * Rainfall is left as it is, although the glacial world was also drier, which makes the mask a
+     * little generous. Generous is the forgiving direction for a *bound* on carving — the stage's
+     * own catchment, relief, length and sinuosity tests decide what is actually cut inside it, and
+     * its run-out already reaches eight cells past the mask.
+     *
+     * Zero makes the carving mask today's ice, which is what the first cut of H2 did: measured on
+     * seed 42 at 512 it left 4,047 frozen cells, 92 of them in channelled country and not one
+     * glacier, so the world had no glacial lakes at all and B4's whole guard collapsed to zero.
+     * That is the correct answer to the question "where are the glaciers today" and the wrong
+     * answer to "what does this landscape look like", and the distinction is what this setting is.
+     */
+    val glacialMaximumC: Float = 6f,
     /**
      * Smallest frozen catchment that carries a valley glacier, as a share of *the frozen ground*.
      *

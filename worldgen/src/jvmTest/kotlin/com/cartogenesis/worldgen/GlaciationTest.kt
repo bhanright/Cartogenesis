@@ -3,7 +3,9 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -826,7 +828,12 @@ class GlaciationTest {
     /** The stage's own tally, which is not required to balance but is required to be looked at. */
     private fun reportBudget(config: WorldGenConfig, world: WorldMap) {
         val sea = SeaLevelStage.apply(world.erosion.height, config.seaLevel, config.sea)
-        GlaciationStage.apply(config, sea) { mass ->
+        // The same provisional snow balance the engine hands the stage (H2), or null for the
+        // pre-H2 temperature mask, so the tally reported here is the one the world was made with.
+        val balance = if (config.climate.snowBalance) {
+            ClimateStage.provisionalSnowBalance(config, sea, OceanStage.generate(config, sea))
+        } else null
+        GlaciationStage.apply(config, sea, balance) { mass ->
             println(
                 "GLACIATION budget frozen=${mass.frozenCells}" +
                     " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +

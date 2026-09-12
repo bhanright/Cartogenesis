@@ -30,3 +30,4 @@ keystore.properties
 # Subagent worktrees. Each parallel chunk of REALISM_PLAN.md works in its own checkout here;
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
+desktop/src/test/kotlin/com/cartogenesis/desktop/SeedProbe*.kt

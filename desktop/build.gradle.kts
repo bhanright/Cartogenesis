@@ -75,6 +75,31 @@ tasks.withType<Test>().configureEach {
     )
 }
 
+// T1: `ExportAuditTest`'s 2048/4096 exports move to the on-demand / nightly audit tier, matching
+// the class-name-plus-filter split used in `:worldgen` (see that module's build script for why a
+// `@Tag` was not used there; the same filter mechanism works unchanged on this module's JUnit5
+// runner, so both modules are split the same way).
+val auditOnlyClasses = listOf("com.cartogenesis.desktop.ExportAuditTest")
+
+tasks.named<Test>("test") {
+    filter {
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+    }
+}
+
+tasks.register<Test>("audit") {
+    group = "verification"
+    description = "Runs the on-demand / nightly audit tier: the 2048/4096 exports excluded from " +
+        "the per-merge test task."
+    val testTask = tasks.named<Test>("test").get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    filter {
+        auditOnlyClasses.forEach { includeTestsMatching(it) }
+        isFailOnNoMatchingTests = true
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.cartogenesis.desktop.MainKt"

@@ -100,21 +100,20 @@ class DepositionTest {
      * And an eighth time, for the delta work in the same stage as E1: the closing pass now opens
      * the pockets of water a river ends in and cuts a groove along a drawn river's own path where
      * that path crosses ground the fill had to raise. It runs whether or not anything is being
-     * carried — deliberately, and this pin is the reason: the case below holds a world with
-     * deposition off and a world with it running and every rate at zero to be bit-identical, and
-     * gating the pass on the spoil broke that. Land held at 6226 for the eighth time.
+     * carried. Land held at 6226 for the eighth time.
      *
-     * And a ninth time for H1 (tectonic history), the largest terrain change of the lot: the stage
-     * now stamps three configurations of the same plates rather than one, so every world carries
-     * the worn belts of two boundaries that are gone as well as the sharp ones of the boundaries
-     * that are there, and `PlateStage` normalizes the whole field over its own range, which
-     * carries a little of that everywhere. The switch is [TectonicsConfig.historyEpochs] and
-     * setting it to 1 reproduces the *pre-H1* field bit for bit — `TectonicHistoryTest` pins
-     * exactly that — so what moved here is the shipped default and not the arithmetic. Land held
-     * at 6226 for the ninth time, for the reason it has held every other time: the shoreline is a
-     * rank cut on a fixed fraction of the cells.
+     * The elevation checksum this pinned was re-recorded nine times in two days — every one of the
+     * changes above touches some terrain field upstream of the hydraulic pass, so the exact
+     * fingerprint moves whenever anything does, and re-recording it proved nothing beyond "this is
+     * still whatever the code currently produces". T1 dropped it. What actually guards this class —
+     * the land count above (which *has* stayed put across all eight changes, because none of them
+     * moved the shoreline), the structural cases below (mass conservation, deltas gaining land),
+     * and the off-equals-on-at-zero-rates identity — is unchanged.
+     *
+     * H1 (the tectonic history) is the ninth such change and the largest of them, and it is the
+     * first that did not have to touch this file: land held at 6226 for the ninth time, for the
+     * reason it has held every other time.
      */
-    private val startingPointElevation = 6066437764702608027L
     private val startingPointLand = 6226
 
     @Test
@@ -224,10 +223,6 @@ class DepositionTest {
 
         assertEquals(
             startingPointLand, world.sea.landCellCount, "land count moved with the switch off"
-        )
-        assertEquals(
-            startingPointElevation, checksum(world),
-            "the elevation fingerprint moved with deposition off"
         )
 
         // And the switch really is a switch: with it off, none of the knobs beside it can leak.

@@ -58,6 +58,31 @@ class ChromeGalleryTest {
         assertTrue(dark.distinctColours > 200, "the dark shot is nearly blank")
     }
 
+    /**
+     * The same window with every section of the panel unrolled.
+     *
+     * F2's subject is the panel, and the panel a reader first sees is five ruled headings with a
+     * `+` at the margin — which is the point of it, and which shows none of the settings inside.
+     * So there is a second light shot with all six sections open, for reviewing what F2 actually
+     * put in them. It doubles as the only assertion anyone can make about a disclosure control
+     * without reading pixels: clicking the headings has to change the picture.
+     */
+    @Test
+    fun `the sections unroll`() {
+        val dir = File("build/screens").apply { mkdirs() }
+
+        val closed = shoot(dark = false)
+        val open = shoot(dark = false, openSections = true)
+
+        File(dir, "chrome-sections.png").writeBytes(open.png)
+        println("CHROME wrote the unrolled panel to ${dir.absolutePath}")
+
+        assertTrue(
+            closed.fingerprint != open.fingerprint,
+            "opening every section changed nothing on screen"
+        )
+    }
+
     private class Shot(val png: ByteArray, val fingerprint: Int, val distinctColours: Int)
 
     /**
@@ -68,7 +93,7 @@ class ChromeGalleryTest {
      * exercises the same path a reader takes.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shoot(dark: Boolean): Shot {
+    private fun shoot(dark: Boolean, openSections: Boolean = false): Shot {
         var shot: Shot? = null
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             val platform = ChromePlatform()
@@ -76,13 +101,25 @@ class ChromeGalleryTest {
                 CartogenesisTheme(dark = dark) { CartogenesisApp(platform) }
             }
             onNodeWithText("Generate").performClick()
-            // Only the finished status line reads "… N realms · M rivers". Waiting on the word
-            // "rivers" alone would match the progress banner's "Carving rivers" and photograph a
-            // half-drawn world, which is exactly what the first run of this test did.
+            // The cartouche in the map's legend is written only once a world exists, and its
+            // "seed N · 512 × 512" is the only place the resolution appears written out that way —
+            // the panel's own chips say "512" alone. Waiting on anything vaguer than this
+            // photographs a half-drawn world, which is what the first run of this test did.
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("realms ·", substring = true).fetchSemanticsNodes().isNotEmpty()
+                onAllNodesWithText("512 × 512", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
+
+            if (openSections) {
+                // In the panel's own order. Since F3 took the style and view lists out of
+                // Cartography there is nothing inside a section whose name could be mistaken for
+                // a heading, but the order is still the reader's.
+                listOf("Terrain", "Climate", "Water", "Peoples", "Cartography").forEach {
+                    onNodeWithText(it).performClick()
+                    waitForIdle()
+                }
+            }
 
             val bitmap = onRoot().captureToImage().asSkiaBitmap()
             val png = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!.bytes

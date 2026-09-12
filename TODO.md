@@ -205,6 +205,12 @@
 
 ## Open
 
+- **Cold currents should suppress rain-out, not only pickup.** H4 scales the moisture march's
+  over-sea pickup by sea-surface temperature, which is physically right and measurably tiny
+  (-0.8% on a cold coast) because the march saturates before landfall. The Atacama and the Namib
+  are as much the cold sea stabilising the air as less evaporation: over a coast washed by a cold
+  current, scale the release rate down (a marine inversion) so the moisture passes inland. Guard
+  on a subtropical west coast with a cold current: a coastal desert appears. 2026-09-12.
 - **D8 holds a bearing on smooth slopes.** On a planar hillside a drawn river runs 20-35 cells in
   one of the eight grid directions before it bends (seed 59758 at 2048, (34,1095) to (68,1095),
   drops 3e-3 to 9e-3 per cell), because steepest descent on a plane always picks the same

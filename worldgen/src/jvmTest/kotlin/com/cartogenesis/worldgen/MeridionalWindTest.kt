@@ -158,7 +158,9 @@ class MeridionalWindTest {
                         } else {
                             temperature.data[i]
                         }
-                        val stepResult = ClimateStage.marchSeaStep(cfg, moisture, seaTemperature)
+                        val currentAnomaly = if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
+                        val stepResult =
+                            ClimateStage.marchSeaStep(cfg, moisture, seaTemperature, currentAnomaly)
                         moisture = stepResult.moisture
                         if (lap == 1) precip.data[i] = stepResult.rain
                         continue

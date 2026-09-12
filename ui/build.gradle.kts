@@ -40,6 +40,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // The naming guard writes a save header and reads it back, and `WorldCodec.encode` is
+            // suspend. Nothing else here needs a coroutine.
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

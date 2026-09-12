@@ -535,40 +535,80 @@ since a trough or a tarn is a few cells wide and disappears at whole-map scale. 
 river-network statistics, and includes a parameter sweep for judging the trade-off between terrain
 roughness and tectonic influence by eye.
 
-Since it runs as part of `:worldgen:jvmTest`, the maps refresh on every JVM test run.
+`DebugMapDump` moved to the audit tier in T1 (see below), so the maps no longer refresh on every
+JVM test run — run `./gradlew audit` (or `./gradlew :worldgen:jvmTest --tests '*DebugMapDump*'
+--rerun` directly) to regenerate them.
+
+## Testing: two tiers
+
+T1 (2026-09-12) split the test suite into a fast tier that runs on every merge and an on-demand /
+nightly tier for the tests that are slow, or report rather than assert, or exist to be looked at
+rather than to gate a build.
+
+**Per-merge** (`:worldgen:jvmTest :cartography:jvmTest :desktop:test`) is what CI and a developer
+run before every merge: correctness guards only, chosen to be fast. Measured on this build, loaded:
+worldgen dropped from roughly 23 minutes (13 idle) to about 6, and desktop from about 5 to about 2.
+
+**Audit** (`./gradlew audit`, unqualified so it runs the `audit` task in every subproject that
+declares one — `:worldgen` and `:desktop` today) carries everything that moved out: the render
+harness `DebugMapDump`, `StageProfileTest`, `GenerationSpeedTest`, `DesertCauseTest`,
+`ColdCapReportTest` and `ErosionConvergenceTest` (whole classes — they report rather than assert,
+or assert something CI's small runners cannot, such as `ErosionConvergenceTest`'s thread-splitting
+case), the 2048-scale cases of `GlaciationTest` and `RealmIdRangeTest` (split into
+`GlaciationAuditTest` and `RealmIdRangeAuditTest`; their 512/1024 siblings stay in the per-merge
+classes), and `ExportSmokeTest`'s 2048/4096 exports (split into `ExportAuditTest`; a 1024 export
+stays in `ExportSmokeTest` as a per-merge smoke check). `.github/workflows/nightly.yml` runs it
+once a day, on a cron schedule, so a regression in the parts the per-merge tier no longer covers is
+still caught within a day.
+
+The split is by exact class name plus a Gradle `filter { excludeTestsMatching(...) }` on the
+per-merge test task and the inverse (`includeTestsMatching`) on `audit`, in both `:worldgen`
+(JUnit4, via `kotlin("test-junit")` — no `@Tag`, JUnit4's nearest equivalent is `@Category`, which
+needs more Gradle wiring than a class-name filter for a fixed list) and `:desktop` (JUnit5, where
+the same mechanism works unchanged). A generic naming convention such as every class ending
+`AuditTest` was considered and rejected: `GeographyAuditTest` already carries that name for an
+unrelated reason (the desert-in-band audit) and is a fast, per-merge guard, not a slow one — so the
+classes moved to the audit tier are named explicitly in each module's `build.gradle.kts` rather
+than matched by a suffix that would also catch it.
+
+`DepositionTest` also lost its absolute elevation-checksum pin in T1: it had been re-recorded nine
+times in two days as unrelated terrain changes moved it, proving nothing beyond "this is whatever
+the code currently produces". Its land-count assertion, its structural cases (mass conservation,
+deltas gaining land) and the off-equals-on-at-zero-rates identity are unchanged and remain the guard.
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs the engine's tests on both the JVM and WebAssembly, and compiles
-and tests the desktop app, on every push and pull request. Measured on this build: `:worldgen:jvmTest`
-runs 79 tests across 29 suites and `:desktop:test` runs 8 across 5, all passing; both also run on
-Wasm, where the shared suite (`:worldgen:wasmJsNodeTest`, `:cartography:wasmJsNodeTest`) is a
-subset of the JVM one, since JVM-only tests such as `DebugMapDump` render through `java.awt`.
+and tests the desktop app, on every push and pull request — the per-merge tier described above.
+Both also run on Wasm, where the shared suite (`:worldgen:wasmJsNodeTest`,
+`:cartography:wasmJsNodeTest`) is a subset of the JVM one, since JVM-only tests such as
+`DebugMapDump` render through `java.awt`.
 
 The step worth knowing about compares the **JVM and Wasm fingerprints** to detect platform drift.
 A divergence is informational — usually worth a glance to catch a platform-dependent bug — but does
-not fail the build, since a save carries the world and platforms may generate differently.
+not fail the build, since a save carries the world and platforms may generate differently. T1
+stopped this from being a third engine test run: the JVM and Wasm test steps run with `-i` and tee
+their console to a log file, and the comparison step reads `WorldFingerprintTest`'s `FINGERPRINT`
+lines back out of those logs instead of rerunning either suite with `--rerun-tasks`.
+
+`.github/workflows/nightly.yml` runs `gradlew audit` once a day on a cron schedule — see
+**Testing: two tiers** above.
 
 ## Multiplatform status
 
-`:worldgen` is a Kotlin Multiplatform module targeting **jvm** (what the desktop app consumes),
-**wasmJs**, and **js**. The whole correctness suite lives in `commonTest` and runs on every target;
-`DebugMapDump` stays in `jvmTest` because it renders PNGs through `java.awt`.
+`:worldgen` is a Kotlin Multiplatform module targeting **jvm** (what the desktop app consumes) and
+**wasmJs** (the web build). The whole correctness suite lives in `commonTest` and runs on every
+target; `DebugMapDump` stays in `jvmTest` because it renders PNGs through `java.awt`.
+
+There used to be a third target, **js**, kept only as a record of why Wasm was chosen: JS routes
+`sin`/`cos`/`pow` through JavaScript's `Math`, which differs from the JVM in the last bit, and the
+FFT compounds that difference into a measurably different world from the same seed — enough to
+fail the resolution-consistency guard, where Wasm matches the JVM bit-for-bit. Measured on
+2026-08-23, seed 42 at 128x128: jvm and wasmJs both passed 16/16 with elevation fingerprint
+`4283446780793226894`; js passed 15/16 with fingerprint `-2412777715130564537`. Nothing had
+consumed the js target since the web build moved to Wasm, so T1 (2026-09-12) removed it.
 
 `WorldFingerprintTest` prints a checksum of a generated world, built from raw float bits so it
-catches a difference in the last bit. Run it on two targets and compare to detect platform-dependent
-divergence; a difference is informational but not a blocker, since saves carry the world.
-
-Measured on 2026-08-23, seed 42 at 128x128:
-
-| Target | Shared suite | Elevation fingerprint |
-|---|---|---|
-| jvm | 16/16 pass | `4283446780793226894` |
-| wasmJs | 16/16 pass | `4283446780793226894` |
-| js | 15/16 pass | `-2412777715130564537` |
-
-**Wasm is bit-identical to the JVM. Kotlin/JS is not.** JS routes `sin`/`cos`/`pow` through
-JavaScript's `Math`, which differs from the JVM in the last bit; the FFT compounds that, and the
-same seed produces a different world — different enough to fail the resolution-consistency guard.
-A save carries the world, so all platforms are equally portable; Wasm is chosen for the web build
-because its bit-identity with the JVM keeps the fingerprint comparison and reasoning simpler.
+catches a difference in the last bit. Run it on jvm and wasmJs and compare to detect
+platform-dependent divergence; a difference is informational but not a blocker, since saves carry
+the world.

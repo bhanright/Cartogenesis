@@ -37,7 +37,6 @@ import com.cartogenesis.cartography.ResolvedLandmark
 import com.cartogenesis.cartography.ResolvedNation
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
-import kotlin.math.roundToInt
 
 /**
  * The atlas, laid out for a desktop window.
@@ -173,17 +172,22 @@ private fun AtlasSettings(
     Surface(tonalElevation = 1.dp) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Atlas settings", style = MaterialTheme.typography.titleMedium)
-            Labelled("Points of interest", "${config.landmarks.count}") {
+            // Declared alongside the panel's own knobs, in the atlas's section of [Knobs], so that
+            // the guard walking the interface's settings can see these two as well: "still
+            // settable" has to include the ones that moved out of the panel.
+            val count = Knobs.landmarkCount
+            Labelled(count.label, count.show(count.read(config))) {
                 Slider(
-                    value = config.landmarks.count.toFloat(),
-                    onValueChange = {
-                        onConfig(config.copy(landmarks = config.landmarks.copy(count = it.roundToInt())))
-                    },
-                    valueRange = 0f..200f,
+                    value = count.read(config),
+                    onValueChange = { onConfig(count.set(config, it)) },
+                    valueRange = count.range,
                     enabled = !busy
                 )
             }
-            Toggle("Landmarks", options.showLandmarks) { onOptions(options.copy(showLandmarks = it)) }
+            val landmarks = Knobs.landmarks
+            Toggle(landmarks.label, landmarks.read(options)) {
+                onOptions(landmarks.set(options, it))
+            }
             OutlinedButton(onClick = onToggleLabels, enabled = !busy, contentPadding = TIGHT) {
                 Text(if (labelMode) "Done labelling" else "Place a label", maxLines = 1)
             }

@@ -55,12 +55,11 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         return GlContext.run("Erosion") {
             val cells = width * height
             val orthogonal = maxOrthogonalDrop
+            // A diagonal neighbour is √2 further away, so it may stand √2 higher at the same slope.
             val diagonal = orthogonal * kotlin.math.sqrt(2f)
-            val settled = orthogonal * 1e-3f
+            val settled = orthogonal * SETTLED_SHARE_OF_LIMIT
 
-            val compiled = programs ?: return@run null
-            val phaseA = compiled.first
-            val phaseB = compiled.second
+            val (shareToGive, moveMaterial) = programs ?: return@run null
 
             // Two height buffers to ping-pong between, and one for the transfer ratios.
             val buffers = IntArray(3)
@@ -72,15 +71,19 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                 GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, heights, GL43C.GL_DYNAMIC_COPY)
                 GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, writeBuffer)
                 GL43C.glBufferData(
-                    GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
+                    GL43C.GL_SHADER_STORAGE_BUFFER,
+                    (cells * BYTES_PER_FLOAT).toLong(),
+                    GL43C.GL_DYNAMIC_COPY
                 )
                 GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, rateBuffer)
                 GL43C.glBufferData(
-                    GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
+                    GL43C.GL_SHADER_STORAGE_BUFFER,
+                    (cells * BYTES_PER_FLOAT).toLong(),
+                    GL43C.GL_DYNAMIC_COPY
                 )
 
-                val groupsX = (width + GROUP - 1) / GROUP
-                val groupsY = (height + GROUP - 1) / GROUP
+                val groupsX = (width + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE
+                val groupsY = (height + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE
 
                 var source = readBuffer
                 var destination = writeBuffer
@@ -88,15 +91,15 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                 repeat(passes) {
                     if (stillWanted?.isActive == false) return@run null
 
-                    GL43C.glUseProgram(phaseA)
-                    setUniforms(phaseA, width, height, orthogonal, diagonal, rate, settled)
+                    GL43C.glUseProgram(shareToGive)
+                    setUniforms(shareToGive, width, height, orthogonal, diagonal, rate, settled)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
                     GL43C.glDispatchCompute(groupsX, groupsY, 1)
                     GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
 
-                    GL43C.glUseProgram(phaseB)
-                    setUniforms(phaseB, width, height, orthogonal, diagonal, rate, settled)
+                    GL43C.glUseProgram(moveMaterial)
+                    setUniforms(moveMaterial, width, height, orthogonal, diagonal, rate, settled)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 1, destination)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
@@ -142,10 +145,24 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
 
     companion object {
         /**
-         * Work group side. 16x16 is 256 invocations, which every device supporting compute
-         * shaders is required to allow, and sits well with how the grid is walked.
+         * The side of a work group, in invocations. 16x16 is 256, which every device supporting
+         * compute shaders is required to allow, and sits well with how the grid is walked.
+         *
+         * The same figure is written into `layout(local_size_x...)` in [COMMON]; a shader's
+         * declaration cannot read a Kotlin constant, so the two are kept in step by hand.
          */
-        private const val GROUP = 16
+        private const val WORK_GROUP_SIDE = 16
+
+        /** A height is a `float`, on both sides of the bus. */
+        private const val BYTES_PER_FLOAT = 4
+
+        /**
+         * Below this share of the critical drop a cell is settled and hands over nothing.
+         *
+         * A thousandth: small enough that no slope anyone can see is called settled, large enough
+         * that a cell a float's rounding above the limit does not shuffle material for ever.
+         */
+        private const val SETTLED_SHARE_OF_LIMIT = 1e-3f
 
         /**
          * Takes the shared offscreen context and compiles the sweeps, or returns null with a reason
@@ -157,9 +174,12 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                 ?: return Result(null, context.unavailableBecause ?: "unknown failure")
 
             val gpu = GpuErosion(device)
-            gpu.programs = GlContext.run("Compiling the erosion sweeps", seconds = 30) {
-                GlContext.compileCompute(PHASE_A_SOURCE) to
-                    GlContext.compileCompute(PHASE_B_SOURCE)
+            gpu.programs = GlContext.run(
+                "Compiling the erosion sweeps",
+                timeoutSeconds = COMPILE_TIMEOUT_SECONDS
+            ) {
+                GlContext.compileCompute(SHARE_TO_GIVE_SOURCE) to
+                    GlContext.compileCompute(MOVE_MATERIAL_SOURCE)
             } ?: return Result(null, "the erosion shader would not compile")
             return Result(gpu, null)
         }
@@ -187,7 +207,11 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
             }
         """.trimIndent()
 
-        private val PHASE_A_SOURCE = COMMON + "\n" + """
+        /** How long a driver may take over two small compute shaders before it is given up on. */
+        private const val COMPILE_TIMEOUT_SECONDS = 30L
+
+        /** First pass: what share of its excess each cell hands over, written to `rates`. */
+        private val SHARE_TO_GIVE_SOURCE = COMMON + "\n" + """
             layout(std430, binding = 0) readonly buffer Source { float source[]; };
             layout(std430, binding = 2) writeonly buffer Rates { float rates[]; };
 
@@ -217,7 +241,8 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
             }
         """.trimIndent()
 
-        private val PHASE_B_SOURCE = COMMON + "\n" + """
+        /** Second pass: moves it, reading what the first wrote for cells this thread does not own. */
+        private val MOVE_MATERIAL_SOURCE = COMMON + "\n" + """
             layout(std430, binding = 0) readonly buffer Source { float source[]; };
             layout(std430, binding = 1) writeonly buffer Target { float target[]; };
             layout(std430, binding = 2) readonly buffer Rates { float rates[]; };

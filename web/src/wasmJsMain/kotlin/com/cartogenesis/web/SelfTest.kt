@@ -63,31 +63,31 @@ private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
         config.erosion.rate
     ) ?: return "device=${accelerator.name} declined a zero-sweep run"
     var roundTripWorst = 0f
-    for (i in uplift.data.indices) {
-        val delta = abs(uplift.data[i] - roundTrip[i])
+    for (cell in uplift.data.indices) {
+        val delta = abs(uplift.data[cell] - roundTrip[cell])
         if (delta > roundTripWorst) roundTripWorst = delta
     }
 
     var onCpu = FloatArray(0)
-    val cpu = measureTime { onCpu = ErosionStage.apply(config, uplift).height.data }
+    val cpuElapsed = measureTime { onCpu = ErosionStage.apply(config, uplift).height.data }
 
     // Once to compile the shaders and warm the device, then the measurement.
     ErosionStage.apply(gpuConfig, uplift, accelerator)
     var onGpu = FloatArray(0)
-    val gpu = measureTime {
+    val gpuElapsed = measureTime {
         onGpu = ErosionStage.apply(gpuConfig, uplift, accelerator).height.data
     }
 
     var worst = 0f
     var total = 0.0
-    for (i in onCpu.indices) {
-        val delta = abs(onCpu[i] - onGpu[i])
+    for (cell in onCpu.indices) {
+        val delta = abs(onCpu[cell] - onGpu[cell])
         if (delta > worst) worst = delta
         total += delta.toDouble()
     }
 
     return "device=${accelerator.name} roundTripWorst=$roundTripWorst " +
-        "cpu=${cpu.inWholeMilliseconds}ms gpu=${gpu.inWholeMilliseconds}ms " +
+        "cpu=${cpuElapsed.inWholeMilliseconds}ms gpu=${gpuElapsed.inWholeMilliseconds}ms " +
         "meanDelta=${total / onCpu.size} worstDelta=$worst"
 }
 
@@ -132,7 +132,7 @@ private suspend fun runStorageSelfTest(): String {
 }
 
 /**
- * The two things F12's exports can only be asked in a browser.
+ * The two questions about exports that can only be asked in a browser.
  *
  * The first is whether the Skia that ships inside this wasm bundle will encode a JPEG at all. On
  * the desktop that question does not arise — the JDK's own encoder writes it — but here the same
@@ -150,15 +150,19 @@ private suspend fun runStorageSelfTest(): String {
  */
 private suspend fun runExportSelfTest(): String {
     val config = WorldGenConfig(seed = 402627L, width = 256, height = 256)
+    // Every encoder is asked for its best, so a null back is the encoder declining rather than
+    // the quality being one this build happens not to support.
     val world = WorldGenerationEngine.generate(config)
 
     val bitmap = MapImage.toBitmap(world, RenderOptions())
     val image = Image.makeFromBitmap(bitmap)
-    val png = image.encodeToData(EncodedImageFormat.PNG, quality = 100)?.bytes?.size ?: -1
-    val webp = image.encodeToData(EncodedImageFormat.WEBP, quality = 100)?.bytes?.size ?: -1
+    val png = image.encodeToData(EncodedImageFormat.PNG, quality = BEST_QUALITY)
+        ?.bytes?.size ?: ENCODER_DECLINED
+    val webp = image.encodeToData(EncodedImageFormat.WEBP, quality = BEST_QUALITY)
+        ?.bytes?.size ?: ENCODER_DECLINED
     val jpeg = image
         .encodeToData(EncodedImageFormat.JPEG, quality = ExportFormat.JPEG_QUALITY)
-        ?.bytes?.size ?: -1
+        ?.bytes?.size ?: ENCODER_DECLINED
     image.close()
     bitmap.close()
 
@@ -171,8 +175,14 @@ private suspend fun runExportSelfTest(): String {
 
     // Minus one anywhere means an encoder declined, which is the failure this is looking for.
     return "exports pngBytes=$png webpBytes=$webp jpegBytes=$jpeg " +
-        "heightmapBytes=${written?.image?.size ?: -1} " +
-        "sidecarBytes=${written?.sidecar?.size ?: -1} " +
-        "zipBytes=${written?.asZip()?.size ?: -1} " +
+        "heightmapBytes=${written?.image?.size ?: ENCODER_DECLINED} " +
+        "sidecarBytes=${written?.sidecar?.size ?: ENCODER_DECLINED} " +
+        "zipBytes=${written?.asZip()?.size ?: ENCODER_DECLINED} " +
         "heightmapMs=${heightmapElapsed.inWholeMilliseconds}"
 }
+
+/** Lossless for PNG and WebP, so a null back is the encoder missing rather than the setting. */
+private const val BEST_QUALITY = 100
+
+/** What a byte count reads as when the encoder handed back nothing at all. */
+private const val ENCODER_DECLINED = -1

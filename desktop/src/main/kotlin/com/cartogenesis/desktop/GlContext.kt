@@ -39,10 +39,28 @@ internal object GlContext {
      */
     fun ensure(): Result =
         try {
-            worker.submit(Callable { createOnWorker() }).get(30, TimeUnit.SECONDS)
-        } catch (e: Exception) {
-            Result(null, e.message ?: e::class.simpleName ?: "unknown failure")
+            worker.submit(Callable { createOnWorker() })
+                .get(CONTEXT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (failure: Exception) {
+            Result(null, failure.message ?: failure::class.simpleName ?: "unknown failure")
         }
+
+    /**
+     * How long to wait for a context, in seconds.
+     *
+     * Creating one is a driver call that normally returns in well under a second; a driver that
+     * has not answered in half a minute is one that is not going to, and the reader is better
+     * served by the processor path than by an application that never draws its first window.
+     */
+    private const val CONTEXT_TIMEOUT_SECONDS = 30L
+
+    /**
+     * How long a piece of graphics work may take before it is given up on, in seconds.
+     *
+     * An hour, which is not a limit on anything anybody would sit through — an 8192 export is
+     * minutes — but a hung driver has to be given up on eventually or the thread never comes back.
+     */
+    private const val WORK_TIMEOUT_SECONDS = 3600L
 
     /**
      * Runs [body] on the thread the context belongs to, or returns null if it failed.
@@ -50,11 +68,17 @@ internal object GlContext {
      * A driver fault should cost the user a slower generation or a slower export, not the app, so
      * the failure is reported to stderr and the caller falls back to the CPU.
      */
-    fun <T> run(what: String, seconds: Long = 3600, body: () -> T?): T? =
+    fun <T> run(
+        what: String,
+        timeoutSeconds: Long = WORK_TIMEOUT_SECONDS,
+        body: () -> T?
+    ): T? =
         try {
-            worker.submit(Callable { body() }).get(seconds, TimeUnit.SECONDS)
-        } catch (e: Exception) {
-            System.err.println("$what failed on the GPU, falling back to the CPU: ${e.message}")
+            worker.submit(Callable { body() }).get(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (failure: Exception) {
+            System.err.println(
+                "$what failed on the GPU, falling back to the CPU: ${failure.message}"
+            )
             null
         }
 
@@ -84,9 +108,9 @@ internal object GlContext {
         // the context this needs cannot exist there. And GLFW must be initialised on the main
         // thread on macOS, while this runs on a thread of its own — so the attempt would not
         // fail politely, it would take the process with it.
-        val os = System.getProperty("os.name").orEmpty().lowercase()
-        if (os.contains("mac") || os.contains("darwin")) {
-            return remember(
+        val osName = System.getProperty("os.name").orEmpty().lowercase()
+        if (osName.contains("mac") || osName.contains("darwin")) {
+            return memoise(
                 Result(
                     null,
                     "macOS caps OpenGL at 4.1 and compute shaders need 4.3. Generation runs on the " +
@@ -94,26 +118,30 @@ internal object GlContext {
                 )
             )
         }
-        if (!GLFW.glfwInit()) return remember(Result(null, "GLFW could not start"))
+        if (!GLFW.glfwInit()) return memoise(Result(null, "GLFW could not start"))
         GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE)
+        // 4.3 is the version compute shaders arrived in, and is the whole of what this asks for.
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4)
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3)
         GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE)
 
+        // One pixel by one, and never shown: the window exists only because GLFW hangs a context
+        // off one, and nothing is ever drawn into its framebuffer.
         val window = GLFW.glfwCreateWindow(1, 1, "cartogenesis", MemoryUtil.NULL, MemoryUtil.NULL)
         if (window == MemoryUtil.NULL) {
             GLFW.glfwTerminate()
-            return remember(
+            return memoise(
                 Result(null, "no OpenGL 4.3 context, which compute shaders need")
             )
         }
         GLFW.glfwMakeContextCurrent(window)
         GL.createCapabilities()
 
-        return remember(Result(GL43C.glGetString(GL43C.GL_RENDERER) ?: "unknown device", null))
+        return memoise(Result(GL43C.glGetString(GL43C.GL_RENDERER) ?: "unknown device", null))
     }
 
-    private fun remember(result: Result): Result {
+    /** Keeps [result] as the answer every later caller gets. Named to stay clear of Compose's. */
+    private fun memoise(result: Result): Result {
         context = result
         return result
     }

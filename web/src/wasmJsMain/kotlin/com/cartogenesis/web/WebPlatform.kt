@@ -150,7 +150,8 @@ class WebPlatform(
         val bitmap = MapImage.toBitmap(world, options, MapSheet.PRINTED)
         // Quality is ignored by the PNG encoder and lossless for WebP at 100; JPEG is the one
         // format with a real quality to choose, and it is chosen once, in [ExportFormat].
-        val quality = if (format == ExportFormat.JPEG) ExportFormat.JPEG_QUALITY else 100
+        val quality =
+            if (format == ExportFormat.JPEG) ExportFormat.JPEG_QUALITY else LOSSLESS_QUALITY
         val encoded = Image.makeFromBitmap(bitmap)
             .encodeToData(skiaFormat(format), quality = quality)
             ?: error("Could not encode the map as ${format.label}")
@@ -207,6 +208,11 @@ class WebPlatform(
         ExportFormat.PNG -> "image/png"
         ExportFormat.WEBP -> "image/webp"
         ExportFormat.JPEG -> "image/jpeg"
+    }
+
+    private companion object {
+        /** Lossless for WebP and ignored by the PNG encoder, so one figure does for both. */
+        const val LOSSLESS_QUALITY = 100
     }
 }
 

@@ -45,7 +45,7 @@ private fun launchWindow() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Cartogenesis",
-        state = rememberWindowState(width = 1500.dp, height = 950.dp)
+        state = rememberWindowState(width = WINDOW_WIDTH, height = WINDOW_HEIGHT)
     ) {
         // The chrome, the interface scale and every other preference are read through the platform
         // by `CartogenesisRoot`, which puts the theme on before drawing anything — so the desktop
@@ -54,12 +54,22 @@ private fun launchWindow() = application {
     }
 }
 
+/**
+ * The window the desktop build opens at.
+ *
+ * Wide enough for the 320 dp panel column beside a map that is still the larger half of the
+ * window, and comfortably past [com.cartogenesis.ui.Layouts.COMPACT_BELOW_DP], so the wide
+ * arrangement is what a first run shows. Dragging the window narrower is a supported thing to do.
+ */
+private val WINDOW_WIDTH = 1500.dp
+private val WINDOW_HEIGHT = 950.dp
+
 /** Native save dialog. Must run on the UI thread; the rendering behind it must not. */
 internal fun chooseSaveFile(defaultName: String): File? {
     val dialog = FileDialog(null as Frame?, "Save map", FileDialog.SAVE)
     dialog.file = defaultName
     dialog.isVisible = true
     val name = dialog.file ?: return null
-    val dir = dialog.directory ?: return null
-    return File(dir, name)
+    val directory = dialog.directory ?: return null
+    return File(directory, name)
 }

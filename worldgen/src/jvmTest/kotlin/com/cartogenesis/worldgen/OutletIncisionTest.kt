@@ -170,9 +170,24 @@ class OutletIncisionTest {
                 "seed $seed: the control was expected to keep its water and kept only " +
                     "${control * 100}% of it, so this guard proves nothing"
             )
+            // The notch does work, and the control does none. Stated over the run rather than
+            // round by round, because "every round cuts something" is a claim about the terrain's
+            // supply of work and not about the notch: once the notch is good enough, a round can
+            // legitimately find nothing left above grade. Seed 42 does exactly that at F22, when
+            // the outflow over a sill lying level to the water stopped reading as having no
+            // gradient — its largest basin sits at 45 cells from the seventh round on, round eleven
+            // cuts nothing at all, and round twelve cuts 327 cells again. Asserting universality
+            // there would fail the notch for having finished early. What the sentence means is
+            // carried by the three assertions around it: the fill more than halves, the control
+            // does not, and the control cuts nothing in any round.
             assertTrue(
-                on.all { it.notched > 0.0 },
-                "seed $seed: some round cut no notch at all"
+                on.sumOf { it.notched } > 0.0,
+                "seed $seed: the notch cut nothing in any of the ${on.size} rounds"
+            )
+            assertTrue(
+                on.first().notched > 0.0,
+                "seed $seed: the notch cut nothing in the first round, when every basin the fill " +
+                    "found is still there to be opened"
             )
             assertTrue(
                 off.all { it.notched == 0.0 },
@@ -279,6 +294,77 @@ class OutletIncisionTest {
             "these worlds keep a basin below the sea-level cut holding more water than the " +
                 "Caspian's ${"%.4f".format(caspianShare * 100)}% share of Earth's land: " +
                 overSizedDrowned
+        )
+    }
+
+    /**
+     * And what keeps a drowned basin under that bar can be the notch measuring its fall to the
+     * water it empties into, rather than to the last cell of land before it.
+     *
+     * The control for the case above, and the reason it is worth reading. A sill lying level all
+     * the way to the water reads as having no gradient when the fall is measured a cell short of
+     * it, so its outflow has no stream power and the basin behind it never opens however large its
+     * catchment. On the 2.0.x line, where the sea's stand was a share of each world's own land
+     * relief, both of these seeds carried such a sill: seed 99 kept a 668-cell basin at 2.64 times
+     * the Caspian's share of its land and seed 718106 one at 1.65 times, and the step took them to
+     * 0.12% and 0.08% of land against the Caspian's 0.25%.
+     *
+     * Against S1's stand — 120 m of the height field on every world rather than a share of its
+     * land — only seed 99 still does, and that is what is asserted. Measured on the merged tree:
+     * seed 99 keeps 0.5362% of its land in one drowned basin with the fall read to the last cell of
+     * land, 2.15 times the Caspian's share, and 0.1183% with the step into the water counted, which
+     * is 0.47 times it. The mechanism is unchanged and the seed that shows it is the seed that has
+     * the sill.
+     *
+     * Seed 718106 is reported rather than asserted, because on this line it moves the other way:
+     * 0.2731% of land without the step and 0.3240% with it, 1.10 and 1.30 times the Caspian. Its
+     * largest drowned basin is not the same body in the two runs — a deeper stand and sixteen
+     * post-cut passes have already opened the one the release line measured, and cutting the level
+     * sills lets a neighbour of it join the sea, which leaves a different basin the largest. Both
+     * figures sit under [drownedChaos], so the case above still holds on that seed; what has gone
+     * is the claim that this seed is one of the two the step rescues. Recorded in `TODO.md`.
+     *
+     * Two seeds rather than six: these are the two the release line measured, and the case above
+     * already generates twelve worlds.
+     */
+    @Test
+    fun `a sill level to the water is what the notch could not cut`() {
+        val stuck = ArrayList<String>()
+        // The seed whose sill runs level to the water on this line. 718106 is generated too, and
+        // printed, because the pair is the measurement; only this one carries the claim.
+        val carriesTheSill = 99L
+        listOf(718106L, 99L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val without = WorldGenerationEngine.generateBlocking(
+                base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
+            )
+            val with = WorldGenerationEngine.generateBlocking(base)
+            val before = largestLakeShare(without, drowned = true)
+            val after = largestLakeShare(with, drowned = true)
+            println(
+                ("OUTLET seed %d: the largest drowned basin is %.4f%% of land with the fall " +
+                    "measured to the last land cell and %.4f%% measured to the water " +
+                    "(the Caspian's share is %.4f%%)").format(
+                    seed, before * 100, after * 100, caspianShare * 100
+                )
+            )
+            if (seed == carriesTheSill) {
+                if (before < caspianShare * chaos) {
+                    stuck += "$seed at ${"%.4f".format(before * 100)}%"
+                }
+                assertTrue(
+                    after < before,
+                    "seed $seed: counting the step into the water left the basin at " +
+                        "${"%.4f".format(after * 100)}% of land against " +
+                        "${"%.4f".format(before * 100)}% without it"
+                )
+            }
+        }
+        assertTrue(
+            stuck.isEmpty(),
+            "the control was expected to keep an over-large drowned basin on seed " +
+                "$carriesTheSill and did not on $stuck, so this case cannot tell the two rules " +
+                "apart"
         )
     }
 

@@ -93,22 +93,44 @@ class PenAndInkTest {
          * what, and the 2.0.3 forward-merge row for the re-recording before this one.
          *
          * Re-recorded again for W1, which is the plainest case there is of the world moving under
-         * all eleven rather than one style being redrawn: the temperature is solved by an energy
+         * all of them rather than one style being redrawn: the temperature is solved by an energy
          * balance now instead of drawn from a curve, so every biome the tints are read off comes
-         * from a different climate. All eleven moved, which is what this guard is for.
+         * from a different climate. Every style moved, which is what this guard is for.
+         *
+         * And there are twelve of them now, because the 2.0.x line brought Natural. A new style is
+         * a row of levers the raster already reads, so a chunk that adds one and moves an existing
+         * hash has reached outside its own palette — and on the release line F23 moved none of the
+         * eleven.
+         *
+         * The whole set is recorded once more on the merged tree, and neither side's numbers would
+         * have done. The 2.0.x line moved the world twice over — the water is routed by the
+         * steepest triangular facet rather than the steepest of eight neighbours, so twelve rounds
+         * of erosion cut different rock; and the outlet notch no longer reads a sill lying level to
+         * the water as having no gradient, so basins that had stood undrained for the life of the
+         * world are opened and the coast around them is a different coast — and this line moved it
+         * under all eleven with the energy balance. What moved is the world, not the drawing:
+         * nothing in this file's own arithmetic changed on either side. How far the rivers actually
+         * moved is measured rather than hashed, in `StraightRunAuditTest`.
+         *
+         * One thing in the drawing did move with them, and it is a consequence of the same
+         * ground: [ReliefShading.ORDINARY_GROUND] is the median illumination over a fixed seed's
+         * land, so a world cut differently measures a different median, and it was re-derived from
+         * 0.936 to 0.9318 in the same commit. Pen and ink is the one style these records show
+         * untouched by that, because it has no tint for the shading to multiply.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1263892093,
-            MapStyle.VELLUM to 688539628,
-            MapStyle.INK_WASH to 687077229,
-            MapStyle.NAUTICAL to 232021106,
-            MapStyle.MIDNIGHT to -709250048,
-            MapStyle.SCHOOLROOM to 1618684963,
-            MapStyle.VERDANT to 908692413,
-            MapStyle.SCROLL to -1466800791,
-            MapStyle.PEN_AND_INK to 446722196,
-            MapStyle.MARS to 539786463,
-            MapStyle.CLEAR to -1790745628
+            MapStyle.ATLAS to 2008645487,
+            MapStyle.VELLUM to 1859047141,
+            MapStyle.INK_WASH to 279160468,
+            MapStyle.NAUTICAL to -1634641140,
+            MapStyle.MIDNIGHT to -1964822747,
+            MapStyle.SCHOOLROOM to -2014562873,
+            MapStyle.VERDANT to 341708382,
+            MapStyle.SCROLL to 1660858719,
+            MapStyle.PEN_AND_INK to -766702493,
+            MapStyle.MARS to 1103907073,
+            MapStyle.NATURAL to 1345079715,
+            MapStyle.CLEAR to 1823331885
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

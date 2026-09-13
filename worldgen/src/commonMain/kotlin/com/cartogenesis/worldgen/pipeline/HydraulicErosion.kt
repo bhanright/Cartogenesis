@@ -380,9 +380,12 @@ internal object HydraulicErosion {
                 return working
             }
 
-            val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, sea.isLand, sea.relativeElevation)
+            val filled = FlowRouting.fillDepressions(
+                cellsAcross, cellsDown, sea.isLand, sea.relativeElevation
+            )
             val directions = FlowRouting.flowDirections(
-                cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled
+                cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
+                config.seed, config.facetRouting
             )
             // Uniform rain: every land cell contributes the same, so accumulation is simply the
             // number of cells upstream.
@@ -901,7 +904,10 @@ internal object HydraulicErosion {
                     val spoilGround = after.relativeElevation
                     val spoilFilled = FlowRouting.fillDepressions(cellsAcross, cellsDown, after.isLand, spoilGround)
                     val spoilFlow =
-                        FlowRouting.flowDirections(cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled)
+                        FlowRouting.flowDirections(
+                            cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
+                            config.seed, config.facetRouting
+                        )
                     val spoilArea = FlowRouting.accumulate(
                         cellsAcross, cellsDown, after.isLand, spoilFilled, spoilFlow, after.landCellCount
                     ) { 1f }
@@ -932,7 +938,8 @@ internal object HydraulicErosion {
             // which is this pass's. See [openMouths].
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
-                    cellsAcross, cellsDown, working, provisionalSeaLevel, spoil, rates.pondDepth
+                    cellsAcross, cellsDown, working, provisionalSeaLevel, spoil, rates.pondDepth,
+                    config.seed, config.facetRouting
                 )
                 incised += opened.removed
                 lost += opened.removed
@@ -1200,7 +1207,9 @@ internal object HydraulicErosion {
         working: FloatField,
         provisionalSeaLevel: Float,
         spoil: FloatArray,
-        pondDepth: Float
+        pondDepth: Float,
+        seed: Long,
+        byFacet: Boolean
     ): Opened {
         val cellCount = cellsAcross * cellsDown
         val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
@@ -1218,8 +1227,11 @@ internal object HydraulicErosion {
         val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / cellsAcross).coerceAtLeast(1e-7f)
         val floor = sea.shorelineHeight + step * LOBE_RIM
 
-        val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(cellsAcross, cellsDown, isLand, sea.relativeElevation, filled)
+        val filled =
+            FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
+        val flow = FlowRouting.flowDirections(
+            cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, byFacet
+        )
         val area = FlowRouting.accumulate(
             cellsAcross, cellsDown, isLand, filled, flow, sea.landCellCount
         ) { 1f }
@@ -1331,6 +1343,29 @@ internal object HydraulicErosion {
                 if (fall > level - floor) break
                 length++
                 cell = directions[cell]
+            }
+            // The walk above stops on the last cell of *land*, one step short of the water the
+            // outflow empties into, and where the sill runs level all the way to that water the
+            // whole of its fall is in the step it did not take. What it measures instead is the
+            // [FlowRouting.FLAT_GRADIENT_STEP] the depression fill nudges a flat by: not a small
+            // gradient but the absence of one, and therefore no stream power and a sill that stands
+            // for the life of the world however large the catchment behind it. Seed 99 at 512 kept
+            // a 668-cell basin below the shoreline that way — 2.64 times the Caspian's share of its
+            // land — its outflow's measured fall 1.0e-6 against the 2.5e-2 it actually descends,
+            // unmoved over every pass it was given.
+            //
+            // So where the walk found no fall the fill did not put there, the step into the water
+            // counts. One flat-gradient step a cell is the staircase the flood leaves on a flat, so
+            // the test is that whole staircase and no more, and what it changes is only outlets
+            // that were cutting nothing whatever. An outlet that measured a real gradient keeps the
+            // answer it had: re-rating those as well hands every coastal sill the whole fall to sea
+            // level at once, which empties basins that ought to hold their water.
+            if (erosion.outletFallToTheWater &&
+                fall <= FlowRouting.FLAT_GRADIENT_STEP * length &&
+                cell >= 0 && !isLand[cell]
+            ) {
+                fall = level - relative[cell]
+                length++
             }
             if (length == 0) continue
             val slope = (fall / length * cellsAcross).coerceAtLeast(0f)

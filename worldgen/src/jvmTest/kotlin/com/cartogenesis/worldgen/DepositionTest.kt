@@ -161,8 +161,20 @@ class DepositionTest {
      * range on every world instead of a share of each world's measured land relief, so the valleys
      * the transgression is allowed to have drowned are a slightly different set. 136 cells filled
      * before, 136 after — the same rule, on a shoreline 37 cells further out.
+     *
+     * And once more where the 2.0.x line meets this one. Two changes arrive together and both are
+     * the same kind of change as every one above: they move the rock, so a percentile taken over it
+     * sits on a different set of cells. The routing now takes its direction from the steepest
+     * triangular facet with the one receiver drawn across it, rather than snapping to the steepest
+     * of the eight neighbours, which changes what the twelve hydraulic rounds cut. And the outlet
+     * notch now measures its channel's fall to the water it empties into, so a sill lying level to
+     * the shore is no longer read as having no gradient at all. On the release line the two took
+     * the land from 6464 to 6488 and then to 6403; against this line's ruler — S1's stand and H5b's
+     * clamp, which is a different shoreline to start from — they take it from 6426 to 6404. Re-measured on the merged tree rather than carried over from either side, because
+     * neither side's number was read against the other's terrain. The cut itself has not moved:
+     * exactly 62% of the cells still lie below it, and the structural cases are untouched.
      */
-    private val startingPointLand = 6426
+    private val startingPointLand = 6404
 
     @Test
     fun `every round conserves mass`() {

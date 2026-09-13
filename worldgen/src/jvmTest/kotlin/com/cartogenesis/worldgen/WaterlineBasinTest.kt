@@ -118,7 +118,10 @@ class WaterlineBasinTest {
         val w = sea.relativeElevation.width
         val h = sea.relativeElevation.height
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
+        val flow =
+            FlowRouting.flowDirections(
+                w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.facetRouting
+            )
         val notch = FlowRouting.spillways(
             w, h, sea.isLand, sea.relativeElevation.data, filled.data, flow,
             config.scale.reliefShareOfMetres(HydraulicErosion.POND_DEPTH_METRES)

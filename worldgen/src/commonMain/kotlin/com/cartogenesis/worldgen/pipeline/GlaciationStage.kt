@@ -281,9 +281,19 @@ object GlaciationStage {
         // The ice follows the water's own network. A glacier occupies the valley a river cut before
         // the cold came, which is both what really happens and what makes the result legible: the
         // trough is where the map already had a valley.
-        val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
-        val directions = FlowRouting.flowDirections(cellsAcross, cellsDown, isLand, sea.relativeElevation, filled)
-        val order = FlowRouting.drainageOrder(cellsAcross, cellsDown, isLand, directions, sea.landCellCount)
+        val filled =
+            FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
+        val directions = FlowRouting.flowDirections(
+            cellsAcross,
+            cellsDown,
+            isLand,
+            sea.relativeElevation,
+            filled,
+            config.seed,
+            config.facetRouting
+        )
+        val order =
+            FlowRouting.drainageOrder(cellsAcross, cellsDown, isLand, directions, sea.landCellCount)
 
         // How much frozen ground drains through each cell — the ice's own catchment, as distinct
         // from the water's. Accumulated along [FlowRouting.drainageOrder] rather than with

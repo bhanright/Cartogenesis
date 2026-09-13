@@ -107,7 +107,7 @@ internal object Menus {
     val themes: List<ThemeChoice> = ThemeChoice.entries
 
     /**
-     * The same fifteen, on three shelves.
+     * The same sixteen, on three shelves.
      *
      * Fifteen is past the point where a flat run is a list: Standard, Accessible and Styled are
      * three headings over the same chromes in the same order within each, and neither a name nor
@@ -187,7 +187,7 @@ internal fun MenuStrip(
             MenuButton("View", open == "View", { open = if (open == "View") null else "View" }) {
                 // The theme submenu, flattened into a labelled run of items with a tick beside the
                 // current one. A real nested submenu is a hover-timing problem Material 3 has no
-                // component for, and fifteen items do not need one — but they do need the three
+                // component for, and sixteen items do not need one — but they do need the three
                 // headings over them, which is all `themeGroups` is.
                 MenuHeading("Theme")
                 Menus.themeGroups.forEach { (group, chromes) ->

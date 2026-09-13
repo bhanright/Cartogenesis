@@ -64,6 +64,7 @@ class DeltaOutlineTest {
     }
 
     private class Run(config: WorldGenConfig) {
+        val seed = config.seed
         val w = config.width
         val h = config.height
         val reach = HydraulicErosion.Rates(config).deltaReachCells
@@ -650,7 +651,8 @@ class DeltaOutlineTest {
         val mask = run.mask(DepositionLog.SEA_LOBE)
         val sea = SeaLevelStage.percentileCut(run.height, 0.62f)
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
+        val flow =
+            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, run.seed)
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
 

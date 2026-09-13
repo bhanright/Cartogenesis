@@ -7,290 +7,421 @@
 <meta name="description" content="A fantasy world-map generator. Give it a seed and it builds plates, mountains, rivers, climate, realms and peoples, then draws a map you can restyle, save and export.">
 <link rel="canonical" href="https://cartogenesis.com/">
 <!-- The point of the domain is that a link to it can be handed to someone, so a link to it has to
-     preview as something. Poster, title and description; nothing that needs maintaining. -->
+     preview as something. The preview image is the hero: one file, rendered by this site's own
+     build from the seed named under it, so it can never fall out of step with the generator. -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://cartogenesis.com/">
 <meta property="og:title" content="Cartogenesis — Procedural World-Map Generator">
-<meta property="og:description" content="Give it a seed and it builds a world — plates and mountains, rivers and lakes, climate and biomes, realms and peoples — then draws a map you can pan, restyle, save and export.">
-<meta property="og:image" content="https://cartogenesis.com/poster.webp">
+<meta property="og:description" content="Give it a seed. It builds the plates, the weather and the peoples — then draws a map you can pan, restyle, save and export.">
+<meta property="og:image" content="https://cartogenesis.com/img/atlas.webp">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2315110f'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+
+<!-- The two faces the first screenful is set in. The other three are asked for by @font-face
+     below and fetched when the reader gets to them. Fonts are fetched in CORS mode even from the
+     same origin, so `crossorigin` is not optional here: without it the preload is discarded and
+     the file is downloaded a second time. -->
+<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_regular.ttf" crossorigin>
+<link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
+
 <style>
+  /* ==========================================================================
+     The application's own identity, not a website's idea of one.
+
+     Spectral names things, IBM Plex Sans measures them, IBM Plex Mono carries
+     seeds and figure captions — the same split, in the same faces, as the
+     window the reader is about to open. The five files are copied out of
+     ui/src/commonMain/composeResources/font by :web:assembleSite, so there is
+     one copy of each face in the repository and the page cannot drift from the
+     app. All three families are SIL Open Font License 1.1; the licences travel
+     with the application (ui/licences) and are listed in its Notices screen.
+
+     Nothing here is fetched from anywhere else. A landing page that asks a font
+     host for a typeface tells that host who reads it, and it fails oddly when
+     the host is slow or blocked.
+     ========================================================================== */
+  @font-face{
+    font-family:"Spectral";font-style:normal;font-weight:400;font-display:swap;
+    src:url("fonts/spectral_regular.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"Spectral";font-style:normal;font-weight:600;font-display:swap;
+    src:url("fonts/spectral_semibold.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"IBM Plex Sans";font-style:normal;font-weight:400;font-display:swap;
+    src:url("fonts/plex_sans_regular.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"IBM Plex Sans";font-style:normal;font-weight:500;font-display:swap;
+    src:url("fonts/plex_sans_medium.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;
+    src:url("fonts/plex_mono_regular.ttf") format("truetype");
+  }
+
   :root{
+    /* The dark scheme from ui/Theme.kt, value for value. Anything that is not
+       one of these is a mistake rather than a decision. */
     --ink:#15110f;
-    --ink-2:#1e1815;
-    --ink-3:#2a221e;
+    --ink-raised:#1c1714;
+    --ink-sunk:#241d18;
     --hairline:#3a2f28;
-    --parchment:#f2e7cf;
-    --oxblood:#5d0000;
-    --oxblood-lit:#7e1414;
-    --brass:#c9a227;
-    --brass-dim:#8d7326;
     --bone:#e8dfd0;
     --bone-dim:#9c9187;
-    --sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
-    --display:"Cinzel","Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
+    --parchment:#f2e7cf;
+    --brass:#c9a227;
+    --brass-dim:#8d7326;
+    --oxblood:#5d0000;
+    --oxblood-lit:#7e1414;
+
+    --sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+    --serif:"Spectral","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+
+    --measure:1120px;
   }
   *{box-sizing:border-box}
   body{
     margin:0;background:var(--ink);color:var(--bone);
-    font-family:var(--sans);font-size:16px;line-height:1.6;
+    font-family:var(--sans);font-size:16px;line-height:1.65;
     -webkit-font-smoothing:antialiased;
   }
   a{color:inherit}
   :focus-visible{outline:2px solid var(--brass);outline-offset:3px}
-  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  .wrap{max-width:var(--measure);margin:0 auto;padding:0 24px}
 
-  /* ---------- topbar ---------- */
-  .topbar{
-    display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
-    padding:14px 20px;border-bottom:1px solid var(--hairline);
-    background:linear-gradient(180deg,#221a16,#181310);
-  }
+  /* ---------- topbar: the wordmark, and nothing that belongs to anyone else -- */
+  .topbar{border-bottom:1px solid var(--hairline)}
+  .topbar .wrap{display:flex;align-items:baseline;padding-top:16px;padding-bottom:14px}
   .wordmark{
-    font-family:var(--display);font-size:20px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--parchment);margin:0;
+    font-family:var(--serif);font-weight:600;font-size:19px;line-height:1;
+    letter-spacing:.02em;color:var(--parchment);margin:0;
   }
-  .wordmark span{color:var(--brass)}
-  .topline{color:var(--bone-dim);font-size:12.5px;margin-right:auto}
 
-  /* ---------- hero ---------- */
-  .hero{padding:52px 0 8px;text-align:center}
+  /* ---------- hero ---------------------------------------------------------- */
+  .hero{
+    display:grid;gap:36px 44px;align-items:center;
+    grid-template-columns:minmax(0,1fr);
+    padding:48px 0 8px;
+  }
+  @media (min-width:900px){
+    /* The text column is the wider of the two because the headline sets on two lines and the
+       break is chosen, not left to the browser: at this width line one ends after "plates,".
+       The crop is 2:1, so half the row is already more height than it needs. */
+    .hero{grid-template-columns:minmax(0,1fr) minmax(0,.9fr);padding:64px 0 16px}
+    h1 .line{display:block}
+  }
   .eyebrow{
-    font-size:11.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--brass);
-    margin:0 0 14px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--brass);margin:0 0 18px;
   }
   h1{
-    font-family:var(--display);font-weight:700;
-    font-size:clamp(38px,8vw,68px);line-height:1;letter-spacing:.03em;
-    text-transform:uppercase;margin:0;color:var(--parchment);
-  }
-  h1 .em{
-    display:block;
-    background:linear-gradient(180deg,#f7e7c0 0%,#e0b455 46%,#a8571d 100%);
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .rule{width:88px;height:1px;background:var(--brass-dim);margin:24px auto 20px;position:relative}
-  .rule::before,.rule::after{
-    content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--brass);
-    transform:rotate(45deg);
-  }
-  .rule::before{left:-9px} .rule::after{right:-9px}
-  .lede{max-width:54ch;margin:0 auto;color:var(--bone-dim);font-size:17px}
-
-  /* ---------- the poster ---------- */
-  .stage{margin:34px 0 0;position:relative}
-  .frame{
-    border:1px solid var(--hairline);border-radius:3px;overflow:hidden;
-    background:#120e0c;line-height:0;
-    box-shadow:0 18px 50px rgba(0,0,0,.5);
-  }
-  .frame img{display:block;width:100%;height:auto}
-  .frame.empty{
-    line-height:1.6;padding:64px 24px;text-align:center;color:#6e645c;
-    font-size:13px;letter-spacing:.14em;text-transform:uppercase;
-  }
-
-  /* ---------- launch ---------- */
-  .launch{
-    display:flex;flex-direction:column;align-items:center;gap:12px;
-    margin:30px 0 0;
-  }
-  .go-btn{
-    display:inline-block;text-decoration:none;
-    font-family:var(--display);font-weight:700;
-    font-size:15px;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--parchment);
-    background:linear-gradient(180deg,#7e1414,#5d0000);
-    border:1px solid var(--brass-dim);border-radius:3px;
-    padding:15px 34px;
-    transition:border-color .18s,transform .18s,box-shadow .18s;
-  }
-  .go-btn.secondary{
-    font-size:12px;letter-spacing:.14em;padding:10px 22px;
-    color:var(--brass);background:transparent;border-color:var(--brass-dim);
-  }
-  .go-btn.secondary:hover,.go-btn.secondary:focus-visible{
-    box-shadow:0 8px 20px rgba(201,162,39,.18);
-  }
-  .go-btn:hover,.go-btn:focus-visible{
-    border-color:var(--brass);transform:translateY(-2px);
-    box-shadow:0 10px 26px rgba(126,20,20,.36);
-  }
-  .weight{font-size:12.5px;color:#7d7269;margin:0;text-align:center}
-  .weight b{color:var(--bone-dim);font-weight:600}
-
-  /* ---------- notices ---------- */
-  .notice{
-    margin:22px 0 0;padding:14px 16px;border-radius:3px;
-    border:1px solid var(--hairline);border-left:3px solid var(--brass-dim);
-    background:var(--ink-2);font-size:13.5px;line-height:1.6;color:var(--bone-dim);
-  }
-  .notice b{color:var(--parchment);font-weight:600}
-  .notice[hidden]{display:none}
-  .notice.small-screen{border-left-color:var(--oxblood-lit)}
-  .notice a{color:var(--brass)}
-
-  /* ---------- sections ---------- */
-  section{padding:52px 0 0}
-  .section-head{display:flex;align-items:baseline;gap:14px;margin-bottom:22px}
-  .section-head h2{
-    font-family:var(--display);font-size:15px;letter-spacing:.2em;text-transform:uppercase;
-    font-weight:400;color:var(--parchment);margin:0;white-space:nowrap;
-  }
-  .section-head .fill{flex:1;height:1px;background:var(--hairline)}
-  .section-head .count{font-size:12px;letter-spacing:.14em;color:var(--bone-dim)}
-
-  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-  .step{
-    background:var(--ink-2);border:1px solid var(--hairline);border-left:3px solid var(--oxblood);
-    border-radius:3px;padding:18px 20px 16px;
-  }
-  .step h3{
-    font-family:var(--display);font-size:19px;line-height:1.2;font-weight:700;
-    margin:0 0 6px;color:var(--parchment);
-  }
-  .step p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.55}
-
-  .spec{
-    display:grid;gap:0;border:1px solid var(--hairline);border-radius:3px;
-    background:var(--ink-2);overflow:hidden;
-  }
-  .spec div{
-    display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;
-    padding:13px 18px;border-bottom:1px solid var(--hairline);
-  }
-  .spec div:last-child{border-bottom:0}
-  .spec dt{
-    flex:none;width:150px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--brass-dim);margin:0;
-  }
-  .spec dd{margin:0;flex:1;min-width:220px;color:var(--bone-dim);font-size:14.5px}
-
-  /* ---------- the download card ---------- */
-  .tool{
-    display:flex;flex-direction:column;gap:9px;
-    background:var(--ink-2);border:1px solid var(--hairline);border-left:3px solid var(--oxblood);
-    border-radius:3px;padding:20px 20px 18px;text-decoration:none;
-    transition:border-color .18s,transform .18s,background .18s;
-  }
-  a.tool:hover,a.tool:focus-visible{
-    border-color:var(--brass-dim);border-left-color:var(--brass);
-    background:#241d19;transform:translateY(-2px);
-  }
-  .tool h3{
-    font-family:var(--display);font-size:21px;line-height:1.2;font-weight:700;
+    font-family:var(--serif);font-weight:400;
+    font-size:clamp(27px,2.55vw,34px);line-height:1.22;letter-spacing:0;
     margin:0;color:var(--parchment);
   }
-  .tool p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.55}
-  .tool .go{
-    margin-top:auto;padding-top:4px;
-    font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);
+  /* Inline by default, so a narrow column wraps the sentence wherever it likes rather than
+     stranding "plates," alone on a line of its own. The chosen break is switched on with the
+     two-column hero below, where there is room for it. */
+  h1 .line{display:inline}
+  .lede{margin:20px 0 0;color:var(--bone-dim);font-size:17px;max-width:38ch}
+
+  .actions{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 0}
+  .btn{
+    display:inline-block;text-decoration:none;font-family:var(--sans);font-weight:500;
+    font-size:15px;line-height:1.2;padding:13px 22px;border-radius:2px;
+    border:1px solid transparent;transition:background-color .15s,border-color .15s,color .15s;
   }
+  .btn.primary{background:var(--oxblood);color:var(--parchment);border-color:var(--oxblood)}
+  .btn.primary:hover,.btn.primary:focus-visible{
+    background:var(--oxblood-lit);border-color:var(--oxblood-lit);
+  }
+  .btn.secondary{background:transparent;color:var(--brass);border-color:var(--brass)}
+  .btn.secondary:hover,.btn.secondary:focus-visible{background:var(--ink-sunk)}
+  .trust{
+    font-family:var(--mono);font-size:12.5px;color:var(--bone-dim);
+    margin:16px 0 0;letter-spacing:.02em;
+  }
+
+  /* ---------- figures ------------------------------------------------------- */
+  figure{margin:0}
+  .plate{border:1px solid var(--hairline);background:var(--ink-raised);line-height:0}
+  .plate img{display:block;width:100%;height:auto}
+  figcaption{
+    font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--bone-dim);
+    margin:10px 0 0;
+  }
+
+  /* ---------- one world, four readings -------------------------------------- */
+  .lead{margin:-6px 0 22px;color:var(--bone-dim);font-size:15px;max-width:64ch}
+
+  /* Hidden until the script turns the strip into tabs. Without JavaScript the four readings
+     stay stacked, which is the phone layout and a perfectly good page. */
+  .tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--hairline);margin-bottom:20px}
+  .tabs[hidden]{display:none}
+  .tabs button{
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;
+    background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;
+    padding:10px 16px;color:var(--bone-dim);cursor:pointer;
+  }
+  .tabs button[aria-selected="true"]{color:var(--brass);border-bottom-color:var(--brass)}
+  .tabs button:hover{color:var(--bone)}
+  .reading + .reading{margin-top:28px}
+  .reading[hidden]{display:none}
+
+  /* ---------- annotated details --------------------------------------------- */
+  .detail + .detail{margin-top:36px}
+  /* Capped at the crop's own width so that on a wide screen the picture is the renderer's own
+     pixels, one for one, and the labels sit exactly where they were measured. */
+  .detail .plate{position:relative;line-height:1.5;max-width:1000px}
+  .detail .plate img{margin:0}
+  .detail figcaption{font-size:12.5px;line-height:1.75;max-width:82ch}
+  .detail figcaption b{color:var(--bone);font-weight:400}
+  .notes{margin:0;padding:0;list-style:none;counter-reset:note}
+  .notes li{counter-increment:note}
+  .notes li::before{
+    content:counter(note);flex:none;
+    font-family:var(--mono);font-size:11px;line-height:16px;text-align:center;
+    width:17px;height:17px;color:var(--brass);border:1px solid var(--brass-dim);
+  }
+  /* Below this width a 1000-pixel crop is drawn at a third of its size and a label pinned to it
+     would be unreadable and would cover what it points at, so the same list runs under the
+     picture instead. One set of words, numbered the same way in both. */
+  @media (max-width:759px){
+    .notes{
+      display:grid;gap:10px;padding:14px 16px;border-top:1px solid var(--hairline);
+      font-size:13.5px;color:var(--bone-dim);line-height:1.5;
+    }
+    .notes li{display:flex;gap:10px;align-items:flex-start}
+  }
+  @media (min-width:760px){
+    .notes{position:absolute;inset:0;pointer-events:none}
+    .notes li{
+      position:absolute;display:flex;gap:8px;align-items:center;
+      transform:translate(-9px,-50%);max-width:17rem;
+      background:var(--ink);border:1px solid var(--brass-dim);padding:5px 10px;
+      font-family:var(--mono);font-size:11.5px;line-height:1.4;color:var(--bone);
+    }
+    /* For a feature near the right-hand edge the cartouche has to run the other way, or it
+       hangs off the picture. */
+    .notes li.flip{flex-direction:row-reverse;transform:translate(calc(-100% + 9px),-50%)}
+  }
+
+  /* ---------- notices ------------------------------------------------------- */
+  .notice{
+    margin:22px 0 0;padding:14px 16px;
+    border:1px solid var(--hairline);border-left:2px solid var(--brass-dim);
+    background:var(--ink-raised);font-size:14px;line-height:1.6;color:var(--bone-dim);
+  }
+  .notice b{color:var(--bone);font-weight:500}
+  .notice[hidden]{display:none}
+  .notice a{color:var(--brass)}
+
+  /* ---------- sections ------------------------------------------------------ */
+  section{padding:56px 0 0}
+  .section-head{display:flex;align-items:baseline;gap:16px;margin-bottom:24px}
+  .section-head h2{
+    font-family:var(--serif);font-weight:400;font-size:21px;line-height:1.2;
+    color:var(--parchment);margin:0;
+  }
+  .section-head .fill{flex:1;height:1px;background:var(--hairline)}
+
+  .spec{margin:0;border-top:1px solid var(--hairline)}
+  .spec div{
+    display:flex;gap:20px;align-items:baseline;flex-wrap:wrap;
+    padding:13px 2px;border-bottom:1px solid var(--hairline);
+  }
+  .spec dt{
+    flex:none;width:150px;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--brass);margin:0;
+  }
+  .spec dd{margin:0;flex:1;min-width:240px;color:var(--bone-dim);font-size:14.5px}
+
+  /* ---------- practical details --------------------------------------------- */
+  .practical{display:grid;gap:24px}
+  @media (min-width:820px){.practical{grid-template-columns:1fr 1fr}}
+  .panel{border:1px solid var(--hairline);background:var(--ink-raised);padding:20px 22px}
+  .panel h3{
+    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
+    margin:0 0 10px;color:var(--parchment);
+  }
+  .panel p{margin:0 0 10px;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  .panel p:last-child{margin-bottom:0}
+  a.panel{display:block;text-decoration:none;transition:border-color .15s,background-color .15s}
+  a.panel:hover,a.panel:focus-visible{border-color:var(--brass);background:var(--ink-sunk)}
+  .panel .go{display:block;margin-top:12px;font-family:var(--mono);font-size:12.5px;color:var(--brass)}
   .tag{
-    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
-    border:1px solid var(--hairline);color:#8d8177;padding:2px 7px;border-radius:2px;
-    white-space:nowrap;margin-left:8px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    border:1px solid var(--hairline);color:var(--bone-dim);padding:2px 7px;
+    white-space:nowrap;margin-left:10px;vertical-align:2px;
   }
 
   footer{
-    margin-top:56px;border-top:1px solid var(--hairline);padding:26px 0 40px;
-    color:#7d7269;font-size:12.5px;line-height:1.7;
+    margin-top:64px;border-top:1px solid var(--hairline);padding:24px 0 48px;
+    color:var(--bone-dim);font-size:13px;line-height:1.7;
   }
-  footer p{margin:0 0 6px}
-  footer a{color:#9c9187}
+  footer p{margin:0}
+  footer a{color:var(--bone)}
   footer a:hover{color:var(--brass)}
 </style>
 </head>
 <body>
 
 <header class="topbar">
-  <h1 class="wordmark" style="font-size:20px">Carto<span>genesis</span></h1>
-  <span class="topline">Procedural world-map generator</span>
+  <div class="wrap"><p class="wordmark">Cartogenesis</p></div>
 </header>
 
-<div class="wrap">
+<main class="wrap">
 
   <div class="hero">
-    <p class="eyebrow">Open source, free to use</p>
-    <h1>Carto<span class="em">genesis</span></h1>
-    <div class="rule"></div>
-    <p class="lede">
-      Give it a seed and it builds a world — plates and mountains, rivers and lakes,
-      climate and biomes, realms and peoples — then draws a map you can pan, restyle,
-      save and export.
-    </p>
-  </div>
+    <div>
+      <p class="eyebrow">Open source, free to use</p>
+      <h1>
+        <span class="line">Give it a seed. It builds the plates,</span>
+        <span class="line">the weather and the peoples.</span>
+      </h1>
+      <p class="lede">
+        Plates collide and erode, winds and currents decide where the rain falls, rivers
+        find the sea, and realms take the ground between them — then it draws the map.
+      </p>
 
-  <div class="stage">
-    <div class="frame" id="poster-frame">
-      <img src="poster.webp" alt="A generated world map: coastlines, mountain ranges, rivers and realm borders"
-           id="poster" width="1600" height="800">
+      <div class="actions">
+        <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
+        <a class="btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Download for Windows (recommended)</a>
+      </div>
+      <p class="trust">Free · Open source · Runs locally</p>
+
+      <div class="notice" id="small-screen" hidden>
+        <b>Works on phones.</b>
+        Worlds generate at 512 by default here, and 2048 works; exports are capped at 2048.
+        The desktop app goes further.
+      </div>
     </div>
+
+    <figure>
+      <div class="plate">
+        <img src="img/atlas.webp" width="1600" height="800" fetchpriority="high"
+             alt="A generated world map: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
+      </div>
+      <figcaption>
+        Seed 718106 · 62% ocean · 14 plates · 2048 cells · Atlas style<br>
+        Rendered from the engine when this page was built, not drawn by hand.
+      </figcaption>
+    </figure>
   </div>
 
-  <div class="launch">
-    <a class="go-btn" href="/app/" id="launch">Open Cartogenesis</a>
-    <a class="go-btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Desktop version (recommended)</a>
-    <p class="weight">
-      Runs in your browser. Nothing is uploaded.<br>
-      The first visit downloads <b>about 4.5&nbsp;MB</b>; it is cached after that.
+  <section id="readings">
+    <div class="section-head">
+      <h2>One world, four readings</h2>
+      <span class="fill"></span>
+    </div>
+    <p class="lead">
+      The same crop of the same world, drawn four ways. A map view chooses what is being
+      shown; a map style chooses how it is drawn. Both are exported.
     </p>
-  </div>
 
-  <div class="notice small-screen" id="small-screen" hidden>
-    <b>Works on phones.</b>
-    Worlds generate at 512 by default here, and 2048 works; exports are capped at 2048. The desktop app goes further.
-  </div>
+    <div class="tabs" id="reading-tabs" role="tablist" aria-label="Four readings of one world" hidden>
+      <button type="button" id="tab-atlas" aria-controls="reading-atlas">Atlas</button>
+      <button type="button" id="tab-biomes" aria-controls="reading-biomes">Biomes</button>
+      <button type="button" id="tab-political" aria-controls="reading-political">Political</button>
+      <button type="button" id="tab-pen" aria-controls="reading-pen">Pen and ink</button>
+    </div>
 
-  <div class="notice">
-    <b>Needs a current browser</b> — recent Chrome, Edge, Firefox or Safari.
-    The optional graphics-card acceleration uses WebGPU where the browser offers it.
-  </div>
+    <figure class="reading" id="reading-atlas">
+      <div class="plate">
+        <img src="img/atlas.webp" width="1600" height="800"
+             alt="The Atlas style: land coloured by height from green lowlands to pale summits, relief shading, blue rivers and lakes, and bathymetric shading in the sea.">
+      </div>
+      <figcaption>Atlas — height in colour, relief raked by a low sun, rivers drawn with a pen sized by their discharge.</figcaption>
+    </figure>
 
-  <div class="notice">
-    <b>The Atlas is a work in progress.</b>
-    Today it lists a world's realms and landmarks, lets you rename them and place labels,
-    and stops there. A full atlas is planned for a later release, targeting 4.0: named
-    continents, seas, bays, straits and ranges, with labels set out the way a printed map
-    sets them. Names you give now are kept with the world.
-  </div>
+    <figure class="reading" id="reading-biomes">
+      <div class="plate">
+        <img src="img/biomes.webp" width="1600" height="800" loading="lazy"
+             alt="The biomes view of the same crop: white sea ice along the top, grey-green tundra across the northern half of the continent, olive steppe and tan desert in the south, and dark green forest on the southern coasts.">
+      </div>
+      <figcaption>Biomes — Köppen classes from the season's temperature and rainfall: sea ice, tundra, steppe, desert, forest.</figcaption>
+    </figure>
+
+    <figure class="reading" id="reading-political">
+      <div class="plate">
+        <img src="img/political.webp" width="1600" height="800" loading="lazy"
+             alt="The political view of the same crop: the continent in one teal realm with two smaller ones on its west coast, an offshore island in lavender, and several more realms along the right-hand edge.">
+      </div>
+      <figcaption>Political — realms grown from their capitals along watersheds, rivers and coasts, so borders sit where the ground divides.</figcaption>
+    </figure>
+
+    <figure class="reading" id="reading-pen">
+      <div class="plate">
+        <img src="img/pen-and-ink.webp" width="1600" height="800" loading="lazy"
+             alt="The Pen and ink style of the same crop: black hachures on cream paper for the relief, contour rings offshore, a stippled band of sea ice, and hairline borders.">
+      </div>
+      <figcaption>Pen and ink — the same terrain as hachures, coastal contour rings and stipple, drawn rather than tinted.</figcaption>
+    </figure>
+  </section>
 
   <section>
     <div class="section-head">
-      <h2>How a world is made</h2>
+      <h2>Three things it works out</h2>
       <span class="fill"></span>
     </div>
+    <p class="lead">
+      Crops from the same world, cut out of the 2048 render at its own pixels rather than
+      scaled down to fit, so the pen is the one the renderer draws with.
+    </p>
 
-    <div class="grid">
-      <div class="step">
-        <h3>Plates and mountains</h3>
-        <p>Drifting plates collide, and what they build depends on what meets: coastal ranges with volcanoes behind them, broad plateaus, island arcs, rift valleys that flood into chains of gulfs.</p>
+    <figure class="detail">
+      <div class="plate">
+        <img src="img/rain-shadow.webp" width="1000" height="600" loading="lazy"
+             alt="The rainfall view across a mountain range running from the lower left to the upper right. A narrow green strip marks the wet seaward coast, and the ground immediately behind the crest is the palest in the frame.">
+        <ol class="notes">
+          <li style="left:9%;top:41%">Windward coast, the wettest ground here</li>
+          <li style="left:40%;top:38%">The crest, running south-west to north-east</li>
+          <li style="left:46%;top:52%">Its lee, the driest ground in the frame</li>
+        </ol>
       </div>
-      <div class="step">
-        <h3>Erosion</h3>
-        <p>Slopes collapse, rivers cut valleys and carry the debris down to floodplains, fans and deltas. Basins drain through the notches their overflow cuts.</p>
+      <figcaption>
+        <b>A rain shadow.</b> Moist air carried onto the coast rises over the range, rains out on
+        the windward flank and comes down the far side dry. Rainfall view.
+      </figcaption>
+    </figure>
+
+    <figure class="detail">
+      <div class="plate">
+        <img src="img/trunk-river.webp" width="1000" height="600" loading="lazy"
+             alt="A dense river network draining to a large lake. The headwaters are hair-thin threads; the channel thickens at each junction, and the reach entering the lake is several times the width of a thread.">
+        <ol class="notes">
+          <li style="left:5%;top:10%">Headwaters, a hairline wide</li>
+          <li style="left:19%;top:33%">Each tributary widens the trunk below the junction</li>
+          <li style="left:26%;top:50%">The mouth: the widest channel on this world</li>
+        </ol>
       </div>
-      <div class="step">
-        <h3>Seas and ice</h3>
-        <p>Continental shelves along the coasts; glaciers in cold mountains and scoured lake country under old ice sheets.</p>
+      <figcaption>
+        <b>A river widening with its discharge.</b> Width follows the square root of the flow it
+        carries, which is what Leopold and Maddock measured on hundreds of gauged rivers, so a
+        trunk is about five times a headwater and every junction shows.
+      </figcaption>
+    </figure>
+
+    <figure class="detail">
+      <div class="plate">
+        <img src="img/rift.webp" width="1000" height="600" loading="lazy"
+             alt="A continental rift flooded by the sea: a long narrow ridge standing above a drowned trough, a nearly enclosed round gulf beside it, and further east a long inlet pinched in the middle by a low neck of land.">
+        <ol class="notes">
+          <li style="left:21%;top:43%">A shoulder, standing above the trough it flanks</li>
+          <li style="left:30%;top:69%">A deep segment, flooded to a gulf</li>
+          <li class="flip" style="left:78%;top:64%">A sill between two segments</li>
+        </ol>
       </div>
-      <div class="step">
-        <h3>Climate</h3>
-        <p>A warm season and a cold one, ocean currents, continental interiors, monsoons and rain shadows. Biomes follow the Köppen rules, so deserts sit where deserts sit.</p>
-      </div>
-      <div class="step">
-        <h3>Rivers and lakes</h3>
-        <p>Water runs downhill to the sea or into lakes. Dry basins hold only the water their catchment can keep against evaporation, so an inland sea shrinks to a salt lake.</p>
-      </div>
-      <div class="step">
-        <h3>Realms and peoples</h3>
-        <p>Borders follow watersheds, rivers and coasts. Peoples spread through country that resembles their homeland, so cultures cross borders the way real ones do.</p>
-      </div>
-    </div>
+      <figcaption>
+        <b>A rift breaking into gulfs.</b> A continental rift is cut along its length into segments,
+        each with its own depth and its own raised flank, and the joins between them stand as low
+        sills. The sea floods the deep segments and stops at the sills, so the rift reads as a
+        chain of gulfs rather than one straight trench.
+      </figcaption>
+    </figure>
   </section>
 
   <section>
@@ -300,66 +431,143 @@
     </div>
 
     <dl class="spec">
-      <div><dt>Map views</dt><dd>Fifteen: the fantasy map, political and peoples layers, elevation, biomes, temperature and rainfall by season, plates, ocean currents, winds, and more.</dd></div>
-      <div><dt>Styles</dt><dd>Eleven, from an atlas with hypsometric tints to vellum, ink wash, nautical chart, pen-and-ink, Mars and a colour-blind-safe palette.</dd></div>
-      <div><dt>Themes</dt><dd>Fifteen for the window itself: light, dark, high contrast, colour-blind, and styled sets from Nautical and Baroque to Matrix and Hitchcock.</dd></div>
+      <div><dt>Views</dt><dd>Fifteen: the fantasy map, political and peoples, elevation, biomes, temperature and rainfall by season, plates, currents, winds.</dd></div>
+      <div><dt>Styles</dt><dd>Eleven for the map: atlas, vellum, ink wash, nautical chart, pen and ink, Mars, and a colour-blind-safe palette.</dd></div>
+      <div><dt>Themes</dt><dd>Fifteen for the window: light, dark, high contrast, colour-blind, and styled sets from Nautical to Hitchcock.</dd></div>
       <div><dt>Editing</dt><dd>Every generated name and border can be overridden, and the overrides are kept with the world.</dd></div>
-      <div><dt>Saving</dt><dd>A save holds the finished world, so it opens instantly and never changes under you. Save files move between the browser and the desktop app.</dd></div>
-      <div><dt>Export</dt><dd>PNG or WebP up to 4096 × 4096.</dd></div>
-      <div><dt>Resolution</dt><dd>512 to 4096 cells across. The browser starts at 512; the desktop app is faster and starts at 1024.</dd></div>
-      <div><dt>Graphics acceleration</dt><dd>Optional. Erosion, the slowest part, runs on the graphics processor where the browser offers WebGPU, phones included; the desktop app renders exports there too. On a 2026 phone a 1024 world takes about twenty seconds and 2048 about a minute and a half.</dd></div>
+      <div><dt>Saves</dt><dd>A save holds the finished world, and the same file opens in the browser and on the desktop.</dd></div>
+      <div><dt>Export</dt><dd>PNG or WebP, up to 4096 × 4096.</dd></div>
+      <div><dt>Resolution</dt><dd>512 to 4096 cells across; the browser starts at 512, the desktop app at 1024.</dd></div>
+      <div><dt>Acceleration</dt><dd>Optional, for erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
     </dl>
   </section>
 
-  <section>
+  <section id="practical">
     <div class="section-head">
-      <h2>Desktop version</h2>
+      <h2>Practical details</h2>
       <span class="fill"></span>
     </div>
 
-    <div class="grid">
-      <a class="tool" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
-        <h3>Download<span class="tag">Windows</span></h3>
-        <p>Bigger worlds, more threads and no download before you start. Portable zip or installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time; choose "More info", then "Run anyway".</p>
+    <div class="practical">
+      <div class="panel">
+        <h3>Running it in a browser</h3>
+        <p>Recent Chrome, Edge, Firefox or Safari. The first visit downloads about 4.5&nbsp;MB and is cached after that; nothing you make is uploaded anywhere.</p>
+        <p>The optional graphics-card acceleration uses WebGPU where the browser offers it.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Sizes, formats and speed</h3>
+        <p>An export re-runs the whole pipeline at the size you ask for rather than enlarging what is on screen, so the detail is real; 4096 wants a few gigabytes, which is why the browser stops at 2048 on a phone.</p>
+        <p>WebP is about a quarter of PNG's size and softens thin rivers and borders very slightly. With a graphics card, a 1024 world takes about twenty seconds on a 2026 phone and 2048 about a minute and a half.</p>
+      </div>
+
+      <div class="panel">
+        <h3>The Atlas is a work in progress</h3>
+        <p>Today it lists a world's realms and landmarks, lets you rename them and place labels, and stops there. A full atlas is planned for a later release, targeting 4.0: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. Names you give now are kept with the world.</p>
+      </div>
+
+      <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
+        <h3>Desktop version<span class="tag">Windows</span></h3>
+        <p>Bigger worlds, more threads and no download before you start. Portable zip or installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time; choose “More info”, then “Run anyway”.</p>
         <span class="go" id="release-line">Get the latest release ↗</span>
       </a>
     </div>
   </section>
 
-</div>
+</main>
 
 <footer>
   <div class="wrap">
-    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>.</p>
+    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>. Spectral and IBM Plex are used under the SIL Open Font License 1.1.</p>
   </div>
 </footer>
 
 <script>
 (function () {
-  var narrow = window.matchMedia('(max-width: 820px)').matches;
-  var coarse = window.matchMedia('(pointer: coarse)').matches;
-  if (narrow && coarse) {
-    var n = document.getElementById('small-screen');
-    if (n) n.hidden = false;
+  /* The phone note is about what a phone can do, so it is shown to phones: a narrow
+     viewport *and* a coarse pointer, which a small desktop window is not. */
+  if (window.matchMedia('(max-width: 820px)').matches &&
+      window.matchMedia('(pointer: coarse)').matches) {
+    var note = document.getElementById('small-screen');
+    if (note) note.hidden = false;
   }
 
-  var poster = document.getElementById('poster');
-  if (poster) {
-    var drop = function () {
-      var frame = document.getElementById('poster-frame');
-      if (!frame) return;
-      poster.remove();
-      frame.classList.add('empty');
-      frame.textContent = 'Poster image not yet added';
-    };
-    poster.addEventListener('error', drop);
-    if (poster.complete && poster.naturalWidth === 0) drop();
+  /* ---- the four readings ------------------------------------------------------------
+     The strip ships stacked: four figures one under another, each with its caption. That is
+     the phone layout, and it is also what a reader with no JavaScript gets, which is why the
+     tablist is marked hidden in the markup rather than here. Where there is room, this turns
+     the same four figures into tabs — one picture at a time, swapped without a page load, so
+     the four readings are compared in place rather than by scrolling between them.
+
+     The tab roles are added and removed with the layout instead of being written into the
+     markup: a tabpanel with no tablist in front of it is a lie told to a screen reader. */
+  var tablist = document.getElementById('reading-tabs');
+  if (tablist) {
+    var tabs = Array.prototype.slice.call(tablist.querySelectorAll('button'));
+    var panels = tabs.map(function (t) {
+      return document.getElementById(t.getAttribute('aria-controls'));
+    });
+    var chosen = 0;
+
+    function show(index, moveFocus) {
+      chosen = index;
+      tabs.forEach(function (tab, i) {
+        var on = i === index;
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        tab.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+      });
+      if (moveFocus) tabs[index].focus();
+    }
+
+    function asTabs() {
+      tablist.hidden = false;
+      tabs.forEach(function (tab, i) {
+        tab.setAttribute('role', 'tab');
+        panels[i].setAttribute('role', 'tabpanel');
+        panels[i].setAttribute('aria-labelledby', tab.id);
+      });
+      show(chosen, false);
+    }
+
+    function asStrip() {
+      tablist.hidden = true;
+      panels.forEach(function (panel) {
+        panel.hidden = false;
+        panel.removeAttribute('role');
+        panel.removeAttribute('aria-labelledby');
+      });
+    }
+
+    tablist.addEventListener('click', function (event) {
+      var i = tabs.indexOf(event.target.closest('button'));
+      if (i >= 0) show(i, false);
+    });
+
+    /* Arrow keys move between tabs and select as they go, which is the pattern for a tablist
+       whose panels are cheap to show — here, four images the browser has already decoded. */
+    tablist.addEventListener('keydown', function (event) {
+      var step = {ArrowRight: 1, ArrowLeft: -1, ArrowDown: 1, ArrowUp: -1}[event.key];
+      var to = step ? (chosen + step + tabs.length) % tabs.length
+             : event.key === 'Home' ? 0
+             : event.key === 'End' ? tabs.length - 1
+             : -1;
+      if (to >= 0) { event.preventDefault(); show(to, true); }
+    });
+
+    var roomForTabs = window.matchMedia('(min-width: 720px)');
+    var layout = function () { roomForTabs.matches ? asTabs() : asStrip(); };
+    layout();
+    if (roomForTabs.addEventListener) roomForTabs.addEventListener('change', layout);
+    else roomForTabs.addListener(layout);
   }
 
-  /* Latest release, read live so the page never carries a stale version. Silent on failure. */
+  /* The latest release, read live so the page never carries a stale version number.
+     Silent on failure: the link works either way. */
   var line = document.getElementById('release-line');
   if (line && window.fetch) {
-    fetch('https://api.github.com/repos/bhanright/Cartogenesis/releases/latest', {headers: {'Accept': 'application/vnd.github+json'}})
+    fetch('https://api.github.com/repos/bhanright/Cartogenesis/releases/latest',
+          {headers: {'Accept': 'application/vnd.github+json'}})
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (j && j.tag_name) line.textContent = 'Get the latest release (' + j.tag_name + ') ↗';

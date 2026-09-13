@@ -5,16 +5,25 @@ Everything the website is, apart from the application itself:
 ```
 site/
   index.html    the description page, served at /
-  poster.webp   1600x800, a 2048 export downsampled; the page falls back to a placeholder
-                if it ever goes missing
   app/
     index.html  the loading shell, served at /app/ — see "What the shell depends on"
   _headers      Cloudflare Pages response headers
   _redirects    Cloudflare Pages redirects
 ```
 
-The application is not in here. It is built from `:web` and dropped in beside these files at
-assembly time.
+That is the whole of it: two pages and two host files. Three things the site serves are *not* in
+here, because keeping a second copy of any of them is how a copy goes stale:
+
+- **The application**, built from `:web` and dropped in under `app/` at assembly time.
+- **The typefaces**, under `fonts/`. The five faces the page sets its type in are copied out of
+  `ui/src/commonMain/composeResources/font`, which is where the application keeps them, so the
+  page and the app cannot drift on to different cuts of Spectral. (The sixth bundled face, Plex
+  Mono bold, is not copied: the page never asks for it.)
+- **Every picture**, under `img/`. There are no image files in this folder at all. They are
+  rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 718106 at 2048
+  with William's settings, cut to fixed windows — so a release that changes what a coastline looks
+  like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
+  how to pick a new one.
 
 ## Assembling it
 
@@ -22,8 +31,9 @@ assembly time.
 ./gradlew :web:assembleSite
 ```
 
-That runs `:web:wasmJsBrowserDistribution` and then syncs `web/build/site` to this folder plus the
-build output under `app/`, which is the tree a host serves:
+That runs `:web:wasmJsBrowserDistribution` and `:desktop:renderSiteImagery`, then syncs
+`web/build/site` to this folder plus the faces, the figures and the build output under `app/`,
+which is the tree a host serves:
 
 - **`Sync`, not a copy.** The two `.wasm` filenames carry content hashes, so a new build lands
   *beside* the old one rather than replacing it. A tree that is only ever added to grows about
@@ -53,9 +63,11 @@ ask for the old loader, which is still there under its old query.
 ```
 
 Assembles the site and then runs `SiteAssemblyTest` over the tree that would be uploaded: two
-`.wasm` files and no third left behind, exactly one of them the application, the six fonts, no
-source map, a loader stamp that is a commit rather than the placeholder, `_headers` and `_redirects`
-present, and a poster that is still a WebP. It lives in `:desktop` because the web module compiles
+`.wasm` files and no third left behind, exactly one of them the application, the six fonts the app
+bundles and the five the page sets its type in, no source map, a loader stamp that is a commit
+rather than the placeholder, `_headers` and `_redirects` present, every figure the page shows
+rendered at the size the page reserves for it, no request to a font host, and no link to any site
+but this project's (ground rule 10). It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

@@ -718,8 +718,15 @@ class IsostasyTest {
         val frozen = BooleanArray(world.sea.isLand.size) {
             world.climate.biome[it] == Biome.ICE_SHEET
         }
+        // How far inside the ice each frozen cell stands, so that "under the cap" means under the
+        // full thickness of one. The taper is the ice's own thickness profile, which ramps over
+        // `iceSheetMarginRampKm`, so a cell half a ramp in is only half filled and is expected to
+        // show half the bend; the clause is about the interior, where the sheet is whole.
+        val insideCells = insideTheIce(world, frozen)
+        val rampCells = world.config.cellsFor(world.config.isostasy.iceSheetMarginRampKm)
         var deepestMoat = 0.0
         var deepestUnderIce = 0.0
+        var interiorCells = 0
         var moved = 0
         for (cell in world.sea.relativeElevation.data.indices) {
             if (!world.sea.isLand[cell] || !without.sea.isLand[cell]) continue
@@ -728,6 +735,8 @@ class IsostasyTest {
             val down = (there - here).toDouble()
             if (down > 1.0) moved++
             if (frozen[cell]) {
+                if (insideCells[cell] < rampCells) continue
+                interiorCells++
                 if (down > deepestUnderIce) deepestUnderIce = down
             } else if (down > deepestMoat) deepestMoat = down
         }
@@ -735,11 +744,17 @@ class IsostasyTest {
         val airy = isostasy.iceSheetThicknessMetres * isostasy.iceDensity / isostasy.mantleDensity
         println(
             ("ISOSTASY ice seed %d: %d cells pressed down, the moat deepest by %.0f m and the" +
-                " ground under the cap by %.0f, against the %.0f m a sheet of this thickness" +
-                " floats out at")
-                .format(seed, moved, deepestMoat, deepestUnderIce, airy)
+                " ground under the %d cells of cap interior by %.0f, against the %.0f m a sheet" +
+                " of this thickness floats out at")
+                .format(seed, moved, deepestMoat, interiorCells, deepestUnderIce, airy)
         )
         assertTrue("seed $seed carries no ice, so there is no load to weigh", moved > 0)
+        assertTrue(
+            "seed $seed grows no sheet wide enough to have an interior — every frozen cell is" +
+                " within a margin ramp of open ground — so there is nowhere the clause below can" +
+                " be read, and the seed has to be re-picked rather than the clause dropped",
+            interiorCells > 0
+        )
         assertTrue(
             "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
                 " a fifth and the whole of the ${"%.0f".format(airy)} m" +
@@ -747,12 +762,50 @@ class IsostasyTest {
             deepestMoat in (airy * MOAT_SHARE_OF_AIRY_FLOOR)..airy.toDouble()
         )
         assertTrue(
-            "the ground under the ice dropped ${"%.0f".format(deepestUnderIce)} m, more than the" +
+            "the ground under the middle of the ice dropped ${"%.0f".format(deepestUnderIce)} m," +
+                " more than the" +
                 " ${"%.0f".format(airy * CAP_SHARE_OF_AIRY_CEILING)} m a cap is allowed to move:" +
                 " the bend is being spent on the surface rather than on the bed under it, which is" +
                 " what the climate stage then reads as warmer ground",
             deepestUnderIce <= airy * CAP_SHARE_OF_AIRY_CEILING
         )
+    }
+
+    /**
+     * How far inside the ice every frozen cell stands, in cells, by a two-pass chamfer sweep from
+     * the ice-free ground. The same distance the glaciation stage ramps the sheet's thickness over.
+     */
+    private fun insideTheIce(world: WorldMap, frozen: BooleanArray): FloatArray {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val far = (cellsAcross + cellsDown).toFloat()
+        val inside = FloatArray(cellsAcross * cellsDown) { if (frozen[it]) far else 0f }
+        val diagonal = 1.41421356f
+        for (pass in 0..1) {
+            val rows = if (pass == 0) 0 until cellsDown else cellsDown - 1 downTo 0
+            for (row in rows) {
+                val columns = if (pass == 0) 0 until cellsAcross else cellsAcross - 1 downTo 0
+                for (column in columns) {
+                    val cell = row * cellsAcross + column
+                    if (!frozen[cell]) continue
+                    var best = inside[cell]
+                    for (rowStep in -1..1) {
+                        val neighbourRow = row + rowStep
+                        if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                        for (columnStep in -1..1) {
+                            if (rowStep == 0 && columnStep == 0) continue
+                            val neighbourColumn =
+                                (column + columnStep + cellsAcross) % cellsAcross
+                            val step = if (rowStep != 0 && columnStep != 0) diagonal else 1f
+                            val reached = inside[neighbourRow * cellsAcross + neighbourColumn] + step
+                            if (reached < best) best = reached
+                        }
+                    }
+                    inside[cell] = best
+                }
+            }
+        }
+        return inside
     }
 
     private fun worldAt(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(

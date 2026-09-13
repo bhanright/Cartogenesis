@@ -137,7 +137,10 @@ because its uplift stopped and erosion went on, and the epochs say when: the age
 `exp(-time / decay time)` from two figures of Earth's rather than a factor per orogeny.
 
 **The plate bends under what is put on it.** Flexure is a low-pass filter on the load,
-`w(k) = L(k) / (dRho g + D k^4)`, solved by the same FFT the terrain stage uses. A range that is
+`w(k) = L(k) / (dRho g + D k^4)`, solved by the same FFT the terrain stage uses, and it answers at
+the head of a hydraulic round rather than at its tail — so every bend has a round of rivers after
+it to adjust to it, which is the order the Earth does it in and which keeps a broad warp from being
+the last thing laid on a landscape whose water has already finished routing. A range that is
 being stripped loses mass and rebounds; the ground in front of it takes that mass as sediment and
 sinks, which is a foreland basin; a delta subsides under its own load; and an ice sheet holds its
 bed down, which is why Greenland's bed lies below sea level and why Scandinavia is still rising a
@@ -162,14 +165,15 @@ integrates it, leaving the relief loudest at 400 km, which is the scale Earth's 
 continental relief sits at and the scale a range is read at on a map. Its amplitude is a standard
 deviation in metres: 700 m on continental crust, which is Earth's own spread away from its orogens,
 250 on the sea floor, which is Goff and Jordan's abyssal hills, and 700 m more inside an active
-orogen, which is the relief between the cordilleras of one. A fifth of the map-scale component is
+orogen, which is the relief between the cordilleras of one. A sixth of the map-scale component is
 kept, because drainage is organised by a continent's longest slopes and a surface with nothing at
 that wavelength grows many short rivers instead of a few long ones — and, as S2's third pass found,
 ponds the water where it falls. At a tenth, which is what the second pass measured the bifurcation
 ratio against, lakes covered 3.55% of the land against Earth's 1.48% at this cell area and the
-sea-level cut landed on a platform flat enough to drown into an archipelago; at a fifth the lakes
-are 1.87%, the drainage density is 0.0030 km/km² against the pre-S2 generator's 0.0026, and the
-coastline's box dimension is still 1.114.
+sea-level cut landed on a platform flat enough to drown into an archipelago; at a sixth the lakes
+are 1.73%, the drainage density is 0.0029 km/km² against the pre-S2 generator's 0.0026, and every
+seed's coastline clears Mandelbrot's floor. Above a sixth the coast goes: a map-scale tilt moves a
+shoreline bodily.
 
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind

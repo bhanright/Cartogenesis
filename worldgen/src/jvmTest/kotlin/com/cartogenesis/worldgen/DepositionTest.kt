@@ -158,10 +158,10 @@ class DepositionTest {
      * And a thirteenth time at S2, which gave the height field an absolute vertical scale: the two
      * crusts float at their own levels, so the percentile falls through different ground. S2's own
      * branch read 6232 where the pre-S2 tree read 6290; F17's branch read 6426 where it read 6290;
-     * the figure below is the two together, taken on the merged tree. The cut itself has not moved
-     * in any of them: exactly 62% of the cells still lie below it.
+     * the two together, taken on the merged tree, read 6289. The cut itself has not moved in any of
+     * them: exactly 62% of the cells still lie below it.
      */
-    private val startingPointLand = 6426
+    private val startingPointLand = 6289
 
     @Test
     fun `every round conserves mass`() {

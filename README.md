@@ -40,7 +40,7 @@ rate below is written in those units and converted to whatever grid the world is
    by Frankot-Chellappa least-squares integration (a 2D FFT). The same transform shapes the result's
    spectrum, leaving its relief loudest at 400 km — the scale Earth's continental topography away
    from its mountains sits at — because the broad shape of the ground is the crust's business and
-   not the noise's. A fifth of the map-wide component survives that filter, because a continent
+   not the noise's. A sixth of the map-wide component survives that filter, because a continent
    that tilts one way for two thousand kilometres is what makes a long river, and a continent that
    does not ponds its water where it falls.
 2. **Plates.** The world splits into drifting Voronoi plates, each made of continental or oceanic

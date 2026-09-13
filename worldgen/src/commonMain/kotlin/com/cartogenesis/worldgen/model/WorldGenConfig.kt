@@ -310,23 +310,27 @@ data class TerrainConfig(
      * outside Horton's 3 to 5, by halving the count of third- and fourth-order streams: the
      * catchments stopped merging.
      *
-     * A fifth, and the floor is small because the unfiltered amplitude at that scale is enormous:
+     * A sixth, and the floor is small because the unfiltered amplitude at that scale is enormous:
      * integration makes it grow as the wavelength, so the map's own width carries fifteen times
-     * what the corner does, and a fifth of that is three times the corner's own amplitude.
+     * what the corner does, and a sixth of that is two and a half times the corner's own amplitude.
      *
      * S2's second pass took a tenth and measured that as where the bifurcation ratio stopped
      * falling. It is not enough, and what the ratio could not see the eye could: with a tenth the
      * ground between the belts has no slope worth the name, so the water ponds where it falls and
      * the sea-level cut lands on a platform flat enough to drown into an archipelago. Rendered at
      * 2048, 718106's southern half was a maze of inlets and islands and both worlds were pocked
-     * with small lakes. Measured over 0.15, 0.20, 0.25 and 0.30 on the five standard worlds, a
-     * fifth is where the drainage is Earth's and the coast is still a coast: the lake share of
-     * land falls from 3.55% to 1.87% against Earth's 1.48% at this cell area, the drainage
-     * density rises from 0.0023 to 0.0030 km/km2 against main's 0.0026 (the bar is main's fifth
-     * either way, so 0.0031 is the ceiling), the drawn rivers go from 160 to 192 against main's
-     * 170, and the coastline's box dimension holds at 1.114 where a tenth gave 1.137. Above a
-     * fifth the coastline goes — a map-scale tilt moves the shoreline bodily — and the drainage
-     * density overshoots: at 0.25 it is 0.0032 and at 0.30 it is 0.0033.
+     * with small lakes.
+     *
+     * Measured over 0.08, 0.12, 0.16 and 0.20 on the five standard worlds at 512, 0.16 is where
+     * the drainage is Earth's and the coast is still a coast. The lake share of land falls from
+     * 3.55% at a tenth to 1.73% against Earth's 1.48% at this cell area; the drainage density
+     * rises from 0.0023 to 0.0029 km/km2 against the 0.0026 the tree before S2 measured, where
+     * the bar is a fifth either way and 0.0031 is the ceiling; the drawn rivers go from 160 to
+     * 164 against that tree's 156; and the coastline's box dimension reads 1.129, 1.124, 1.134,
+     * 1.172 and 1.186 on the five seeds, every one of them inside Mandelbrot's band. Above a
+     * sixth the coastline goes — a map-scale tilt moves the shoreline bodily — and at 0.20 two of
+     * the five seeds fall under the floor while the density overshoots at 0.0031; below it the
+     * lakes come back, 2.3% at 0.12 and 2.9% at 0.08.
      *
      * A continental interior swell of Bond's own amplitude and wavelength, windowed onto the crust,
      * was built and measured as the physically better answer and removed again: over 400, 800 and

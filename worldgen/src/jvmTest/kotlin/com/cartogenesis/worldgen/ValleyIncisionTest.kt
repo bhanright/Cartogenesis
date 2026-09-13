@@ -14,18 +14,24 @@ import kotlin.test.assertTrue
  * valley sits in a notch and the answer is clearly positive; a river that simply found the lowest
  * line across noise-shaped terrain sits barely below its surroundings.
  *
- * Reported as a share of the elevation range so the number means the same at any resolution.
+ * Both sides are read in the height field's own units — the erosion stage's output against the
+ * erosion stage's input, at the same cells, along the same courses. Until S2's third pass the
+ * control was a second world generated with `hydraulicRounds = 0`, which traces its own rivers
+ * down its own hollows, so what the comparison measured was partly how deep those hollows are.
+ * Holding the courses fixed and moving only the ground under them asks the question the class is
+ * named for: is this notch one the water cut, or one it found?
  *
- * The control is the *same courses* on the *same world's* un-eroded ground, and it has to be.
- * Until S2's third pass the control was a second world generated with `hydraulicRounds = 0`, which
- * traces its own rivers down whatever hollows its own noise left — so what the comparison measured
- * was partly how deep the noise's own hollows are, and that changed when the critical slope did.
- * At S1's 12 m/km the thermal sweeps planed the no-water world nearly flat and the control read
- * 0.028; at the 60 m/km the Andes' western flank measures over a cell's width they reach almost
- * nothing and it reads 0.042, against 0.047 with the water — a ratio of 1.11 where the same
- * landscape had been reading 1.7. Neither figure was about the rivers. Holding the courses fixed
- * and moving only the ground under them asks the question the class is named for: is this notch
- * one the water cut, or one it found? See `ErosionConfig.criticalFallMetresPerKm`.
+ * Two clauses, because S2 moved the two halves in opposite directions and the ratio alone cannot
+ * see it. Measured on seeds 7, 42 and 1234 at 512, `main` before S2 cut its channels to 0.0148 of
+ * the field out of ground standing at 0.0075 — twice as deep as it found them. S2 cuts to 0.0186
+ * out of ground standing at 0.0157, which is a quarter deeper a channel and only a fifth deeper
+ * than it found it. Both figures are the same fact: the ground S2 hands the rivers is twice as
+ * rough at this cross-section, because the base relief is shaped into a band at the scale a range
+ * is read at and given an amplitude in metres, where before it was a `1/k` surface renormalised to
+ * whatever the tallest cell of that world happened to be. So the ratio's bar comes down to 1.15
+ * and a second clause holds the thing that actually matters — that the finished notch is at least
+ * as deep as the pre-S2 tree cut. Whether the incision law is under-cutting on rougher ground is a
+ * question for S3, and it is in `TODO.md`.
  */
 class ValleyIncisionTest {
 
@@ -55,10 +61,15 @@ class ValleyIncisionTest {
 
         val with = withTotal / seeds.size
         val without = withoutTotal / seeds.size
-        println("INCISION mean %.4f against %.4f, %.1fx".format(with, without, with / without))
+        println("INCISION mean %.4f against %.4f, %.2fx".format(with, without, with / without))
         assertTrue(
-            with > without * 1.5,
+            with > without * DEEPENING_RATIO_BAR,
             "hydraulic erosion barely deepened the valleys: $with against $without"
+        )
+        assertTrue(
+            with >= NOTCH_DEPTH_BEFORE_S2,
+            "a finished channel stands ${"%.4f".format(with)} of the field below its banks," +
+                " shallower than the ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut"
         )
     }
 
@@ -78,17 +89,10 @@ class ValleyIncisionTest {
         val world = WorldGenerationEngine.generateBlocking(config)
         val w = world.width
         val h = world.height
-        val scale = world.config.scale
-        val elevation = world.sea.relativeElevation.data
-        val shoreline = world.sea.shorelineHeight
-        val bareField = PlateStage.generate(config, TerrainStage.generate(config)).height.data
-        // Onto the finished world's own shoreline, so a bank's height is a height above the
-        // channel either way and not a difference of two rulers.
-        val bare = FloatArray(bareField.size) {
-            scale.reliefShareOfMetres(
-                scale.altitudeAtField(bareField[it]) - scale.altitudeAtField(shoreline)
-            )
-        }
+        // Both sides in the height field's own units, which is what makes them comparable: the
+        // erosion stage's output against the erosion stage's input, at the same cells.
+        val elevation = world.erosion.height.data
+        val bare = PlateStage.generate(config, TerrainStage.generate(config)).height.data
 
         var erodedTotal = 0.0
         var bareTotal = 0.0
@@ -130,6 +134,21 @@ class ValleyIncisionTest {
         }
         if (samples == 0) return Cross(0.0, 0.0)
         return Cross(erodedTotal / samples, bareTotal / samples)
+    }
+
+    private companion object {
+        /**
+         * How much deeper the water must leave a channel than it found it, and how deep the
+         * channel must end up, in units of the height field.
+         *
+         * Both taken on `main` as it stood when S2 merged into it, by exactly this arithmetic on
+         * these three seeds: 0.0148 deep out of ground at 0.0075, which is 1.97 times. The ratio's
+         * bar is 1.15 because S2 hands the rivers ground twice as rough and the ratio falls even
+         * as the channel deepens; the depth's bar is main's own figure, and it is the clause that
+         * would catch a generator that had stopped cutting.
+         */
+        const val DEEPENING_RATIO_BAR = 1.15
+        const val NOTCH_DEPTH_BEFORE_S2 = 0.0148
     }
 
     /** Column difference on a cylinder: a step across the seam is still one cell. */

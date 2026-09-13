@@ -59,12 +59,14 @@ class TectonicHistoryTest {
      * build that predated it; S2 gave the height field an absolute vertical scale, which changes
      * every value in it, so there is no longer a build outside this branch that produces them.
      * They were re-taken here, once, and the property they pin is the one above rather than
-     * agreement with a generator that no longer exists.
+     * agreement with a generator that no longer exists. Re-taken a second time when S2's third
+     * pass moved the map-scale relief and the critical slope, for the same reason and with the
+     * same property: the two columns of the printed table still agree cell for cell.
      */
     private val presentOnlyChecksums = mapOf(
-        7L to -6157481513910583138L,
-        42L to 5782648589295029678L,
-        1234L to -7620405674804084178L
+        7L to 2334082564602675557L,
+        42L to 5259026240674932515L,
+        1234L to -3573775963666546281L
     )
 
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {

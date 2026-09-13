@@ -44,10 +44,13 @@ class SeaIceTest {
          * It was 40 to 78 in W1's first pass, which was loose enough to accept an edge at 49
          * degrees — nine degrees equatorward of Earth's zonal mean and past the Okhotsk. The second
          * pass moved the edge to 54-55 by correcting the model's albedo and its heat transport, and
-         * tightened the bar to what Earth's own spread actually allows. Five degrees short of the
-         * zonal mean is what remains, and it is reported rather than tuned: the model's sea column
-         * at 60 degrees reads two degrees under Earth's marine air there, and two degrees is what
-         * five degrees of latitude costs at that gradient.
+         * tightened the bar to what Earth's own spread actually allows. The third pass put the
+         * freezing test on the *water* rather than on the air above it and gave the transport a
+         * storm track, and the edge reads 55-58 against the model's own 60.4 on Earth's land
+         * fraction. What is left between the map and the zonal mean is the map's own geography: the
+         * ice edge on a world whose polar sea is nearly landlocked is not the ice edge on one whose
+         * Southern Ocean runs all the way round, and the three seeds differ by three degrees among
+         * themselves. Reported beside every measurement rather than tuned.
          */
         const val ICE_EDGE_EQUATORWARD_LIMIT = 45f
         const val ICE_EDGE_POLEWARD_LIMIT = 70f
@@ -73,8 +76,8 @@ class SeaIceTest {
          * world, and the gap is the full one — a lid against a source. Here the same cells are
          * compared against themselves on a world where nothing freezes, and that world's polar
          * ocean also feeds every cell downwind of it, so the comparison is between two whole
-         * climates rather than between two surfaces. Measured, seed 7's frozen cells take 511 mm
-         * with the lid and 1,259 mm without it, a factor of 2.5.
+         * climates rather than between two surfaces. Measured, seed 7's frozen cells take 523 mm
+         * with the lid and 1,228 mm without it, a factor of 2.3.
          */
         const val ICE_OFF_WETTER_RATIO = 2.0
     }

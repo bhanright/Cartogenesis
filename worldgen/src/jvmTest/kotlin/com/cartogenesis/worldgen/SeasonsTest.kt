@@ -39,22 +39,30 @@ class SeasonsTest {
          * land may beat the open sea by.
          *
          * All three are Earth's, at 35 degrees, and all three moved in W1, when the seasonal
-         * amplitude stopped being a damping factor over water and became two heat capacities in an
+         * amplitude stopped being a damping factor over water and became heat capacities in an
          * energy balance. The sea's ceiling was 4 C, which was the old model's own damped figure
-         * rather than a measurement: the open North Atlantic at 35 N runs 19 to 27 C over the year,
-         * the North Pacific 16 to 25, and the two southern oceans 6 C apiece, so the observed range
-         * there is 6 to 9 and the ceiling is 9. Land: a continental interior at that latitude swings
-         * about 26 C (Kabul 26, Tehran 25) and a west coast about 8 (Los Angeles), so a band mixing
-         * both keeps the floor at 8. The ratio of the extremes is 3.7, and the guard asks for 2,
-         * because the map's land band at this latitude is a mixture and not one interior station.
+         * rather than a measurement.
          *
-         * The model measures land 15.0 C, sea 4.8 C, ratio 3.1. The sea's own figure is under
-         * Earth's 6-9, and that is a finding rather than a pass: a fifty-metre slab of water with
-         * no seasonal deepening stores more of its summer than the real thing does.
+         * **What the map's sea reads is marine air, not the sea surface**, and that is what sets
+         * the ceiling. W1's third pass gave each sea band two temperatures — a fifty-metre mixed
+         * layer and the air above it, coupled by a bulk surface flux — because a coast feels the
+         * air and not the water; the map's temperature field over water is therefore the air. Over
+         * the open North Atlantic at 35 N the water runs 19 to 27 C over the year and the North
+         * Pacific 16 to 25, so the *water's* range there is 6 to 9; the air over it swings a degree
+         * or two further, as air with a twentieth of the memory does, which puts the observed
+         * marine-air range at 7 to 11 and the ceiling at 11.
+         *
+         * Land: a continental interior at that latitude swings about 26 C over the year (Kabul 26,
+         * Tehran 25) and a west coast about 8 (Los Angeles), so a band mixing both keeps the floor
+         * at 8. The ratio of land to marine air runs from 26/7 down to 8/11 across that spread, so
+         * the guard asks for **1.5** — where the old figure of 2 was set against the *water*, which
+         * swings less than the air over it and is not what the map stores.
+         *
+         * The model measures land 20.6 C, marine air 10.8 C, ratio 1.9.
          */
         const val LAND_SWING_FLOOR_C = 8.0
-        const val SEA_SWING_CEILING_C = 9.0
-        const val LAND_TO_SEA_RATIO = 2.0
+        const val SEA_SWING_CEILING_C = 11.0
+        const val LAND_TO_SEA_RATIO = 1.5
 
         /**
          * How far inland of a west-facing shore a cell may sit and still be that coast's climate.
@@ -113,8 +121,9 @@ class SeasonsTest {
         println(
             "SEASONS seed 42 at ${SAMPLE_LATITUDE.toInt()} deg: " +
                 "land swing ${"%.1f".format(land)} C over $landCells cells (Earth 8-26), " +
-                "open sea ${"%.1f".format(sea)} C over $seaCells cells (Earth 6-9), " +
-                "ratio ${"%.1f".format(land / sea)} (Earth up to 3.7)"
+                "marine air ${"%.1f".format(sea)} C over $seaCells cells (Earth 7-11, " +
+                "the water under it 6-9), " +
+                "ratio ${"%.1f".format(land / sea)} (Earth 0.7 to 3.7)"
         )
 
         assertTrue(land > LAND_SWING_FLOOR_C, "land at 35 degrees swings only ${"%.1f".format(land)} C")

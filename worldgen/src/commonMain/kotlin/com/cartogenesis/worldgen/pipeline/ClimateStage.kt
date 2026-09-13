@@ -39,11 +39,14 @@ data class ClimateResult(
     /** Mean annual temperature in degrees Celsius. */
     val temperature: FloatField,
     /**
-     * Temperature in the local warm and cold seasons, in degrees Celsius.
+     * Temperature in the local warmest and coldest month, in degrees Celsius.
      *
-     * These are not July and January. "Summer" is whichever half of the year the cell's *own*
-     * hemisphere is warm in, so northern July and southern January both land in
-     * [summerTemperature]. Storing the local season rather than the calendar month is what lets
+     * These are not July and January. "Summer" is whichever month the cell's *own* latitude and
+     * surface are warmest in, so northern July and southern January both land in
+     * [summerTemperature] — and a coast's warmest month runs later than the interior's beside it,
+     * because water remembers longer. Months rather than half-years because every threshold
+     * [ClimateStage.classify] applies to them is one of Koppen's and Koppen's are monthly means.
+     * Storing the local season rather than the calendar month is what lets
      * [ClimateStage.classify] apply one rule to the whole map instead of branching on the sign of
      * the latitude — a Mediterranean coast is a Mediterranean coast either side of the equator.
      */
@@ -546,8 +549,17 @@ object ClimateStage {
      */
     private class SeasonalFields(
         val temperature: FloatField,
+        /** The warmest and coldest month, which is what Koppen's thresholds are stated on. */
         val summerTemperature: FloatField,
         val winterTemperature: FloatField,
+        /**
+         * The warm and cold half-years' means, which is what anything integrating across a season
+         * needs — the snow balance's degree-day sum and the moisture march's evaporation. Not
+         * saved: `ClimateResult` carries the months, because those are what a reader and a
+         * classifier want. See [Season].
+         */
+        val warmHalfTemperature: FloatField,
+        val coldHalfTemperature: FloatField,
         val summerPrecipitationMm: FloatField,
         val winterPrecipitationMm: FloatField,
         val summerSeaIce: BooleanArray,
@@ -582,8 +594,8 @@ object ClimateStage {
         val fields = seasonalFields(config, sea, ocean, globalCoolingC)
         return SnowBalance.field(
             sea.isLand,
-            fields.summerTemperature,
-            fields.winterTemperature,
+            fields.warmHalfTemperature,
+            fields.coldHalfTemperature,
             fields.summerPrecipitationMm,
             fields.winterPrecipitationMm
         )
@@ -632,7 +644,7 @@ object ClimateStage {
         // economy — see [SnowBalanceAccelerator].
         val snowBalance = if (config.climate.snowBalance) {
             SnowBalance.field(
-                sea.isLand, summerTemperature, winterTemperature,
+                sea.isLand, fields.warmHalfTemperature, fields.coldHalfTemperature,
                 summerPrecipitationMm, winterPrecipitationMm
             )
         } else null
@@ -691,13 +703,29 @@ object ClimateStage {
         val marineFraction = marineAirFraction(config, sea)
         val temperature = annualTemperature(config, sea, zonal, marineFraction)
         applyMaritimeInfluence(config, sea, ocean, temperature, waterExposure(config, sea))
+        // Two readings of the same year. The months are what `classify` gates on, because Koppen's
+        // thresholds are monthly means; the half-years are what the snow balance and the moisture
+        // march integrate across, because a degree-day sum over 182 days wants those 182 days'
+        // mean and not the peak of July. See `Season`.
         val summerTemperature =
             seasonalTemperature(config, temperature, zonal, marineFraction, Season.SUMMER)
         val winterTemperature =
             seasonalTemperature(config, temperature, zonal, marineFraction, Season.WINTER)
+        val warmHalfTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.WARM_HALF)
+        val coldHalfTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.COLD_HALF)
 
-        val summerSeaIce = seaIceMask(config, sea, ocean, summerTemperature)
-        val winterSeaIce = seaIceMask(config, sea, ocean, winterTemperature)
+        // The water under the marine air, half-year by half-year. The ice test and the march's
+        // evaporation are questions about the sea surface, not about the air over it: a sea
+        // freezes when the water reaches -1.8, and what evaporates is water.
+        val warmHalfSeaSurface =
+            seaSurfaceTemperature(config, sea, zonal, warmHalfTemperature, Season.WARM_HALF)
+        val coldHalfSeaSurface =
+            seaSurfaceTemperature(config, sea, zonal, coldHalfTemperature, Season.COLD_HALF)
+
+        val summerSeaIce = seaIceMask(config, sea, ocean, warmHalfSeaSurface)
+        val winterSeaIce = seaIceMask(config, sea, ocean, coldHalfSeaSurface)
 
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
@@ -711,12 +739,12 @@ object ClimateStage {
         // from the mm fields below because [MM_SCALE] is the only place that unit conversion
         // happens, and nothing else should need to know what the march's native units are.
         val summerRaw = buildPrecipitation(
-            config, sea, summerTemperature, summerSeaIce,
+            config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce,
             buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
             ocean, bands(cellsDown, climateConfig, warm = true)
         )
         val winterRaw = buildPrecipitation(
-            config, sea, winterTemperature, winterSeaIce,
+            config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce,
             buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
             ocean, bands(cellsDown, climateConfig, warm = false)
         )
@@ -737,6 +765,8 @@ object ClimateStage {
             temperature = temperature,
             summerTemperature = summerTemperature,
             winterTemperature = winterTemperature,
+            warmHalfTemperature = warmHalfTemperature,
+            coldHalfTemperature = coldHalfTemperature,
             summerPrecipitationMm = summerPrecipitationMm,
             winterPrecipitationMm = winterPrecipitationMm,
             summerSeaIce = summerSeaIce,
@@ -746,15 +776,52 @@ object ClimateStage {
     }
 
     /**
-     * Where the sea is frozen in the season [seasonTemperature] belongs to: true on a water cell
-     * whose sea surface sits at or below [EnergyBalance.SEA_FREEZING_C], false on land.
+     * The **water** temperature in a season, over every sea cell: the mixed layer under the marine
+     * air, which is what freezes and what evaporates.
      *
-     * The sea surface of a season is the energy balance's own sea column for that latitude and
-     * that half of the year, which is what [seasonTemperature] already holds over water, plus the
-     * current anomaly the ocean stage measured — so a warm current keeps a polar sea open where
-     * its latitude alone would freeze it, which is the Norwegian Sea, and a cold one closes a sea
-     * further from the pole, which is the Labrador. Reading the same field the march reads is what
-     * keeps the mask and the march from disagreeing about which cells are ice.
+     * Written as a departure from [seasonAirTemperature] rather than built afresh, so that the
+     * weather noise and everything else the air field carries stay identical between the two —
+     * the only difference between them is the one the energy balance puts there, the gap between
+     * a band's marine air and the fifty metres of water under it. On land the two are the same
+     * number, because there is no water there and nothing reads it.
+     *
+     * See [EnergyBalance]'s marine-air heat capacity for why the sea has two temperatures at all.
+     */
+    internal fun seaSurfaceTemperature(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        seasonAirTemperature: FloatField,
+        season: Season
+    ): FloatField {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val field = FloatField(cellsAcross, cellsDown)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val latitude = latitudeOf(row, cellsDown)
+                val waterAboveAirC = zonal.waterC(latitude, season) - zonal.seaC(latitude, season)
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    field.data[cell] = seasonAirTemperature.data[cell] +
+                        if (sea.isLand[cell]) 0f else waterAboveAirC
+                }
+            }
+        }
+        return field
+    }
+
+    /**
+     * Where the sea is frozen in the season [seaSurface] belongs to: true on a water cell whose
+     * **water** sits at or below [EnergyBalance.SEA_FREEZING_C], false on land.
+     *
+     * The freezing test is a question about the sea surface, not the air over it: -1.8 C is where
+     * water of the ocean's mean salinity turns to ice, and the marine air above a freezing sea is
+     * colder than that all winter without the sea being frozen. Add the current anomaly the ocean
+     * stage measured — so a warm current keeps a polar sea open where its latitude alone would
+     * freeze it, which is the Norwegian Sea, and a cold one closes a sea further from the pole,
+     * which is the Labrador. The march reads the same water field, which is what keeps the mask
+     * and the march from disagreeing about which cells are ice.
      *
      * Empty when `ClimateConfig.seaIce` is off, which is the control the guard needs.
      * See [ClimateResult.summerSeaIce] for what the two masks are for.
@@ -763,14 +830,14 @@ object ClimateStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         ocean: OceanResult,
-        seasonTemperature: FloatField
+        seaSurface: FloatField
     ): BooleanArray {
         val frozen = BooleanArray(config.width * config.height)
         if (!config.climate.seaIce) return frozen
         for (cell in frozen.indices) {
             if (sea.isLand[cell]) continue
             val anomalyC = if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f
-            frozen[cell] = seasonTemperature.data[cell] + anomalyC <= EnergyBalance.SEA_FREEZING_C
+            frozen[cell] = seaSurface.data[cell] + anomalyC <= EnergyBalance.SEA_FREEZING_C
         }
         return frozen
     }
@@ -810,8 +877,15 @@ object ClimateStage {
      * exposed to water" and "how close to water" are not the same question at this radius: two
      * box-blur passes leave a cell right at the edge of `coastalReachCells` reading roughly 0.2
      * exposure, which would make a coast three quarters of the way to fully continental. An honest
-     * distance says a shoreline cell is 0 cells from water and one at 350 km is exactly that,
+     * distance says a shoreline cell is half a cell from water and one at 350 km is exactly that,
      * which is what a decay length measured in kilometres needs.
+     *
+     * Half a cell, and the correction matters. The jump flood measures centre to centre, so a cell
+     * whose own edge is the shoreline comes back a whole cell from the sea — 78 km on the 512-wide
+     * grid and 39 on the 1024 — which made the same coast four fifths maritime at one resolution
+     * and nine tenths at the other, and put a fifth of a continental interior's winter onto every
+     * shoreline in the world at the coarse one. The water starts halfway between the two centres,
+     * so half a cell comes off every distance and a shoreline reads as a shoreline.
      *
      * Internal rather than private so `ContinentalityTest` measures the same field the stage
      * actually used instead of re-deriving it and risking the two drifting apart.
@@ -832,9 +906,20 @@ object ClimateStage {
         // the marine fraction falls to zero everywhere and every cell is fully continental.
         JumpFloodDistance.run(cellsAcross, cellsDown, distanceToWater, nearestWaterCell)
         val field = FloatField(cellsAcross, cellsDown)
-        distanceToWater.copyInto(field.data)
+        for (cell in distanceToWater.indices) {
+            val centreToCentre = distanceToWater[cell]
+            field.data[cell] =
+                if (centreToCentre == JumpFloodDistance.INFINITE) centreToCentre
+                else (centreToCentre - HALF_A_CELL).coerceAtLeast(0f)
+        }
         return field
     }
+
+    /**
+     * The half cell that separates a land cell's centre from the shoreline when the sea starts in
+     * the next cell along. See [waterDistance].
+     */
+    private const val HALF_A_CELL = 0.5f
 
     /**
      * Lets a coast feel the water beside it.
@@ -842,6 +927,18 @@ object ClimateStage {
      * The sea anomaly is spread inland with a blur and added to land temperature, so a shore
      * washed by warm water is milder than its latitude and one beside a cold current is colder.
      * This is the difference between Bergen and Labrador, which sit at the same latitude.
+     *
+     * The anomaly field is zero on land, so the blur mixes the sea's departure with a great many
+     * zeros and the exposure attenuates it a second time: a shoreline ends up with about a quarter
+     * of the anomaly of the water it looks out on, and `ColdCapReportTest` reads +1.6 C offshore
+     * against a coast that was given nearer +0.4. W1 tried the corrected form — the blurred anomaly
+     * divided by the blurred water mask, which is the mean anomaly of the sea cells within reach,
+     * decayed inland by [marineAirFraction] instead of by the exposure a second time — and it made
+     * the coasts *worse*, because a ten-cell disc of sea around a narrow warm tongue is mostly not
+     * that tongue: seed 42's warm west coasts went from 57% temperate forest to 43%. The
+     * attenuation is standing in for a neighbourhood that is too wide and too round, and the honest
+     * fix is a directed one — the water upwind — which needs W2's surface winds. Left as it is,
+     * with the finding written down.
      */
     private fun applyMaritimeInfluence(
         config: WorldGenConfig,
@@ -1023,6 +1120,23 @@ object ClimateStage {
     }
 
     /**
+     * A half-year's mean temperature, rebuilt from a finished world's annual field.
+     *
+     * `ClimateResult` stores the warmest and coldest *month*, because those are what Koppen's gates
+     * and a reader want, but the snow balance and the moisture march were run on the half-years —
+     * see [Season]. A guard that needs to redo either of those computations asks for this rather
+     * than reaching for the saved field and quietly measuring a different quantity.
+     */
+    internal fun halfYearTemperature(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        annual: FloatField,
+        season: Season
+    ): FloatField = seasonalTemperature(
+        config, annual, zonalClimate(config, sea), marineAirFraction(config, sea), season
+    )
+
+    /**
      * The warm- or cold-season temperature, as a departure from the annual mean.
      *
      * Everything a season shares with the annual field — the altitude lapse, the current anomaly,
@@ -1030,13 +1144,13 @@ object ClimateStage {
      * blended the same way. That is the honest way round: a mountain is no more seasonal than the
      * valley below it, it is simply colder all year.
      *
-     * The size of the departure is nobody's setting. It is the two heat capacities the model
-     * carries — three metres of soil under an air column against fifty metres of sea water — and
-     * the world's own coastline deciding, cell by cell, how much of each a place gets. Ireland and
-     * Siberia sit at the same latitude and take the same two columns; what separates them is that
-     * one is a hundred kilometres from the sea and the other two thousand.
+     * The size of the departure is nobody's setting. It is the heat capacities the model carries —
+     * three metres of soil under an air column, against an air column over fifty metres of sea
+     * water — and the world's own coastline deciding, cell by cell, how much of each a place gets.
+     * Ireland and Siberia sit at the same latitude and take the same two columns; what separates
+     * them is that one is a hundred kilometres from the sea and the other two thousand.
      */
-    private fun seasonalTemperature(
+    internal fun seasonalTemperature(
         config: WorldGenConfig,
         annual: FloatField,
         zonal: ZonalClimate,
@@ -1218,6 +1332,7 @@ object ClimateStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
+        seaSurface: FloatField,
         seaIce: BooleanArray,
         wind: WindField,
         ocean: OceanResult,
@@ -1242,7 +1357,8 @@ object ClimateStage {
         parallelChunks(0, runStartRows.size - 1) { firstRun, lastRun ->
             for (run in firstRun until lastRun) {
                 marchRun(
-                    config, sea, temperature, seaIce, wind, ocean, bandOfRow, precipitation,
+                    config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
+                    precipitation,
                     firstRow = runStartRows[run], lastRow = runStartRows[run + 1]
                 )
             }
@@ -1264,6 +1380,7 @@ object ClimateStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
+        seaSurface: FloatField,
         seaIce: BooleanArray,
         wind: WindField,
         ocean: OceanResult,
@@ -1337,7 +1454,7 @@ object ClimateStage {
                                 if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f
                             marchSeaStep(
                                 climateConfig, moisture[rowWithinRun],
-                                temperature.data[cell] + currentAnomalyC, currentAnomalyC
+                                seaSurface.data[cell] + currentAnomalyC, currentAnomalyC
                             )
                         }
                         moisture[rowWithinRun] = marched.moisture

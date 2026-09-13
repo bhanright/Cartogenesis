@@ -14,22 +14,26 @@ import kotlin.math.tan
  *
  * The band arrays are one entry per latitude band, north to south, at the centre latitudes
  * [EnergyBalance.latitudeOfBand] gives; every temperature is in degrees Celsius at sea level.
- * `land` and `sea` are the two surfaces the model carries in each band: the same insolation and
- * the same imported heat, but heat capacities that differ by a factor of fifteen, which is the
- * whole of why a continent has a winter and an ocean has a cool spell.
+ * Three temperatures per band. `land` and `sea` are the two *air* columns the model carries — the
+ * same insolation and the same imported heat, but different memories and different neighbours,
+ * which is the whole of why a continent has a winter and a coast has a cool spell. `water` is the
+ * sea surface under the marine air: the ocean's mixed layer, twenty times the memory, which is
+ * what freezes and what the moisture march evaporates from. Read the air for what a place feels
+ * and the water for what the sea is.
  *
- * "Summer" and "winter" are the band's own warmest and coldest contiguous half-year rather than
- * calendar halves, so a southern band's summer is the southern one and a maritime column's summer
- * runs later than the land's beside it — the lag heat capacity produces. Each pair averages
- * exactly to its annual figure, because the two windows are complements.
+ * Each column carries its year as five numbers — the annual mean, the warmest and coldest month,
+ * and the warm and cold half-year means — and they are the column's own, not the calendar's: a
+ * southern band's summer is the southern one, and a maritime column's summer runs later than the
+ * land's beside it, which is the lag heat capacity produces. See [ZonalColumn] for why both the
+ * months and the halves are kept.
  */
 class ZonalClimate internal constructor(
-    val landAnnualC: FloatArray,
-    val landSummerC: FloatArray,
-    val landWinterC: FloatArray,
-    val seaAnnualC: FloatArray,
-    val seaSummerC: FloatArray,
-    val seaWinterC: FloatArray,
+    /** The air over the band's land. */
+    val land: ZonalColumn,
+    /** The air over the band's sea. */
+    val sea: ZonalColumn,
+    /** The mixed layer under that air. */
+    val water: ZonalColumn,
     /** Area-weighted mean of the annual field over the whole planet, in degrees Celsius. */
     val globalMeanC: Float,
     /**
@@ -39,24 +43,23 @@ class ZonalClimate internal constructor(
     val spinUpResidualC: Float
 ) {
 
-    /** The land temperature at [latitudeDegrees], interpolated between band centres. */
+    /** The land air temperature at [latitudeDegrees], interpolated between band centres. */
     fun landC(latitudeDegrees: Float, season: Season): Float =
-        interpolate(seasonOf(landAnnualC, landSummerC, landWinterC, season), latitudeDegrees)
+        interpolate(land.at(season), latitudeDegrees)
 
-    /** The sea-surface temperature at [latitudeDegrees], interpolated between band centres. */
+    /**
+     * The **marine air** temperature at [latitudeDegrees], interpolated between band centres:
+     * what a ship's deck or a shoreline reads, and what the map's marine blend hands to a coast.
+     */
     fun seaC(latitudeDegrees: Float, season: Season): Float =
-        interpolate(seasonOf(seaAnnualC, seaSummerC, seaWinterC, season), latitudeDegrees)
+        interpolate(sea.at(season), latitudeDegrees)
 
-    private fun seasonOf(
-        annual: FloatArray,
-        summer: FloatArray,
-        winter: FloatArray,
-        season: Season
-    ): FloatArray = when (season) {
-        Season.ANNUAL -> annual
-        Season.SUMMER -> summer
-        Season.WINTER -> winter
-    }
+    /**
+     * The **sea-surface** temperature at [latitudeDegrees], interpolated between band centres:
+     * the mixed layer itself, which is what freezes and what evaporates.
+     */
+    fun waterC(latitudeDegrees: Float, season: Season): Float =
+        interpolate(water.at(season), latitudeDegrees)
 
     /**
      * A band array read at an arbitrary latitude, linearly between the two band centres either
@@ -77,8 +80,43 @@ class ZonalClimate internal constructor(
     }
 }
 
-/** Which of the three fields a [ZonalClimate] lookup wants. */
-enum class Season { ANNUAL, SUMMER, WINTER }
+/**
+ * One surface's year, band by band: the annual mean, the warmest and coldest month, and the means
+ * of the warm and cold half-years.
+ *
+ * Both the months and the halves, because two different kinds of question get asked of this model
+ * and each wants its own answer. Koppen's thresholds are monthly means — the 10 C tree line, the
+ * -3 C continental winter, the 18 C tropical one — so `ClimateStage.classify` reads
+ * [warmestMonthC] and [coldestMonthC]. Anything that *integrates over* a season wants the season's
+ * own mean instead: `SnowBalance` runs a positive-degree-day sum across 182 days and the moisture
+ * march evaporates for half a year, and handing either of those a warmest month has it melting and
+ * evaporating at the peak of summer for the whole of summer. W1's third pass made that mistake for
+ * one build and it cost the world a third of its permanent ice.
+ */
+class ZonalColumn internal constructor(
+    val annualC: FloatArray,
+    val warmestMonthC: FloatArray,
+    val coldestMonthC: FloatArray,
+    val warmHalfC: FloatArray,
+    val coldHalfC: FloatArray
+) {
+    internal fun at(season: Season): FloatArray = when (season) {
+        Season.ANNUAL -> annualC
+        Season.SUMMER -> warmestMonthC
+        Season.WINTER -> coldestMonthC
+        Season.WARM_HALF -> warmHalfC
+        Season.COLD_HALF -> coldHalfC
+    }
+}
+
+/**
+ * Which reading of a [ZonalColumn]'s year a lookup wants.
+ *
+ * [SUMMER] and [WINTER] are the warmest and coldest *month*, which is what Koppen's thresholds are
+ * stated on; [WARM_HALF] and [COLD_HALF] are the means of the warm and cold half-years, which is
+ * what anything integrating over a season needs. See [ZonalColumn].
+ */
+enum class Season { ANNUAL, SUMMER, WINTER, WARM_HALF, COLD_HALF }
 
 /**
  * A one-dimensional energy-balance model of the atmosphere, solved per season.
@@ -110,20 +148,28 @@ enum class Season { ANNUAL, SUMMER, WINTER }
  * the astronomical daily mean at that latitude
  * and that day, so the seasons are the planet's tilt rather than a prescribed migration.
  *
- * ### Two columns per band
+ * ### Two air columns and a slab of water
  *
- * Each band carries a land column and a sea column with the band's own land fraction as their
- * areas. They see the same sunlight and share the heat their neighbours send, but they store it
- * in [LAND_HEAT_CAPACITY_J_PER_M2_C] and [OCEAN_HEAT_CAPACITY_J_PER_M2_C], which differ by a
- * factor of fifteen. That is the entire land-sea contrast: no continentality setting, no damping
- * factor, only the two capacities and the world's own geography deciding how much of each band is
- * which.
+ * Each band carries a land column and a marine column with the band's own land fraction as their
+ * areas, and beneath the marine column a mixed layer of sea water. Both columns are *air*: they
+ * see the same sunlight, radiate the same infrared law, trade heat with each other round the
+ * latitude circle, and share what their neighbours send them. They differ only in memory —
+ * [LAND_HEAT_CAPACITY_J_PER_M2_C] against [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C], the land's soil
+ * and the sea's damp counted on top of the same atmospheric column — and in what sits under them.
+ * Under the marine column is [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C], twenty times either, coupled
+ * to the air by the bulk surface flux [SURFACE_EXCHANGE_W_PER_M2_C] and coupled to nothing else.
  *
- * The heat a band trades with its neighbours moves both of its columns by the same number of
+ * That is the entire land-sea contrast: no continentality setting, no damping factor, only the
+ * capacities, the flux, and the world's own geography deciding how much of each band is which.
+ * The water buys the marine air its mildness, and the zonal exchange with the continent beside it
+ * takes some of that mildness back — which is why the sea's year is not the coast's year, and why
+ * the model has to carry both. The three annual means come out within a degree of each other
+ * while their years do not, which is the observed thing: Bergen and Yakutsk differ far more in
+ * January than they do over the year, and the water off Bergen differs from Bergen too.
+ *
+ * The heat a band trades with its neighbours moves both *air* columns by the same number of
  * degrees, because the air that carries it has already gone round the latitude circle several
- * times over. So what separates the two columns is only their own radiation budgets, and their
- * annual means come out within a degree of each other while their years do not — which is the
- * observed thing: Bergen and Yakutsk differ far more in January than they do over the year.
+ * times over; the water feels it only through the surface flux above.
  *
  * The simplification is that a band has no *internal* geography. A band that is one percent island
  * still carries a fully continental land column, because nothing tells it that its land is
@@ -160,15 +206,33 @@ object EnergyBalance {
     /**
      * Time steps per simulated year.
      *
-     * 360 rather than 365 so that a half-year is exactly 180 steps and the warm and cold halves
-     * of the year are true complements: their means then average to the annual mean exactly,
-     * which several things downstream assume. A step is a little over a day, and the diffusion is
-     * solved implicitly, so nothing here is near a stability limit.
+     * 360 rather than 365 so that a month is exactly 30 steps and a half-year exactly 180. A step
+     * is a little over a day, and the diffusion is solved implicitly, so nothing here is near a
+     * stability limit.
      */
     private const val STEPS_PER_YEAR = 360
 
-    /** Steps in half a year, which is the window a season's mean is taken over. */
-    private const val SEASON_STEPS = STEPS_PER_YEAR / 2
+    /**
+     * Steps in a month, which is the window "summer" and "winter" are the extremes of.
+     *
+     * A month and not a half-year, because every threshold downstream is one of Koppen's and
+     * Koppen's are monthly means: the 10 C tree line, the -3 C continental winter, the 18 C
+     * tropical one. `ClimateStage.classify` says so in as many words, and W1's first two passes
+     * handed it warm- and cold-*half-year* means instead — which for a sinusoidal year are 0.64 of
+     * the month extremes, so every gate was being asked of a number a third short of the one it
+     * was written for. Nothing else in the pipeline needs the halves: the seasonal rain march
+     * wants the temperature of the season it is marching, and the warmest month is the honest
+     * stand-in for that, which is what the model before W1 supplied.
+     */
+    private const val MONTH_STEPS = STEPS_PER_YEAR / 12
+
+    /**
+     * Steps in half a year, which is the window the warm and cold seasons' *means* are taken over.
+     *
+     * The other half of the pair above. Everything that integrates across a season rather than
+     * testing a threshold reads these: see [ZonalColumn].
+     */
+    private const val HALF_YEAR_STEPS = STEPS_PER_YEAR / 2
 
     /**
      * Years the model is marched before the last one is measured.
@@ -234,20 +298,75 @@ object EnergyBalance {
      * (*Some realistic modifications of simple climate models*, J. Atmos. Sci. 34, 1977).
      *
      * **The two numbers.** Swept against Earth's own land and sea profiles at 0, 20, 40, 60 and
-     * 80 degrees, 0.90 and 0.50 is the pair that lands on them; `EnergyBalanceTest` states what it
-     * produces at each. The polar figure sits inside the published range for a constant
-     * diffusivity; the tropical one is above it, which is what a number standing for the Hadley
-     * cell rather than for an eddy should be.
+     * 80 degrees: 0.90 and 0.30, with the storm track below carrying the mid-latitudes.
+     * `EnergyBalanceTest` states what the three together produce at each. The polar figure sits at
+     * the bottom of the published range for a constant diffusivity, which is what a pole with no
+     * storms of its own should have; the tropical one is above it, which is what a number standing
+     * for the Hadley cell rather than for an eddy should be.
      *
-     * It is the smaller of W1's two second-pass corrections and it is honest to say so. The larger
-     * was the albedo below, whose shape was wrong; with that fixed and the diffusivity left
-     * constant at 0.60 the profile is already close, and what the latitude dependence then buys is
-     * the equator (26.3 C against 28.1 for a constant one, where Earth has 26), 40 degrees (14.2
-     * against 13.0, where Earth has 14.5) and the cold-season ice edge (59.6 degrees against 56.6,
-     * where Earth's is 60). It costs half a degree of warmth at 60 and 80.
+     * The latitude dependence was the smaller of W1's two second-pass corrections and it is honest
+     * to say so. The larger was the albedo below, whose shape was wrong; with that fixed and the
+     * diffusivity left constant at 0.60 the profile is already close, and what the shape then buys
+     * is the equator (26.3 C against 28.1 for a constant one, where Earth has 26), 40 degrees (14.2
+     * against 13.0, where Earth has 14.5) and the cold-season ice edge.
      */
     internal const val DIFFUSION_TROPICS_W_PER_M2_C = 0.90
-    internal const val DIFFUSION_POLAR_W_PER_M2_C = 0.50
+    internal const val DIFFUSION_POLAR_W_PER_M2_C = 0.30
+
+    /**
+     * The storm track: how much more heat the mid-latitudes carry than the cosine-squared shape
+     * above accounts for, as a share of [DIFFUSION_TROPICS_W_PER_M2_C], and where the extra sits.
+     *
+     * Earth's atmosphere carries heat poleward by two different machines and they live in
+     * different places. The Hadley cell is a mean overturning, strongest at the equator and gone
+     * by 30 degrees, and a cosine-squared diffusivity stands in for it well. Baroclinic eddies —
+     * the depressions of the mid-latitude storm track — are the other, and they peak near 45-50
+     * degrees and fall away to nothing at the pole; Trenberth and Stepaniak (2003) separate the
+     * two components and the eddy one carries most of the transport poleward of 35. A single
+     * monotonic shape cannot be both, and the cost of pretending it is one shows up as a band of
+     * mid-latitude ocean several degrees colder than the reanalysis: 11.0 C at 45 and 3.8 at 55
+     * against about 12.5 and 7.5, with the pole several degrees *warmer* than Earth's because the
+     * same shape keeps carrying heat past 70 where Earth's eddies have stopped.
+     *
+     * A Gaussian on the eddy band, therefore, and a lower floor under it. Written as a share of
+     * the tropical figure rather than as watts of its own so that a guard which scales the
+     * transport down — the no-transport control does, by ten — scales all of it.
+     *
+     * Fifty degrees and fifteen wide, which is where the North Atlantic and North Pacific storm
+     * tracks are and about how broad they are, and 0.30 of the tropical figure. What the three buy,
+     * against the same model with the eddy term left out:
+     *
+     *              45 deg   50 deg   55 deg   60 deg   pole    ice edge
+     *   without     11.0      7.6      3.8      0.2   -13.2       58.1
+     *   with        11.2      8.3      5.0      1.8   -15.6       60.4
+     *   Earth       12.5     10.0      7.5      2.0   -20.0       60.0
+     *
+     * and a poleward transport of 4.6 / 4.9 / 3.2 PW at 30 / 45 / 60 against Trenberth and Caron's
+     * 5.3 / 5.0 / 3.3. It is the difference between a west coast at 55 degrees that is taiga and
+     * one that is forest: `ColdCapReportTest` reads 32/48/37% of warm-current west-facing coast as
+     * temperate forest without the term and 40/52/51% with it, against A6's recorded 65/53/59.
+     */
+    private const val DIFFUSION_STORM_TRACK_SHARE = 0.30
+    private const val STORM_TRACK_DEGREES = 50.0
+    private const val STORM_TRACK_WIDTH_DEGREES = 15.0
+
+    /**
+     * The whole diffusivity shape at one latitude, in watts per square metre per degree: the
+     * Hadley cosine-squared plus the storm track's Gaussian.
+     *
+     * Internal so that `EnergyBalanceTest`'s petawatt report reads the same curve the solve uses
+     * rather than re-deriving it from the constants and drifting away from it.
+     */
+    internal fun diffusivityAt(
+        latitudeDegrees: Double,
+        tropics: Double = DIFFUSION_TROPICS_W_PER_M2_C,
+        polar: Double = DIFFUSION_POLAR_W_PER_M2_C
+    ): Double {
+        val cosine = cos(latitudeDegrees * PI / 180.0)
+        return polar + (tropics - polar) * cosine * cosine +
+            tropics * DIFFUSION_STORM_TRACK_SHARE *
+            cloudBelt(latitudeDegrees, STORM_TRACK_DEGREES, STORM_TRACK_WIDTH_DEGREES)
+    }
 
     /**
      * Planetary albedo of an ice-free surface: a clear-sky base that climbs toward the poles, plus
@@ -370,40 +489,96 @@ object EnergyBalance {
     private const val LAND_HEAT_CAPACITY_J_PER_M2_C = 1.7e7
 
     /**
-     * Heat stored per square metre of open sea for each degree it warms, in joules.
+     * Heat stored per square metre of the ocean's **mixed layer** for each degree it warms, in
+     * joules: a 50 m slab of sea water at 4.0 MJ per cubic metre per degree.
      *
-     * A 50 m mixed layer of sea water at 4.0 MJ per cubic metre per degree, plus the same air
-     * column as the land. Fifty metres is the depth the seasonal cycle actually stirs: de Boyer
-     * Montegut et al. (2004) put the global mean mixed layer near 60 m over the year, with a
-     * summer minimum of 20-30 m and a deep winter tail that the seasonal wave never fills.
+     * Fifty metres is the depth the seasonal cycle actually stirs: de Boyer Montegut et al. (2004)
+     * put the global mean mixed layer near 60 m over the year, with a summer minimum of 20-30 m and
+     * a deep winter tail that the seasonal wave never fills.
      *
-     * Twelve times the land's, and that ratio is the land-sea contrast in one number.
+     * The air that sits on it is [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] and is a separate reservoir,
+     * which is the whole point: twenty times less memory, so it swings while the water does not.
      */
-    private const val OCEAN_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6 + 1.04e7
+    private const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6
 
     /**
-     * How fast a band's land and its sea trade heat with each other, in watts per square metre per
+     * Heat stored per square metre of **marine air** for each degree it warms, in joules: the
+     * atmospheric column, `c_p x p / g = 1004 x 101325 / 9.81`, the same one that is lumped into
+     * the land's figure.
+     *
+     * ### Why the sea band has two temperatures and not one
+     *
+     * W1's first two passes gave each band one sea temperature carrying the water's heat capacity,
+     * and the map's marine blend handed it to every coastal cell. That is a category error with a
+     * measurable cost. A fifty-metre slab of water barely moves through the year — at 55-60 degrees
+     * it swung 4.4 C, which is right for the *water* — but the air over it swings half again as far,
+     * because it has a twentieth of the memory and is chilled every winter by the continental air
+     * beside it. A shoreline cell is 94% marine air, so it inherited the water's year, and a coast
+     * whose warmest month is 6 C is tundra by Koppen's tree line whatever else is true of it: A6's
+     * own guard fell from 65/53/59% of warm west-facing coasts as forest to 16/14/6%, taiga went
+     * from 1.5% of the map to nothing, and `OceanCurrentTest`'s warm-against-cold coastal
+     * habitability went from +13.2% to -2.4%.
+     *
+     * So the sunlight, the outgoing radiation, the zonal exchange with the land and the meridional
+     * transport all belong to the **air**, which is what the atmosphere does with them and what a
+     * coast feels; and the mixed layer hangs off it as a buffer, exchanging by the bulk surface flux
+     * below. The annual mean is untouched by the split — at steady state the water sits exactly at
+     * the air's temperature and the air's budget is the one the single column always had — and the
+     * seasonal cycle is not. Measured at 50-60 degrees, warmest month against coldest: the air
+     * swings 13.0 C and the water 6.9, against Earth's 8-11 for zonal-mean marine air and 5-8 for
+     * the sea surface under it. The water is right and the air is at the top of its range, which is
+     * the honest place for it to be: with a bulk coefficient of 25 against a fifty-metre slab's
+     * inertia the air can only hand the water about half its amplitude, and Earth's air-sea
+     * difference over the open ocean is nearer a degree all year. See TODO.md.
+     */
+    private const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
+
+    /**
+     * How fast the sea surface and the air above it trade heat, in watts per square metre per
      * degree of difference between them.
      *
-     * Not a published figure: a one-dimensional model with two columns per band is not a standard
-     * construction, and the literature's seasonal energy-balance models with continents
-     * (North, Mengel and Short 1983) are two-dimensional, where the same diffusivity that carries
-     * heat poleward also carries it across a coast. So this is set from what Earth measures. At
-     * 50-60 degrees a continental interior swings 34-38 C over the year (Novosibirsk 34,
-     * Winnipeg 38) and the open ocean 6-8; the exchange is the value that puts the model's own
-     * land column inside the first of those, and it is 3.5: the model then reads 35.6 C over the
-     * land there and 5.6 over the sea.
+     * The bulk aerodynamic formulae, sensible plus latent, at a typical marine wind of 8 m/s:
      *
-     * Small against [OUTGOING_PER_DEGREE_W_PER_M2_C]'s 2.09 and much smaller than the meridional
-     * diffusivity, which is right and is why continents have winters: the anomaly that separates a
-     * January in Siberia from a January in the North Atlantic lives in the lowest kilometre or two
-     * of air, not in the whole column that the westerlies carry round the planet in a fortnight.
+     *   sensible   `rho c_p C_H U = 1.2 x 1004 x 1.2e-3 x 8`                    = 11.6 W/m2/K
+     *   latent     `rho L_v C_E U x RH x dq_sat/dT`, at 15 C and 80% humidity,
+     *              `1.2 x 2.5e6 x 1.2e-3 x 8 x 0.8 x 7e-4`                      = 13.4 W/m2/K
      *
-     * The check that it is not merely a fit is that nothing at any other latitude was asked of it,
-     * and `EnergyBalanceTest` measures the model's land column at 30-40 degrees against Earth's
-     * own continental range there.
+     * Twenty-five together, the top of the 15-25 the standard formulae give across the range of
+     * wind speeds and surface temperatures a planet has. Warmer water couples harder, because the
+     * latent term follows Clausius-Clapeyron — the same 7% a degree `ClimateConfig.currentMoisture`
+     * uses — and that dependence is not modelled here; 25 is the mid-latitude figure, which is
+     * where the coasts this matters for are.
+     *
+     * It sets how fast the air forgets the water: `C_air / 25` is six days, so marine air tracks
+     * the sea surface closely and departs from it only as far as the land beside it and the heat
+     * arriving from other latitudes push it.
      */
-    private const val ZONAL_EXCHANGE_W_PER_M2_C = 3.5
+    private const val SURFACE_EXCHANGE_W_PER_M2_C = 25.0
+
+    /**
+     * How fast the two air columns of one band trade heat with each other, in watts per square
+     * metre per degree of difference from the band's mean.
+     *
+     * This is the westerlies going round the latitude circle. An air mass crossing a continent at
+     * mid-latitudes takes one to two weeks, and over that time it takes on the ground beneath it
+     * and gives up what it brought; the same air then spends a comparable time over the ocean.
+     * Written as a one-box exchange, that is a rate of `C / tau`: with the land column's
+     * [LAND_HEAT_CAPACITY_J_PER_M2_C] and a fortnight, 14 W/m2/K, and with a month, 6.5. Eight is
+     * in the middle of that bracket — three and a half weeks for the land column, a fortnight for
+     * the lighter marine one — and it is what puts the model's seasonal ranges on Earth's:
+     *
+     *   50-60 deg   land 38.1 C     Earth's continental interiors  34-38
+     *               marine air 13.6                                10-13
+     *               water 7.0                                       5-8
+     *   30-40 deg   land 27.6 C     Earth's continental interiors  24-26
+     *
+     * W1's first two passes had this at 3.5, which was fitted against the same latitudes and came
+     * out half as large — because at the time [splitIntoSeasons] was reporting warm- and cold-half-
+     * *year* means and they were being compared against Earth's month-to-month figures. A number
+     * fitted against the wrong quantity is worse than an unfitted one, and this is the correction:
+     * the timescale is now the argument and the table above is the check.
+     */
+    private const val ZONAL_EXCHANGE_W_PER_M2_C = 8.0
 
     /**
      * Heat stored per square metre of *frozen* sea, in joules per degree.
@@ -412,9 +587,9 @@ object EnergyBalance {
      * air above it is talking to a metre or two of ice, not to fifty metres of ocean. So a frozen
      * sea has a land's memory, which is why a polar winter under ice is as cold as a continental
      * one and why the ice edge advances as fast as it does. Two metres of ice at 1.9 MJ per cubic
-     * metre per degree, plus the air column.
+     * metre per degree; the air column is a reservoir of its own now and is not added here.
      */
-    private const val FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C = 2.0 * 1.9e6 + 1.04e7
+    private const val FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C = 2.0 * 1.9e6
 
     /**
      * Earth's axial tilt in degrees (IAU), and the zonal-mean migration of its thermal equator
@@ -540,60 +715,52 @@ object EnergyBalance {
         val outgoingOffset = OUTGOING_OFFSET_W_PER_M2 + outgoingOffsetShiftW
 
         val landC = DoubleArray(BANDS)
-        val seaC = DoubleArray(BANDS)
-        annualMeanEquilibrium(geometry, annualInsolation, outgoingOffset, landC, seaC)
-        refreshSurfaceState(geometry, landFraction, landC, seaC)
+        val seaAirC = DoubleArray(BANDS)
+        val waterC = DoubleArray(BANDS)
+        annualMeanEquilibrium(geometry, annualInsolation, outgoingOffset, landC, seaAirC, waterC)
+        refreshSurfaceState(geometry, landFraction, landC, seaAirC)
 
         // Only the last year is turned into seasons; the year before it is kept as a global mean
         // so the spin-up's remaining drift can be reported rather than assumed away.
         val lastYearLand = DoubleArray(BANDS * STEPS_PER_YEAR)
-        val lastYearSea = DoubleArray(BANDS * STEPS_PER_YEAR)
+        val lastYearSeaAir = DoubleArray(BANDS * STEPS_PER_YEAR)
+        val lastYearWater = DoubleArray(BANDS * STEPS_PER_YEAR)
         val landAnnualC = DoubleArray(BANDS)
-        val seaAnnualC = DoubleArray(BANDS)
+        val seaAirAnnualC = DoubleArray(BANDS)
         var previousYearMeanC = 0.0
         var lastYearMeanC = 0.0
 
         for (year in 0 until SPIN_UP_YEARS) {
             val recording = year == SPIN_UP_YEARS - 1
             landAnnualC.fill(0.0)
-            seaAnnualC.fill(0.0)
+            seaAirAnnualC.fill(0.0)
             for (step in 0 until STEPS_PER_YEAR) {
-                advance(geometry, landFraction, insolation, step, outgoingOffset, landC, seaC)
+                advance(
+                    geometry, landFraction, insolation, step, outgoingOffset,
+                    landC, seaAirC, waterC
+                )
                 for (band in 0 until BANDS) {
                     landAnnualC[band] += landC[band] / STEPS_PER_YEAR
-                    seaAnnualC[band] += seaC[band] / STEPS_PER_YEAR
+                    seaAirAnnualC[band] += seaAirC[band] / STEPS_PER_YEAR
                     if (recording) {
                         lastYearLand[step * BANDS + band] = landC[band]
-                        lastYearSea[step * BANDS + band] = seaC[band]
+                        lastYearSeaAir[step * BANDS + band] = seaAirC[band]
+                        lastYearWater[step * BANDS + band] = waterC[band]
                     }
                 }
             }
             // The albedo and the heat capacities follow the year that has just been lived, so the
             // ice-albedo feedback is an outer iteration over the years of the spin-up. That is
             // what keeps it from oscillating inside one: see [ICE_LINE_C].
-            refreshSurfaceState(geometry, landFraction, landAnnualC, seaAnnualC)
+            refreshSurfaceState(geometry, landFraction, landAnnualC, seaAirAnnualC)
             previousYearMeanC = lastYearMeanC
-            lastYearMeanC = globalMean(geometry, landFraction, landAnnualC, seaAnnualC)
-        }
-
-        val landAnnual = FloatArray(BANDS)
-        val landSummer = FloatArray(BANDS)
-        val landWinter = FloatArray(BANDS)
-        val seaAnnual = FloatArray(BANDS)
-        val seaSummer = FloatArray(BANDS)
-        val seaWinter = FloatArray(BANDS)
-        for (band in 0 until BANDS) {
-            splitIntoSeasons(lastYearLand, band, landAnnual, landSummer, landWinter)
-            splitIntoSeasons(lastYearSea, band, seaAnnual, seaSummer, seaWinter)
+            lastYearMeanC = globalMean(geometry, landFraction, landAnnualC, seaAirAnnualC)
         }
 
         return ZonalClimate(
-            landAnnualC = landAnnual,
-            landSummerC = landSummer,
-            landWinterC = landWinter,
-            seaAnnualC = seaAnnual,
-            seaSummerC = seaSummer,
-            seaWinterC = seaWinter,
+            land = splitIntoSeasons(lastYearLand),
+            sea = splitIntoSeasons(lastYearSeaAir),
+            water = splitIntoSeasons(lastYearWater),
             globalMeanC = lastYearMeanC.toFloat(),
             spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat()
         )
@@ -704,10 +871,11 @@ object EnergyBalance {
          * See [DIFFUSION_TROPICS_W_PER_M2_C] for the shape and where it comes from.
          */
         val transportAtEdge = DoubleArray(BANDS + 1) { edge ->
-            val latitudeRadians =
-                (POLE_DEGREES - POLE_TO_POLE_DEGREES * edge / BANDS) * PI / 180.0
-            val cosine = cos(latitudeRadians)
-            transportPolarW + (transportTropicsW - transportPolarW) * cosine * cosine
+            diffusivityAt(
+                (POLE_DEGREES - POLE_TO_POLE_DEGREES * edge / BANDS).toDouble(),
+                transportTropicsW,
+                transportPolarW
+            )
         }
 
         val bandWidthRadians = (POLE_TO_POLE_DEGREES / BANDS) * PI / 180.0
@@ -731,10 +899,22 @@ object EnergyBalance {
         val rightHandSide = DoubleArray(BANDS)
         val bandMeanBeforeTransport = DoubleArray(BANDS)
         val meanHeatCapacity = DoubleArray(BANDS)
-        val seaHeatCapacity = DoubleArray(BANDS)
+        val mixedLayerHeatCapacity = DoubleArray(BANDS)
 
         /** The white share the albedo and the capacities are read off, refreshed once a year. */
         val white = DoubleArray(BANDS)
+
+        /**
+         * The band's planetary albedo, refreshed with [white] once a year.
+         *
+         * Held rather than recomputed because it depends only on the white share and the latitude,
+         * and neither moves inside a year — where computing it in the step loop asked for a sine
+         * and an exponential 1.7 million times per solve, and a world's generation solves this
+         * model eight times. That is nothing on a desktop and it is seconds in a browser, which is
+         * how it was found: `GenerationProgressTest` on Wasm gives a 128-cell world two seconds and
+         * the model was taking longer than that. Bit for bit the same numbers, computed once.
+         */
+        val bandAlbedo = DoubleArray(BANDS)
     }
 
     /**
@@ -839,7 +1019,8 @@ object EnergyBalance {
         annualInsolation: DoubleArray,
         outgoingOffset: Double,
         landC: DoubleArray,
-        seaC: DoubleArray
+        seaAirC: DoubleArray,
+        waterC: DoubleArray
     ) {
         for (band in 0 until BANDS) {
             geometry.rightHandSide[band] = annualInsolation[band] *
@@ -853,28 +1034,40 @@ object EnergyBalance {
             perBandCapacity = null,
             result = landC
         )
-        landC.copyInto(seaC)
+        landC.copyInto(seaAirC)
+        landC.copyInto(waterC)
     }
 
     /**
-     * Carries both columns of every band forward one time step.
+     * Carries all three reservoirs of every band forward one time step.
      *
-     * Three terms in order. **Radiation**, implicitly in each column's own temperature, so no step
-     * can overshoot the equilibrium it is heading for whatever the step length. **The zonal
-     * exchange** between the band's two columns, at [ZONAL_EXCHANGE_W_PER_M2_C], which is what
-     * keeps a continent and the sea beside it in the same climate over the year while leaving them
-     * free to differ within it. **The meridional transport**, implicitly, spreading the watts it
-     * brings over the band's whole area — so each column takes the same watts per square metre and
-     * turns them into degrees at its own heat capacity, which is why the band capacity used in the
-     * solve is the harmonic mean.
+     * Four terms in order. **Radiation**, implicitly in each air column's own temperature, so no
+     * step can overshoot the equilibrium it is heading for whatever the step length; the water
+     * carries none of it, because the sunlight the sea absorbs and the infrared it sends to space
+     * both pass through the air, which is where the model's radiative law lives. **The zonal
+     * exchange** between the band's two air columns, at [ZONAL_EXCHANGE_W_PER_M2_C], which keeps a
+     * continent and the coast beside it in the same climate over the year while leaving them free
+     * to differ within it. **The meridional transport**, implicitly, spreading the watts it brings
+     * over the band's whole air — so each column takes the same watts per square metre and turns
+     * them into degrees at its own heat capacity, which is why the band capacity used in the solve
+     * is the harmonic mean. And last **the surface flux**, marine air against the water beneath
+     * it, at [SURFACE_EXCHANGE_W_PER_M2_C].
      *
-     * Both couplings are needed, and each fixes what the other cannot. Without the exchange the
-     * tropics — which export heat all year — drain their land column, because the same watts leaving
-     * both columns cost the land fifteen times the degrees; it was measured at forty degrees below
+     * The split changes no annual mean. At steady state the surface flux vanishes, so the water
+     * sits exactly at the air's temperature and the air's budget is the one the single sea column
+     * always had. What it changes is the year: the air's amplitude rises because it is answering
+     * for its own small capacity with the water only lagging behind it, and the water's falls
+     * because it is driven through a flux rather than by the sun directly.
+     *
+     * All three couplings are needed, and each fixes what the others cannot. Without the zonal
+     * exchange the tropics — which export heat all year — drain their land column, because the same
+     * watts leaving both columns cost the land more degrees; it was measured at forty degrees below
      * the sea beside it, cold enough to whiten and stay there. Without the harmonic split, and with
      * the transport instead moving both columns by the same number of degrees, the steady state
-     * requires the ocean to run a radiative imbalance fifteen times the land's, which is not a
-     * thing an ocean does.
+     * requires the ocean to run a radiative imbalance many times the land's, which is not a thing
+     * an ocean does. And without the surface flux — with the sea a single slab of water handed
+     * whole to the coasts — every shoreline in the world inherits the ocean's year and freezes into
+     * tundra; see [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] for what that cost when it was tried.
      */
     private fun advance(
         geometry: Geometry,
@@ -883,36 +1076,33 @@ object EnergyBalance {
         step: Int,
         outgoingOffset: Double,
         landC: DoubleArray,
-        seaC: DoubleArray
+        seaAirC: DoubleArray,
+        waterC: DoubleArray
     ) {
         val stepSeconds = SECONDS_PER_YEAR / STEPS_PER_YEAR
         val landHeat = LAND_HEAT_CAPACITY_J_PER_M2_C
+        val marineAirHeat = MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
         val bandMean = geometry.rightHandSide
 
         for (band in 0 until BANDS) {
             val sunlight = insolation[step * BANDS + band]
-
-            val bandAlbedo =
-                albedoOf(geometry.white[band], latitudeOfBand(band).toDouble())
-            val landAbsorbed = sunlight * (1.0 - bandAlbedo)
-            var land = (landC[band] + stepSeconds / landHeat * (landAbsorbed - outgoingOffset)) /
+            val absorbed = sunlight * (1.0 - geometry.bandAlbedo[band])
+            var land = (landC[band] + stepSeconds / landHeat * (absorbed - outgoingOffset)) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / landHeat)
+            var seaAir =
+                (seaAirC[band] + stepSeconds / marineAirHeat * (absorbed - outgoingOffset)) /
+                    (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / marineAirHeat)
 
-            val seaHeat = geometry.seaHeatCapacity[band]
-            val seaAbsorbed = sunlight * (1.0 - bandAlbedo)
-            var sea = (seaC[band] + stepSeconds / seaHeat * (seaAbsorbed - outgoingOffset)) /
-                (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / seaHeat)
-
-            // The zonal exchange, toward the band's own mean and so conservative by construction:
-            // what one column gives, weighted by its area, the other takes.
+            // The zonal exchange, between the two *air* columns, toward the band's own mean and so
+            // conservative by construction: what one gives, weighted by its area, the other takes.
             val landShare = landFraction[band].toDouble()
-            val mixed = landShare * land + (1.0 - landShare) * sea
+            val mixed = landShare * land + (1.0 - landShare) * seaAir
             land += stepSeconds / landHeat * ZONAL_EXCHANGE_W_PER_M2_C * (mixed - land)
-            sea += stepSeconds / seaHeat * ZONAL_EXCHANGE_W_PER_M2_C * (mixed - sea)
+            seaAir += stepSeconds / marineAirHeat * ZONAL_EXCHANGE_W_PER_M2_C * (mixed - seaAir)
 
             landC[band] = land
-            seaC[band] = sea
-            bandMean[band] = landShare * land + (1.0 - landShare) * sea
+            seaAirC[band] = seaAir
+            bandMean[band] = landShare * land + (1.0 - landShare) * seaAir
             geometry.bandMeanBeforeTransport[band] = bandMean[band]
         }
 
@@ -927,17 +1117,37 @@ object EnergyBalance {
             val importedJoules = geometry.meanHeatCapacity[band] *
                 (bandMean[band] - geometry.bandMeanBeforeTransport[band])
             landC[band] += importedJoules / landHeat
-            seaC[band] += importedJoules / geometry.seaHeatCapacity[band]
+            val seaAir = seaAirC[band] + importedJoules / marineAirHeat
+
+            // The bulk surface flux last, so that what is recorded for the air and what is
+            // recorded for the water are two ends of the same finished exchange. Over a periodic
+            // year the flux integrates to nothing, so ordering it here is what makes the two
+            // columns' annual means identical rather than a few tenths apart — which matters,
+            // because one of them is compared against a marine-air climatology and the other
+            // against a sea-surface one. Implicit in the pair, because six days of air memory
+            // against a step of one day is close enough to stiff to matter.
+            val water = waterC[band]
+            val waterHeat = geometry.mixedLayerHeatCapacity[band]
+            val exchange = stepSeconds * SURFACE_EXCHANGE_W_PER_M2_C
+            val determinant =
+                waterHeat * marineAirHeat + exchange * waterHeat + exchange * marineAirHeat
+            val waterNext = (
+                waterHeat * water * (marineAirHeat + exchange) + exchange * marineAirHeat * seaAir
+                ) / determinant
+            seaAirC[band] =
+                (marineAirHeat * seaAir + exchange * waterNext) / (marineAirHeat + exchange)
+            waterC[band] = waterNext
         }
     }
 
     /**
-     * Sets each band's white share, its sea heat capacity and its mean heat capacity from the
-     * annual means the year just marched produced.
+     * Sets each band's white share, its mixed-layer heat capacity and the mean heat capacity of
+     * its air, from the annual means the year just marched produced.
      *
      * Once a year, not once a step, because the albedo follows the annual mean — see [ICE_LINE_C].
-     * The capacities go with it: a sea that spends its year under ice has the memory of the ice
-     * rather than of the water beneath it, and that is a property of the year too.
+     * The mixed layer's capacity goes with it: a sea that spends its year under ice presents the
+     * air a metre or two of ice rather than fifty metres of water, and that is a property of the
+     * year too.
      *
      * One white share per **band**, from both columns pooled, rather than one per column. Budyko's
      * and North's ice line is a property of a latitude, and splitting it lets the land column run
@@ -958,11 +1168,19 @@ object EnergyBalance {
                 landShare * landAnnualC[band] + (1.0 - landShare) * seaAnnualC[band]
             val white = geometry.whiteFraction(bandAnnualC)
             geometry.white[band] = white
-            val seaHeat = OCEAN_HEAT_CAPACITY_J_PER_M2_C +
-                (FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C - OCEAN_HEAT_CAPACITY_J_PER_M2_C) * white
-            geometry.seaHeatCapacity[band] = seaHeat
-            geometry.meanHeatCapacity[band] =
-                1.0 / (landShare / LAND_HEAT_CAPACITY_J_PER_M2_C + (1.0 - landShare) / seaHeat)
+            geometry.bandAlbedo[band] = albedoOf(white, latitudeOfBand(band).toDouble())
+            geometry.mixedLayerHeatCapacity[band] = MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C +
+                (FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C - MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C) *
+                white
+            // The transport moves air, so the capacity it is spread over is the air's: the
+            // harmonic mean of the two columns, which is what makes the watts rather than the
+            // degrees the shared quantity. The water is not in it — it takes its share of the
+            // imported heat through the surface flux, a step later and much attenuated, which is
+            // exactly how an ocean receives what the atmosphere brings.
+            geometry.meanHeatCapacity[band] = 1.0 / (
+                landShare / LAND_HEAT_CAPACITY_J_PER_M2_C +
+                    (1.0 - landShare) / MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
+                )
         }
     }
 
@@ -1029,34 +1247,52 @@ object EnergyBalance {
     }
 
     /**
-     * Splits one band's year into its warmest and coldest halves and writes all three figures.
+     * Turns one surface's recorded year into a [ZonalColumn]: the annual mean, the warmest and
+     * coldest month, and the warm and cold half-years.
      *
-     * The warm half is the contiguous half-year with the highest mean, found by sliding the window
-     * round the year, and the cold half is what is left — so a southern band finds the southern
-     * summer without being told which hemisphere it is in, a sea column finds its own later summer,
-     * and the two means average exactly to the annual one.
+     * A sliding window round the year for each length, so a southern band finds the southern
+     * summer without being told which hemisphere it is in and a maritime column finds its own
+     * later one: the sea's warmest month runs a month or two behind the land's beside it, and that
+     * lag is the heat capacity's doing rather than anything written down here. The cold half-year
+     * is the warm one's complement, so those two average exactly to the annual mean; the two months
+     * do not, and nothing treats them as though they did.
      */
-    private fun splitIntoSeasons(
-        year: DoubleArray,
-        band: Int,
-        annual: FloatArray,
-        summer: FloatArray,
-        winter: FloatArray
-    ) {
-        var yearTotal = 0.0
-        for (step in 0 until STEPS_PER_YEAR) yearTotal += year[step * BANDS + band]
+    private fun splitIntoSeasons(year: DoubleArray): ZonalColumn {
+        val annual = FloatArray(BANDS)
+        val warmestMonth = FloatArray(BANDS)
+        val coldestMonth = FloatArray(BANDS)
+        val warmHalf = FloatArray(BANDS)
+        val coldHalf = FloatArray(BANDS)
+        for (band in 0 until BANDS) {
+            var yearTotal = 0.0
+            for (step in 0 until STEPS_PER_YEAR) yearTotal += year[step * BANDS + band]
+            annual[band] = (yearTotal / STEPS_PER_YEAR).toFloat()
 
-        var windowTotal = 0.0
-        for (step in 0 until SEASON_STEPS) windowTotal += year[step * BANDS + band]
-        var warmestTotal = windowTotal
-        for (start in 1 until STEPS_PER_YEAR) {
-            windowTotal += year[((start + SEASON_STEPS - 1) % STEPS_PER_YEAR) * BANDS + band] -
-                year[(start - 1) * BANDS + band]
-            if (windowTotal > warmestTotal) warmestTotal = windowTotal
+            var monthTotal = 0.0
+            for (step in 0 until MONTH_STEPS) monthTotal += year[step * BANDS + band]
+            var warmestMonthTotal = monthTotal
+            var coldestMonthTotal = monthTotal
+
+            var halfTotal = 0.0
+            for (step in 0 until HALF_YEAR_STEPS) halfTotal += year[step * BANDS + band]
+            var warmestHalfTotal = halfTotal
+
+            for (start in 1 until STEPS_PER_YEAR) {
+                monthTotal += year[((start + MONTH_STEPS - 1) % STEPS_PER_YEAR) * BANDS + band] -
+                    year[(start - 1) * BANDS + band]
+                if (monthTotal > warmestMonthTotal) warmestMonthTotal = monthTotal
+                if (monthTotal < coldestMonthTotal) coldestMonthTotal = monthTotal
+
+                halfTotal += year[((start + HALF_YEAR_STEPS - 1) % STEPS_PER_YEAR) * BANDS + band] -
+                    year[(start - 1) * BANDS + band]
+                if (halfTotal > warmestHalfTotal) warmestHalfTotal = halfTotal
+            }
+
+            warmestMonth[band] = (warmestMonthTotal / MONTH_STEPS).toFloat()
+            coldestMonth[band] = (coldestMonthTotal / MONTH_STEPS).toFloat()
+            warmHalf[band] = (warmestHalfTotal / HALF_YEAR_STEPS).toFloat()
+            coldHalf[band] = ((yearTotal - warmestHalfTotal) / HALF_YEAR_STEPS).toFloat()
         }
-
-        annual[band] = (yearTotal / STEPS_PER_YEAR).toFloat()
-        summer[band] = (warmestTotal / SEASON_STEPS).toFloat()
-        winter[band] = ((yearTotal - warmestTotal) / SEASON_STEPS).toFloat()
+        return ZonalColumn(annual, warmestMonth, coldestMonth, warmHalf, coldHalf)
     }
 }

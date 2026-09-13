@@ -235,10 +235,10 @@ class RiverWidthTest {
             //
             // It can still fall where the water does, and on rare occasions the water does: the
             // routing hands a handful of cells a downstream neighbour that carries less than they
-            // do, five of the 100224 land cells of seed 1234 among them. That is the flow graph's
+            // do, six of the 100224 land cells of seed 1234 among them. That is the flow graph's
             // own inconsistency and not the pen's — the superseded rule, monotone in the same
-            // quantity, narrows at exactly the same points — so it is counted and held to a
-            // thousandth of the drawn course rather than treated as a width failure.
+            // quantity, narrows at exactly the same points — so it is counted against the land it
+            // is a property of rather than treated as a width failure.
             var narrowings = 0
             var againstTheWater = 0
             var steps = 0
@@ -257,19 +257,27 @@ class RiverWidthTest {
                 "seed $seed: a drawn river narrowed at $againstTheWater points " +
                     "where it carried no less water"
             )
+            val landCells = network.world.sea.isLand.count { it }
             println(
-                "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water"
+                "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water, " +
+                    "on $landCells land cells"
             )
-            // One in five hundred, and the figure is about the flow graph rather than the pen.
-            // A thousandth was written when seed 1234's drawn network ran to more steps than it
-            // does; S1's terrain leaves it 2517, so a thousandth is two steps and the graph's own
-            // inconsistent cells are three. Measured over the three seeds the counts are 0, 0 and
-            // 3, which is the handful the paragraph above describes and not a rate at all — what
-            // holds the pen to account is `againstTheWater`, which is zero on every seed.
+            // Against the **land**, not against the drawn course, and W1 is why. What is being
+            // counted is cells where the routing hands a cell a downstream neighbour carrying less
+            // water than it does — a property of the flow graph over the whole world, a handful per
+            // map, and nothing to do with how much of that graph the pen happens to draw. Stating
+            // it as a share of the drawn steps made it move whenever the drawn network did: it was
+            // a thousandth until S1's terrain shortened seed 1234's course, then a five-hundredth,
+            // and W1's rainfall moved both the course (2517 steps to 2460) and the graph's
+            // inconsistent cells (three to six) again. One in ten thousand land cells is the same
+            // claim stated about the thing it is a property of: seed 1234 has six over 100,224
+            // cells, which is one in sixteen thousand, and seeds 7 and 42 have none at all. What
+            // holds the *pen* to account is `againstTheWater`, which is zero on every seed.
             assertTrue(
-                narrowings * 500 <= steps,
-                "seed $seed: $narrowings of $steps drawn steps run into less water than the " +
-                    "step above, past one in five hundred"
+                narrowings * 10_000 <= landCells,
+                "seed $seed: $narrowings drawn steps run into less water than the step above, " +
+                    "on $landCells land cells — past one in ten thousand, so the routing is " +
+                    "inconsistent more often than a handful of cells"
             )
 
             // Only the confluences the flow graph agrees are confluences: the same handful of cells

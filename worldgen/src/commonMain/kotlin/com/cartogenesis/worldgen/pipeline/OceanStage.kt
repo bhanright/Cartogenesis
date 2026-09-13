@@ -376,7 +376,7 @@ object OceanStage {
         val cellsDown = config.height
         for (row in 0 until cellsDown) {
             val latitudeTemperatureC =
-                zonal.seaC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
+                zonal.waterC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
             for (column in 0 until cellsAcross) {
                 if (!sea.isLand[row * cellsAcross + column]) {
                     temperature.data[row * cellsAcross + column] = latitudeTemperatureC
@@ -407,7 +407,7 @@ object OceanStage {
         // cell per pass: two hundred passes over a four-million-cell grid is not the place for an
         // interpolation that only ever depends on the latitude.
         val relaxTowardC = FloatArray(cellsDown) { row ->
-            zonal.seaC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
+            zonal.waterC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
         }
 
         var current = temperature.data.copyOf()

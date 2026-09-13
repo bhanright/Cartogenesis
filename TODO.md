@@ -84,17 +84,37 @@
   `equatorTemperatureC`, `poleTemperatureC` and `continentality`. In its place is a one-dimensional
   energy balance over 240 latitude bands, marched through 360 steps of the year for twenty years:
   insolation from the planet's own tilt, `A + B·T` out with North's slope and an offset fixed by
-  Earth's 240 W/m² at 14 °C, heat transport at 0.60 W/m²/°C, and an albedo that follows the ice the
-  model itself grows. Each band carries a land column and a sea column with the world's own
-  coastline as their areas, storing what they absorb in three metres of soil against fifty metres of
-  water; a cell takes a blend of the two, falling away from the coast with the 350 km e-folding
-  Earth's own stations give. On Earth's land fraction it reads 13.8 °C globally against 14, 26.4 at
-  the equator against 26, −2.2 at 60° against −2, a 35.6 °C annual range over continental land at
-  50-60° against 34-38 and 5.6 over the open ocean against 6-8. `glacialMaximumC` became a dimmer
-  sun rather than a redrawn mask, so the glacial cooling comes out polar-amplified (5.2 °C at 10°
-  against 8.5 at 75°) instead of being told to be. Sea ice is two saved masks at −1.8 °C, the march
-  takes nothing from a frozen cell, and the biome draws the pack that survives the summer. The two
-  anchors' old complaint — the equator 5 °C warm and 60° 3 °C cold — is answered by construction.
+  Earth's 240 W/m² at 14 °C, a heat transport split between a Hadley cosine-squared and a
+  storm-track Gaussian at 50°, and an albedo fitted to Earth's observed zonal planetary albedo that
+  then follows the ice the model itself grows.
+  Each band carries **three** reservoirs: an air column over its land (1.7 × 10⁷ J/m²/°C, soil plus
+  air), an air column over its sea (1.04 × 10⁷, `c_p·p/g`), and a fifty-metre mixed layer under that
+  (2.0 × 10⁸) coupled to the air above it by a bulk surface flux of 25 W/m²/°C — sensible 11.6 plus
+  latent 13.4 from the standard bulk formulae at 8 m/s. The two air columns trade heat round the
+  latitude circle at 8 W/m²/°C, a fortnight's exchange, and carry the meridional transport; the
+  water carries none of it. A cell takes a blend of the two air columns, falling away from the coast
+  with the 350 km e-folding Earth's own stations give; the water is read only where the sea freezes
+  and where the march evaporates. Two readings of the year are kept per column, because Köppen's
+  thresholds are monthly means and a degree-day sum is a half-year integral.
+  On Earth's land fraction it reads 15.5 °C globally against 14, 26.1 at the equator against 27,
+  1.7 at 60° against 0, and −15.6 at the pole against −20; land and marine air at 0/20/40/60 sit at
+  26.2/26.0, 23.4/23.3, 13.9/13.9 and 1.5/1.8 against a lowland-station and a reanalysis
+  climatology's 26.0/26.5, 25.0/24.5, 14.5/14.5 and −2.0/2.0, and the warmest month over the sea at
+  26.7/26.0/19.2/7.9 against 27/27/19/7, inside a ±3 °C envelope. Warmest month against coldest at
+  50-60°: land 38.7 °C against Earth's continental 34-38, marine air 13.0 against 8-11, water 6.9
+  against 5-8. The poleward transport is 4.6/4.9/3.2 PW at 30/45/60 against Trenberth and Caron's
+  5.3/5.0/3.3, and the model's cold-season ice edge lands at 60.4° N against Earth's zonal-mean 60.
+  `glacialMaximumC` became a dimmer sun rather than a redrawn mask, so the poles cool 5.8 °C where
+  the same forcing with the feedback off cools them 4.3, and the cap walks to 52.1° instead of
+  53.6°. Sea ice is two saved masks at −1.8 °C on the *water*, the march takes nothing from a frozen
+  cell, and the biome draws the pack that survives the summer: over seeds 7/42/1234 at 512 the cold
+  season freezes 25–33% of the sea and reaches 55–58°, and the frozen sea takes 257–523 mm a year
+  against 1,811–2,508 over the open water beside it. On the map, A6's own guard reads 40/52/51% of
+  warm-current west-facing coast at 50–60° as temperate forest against its recorded 65/53/59, the
+  boreal belt holds 6.7% of ice-free land against Earth's 11%, permanent ice 8.7% against Earth's
+  10.1%, and `OceanCurrentTest`'s warm-against-cold coastal habitability reads +4.3/+5.5/+5.5%. The
+  two anchors' old complaint — the equator 5 °C warm and 60° 3 °C cold — is answered by
+  construction.
 - **One unit of land elevation was six kilometres in the climate and eight everywhere else**
   (2026-09-13, S1) — `WorldScale` is now the only place a physical unit is declared: the map's
   width in kilometres, the two ends of its vertical range in metres and the years a hydraulic round
@@ -485,27 +505,30 @@
   `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
   islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
   are. See GEOGRAPHY.md's "Known deviations".
-- **The model's sea column is a slab of water, and the map hands it to every coast as though it
-  were the air.** This is W1's open defect and it blocks the chunk. `EnergyBalance` gives each band
-  one temperature per surface, and the sea's carries the ocean's heat capacity — fifty metres of
-  water — so it barely moves through the year: at 55-60 degrees it reads a summer of 5.5 C and a
-  range of 4.4. That is about right for the *water* (Earth's zonal-mean SST range there is 5 to 8)
-  and badly wrong for the *air over it*, which on Earth swings half again as far and reaches 9 to
-  13 in August. `ClimateStage`'s marine blend then hands that summer to every coastal cell, because
-  a shoreline cell is 94% marine air, and a coast whose warmest month is 6 C is tundra by Koppen's
-  tree line whatever else is true of it.
-  Three symptoms, one cause, all measured: `ColdCapReportTest` — A6's own guard — reads 16%, 14%
-  and 6% of warm west-facing coasts at 50-60 degrees as forest against A6's recorded 65/53/59, and
-  prints the reason beside it (warmest month 6.3, 7.5 and 6.2 C against the 10 C tree line);
-  `OceanCurrentTest`'s warm-against-cold coastal habitability on seed 7 went from +13.2% before W1
-  to -2.4%, the warm quartile falling 0.090 where the cold fell 0.018, because the warm coasts are
-  the ones A6's gate made forest; and tundra holds 62/48/47/39% of the four seeds' land against
-  52/38/34/26% before W1.
-  The repair is structural rather than a constant: the marine air and the mixed layer are two
-  reservoirs with capacities two orders apart, coupled to each other, and the model conflates them.
-  A shallower slab does not reach it — 25 m buys two degrees of the seven that are missing and pushes
-  the winter sea colder, which moves the ice edge the wrong way. Whether that belongs in W1 or in
-  W2 with the pressure field is a scope question. 2026-09-13, W1.
+- **Half the land is tundra, and it is the hypsometry rather than the climate.** Over seeds
+  7/42/1234/99 at 512, tundra takes 55/43/47/42% of the ice-free land, pooled 47%, against Earth's
+  6% (Olson et al. 2001: 8.1 of about 135 million km² ice-free). Boreal forest is 7.8% against
+  Earth's 11%, which is right, and the zonal temperatures the same worlds are built on sit within a
+  degree or two of the reanalysis at every latitude from the equator to 70° — so the belts are in
+  the right places and the tree line is not. What puts them there is the ground: M1 measured this
+  map's land standing 1200–1700 m above its own sea against Earth's 840, and a lapse rate of
+  6 °C/km takes three to five degrees off nearly every land cell. `ColdBiomeShareTest` prints both
+  shares per seed and pooled and asserts only the boreal one, because no factor a guard could state
+  would both accept 47% and mean anything. S2's hypsometry is where this is settled.
+  2026-09-13, W1.
+- **The ice makes almost no lakes any more, because it cuts almost no valleys.** `GlaciationTest`'s
+  two glacial-lake clauses are findings from W1 rather than assertions. Pooled over seeds 42, 7 and
+  718106 at 1024 — pooled because two lakes against one on one seed is not a density — the ice
+  raises cold-country lake density from 0.21 to 0.28 per 10k cells, where the clause asks for three
+  times, and the iced zone ratio reaches 1.70 against a bar of 2.5. The budget line says why:
+  `trunks=0 cirques=0 moraines=0` on seed 42 at 1024, with 31,453 cells channelled and *nothing
+  refused*, so no flow path is even proposed as a trough. The candidate test asks that a path carry
+  `minCatchment` of the whole frozen area's ice, and W1's energy balance replaced a few
+  concentrated mountain ice fields with one diffuse 41,000-cell sheet, under which no single valley
+  can clear that share. The climate itself is not the complaint — the pooled permanent-ice share is
+  8.7% of land against Earth's 10.1% — so the repair is `GlaciationStage`'s catchment thresholds
+  re-derived against a mask of that shape, with the comb and lattice clauses (which still pass)
+  protecting the D8 artefacts while it is done. 2026-09-13, W1.
 - **A drowned basin is over the Caspian cap again, and the cap is the thing to look at.**
   `OutletResolutionTest`'s clause on basins below the sea-level cut was an assertion from H5b and is
   a printed finding again from W1: seed 42's largest walled-off hollow at 2048 went from 3,453 cells
@@ -521,22 +544,27 @@
   seed 59758 reading 0.501% standing water against a floor of 0.500%, and W1's climate moved it to
   0.371% while moving seed 42's the other way, 0.120% to 0.210%. The spread that floor protected was
   retired by S1 in favour of `ScaleFreeTest`, so what it guarded is already measured elsewhere.
-- **The ocean's seasonal swing is short of Earth's.** W1's energy balance stores the sea's summer in
-  a fifty-metre slab with no seasonal deepening, so the open ocean's annual range comes out at
-  4.8 °C at 35° where Earth's is 6-9 and 5.6 °C at 50-60° where Earth's is 6-8. The land's range is
-  right (35.6 °C at 50-60° against 34-38), so this is the slab and not the model: a mixed layer that
-  shoals to 25 m in summer and deepens to 150 in winter absorbs its summer into less water and
-  releases it out of more, which a single depth cannot do. `SeasonsTest` states both figures with
-  Earth's beside them. A two-layer ocean would be W3's or later, and it would also give the coasts
-  their observed autumn lag.
-- **The model's poles are ten degrees warm and its mid-latitudes four degrees cold.** On Earth's own
-  land fraction W1's energy balance reads 26.4 °C at the equator (Earth 26), −2.2 at 60° (Earth −2),
-  and −13.3 at the pole against a nominal −20; at 45° it reads 7.7 against Earth's 12. The global
-  mean and the two ends are within a degree, so what is off is the shape between them — a constant
-  diffusivity carries too little heat across the mid-latitudes, where Earth's transport peaks, and
-  too much into the polar cap. A diffusivity that varies with latitude is the literature's own fix
-  (North, Cahalan and Coakley 1981 discuss it) and is a small change to `EnergyBalance`; it was left
-  out of W1 because every guard passes without it and one fitted profile is enough for one chunk.
+- **The marine air swings a third too far, and the mixed layer has one depth all year.** W1's third
+  pass gave each sea band an air column over a fifty-metre slab, coupled by a bulk surface flux of
+  25 W/m2/K, and the water's own year came right: 6.9 C from warmest month to coldest at 50-60
+  degrees against Earth's 5-8. The air over it did not quite. It swings 13.0 C where Earth's
+  zonal-mean marine air swings 8-11, and the reason is structural rather than a constant: with a
+  bulk coefficient of 25 against the slab's own inertia the air can only hand the water about half
+  its amplitude, so the excess has nowhere to go but the air. Earth's air-sea difference over the
+  open ocean is about a degree all year, which is a coupling nearer 100 W/m2/K than 25 — the surface
+  flux is mostly radiative and evaporative and only weakly proportional to the temperature
+  difference, which a bulk formula linearised about one wind speed cannot say. The other half of it
+  is the fixed depth: a mixed layer that shoals to 25 m in summer and deepens past 200 in winter
+  damps the winter far more than the summer, and a single depth cannot. Both belong to whoever next
+  opens the ocean's side of the energy balance; neither is worth a fitted fudge. 2026-09-13, W1.
+- **The mid-latitude ocean is a degree or two cold and the pole two or three warm.** W1's third pass
+  split the diffusivity into a Hadley cosine-squared and a storm-track Gaussian at 50 degrees, which
+  moved the 45-60 band from 3-4 C below the reanalysis to within 1-2 and put the pole at -15.6
+  against a nominal -20 and an ice edge at 60.4 N against Earth's 60. What is left is small and
+  consistent: 11.2 C at 45 against about 12.5, 8.3 at 50 against 10, 5.0 at 55 against 7.5, and
+  -13.1/-12.7 over land and sea at 80 against -15/-16. The shape between the storm track and the
+  pole is the part still being carried by one Gaussian and one floor, and a transport read off the
+  observed eddy flux rather than fitted to five latitudes would settle it. 2026-09-13, W1.
 - **A band has no internal geography.** `EnergyBalance` gives each latitude a land column and a sea
   column but nothing tells it that a band's land is an island in its sea, so a band that is one per
   cent island carries a fully continental land column. The map is saved from that by the marine

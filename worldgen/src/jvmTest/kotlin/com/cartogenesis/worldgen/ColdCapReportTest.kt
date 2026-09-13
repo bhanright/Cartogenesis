@@ -76,6 +76,10 @@ class ColdCapReportTest {
             var warmAnomalyForestCount = 0
             var warmAnomalyColdSum = 0.0
             var warmAnomalyWarmSum = 0.0
+            // How high the warm coast stands, and what the lapse rate therefore takes off it.
+            // Reported because a shoreline that stands half a kilometre up is a hypsometry
+            // finding rather than a climate one: see the M1 row on unimodal elevation.
+            var warmAnomalyMetresSum = 0.0
 
             coastCells.forEach { i ->
                 val biome = world.climate.biome[i]
@@ -112,6 +116,9 @@ class ColdCapReportTest {
                         anomalyWarmCount++
                         warmAnomalyColdSum += world.climate.winterTemperature.data[i]
                         warmAnomalyWarmSum += world.climate.summerTemperature.data[i]
+                        warmAnomalyMetresSum += world.config.scale.metresAboveShoreline(
+                            world.sea.relativeElevation.data[i]
+                        ).toDouble()
                         if (biome == Biome.TEMPERATE_FOREST || biome == Biome.TEMPERATE_RAINFOREST) {
                             warmAnomalyForestCount++
                         }
@@ -178,6 +185,10 @@ class ColdCapReportTest {
                 if (anomalyWarmCount > 0) warmAnomalyColdSum / anomalyWarmCount else 0.0
             val warmAnomalyWarmMean =
                 if (anomalyWarmCount > 0) warmAnomalyWarmSum / anomalyWarmCount else 0.0
+            val warmAnomalyMetresMean =
+                if (anomalyWarmCount > 0) warmAnomalyMetresSum / anomalyWarmCount else 0.0
+            val warmAnomalyLapseC =
+                warmAnomalyMetresMean / 1000.0 * world.config.climate.lapseRateCPerKm
             val interiorTaigaTundraShare =
                 if (interiorLand > 0) interiorTaigaTundra * 100.0 / interiorLand else 0.0
 
@@ -192,7 +203,9 @@ class ColdCapReportTest {
                     "warm coasts anom ${"%.1f".format(warmAnomalyMean)}°C ($anomalyWarmCount cells, " +
                     "coldest month avg ${"%.1f".format(warmAnomalyColdMean)}°C, warmest month avg " +
                     "${"%.1f".format(warmAnomalyWarmMean)}°C, ${"%.1f".format(warmCoastForestShare)}% " +
-                    "forest/rainforest); cold coasts ${"%.1f".format(coldAnomalyMean)}°C " +
+                    "forest/rainforest, standing ${"%.0f".format(warmAnomalyMetresMean)} m up which " +
+                    "the lapse rate takes ${"%.1f".format(warmAnomalyLapseC)}°C off); " +
+                    "cold coasts ${"%.1f".format(coldAnomalyMean)}°C " +
                     "($anomalyColdCount cells); interior taiga/tundra " +
                     "${"%.1f".format(interiorTaigaTundraShare)}% of $interiorLand cells"
             )

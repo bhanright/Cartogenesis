@@ -39,11 +39,11 @@ internal enum class PanelSection(val title: String) {
      * Not a section: the slim header above them all, which never rolls up.
      *
      * It holds the two things that are not settings of the world — which world (the seed and the
-     * name) and how finely it is computed — and, since this change, the one setting that is not
-     * about the world either: where the work runs. The graphics-acceleration switch spent F2 in [WORLD],
-     * directly under Ocean coverage, where it read as something to do with the sea. It decides
-     * which processor erodes the terrain, which is a fact about this machine, and it belongs with
-     * the resolution it is the other half of.
+     * name) and how finely it is computed — and the one setting that is not about the world
+     * either: where the work runs. The graphics-acceleration switch does not belong in [WORLD],
+     * under Ocean coverage, where it reads as something to do with the sea. It decides which
+     * processor erodes the terrain, which is a fact about this machine, and it belongs with the
+     * resolution it is the other half of.
      */
     HEADER("Header"),
 
@@ -65,9 +65,9 @@ internal enum class PanelSection(val title: String) {
     /**
      * Nothing about the world; everything about the drawing of it.
      *
-     * Style and view used to be here, as two stacked columns of chips twenty-four rows long. F3
-     * lifts both onto the map, where what they do can be seen — see [MapChrome]. What is left is
-     * the pair of marks that are about the drawing and not about the world.
+     * Style and view are not here. They are on the map, where what they do can be seen — see
+     * [MapChrome] — rather than in two stacked columns of chips twenty-four rows long. What is
+     * left is the handful of marks that are about the drawing and not about the world.
      */
     CARTOGRAPHY("Cartography"),
 
@@ -179,9 +179,28 @@ internal class Mark(
     fun set(options: RenderOptions, value: Boolean): RenderOptions = write(options, value)
 }
 
-/** Prints a value against its own default, for settings whose raw units mean nothing. */
+/**
+ * Prints a value against its own default, for settings whose raw units mean nothing.
+ *
+ * 100% is therefore the world the generator makes when the dial is left alone, which is a thing a
+ * reader can act on where "0.52" and "1e-6" are not.
+ */
 private fun relativeTo(default: Float): (Float) -> String =
     { "${(it / default * 100f).roundToInt()}%" }
+
+/**
+ * The three defaults the dials below are shown against, copied from the generator's own config so
+ * that 100% on the panel is the world `WorldGenConfig()` describes.
+ *
+ * Literals rather than reads of `TectonicsConfig()` and friends, because a `show` lambda runs on
+ * every recomposition and building three config objects to print three percentages would be
+ * paying for the tidiness in frames. `PanelKnobsTest` asserts that each dial reads exactly 100%
+ * at its config's own default, so a default that moves in the generator fails there rather than
+ * quietly mislabelling the panel.
+ */
+private const val DEFAULT_ANDEAN_HEIGHT = 0.52f
+private const val DEFAULT_BEDROCK_ERODIBILITY_PER_YEAR = 1e-6f
+private const val DEFAULT_OROGRAPHIC_STRENGTH = 2.0f
 
 /**
  * Every knob on the panel and in the atlas, in the order they are drawn.
@@ -211,18 +230,18 @@ internal object Knobs {
         range = 0.05f..0.95f,
         show = { "${(it * 100).roundToInt()}%" },
         read = { it.seaLevel },
-        write = { config, v -> config.copy(seaLevel = v) }
+        write = { config, coverage -> config.copy(seaLevel = coverage) }
     )
 
     /**
      * Where erosion runs. In the header, directly under the working resolution, which is the other
      * half of the same question: how finely the world is computed, and by what.
      *
-     * It has moved twice. Before F2 it sat beside the export buttons under "Acceleration", which
-     * implied it was something about the picture; F2 filed it in World, where it fell under Ocean
-     * coverage and read as if it applied to the sea. It is not a setting of the world at all — the
-     * world is the same world either way — it is a fact about this machine, and on a large one it
-     * is most of the difference between a minute and a quarter of an hour.
+     * Not beside the export buttons, which would imply it is something about the picture, and not
+     * in World, where it would fall under Ocean coverage and read as if it applied to the sea. It
+     * is not a setting of the world at all — the world is the same world either way — it is a fact
+     * about this machine, and on a large one it is most of the difference between a minute and a
+     * quarter of an hour.
      */
     val graphicsAcceleration = Latch(
         section = PanelSection.HEADER,
@@ -246,14 +265,16 @@ internal object Knobs {
         label = "Plates",
         range = 3..40,
         read = { it.tectonics.plateCount },
-        write = { config, n -> config.copy(tectonics = config.tectonics.copy(plateCount = n)) }
+        write = { config, plateCount ->
+            config.copy(tectonics = config.tectonics.copy(plateCount = plateCount))
+        }
     )
 
     /**
      * The crest height of a coastal range, and not [com.cartogenesis.worldgen.model.
      * TectonicsConfig.mountainHeight], which is the obvious-looking field and the wrong one.
-     * With crust-pair profiles on — the default since B2 — `mountainHeight` feeds only ocean
-     * ridges and transform faults, both of them under water; the mountains anyone can see on the
+     * With crust-pair profiles on, which is the default, `mountainHeight` feeds only ocean ridges
+     * and transform faults, both of them under water; the mountains anyone can see on the
      * map are the Andean margins, which are the commonest convergent boundary a world gets, and
      * this is their height. 0.20 gives a coast with hills on it; 0.90 gives a wall.
      */
@@ -261,9 +282,11 @@ internal object Knobs {
         section = PanelSection.TERRAIN,
         label = "Mountain height",
         range = 0.20f..0.90f,
-        show = relativeTo(0.52f),
+        show = relativeTo(DEFAULT_ANDEAN_HEIGHT),
         read = { it.tectonics.andeanHeight },
-        write = { config, v -> config.copy(tectonics = config.tectonics.copy(andeanHeight = v)) }
+        write = { config, height ->
+            config.copy(tectonics = config.tectonics.copy(andeanHeight = height))
+        }
     )
 
     /**
@@ -277,10 +300,12 @@ internal object Knobs {
         section = PanelSection.TERRAIN,
         label = "Erosion strength",
         range = 2e-7f..2e-6f,
-        show = relativeTo(1e-6f),
+        show = relativeTo(DEFAULT_BEDROCK_ERODIBILITY_PER_YEAR),
         read = { it.erosion.bedrockErodibilityPerYear },
-        write = { config, v ->
-            config.copy(erosion = config.erosion.copy(bedrockErodibilityPerYear = v))
+        write = { config, erodibilityPerYear ->
+            config.copy(
+                erosion = config.erosion.copy(bedrockErodibilityPerYear = erodibilityPerYear)
+            )
         }
     )
 
@@ -295,7 +320,9 @@ internal object Knobs {
         range = 0f..25f,
         show = { "${it.roundToInt()}°" },
         read = { it.climate.seasonalTiltDegrees },
-        write = { config, v -> config.copy(climate = config.climate.copy(seasonalTiltDegrees = v)) }
+        write = { config, degrees ->
+            config.copy(climate = config.climate.copy(seasonalTiltDegrees = degrees))
+        }
     )
 
     /**
@@ -310,9 +337,11 @@ internal object Knobs {
         section = PanelSection.CLIMATE,
         label = "Rain shadow",
         range = 0f..5f,
-        show = relativeTo(2.0f),
+        show = relativeTo(DEFAULT_OROGRAPHIC_STRENGTH),
         read = { it.climate.orographicStrength },
-        write = { config, v -> config.copy(climate = config.climate.copy(orographicStrength = v)) }
+        write = { config, strength ->
+            config.copy(climate = config.climate.copy(orographicStrength = strength))
+        }
     )
 
     val ice = Latch(
@@ -353,7 +382,9 @@ internal object Knobs {
         label = "Realms",
         range = 0..40,
         read = { it.nations.nationCount },
-        write = { config, n -> config.copy(nations = config.nations.copy(nationCount = n)) }
+        write = { config, realmCount ->
+            config.copy(nations = config.nations.copy(nationCount = realmCount))
+        }
     )
 
     /**
@@ -445,8 +476,8 @@ internal object Knobs {
         range = 0f..200f,
         show = { it.roundToInt().toString() },
         read = { it.landmarks.count.toFloat() },
-        write = { config, v ->
-            config.copy(landmarks = config.landmarks.copy(count = v.roundToInt()))
+        write = { config, count ->
+            config.copy(landmarks = config.landmarks.copy(count = count.roundToInt()))
         }
     )
 
@@ -493,7 +524,7 @@ internal object Exports {
     /** The picture formats, in the order the chips sit: lossless, small, compatible. */
     val PICTURES: List<ExportFormat> = ExportFormat.entries
 
-    /** The data layers, which are the second kind of export F12 added. */
+    /** The data layers: the second kind of export, beside the pictures. */
     val LAYERS: List<DataLayer> = DataLayer.entries
 
     fun reachable(size: Int, ceiling: Int): Boolean = size <= ceiling
@@ -553,9 +584,9 @@ internal sealed interface ExportChoice {
  * They are not knobs, and forcing them into [Knob] would have been a lie — a knob is a row in a
  * section, and these are a segmented control and a menu over the chart itself. But the same
  * argument that made the panel data applies to them: [PanelKnobsTest] has to be able to ask "can
- * the interface still set the style?" without driving a composition, and the guard F2 wrote must
- * not go quiet merely because the control it was watching moved. So the toolbar is declared here
- * too, and `MapChrome` draws exactly this.
+ * the interface still set the style?" without driving a composition, and that guard must not go
+ * quiet merely because the control it is watching has moved. So the toolbar is declared here too,
+ * and `MapChrome` draws exactly this.
  *
  * Both writers are `RenderOptions.copy`, so neither ever regenerates a world: changing the style
  * or the view re-renders the picture the world already is.

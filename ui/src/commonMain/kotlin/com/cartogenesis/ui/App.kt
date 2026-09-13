@@ -1245,7 +1245,7 @@ private fun MapView(
                             // Scrolling down is positive, and should zoom out.
                             camera.about(
                                 change.position,
-                                if (scrolled < 0f) MapCamera.STEP else 1f / MapCamera.STEP
+                                if (scrolled < 0f) MapCamera.ZOOM_STEP else 1f / MapCamera.ZOOM_STEP
                             )
                             change.consume()
                         }

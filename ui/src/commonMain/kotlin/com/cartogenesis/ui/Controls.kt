@@ -105,12 +105,15 @@ internal fun Slider(
             Box(
                 Modifier.size(targets.sliderThumb)
                     .background(accent, CircleShape)
-                    .border(1.dp, scheme.onSurface.copy(alpha = 0.45f), CircleShape)
+                    .border(1.dp, scheme.onSurface.copy(alpha = THUMB_RING_ALPHA), CircleShape)
             )
         },
         track = { state ->
-            Box(Modifier.fillMaxWidth().height(2.dp), contentAlignment = Alignment.CenterStart) {
-                Box(Modifier.fillMaxSize().background(rail.copy(alpha = 0.5f)))
+            Box(
+                Modifier.fillMaxWidth().height(RAIL_HEIGHT),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Box(Modifier.fillMaxSize().background(rail.copy(alpha = UNFILLED_RAIL_ALPHA)))
                 Box(
                     Modifier.fillMaxWidth(state.coercedValueAsFraction)
                         .fillMaxHeight()
@@ -120,6 +123,20 @@ internal fun Slider(
         }
     )
 }
+
+/** The rail a slider's thumb runs along: a hairline, not Material's rounded bar. */
+private val RAIL_HEIGHT = 2.dp
+
+/**
+ * The ink ring round the thumb, as a share of the scheme's own text colour.
+ *
+ * Enough to read the bead against the paper it sits on, not so much that a row of sliders is a row
+ * of full-strength dots: the thumb is the accent and the ring is only its edge.
+ */
+private const val THUMB_RING_ALPHA = 0.45f
+
+/** The part of the rail the value has not reached, at half the outline's strength. */
+private const val UNFILLED_RAIL_ALPHA = 0.5f
 
 /**
  * A ruled slot with an inked bead in it, at either end.
@@ -189,7 +206,8 @@ internal fun Button(
         colors = ButtonDefaults.buttonColors(
             containerColor = scheme.primaryContainer,
             // The accent, unless the chrome has made this button a block rather than a stain —
-            // three of F7's four have, and then the label is the ground. See [ChromeDetail.label].
+            // Matrix, Hessian and Hitchcock have, and then the label is the ground. See
+            // [ChromeDetail.label].
             contentColor = detail.label(scheme),
             disabledContainerColor = Color.Transparent,
             disabledContentColor = scheme.outline
@@ -344,11 +362,11 @@ internal fun HorizontalDivider(modifier: Modifier = Modifier) {
 /**
  * The rule under a section heading, drawn the way this chrome rules a section.
  *
- * The panel has six headings and every one of them used to draw a [HorizontalDivider] at the call
- * site. Two of F6's chromes want something else there — Hallowed's hairline doubled in gold leaf,
- * Baroque's double hairline with a lozenge centred on each end, which is the rule the author's site
- * draws in CSS — and the point of putting the choice in [ChromeDetail] is that the six call sites
- * do not change and cannot disagree. A chrome that says nothing gets the hairline it always had.
+ * The panel has six headings, and a divider written at each of the six call sites could not carry
+ * what some chromes want there — Hallowed's hairline doubled in gold leaf, Baroque's double
+ * hairline with a lozenge centred on each end, which is the rule the author's site draws in CSS.
+ * The point of putting the choice in [ChromeDetail] is that the six call sites do not change and
+ * cannot disagree. A chrome that says nothing gets the plain hairline.
  */
 @Composable
 internal fun SectionRule(modifier: Modifier = Modifier) {
@@ -381,19 +399,21 @@ private fun DrawScope.doubled(ink: Color, diamonds: Boolean) {
     val gap = 3.dp.toPx()
     val top = (size.height - (gap + weight)) / 2f
     // A lozenge is as tall as the pair of rules is deep, so the ornament reads as one object
-    // rather than as two lines with something stuck on the end.
-    val half = if (diamonds) (gap + weight) else 0f
-    drawRect(ink, Offset(half, top), Size(size.width - half * 2, weight))
-    drawRect(ink, Offset(half, top + gap), Size(size.width - half * 2, weight))
+    // rather than as two lines with something stuck on the end — and the rules are inset by the
+    // same amount, so they meet its points instead of running through it.
+    val lozengeRadius = if (diamonds) (gap + weight) else 0f
+    val ruleWidth = size.width - lozengeRadius * 2
+    drawRect(ink, Offset(lozengeRadius, top), Size(ruleWidth, weight))
+    drawRect(ink, Offset(lozengeRadius, top + gap), Size(ruleWidth, weight))
     if (!diamonds) return
     val middle = top + gap / 2f + weight / 2f
-    listOf(half, size.width - half).forEach { x ->
+    listOf(lozengeRadius, size.width - lozengeRadius).forEach { centreX ->
         drawPath(
             Path().apply {
-                moveTo(x, middle - half)
-                lineTo(x + half, middle)
-                lineTo(x, middle + half)
-                lineTo(x - half, middle)
+                moveTo(centreX, middle - lozengeRadius)
+                lineTo(centreX + lozengeRadius, middle)
+                lineTo(centreX, middle + lozengeRadius)
+                lineTo(centreX - lozengeRadius, middle)
                 close()
             },
             ink
@@ -433,24 +453,24 @@ private fun DrawScope.runningStitch(ink: Color) {
  */
 private fun DrawScope.meander(ink: Color) {
     val weight = 1.dp.toPx()
-    val unit = 12.dp.toPx()
-    val step = 3.dp.toPx()
+    val unitWidth = 12.dp.toPx()
+    val inset = 3.dp.toPx()
     val base = size.height - weight / 2f
     val top = weight / 2f
     drawLine(ink, Offset(0f, base), Offset(size.width, base), weight)
     val key = Path()
-    var x = 0f
-    while (x < size.width) {
+    var unitLeft = 0f
+    while (unitLeft < size.width) {
         // Up from the rail, across the top, down the far side, back along the middle and up into
         // the centre: one turn of the spiral, which is the whole of the classical single meander.
-        key.moveTo(x + weight / 2f, base)
-        key.lineTo(x + weight / 2f, top)
-        key.lineTo(x + unit - step, top)
-        key.lineTo(x + unit - step, base - step)
-        key.lineTo(x + step, base - step)
-        key.lineTo(x + step, top + step)
-        key.lineTo(x + unit - 2f * step, top + step)
-        x += unit
+        key.moveTo(unitLeft + weight / 2f, base)
+        key.lineTo(unitLeft + weight / 2f, top)
+        key.lineTo(unitLeft + unitWidth - inset, top)
+        key.lineTo(unitLeft + unitWidth - inset, base - inset)
+        key.lineTo(unitLeft + inset, base - inset)
+        key.lineTo(unitLeft + inset, top + inset)
+        key.lineTo(unitLeft + unitWidth - 2f * inset, top + inset)
+        unitLeft += unitWidth
     }
     drawPath(key, ink, style = Stroke(width = weight))
 }
@@ -465,14 +485,14 @@ private fun DrawScope.meander(ink: Color) {
 private fun DrawScope.cutBar(ink: Color) {
     val weight = 2.dp.toPx()
     val gap = 3.dp.toPx()
-    val widths = listOf(0.42f, 0.33f, 0.25f)
-    val offsets = listOf(1.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
-    val span = size.width - gap * (widths.size - 1)
-    var x = 0f
-    widths.forEachIndexed { index, share ->
-        val w = span * share
-        drawRect(ink, Offset(x, offsets[index]), Size(w, weight))
-        x += w + gap
+    val shares = listOf(0.42f, 0.33f, 0.25f)
+    val topOffsets = listOf(1.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
+    val span = size.width - gap * (shares.size - 1)
+    var left = 0f
+    shares.forEachIndexed { index, share ->
+        val pieceWidth = span * share
+        drawRect(ink, Offset(left, topOffsets[index]), Size(pieceWidth, weight))
+        left += pieceWidth + gap
     }
 }
 
@@ -493,13 +513,18 @@ internal fun Modifier.chromeWeave(): Modifier {
         val step = 6.dp.toPx()
         val weight = 1.dp.toPx()
         // Two families at ±45°, drawn as intercepts stepped along the top edge: a line of slope +1
-        // through (c, 0) leaves the box at (c + height, height), and its mirror at (c - height,
-        // height). Starting a screen-height to the left of the origin is what fills the corners.
-        var c = -size.height
-        while (c <= size.width + size.height) {
-            drawLine(ink, Offset(c, 0f), Offset(c + size.height, size.height), weight)
-            drawLine(ink, Offset(c, 0f), Offset(c - size.height, size.height), weight)
-            c += step
+        // through (intercept, 0) leaves the box at (intercept + height, height), and its mirror at
+        // (intercept - height, height). Starting a screen-height to the left of the origin is what
+        // fills the corners.
+        var intercept = -size.height
+        while (intercept <= size.width + size.height) {
+            drawLine(
+                ink, Offset(intercept, 0f), Offset(intercept + size.height, size.height), weight
+            )
+            drawLine(
+                ink, Offset(intercept, 0f), Offset(intercept - size.height, size.height), weight
+            )
+            intercept += step
         }
     }
 }

@@ -458,16 +458,16 @@ class PanelKnobsTest {
     @Test
     fun `the zoom buttons step and clamp, and Fit returns to the whole sheet`() {
         val camera = MapCamera()
-        assertEquals(100, camera.percent)
+        assertEquals(100, camera.zoomPercent)
 
-        camera.step(MapCamera.STEP)
-        assertEquals(115, camera.percent)
-        camera.step(1f / MapCamera.STEP)
-        assertEquals(100, camera.percent)
+        camera.step(MapCamera.ZOOM_STEP)
+        assertEquals(115, camera.zoomPercent)
+        camera.step(1f / MapCamera.ZOOM_STEP)
+        assertEquals(100, camera.zoomPercent)
 
-        repeat(100) { camera.step(MapCamera.STEP) }
+        repeat(100) { camera.step(MapCamera.ZOOM_STEP) }
         assertEquals(MapCamera.MAX_ZOOM, camera.zoom)
-        repeat(200) { camera.step(1f / MapCamera.STEP) }
+        repeat(200) { camera.step(1f / MapCamera.ZOOM_STEP) }
         assertEquals(MapCamera.MIN_ZOOM, camera.zoom)
 
         camera.about(Offset(120f, 80f), 2f)
@@ -745,6 +745,25 @@ class PanelKnobsTest {
         assertTrue(TouchTargets.TOUCH.sliderHeight > TouchTargets.POINTER.sliderHeight)
         assertTrue(TouchTargets.TOUCH.sliderThumb > TouchTargets.POINTER.sliderThumb)
         assertTrue(TouchTargets.TOUCH.minTarget >= 48.dp)
+    }
+
+    /**
+     * The three dials printed as a percentage are printed against the generator's own defaults.
+     *
+     * Those defaults are copied into `PanelKnobs.kt` so that a `show` lambda need not build a
+     * config on every recomposition, and a copy is a thing that goes stale. 100% has to mean "the
+     * world the generator makes when left alone" or the percentage is worse than the raw number
+     * it replaced.
+     */
+    @Test
+    fun `a dial shown as a percentage reads 100 at the generator's own default`() {
+        val defaults = WorldGenConfig()
+        assertEquals("100%", Knobs.mountainHeight.show(defaults.tectonics.andeanHeight))
+        assertEquals(
+            "100%",
+            Knobs.erosionStrength.show(defaults.erosion.bedrockErodibilityPerYear)
+        )
+        assertEquals("100%", Knobs.rainShadow.show(defaults.climate.orographicStrength))
     }
 
     /** Zooming about a point has to leave that point where it was, or the map slides away. */

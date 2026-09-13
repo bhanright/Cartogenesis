@@ -94,6 +94,12 @@ class PenAndInkTest {
          * twice for that chunk, once for each of its two passes; how far the coastline actually
          * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
          *
+         * And all eleven again at F18, from the other end once more: the water is routed by the
+         * steepest triangular facet rather than the steepest of eight neighbours, so twelve rounds
+         * of erosion cut different rock and every style is drawing a different land. What moved is
+         * the world, not the drawing — nothing in this file's own arithmetic changed — and how far
+         * the rivers actually moved is measured rather than hashed, in `StraightRunAuditTest`.
+         *
          * F14 and F17 were merged after both were written and all eleven were checked again: not
          * one moved. That is worth a line, because it is the answer to the question the two chunks
          * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
@@ -101,17 +107,17 @@ class PenAndInkTest {
          * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -173307292,
-            MapStyle.VELLUM to -23465626,
-            MapStyle.INK_WASH to 323555479,
-            MapStyle.NAUTICAL to -965577701,
-            MapStyle.MIDNIGHT to 580634097,
-            MapStyle.SCHOOLROOM to 328982709,
-            MapStyle.VERDANT to -2116422614,
-            MapStyle.SCROLL to -1448446961,
-            MapStyle.PEN_AND_INK to 1950662391,
-            MapStyle.MARS to -1005799490,
-            MapStyle.CLEAR to -361190112
+            MapStyle.ATLAS to -532891877,
+            MapStyle.VELLUM to 2101281011,
+            MapStyle.INK_WASH to 901656960,
+            MapStyle.NAUTICAL to -323183727,
+            MapStyle.MIDNIGHT to -1821588218,
+            MapStyle.SCHOOLROOM to 140125851,
+            MapStyle.VERDANT to -58779010,
+            MapStyle.SCROLL to 1629693738,
+            MapStyle.PEN_AND_INK to -1527137189,
+            MapStyle.MARS to -658279499,
+            MapStyle.CLEAR to -341816426
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

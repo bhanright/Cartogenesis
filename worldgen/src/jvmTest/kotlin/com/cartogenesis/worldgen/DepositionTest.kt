@@ -151,10 +151,10 @@ class DepositionTest {
      * drawn across it, rather than snapped to the steepest of the eight neighbours. Different rock
      * under the same percentile is a different set of cells below it. On the merge base the land
      * moved from 6327 to 6345; over F17's littoral coast, which had already taken it to 6464, the
-     * two together take it to 6488. The cut itself has not moved either time — exactly 62%
+     * two together take it to 6488, and F22's sill repair to the figure below. The cut itself has not moved either time — exactly 62%
      * of the cells still lie below it — and the structural cases are untouched.
      */
-    private val startingPointLand = 6488
+    private val startingPointLand = 6403
 
     @Test
     fun `every round conserves mass`() {

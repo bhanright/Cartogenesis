@@ -45,6 +45,9 @@ class StraightRunRenderTest {
         /** Where F15 found the bar on 298405 at 1024: 53 cells centred here. */
         const val BAR_X = 503
         const val BAR_Y = 866
+
+        /** Seed 99 at the size its stuck basin was measured on. */
+        const val STUCK_SIDE = 512
     }
 
     private fun authorsWorld(side: Int, byFacet: Boolean): WorldMap =
@@ -103,6 +106,92 @@ class StraightRunRenderTest {
 
         written.forEach { println("F18 CROP $it") }
         assertTrue(written.size == 8, "expected eight pictures, wrote ${written.size}")
+    }
+
+    /**
+     * F22: the drowned basins whose sills lay level to the water, before and after they could cut.
+     *
+     * The notch measured its channel's fall to the last cell of land, one step short of the water
+     * the outflow empties into, so a sill that ran level to the shore read as having no gradient
+     * and never cut. What that looks like is a basin of standing water below the shoreline that no
+     * river drains — seed 99 keeps one of 668 cells, 2.64 times the Caspian's share of its land —
+     * and what it looks like afterwards is country.
+     *
+     * The two seeds that carry such a sill, each at the size its basin is worth looking at, with
+     * the window chosen on the *before* world so the pair frames the same ground.
+     */
+    @Test
+    fun `the sills that could not cut, before and after`() {
+        val dir = File("build/f18-crops").apply { mkdirs() }
+        val written = ArrayList<String>()
+        val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
+
+        listOf(
+            Triple(SiteImagery.SEED, EXPORT_SIDE, "lake-country"),
+            Triple(99L, STUCK_SIDE, "outlet")
+        ).forEach { (seed, side, what) ->
+            var window: Pair<Int, Int>? = null
+            listOf(false to "before", true to "after").forEach { (cutTheSill, which) ->
+                val world = worldWithSill(seed, side, cutTheSill)
+                val sheet = MapImage.toBitmap(
+                    world, options, MapRasterizer.rasterize(world, options), MapSheet.SHEET
+                )
+                val at = window ?: wettestWindow(world, side).also { window = it }
+                written += write(dir, "$seed-$side-$what-$which-whole.png", sheet)
+                written += write(
+                    dir, "$seed-$side-$what-$which.png", crop(sheet, at.first, at.second, side)
+                )
+                sheet.close()
+            }
+        }
+
+        written.forEach { println("F22 CROP $it") }
+        assertTrue(written.size == 8, "expected eight pictures, wrote ${written.size}")
+    }
+
+    private fun worldWithSill(seed: Long, side: Int, cutTheSill: Boolean): WorldMap {
+        val base = if (seed == SiteImagery.SEED) {
+            WorldGenConfig(
+                seed = seed, width = 512, height = 512, seaLevel = SiteImagery.SEA_LEVEL
+            ).let {
+                it.copy(
+                    tectonics = it.tectonics.copy(plateCount = SiteImagery.PLATES),
+                    nations = it.nations.copy(nationCount = SiteImagery.REALMS)
+                )
+            }
+        } else {
+            WorldGenConfig(seed = seed, width = 512, height = 512)
+        }
+        val scaled = base.atResolution(side, side)
+        return WorldGenerationEngine.generateBlocking(
+            scaled.copy(erosion = scaled.erosion.copy(outletFallToTheWater = cutTheSill))
+        )
+    }
+
+    /** The [CROP]-square window holding the most standing water: where the stuck basins are. */
+    private fun wettestWindow(world: WorldMap, side: Int): Pair<Int, Int> {
+        val lake = world.rivers.lakes.lakeId
+        var most = 0
+        var at = (side - CROP) / 2 to (side - CROP) / 2
+        var top = 0
+        while (top <= side - CROP) {
+            var left = 0
+            while (left <= side - CROP) {
+                var wet = 0
+                for (row in top until top + CROP step 4) {
+                    for (column in left until left + CROP step 4) {
+                        if (lake[row * side + column] >= 0) wet++
+                    }
+                }
+                if (wet > most) {
+                    most = wet
+                    at = left to top
+                }
+                left += CROP / 4
+            }
+            top += CROP / 4
+        }
+        return at
     }
 
     /** The top-left corner of the [CROP]-square window with the most river in it. */

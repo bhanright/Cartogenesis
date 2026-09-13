@@ -51,25 +51,25 @@
   draws the one receiver across it at the bearing's own share (Rho8), so the course follows the same
   slope without being ruled. Census of straight bars 1/0/0/0/0 before, 0/0/0/0/0 after. See
   `StraightRunTest` and `GEOGRAPHY.md`.
-- **A sill that runs level to the shore reads as having no gradient, so it never cuts.** The outlet
-  notch measures its channel's fall by walking `directions` from the spill and taking
-  `level - relative[c]` at the last *land* cell, which stops one cell short of the water the
-  outflow empties into. Where the sill runs level all the way to that water — the case
-  `SeaConfig.postCutOutlet` exists for — the whole of its fall is in the step off the end, and what
-  is measured instead is the 1e-6 the depression fill nudges a flat by: a gradient of nothing, a
-  stream power of nothing, and a sill that stands for the life of the world however big the
-  catchment behind it. Seed 99 at 512 keeps a 668-cell drowned basin that way, 2.64x the Caspian's
-  share of its land, its outflow's measured fall 1.0e-6 against the 2.5e-2 it actually descends and
-  unmoved over all eight passes; seed 42 has a round in which the notch cuts nothing anywhere for
-  the same reason, which is `OutletIncisionTest`'s other failure. Counting the step into the water —
-  only where the walk found no fall beyond the fill's own epsilon, so it touches nothing that was
-  cutting — takes seed 99's basin to 0.12% of its land and clears both assertions. Not landed at
-  F18: unsticking those sills drains basins that had been stuck, which took seed 718106 at 512 from
-  44 lakes to 30 and tipped `GlaciationTest`'s resolution-scaling case instead. And 718106's own
-  drowned basin needs something else again — its outlet cuts properly, at slope 2.28 with real
-  power, and simply runs out of H5b's eight passes, 1849 cells down to 632 and still falling by a
-  hundred a pass. Both belong to a chunk that can re-derive `POST_CUT_PASSES` from H5b's own
-  criterion and restate the glaciation figures. Found by F18, 2026-09-13.
+- ~~**A sill that runs level to the shore reads as having no gradient, so it never cuts.**~~ Fixed
+  at F22 (2026-09-13). The walk that measures an outlet channel's fall stopped on the last cell of
+  land, one step short of the water it empties into, so where the sill ran level to the shore the
+  whole of its fall was in the step not taken and what was read instead was the 1e-6 the depression
+  fill nudges a flat by. The step into the water now counts, only where the walk found no fall the
+  fill did not put there. Largest drowned basin 0.361% of land to 0.083% on 718106 and 0.658% to
+  0.122% on 99, against the Caspian's 0.249%; seed 42's round that cut no notch cuts one.
+  `POST_CUT_PASSES` re-derived from the retreat it now has, eight to ten. See `OutletIncisionTest`
+  and `GEOGRAPHY.md`.
+- **The drainage's standing water grows with the grid, and nothing guards it where it belongs.**
+  `GlaciationTest`'s resolution clause used to assert that the lake share of land grows by less than
+  2.0 when the grid doubles, on seed 42, through a glacial mask. F22 stopped asserting it, because
+  the same quantity measured across seeds does not hold still: standing water above the sea-level
+  cut, as a share of land, grows by 2.29 on seed 42 between 512 and 1024, 2.32 on 7, 6.80 on 1234
+  and 0.41 on 99. One seed cannot carry a bar on a figure with a sixteen-fold spread. The clause it
+  replaced still catches the mesh it was written for by shape — trough depth, till, the comb, the
+  filaments — but the whole-map question it was also being asked, whether the drainage selects lakes
+  per cell or per unit of map, now has no guard at all. It belongs in `ResolutionScalingTest`,
+  pooled over several seeds rather than read off one. 2026-09-13.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm

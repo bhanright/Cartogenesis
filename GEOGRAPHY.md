@@ -347,6 +347,28 @@ relief to 0.010 across the twelve rounds, where with `outletIncision` off it end
 where it started. What the map keeps is bounded by a figure with a meaning — no world has a lake
 larger than the Caspian's 0.073% share of its surface, where two seeds in four did before.
 
+**And the outflow's gradient is measured to the water it empties into.** The walk that measures an
+outlet channel's fall stops on the last cell of land, one step short of the water below it. Where
+the sill runs level all the way to that water — which is precisely the case the post-cut outlet pass
+exists for, a basin below the shoreline behind a bar at the waterline — the whole of the fall is in
+the step the walk did not take, and what is read instead is the 1e-6 the depression fill nudges a
+flat by: not a small gradient but the absence of one, so no stream power, so a sill that stands for
+the life of the world however large the catchment behind it. Seed 99 at 512 kept a 668-cell basin
+that way, 2.64 times the Caspian's share of its land, its outflow's measured fall 1.0e-6 against the
+2.5e-2 it actually descends and unmoved over every pass it was given; seed 718106 kept one at 1.65
+times, and seed 42 had a hydraulic round in which the notch cut nothing anywhere. The step into the
+water now counts, and only where the walk found no fall the fill did not put there — one epsilon a
+step is the flood's own staircase on a flat — so an outlet that measured a real gradient keeps the
+answer it had. Re-rating every sill instead hands each coastal one the whole fall to sea level at
+once and empties basins that ought to hold their water: measured, that took seed 718106 from 44
+lakes to 12. Largest drowned basin, as a share of land: 0.361% to 0.083% on 718106 and 0.658% to
+0.122% on 99, against the Caspian's 0.249%. Every lake this drains is one below the sea-level cut —
+classified over six seeds, the ice's own lakes are untouched to the last one (718106 7 and 7, seed 7
+16 and 16, seed 99 9 and 9) and so are the lakes above the cut that the ice did not make, because
+glaciation runs after this pass and a glacially over-deepened basin has no outlet to cut. With the
+sill cutting, the retreat of the largest drowned basin takes ten passes rather than eight to stop:
+1849, 1196, 988, 839, 727, 605, 495, 391, 285, 157, then 138 and flat. See `OutletIncisionTest`.
+
 **A glacier is where the snow outlasts the year, not where it is cold.** Ice used to be simply
 "the mean annual temperature is at or below freezing", which made an ice sheet of every cold
 interior — 41.9% of seed 7's land, against the 10.1% of Earth's that carries glacier ice, nearly

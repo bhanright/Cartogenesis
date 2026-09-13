@@ -1041,6 +1041,20 @@ data class ErosionConfig(
      */
     val outletReach: Int = 64,
     /**
+     * Whether the notch's channel gradient counts the step into the water the outflow empties into.
+     *
+     * It has to, where the sill runs level all the way to that water: the walk that measures the
+     * fall stops on the last cell of land, so what it reads there is the epsilon the depression
+     * fill nudges a flat by, which is not a small gradient but the absence of one — no stream
+     * power, and a sill that stands for the life of the world however large the catchment behind
+     * it. Only where the walk found no fall the fill did not put there, so an outlet that measured
+     * a real gradient is untouched. See `HydraulicErosion.breach`.
+     *
+     * Off is the rule this replaced, kept as the control `OutletIncisionTest` measures against and
+     * the renders are drawn against; a guard that has only ever been green proves nothing.
+     */
+    val outletFallToTheWater: Boolean = true,
+    /**
      * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
      * its river, and made only of cells the load could lift clear of the water.
      *

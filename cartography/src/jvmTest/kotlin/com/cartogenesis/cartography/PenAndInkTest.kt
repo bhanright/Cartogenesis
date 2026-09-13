@@ -94,7 +94,13 @@ class PenAndInkTest {
          * twice for that chunk, once for each of its two passes; how far the coastline actually
          * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
          *
-         * And all eleven again at F18, from the other end once more: the water is routed by the
+         * And all eleven once more at F22, which is the world moving again rather than the drawing:
+         * the outlet notch no longer measures a sill lying level to the water as having no
+         * gradient, so basins that had stood undrained for the life of the world are opened and
+         * the coast around them is a different coast. On the gallery world it is a small change
+         * and every hash moved, which is what a hash does.
+         *
+         * And all eleven at F18, from the other end once more: the water is routed by the
          * steepest triangular facet rather than the steepest of eight neighbours, so twelve rounds
          * of erosion cut different rock and every style is drawing a different land. What moved is
          * the world, not the drawing — nothing in this file's own arithmetic changed — and how far
@@ -107,17 +113,17 @@ class PenAndInkTest {
          * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -532891877,
-            MapStyle.VELLUM to 2101281011,
-            MapStyle.INK_WASH to 901656960,
-            MapStyle.NAUTICAL to -323183727,
-            MapStyle.MIDNIGHT to -1821588218,
-            MapStyle.SCHOOLROOM to 140125851,
-            MapStyle.VERDANT to -58779010,
-            MapStyle.SCROLL to 1629693738,
-            MapStyle.PEN_AND_INK to -1527137189,
-            MapStyle.MARS to -658279499,
-            MapStyle.CLEAR to -341816426
+            MapStyle.ATLAS to -980125225,
+            MapStyle.VELLUM to 1913949796,
+            MapStyle.INK_WASH to 576177003,
+            MapStyle.NAUTICAL to -83741925,
+            MapStyle.MIDNIGHT to 1234410841,
+            MapStyle.SCHOOLROOM to -511879054,
+            MapStyle.VERDANT to 7506317,
+            MapStyle.SCROLL to 270812201,
+            MapStyle.PEN_AND_INK to 986838792,
+            MapStyle.MARS to -2108325037,
+            MapStyle.CLEAR to -267579735
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

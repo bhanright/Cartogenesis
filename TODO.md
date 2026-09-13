@@ -42,21 +42,34 @@
   would supply. Until then a world's depositional share is Earth's by construction rather than by
   measurement, and a world that genuinely had less low coast than Earth would not show it.
   2026-09-12.
-- **A lake can be a dead-straight diagonal bar.** On seed 298405 at 1024 one of the eight lakes —
-  53 cells at (509,860), every one of them within 1.2 cells of a single straight line — is drawn as
-  a rectangle laid on the diagonal with square ends, in a straight-walled trench beside it. It is
-  the artefact William called "this diagonal rectangle section of river" (F15). Diagnosed and not
-  fixed: it survives with the outlet incision off, with deposition off and with the post-cut outlet
-  off, at the same place and the same size each time, and disappears only with erosion switched off
-  altogether — so what cuts the trench is the ordinary stream-power incision, and what makes it
-  straight is D8 itself, which on ground smooth at the cell scale (here the apron below a range)
-  takes the same neighbour twenty cells running. The reach then ponds behind its own lip, the fill
-  raises it, and `findLakes` calls it standing water. Rare: a census of straight bars of 20 cells or
-  more finds 1 on 298405 at 1024, 0 on seeds 7 and 42 at 512, 1 on 1234 and 2 on 99. The repair is
-  to break D8's straight-line bias on smooth ground — `LakeWaterBalance.jitter` already does exactly
-  this inside an endorheic basin's re-routing, and the same idea in `FlowRouting.flowDirections`
-  would do it everywhere — but `FlowRouting` is shared with erosion, so it moves every world's
-  terrain and belongs in a chunk that can render and review the lot. 2026-09-12.
+- ~~**A lake can be a dead-straight diagonal bar.**~~ Fixed at F18 (2026-09-13). The cause was not a
+  tie among near-equal descents, as the jitter's case would have been: on the apron the trench
+  crossed, the drop to the winning diagonal was 1.9489e-02 and to the runner-up 1.5050e-02, the same
+  two figures to four digits at seven cells running. The plane simply faces 83% of the way from the
+  cardinal toward the diagonal, and rounding a bearing to one of eight makes that 100% every time.
+  `FlowRouting.flowDirections` now takes the direction from Tarboton's steepest triangular facet and
+  draws the one receiver across it at the bearing's own share (Rho8), so the course follows the same
+  slope without being ruled. Census of straight bars 1/0/0/0/0 before, 0/0/0/0/0 after. See
+  `StraightRunTest` and `GEOGRAPHY.md`.
+- ~~**A sill that runs level to the shore reads as having no gradient, so it never cuts.**~~ Fixed
+  at F22 (2026-09-13). The walk that measures an outlet channel's fall stopped on the last cell of
+  land, one step short of the water it empties into, so where the sill ran level to the shore the
+  whole of its fall was in the step not taken and what was read instead was the 1e-6 the depression
+  fill nudges a flat by. The step into the water now counts, only where the walk found no fall the
+  fill did not put there. Largest drowned basin 0.361% of land to 0.083% on 718106 and 0.658% to
+  0.122% on 99, against the Caspian's 0.249%; seed 42's round that cut no notch cuts one.
+  `POST_CUT_PASSES` re-derived from the retreat it now has, eight to ten. See `OutletIncisionTest`
+  and `GEOGRAPHY.md`.
+- **The drainage's standing water grows with the grid, and nothing guards it where it belongs.**
+  `GlaciationTest`'s resolution clause used to assert that the lake share of land grows by less than
+  2.0 when the grid doubles, on seed 42, through a glacial mask. F22 stopped asserting it, because
+  the same quantity measured across seeds does not hold still: standing water above the sea-level
+  cut, as a share of land, grows by 2.29 on seed 42 between 512 and 1024, 2.32 on 7, 6.80 on 1234
+  and 0.41 on 99. One seed cannot carry a bar on a figure with a sixteen-fold spread. The clause it
+  replaced still catches the mesh it was written for by shape — trough depth, till, the comb, the
+  filaments — but the whole-map question it was also being asked, whether the drainage selects lakes
+  per cell or per unit of map, now has no guard at all. It belongs in `ResolutionScalingTest`,
+  pooled over several seeds rather than read off one. 2026-09-13.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm

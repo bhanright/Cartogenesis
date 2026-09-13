@@ -161,7 +161,9 @@ object SeaLevelStage {
         // water into land, and neither will touch a cell whose filling would cut the water around it
         // in two, so no body of water can be enclosed by them. See [WaterTopology], and
         // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
-        val resolved = DrownedValleys.apply(drained, height, sea, resolvedShareOfCell)
+        val resolved = DrownedValleys.apply(
+            drained, height, sea, config.seed, config.facetRouting, resolvedShareOfCell
+        )
         val base = LittoralGrading.apply(
             resolved,
             sea,
@@ -327,20 +329,29 @@ object SeaLevelStage {
      * quickly — a sill standing high above the shoreline, which the outflow takes down by one
      * stream-power bite per pass exactly as a knickpoint retreats over successive floods.
      *
-     * Eight, from where the retreat stops rather than from where any guard turns green. Measured on
-     * seed 718106 at 512, the largest drowned basin's filled area over the passes runs 1883, 1195,
-     * 985, 838, 663, 515, 405, 366, 366 cells, its surface coming down from 0.227 of the land's
-     * relief above the shoreline to 0.018 — flat from the seventh, and a ninth moves neither
-     * figure. Seed 99's largest goes 1486 cells to 141 in a single pass, because its sill has the
-     * power to reach the waterline and the basin becomes an arm of the sea, and then to 88 and no
-     * further. Seed 43's does not move at all, because its outflow cannot cut its sill, which is
-     * the Caspian's own situation and the case this rule exists to leave alone.
+     * Ten, from where the retreat stops rather than from where any guard turns green.
      *
-     * Eight rather than the twelve rounds the notch gets inside the hydraulic pass, for a reason of
-     * cost and not of principle: each pass is a priority flood and a D8 route over the whole grid,
-     * and four more would buy nothing the curve above says is left to buy.
+     * H5b read the same criterion off the same seed and got eight, and the figure has been
+     * re-derived rather than inherited because the curve it was read from was the curve of a notch
+     * that could not cut a sill lying level to the water — see [HydraulicErosion.breach], which no
+     * longer measures such a sill as having no gradient. What the retreat looks like now, on seed
+     * 718106 at 512, the largest drowned basin's area at the start of each pass: 1849, 1196, 988,
+     * 839, 727, 605, 495, 391, 285, 157, then 138, 138, 138 — flat from the eleventh, so ten passes
+     * are what the retreat takes and an eleventh moves nothing. Under eight it is still at 391 and
+     * still falling by about a hundred a pass, which is a basin left mid-drain rather than one the
+     * water cannot open.
+     *
+     * The other five seeds are flat long before that — 7 by the fourth pass at 11 cells, 42 by the
+     * third at 23, 1234 by the second at 7, 99 by the third at 124, 43 by the third at 7 — so ten
+     * is set by the one seed that needs it and costs the rest nothing but the passes. Seed 43's
+     * hardly moves at all, because its outflow cannot cut its sill, which is the Caspian's own
+     * situation and the case this rule exists to leave alone.
+     *
+     * Ten rather than the twelve rounds the notch gets inside the hydraulic pass, and the reason is
+     * still cost rather than principle: each pass is a priority flood and a D8 route over the whole
+     * grid, and two more would buy nothing the curve above says is left to buy.
      */
-    private const val POST_CUT_PASSES = 8
+    private const val POST_CUT_PASSES = 10
 
     /**
      * Cuts the outlet of every basin the enclosure rule just made, on the far side of the cut.
@@ -416,7 +427,9 @@ object SeaLevelStage {
             val relative = current.relativeElevation.copy()
             val isLand = current.isLand
             val filled = FlowRouting.fillDepressions(w, h, isLand, relative)
-            val directions = FlowRouting.flowDirections(w, h, isLand, relative, filled)
+            val directions = FlowRouting.flowDirections(
+                w, h, isLand, relative, filled, config.seed, config.facetRouting
+            )
             val area = FlowRouting.accumulate(
                 w, h, isLand, filled, directions, current.landCellCount
             ) { 1f }

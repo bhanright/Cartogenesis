@@ -90,7 +90,10 @@ val auditOnlyClasses = listOf(
     // against the raster. Nothing per-merge depends on any of it.
     "com.cartogenesis.desktop.GeneralisationRenderTest",
     // F17's before-and-after pictures: four worlds, one of them at 2048, and twenty renders.
-    "com.cartogenesis.desktop.LittoralCoastRenderTest"
+    "com.cartogenesis.desktop.LittoralCoastRenderTest",
+    // F18's crops: two worlds drawn under each routing rule, one pair of them at 2048, so the
+    // rivers can be compared by eye. Nothing per-merge depends on any of it.
+    "com.cartogenesis.desktop.StraightRunRenderTest"
 )
 
 /**

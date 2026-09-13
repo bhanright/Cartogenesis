@@ -549,10 +549,10 @@ private val SCALE_BAR_HEIGHT = 7.dp
 /**
  * The frame round the title block, as this chrome frames one.
  *
- * Four of the sixteen chromes ask for something and twelve ask for nothing, and the twelve get the
- * modifier back untouched — no border, no padding, no draw node — which is what keeps their legends
- * pixel-identical. The stitched and doubled forms are drawn rather than bordered because
- * `Modifier.border` takes one stroke and neither of those is one stroke.
+ * Four of the seventeen chromes ask for something and thirteen ask for nothing, and the thirteen
+ * get the modifier back untouched — no border, no padding, no draw node — which is what keeps
+ * their legends pixel-identical. The stitched and doubled forms are drawn rather than bordered
+ * because `Modifier.border` takes one stroke and neither of those is one stroke.
  */
 private fun Modifier.cartoucheFrame(shape: CartoucheStyle): Modifier = when (shape) {
     CartoucheStyle.PLAIN, CartoucheStyle.SPIRAL -> this

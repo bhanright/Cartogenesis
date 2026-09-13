@@ -24,7 +24,7 @@ import kotlin.test.fail
  * variable cannot be added to the page without a pair being measured for it here.
  *
  * The arithmetic is [ColorVision.contrast], the same function `ChromeContrastTest` holds the
- * fifteen window chromes to, so the site and the application cannot come to mean different things
+ * window chromes to, so the site and the application cannot come to mean different things
  * by the same number.
  */
 class SitePaletteContrastTest {

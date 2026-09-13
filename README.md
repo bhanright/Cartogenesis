@@ -505,17 +505,19 @@ Settings persist through the `Platform` seam as one JSON document (`%APPDATA%\Ca
 on Windows, browser local storage on the web), and a file from a different build, or a hand-edited
 typo, opens anyway rather than refusing to start.
 
-There are sixteen chromes on three shelves. **Standard**: System, Light, Dark. **Accessible**: *High
-contrast* (pure black and white, every text pair past WCAG AAA) and *Colorblind* (Okabe-Ito orange
-and sky blue, with a shape cue wherever a state would otherwise be told by hue alone). **Styled**,
-eleven rooms: *Nautical*, *Midnight* and *Mars* (from the map styles of those names), *Allied* (1940s
-Army Map Service buff and olive drab), *Hallowed* (an illuminated manuscript in lapis and vellum
-with gold-leaf rules), *Baroque* (gilt and walnut, italic headings), *Matrix* (a phosphor terminal in
-IBM Plex Mono), *Hessian* (burlap and linen with a woven crosshatch), *Roman* (Pompeian red and
-marble with a Greek key), *Hitchcock* (Saul Bass's charcoal and vermilion, with Vertigo's spiral
-in the cartouche) and *Lemon Blueberry* (a deep blue-violet room written in lemon, whose alarm is
-the pink the blueberry pigment turns when a lemon is squeezed into it). Every text pair in all
-sixteen is measured, not just claimed: AAA for High contrast, AA for the rest.
+There are seventeen chromes on three shelves. **Standard**: System, Light, Dark. **Accessible**:
+*High contrast* (pure black and white, every text pair past WCAG AAA) and *Colorblind* (Okabe-Ito
+orange and sky blue, with a shape cue wherever a state would otherwise be told by hue alone).
+**Styled**, twelve rooms: *Nautical*, *Midnight* and *Mars* (from the map styles of those names),
+*Allied* (1940s Army Map Service buff and olive drab), *Hallowed* (an illuminated manuscript in
+lapis and vellum with gold-leaf rules), *Baroque* (gilt and walnut, italic headings), *Matrix* (a
+phosphor terminal in IBM Plex Mono), *Hessian* (burlap and linen with a woven crosshatch), *Roman*
+(Pompeian red and marble with a Greek key), *Hitchcock* (Saul Bass's charcoal and vermilion, with
+Vertigo's spiral in the cartouche), *Lemon Blueberry* (a deep blue-violet room written in lemon,
+whose alarm is the pink the blueberry pigment turns when a lemon is squeezed into it) and
+*Blacklight* (a highlighter lime glowing on a deep violet, two colours and two hues and nothing
+else, whose alarm is the orange the same lamp fires in a different dye). Every text pair in all
+seventeen is measured, not just claimed: AAA for High contrast, AA for the rest.
 
 **Check for updates** compares GitHub's `releases/latest` tag against this build's own version
 (generated from `gradle.properties`); it is off by default and only ever runs from the menu, so

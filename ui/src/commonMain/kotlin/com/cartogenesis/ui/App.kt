@@ -624,14 +624,14 @@ private fun Application(
      * laid inside a `Surface`, and a `Surface` is what otherwise says what ink its paper takes. So
      * `LocalContentColor` here was Material's own default — plain black — and the library's two
      * headings and every unstyled line of a realm's page were drawn in it. On paper that is very
-     * nearly right and nobody noticed for two rounds of review; on the sixteen chromes whose ground
-     * is not paper it ran from poor to invisible, and on High contrast it was black on pure black
-     * at exactly 1.0:1. The controls around them were never affected, because a text field, a
-     * button and a card each carry their own colour or their own `Surface`.
+     * nearly right and nobody noticed for two rounds of review; on the seventeen chromes whose
+     * ground is not paper it ran from poor to invisible, and on High contrast it was black on pure
+     * black at exactly 1.0:1. The controls around them were never affected, because a text field,
+     * a button and a card each carry their own colour or their own `Surface`.
      *
      * Declared beside the ground it belongs to, and provided once for the whole pane, so this is a
      * pairing rather than a colour written onto a heading — the fix has to hold for every word
-     * either pane draws, in all sixteen chromes, and for whatever a later one draws.
+     * either pane draws, in all seventeen chromes, and for whatever a later one draws.
      * `PhoneAtlasTest` measures it off the drawn pixels in each.
      */
     val paneInk =
@@ -847,7 +847,7 @@ private fun Application(
 
     /** The keystrokes, previewed above everything, in whichever arrangement is drawn. */
     val frame = Modifier.fillMaxSize()
-        // The paper the panels are laid on, which for eleven of the sixteen chromes is the same
+        // The paper the panels are laid on, which for eleven of the seventeen chromes is the same
         // paper the panels are — see [ChromeDetail.windowGround].
         .background(LocalChromeDetail.current.ground(MaterialTheme.colorScheme))
         // So the cloth runs behind the gutter between the panels and the map as well as inside
@@ -1516,8 +1516,8 @@ private fun PanelHeader(
         // the reader who wants out of a generation is looking at the button they started it with,
         // and a Generate greyed out beside a Stop elsewhere would be two controls for one decision.
         // The label is the whole of the difference - no colour of its own, because the danger roles
-        // are not part of what the sixteen chromes were measured against, and because no button in
-        // this application is styled where it is used. See `Controls.kt`.
+        // are not part of what the seventeen chromes were measured against, and because no button
+        // in this application is styled where it is used. See `Controls.kt`.
         Button(
             onClick = if (generating) onStop else onGenerate,
             enabled = generating || !busy,

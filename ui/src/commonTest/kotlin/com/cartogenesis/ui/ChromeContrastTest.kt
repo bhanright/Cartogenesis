@@ -6,6 +6,10 @@ import androidx.compose.ui.graphics.toArgb
 import com.cartogenesis.cartography.ColorVision
 import com.cartogenesis.cartography.ColorVision.Deficiency.DEUTERANOPIA
 import com.cartogenesis.cartography.ColorVision.Deficiency.PROTANOPIA
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -13,13 +17,14 @@ import kotlin.test.assertTrue
 /**
  * What the chromes that made a promise in numbers actually measure.
  *
- * Most of the sixteen are claims about appearance and are reviewed by looking at a screenshot.
- * Seven are not. "High contrast" and "colour-blind" are claims with published thresholds behind
+ * Most of the seventeen are claims about appearance and are reviewed by looking at a screenshot.
+ * Eight are not. "High contrast" and "colour-blind" are claims with published thresholds behind
  * them, and a chrome that made either claim and missed it would be worse than no chrome at all — a
  * reader would choose it *because* of the promise. The four typographic chromes — Matrix, Hessian,
- * Roman and Hitchcock — and Lemon Blueberry make a quieter promise of the same kind: a
- * chrome is a room somebody works in for an hour, and one whose secondary text or whose armed
- * button sat under WCAG AA would be a room nobody could work in, however good it looked.
+ * Roman and Hitchcock — and the two two-colour rooms, Lemon Blueberry and Blacklight, make a
+ * quieter promise of the same kind: a chrome is a room somebody works in for an hour, and one
+ * whose secondary text or whose armed button sat under WCAG AA would be a room nobody could work
+ * in, however good it looked.
  *
  * So each is measured with [ColorVision], which is also what `ClearStyleTest` measures the map style
  * with, so the two guards cannot come to mean different things by the same number.
@@ -93,9 +98,30 @@ class ChromeContrastTest {
          * colour at all, or a shade of one of the two". 20 is well past the point where anybody
          * would call it two colours, and it is what a chrome built from a pair has to clear before
          * its alarm means anything — Lemon Blueberry's pink measures 51.1 from the lemon accent,
-         * 59.0 from the panel it is read on and 43.2 from the ink beside it.
+         * 59.0 from the panel it is read on and 43.2 from the ink beside it, and Blacklight's
+         * orange 39.3, 71.0 and 30.0 from the same three.
          */
         const val ALARM_MARGIN = 20.0
+
+        /**
+         * #520C94's hue angle in CIE L*a*b*, in degrees, and #E6FF42's.
+         *
+         * The two colours Blacklight was given, reduced to the one property the chrome holds every
+         * tone to. See the guard that reads them.
+         */
+        const val VIOLET_HUE = 312.7
+        const val LIME_HUE = 110.5
+
+        /**
+         * How far a tone may sit off the hue it belongs to, in degrees.
+         *
+         * Set from the measurement rather than the other way round: the palette was built by
+         * naming a lightness and a chroma for each tone and converting back through L*a*b*, so
+         * every tone lands within **0.36** of its hue and the rest of that is rounding to eight
+         * bits a channel. One degree gives that a little under three times the room it needs and
+         * is still far too tight for a tone to have been re-picked by eye.
+         */
+        const val HUE_DRIFT = 1.0
 
         /**
          * The eleven older chromes as they were on `main` at 27fd260, role by role.
@@ -665,6 +691,220 @@ class ChromeContrastTest {
         assertTrue(fromAccent >= ALARM_MARGIN, "the alarm is ${fromAccent.rounded()} from the zest")
         assertTrue(fromGround >= ALARM_MARGIN, "the alarm is ${fromGround.rounded()} from a panel")
         assertTrue(fromInk >= ALARM_MARGIN, "the alarm is ${fromInk.rounded()} from the ink")
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // F28's one.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `every text pair in the Blacklight chrome clears WCAG AA`() {
+        assertAA(ThemeChoice.BLACKLIGHT)
+    }
+
+    /**
+     * The decision F28 was asked to make by measuring, re-measured here rather than remembered.
+     *
+     * F24's guard, for F24's reason: which of two named colours is the room was left to the
+     * measurement, and a figure that only ever lived in a report is a figure nobody can check a
+     * year from now. Both arrangements were built to one set of rules and both cleared AA, so the
+     * armed Stop button decided it, and the arrangement that lost is written down here as the two
+     * colours that decided it and measured again on every run.
+     *
+     * The margin is not close. On a lime ground — #E6FF42 has a relative luminance of 0.887,
+     * paler than most papers — everything that has to be seen against it is forced down into the
+     * dark end together, and the stain under an armed button can only travel so far before the
+     * button stops being a stain and becomes a block. With the violet underneath, the accent is
+     * the lime itself and the wash beneath it is the darkest thing on the panel.
+     */
+    @Test
+    fun `Blacklight puts the violet underneath, which is the arrangement that measured`() {
+        val scheme = ThemeChoice.BLACKLIGHT.scheme(systemDark = false)
+        val detail = ThemeChoice.BLACKLIGHT.detail()
+
+        // The violet is the room and the lime is the writing, not the other way round.
+        assertTrue(
+            ColorVision.luminance(scheme.onSurface.toArgb()) >
+                ColorVision.luminance(scheme.surface.toArgb()),
+            "the lime is no longer the ink: the chrome has been turned over"
+        )
+        // And the panel is the violet the author named, not a tone derived from it.
+        assertEquals(
+            Color(0xFF520C94),
+            scheme.surface,
+            "the panel is no longer the violet the chunk was given"
+        )
+        assertEquals(
+            Color(0xFFE6FF42),
+            scheme.primary,
+            "the accent is no longer the lime the chunk was given"
+        )
+        assertEquals(
+            scheme.background,
+            detail.ground(scheme),
+            "the window is no longer the room past the lamp's reach"
+        )
+
+        // The armed button, which is Stop while a world is being built. Neither arrangement
+        // inverts it, so in both it is the accent read against a wash of the window ground.
+        val shipped = ColorVision.contrast(
+            detail.label(scheme).toArgb(),
+            scheme.primaryContainer.toArgb()
+        )
+        // The arrangement that lost: a lime room takes the violet at full strength for its accent
+        // (#520C94), and its armed button is the same stain — the panel taken ten L* down, which
+        // on a lime panel is #CCDF4B.
+        val rejected = ColorVision.contrast(0xFF520C94.toInt(), 0xFFCCDF4B.toInt())
+
+        println(
+            "CHROME blacklight: Stop ${shipped.rounded()}:1 with the violet underneath, " +
+                "against ${rejected.rounded()}:1 with the lime underneath"
+        )
+        assertTrue(
+            shipped > rejected,
+            "the arrangement shipped has the worse Stop button: ${shipped.rounded()}:1 against " +
+                "${rejected.rounded()}:1, so F28 chose the wrong way round"
+        )
+        assertTrue(shipped >= AA, "Stop measures ${shipped.rounded()}:1, short of AA")
+    }
+
+    /**
+     * That the alarm is a third colour and not a shade of either.
+     *
+     * The same question F24's alarm answers with chemistry, answered here with optics. A blacklight
+     * is an excitation rather than a colour: the ultraviolet goes in and the dye decides what comes
+     * out, which is why one highlighter glows lime and the orange one beside it in the box glows
+     * orange. So the alarm is arrived at the way the accent was, and this asserts that the result
+     * really is far enough from the lime, from the violet it is read on and from the pale lime ink
+     * beside it to carry "something has gone wrong" on its own.
+     */
+    @Test
+    fun `the Blacklight alarm is neither the lime nor the violet`() {
+        val scheme = ThemeChoice.BLACKLIGHT.scheme(systemDark = false)
+        val fromAccent = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.primary.toArgb())
+        val fromGround = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.surface.toArgb())
+        val fromInk = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.onSurface.toArgb())
+        println(
+            "CHROME blacklight alarm: dE2000 ${fromAccent.rounded()} from the lime, " +
+                "${fromGround.rounded()} from the violet panel, ${fromInk.rounded()} from the ink"
+        )
+        assertTrue(fromAccent >= ALARM_MARGIN, "the alarm is ${fromAccent.rounded()} from the lime")
+        assertTrue(
+            fromGround >= ALARM_MARGIN,
+            "the alarm is ${fromGround.rounded()} from the violet panel"
+        )
+        assertTrue(fromInk >= ALARM_MARGIN, "the alarm is ${fromInk.rounded()} from the ink")
+    }
+
+    /**
+     * That the chrome really is built out of two hues and one stated exception.
+     *
+     * The claim the palette's own note makes and the one a screenshot cannot check: every violet in
+     * the scheme is #520C94's hue and every lime is #E6FF42's, moved only in lightness and chroma.
+     * A tone that drifted — a panel warmed toward blue, a rule cooled toward magenta — would
+     * still pass every contrast assertion above and would still look like a violet room, and
+     * would have quietly made this a chrome of four colours.
+     *
+     * Every role the application reads is checked rather than a chosen handful, because the ones a
+     * chosen handful would leave out are exactly the ones nobody looks at: the container tones a
+     * menu and a card are drawn on. The three that carry the alarm are the exception the note
+     * declares, and they are named here so that adding a fourth off-hue role is a decision
+     * somebody has to make in this file.
+     */
+    @Test
+    fun `every tone in the Blacklight chrome is one of its two hues`() {
+        val scheme = ThemeChoice.BLACKLIGHT.scheme(systemDark = false)
+        val alarm = setOf("error", "errorContainer", "onErrorContainer")
+        var worst = 0.0
+        var worstWhere = ""
+        var counted = 0
+        namedRoles(scheme).forEach { (role, colour) ->
+            if (role in alarm) return@forEach
+            counted++
+            val hue = hueOf(colour)
+            val drift = minOf(hueDistance(hue, VIOLET_HUE), hueDistance(hue, LIME_HUE))
+            if (drift > worst) {
+                worst = drift
+                worstWhere = role
+            }
+            assertTrue(
+                drift <= HUE_DRIFT,
+                "Blacklight: $role is ${drift.rounded()} degrees off both of the chrome's hues, " +
+                    "past $HUE_DRIFT"
+            )
+        }
+        println(
+            "CHROME blacklight: $counted roles on $VIOLET_HUE or $LIME_HUE degrees, worst drift " +
+                "${worst.rounded()} ($worstWhere), bar $HUE_DRIFT"
+        )
+    }
+
+    /** The same roles [roles] writes, each with the name the scheme calls it by. */
+    private fun namedRoles(s: ColorScheme): List<Pair<String, Color>> = listOf(
+        "primary" to s.primary, "onPrimary" to s.onPrimary,
+        "primaryContainer" to s.primaryContainer, "onPrimaryContainer" to s.onPrimaryContainer,
+        "inversePrimary" to s.inversePrimary,
+        "secondary" to s.secondary, "onSecondary" to s.onSecondary,
+        "secondaryContainer" to s.secondaryContainer,
+        "onSecondaryContainer" to s.onSecondaryContainer,
+        "tertiary" to s.tertiary, "onTertiary" to s.onTertiary,
+        "tertiaryContainer" to s.tertiaryContainer,
+        "onTertiaryContainer" to s.onTertiaryContainer,
+        "background" to s.background, "onBackground" to s.onBackground,
+        "surface" to s.surface, "onSurface" to s.onSurface,
+        "surfaceVariant" to s.surfaceVariant, "onSurfaceVariant" to s.onSurfaceVariant,
+        "surfaceTint" to s.surfaceTint,
+        "inverseSurface" to s.inverseSurface, "inverseOnSurface" to s.inverseOnSurface,
+        "error" to s.error, "onError" to s.onError,
+        "errorContainer" to s.errorContainer, "onErrorContainer" to s.onErrorContainer,
+        "outline" to s.outline, "outlineVariant" to s.outlineVariant, "scrim" to s.scrim,
+        "surfaceBright" to s.surfaceBright, "surfaceDim" to s.surfaceDim,
+        "surfaceContainerLowest" to s.surfaceContainerLowest,
+        "surfaceContainerLow" to s.surfaceContainerLow,
+        "surfaceContainer" to s.surfaceContainer,
+        "surfaceContainerHigh" to s.surfaceContainerHigh,
+        "surfaceContainerHighest" to s.surfaceContainerHighest
+    )
+
+    /**
+     * The hue angle of a colour in CIE L*a*b* under D65, in degrees.
+     *
+     * `ColorVision` exposes the *difference* between two colours and their luminance, but not a
+     * colour's own hue, since nothing before this chrome had a use for one. The transform is the
+     * standard's and is the same one that function is built on, written out here rather than added
+     * to the library for a single guard.
+     */
+    private fun hueOf(colour: Color): Double {
+        val argb = colour.toArgb()
+        val red = linearise((argb shr 16) and 0xFF)
+        val green = linearise((argb shr 8) and 0xFF)
+        val blue = linearise(argb and 0xFF)
+        val x = (0.4124564 * red + 0.3575761 * green + 0.1804375 * blue) / 0.95047
+        val y = 0.2126729 * red + 0.7151522 * green + 0.0721750 * blue
+        val z = (0.0193339 * red + 0.1191920 * green + 0.9503041 * blue) / 1.08883
+        val aStar = 500.0 * (labCurve(x) - labCurve(y))
+        val bStar = 200.0 * (labCurve(y) - labCurve(z))
+        val degrees = atan2(bStar, aStar) * 180.0 / PI
+        return if (degrees < 0.0) degrees + 360.0 else degrees
+    }
+
+    /** The sRGB transfer function, decoded. */
+    private fun linearise(channel: Int): Double {
+        val c = channel / 255.0
+        return if (c <= 0.04045) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
+    }
+
+    /** L*a*b*'s cube root, with the linear segment near black that keeps it finite. */
+    private fun labCurve(t: Double): Double {
+        val kappa = 6.0 / 29.0
+        return if (t > kappa * kappa * kappa) t.pow(1.0 / 3.0)
+        else t / (3.0 * kappa * kappa) + 4.0 / 29.0
+    }
+
+    /** The shorter way round the wheel between two hue angles. */
+    private fun hueDistance(first: Double, second: Double): Double {
+        val raw = abs(first - second) % 360.0
+        return if (raw > 180.0) 360.0 - raw else raw
     }
 
     /**

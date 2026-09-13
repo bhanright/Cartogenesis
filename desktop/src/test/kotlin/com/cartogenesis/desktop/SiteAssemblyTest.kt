@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,6 +22,21 @@ import kotlin.test.fail
  * WebAssembly and would otherwise be testing whatever an earlier run happened to leave behind.
  */
 class SiteAssemblyTest {
+
+    private companion object {
+        /**
+         * The counting words the page writes its tallies in, indexed by the number they mean.
+         *
+         * The page says "Seventeen for the window" rather than "17 for the window" because it is
+         * prose, so a guard that wants to compare that with `ThemeChoice.entries.size` has to
+         * spell the numbers somewhere. Here, once, rather than in the assertion.
+         */
+        val NUMBER_WORDS = listOf(
+            "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+            "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
+            "Eighteen", "Nineteen", "Twenty"
+        )
+    }
 
     private val repoRoot: File
         get() {
@@ -132,6 +148,36 @@ class SiteAssemblyTest {
             "img/ holds something other than the figures the page shows — a contact sheet left " +
                 "by -Pcontact, or a figure the page has stopped asking for"
         )
+    }
+
+    /**
+     * That the Features list still counts the chromes the application actually offers.
+     *
+     * "Seventeen for the window … from Nautical to Blacklight" is a sentence that goes stale the
+     * instant a chrome is added, and nothing else on the page or in the build would notice: the
+     * page would go on deploying, correct in every other respect, quietly one short. So the count
+     * is read back out of the page in words and compared with the enum, and so is the name the run
+     * of styled chromes ends at, which is the newest one and the one a reader is most likely to
+     * have come looking for.
+     */
+    @Test
+    fun `the Features list counts the chromes the application offers`() {
+        val page = file("index.html").readText()
+        val sentence = Regex("""<dt>Themes</dt><dd>([^<]*)</dd>""").find(page)?.groupValues?.get(1)
+            ?: fail("the Features list no longer has a Themes row")
+        val counted = NUMBER_WORDS.indexOf(sentence.substringBefore(' '))
+        assertEquals(
+            ThemeChoice.entries.size,
+            counted,
+            "the page opens the Themes row with \"${sentence.substringBefore(' ')}\" and the " +
+                "application offers ${ThemeChoice.entries.size} chromes"
+        )
+        val newest = ThemeChoice.entries.last().label
+        assertTrue(
+            sentence.contains(newest),
+            "the page's run of styled chromes stops short of $newest: \"$sentence\""
+        )
+        println("SITE the Features list counts $counted chromes, ending at $newest")
     }
 
     @Test

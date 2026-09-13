@@ -15,11 +15,14 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.ThemeChoice
 import java.io.File
+import kotlin.math.ceil
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -342,6 +345,54 @@ class ChromeGalleryTest {
     }
 
     /**
+     * The two-colour chrome, at 1440x900 and on a phone.
+     *
+     * Lemon Blueberry is a chrome of two colours and nothing else — no weave, no meander, no
+     * prompt — so what a shot of it has to answer is whether two colours are enough to tell a panel
+     * from the ground it is on, an accent from the ink, and an alarm from either. The phone shot is
+     * the second half of that question and the one the numbers cannot reach: at 390 dp the panels
+     * become a sheet pulled over the map, and a chrome whose ground and whose panel are two shades
+     * of the same violet is a chrome that reads as one flat block at that size.
+     *
+     * Recorded alongside the named and typographic shots rather than added to either, so no
+     * existing capture moves.
+     */
+    @Test
+    fun `the Lemon Blueberry chrome is photographed at a desk and on a phone`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val choice = ThemeChoice.LEMON_BLUEBERRY
+
+        val wide = shoot(dark = false, choice = choice)
+        File(dir, "f24-lemonblueberry.png").writeBytes(wide.png)
+        assertTrue(wide.distinctColours > 200, "the Lemon Blueberry shot is nearly blank")
+
+        val (down, up) = shootCompact(dark = false, width = 390, height = 844, choice = choice)
+        File(dir, "f24-lemonblueberry-phone.png").writeBytes(down.png)
+        File(dir, "f24-lemonblueberry-phone-sheet.png").writeBytes(up.png)
+        assertTrue(down.distinctColours > 200, "the Lemon Blueberry phone shot is nearly blank")
+        assertTrue(
+            down.fingerprint != up.fingerprint,
+            "pulling the sheet up in Lemon Blueberry changed nothing on screen"
+        )
+
+        // And that the chrome reached the composition at all: the same window in the chrome the
+        // application opens in is a different picture, which is the one thing a screenshot of a
+        // colour scheme can assert on its own.
+        val plain = shoot(dark = false, choice = ThemeChoice.LIGHT)
+        assertTrue(
+            wide.fingerprint != plain.fingerprint,
+            "Lemon Blueberry rendered the same window as Light: the scheme never arrived"
+        )
+
+        println(
+            "CHROME wrote the ${WIDTH}x$HEIGHT and 390x844 Lemon Blueberry shots to " +
+                "${dir.absolutePath}; " +
+                "fingerprints wide ${wide.fingerprint}, phone ${down.fingerprint}, " +
+                "sheet ${up.fingerprint}"
+        )
+    }
+
+    /**
      * The settings dialog in the two chromes whose lettering only shows there.
      *
      * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own
@@ -363,6 +414,81 @@ class ChromeGalleryTest {
         }
         println("CHROME wrote two settings-dialog lettering shots to ${dir.absolutePath}")
         assertEquals(2, fingerprints.values.toSet().size, "both settings shots are identical")
+    }
+
+    /**
+     * That every chip in the Export panel says its whole word at the widths the panel is drawn at.
+     *
+     * F12 put a second line of chips under the first — Heightmap, Biomes, Realms — and three of
+     * those words are longer than the two format chips the row was sized for, so at the desktop
+     * panel's 320 dp the last one ran out of room and "Realms" was drawn as "Real". William's own
+     * screenshot of 2.0.2 shows it, and so did F24's first capture of the new chrome; nobody had
+     * noticed, because a truncated chip still looks like a chip.
+     *
+     * Measured rather than eyeballed, and measured off the *text layout* rather than off the
+     * bounds: the question is the width the word wants against the width the layout gave it. A
+     * chip whose box has been squeezed narrower than its word is exactly the case a bounds check
+     * misses, because the box is still inside the panel.
+     *
+     * Both arrangements, because they lay the panel out differently and each could break the other:
+     * the wide window puts the panel in a 320 dp column, the phone puts it in the pull-up sheet at
+     * 390 dp. The phone already read "Realms" in full and must go on doing so.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `no export chip has its word cut short at either panel width`() {
+        val cutShort = mutableListOf<String>()
+        listOf(
+            "the desk" to (WIDTH to HEIGHT),
+            "a phone" to (390 to 844)
+        ).forEach { (where, size) ->
+            runDesktopComposeUiTest(width = size.first, height = size.second) {
+                val platform = if (size.first < 700) TouchPlatform() else ChromePlatform()
+                setContent {
+                    CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                        CartogenesisApp(platform)
+                    }
+                }
+                waitForIdle()
+                // On a phone the panel lives in the sheet, which is down when the window opens.
+                if (size.first < 700) {
+                    onNodeWithText("Settings").performClick()
+                    waitForIdle()
+                }
+                EXPORT_CHIPS.forEach { label ->
+                    val node = onNodeWithText(label)
+                    node.performScrollTo()
+                    waitForIdle()
+                    val laid = node.fetchTextLayout()
+                    // The width the word wants against the width it was given. `hasVisualOverflow`
+                    // is the obvious API and is the wrong one here: these labels are `maxLines = 1`
+                    // with Material's default overflow, which *clips* rather than ellipsises — the
+                    // panel really did draw "Real" with no ellipsis after it — and the flag reads
+                    // true for every one of the six whether or not anything was lost. So the
+                    // measure is the arithmetic the flag was supposed to stand for.
+                    val room = laid.size.width
+                    val wanted = ceil(laid.multiParagraph.maxIntrinsicWidth).toInt()
+                    val cut = room < wanted
+                    println(
+                        "F12 chip \"$label\" on $where: ${room}px of the ${wanted}px the word " +
+                            "wants${if (cut) ", CUT SHORT" else ""}"
+                    )
+                    if (cut) cutShort += "\"$label\" on $where ($room of ${wanted}px)"
+                }
+            }
+        }
+        assertTrue(
+            cutShort.isEmpty(),
+            "an export chip is drawn with its word cut short: $cutShort"
+        )
+    }
+
+    /** What a text node was actually laid out as, rather than what it asked to be. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun SemanticsNodeInteraction.fetchTextLayout(): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        return results.firstOrNull() ?: error("the node holds no text layout")
     }
 
     private enum class Opened { NOTHING, MENU, SETTINGS, ABOUT }
@@ -469,17 +595,27 @@ class ChromeGalleryTest {
      * where Generate lives now, so the sheet goes up first and the map-only shot is taken after it
      * comes back down — which is also the only assertion available that the handle works in both
      * directions.
+     *
+     * [choice] defaults to the chrome the application opens in, which is what every caller before
+     * F24 passed by leaving it out, so their captures are the captures they were.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shootCompact(dark: Boolean, width: Int, height: Int): Pair<Shot, Shot> {
+    private fun shootCompact(
+        dark: Boolean,
+        width: Int,
+        height: Int,
+        choice: ThemeChoice = ThemeChoice.SYSTEM
+    ): Pair<Shot, Shot> {
         var down: Shot? = null
         var up: Shot? = null
         runDesktopComposeUiTest(width = width, height = height) {
             val platform = TouchPlatform()
             setContent {
-                CartogenesisTheme(dark = dark, coarsePointer = platform.coarsePointer) {
-                    CartogenesisApp(platform)
-                }
+                CartogenesisTheme(
+                    dark = dark,
+                    choice = choice,
+                    coarsePointer = platform.coarsePointer
+                ) { CartogenesisApp(platform) }
             }
             waitForIdle()
             // The sheet's own handle. "Settings…" on the File menu is a different string and that
@@ -658,6 +794,15 @@ class ChromeGalleryTest {
 
         /** Generous: this is a full 512 world on the CPU, on whatever machine is running the tests. */
         const val GENERATION_TIMEOUT_MS = 300_000L
+
+        /**
+         * The two lines of chips in the Export panel, written out as a reader reads them.
+         *
+         * Spelled here rather than imported from `Exports`, for the reason this file spells the
+         * panel's copy everywhere else: the list is internal to `:ui`, and a guard that asked the
+         * code what the words are would pass however wrong the words were.
+         */
+        val EXPORT_CHIPS = listOf("PNG", "WebP", "JPEG", "Heightmap", "Biomes", "Realms")
 
         /**
          * The panel's own copy, as a reader sees it: the header's controls, the six section

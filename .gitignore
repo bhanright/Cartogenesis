@@ -30,4 +30,7 @@ keystore.properties
 # Subagent worktrees. Each parallel chunk of REALISM_PLAN.md works in its own checkout here;
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
+
+# Scratch probes a chunk writes to measure something once. Never part of the suite.
 desktop/src/test/kotlin/com/cartogenesis/desktop/SeedProbe*.kt
+worldgen/src/jvmTest/kotlin/com/cartogenesis/worldgen/SeedProbe*.kt

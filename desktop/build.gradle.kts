@@ -91,7 +91,13 @@ val auditOnlyClasses = listOf(
     // trace timed against the raster. Nothing per-merge depends on any of it.
     "com.cartogenesis.desktop.GeneralisationRenderTest",
     // The littoral before-and-after pictures: four worlds, one at 2048, and twenty renders.
-    "com.cartogenesis.desktop.LittoralCoastRenderTest"
+    "com.cartogenesis.desktop.LittoralCoastRenderTest",
+    // The routing crops: two worlds drawn under each routing rule, one pair of them at 2048, so
+    // the rivers can be compared by eye. Nothing per-merge depends on any of it.
+    "com.cartogenesis.desktop.StraightRunRenderTest",
+    // The Natural style's review: the same two worlds at 2048 again, whole and in three details
+    // each, to be held beside the photograph the palette was sampled off.
+    "com.cartogenesis.desktop.NaturalGalleryTest"
 )
 
 /**

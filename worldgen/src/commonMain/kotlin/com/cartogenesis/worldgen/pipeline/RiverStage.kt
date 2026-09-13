@@ -197,7 +197,9 @@ object RiverStage {
         val cellsDown = config.height
 
         val filled = fillDepressions(cellsAcross, cellsDown, sea)
-        val flowTarget = computeFlowDirections(cellsAcross, cellsDown, sea, filled)
+        val flowTarget = computeFlowDirections(
+            cellsAcross, cellsDown, sea, filled, config.seed, config.facetRouting
+        )
 
         // Lakes are sized before the water is accumulated, because an endorheic basin changes the
         // answer: nothing leaves it, so every cell downstream of its rim loses that whole catchment
@@ -440,9 +442,12 @@ object RiverStage {
         width: Int,
         height: Int,
         sea: SeaLevelResult,
-        filled: FloatField
-    ): IntArray =
-        FlowRouting.flowDirections(width, height, sea.isLand, sea.relativeElevation, filled)
+        filled: FloatField,
+        seed: Long,
+        byFacet: Boolean
+    ): IntArray = FlowRouting.flowDirections(
+        width, height, sea.isLand, sea.relativeElevation, filled, seed, byFacet
+    )
 
     /**
      * @param totalRunoff sum of the per-cell rainfall *inputs*. Not the sum of the accumulation

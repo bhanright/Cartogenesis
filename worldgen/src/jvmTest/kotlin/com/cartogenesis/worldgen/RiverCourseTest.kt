@@ -197,20 +197,27 @@ class RiverCourseTest {
             drawnTotal += narrowDrawn
 
             // A break: a drawn line stops at water one cell wide and nothing carries on through
-            // it, *and there was somewhere for it to carry on to*. Where the flow target is -1 the
-            // water leaves the model — an endorheic lake takes its inflow and gives nothing back —
-            // so the course has arrived rather than stopped short, and a line drawn onward would be
-            // drawing water that is not there. Seed 99 has three such arrivals, all on the same
-            // 242-cell endorheic lake, at places where it happens to be one cell wide; the other
-            // three seeds have none. They were not there before the 2.0.x line met S1's units,
-            // which is what put a lake of that kind on that seed, and they are not what this guard
-            // was written to catch.
+            // it, *and there was somewhere for it to carry on to*.
+            //
+            // Unless there is nothing to carry on to. A lake below its spill is endorheic — the
+            // Caspian, not Erie — so its cells are sinks in the flow graph and the rivers that run
+            // into it are the end of the story. A course stopping at one of those has not been
+            // broken by the water it stopped at; it has arrived, and a line drawn onward would be
+            // drawing water that is not there.
+            //
+            // Both sides of the merge met this on seed 99 and each wrote the arrival down its own
+            // way, so both tests stand. The facet routing found three courses ending in the same
+            // 668-cell endorheic lake at cells whose receiver is -1 by construction; S1's units
+            // found three on the same seed in a 242-cell one, at places where it happens to be one
+            // cell wide. The other three seeds have none either way. Counting them was measuring
+            // the lake's dryness rather than the tracing this class is about.
             var broken = 0
             world.rivers.rivers.forEach { river ->
                 val end = river.cells.last()
                 if (!lakes.isLake(end) || lakes.isOpenWater(end) || runThrough[end]) return@forEach
-                val below = world.rivers.flowTarget[end]
-                if (below >= 0) broken++
+                if (world.rivers.flowTarget[end] < 0) return@forEach
+                if (lakes.lakes[lakes.lakeId[end]].endorheic) return@forEach
+                broken++
             }
             // A gap: narrow water with a drawn channel above it and a drawn channel below, and no
             // line across. This is the thread William saw, counted.

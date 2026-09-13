@@ -1308,6 +1308,20 @@ data class ErosionConfig(
      */
     val outletReachKm: Double = 1_500.0,
     /**
+     * Whether the notch's channel gradient counts the step into the water the outflow empties into.
+     *
+     * It has to, where the sill runs level all the way to that water: the walk that measures the
+     * fall stops on the last cell of land, so what it reads there is the epsilon the depression
+     * fill nudges a flat by, which is not a small gradient but the absence of one — no stream
+     * power, and a sill that stands for the life of the world however large the catchment behind
+     * it. Only where the walk found no fall the fill did not put there, so an outlet that measured
+     * a real gradient is untouched. See `HydraulicErosion.breach`.
+     *
+     * Off is the rule this replaced, kept as the control `OutletIncisionTest` measures against and
+     * the renders are drawn against; a guard that has only ever been green proves nothing.
+     */
+    val outletFallToTheWater: Boolean = true,
+    /**
      * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
      * its river, and made only of cells the load could lift clear of the water.
      *
@@ -1977,6 +1991,17 @@ data class WorldGenConfig(
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
     val erosion: ErosionConfig = ErosionConfig(),
+    /**
+     * Whether the water's direction is taken from the steepest triangular facet, with the one
+     * receiver drawn across it, rather than snapped to the steepest of the eight neighbours.
+     *
+     * Top level rather than inside a section because four stages route water — erosion, the
+     * post-cut outlet inside the sea-level step, glaciation and rivers — and the rule is the same
+     * rule for all of them. Off is the plain steepest-neighbour rule the generator used until F18,
+     * kept as the control the straight-bar census is measured against; see
+     * [com.cartogenesis.worldgen.pipeline.FlowRouting.flowDirections] for what it does and why.
+     */
+    val facetRouting: Boolean = true,
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
     val sea: SeaConfig = SeaConfig(),

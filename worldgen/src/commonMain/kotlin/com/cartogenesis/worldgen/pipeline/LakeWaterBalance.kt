@@ -178,66 +178,20 @@ internal object LakeWaterBalance {
      * comes out as a scan: paths that run due east or due south for as far as the flat goes, several
      * of them side by side.
      *
-     * Value noise on a lattice of [JITTER_PERIOD] cells rather than per-cell white noise, because
-     * the point is to give the flat a *gradient* to follow. White noise would make each cell pick
+     * Value noise on a lattice of a few cells rather than per-cell white noise, because the point
+     * is to give the flat a *gradient* to follow. White noise would make each cell pick
      * an unrelated direction and the path would stagger; a smooth field gives it a slope that turns
-     * gently, so the path meanders the way water on a floodplain does.
+     * gently, so the path meanders the way water on a floodplain does. The field itself is
+     * [FlowRouting.smoothSeededField], shared with the routing's own sub-grid draw so that the two
+     * decisions a coarse grid leaves open are made off one surface rather than two.
      *
      * The amplitude is chosen, not tuned: ten times the 1e-6 the depression fill nudges a flat cell
      * by, so it decides wherever the fill's own staircase would have, and a hundredth of the
      * smallest real cell-to-cell drop the routing has to respect — a basin floor measured at 2048
      * falls by 3e-3 to 1.3e-2 per cell — so nowhere with genuine relief in it is moved at all.
      */
-    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float {
-        val latticeColumns = (width / JITTER_PERIOD).coerceAtLeast(1)
-        val latticeColumn = x / JITTER_PERIOD
-        val latticeRow = y / JITTER_PERIOD
-        val acrossCell = (x - latticeColumn * JITTER_PERIOD).toFloat() / JITTER_PERIOD
-        val downCell = (y - latticeRow * JITTER_PERIOD).toFloat() / JITTER_PERIOD
-        // Smoothstep, so the field has no creases on the lattice lines for a path to follow.
-        val acrossBlend = acrossCell * acrossCell * (3f - 2f * acrossCell)
-        val downBlend = downCell * downCell * (3f - 2f * downCell)
-        val leftColumn = latticeColumn % latticeColumns
-        val rightColumn = (latticeColumn + 1) % latticeColumns
-        val alongTop = lerp(
-            hash(leftColumn, latticeRow, seed), hash(rightColumn, latticeRow, seed), acrossBlend
-        )
-        val alongBottom = lerp(
-            hash(leftColumn, latticeRow + 1, seed),
-            hash(rightColumn, latticeRow + 1, seed),
-            acrossBlend
-        )
-        return lerp(alongTop, alongBottom, downBlend) * JITTER_AMPLITUDE
-    }
-
-    private fun lerp(from: Float, to: Float, fraction: Float): Float =
-        from + (to - from) * fraction
-
-    /**
-     * One lattice corner's value in -1..1.
-     *
-     * Integer mixing only — the multiply-shift-xor rounds are SplitMix64's, chosen because they
-     * are the same on every platform where a floating-point hash would not be. The last line takes
-     * the top 24 bits and maps them onto -1..1, hence [HALF_OF_24_BITS].
-     */
-    private fun hash(latticeColumn: Int, latticeRow: Int, seed: Long): Float {
-        var mixed = seed xor
-            (latticeColumn.toLong() * -0x61c8864680b583ebL) xor
-            (latticeRow.toLong() * 0x27220a95_1d5a2b1fL)
-        mixed = mixed xor (mixed ushr 30)
-        mixed *= -0x40a7b892e31b1a47L
-        mixed = mixed xor (mixed ushr 27)
-        mixed *= -0x6b2fb644ecceee15L
-        mixed = mixed xor (mixed ushr 31)
-        return (mixed ushr (Long.SIZE_BITS - HASH_BITS)).toInt() / HALF_OF_24_BITS - 1f
-    }
-
-    /** Bits of the mixed hash kept, and half that range, which is what centres it on zero. */
-    private const val HASH_BITS = 24
-    private const val HALF_OF_24_BITS = 8388608f
-
-    /** Cells across one period of the jitter field: short enough to bend a path inside one basin. */
-    private const val JITTER_PERIOD = 8
+    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float =
+        FlowRouting.smoothSeededField(width, x, y, seed) * JITTER_AMPLITUDE
 
     private const val JITTER_AMPLITUDE = 1e-5f
 

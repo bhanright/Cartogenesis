@@ -1066,6 +1066,44 @@ audit's S1 units and P1 projection is done here; the north arrow and the project
   cells; `GpuRasterTest` unaffected (these are overlay and legend); phone captures with the
   graticule on. Render both worlds at 2048 at fit and at 4x and look.
 
+### Site 2. cartogenesis.com in the app's own identity — Opus, on `release/2.0`
+
+*From the design review of 2026-09-12 (a Codex handoff William asked Fable to critique; the
+assessment and William's approval of its seven decisions are in the session). Diagnosis: the
+landing page looks like the campaign site it was born on — Cinzel, a gradient wordmark, a
+diamond rule, a bevelled button — while the app already has an authored identity (F1: Spectral,
+IBM Plex Sans, Plex Mono, flat surfaces, hairline rules, the ink/bone/brass/oxblood palette used
+with restraint). The site adopts the app's identity; every image is a real export produced by
+the site's own build from a fixed seed and crop, so the pictures regenerate with each release.*
+Decisions approved: the app's typefaces self-hosted; the palette kept, gradients, bevel and
+ornament removed; headline "Give it a seed. It builds the plates, the weather and the peoples.";
+buttons "Open in the browser" and "Download for Windows (recommended)"; imagery rendered from
+seed 718106 at build time; one combined strip of four readings; the generator interface out of
+scope.
+
+- **Phase 1.** Self-host the six bundled faces (copied from `ui/src/commonMain/composeResources/
+  font/` at assembly, `@font-face`, no Google Fonts request). Topbar: a small wordmark only.
+  Hero: eyebrow "Open source, free to use", the two-line headline, one sentence, the two flat
+  actions (oxblood primary, brass-outlined secondary) with "Free · Open source · Runs locally"
+  beneath, beside a real 2048 crop of 718106 (62% ocean, 14 plates, 12 realms) in the Atlas
+  style; the giant wordmark, gradient, diamond rule and bevel gone. The browser and Atlas notices
+  move into a practical-details section with formats, resolutions and downloads; the phone notice
+  stays conditional by the launch. A `:desktop:renderSiteImagery` task renders the crops from the
+  engine at assembly time (JVM, CPU, WebP at the poster's quality), `:web:assembleSite` depends
+  on it, and `SiteAssemblyTest` checks the images exist at their sizes and that no external font
+  or the author's other site is referenced.
+- **Phase 2.** "One world, four readings": the same crop in Atlas, biomes (or rainfall), the
+  political view and Pen and ink, as tabs on wide screens and a stacked strip on phones. Three
+  annotated details replacing the six cards, each a real crop with HTML labels over it (crisp,
+  readable, translatable): a rain shadow on the rainfall view, a river widening as its
+  tributaries join (F10), a rift breaking into gulfs (E4). Captions state only what the engine
+  does. The spec list tightened to what a reader compares.
+- Guards: every text pair's contrast measured at AA in a test using the palette constants
+  (reuse `ColorVision` from `:cartography`); the assembled page at 1280 and 390 wide screenshotted
+  in a browser and looked at; `WebDeploymentContractTest` and `SiteAssemblyTest` green; page
+  weight reported (fonts plus images, target under 1.5 MB before the app); build time of the
+  imagery task on the runner reported.
+
 ### Release 2.0.0 checklist
 
 When F, H5 and H5b are green (G1 follows the release; G2 and G4 are in): version 2.0.0; full suite plus the audit tier once; William's
@@ -1697,6 +1735,7 @@ guard reported, so the next chunk knows its baseline.
 | F12 JPEG, heightmap and layer exports | Opus | queued behind F11, on release/2.0 | 2026-09-12 | | |
 | F13 Tints by climate and shading by sky (V1) | Opus | queued behind F12, on release/2.0 | 2026-09-12 | | |
 | F14 Generalisation, graticule and scale (V2) | Opus | queued behind F13, on release/2.0 | 2026-09-12 | | |
+| Site 2 cartogenesis.com in the app's identity | Opus | in progress on release/2.0 | 2026-09-12 | | |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |
 | T1 Two test tiers | Sonnet | done | 2026-09-12 | f6f01a7 (merge, see log) | class-name lists with Gradle filter exclude/include on jvmTest and a new audit task in :worldgen (JUnit 4 via kotlin-test-junit) and :desktop (JUnit 5, same mechanism); moved: DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest, ColdCapReportTest, ErosionConvergenceTest whole, the 2048 cases of GlaciationTest and RealmIdRangeTest split into *AuditTest classes, ExportSmokeTest's 2048/4096 exports into ExportAuditTest (1024 stays); LakeWaterBalanceTest had no 2048 case in code; DepositionTest's absolute pin dropped, land count and structural cases kept; js(IR) removed from worldgen (cartography never had it), node/yarn/binaryen ivy repos still needed by wasm; CI runs JVM and Wasm tests with -i teed to logs and diffs FINGERPRINT lines from them, no second --rerun-tasks pass; nightly.yml runs gradlew audit; per-merge worldgen 1357 -> 706 s under the same load, desktop 191 s, cartography 65 s; audit tier green: worldgen 12m29s (21 cases), desktop 6m |

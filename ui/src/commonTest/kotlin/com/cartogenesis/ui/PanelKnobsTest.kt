@@ -339,9 +339,10 @@ class PanelKnobsTest {
                 it.label == "Style" || it.label == "View"
             }
         )
-        // Cartography keeps its own two marks, so the section is not left empty.
+        // Cartography keeps its own marks, so the section is not left empty: whether the relief is
+        // drawn at all, which light it is drawn by, and whether the coast is inked.
         assertEquals(
-            listOf("Relief shading", "Coastline"),
+            listOf("Relief shading", "Single-lamp relief", "Coastline"),
             Knobs.inSection(PanelSection.CARTOGRAPHY).map { it.label }
         )
     }

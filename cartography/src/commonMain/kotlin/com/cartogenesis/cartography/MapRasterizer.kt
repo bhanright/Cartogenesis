@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
+import com.cartogenesis.worldgen.pipeline.River
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -62,6 +63,15 @@ data class RenderOptions(
     val showRivers: Boolean = true,
     val showCoastline: Boolean = true,
     val showHillshade: Boolean = true,
+    /**
+     * Light the relief from one lamp in the north-west instead of from the whole sky.
+     *
+     * The convention every shaded-relief map used before this one, kept because a reader may prefer
+     * it and because it is the control the sky model is measured against. It is a setting of the
+     * drawing rather than of the world: it lives in the panel beside the relief switch, never in a
+     * save. See [ReliefShading].
+     */
+    val singleLamp: Boolean = false,
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
     val showLandmarks: Boolean = false,
@@ -154,15 +164,6 @@ object MapRasterizer {
     internal const val WIND_SEA = 0xFF16242F.toInt()
 
     /**
-     * How far the hillshade's central differences are exaggerated, at a map [width].
-     *
-     * Gentle relief still has to read at map scale, and these are differences between adjacent
-     * cells: at four times the grid a step covers a quarter of the ground, and the relief would
-     * otherwise render four times flatter.
-     */
-    internal fun hillshadeScale(width: Int): Float = 12f * (width / 512f)
-
-    /**
      * Draws the map on [accelerator] if it will take the job, and on the CPU if it will not.
      *
      * The CPU remains the reference: an accelerator that cannot describe a view, or cannot reach a
@@ -190,7 +191,9 @@ object MapRasterizer {
         val reliefDrawn = options.showHillshade && options.view != MapView.NORMALS
         // A line-art style never asks for the shaded relief, so it never pays for the pass: the
         // hachures read the same central differences a cell at a time.
-        val hillshade = if (reliefDrawn && !style.lineArt) computeHillshade(world) else null
+        val relief = if (reliefDrawn && !style.lineArt) {
+            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, options.singleLamp)
+        } else null
 
         val lakes = world.rivers.lakes
         val showLakes = options.showLakes && options.view.showsTerrain
@@ -206,6 +209,17 @@ object MapRasterizer {
             ShoreDistance.of(w, h, dryLandMask(world, showLakes))
         } else null
         val elevation = world.sea.relativeElevation
+
+        // The two things only the fantasy view draws: the ramp modulated by the climate, and the
+        // contours in the sea. The other views either mean something a legend explains (elevation,
+        // biomes) or are about who holds the land rather than what it is, and repainting their
+        // ground would make both harder to read.
+        val painted = options.view == MapView.FANTASY
+        val contoured = painted && style.isobathInk > 0f
+        val isobathInterval =
+            if (contoured) Isobaths.interval(world.config.climate.maxAltitudeMetres) else 0f
+        val flattestSlope = if (contoured) Isobaths.flattestSlope(world.config, w, h) else 0f
+        val isobathStencil = Isobaths.slopeStencil(w)
 
         for (i in 0 until w * h) {
             val x = i % w
@@ -231,7 +245,9 @@ object MapRasterizer {
                 continue
             }
 
-            var color = baseColor(world, options.view, style, i)
+            var color = baseColor(
+                world, options.view, style, i, isobathInterval, flattestSlope, isobathStencil
+            )
             val isLand = world.sea.isLand[i]
             if (plan != null && engraveWater && !isLand) {
                 color = MapPalette.blend(
@@ -256,7 +272,7 @@ object MapRasterizer {
                         Engraving.hachure(x, y, gradientX, gradientY, plan, style.inkGain)
                     )
                 } else {
-                    color = MapPalette.shade(color, style.relief(hillshade!![i]))
+                    color = MapPalette.shade(color, style.relief(relief!![i]))
                 }
             }
             if (plan != null && engraveWater &&
@@ -295,24 +311,28 @@ object MapRasterizer {
         val w = world.width
         val rivers = ArrayList<RiverSegment>()
         val skipInLakes = options.showLakes && options.view.showsTerrain
+        val water = world.rivers.lakes
 
         if (options.showRivers && !options.view.showsFlow) {
             world.rivers.rivers.forEach { river ->
-                for (k in 0 until river.cells.size - 1) {
+                val course = trimmedAtTheShore(world, river, w)
+                for (k in 0 until course.vertexCount - 1) {
                     val from = river.cells[k]
                     val to = river.cells[k + 1]
                     val x0 = from % w
                     val x1 = to % w
                     val y0 = (from / w) + 0.5f
                     val y1 = (to / w) + 0.5f
-                    val width = RiverPen.widthPixels(river.widthRatio[k])
+                    val width = RiverPen.widthPixels(river.widthRatio[k], w)
+                    // The last drawn segment stops short of the water, so the round cap's outer
+                    // edge lands on the shoreline; [trimmedAtTheShore] says why.
+                    val reach = if (k == course.vertexCount - 2) course.lastFraction else 1f
 
-                    // Inside a lake the river *is* the lake. Drawing it would put a channel across
-                    // open water — and these are exactly the segments that run uphill on raw
-                    // terrain, because the basin was raised to let the water out.
-                    if (skipInLakes && world.rivers.lakes.isLake(from) &&
-                        world.rivers.lakes.isLake(to)
-                    ) continue
+                    // Inside open water the river *is* the lake. Drawing it would put a channel
+                    // across the surface — and these are exactly the segments that run uphill on
+                    // raw terrain, because the basin was raised to let the water out. A strip of
+                    // lake one cell wide is not open water and is drawn; see `LakeResult.openWater`.
+                    if (skipInLakes && water.isOpenWater(from) && water.isOpenWater(to)) continue
 
                     if (abs(x1 - x0) > w / 2) {
                         // The river crosses the east-west seam. Drawing it as-is would streak a
@@ -320,13 +340,28 @@ object MapRasterizer {
                         // stopping dead at the edge. Draw it twice instead, shifted a map-width
                         // each way, so it runs off one side and arrives on the other.
                         val shifted = if (x1 > x0) x1 - w else x1 + w
-                        rivers.add(RiverSegment(x0 + 0.5f, y0, shifted + 0.5f, y1, width))
+                        rivers.add(
+                            RiverSegment(
+                                x0 + 0.5f, y0,
+                                x0 + 0.5f + reach * (shifted - x0), y0 + reach * (y1 - y0), width
+                            )
+                        )
                         val back = if (x1 > x0) x0 + w else x0 - w
-                        rivers.add(RiverSegment(back + 0.5f, y0, x1 + 0.5f, y1, width))
+                        rivers.add(
+                            RiverSegment(
+                                back + 0.5f, y0,
+                                back + 0.5f + reach * (x1 - back), y0 + reach * (y1 - y0), width
+                            )
+                        )
                         continue
                     }
 
-                    rivers.add(RiverSegment(x0 + 0.5f, y0, x1 + 0.5f, y1, width))
+                    rivers.add(
+                        RiverSegment(
+                            x0 + 0.5f, y0,
+                            x0 + 0.5f + reach * (x1 - x0), y0 + reach * (y1 - y0), width
+                        )
+                    )
                 }
             }
         }
@@ -407,6 +442,70 @@ object MapRasterizer {
             options.style.river, 0xFF241C14.toInt(), 1f)
     }
 
+    /**
+     * How much of a river's course to draw: every vertex up to [vertexCount], with the last
+     * segment run only [lastFraction] of the way to its far end.
+     */
+    private class DrawnCourse(val vertexCount: Int, val lastFraction: Float)
+
+    /**
+     * A course cut back so that the ink stops at the shoreline instead of pooling beyond it.
+     *
+     * A traced course ends *in* the water: the last cell is the sea cell, or the open-water cell,
+     * that the last cell on land drains into, kept so the line reaches the water rather than
+     * stopping a step short of it. Drawn literally that puts the centre of the stroke a whole cell
+     * past the coast, and the round cap that blends one cell-long segment into the next then adds
+     * half a stroke on top of that. Measured on seeds 7/42/1234/99 at 512 under F10's five-pixel
+     * pen, the ink reached 3.0 to 3.2 pixels past the shoreline — a blob of river sitting on the
+     * open sea, which is what William saw at the widest mouth of seed 298405 (F15).
+     *
+     * A round cap centred half a stroke back from the shore, on the other hand, is tangent to it:
+     * the last pixel of the stroke is the shoreline pixel and the sea takes over with no seam. So
+     * the course is walked back from the shore — which is the edge between the last cell on land
+     * and the water, half a step past that cell's centre — until half a stroke has been given up,
+     * and the stroke ends there. Every vertex closer than that goes, because a round cap at a
+     * vertex within half a stroke of the shore would cross it just as the end cap did.
+     *
+     * A course that ends on land is a tributary stopping on the trunk it joins, and is left whole.
+     */
+    private fun trimmedAtTheShore(world: WorldMap, river: River, cellsAcross: Int): DrawnCourse {
+        val cells = river.cells
+        val whole = DrawnCourse(cells.size, 1f)
+        if (cells.size < 3) return whole
+        val mouth = cells[cells.size - 1]
+        val lastOnLandIndex = cells.size - 2
+        val intoWater = !world.sea.isLand[mouth] || world.rivers.lakes.isOpenWater(mouth)
+        if (!intoWater) return whole
+
+        val half = RiverPen.widthPixels(river.widthRatio[lastOnLandIndex], cellsAcross) / 2f
+        val toTheShore = stepLength(cells[lastOnLandIndex], mouth, cellsAcross) / 2f
+        if (toTheShore >= half) {
+            // The stroke ends on the last step, between that cell's centre and the shoreline.
+            return DrawnCourse(cells.size, (toTheShore - half) / (2f * toTheShore))
+        }
+
+        var owed = half - toTheShore
+        var vertex = lastOnLandIndex
+        while (vertex > 0) {
+            val step = stepLength(cells[vertex - 1], cells[vertex], cellsAcross)
+            if (owed <= step) return DrawnCourse(vertex + 1, (step - owed) / step)
+            owed -= step
+            vertex--
+        }
+        // A course shorter than its own pen: leave it whole rather than draw a dot. It takes a
+        // headwater-length reach carrying a trunk's water, which the widths make near impossible.
+        return whole
+    }
+
+    /** Distance between two cells' centres, in cells, across the east-west seam if need be. */
+    private fun stepLength(from: Int, to: Int, cellsAcross: Int): Float {
+        var dx = to % cellsAcross - from % cellsAcross
+        if (dx > cellsAcross / 2) dx -= cellsAcross
+        if (dx < -cellsAcross / 2) dx += cellsAcross
+        val dy = to / cellsAcross - from / cellsAcross
+        return sqrt((dx * dx + dy * dy).toFloat())
+    }
+
     /** Shape carries the kind, so the map stays readable in greyscale and without a legend. */
     private fun shapeFor(kind: LandmarkKind): GlyphShape = when (kind) {
         LandmarkKind.MONSTER_LAIR, LandmarkKind.HAZARD -> GlyphShape.TRIANGLE
@@ -440,19 +539,54 @@ object MapRasterizer {
     private fun politicalLand(style: MapStyle, relative: Float): Int =
         if (style.ownsPoliticalGround) style.land(relative) else MapPalette.land(relative)
 
-    private fun baseColor(world: WorldMap, view: MapView, style: MapStyle, i: Int): Int {
+    /**
+     * The colour a cell starts as, before the relief, the air, the engraving and the coast.
+     *
+     * [isobathInterval] is the depth between contours as a fraction of the field's own range, or 0
+     * on the views and styles that draw none, and [flattestSlope] the gradient below which the sea
+     * floor is a plain and carries none.
+     */
+    private fun baseColor(
+        world: WorldMap,
+        view: MapView,
+        style: MapStyle,
+        i: Int,
+        isobathInterval: Float,
+        flattestSlope: Float,
+        isobathStencil: Int
+    ): Int {
         val isLand = world.sea.isLand[i]
         val relative = world.sea.relativeElevation.data[i]
 
         return when (view) {
             MapView.FANTASY ->
                 if (!isLand) {
-                    style.ocean(-relative)
+                    val water = style.ocean(-relative)
+                    if (isobathInterval <= 0f) {
+                        water
+                    } else {
+                        val contour = seaContour(
+                            world, i, -relative, isobathInterval, flattestSlope, isobathStencil
+                        )
+                        MapPalette.blend(water, style.coastline, style.isobathInk * contour)
+                    }
                 } else {
-                    // Hypsometric tint carries the shape; a wash of biome colour carries the
-                    // climate, so both read at a glance. How much of that wash gets through is
-                    // most of what separates one style from another.
-                    style.tint(style.land(relative), world.climate.biome[i])
+                    // The hypsometric tint carries the shape and the climate bends it — a desert is
+                    // sand at any height, frozen ground is pale, a wood is dark. On top of that goes
+                    // the wash of biome colour the style has always had. How much of either gets
+                    // through is most of what separates one style from another.
+                    val biome = world.climate.biome[i]
+                    if (style.climateTint <= 0f) {
+                        style.ground(relative, 0f, 0f, 0f, biome)
+                    } else {
+                        style.ground(
+                            relative,
+                            ClimateTint.drynessAt(world, i),
+                            ClimateTint.coldnessAt(world, i),
+                            ClimateTint.canopyClosure(biome),
+                            biome
+                        )
+                    }
                 }
 
             MapView.POLITICAL -> {
@@ -552,28 +686,31 @@ object MapRasterizer {
         }
     }
 
-    /** Lambertian shading from a light in the north-west, the cartographic convention. */
-    private fun computeHillshade(world: WorldMap): FloatArray {
-        val w = world.width
-        val h = world.height
+    /**
+     * How strongly this sea pixel takes the contour ink.
+     *
+     * The line's width is held in pixels rather than in metres of depth, so the arithmetic needs to
+     * know how fast the floor falls here — a central difference over [stencil] cells each way,
+     * divided by the distance it spans, which is the depth a single pixel of travel covers. Over a
+     * stencil rather than between neighbours, for the reason [Isobaths.slopeStencil] gives.
+     */
+    private fun seaContour(
+        world: WorldMap,
+        i: Int,
+        depth: Float,
+        interval: Float,
+        flattestSlope: Float,
+        stencil: Int
+    ): Float {
+        val width = world.width
+        val x = i % width
+        val y = i / width
         val elevation = world.sea.relativeElevation
-        val shade = FloatArray(w * h)
-
-        val zScale = hillshadeScale(w)
-        val lightX = -0.6f
-        val lightY = -0.6f
-        val lightZ = 0.53f
-
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val dzdx = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * zScale
-                val dzdy = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * zScale
-                val len = sqrt(dzdx * dzdx + dzdy * dzdy + 1f)
-                val dot = (-dzdx * lightX - dzdy * lightY + lightZ) / len
-                shade[y * w + x] = (0.72f + 0.55f * dot).coerceIn(0.45f, 1.35f)
-            }
-        }
-        return shade
+        val span = 1f / (2f * stencil)
+        val eastward = (elevation.sample(x + stencil, y) - elevation.sample(x - stencil, y)) * span
+        val southward = (elevation.sample(x, y + stencil) - elevation.sample(x, y - stencil)) * span
+        val slope = sqrt(eastward * eastward + southward * southward)
+        return Isobaths.ink(depth, slope, interval, flattestSlope)
     }
 
     private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {

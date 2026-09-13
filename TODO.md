@@ -17,6 +17,21 @@
   would supply. Until then a world's depositional share is Earth's by construction rather than by
   measurement, and a world that genuinely had less low coast than Earth would not show it.
   2026-09-12.
+- **A lake can be a dead-straight diagonal bar.** On seed 298405 at 1024 one of the eight lakes —
+  53 cells at (509,860), every one of them within 1.2 cells of a single straight line — is drawn as
+  a rectangle laid on the diagonal with square ends, in a straight-walled trench beside it. It is
+  the artefact William called "this diagonal rectangle section of river" (F15). Diagnosed and not
+  fixed: it survives with the outlet incision off, with deposition off and with the post-cut outlet
+  off, at the same place and the same size each time, and disappears only with erosion switched off
+  altogether — so what cuts the trench is the ordinary stream-power incision, and what makes it
+  straight is D8 itself, which on ground smooth at the cell scale (here the apron below a range)
+  takes the same neighbour twenty cells running. The reach then ponds behind its own lip, the fill
+  raises it, and `findLakes` calls it standing water. Rare: a census of straight bars of 20 cells or
+  more finds 1 on 298405 at 1024, 0 on seeds 7 and 42 at 512, 1 on 1234 and 2 on 99. The repair is
+  to break D8's straight-line bias on smooth ground — `LakeWaterBalance.jitter` already does exactly
+  this inside an endorheic basin's re-routing, and the same idea in `FlowRouting.flowDirections`
+  would do it everywhere — but `FlowRouting` is shared with erosion, so it moves every world's
+  terrain and belongs in a chunk that can render and review the lot. 2026-09-12.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm
@@ -37,6 +52,25 @@
   opened (S2 in REALISM_AUDIT.md). 2026-09-12.
 
 ## Done
+
+- **A drawn river begins at its biggest headwater, not at its farthest** (2026-09-12, F15) — M1's
+  finding, fixed in the tracing as it suggested: `RiverStage.traceRivers` now ranks channel heads by
+  the length of the watercourse below them rather than by the flow at them, so the first course
+  traced out of a catchment is that catchment's longest and every other branch is a tributary of it.
+  Coverage of the watercourse each course stands for, over seeds 7/42/1234/99 at 512: **1.000**
+  (worst 1.000 per seed) against 0.780 for the biggest-headwater order measured on the same worlds.
+  The open entry is on `main`, where M1 wrote it, and should be struck when this merges there.
+
+- **A trunk crossing a lake's narrow arm was drawn as a thread** (2026-09-12, F15) — the "strange
+  thin squiggly connection between two thicker rivers" on seed 298405 at 1024 is lake 3: 61 cells of
+  water, one cell wide, strung diagonally along the trunk of the map's biggest river system, painted
+  as a dotted line of single water pixels with no river over it because the tracer stopped at every
+  lake cell and the renderer refused to draw inside one. The lake's outlet was never the problem —
+  measured, the accumulation below every lake on that world is 1.00 to 1.70 times the largest
+  accumulation inside it, so the outlet has always carried its lake. `LakeResult.openWater` now
+  distinguishes water two cells across from water one cell across, and the line runs through the
+  latter. 237 channel cells over the four seeds at 512 stand under water one cell wide; 170 of them
+  are now drawn, none before, and no drawn line has a break or a gap at one.
 
 - **The rift-mouth valley: pocket, moats and terrace** (2026-09-12, E6) — the three things in the
   author's crop of 718106's southern rift turned out to be three different causes, found with the
@@ -409,3 +443,22 @@
   the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
   anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
   render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
+- **The colour-blind style draws a coastal desert dark olive.** Its ramp starts at #2B2E1C, whose
+  green channel is three of 255 above its red, so a desert at the shoreline is the one place on any
+  style where sand reads as vegetation — and it must, because that ramp is ordered by lightness and
+  cannot spend any of it on climate without breaking the promise it exists for. Measured at F13:
+  45% of the desert cells of seed 234475, which is the same 45% it was before the chunk. Fixing it
+  properly means a second ordered ramp for arid ground whose stops are also 8.00 CIEDE2000 apart
+  from each other under both deficiencies, which is a palette exercise rather than a rendering one.
+- **The sky model doubles the processor's raster.** Twenty-four horizon samples a land pixel against
+  the single lamp's four central differences: about 0.44 s against 0.21 s at 2048 and 1.65 s against
+  0.81 s at 4096, measured on seed 42 at F13. The desktop draws exports on the graphics card, where
+  it costs nothing measurable, but the browser has no raster device and pays it in full. If it ever
+  matters, the horizon is separable — one sweep along each of the eight bearings with a running
+  maximum is O(1) a pixel instead of three samples — at the cost of the two paths no longer being
+  the same arithmetic per pixel.
+- **Aerial perspective was written for F13 and taken out again.** The plan asked for the low ground
+  to be veiled slightly toward the paper; it was built, rendered and reviewed, and it cost the
+  relief more contrast than the haze it stood for was worth — aerial perspective is a painter's
+  device for an oblique view, and a map is a plan. If it ever comes back it should be a style's own
+  decision, declared like the biome wash, rather than a physical claim about the air.

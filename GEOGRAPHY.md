@@ -25,6 +25,47 @@ headwaters — channel cells with no upstream channel — which by definition si
 `RiverEndingsTest` follows the whole drainage and finds no breaks. Depression filling guarantees
 every land cell has a downhill path out.
 
+**A river runs from its farthest source.** A course is traced from the headwater with the longest
+way down to the water rather than from the one already carrying the most, so what the map calls a
+river holds the whole of the longest watercourse in its catchment and every other branch is drawn
+as a tributary of it. Ranking by flow instead picks a short fat tributary surprisingly often, and
+then the river's own upper half is drawn afterwards as a tributary stopping at the junction — the
+union of drawn cells is the same either way, but nothing that reads one `River` as one river is
+right. Measured on seeds 7/42/1234/99 at 512, the drawn courses cover **1.000** of the watercourses
+they stand for by cell count, against 0.780 under the biggest-headwater order (M1's own measure of
+the same defect: 0.484 at 512 and 0.408 at 2048).
+
+**A river is drawn through water narrower than itself.** A lake stands at its basin's spill level,
+which at the ends of the basin covers the channel that feeds it. Where that strip is one cell wide
+it is a river and not a lake — a cell here is 23 km at 512 down to 6 km at 2048, and the Amazon's
+mouth is about 10 — so the tracer and the renderer stop only at *open* water, meaning a lake cell
+belonging to some 2×2 square of its own lake, and run the line through the rest. Left as lake, such
+a strip was painted in flat water with no river over it, and a whole catchment's trunk crossed it as
+a one-pixel thread between two thick channels (a dotted one where the strip ran diagonally and the
+cells met only at their corners). Over seeds 7/42/1234/99 at 512, 237 channel cells stand under
+water one cell wide; before, none of them was drawn and every line that reached one stopped dead.
+
+**A river's ink stops at the shoreline.** A traced course ends *in* the water, so that the line
+reaches it rather than stopping a step short; drawn literally that put the stroke's centre a whole
+cell past the coast and the round cap that blends one cell-long segment into the next half a stroke
+beyond that again — 3.0 to 3.2 pixels of river ink lying on the open sea under F10's pen. The last
+stroke is now cut back along its own course by half its width, so the cap is tangent to the coast
+and the last pixel of the river is the shoreline pixel. Measured on 298405 and seeds 7/42/1234/99 at
+512: no stroke ends over water, and no river pixel falls on water with no land beside it (3 to 16
+before).
+
+**How wide a river is drawn is a share of the sheet.** A drawn river is a cartographic
+exaggeration, not a width to scale: the Amazon's ten-kilometre mouth is 0.08% of a
+twelve-thousand-kilometre world and would be invisible, and a printed map exaggerates a river of
+that class about threefold. So the widest stroke on a map is **0.24% of its width** — 1.2 px at
+512, 2.5 at 1024, 4.9 at 2048, 9.8 at 4096 — and the finest is a 0.8-pixel hairline, which is a
+nib rather than a width and does not grow. Between them the stroke follows Leopold and Maddock's
+square root of discharge. F10 held the full pen at five pixels whatever the size of the sheet,
+which at 2048 was right and at 1024 was twice the ink against the same country. One consequence is
+worth stating: with the hairline fixed, the range a sheet can show shrinks with it — the nib spans
+6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
+are nearly the same line, because the headwater is already the finest mark there is.
+
 **Mountains come from plate tectonics, in ranges.** Uplift is applied along classified plate
 boundaries — convergent belts, subduction trenches, divergent ridges — rather than scattered. Belts
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole
@@ -405,7 +446,8 @@ shaped, or a second erosion pass after the climate.
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
 run into it, and one river leaves at the outlet. River segments *inside* a lake are no longer drawn,
 since the river there is the lake — and those were precisely the segments that appeared to flow
-uphill. Depth is shaded from how far the water surface stands above the ground beneath it. (The
+uphill. (Inside *open* water, since F15; see "A river is drawn through water narrower than itself"
+above.) Depth is shaded from how far the water surface stands above the ground beneath it. (The
 spill level is now only where a lake sits when it overflows; see "A dry basin is not a full one"
 above for the basins that stand below their rims.)
 

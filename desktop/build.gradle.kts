@@ -83,7 +83,10 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.ExportAuditTest",
     // H5's own 2048 pair, four worlds and four renders: the same tier for the same reason.
     "com.cartogenesis.desktop.SeaLevelHistoryAuditTest",
-    // F17's before-and-after pictures: four worlds, one of them at 2048, and twelve renders.
+    // F13's render review: the same two worlds at 2048, drawn in three styles with four details of
+    // each. Ninety seconds of generation for thirty pictures nothing but a person can judge.
+    "com.cartogenesis.desktop.ClimateReliefGalleryTest",
+    // F17's before-and-after pictures: four worlds, one of them at 2048, and twenty renders.
     "com.cartogenesis.desktop.LittoralCoastRenderTest"
 )
 

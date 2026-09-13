@@ -287,7 +287,8 @@ class IncrementalReuseTest {
                 lakes = LakeResult(
                     world.rivers.lakes.lakeId.copyOf(),
                     world.rivers.lakes.lakes.toList(),
-                    world.rivers.lakes.playa.copyOf()
+                    world.rivers.lakes.playa.copyOf(),
+                    world.rivers.lakes.cellsAcross
                 )
             ),
             nations = NationResult(

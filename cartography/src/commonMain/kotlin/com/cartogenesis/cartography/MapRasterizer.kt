@@ -209,15 +209,16 @@ object MapRasterizer {
         } else null
         val elevation = world.sea.relativeElevation
 
-        // The three things only the fantasy view draws: the ramp modulated by the climate, the air
-        // over the low ground, and the contours in the sea. The other views either mean something a
-        // legend explains (elevation, biomes) or are about who holds the land rather than what it
-        // is, and repainting their ground would make both harder to read.
+        // The two things only the fantasy view draws: the ramp modulated by the climate, and the
+        // contours in the sea. The other views either mean something a legend explains (elevation,
+        // biomes) or are about who holds the land rather than what it is, and repainting their
+        // ground would make both harder to read.
         val painted = options.view == MapView.FANTASY
-        val isobathInterval = if (painted && style.isobathInk > 0f) {
-            Isobaths.interval(world.config.climate.maxAltitudeMetres)
-        } else 0f
-        val aerial = painted && style.aerialPerspective > 0f
+        val contoured = painted && style.isobathInk > 0f
+        val isobathInterval =
+            if (contoured) Isobaths.interval(world.config.climate.maxAltitudeMetres) else 0f
+        val flattestSlope = if (contoured) Isobaths.flattestSlope(world.config, w, h) else 0f
+        val isobathStencil = Isobaths.slopeStencil(w)
 
         for (i in 0 until w * h) {
             val x = i % w
@@ -243,7 +244,9 @@ object MapRasterizer {
                 continue
             }
 
-            var color = baseColor(world, options.view, style, i, isobathInterval)
+            var color = baseColor(
+                world, options.view, style, i, isobathInterval, flattestSlope, isobathStencil
+            )
             val isLand = world.sea.isLand[i]
             if (plan != null && engraveWater && !isLand) {
                 color = MapPalette.blend(
@@ -270,11 +273,6 @@ object MapRasterizer {
                 } else {
                     color = MapPalette.shade(color, style.relief(relief!![i]))
                 }
-            }
-            // Aerial perspective, last of the land passes: haze lies between the reader and the
-            // hillside, so it softens the shading as well as the colour under it.
-            if (aerial && isLand) {
-                color = MapPalette.blend(color, style.paper, style.aerialVeil(elevation.data[i]))
             }
             if (plan != null && engraveWater &&
                 world.climate.biome[i] == Biome.ICE_SHEET
@@ -461,14 +459,17 @@ object MapRasterizer {
      * The colour a cell starts as, before the relief, the air, the engraving and the coast.
      *
      * [isobathInterval] is the depth between contours as a fraction of the field's own range, or 0
-     * on the views and styles that draw none.
+     * on the views and styles that draw none, and [flattestSlope] the gradient below which the sea
+     * floor is a plain and carries none.
      */
     private fun baseColor(
         world: WorldMap,
         view: MapView,
         style: MapStyle,
         i: Int,
-        isobathInterval: Float
+        isobathInterval: Float,
+        flattestSlope: Float,
+        isobathStencil: Int
     ): Int {
         val isLand = world.sea.isLand[i]
         val relative = world.sea.relativeElevation.data[i]
@@ -480,7 +481,9 @@ object MapRasterizer {
                     if (isobathInterval <= 0f) {
                         water
                     } else {
-                        val contour = seaContour(world, i, -relative, isobathInterval)
+                        val contour = seaContour(
+                            world, i, -relative, isobathInterval, flattestSlope, isobathStencil
+                        )
                         MapPalette.blend(water, style.coastline, style.isobathInk * contour)
                     }
                 } else {
@@ -603,18 +606,27 @@ object MapRasterizer {
      * How strongly this sea pixel takes the contour ink.
      *
      * The line's width is held in pixels rather than in metres of depth, so the arithmetic needs to
-     * know how fast the floor falls here: a central difference over the two neighbours each way,
-     * halved, which is the depth a single pixel of travel covers.
+     * know how fast the floor falls here — a central difference over [stencil] cells each way,
+     * divided by the distance it spans, which is the depth a single pixel of travel covers. Over a
+     * stencil rather than between neighbours, for the reason [Isobaths.slopeStencil] gives.
      */
-    private fun seaContour(world: WorldMap, i: Int, depth: Float, interval: Float): Float {
+    private fun seaContour(
+        world: WorldMap,
+        i: Int,
+        depth: Float,
+        interval: Float,
+        flattestSlope: Float,
+        stencil: Int
+    ): Float {
         val width = world.width
         val x = i % width
         val y = i / width
         val elevation = world.sea.relativeElevation
-        val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * 0.5f
-        val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * 0.5f
+        val span = 1f / (2f * stencil)
+        val eastward = (elevation.sample(x + stencil, y) - elevation.sample(x - stencil, y)) * span
+        val southward = (elevation.sample(x, y + stencil) - elevation.sample(x, y - stencil)) * span
         val slope = sqrt(eastward * eastward + southward * southward)
-        return Isobaths.ink(depth, slope, interval)
+        return Isobaths.ink(depth, slope, interval, flattestSlope)
     }
 
     private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {

@@ -61,6 +61,36 @@ class ClimateTintTest {
          * genuinely half sand, and drawing it so is the point of this chunk.
          */
         const val MAX_FOREST_DRYNESS = 0.2
+
+        /**
+         * Which styles are asked where their steppe sits.
+         *
+         * The ones that let most of the climate through, since a style that lets a fifth of it
+         * through is making a different claim and its three vegetations are meant to be close
+         * together.
+         */
+        const val STRONG_CLIMATE_TINT = 0.5f
+
+        /**
+         * How far along the road from desert to forest a steppe must stand, in CIEDE2000.
+         *
+         * A quarter, and the same figure the other way for the forest end, so a steppe has to be a
+         * colour of its own rather than either neighbour wearing a slightly different hat. The
+         * number comes from the same place [ClimateTint]'s bands do: on the fractional-cover axis
+         * those classes are defined on, a steppe shows something like a third of the bare ground a
+         * desert does and several times what a forest does, so a quarter of the way is a floor
+         * rather than a target. Measured against a style's own span rather than in absolute
+         * degrees, because a style that mutes everything toward its paper — Scroll's forest is nine
+         * degrees of hue from its desert — is making a different claim, and the guard should ask
+         * whether the steppe sits inside *that* claim.
+         */
+        const val MIN_STEPPE_SHARE = 0.25
+
+        /** The single bare-earth figure the first pass of F13 gave a grassland. See [steppeBefore]. */
+        const val BEFORE_GRASSLAND_BARE = 0.15f
+
+        /** How much of a desert's bare ground a steppe may read as. See the assertion's note. */
+        const val MAX_STEPPE_SHARE_OF_DESERT = 0.5
     }
 
     /** Hue in degrees, 0 red, 60 yellow, 120 green — for the report rather than for the assertion. */
@@ -151,6 +181,101 @@ class ClimateTintTest {
     }
 
     /**
+     * That a steppe is drawn between a forest and a desert, and not as either.
+     *
+     * The other end of the same claim the desert guard makes, and the one the first pass of F13 got
+     * wrong: the drought lift saturated well before the arid line, so grassland came out at 0.74 of
+     * the way to bare ground and the interior of a continent read as Sahara. On a physical atlas
+     * the Great Plains and the Kazakh steppe are straw or olive — plainly not forest, plainly not
+     * sand — and hue is where that difference lives: measured on the rendered pixels of Atlas,
+     * desert sits at 40 degrees, forest at 78, and a steppe belongs between them with room either
+     * side. Before the fix it measured 46, six degrees off the desert and thirty-two off the
+     * forest.
+     */
+    @Test
+    fun `a steppe is drawn between the forest and the desert`() {
+        val world = WORLD
+        MapStyle.entries.filter { it.climateTint >= STRONG_CLIMATE_TINT }.forEach { style ->
+            val drawn = MapRasterizer.rasterize(world, RenderOptions(style = style))
+            val desert = meanColour(drawn, world, listOf(Biome.DESERT))
+            val steppe = meanColour(drawn, world, listOf(Biome.GRASSLAND))
+            val forest = meanColour(drawn, world, CLOSED_FORESTS)
+            val before = steppeBefore(world, style)
+
+            val span = ColorVision.deltaE2000(desert, forest)
+            val share = ColorVision.deltaE2000(desert, steppe) / span
+            val shareBefore = ColorVision.deltaE2000(desert, before) / span
+            println(
+                ("DESERT %-13s hue: desert %.0f, steppe %.0f, forest %.0f degrees; the steppe " +
+                    "stands %.0f%% of the %.1f CIEDE2000 from desert to forest, against %.0f%% " +
+                    "before the biome's band bounded the lift")
+                    .format(
+                        style.label, hue(desert), hue(steppe), hue(forest),
+                        share * 100, span, shareBefore * 100
+                    )
+            )
+            assertTrue(
+                share >= MIN_STEPPE_SHARE && share <= 1.0 - MIN_STEPPE_SHARE,
+                "${style.label}: a steppe stands ${"%.0f".format(share * 100)}% of the way from " +
+                    "the desert to the forest, outside " +
+                    "${(MIN_STEPPE_SHARE * 100).toInt()}-${((1 - MIN_STEPPE_SHARE) * 100).toInt()}%"
+            )
+        }
+    }
+
+    /**
+     * What this style gave a steppe before the biome's band bounded the drought's lift.
+     *
+     * The first pass of F13 took the drier of two numbers — the climate's drought and one
+     * bare-earth figure per biome — so a grassland with an arid index went all the way to bare
+     * ground. Reproduced here rather than remembered, so the control is something this file can
+     * still run.
+     */
+    private fun steppeBefore(world: WorldMap, style: MapStyle): Int {
+        var red = 0L
+        var green = 0L
+        var blue = 0L
+        var count = 0
+        for (cell in 0 until world.width * world.height) {
+            if (!world.sea.isLand[cell] || world.rivers.lakes.isLake(cell)) continue
+            if (world.climate.biome[cell] != Biome.GRASSLAND) continue
+            val drought = ClimateTint.droughtAt(world, cell)
+            val colour = style.ground(
+                world.sea.relativeElevation.data[cell],
+                maxOf(BEFORE_GRASSLAND_BARE, drought),
+                ClimateTint.coldnessAt(world, cell),
+                ClimateTint.canopyClosure(Biome.GRASSLAND),
+                Biome.GRASSLAND
+            )
+            red += (colour shr 16) and 0xFF
+            green += (colour shr 8) and 0xFF
+            blue += colour and 0xFF
+            count++
+        }
+        return packed(red / count, green / count, blue / count)
+    }
+
+    /** The mean rendered colour of the land cells of [biomes]. */
+    private fun meanColour(drawn: IntArray, world: WorldMap, biomes: List<Biome>): Int {
+        var red = 0L
+        var green = 0L
+        var blue = 0L
+        var count = 0
+        for (cell in drawn.indices) {
+            if (!world.sea.isLand[cell] || world.rivers.lakes.isLake(cell)) continue
+            if (world.climate.biome[cell] !in biomes) continue
+            red += (drawn[cell] shr 16) and 0xFF
+            green += (drawn[cell] shr 8) and 0xFF
+            blue += drawn[cell] and 0xFF
+            count++
+        }
+        return packed(red / count, green / count, blue / count)
+    }
+
+    private fun packed(red: Long, green: Long, blue: Long): Int =
+        (0xFF shl 24) or (red.toInt() shl 16) or (green.toInt() shl 8) or blue.toInt()
+
+    /**
      * What the climate says about each vegetation, over a whole world.
      *
      * The desert guard above asks whether the driest ground is drawn dry; this asks the other half,
@@ -187,6 +312,20 @@ class ClimateTintTest {
                 "$biome reads $mean dry over $cellsHere cells, past $MAX_FOREST_DRYNESS"
             )
         }
+
+        // And the steppe's own bound, which is where the first pass of F13 went wrong: it took the
+        // drier of the climate's drought and one figure per biome, so a grassland with an arid
+        // index went all the way to bare ground and measured 0.74 against a desert's 1.00. The
+        // classes these biomes are named for put a grassland's bare ground at half a desert's at
+        // the very driest, so half is the bound rather than a target.
+        val steppe = total[Biome.GRASSLAND.ordinal] / count[Biome.GRASSLAND.ordinal]
+        val desert = total[Biome.DESERT.ordinal] / count[Biome.DESERT.ordinal]
+        println("DESERT a steppe reads %.2f dry against a desert's %.2f".format(steppe, desert))
+        assertTrue(
+            steppe <= desert * MAX_STEPPE_SHARE_OF_DESERT,
+            "a steppe reads ${"%.2f".format(steppe)} dry against a desert's " +
+                "${"%.2f".format(desert)}, past ${MAX_STEPPE_SHARE_OF_DESERT} of it"
+        )
     }
 
     /**

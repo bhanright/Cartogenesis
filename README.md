@@ -144,31 +144,38 @@ one series but a series modulated by what grows there, and that is what the land
 cell carries three numbers about its own ground — how bare it is, how frozen, and how closed the
 canopy over it — and each style says through one lever how much of that to let through: the full
 effect on Atlas and Schoolroom, a suggestion on the aged papers, nothing at all on Pen and ink,
-which has no tint, or on Colour-blind, whose ramp is a measured promise nothing may move. Dryness
-comes from De Martonne's aridity index, the year's rain over the mean temperature plus ten, which is
-the oldest measure of how far a place is from having enough water to cover its own ground; on a
-world with a desert in it, the desert now comes out sand at every height and the forest darkens the
-lowland greens.
+which has no tint, or on Colour-blind, whose ramp is a measured promise nothing may move. How bare
+the ground is comes from De Martonne's aridity index, the year's rain over the mean temperature plus
+ten, spent *inside* the band of bare ground the biome itself allows — barren land is over nine
+tenths bare whatever the weather does, a grassland between a twentieth and a half of it, a closed
+forest none — so a desert comes out sand at every height, a steppe comes out straw, and a forest
+darkens the lowland greens. Getting that wrong in the first draft, by letting the index take any
+climate all the way to bare, drew the interior of a continent as Sahara.
 
 The relief is lit by a sky rather than a lamp. One light in the north-west is the convention every
 shaded-relief map has used since the nineteenth century, and it has one failure no exaggeration
 fixes: a slope facing away from it receives nothing at all, so a range running the wrong way comes
 out with one side white, the other black, and nothing readable inside the black. After Kennelly and
 Stewart's sky models, the light now comes from eight lamps round the whole compass, each as bright
-as its own quarter of the sky — brightest around the old north-west convention and a quarter of that
-opposite it — plus an ambient term that falls with how much sky the ground can actually see, which
-is measured as a horizon along those same eight bearings. On a synthetic cone as steep as the
-steepest tenth of a world's land, a third of the bearings receive no light at all from the single
-lamp; under the sky the darkest face keeps 0.53 of the light of the brightest and none of it is
-crushed flat. The single lamp is still there, as **Single-lamp relief** in the Cartography section
-of the panel, and under it the older picture comes back bit for bit.
+as its own eighth of the sky, plus an ambient term that falls with how much sky the ground can
+actually see, measured as a horizon along those same eight bearings. How much brighter the sky is
+around the light than opposite it, and how much of its light is diffuse, are two faces of one
+number — how hazy the day is — and that number is derived rather than chosen: it is the haze at
+which the shaded relief has exactly the contrast of the lamp it replaces (0.169 against 0.171 over
+the land of the standard world), so nothing is given up in exchange. What changes is *where* the
+darkness falls: on a synthetic cone as steep as the steepest tenth of a world's land, a third of the
+bearings receive no light at all from the single lamp, and none do from the dome. The single lamp is
+still there, as **Single-lamp relief** in the Cartography section of the panel, and under it the
+older picture comes back bit for bit.
 
-Two smaller things come with it. **Aerial perspective**: the low ground is veiled slightly toward
-the colour of the paper, because it is the ground furthest from a reader looking down and the air
-between is doing the same thing to it that distance does in a landscape. And **depth contours** in
-the sea, every 500 m, which is what GEBCO's small-scale sheets are drawn at — held at a fixed width
-in pixels by dividing by how fast the floor falls, and faded out where they would crowd closer than
-four pixels, so a continental slope reads as a slope rather than as a moiré.
+And **depth contours** in the sea, every 500 m, which is what GEBCO's small-scale sheets are drawn
+at. A line is held at a fixed width in pixels by dividing by how fast the floor falls, which is
+measured over a short distance of ground rather than between two neighbouring cells — between
+neighbours the answer is the floor's own roughness, and a line drawn to that width covers an abyssal
+plain in a nest of closed loops that mean nothing. They fade out where they would crowd closer than
+four pixels, so a continental slope reads as a slope rather than as a moiré, and again where the
+floor is flatter than one in a thousand, which is the definition of an abyssal plain and the point
+below which a contour stops describing anything.
 
 `StyleGalleryTest` writes all ten out to be looked at, since no number says whether something
 resembles vellum. What it does assert is that they differ from one another — a style quietly

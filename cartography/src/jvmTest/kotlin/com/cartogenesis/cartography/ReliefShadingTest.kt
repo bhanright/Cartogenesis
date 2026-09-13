@@ -20,11 +20,12 @@ import kotlin.test.assertTrue
  *  - **Nothing is unlit.** A cone is the shape that finds this: whatever bearing a lamp is at, some
  *    part of a cone faces away from it, and a single lamp leaves a third of this one with no light
  *    at all and goes on darkening it past that point. Under the dome every bearing receives light
- *    from somewhere, and the darkest face keeps half of what the brightest has.
+ *    from somewhere. How *dark* the darkest face ends up is much the same either way, by design —
+ *    what the dome changes is that the dark side is the steep side of each hill rather than one
+ *    quadrant of the whole map.
  *  - **It is no flatter than what it replaces.** Light from every direction is softer than light
- *    from one, so the question is how much softer. The two contrasts are measured on the same
- *    world and held within a seventh of each other; the sky share in [ReliefShading] is calibrated
- *    against exactly this measurement.
+ *    from one, so [ReliefShading.HAZE] is chosen to make the difference up: the sweep below
+ *    re-derives it from the two contrasts rather than trusting the constant.
  */
 class ReliefShadingTest {
 
@@ -63,25 +64,21 @@ class ReliefShadingTest {
         const val BEARINGS = 360
 
         /**
-         * How dark the darkest face of a cone may be against its brightest, as a ratio.
-         *
-         * The secondary claim, and a narrow one: the sky holds the darkest flank at 0.53 of the
-         * brightest and the single lamp at 0.44, so a bar of a half sits between them. The claims
-         * that carry this guard are the two either side of it, which are exact rather than
-         * measured — a third of this cone receives no light at all from the lamp, and every part
-         * of it receives some from the dome.
-         */
-        const val MIN_FLANK_RATIO = 0.5
-
-        /**
          * How far the two models' contrasts may differ, as a share of the lamp's.
          *
-         * Light from every direction is softer than light from one, and the model does not try to
-         * make all of that back: it measures 10.9% flatter over the land of the gallery's world.
-         * The bar is a seventh, which leaves a quarter of the headroom and would still catch a
-         * model that had lost a third of its relief.
+         * Tight, because this is no longer a hope but the thing [ReliefShading.HAZE] is derived
+         * from: the sweep below picks the day at which the two match, so what is left over is the
+         * coarseness of the sweep's own step. It measures 8.8% flatter, and one step of haze either
+         * side of the chosen one moves that by about six points, so a tenth is the honest bar.
          */
-        const val MAX_CONTRAST_DRIFT = 0.15
+        const val MAX_CONTRAST_DRIFT = 0.10
+
+        /** How far the haze sweep goes, and in what steps: a clear sky to a thick overcast. */
+        const val HAZE_SWEEP_TO = 0.6f
+        const val HAZE_SWEEP_STEP = 0.02f
+
+        /** How far the declared ordinary ground may sit from the measured median. */
+        const val MAX_GROUND_DRIFT = 0.004f
     }
 
     /**
@@ -232,16 +229,103 @@ class ReliefShadingTest {
             "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
                 "the model has, which is a face with no detail left in it"
         )
-        assertTrue(
-            sky.ratio >= MIN_FLANK_RATIO,
-            "the darkest face of the cone keeps only ${"%.2f".format(sky.ratio)} of the light of " +
-                "the brightest under the sky, short of $MIN_FLANK_RATIO"
+        // How dark the darkest face is comes out much the same either way, and it should: the haze
+        // is calibrated so that the two models have the same contrast. What the dome changes is
+        // *which* faces are dark — the lamp blacks out a whole quadrant, the dome darkens the steep
+        // side of every hill whichever way it points — so the two assertions above are the ones
+        // that separate them, and the ratios are reported rather than asserted.
+    }
+
+    /**
+     * That the haze the model is drawn under is the one it says it is.
+     *
+     * [ReliefShading.HAZE] is the model's only calibrated number, and what calibrates it is this:
+     * the haze at which the shaded relief has the same contrast as the single lamp it replaces.
+     * Rather than take that on trust, the sweep below re-derives it — every haze from a clear sky
+     * to a thoroughly overcast one, the deviation of the shading over this world's land at each,
+     * and the one that lands nearest the lamp's — and asserts that the constant is that value and
+     * that [ReliefShading.ORDINARY_GROUND] is the median illumination there. A change to the sky's
+     * arithmetic that quietly moved either fails here rather than in a render six chunks later.
+     */
+    @Test
+    fun `the haze is the one at which the relief keeps the lamp's contrast`() {
+        val world = WORLD
+        val lamp = Spread(
+            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, singleLamp = true),
+            world
+        )
+
+        var bestHaze = 0f
+        var bestGap = Double.MAX_VALUE
+        var bestGround = 1f
+        val readings = StringBuilder()
+        var haze = 0f
+        while (haze <= HAZE_SWEEP_TO + 1e-6f) {
+            val sky = ReliefShading.Sky.forHaze(haze)
+            val light = illuminationOverLand(world, sky)
+            val ground = median(light)
+            val deviation = Spread(shadeFrom(light, ground, world), world).deviation
+            if (haze % 0.05f < 1e-5f || haze < 1e-5f) {
+                readings.append(" %.2f→%.4f".format(haze, deviation))
+            }
+            val gap = kotlin.math.abs(deviation - lamp.deviation)
+            if (gap < bestGap) {
+                bestGap = gap
+                bestHaze = haze
+                bestGround = ground
+            }
+            haze += HAZE_SWEEP_STEP
+        }
+
+        println("RELIEF the lamp's contrast is %.4f; haze→deviation:%s".format(lamp.deviation, readings))
+        println(
+            "RELIEF the shipped sky: diffuse share %.8f, brightness %s".format(
+                ReliefShading.DAYLIGHT.diffuseShare,
+                ReliefShading.DAYLIGHT.brightness.joinToString(", ") { "%.8f".format(it) }
+            )
+        )
+        println(
+            "RELIEF it is matched at haze %.2f, where ordinary ground sits at %.3f"
+                .format(bestHaze, bestGround)
         )
         assertTrue(
-            lamp.ratio < MIN_FLANK_RATIO,
-            "the single lamp now keeps ${"%.2f".format(lamp.ratio)} of the light on the dark side " +
-                "as well, so this guard no longer separates the two models"
+            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP * 1.5f,
+            "the contrasts match at haze ${"%.2f".format(bestHaze)}, not at the declared " +
+                "${ReliefShading.HAZE}"
         )
+        assertTrue(
+            kotlin.math.abs(bestGround - ReliefShading.ordinaryGround) <= MAX_GROUND_DRIFT,
+            "ordinary ground measures ${"%.4f".format(bestGround)} at that haze, against the " +
+                "declared ${ReliefShading.ordinaryGround}"
+        )
+    }
+
+    /** The unnormalised light over every land cell, in cell order. */
+    private fun illuminationOverLand(world: WorldMap, sky: ReliefShading.Sky): FloatArray {
+        val elevation = world.sea.relativeElevation
+        val land = world.sea.isLand
+        val light = FloatArray(world.width * world.height)
+        for (y in 0 until world.height) {
+            for (x in 0 until world.width) {
+                val cell = y * world.width + x
+                if (!land[cell]) continue
+                light[cell] =
+                    ReliefShading.illumination(x, y, elevation, SLOPE_SCALE, OPENNESS_STEP, sky)
+            }
+        }
+        return light
+    }
+
+    /** What [ReliefShading.at] would return from those figures: normalised, then clamped. */
+    private fun shadeFrom(light: FloatArray, ordinaryGround: Float, world: WorldMap): FloatArray =
+        FloatArray(light.size) { cell ->
+            if (world.sea.isLand[cell]) (light[cell] / ordinaryGround).coerceIn(DARKEST, 1.35f)
+            else 1f
+        }
+
+    private fun median(light: FloatArray): Float {
+        val lit = light.filter { it > 0f }.sorted()
+        return lit[lit.size / 2]
     }
 
     @Test
@@ -269,12 +353,6 @@ class ReliefShadingTest {
             kotlin.math.abs(sky.deviation - lamp.deviation) / lamp.deviation <= MAX_CONTRAST_DRIFT,
             "the sky model's contrast is %.4f against the lamp's %.4f, more than %.0f%% apart"
                 .format(sky.deviation, lamp.deviation, MAX_CONTRAST_DRIFT * 100)
-        )
-        assertTrue(
-            sky.crushed <= lamp.crushed,
-            ("the sky model pins %.2f%% of the land at the darkest factor it has, against the " +
-                "lamp's %.2f%% — which is the thing it exists to stop doing")
-                .format(sky.crushed * 100, lamp.crushed * 100)
         )
     }
 

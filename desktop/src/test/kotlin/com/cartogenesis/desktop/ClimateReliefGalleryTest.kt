@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.Isobaths
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -21,24 +22,25 @@ import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Rect
 
 /**
- * The author's two worlds at 2048, and four details of each, written out to be looked at.
+ * The author's two worlds at 2048, and five details of each, written out to be looked at.
  *
  * Tints by climate and shading by a sky are claims about *appearance*, and the only instrument that
  * can settle them is a person. What the guards beside this can settle — that a desert never comes
  * out green, that no face of a hill is left unlit, that the graphics card draws the same picture —
  * they do; this writes the pictures those numbers are supposed to describe.
  *
- * Four details a piece, each 800 by 600 at the render's own pixels, chosen by the world rather than
- * by hand: the window holding the most desert, the most forest, the most high ground, and the most
- * sea floor crossed by a depth contour. Choosing them from the fields means the same window comes
- * out before and after a change to the drawing, since the world underneath is untouched.
+ * Five details a piece, each 800 by 600 at the render's own pixels, chosen by the world rather than
+ * by hand: the window holding the most desert, the most forest, the most high ground, the most sea
+ * floor at a contourable gradient, and the most abyssal plain. Choosing them from the fields means
+ * the same window comes out before and after a change to the drawing, since the world underneath is
+ * untouched.
  *
  * In the audit tier: two 2048 worlds is a minute and a half of generation before a pixel is drawn.
  */
 class ClimateReliefGalleryTest {
 
     @Test
-    fun `both worlds at 2048, in three styles, with four details of each`() {
+    fun `both worlds at 2048, in three styles, with five details of each`() {
         val dir = File("build/f13-crops").apply { mkdirs() }
         val styles = listOf(MapStyle.ATLAS, MapStyle.VELLUM, MapStyle.PEN_AND_INK)
 
@@ -48,6 +50,7 @@ class ClimateReliefGalleryTest {
                 detail.name to densestWindow(world, detail)
             }
             println("F13 $name windows: $windows")
+            println("F13 $name ${contourPatches(world)}")
 
             styles.forEach { style ->
                 val options = RenderOptions(view = MapView.FANTASY, style = style)
@@ -68,8 +71,58 @@ class ClimateReliefGalleryTest {
         }
 
         val written = dir.listFiles()?.count { it.name.endsWith(".png") } ?: 0
-        assertTrue(written >= 24, "only $written pictures were written to ${dir.absolutePath}")
+        assertTrue(written >= 30, "only $written pictures were written to ${dir.absolutePath}")
         println("F13 wrote $written pictures to ${dir.absolutePath}")
+    }
+
+    /**
+     * How much of this world's abyssal plain the depth contours are drawn on, with the flatness
+     * rule and without it.
+     *
+     * `IsobathTest` holds the same measurement on a made floor at 512, which is where the guard
+     * lives; this is the same measurement on the world and at the size the review looked at,
+     * because the defect it caught — a nest of meaningless contours through the middle of an open
+     * basin — is a thing that happens on a real sea floor and the made floor only stands in for it.
+     */
+    private fun contourPatches(world: WorldMap): String {
+        val flattest = Isobaths.flattestSlope(world.config, world.width, world.height)
+        val plainCells = (0 until world.width * world.height).count {
+            !world.sea.isLand[it] && onAPlain(world, it)
+        }
+        val drawn = inkedOnPlain(world, flattest)
+        val stained = inkedOnPlain(world, 0f)
+        return ("%d cells of abyssal plain, of which %d take contour ink with the flatness rule " +
+            "(%.2f%%) and %d without it (%.2f%%); a plain here is flatter than %.5f of the field " +
+            "a pixel")
+            .format(
+                plainCells, drawn, drawn * 100.0 / plainCells,
+                stained, stained * 100.0 / plainCells, flattest
+            )
+    }
+
+    /** How many cells of plain take ink at [flattestSlope], which is 0 for the control. */
+    private fun inkedOnPlain(world: WorldMap, flattestSlope: Float): Int {
+        val width = world.width
+        val height = world.height
+        val elevation = world.sea.relativeElevation
+        val interval = Isobaths.interval(world.config.climate.maxAltitudeMetres)
+        val reach = Isobaths.slopeStencil(width)
+        val span = 1f / (2f * reach)
+        val inked = BooleanArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val cell = y * width + x
+                if (world.sea.isLand[cell]) continue
+                val eastward = (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * span
+                val southward =
+                    (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * span
+                val slope = kotlin.math.sqrt(eastward * eastward + southward * southward)
+                inked[cell] =
+                    Isobaths.ink(-elevation.data[cell], slope, interval, flattestSlope) >= 0.5f
+            }
+        }
+
+        return inked.indices.count { inked[it] && onAPlain(world, it) }
     }
 
     /** One PNG, from a whole map or a detail of one. */
@@ -166,8 +219,28 @@ class ClimateReliefGalleryTest {
             Detail("sea") { world, cell ->
                 val depth = world.sea.relativeElevation.data[cell]
                 !world.sea.isLand[cell] && depth < SEA_SLOPE_DEEP && depth > SEA_SLOPE_SHALLOW
+            },
+            // And the opposite: the flattest deep water there is, which is where the first render
+            // review found a contour staining a whole basin.
+            Detail("plain") { world, cell ->
+                !world.sea.isLand[cell] && onAPlain(world, cell)
             }
         )
+
+        /** Whether the sea floor at this cell is flatter than an abyssal plain's gradient. */
+        fun onAPlain(world: WorldMap, cell: Int): Boolean {
+            val width = world.width
+            val x = cell % width
+            val y = cell / width
+            val elevation = world.sea.relativeElevation
+            val reach = Isobaths.slopeStencil(width)
+            val span = 1f / (2f * reach)
+            val eastward = (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * span
+            val southward =
+                (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * span
+            val slope = kotlin.math.sqrt(eastward * eastward + southward * southward)
+            return slope < Isobaths.flattestSlope(world.config, width, world.height)
+        }
 
         /**
          * The author's own two worlds, at the size he exports at.

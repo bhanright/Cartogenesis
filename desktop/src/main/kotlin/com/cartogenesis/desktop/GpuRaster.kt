@@ -214,9 +214,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uBiomeWash"), recipe.biomeWash)
         GL43C.glUniform1f(uniform("uBiomeMuting"), recipe.biomeMuting)
         GL43C.glUniform1f(uniform("uClimateTint"), recipe.climateTint)
-        GL43C.glUniform1f(uniform("uAerialPerspective"), recipe.aerialPerspective)
         GL43C.glUniform1f(uniform("uIsobathInk"), recipe.isobathInk)
         GL43C.glUniform1f(uniform("uIsobathInterval"), recipe.isobathInterval)
+        GL43C.glUniform1f(uniform("uIsobathFlattest"), recipe.isobathFlattestSlope)
+        GL43C.glUniform1i(uniform("uIsobathStencil"), recipe.isobathSlopeStencil)
         GL43C.glUniform1fv(uniform("uBiomeCanopy"), recipe.biomeCanopy)
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
@@ -387,9 +388,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform float uBiomeWash;
             uniform float uBiomeMuting;
             uniform float uClimateTint;
-            uniform float uAerialPerspective;
             uniform float uIsobathInk;
             uniform float uIsobathInterval;
+            uniform float uIsobathFlattest;
+            uniform int uIsobathStencil;
             uniform float uBiomeCanopy[$BIOME_SLOTS];
             uniform float uCoastlineStrength;
             uniform float uReliefStrength;
@@ -480,9 +482,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float LAMP_REACH = 0.848;
             const float ROOT_HALF = 0.70710678;
             const float ROOT_TWO = 1.4142135;
-            const float SKY_BRIGHTNESS_TOTAL = 5.0;
-            const float SKY_SHARE = 0.25;
-            const float ORDINARY_GROUND = 0.933;
+            // The sky at ReliefShading.HAZE, which is 0.10: a diffuse share of
+            // 0.15 + 0.85 * haze, and a brightness per bearing of
+            // evenness + (1 - evenness) * toward, with evenness 0.1 + 0.9 * haze. Copied out of
+            // the Kotlin's own arithmetic rather than recomputed here, so the two agree to the bit.
+            const float SKY_BRIGHTNESS_TOTAL = 4.76000016;
+            const float SKY_SHARE = 0.23500001;
+            const float ORDINARY_GROUND = 0.936;
             const float DARKEST = 0.45;
             const float BRIGHTEST = 1.35;
             const int HORIZON_BEARINGS = 8;
@@ -500,7 +506,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float BEARING_UNIT_SOUTH[8] =
                 float[8](0.0, ROOT_HALF, 1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF);
             const float SKY_BRIGHTNESS[8] = float[8](
-                0.359835, 0.25, 0.359835, 0.625, 0.890165, 1.0, 0.890165, 0.625
+                0.30862176, 0.19, 0.30862176, 0.59500003,
+                0.88137829, 1.0, 0.88137829, 0.59500003
             );
 
             /* And from ClimateTint.kt and Isobaths.kt, on the same terms. */
@@ -510,6 +517,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float ISOBATH_HALF_WIDTH = 0.5;
             const float ISOBATH_ANTIALIAS = 0.6;
             const float ISOBATH_CROWDED = 4.0;
+            const float ISOBATH_PLAIN_FADE = 0.5;
             const float FLATTEST_SLOPE = 1e-6;
 
             vec3 unpack(uint c) {
@@ -789,9 +797,18 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              */
             float seaContourInk(int x, int y, float depth) {
                 if (depth <= 0.0) return 0.0;
-                precise float eastward = (elevationAt(x + 1, y) - elevationAt(x - 1, y)) * 0.5;
-                precise float southward = (elevationAt(x, y + 1) - elevationAt(x, y - 1)) * 0.5;
+                int reach = uIsobathStencil;
+                precise float span = 1.0 / (2.0 * float(reach));
+                precise float eastward =
+                    (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * span;
+                precise float southward =
+                    (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * span;
                 precise float slope = sqrt(eastward * eastward + southward * southward);
+                // A contour is a line only where the floor slopes; on a plain the level set is a
+                // region, and the drawing stains a basin instead of tracing a line through it.
+                float onASlope = uIsobathFlattest <= 0.0 ? 1.0 : smoothstep(
+                    uIsobathFlattest * ISOBATH_PLAIN_FADE, uIsobathFlattest, slope);
+                if (onASlope <= 0.0) return 0.0;
                 precise float run = slope < FLATTEST_SLOPE ? FLATTEST_SLOPE : slope;
 
                 precise float steps = depth / uIsobathInterval;
@@ -807,7 +824,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 );
                 float legible =
                     smoothstep(ISOBATH_CROWDED * 0.5, ISOBATH_CROWDED, pixelsBetweenLines);
-                return line * legible;
+                return line * legible * onASlope;
             }
 
             vec3 temperatureColour(float celsius) {
@@ -930,13 +947,6 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                                 1.0 + (reliefAt(x, y) - 1.0) * uReliefStrength;
                             colour = shade(colour, relief);
                         }
-                    }
-                    // Aerial perspective, after the shading: haze lies between the reader and the
-                    // hillside and softens what the light did to it.
-                    if (uAerialPerspective > 0.0 && land) {
-                        precise float veil =
-                            uAerialPerspective * (1.0 - clamp(relative, 0.0, 1.0));
-                        colour = blend(colour, uPaper, veil);
                     }
                     if (engraveWater && uIceBiome >= 0 && biomeAt(i) == uIceBiome) {
                         colour = blend(colour, uCoastline, stippleInk(x, y));

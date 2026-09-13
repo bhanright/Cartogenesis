@@ -15,9 +15,9 @@ import kotlin.math.sqrt
  *
  *  - **The direct light**, from eight lamps round the whole compass rather than one. Each is at the
  *    same height above the horizon as the old lamp, each lights a slope according to how that slope
- *    faces it, and each is as bright as its quarter of the sky is — brightest around the
- *    conventional north-west light and a quarter of that opposite it (see [SKY_BRIGHTNESS]). So a
- *    ridge reads whichever way it runs, and the north-west still reads as the lit side.
+ *    faces it, and each is as bright as its own eighth of the sky is — brightest around the
+ *    conventional north-west light and dimmest opposite it, by however much [HAZE] says. So a ridge
+ *    reads whichever way it runs, and the north-west still reads as the lit side.
  *  - **The sky**, which is what fills the shadow. A surface walled in by higher ground sees less of
  *    the sky than an open plain does, and [openness] measures how much: the horizon angle along
  *    eight bearings over a short stencil, weighted by the brightness of the sky each bearing hides.
@@ -82,6 +82,25 @@ internal object ReliefShading {
     }
 
     /**
+     * A day's sky: how much of its light is diffuse, and how bright it is along each bearing.
+     *
+     * One object rather than two loose numbers because the two move together — see [HAZE] — and
+     * because `ReliefShadingTest` sweeps them together to derive it. The shipped [DAYLIGHT] is
+     * built once; nothing allocates one per pixel.
+     */
+    class Sky(val diffuseShare: Float, val brightness: FloatArray) {
+        val brightnessTotal: Float = brightness.sum()
+
+        companion object {
+            fun forHaze(haze: Float): Sky =
+                Sky(skyShare(haze), FloatArray(HORIZON_BEARINGS) { skyBrightness(haze, it) })
+        }
+    }
+
+    /** The sky every render is drawn under. */
+    val DAYLIGHT: Sky by lazy { Sky.forHaze(HAZE) }
+
+    /**
      * The lighting factor at one cell.
      *
      * [scale] comes from [slopeScale] and [step] from [opennessStep]; both are properties of the
@@ -93,22 +112,43 @@ internal object ReliefShading {
         elevation: FloatField,
         scale: Float,
         step: Int,
-        singleLamp: Boolean
+        singleLamp: Boolean,
+        sky: Sky = DAYLIGHT
     ): Float {
-        val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * scale
-        val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale
-        val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
-
         if (singleLamp) {
+            val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * scale
+            val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale
+            val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
             val lambert =
                 (-eastward * LAMP_EAST - southward * LAMP_SOUTH + LAMP_HEIGHT) / normalLength
             return (LAMP_AMBIENT + LAMP_SWING * lambert).coerceIn(DARKEST, BRIGHTEST)
         }
+        return (illumination(x, y, elevation, scale, step, sky) / ORDINARY_GROUND)
+            .coerceIn(DARKEST, BRIGHTEST)
+    }
 
-        val direct = directLight(eastward, southward, normalLength)
-        val sky = openness(x, y, elevation, scale, step)
-        val illumination = SKY_SHARE * sky + (1f - SKY_SHARE) * (direct / LAMP_HEIGHT)
-        return (illumination / ORDINARY_GROUND).coerceIn(DARKEST, BRIGHTEST)
+    /**
+     * The light reaching a cell under [sky], as a share of what a flat open plain receives.
+     *
+     * Before [ORDINARY_GROUND], which is the median of this over a world's land — so this is the
+     * quantity `ReliefShadingTest` sweeps the haze over, and [at] is this divided by that median
+     * and clamped.
+     */
+    fun illumination(
+        x: Int,
+        y: Int,
+        elevation: FloatField,
+        scale: Float,
+        step: Int,
+        sky: Sky = DAYLIGHT
+    ): Float {
+        val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * scale
+        val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale
+        val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
+        val direct = directLight(eastward, southward, normalLength, sky)
+        val open = openness(x, y, elevation, scale, step, sky)
+        val share = sky.diffuseShare
+        return share * open + (1f - share) * (direct / LAMP_HEIGHT)
     }
 
     /**
@@ -120,11 +160,18 @@ internal object ReliefShading {
      * have. [eastward] and [southward] are the scaled central differences and [normalLength] the
      * length of the surface normal they imply.
      */
-    fun directLight(eastward: Float, southward: Float, normalLength: Float): Float {
+    fun directLight(
+        eastward: Float,
+        southward: Float,
+        normalLength: Float,
+        sky: Sky = DAYLIGHT
+    ): Float {
         // Each lamp contributes as this slope faces it and as bright as its quarter of the sky is.
         // A lamp below the local horizon contributes nothing, which is what the clamp at zero is;
         // the brightnesses total a constant, so flat ground comes out with exactly the light one
         // lamp of the same altitude would have given it.
+        // The table is read out of the object once: this loop runs for every land pixel of the map.
+        val brightness = sky.brightness
         var direct = 0f
         for (bearing in 0 until HORIZON_BEARINGS) {
             val bearingEast = BEARING_UNIT_EAST[bearing]
@@ -133,9 +180,9 @@ internal object ReliefShading {
                 -eastward * bearingEast * LAMP_REACH -
                     southward * bearingSouth * LAMP_REACH + LAMP_HEIGHT
                 ) / normalLength
-            if (lambert > 0f) direct += SKY_BRIGHTNESS[bearing] * lambert
+            if (lambert > 0f) direct += brightness[bearing] * lambert
         }
-        return direct / SKY_BRIGHTNESS_TOTAL
+        return direct / sky.brightnessTotal
     }
 
     /**
@@ -151,8 +198,16 @@ internal object ReliefShading {
      * to the true horizon in every direction: at map scale the difference is invisible and the cost
      * is the whole of it.
      */
-    fun openness(x: Int, y: Int, elevation: FloatField, scale: Float, step: Int): Float {
+    fun openness(
+        x: Int,
+        y: Int,
+        elevation: FloatField,
+        scale: Float,
+        step: Int,
+        sky: Sky = DAYLIGHT
+    ): Float {
         val here = elevation.sample(x, y)
+        val brightness = sky.brightness
         var blocked = 0f
         for (bearing in 0 until HORIZON_BEARINGS) {
             val eastward = BEARING_EAST[bearing]
@@ -170,9 +225,9 @@ internal object ReliefShading {
             }
             // Weighted by how bright that quarter of the sky is, so a ridge standing between the
             // ground and the sun costs it more light than the same ridge behind it.
-            blocked += SKY_BRIGHTNESS[bearing] * (steepest / sqrt(steepest * steepest + 1f))
+            blocked += brightness[bearing] * (steepest / sqrt(steepest * steepest + 1f))
         }
-        return 1f - blocked / SKY_BRIGHTNESS_TOTAL
+        return 1f - blocked / sky.brightnessTotal
     }
 
     /**
@@ -209,23 +264,17 @@ internal object ReliefShading {
     )
 
     /**
-     * How bright each eighth of the sky is, in the same order: east, south-east, south, south-west,
-     * west, north-west, north, north-east.
+     * How much of each eighth of the sky faces the light, in the same order: east, south-east,
+     * south, south-west, west, north-west, north, north-east.
      *
-     * `SKY_BIAS + (1 - SKY_BIAS) · (1 + cos(bearing - north-west)) / 2` — brightest around the
-     * conventional north-west light and dimmest opposite it, with [SKY_BIAS] a quarter, so the sky
-     * behind the reader is a quarter as bright as the sky the light is in. That is between the CIE
-     * overcast sky, which has no variation with bearing at all, and a clear one, where the sky
-     * around the sun is ten times the rest. Written out rather than computed, so the compute
-     * shader's copy is the same to the bit.
-     *
-     * They come to five exactly, which is eight times the mean of the cosine term: a fact of the
-     * arithmetic rather than a choice, and what makes the normalisation a constant.
+     * `(1 + cos(bearing - north-west)) / 2`: 1 in the north-west, 0 opposite it. Written out rather
+     * than taken from a cosine at run time, because the compute shader's copy has to be the same to
+     * the bit. They come to four exactly, whatever the haze, which is what makes the normalisation
+     * a constant.
      */
-    private val SKY_BRIGHTNESS = floatArrayOf(
-        0.359835f, 0.25f, 0.359835f, 0.625f, 0.890165f, 1f, 0.890165f, 0.625f
+    private val SKY_TOWARD_LIGHT = floatArrayOf(
+        0.14644661f, 0f, 0.14644661f, 0.5f, 0.85355339f, 1f, 0.85355339f, 0.5f
     )
-    private const val SKY_BRIGHTNESS_TOTAL = 5f
 
     /**
      * The single lamp, in the north-west at 32 degrees above the horizon.
@@ -246,16 +295,33 @@ internal object ReliefShading {
     private const val LAMP_REACH = 0.848f
 
     /**
-     * How much of the light comes from the sky rather than from the sun.
+     * How hazy the day is: 0 a clear sky, 1 a fully overcast one.
      *
-     * The diffuse share of daylight: about 0.15 to 0.20 of the light falling on a horizontal surface
-     * under a clear sky, 0.3 to 0.4 under a hazy or lightly clouded one, and all of it under
-     * overcast. A quarter is a bright day with a little haze in it, and it is the value inside that
-     * range at which the shaded relief keeps the contrast of the lamp it replaces — the whole of the
-     * calibration, since raising it flattens the drawing and lowering it hardens the shadows back
-     * toward the thing this model exists to stop doing. `ReliefShadingTest` measures both.
+     * The one number this model is calibrated on, and it moves two things together because a real
+     * sky moves them together. A clear sky sends about **0.15** of its light diffusely and is some
+     * **ten times** brighter around the sun than opposite it; an overcast sky sends **all** of its
+     * light diffusely and is the same brightness whichever way you look. Anything between is a
+     * haze, and [skyShare] and [skyBrightness] interpolate the pair.
+     *
+     * The value is derived rather than chosen: it is the haze at which the shaded relief has the
+     * same contrast as the single lamp it replaces, over the land of seed 234475 at 512.
+     * `ReliefShadingTest` sweeps the haze, finds that value and asserts this constant is it — so
+     * the derivation is a guard rather than a note. Clearer than this and the shadows harden back
+     * toward the thing the model exists to stop doing; hazier and the drawing goes flat.
      */
-    private const val SKY_SHARE = 0.25f
+    const val HAZE: Float = 0.10f
+
+    /** The diffuse share of daylight at a given haze: clear-sky 0.15, overcast 1. */
+    fun skyShare(haze: Float): Float = CLEAR_SKY_DIFFUSE + (1f - CLEAR_SKY_DIFFUSE) * haze
+
+    /** How bright one eighth of the sky is at a given haze: clear-sky a tenth opposite the sun. */
+    fun skyBrightness(haze: Float, bearing: Int): Float {
+        val evenness = CLEAR_SKY_OPPOSITE + (1f - CLEAR_SKY_OPPOSITE) * haze
+        return evenness + (1f - evenness) * SKY_TOWARD_LIGHT[bearing]
+    }
+
+    private const val CLEAR_SKY_DIFFUSE = 0.15f
+    private const val CLEAR_SKY_OPPOSITE = 0.1f
 
     /**
      * How much light ordinary ground receives, as a share of what a flat open plain receives.
@@ -264,11 +330,12 @@ internal object ReliefShading {
      * the light the ground gets — but there is a question of what "unshaded" means, and flat open
      * ground is the wrong answer to it: almost no ground is flat, so measuring against a plain
      * would darken every map by the amount ordinary country is rougher than one. This is the median
-     * illumination over the land of seed 234475 at 512, which is what ordinary country comes to;
-     * dividing by it leaves the sheet's overall tone where the single lamp had it and lets only the
-     * relief move. `ReliefShadingTest` measures both models and reports the two side by side.
+     * illumination over the land of seed 234475 at 512 under this day's [HAZE], which is what
+     * ordinary country comes to; dividing by it leaves the sheet's overall tone where the single
+     * lamp had it and lets only the relief move. `ReliefShadingTest` measures it at the haze it
+     * derives and asserts this is that figure.
      */
-    private const val ORDINARY_GROUND = 0.933f
+    private const val ORDINARY_GROUND = 0.936f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

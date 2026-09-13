@@ -57,15 +57,6 @@ enum class MapStyle(
      */
     internal val climateTint: Float,
     /**
-     * How far the air veils the low ground, as a share of the way to the paper at sea level.
-     *
-     * Aerial perspective, the oldest trick in relief drawing and the other half of Imhof's advice
-     * on tints: the far ground is seen through more atmosphere than the near, so it loses contrast
-     * toward the colour of the sheet, and on a map read from above the far ground is the low ground.
-     * Falls linearly to nothing at the snow line, so a summit stays as crisp as it is drawn.
-     */
-    internal val aerialPerspective: Float,
-    /**
      * How black this style rules its depth contours, or 0 for a sea with none.
      *
      * Drawn in [coastline], the style's own ink, at this share of it. See [Isobaths]. Zero for the
@@ -151,7 +142,6 @@ enum class MapStyle(
         // hypsometric series has to follow the vegetation, and this style is the one that claims to
         // be one.
         climateTint = 1f,
-        aerialPerspective = 0.12f,
         isobathInk = 0.18f,
         glyphMuting = 0f,
         lineArt = false,
@@ -192,7 +182,6 @@ enum class MapStyle(
         // Half. An old chart knew perfectly well where the deserts were and drew them as sand, but
         // its whole palette is already earths, so there is less for the climate to move.
         climateTint = 0.45f,
-        aerialPerspective = 0.10f,
         isobathInk = 0.12f,
         glyphMuting = 0.55f,
         lineArt = false,
@@ -228,10 +217,9 @@ enum class MapStyle(
         border = 0xFF7A2E28.toInt(),
         wilderness = 0xFFC9C4B8.toInt(),
         reliefStrength = 1.8f,
-        // Almost nothing to modulate — but distance drawn as a paler wash is the defining device of
-        // the form it imitates, so this is the style that takes the most aerial perspective.
+        // Almost nothing to modulate: with the colour this nearly gone, what is left of a climate
+        // is a shade of grey either way.
         climateTint = 0.15f,
-        aerialPerspective = 0.16f,
         isobathInk = 0.10f,
         glyphMuting = 0.70f,
         lineArt = false,
@@ -270,7 +258,6 @@ enum class MapStyle(
         // climate gets a third of a say ashore and the contours are the strongest on the list. A
         // chart is the one document here that is *about* the depth.
         climateTint = 0.30f,
-        aerialPerspective = 0.06f,
         isobathInk = 0.30f,
         glyphMuting = 0.40f,
         lineArt = false,
@@ -307,7 +294,6 @@ enum class MapStyle(
         // Moonlight drains the colour out of everything, so only a quarter of the climate survives
         // — and what "paler" means here is bluer, since the paper this style prints on is dark.
         climateTint = 0.25f,
-        aerialPerspective = 0.10f,
         isobathInk = 0.14f,
         glyphMuting = 0f,
         lineArt = false,
@@ -345,11 +331,8 @@ enum class MapStyle(
         // The full effect, as on Atlas, and for a blunter reason: the pull-down map printed the
         // Sahara yellow and the Congo dark green, and that is most of what it was for. Anything
         // less leaves this ramp's lowland green under a coastal desert, because the green band of
-        // a classroom map runs a third of the way up the sheet before it turns to sand. No haze at
-        // all, though: these were flat lithographs meant to be read from the back of a room, and
-        // softening the low ground would take the legibility with it.
+        // a classroom map runs a third of the way up the sheet before it turns to sand.
         climateTint = 1f,
-        aerialPerspective = 0.04f,
         isobathInk = 0.10f,
         glyphMuting = 0.2f,
         lineArt = false,
@@ -389,7 +372,6 @@ enum class MapStyle(
         // An illustrated map draws the desert as a desert and the wood as a wood — they are named
         // places on it, which is the same reason its biome wash runs higher than anyone else's.
         climateTint = 0.80f,
-        aerialPerspective = 0.08f,
         isobathInk = 0.10f,
         glyphMuting = 0.15f,
         lineArt = false,
@@ -426,7 +408,6 @@ enum class MapStyle(
         // Half, like the other painted parchment: the sage and ochre it is painted in are already
         // most of the way to being climate colours.
         climateTint = 0.50f,
-        aerialPerspective = 0.12f,
         isobathInk = 0.12f,
         glyphMuting = 0.25f,
         lineArt = false,
@@ -485,7 +466,6 @@ enum class MapStyle(
         // with, and the sea already carries four lines of its own — a second family of them running
         // the other way would turn the ocean into a net.
         climateTint = 0f,
-        aerialPerspective = 0f,
         isobathInk = 0f,
         glyphMuting = 0.5f,
         lineArt = true,
@@ -560,7 +540,6 @@ enum class MapStyle(
         // A third. A dry world has one climate, so what little the modulation has to say comes out
         // as pale dust against darker plain — and the polar caps, which the cold term draws.
         climateTint = 0.35f,
-        aerialPerspective = 0.10f,
         // On the contours of a sea that is not there any more, which is exactly how the northern
         // lowlands of a dry planet are charted: the old floor, still with its terraces.
         isobathInk = 0.12f,
@@ -643,7 +622,6 @@ enum class MapStyle(
         // lowlands toward white or a contour that broke the flat sea would each make the colour on
         // the page something other than the colour the guard measured.
         climateTint = 0f,
-        aerialPerspective = 0f,
         isobathInk = 0f,
         glyphMuting = 0.2f,
         lineArt = false,
@@ -702,15 +680,6 @@ enum class MapStyle(
         )
         return tint(colour, biome)
     }
-
-    /**
-     * How far the air has veiled the ground at [relative] height, 0 to 1.
-     *
-     * Applied after the relief rather than before it, because haze lies between the reader and the
-     * hillside and softens the shading along with the colour.
-     */
-    internal fun aerialVeil(relative: Float): Float =
-        aerialPerspective * (1f - relative.coerceIn(0f, 1f))
 
     /** The biome colour as this style would print it: muted toward the paper, then washed in. */
     internal fun tint(base: Int, biome: Biome): Int {

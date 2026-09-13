@@ -91,17 +91,17 @@ class PenAndInkTest {
          * against that chunk's renders.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 2098735428,
-            MapStyle.VELLUM to -1176442695,
-            MapStyle.INK_WASH to 752517727,
-            MapStyle.NAUTICAL to -1649287768,
-            MapStyle.MIDNIGHT to 1804762079,
-            MapStyle.SCHOOLROOM to -1516353490,
-            MapStyle.VERDANT to -676025039,
-            MapStyle.SCROLL to -1483607860,
+            MapStyle.ATLAS to 1359403302,
+            MapStyle.VELLUM to 1582483938,
+            MapStyle.INK_WASH to 1749555980,
+            MapStyle.NAUTICAL to -5657209,
+            MapStyle.MIDNIGHT to 1248066434,
+            MapStyle.SCHOOLROOM to 1099874040,
+            MapStyle.VERDANT to -1750189930,
+            MapStyle.SCROLL to 1269027523,
             MapStyle.PEN_AND_INK to 2027689450,
-            MapStyle.MARS to 1678113644,
-            MapStyle.CLEAR to 1766017879
+            MapStyle.MARS to -1857840696,
+            MapStyle.CLEAR to 1540381349
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

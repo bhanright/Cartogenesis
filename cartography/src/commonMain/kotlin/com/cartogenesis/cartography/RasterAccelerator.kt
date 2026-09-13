@@ -164,15 +164,17 @@ class RasterRecipe(
     val biomeMuting: Float,
     /** How far the land ramp follows the climate. See [MapStyle.climateTint]. */
     val climateTint: Float,
-    /** How far the air veils the low ground. See [MapStyle.aerialPerspective]. */
-    val aerialPerspective: Float,
     /**
      * How black the depth contours run, and how far apart they are as a fraction of the elevation
      * field's own range. See [Isobaths]. The interval depends on the world's metre scale, which is
-     * why it travels rather than being a constant on the device.
+     * why it travels rather than being a constant on the device, and so does the gradient below
+     * which the floor is a plain and carries no contour at all.
      */
     val isobathInk: Float,
     val isobathInterval: Float,
+    val isobathFlattestSlope: Float,
+    /** How far the central difference that measures the floor's fall reaches, in cells. */
+    val isobathSlopeStencil: Int,
     val lake: Int,
     val lakeDeep: Int,
     val coastline: Int,
@@ -401,9 +403,10 @@ class RasterRecipe(
                 biomeWash = style.biomeWash,
                 biomeMuting = style.biomeMuting,
                 climateTint = if (view == MapView.FANTASY) style.climateTint else 0f,
-                aerialPerspective = if (view == MapView.FANTASY) style.aerialPerspective else 0f,
                 isobathInk = if (view == MapView.FANTASY) style.isobathInk else 0f,
                 isobathInterval = Isobaths.interval(world.config.climate.maxAltitudeMetres),
+                isobathFlattestSlope = Isobaths.flattestSlope(world.config, w, h),
+                isobathSlopeStencil = Isobaths.slopeStencil(w),
                 lake = style.lake,
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,

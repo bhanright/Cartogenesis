@@ -20,10 +20,10 @@ import com.cartogenesis.worldgen.pipeline.Biome
  *    from having enough water for a closed cover of plants, and its own class boundaries are the
  *    two ends of the ramp here: below 10 the drainage is endorheic and the ground shows through,
  *    above 20 the cover closes over it.
- *  - **[bareEarth]**, from the biome, which is the part aridity cannot know. A biome is the
- *    classifier's own verdict on what grows at a cell, and where it says desert the ground is bare
- *    whatever the index makes of the rainfall. The two are combined by taking whichever says the
- *    ground is barer.
+ *  - **The band the biome allows**, which is the part aridity cannot know. A biome is the
+ *    classifier's own verdict on what grows at a cell, and each class shows a *range* of ground:
+ *    see [bareEarthLeast] and [bareEarthMost]. The index is spent inside that range rather than on
+ *    top of it, which is what keeps a dry grassland straw and a desert sand.
  *  - **[canopyClosure]**, also from the biome: how much of the ground is under closed woody cover,
  *    which is what makes a forest darker than the plain beside it rather than merely greener.
  *
@@ -60,14 +60,25 @@ internal object ClimateTint {
      * instead, and the two never both apply to the same cell.
      */
     fun drynessAt(world: WorldMap, cell: Int): Float {
+        val biome = world.climate.biome[cell]
+        val least = BARE_EARTH_LEAST[biome.ordinal]
+        return least + (BARE_EARTH_MOST[biome.ordinal] - least) * droughtAt(world, cell)
+    }
+
+    /**
+     * The climate's half of it: 1 where the year is arid by De Martonne's line, 0 where it is
+     * sub-humid, and 0 wherever the cold rather than the drought is what stops things growing.
+     *
+     * Separate from [drynessAt] because it is the part that knows nothing about what grows there —
+     * the biome's own band is what turns it into a colour.
+     */
+    fun droughtAt(world: WorldMap, cell: Int): Float {
         val index = aridityIndex(
             world.climate.temperature.data[cell],
             world.climate.precipitationMm.data[cell]
         )
         val drought = 1f - Engraving.smoothstep(DE_MARTONNE_ARID, DE_MARTONNE_SUBHUMID, index)
-        val fromClimate = drought * (1f - coldnessAt(world, cell))
-        val fromCover = bareEarth(world.climate.biome[cell])
-        return if (fromCover > fromClimate) fromCover else fromClimate
+        return drought * (1f - coldnessAt(world, cell))
     }
 
     /** How far the cold has taken the ground out of the growing world, 0 to 1. */
@@ -83,8 +94,10 @@ internal object ClimateTint {
     fun coldness(meanAnnualC: Float): Float =
         1f - Engraving.smoothstep(ICE_CAP_C, TUNDRA_C, meanAnnualC)
 
-    /** How much of this vegetation's ground is bare earth rather than living cover. */
-    fun bareEarth(biome: Biome): Float = BARE_EARTH[biome.ordinal]
+    /** How bare this vegetation's ground can get: at its wettest, and at its driest. */
+    fun bareEarthLeast(biome: Biome): Float = BARE_EARTH_LEAST[biome.ordinal]
+
+    fun bareEarthMost(biome: Biome): Float = BARE_EARTH_MOST[biome.ordinal]
 
     /** How much of it is under a closed woody canopy. */
     fun canopyClosure(biome: Biome): Float = CANOPY_CLOSURE[biome.ordinal]
@@ -147,30 +160,60 @@ internal object ClimateTint {
     private const val ICE_CAP_C = -10f
 
     /**
-     * How much bare earth each vegetation leaves showing.
+     * How much bare earth each vegetation leaves showing: the wettest example of it, then the
+     * driest.
      *
-     * Read off the cover classes the biomes are named for rather than invented: a barren surface is
-     * over four fifths bare, an open shrubland something like half, a savanna a third between the
-     * tussocks, a grassland a tenth in the dry season, and a closed forest none at all. Ordered by
-     * [Biome], and the two sea entries are never asked.
+     * A band rather than a number, and the band is what stops a steppe being drawn as a desert. The
+     * classifier has already decided what grows at a cell, and a class has a *range* of ground it
+     * can show — the land-cover classes these biomes are named for are defined by exactly that:
+     * barren is under a tenth vegetated, open shrubland a tenth to two fifths woody over bare or
+     * herbaceous ground, savanna a tenth to three tenths tree cover over grass, grassland mostly
+     * closed herb in the growing season and litter and soil in the dry one, closed forest over
+     * three fifths canopy. So the aridity index is spent *within* the class's own band rather than
+     * on top of it: a wet grassland sits at the green end of a grassland's range and a dry one at
+     * the straw end, and neither reaches a desert's ground, because a desert is the class where the
+     * ground is nearly all there is.
+     *
+     * The first pass of F13 had one number per biome and let the index take a cell all the way to
+     * bare from any class, which drew the interior of a continent as Sahara: seed 234475's
+     * grassland measured 0.74 of the way to bare ground against a desert's 1.00.
      */
-    private val BARE_EARTH = floatArrayOf(
+    private val BARE_EARTH_LEAST = floatArrayOf(
         0f,    // OCEAN
         0f,    // SHALLOW_OCEAN
         0f,    // ICE_SHEET — pale because it is frozen, not because it is bare
-        0.25f, // TUNDRA — frost-shattered ground between the mats
+        0.1f,  // TUNDRA — frost-shattered ground between the mats
         0f,    // TAIGA
         0f,    // TEMPERATE_FOREST
         0f,    // TEMPERATE_RAINFOREST
-        0.15f, // GRASSLAND
-        0.5f,  // SHRUBLAND
-        1f,    // DESERT — bare by the classifier's own definition
-        0.35f, // SAVANNA
+        0.05f, // GRASSLAND
+        0.2f,  // SHRUBLAND
+        0.9f,  // DESERT — bare by the classifier's own definition
+        0.1f,  // SAVANNA
         0f,    // TROPICAL_SEASONAL_FOREST
         0f,    // TROPICAL_RAINFOREST
-        0.6f,  // ALPINE — rock and scree above the tree line
-        0.3f,  // MEDITERRANEAN — maquis over dry ground for half the year
+        0.3f,  // ALPINE — rock and scree above the tree line
+        0.1f,  // MEDITERRANEAN — maquis over dry ground for half the year
         0f     // MONSOON_FOREST
+    )
+
+    private val BARE_EARTH_MOST = floatArrayOf(
+        0f,    // OCEAN
+        0f,    // SHALLOW_OCEAN
+        0f,    // ICE_SHEET
+        0.4f,  // TUNDRA
+        0.08f, // TAIGA
+        0.08f, // TEMPERATE_FOREST
+        0.05f, // TEMPERATE_RAINFOREST
+        0.5f,  // GRASSLAND — straw and litter at the end of a dry season, not sand
+        0.6f,  // SHRUBLAND
+        1f,    // DESERT
+        0.5f,  // SAVANNA
+        0.08f, // TROPICAL_SEASONAL_FOREST
+        0.05f, // TROPICAL_RAINFOREST
+        0.7f,  // ALPINE
+        0.5f,  // MEDITERRANEAN
+        0.08f  // MONSOON_FOREST
     )
 
     /**

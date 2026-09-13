@@ -400,9 +400,14 @@
   properly means a second ordered ramp for arid ground whose stops are also 8.00 CIEDE2000 apart
   from each other under both deficiencies, which is a palette exercise rather than a rendering one.
 - **The sky model doubles the processor's raster.** Twenty-four horizon samples a land pixel against
-  the single lamp's four central differences: 0.44 s against 0.21 s at 2048 and 1.65 s against
+  the single lamp's four central differences: about 0.44 s against 0.21 s at 2048 and 1.65 s against
   0.81 s at 4096, measured on seed 42 at F13. The desktop draws exports on the graphics card, where
   it costs nothing measurable, but the browser has no raster device and pays it in full. If it ever
   matters, the horizon is separable — one sweep along each of the eight bearings with a running
   maximum is O(1) a pixel instead of three samples — at the cost of the two paths no longer being
   the same arithmetic per pixel.
+- **Aerial perspective was written for F13 and taken out again.** The plan asked for the low ground
+  to be veiled slightly toward the paper; it was built, rendered and reviewed, and it cost the
+  relief more contrast than the haze it stood for was worth — aerial perspective is a painter's
+  device for an oblique view, and a map is a plan. If it ever comes back it should be a style's own
+  decision, declared like the biome wash, rather than a physical claim about the air.

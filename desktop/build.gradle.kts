@@ -112,6 +112,9 @@ tasks.register<Test>("audit") {
     }
 }
 
+/** Where the figures are left for `:web:assembleSite` to pick up. */
+val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
+
 /**
  * Renders every picture on cartogenesis.com from the engine, into `web/build/site-imagery`.
  *
@@ -124,19 +127,22 @@ tasks.register<Test>("audit") {
  * writes to memory. Headless is stated anyway, so a stray AWT touch fails here rather than on the
  * runner.
  *
+ * What it costs a deploy: 57 s on a sixteen-core desktop and 219 s pinned to two cores with
+ * `-XX:ActiveProcessorCount=2`, which is the shape of a GitHub runner. Nearly all of it is
+ * generating the world once; the seven rasterisations and their WebP encodes are three seconds
+ * between them. Measured 2026-09-12.
+ *
  * `-Pcontact` additionally writes the whole map at half size with a coordinate grid over it and
  * the page's windows outlined, which is how a window is chosen. Not wanted by a deploy.
  */
-val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
-
 tasks.register<JavaExec>("renderSiteImagery") {
     group = "distribution"
     description = "Renders cartogenesis.com's figures from seed 718106 at 2048 into " +
         "web/build/site-imagery."
     mainClass = "com.cartogenesis.desktop.SiteImagery"
     classpath = sourceSets["main"].runtimeClasspath
-    // The world is 2048x2048 and every stage keeps float fields over it; 6g is comfortable and
-    // well inside a GitHub runner's 16.
+    // The world is 2048x2048 and every stage keeps float fields over it; 6g is comfortable, and
+    // well inside the memory a hosted runner has.
     maxHeapSize = "6g"
     systemProperty("java.awt.headless", "true")
     if (project.hasProperty("contact")) {
@@ -221,5 +227,13 @@ compose.desktop {
 tasks.withType<Test>().configureEach {
     inputs.files(rootProject.fileTree("web/src/wasmJsMain/kotlin"))
         .withPropertyName("webSourcesReadByDeploymentContractTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `SitePaletteContrastTest` reads the landing page's own CSS and measures every pair of
+    // colours it sets. Same trap, caught the same way: without this the task stays up to date
+    // when the page changes and the build cache hands back the previous *passing* result. Proved
+    // by putting the old page's failing grey back and watching the guard report success.
+    inputs.files(rootProject.fileTree("site"))
+        .withPropertyName("sitePagesReadByThePaletteContrastTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

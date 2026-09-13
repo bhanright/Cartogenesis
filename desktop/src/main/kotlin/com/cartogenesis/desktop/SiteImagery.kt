@@ -67,6 +67,12 @@ object SiteImagery {
      * has already accepted, and 72 lands the Atlas band at 134 KB — the same picture, slightly
      * lighter. Skia exposes no lossless WebP path, so this is a choice about how much to keep
      * rather than whether to lose any.
+     *
+     * Pen and ink is the one figure that resists it, and it is left alone rather than squeezed:
+     * its hachures and its stippled sea are high-frequency noise, which is exactly what a lossy
+     * encoder cannot discard, so it measures 317 KB here, 311 at quality 68 and still 255 at 40.
+     * Sixty kilobytes is not worth softening every hairline on the page's most delicate picture,
+     * and the reader only fetches it on opening its tab.
      */
     const val QUALITY = 72
 
@@ -95,6 +101,27 @@ object SiteImagery {
     val BAND = Window(448, 64, 1600, 800)
 
     /**
+     * A rain shadow, on the rainfall view: the cordillera across the frame from south-west to
+     * north-east, the wet windward coast on its seaward flank, and the palest ground in the whole
+     * world in its lee.
+     */
+    val RAIN_SHADOW = Window(660, 290, 1000, 600)
+
+    /**
+     * The widest river on this world — and it crosses the seam.
+     *
+     * Found rather than picked. `River.widthRatio` reaches 1.0, the widest channel drawn anywhere
+     * on the map, on the river whose mouth is at cell (104, 1094), while its own headwaters are
+     * threads the same width as every other headwater; the next widest are 0.94. Its course runs
+     * over the map's left-hand edge, which is why [drawWindow] wraps: refusing to cross the seam
+     * would have meant illustrating F10 with a lesser river to keep the arithmetic simple.
+     */
+    val TRUNK_RIVER = Window(1900, 800, 1000, 600)
+
+    /** The rift, broken along strike into a chain of gulfs behind their sills. */
+    val RIFT = Window(1048, 900, 1000, 600)
+
+    /**
      * What the page asks for.
      *
      * [file] is the name the page references, so renaming one here renames it there, and
@@ -109,9 +136,27 @@ object SiteImagery {
         val options: RenderOptions = RenderOptions(view = view, style = style)
     )
 
-    /** Every figure the page shows, in the order it shows them. */
+    /**
+     * Every figure the page shows, in the order it shows them.
+     *
+     * `atlas.webp` is both the hero and the first of the four readings — the same crop in the same
+     * style — so it is one file fetched once rather than two identical ones.
+     *
+     * The second reading is **biomes** rather than rainfall, which the design left open. On this
+     * world the rainfall view reads as a pale interior with a narrow green fringe at every coast:
+     * true, and the right picture for the rain-shadow detail where a label can point at it, but
+     * beside the Atlas band it looks like the Atlas band with a wash over it. Biomes separates sea
+     * ice, tundra, steppe, desert and forest into colours a reader can tell apart at a glance, so
+     * it is the one that reads as a genuinely *different reading* of the same country.
+     */
     val FIGURES: List<Figure> = listOf(
-        Figure("atlas.webp", MapView.FANTASY, MapStyle.ATLAS, BAND)
+        Figure("atlas.webp", MapView.FANTASY, MapStyle.ATLAS, BAND),
+        Figure("biomes.webp", MapView.BIOMES, MapStyle.ATLAS, BAND),
+        Figure("political.webp", MapView.POLITICAL, MapStyle.ATLAS, BAND),
+        Figure("pen-and-ink.webp", MapView.FANTASY, MapStyle.PEN_AND_INK, BAND),
+        Figure("rain-shadow.webp", MapView.RAINFALL, MapStyle.ATLAS, RAIN_SHADOW),
+        Figure("trunk-river.webp", MapView.FANTASY, MapStyle.ATLAS, TRUNK_RIVER),
+        Figure("rift.webp", MapView.FANTASY, MapStyle.ATLAS, RIFT)
     )
 
     @JvmStatic

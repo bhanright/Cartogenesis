@@ -114,7 +114,15 @@ class SiteAssemblyTest {
     fun `every figure the page shows was rendered, at the size the page reserves`() {
         // These names are the contract between SiteImagery.FIGURES and the page's img tags.
         // Renaming one side alone deploys a broken figure that nothing else would notice.
-        val expected = mapOf("atlas.webp" to (1600 to 800))
+        val expected = mapOf(
+            "atlas.webp" to (1600 to 800),
+            "biomes.webp" to (1600 to 800),
+            "political.webp" to (1600 to 800),
+            "pen-and-ink.webp" to (1600 to 800),
+            "rain-shadow.webp" to (1000 to 600),
+            "trunk-river.webp" to (1000 to 600),
+            "rift.webp" to (1000 to 600)
+        )
         val page = file("index.html").readText()
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")

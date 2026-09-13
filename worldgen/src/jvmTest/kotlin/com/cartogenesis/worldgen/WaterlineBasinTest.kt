@@ -48,14 +48,17 @@ import kotlin.test.assertTrue
 class WaterlineBasinTest {
 
     /**
-     * Earth's surge range as a share of the land's relief: ten metres against eight kilometres.
+     * Earth's surge range, in metres above the waterline.
      *
      * A spring tide is 2 to 4 m on an open coast, a severe tropical-cyclone surge 8 to 9 m (Katrina
      * put 8.5 m on the Mississippi coast in 2005, the 1970 Bhola cyclone about 9 m into the Bay of
-     * Bengal) and the record is the 13.7 m measured at Bathurst Bay in 1899. The eight kilometres
-     * are the same relief `SeaConfig.lowstand` measures its 120 m against.
+     * Bengal) and the record is the 13.7 m measured at Bathurst Bay in 1899.
+     *
+     * In metres since S1, converted through `WorldScale` where it is used. It was 0.00125 of "the
+     * land's relief", read against the eight kilometres `SeaConfig.lowstand` also assumed, and
+     * neither figure was the one the pipeline actually spent.
      */
-    private val surge = 0.00125f
+    private val surgeMetres = 10f
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
@@ -68,8 +71,8 @@ class WaterlineBasinTest {
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground
             // is a hollow at the waterline that no sea-level rule ever saw.
-            val stage = count(SeaLevelStage.apply(world.erosion.height, config))
-            val finished = count(world.sea)
+            val stage = count(config, SeaLevelStage.apply(world.erosion.height, config))
+            val finished = count(config, world.sea)
             found += stage.at
             println(
                 ("E8 seed %d at 512: %d basins below the cut over %d cells — %d standing at the " +
@@ -111,14 +114,14 @@ class WaterlineBasinTest {
      * converted ground below the waterline, which is to say they lie inside a tract the ocean
      * cannot reach at all and belong to `SeaConfig.enclosedSeaIsLand` rather than to any surge.
      */
-    private fun count(sea: SeaLevelResult): Count {
+    private fun count(config: WorldGenConfig, sea: SeaLevelResult): Count {
         val w = sea.relativeElevation.width
         val h = sea.relativeElevation.height
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
         val notch = FlowRouting.spillways(
             w, h, sea.isLand, sea.relativeElevation.data, filled.data, flow,
-            HydraulicErosion.POND_DEPTH
+            config.scale.reliefShareOfMetres(HydraulicErosion.POND_DEPTH_METRES)
         )
         var drowned = 0
         var drownedCells = 0
@@ -126,6 +129,9 @@ class WaterlineBasinTest {
         var atCells = 0
         var above = 0
         var below = 0
+        // A crest above the waterline is a height on land, so it is read off the land's half of
+        // the ruler.
+        val surge = config.scale.reliefShareOfMetres(surgeMetres)
         var largest = 0
         for (b in 0 until notch.count) {
             if (notch.floor[b] >= 0f) continue

@@ -2,6 +2,193 @@ package com.cartogenesis.worldgen.model
 
 import kotlinx.serialization.Serializable
 
+/**
+ * How big the world is, and how long a round of erosion lasts: the only place a physical unit is
+ * declared.
+ *
+ * Every stage that needs metres, kilometres or years reads them from here and converts to the grid
+ * where it uses them. Nothing else in the pipeline may hold a metre of its own — before this
+ * section existed, one unit of land elevation was 6,000 m in the climate and about 8,000 m in the
+ * sea-level and erosion constants, and the sea had no depth at all, so a hypsometric curve had to
+ * carry the land's ruler past the shoreline. `UnitsTest` is what keeps that from coming back.
+ *
+ * The vertical range is two numbers rather than one because the shoreline is where the map's two
+ * halves meet: [SeaLevelResult.relativeElevation] runs 0..1 from the shoreline to the highest land
+ * and -1..0 from the shoreline to the deepest floor, each side normalised against its own range. So
+ * the ruler is piecewise, with a knot at zero — [metresAboveShoreline] above it and
+ * [metresBelowShoreline] below.
+ *
+ * There is a third reading, and which one a figure takes is decided by where the figure is spent.
+ * A quantity that is a *level in the raw height field* rather than a height above the water or a
+ * depth below it — the sea's own stand, or a depth measured down from the shoreline into the
+ * elevation the erosion stages work on — takes [fieldShareOfMetres], the whole
+ * [reliefSpanMetres]. That distinction is not pedantry: the two halves of the piecewise ruler are
+ * measured against ranges the world produces, which differ by seed and by grid, while the field's
+ * is declared and does not.
+ */
+@Serializable
+data class WorldScale(
+    /**
+     * How wide the world is taken to be, which is what turns cells into kilometres and an area.
+     *
+     * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
+     * longitude against 180 of latitude and is twice as wide as it is tall — hence
+     * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
+     * Earth's equator is 40,075 km; 12,000 km is a smaller world, and the one every knob in this
+     * file is calibrated against.
+     */
+    val worldWidthKm: Double = 12_000.0,
+    /**
+     * The altitude of the highest land, in metres: the top of the land's half of the ruler.
+     *
+     * A cell mean and not a summit. A cell of the default 512 grid is 23 km by 12 km, and no cell
+     * that size holds Everest's 8,849 m — a summit is a point. The highest ground a cell this
+     * coarse can hold is a plateau: Tibet's interior averages 5,023 m (Fielding, Isacks, Barazangi
+     * & Duncan, *How flat is Tibet?*, Geology 22, 1994) and the Karakoram-Himalaya cells above it
+     * a little more, so 6,000 m is where a 23 km cell tops out.
+     *
+     * This is the figure the climate has always used for the lapse rate, and choosing it as the one
+     * ruler is why every temperature on the map is where it was. The 8 km the sea-level and erosion
+     * constants assumed was Everest, which is to say a summit; see `REALISM_PLAN.md`, S1.
+     */
+    val highestLandMetres: Float = 6_000f,
+    /**
+     * The depth of the deepest sea floor, in metres: the bottom of the sea's half of the ruler.
+     *
+     * A cell mean on the same terms, but a trench survives a cell mean far better than a summit
+     * does, because a trench is a line where a peak is a point: the Mariana axis holds below 10 km
+     * for hundreds of kilometres along strike, so a cell laid along it loses little of the
+     * Challenger Deep's 10,935 m. Ten kilometres is that figure less the cell's share of the trench
+     * walls.
+     *
+     * Before this existed the sea had no depth: below the shoreline `relativeElevation` was
+     * normalised to whatever the deepest cell happened to be, so the only way to read a depth in
+     * metres was to carry the land's ruler downward, which put the deepest floor exactly as far
+     * below the water as the highest summit stood above it.
+     */
+    val deepestOceanMetres: Float = 10_000f,
+    /**
+     * How long one hydraulic round stands for, in years.
+     *
+     * Derived rather than chosen, which is why it is not a round number. Stream-power incision is
+     * `E = K * A^m * S^n` with m near 0.5 and n near 1, and K in m^(1-2m)/yr — for bedrock rivers
+     * 10^-6 to 10^-5 (Whipple & Tucker, *Dynamics of the stream-power river incision model*, JGR
+     * 104, 1999; Lague, *The stream power river incision model*, ESPL 39, 2014, for the range
+     * across lithologies). Fix K at the bottom of that band, in
+     * [ErosionConfig.bedrockErodibilityPerYear], and the time step is whatever makes a round remove
+     * what a round removes today: see [ErosionConfig.bedrockErodibilityPerYear] for the arithmetic.
+     *
+     * Twelve rounds of it is 4.0 million years, which is the right order for the time a mountain
+     * belt takes to reach a steady state between uplift and erosion, and a reassuring answer to a
+     * question the generator could not previously be asked.
+     *
+     * Written to a tenth of a year, which is not precision anybody could defend about a landscape:
+     * it is the figure at which the coefficient the stage computes lands on 0.055 exactly, to the
+     * last bit of a float, which is what the incision was before it had a unit. A round of erosion
+     * is chaotic in its own last bit — `ErosionConfig.outletIncisionRatio` records the largest lake
+     * on a seed jumping by a factor of two between neighbouring rates — so a rate that is a
+     * millionth off is a different world, and this chunk is meant to change the world only where
+     * it says it does.
+     */
+    val yearsPerHydraulicRound: Double = 336_476.4
+) {
+
+    /**
+     * The altitude, in metres, of a **land** cell standing at [relativeElevation].
+     *
+     * The land's half of the ruler. A land cell can stand below the waterline — ice carves troughs
+     * into ground the coastline has already been drawn around, and a drowned basin's outlet is cut
+     * below it — and such a cell keeps the land's scale rather than crossing to the sea's, because
+     * which half a cell belongs to is a question about `SeaLevelResult.isLand` and not about the
+     * sign of a float.
+     */
+    fun metresAboveShoreline(relativeElevation: Float): Float =
+        relativeElevation * highestLandMetres
+
+    /** The altitude, in metres and so negative, of a **water** cell at [relativeElevation]. */
+    fun metresBelowShoreline(relativeElevation: Float): Float =
+        relativeElevation * deepestOceanMetres
+
+    /**
+     * The altitude in metres of a cell whose side of the shoreline the caller does not know, read
+     * off whichever half of the ruler the sign points at.
+     *
+     * For converting a *constant* rather than a cell: a depth written as a negative number of
+     * metres, or a height as a positive one, lands on the right half without the caller saying so.
+     * A stage walking a grid should use [metresAboveShoreline] or [metresBelowShoreline] and let
+     * `isLand` decide, for the reason the first of those gives.
+     */
+    fun metresAtRelativeElevation(relativeElevation: Float): Float =
+        if (relativeElevation >= 0f) metresAboveShoreline(relativeElevation)
+        else metresBelowShoreline(relativeElevation)
+
+    /** [metres] of altitude as a share of the land's relief above the shoreline. */
+    fun reliefShareOfMetres(metres: Float): Float = metres / highestLandMetres
+
+    /** [metres] of depth as a share of the sea's own range below the shoreline. */
+    fun depthShareOfMetres(metres: Float): Float = metres / deepestOceanMetres
+
+    /**
+     * [metres] as a share of the **raw height field**, whose whole 0..1 is [reliefSpanMetres].
+     *
+     * The third conversion, and the one a stage needs when the quantity it is spending straddles
+     * the shoreline or is a level in the field rather than a height above or a depth below the
+     * water. The sea's own stand is the case: dropping the shoreline 120 m is moving a level in
+     * the field, and reading it off either half of the piecewise ruler would multiply it by that
+     * half's own measured range — which is a different number on every seed and at every grid, and
+     * is the resolution dependence this chunk exists to end.
+     */
+    fun fieldShareOfMetres(metres: Float): Float = metres / reliefSpanMetres
+
+    /**
+     * The metres one unit of the *raw* height field is worth, which is the whole world's relief.
+     *
+     * The field the terrain and erosion stages work in is normalised to 0..1 between the deepest
+     * floor and the highest land, so its span is by construction the two figures above added
+     * together. This is the ruler a stage has to use when it is working before the shoreline
+     * exists — the thermal sweeps and the stream-power incision both do — and it agrees with
+     * [metresAtRelativeElevation] exactly when the shoreline sits at
+     * `deepestOceanMetres / reliefSpanMetres` of the field. It does not sit exactly there: the
+     * shoreline is a percentile of the cells rather than of the range, so the two rulers differ by
+     * however far the world's own hypsometry is from that. `UnitsTest` measures the difference and
+     * holds it inside a stated factor; closing it needs an absolute vertical scale, which is S2's
+     * uplift and isostasy.
+     */
+    val reliefSpanMetres: Float get() = highestLandMetres + deepestOceanMetres
+
+    /** How wide one cell is, in kilometres, on a grid [cellsAcross] cells wide. */
+    fun cellWidthKm(cellsAcross: Int): Double = worldWidthKm / cellsAcross
+
+    /** How tall one cell is, in kilometres, on a grid [cellsDown] cells tall. */
+    fun cellHeightKm(cellsDown: Int): Double =
+        worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH / cellsDown
+
+    /** How much ground one cell stands for, which is what turns a cell count into an area. */
+    fun squareKilometresPerCell(cellsAcross: Int, cellsDown: Int): Double =
+        cellWidthKm(cellsAcross) * cellHeightKm(cellsDown)
+
+    /**
+     * [kilometres] as a count of cells across a grid [cellsAcross] cells wide.
+     *
+     * This is the conversion that retired [WorldGenConfig.atResolution] for every reach, radius and
+     * width in the pipeline: a length on the ground is more cells on a finer grid, and saying so
+     * once here is arithmetic where carrying it by hand through a rescaling function was a contract.
+     */
+    fun cellsAcrossFor(kilometres: Double, cellsAcross: Int): Float =
+        (kilometres * cellsAcross / worldWidthKm).toFloat()
+
+    /** The whole world's surface in square kilometres, land and sea alike. */
+    val worldAreaKm2: Double get() = worldWidthKm * worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
+
+    companion object {
+        /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
+        const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
+
+        /** Metres in a kilometre, so no stage has to write the conversion out. */
+        const val METRES_PER_KM = 1_000f
+    }
+}
+
 /** Base terrain: the random gradient ("normal map") field that gets integrated into elevation. */
 @Serializable
 data class TerrainConfig(
@@ -393,22 +580,32 @@ data class TectonicsConfig(
 @Serializable
 data class SeaConfig(
     /**
-     * Width of the shelf plateau; a further band of the same width blends the plateau back down to
-     * the natural sea floor, so the whole remap reaches `2 * shelfWidthCells` from the coast.
-     * [WorldGenConfig.atResolution] rescales it with the grid, as it does
-     * [TectonicsConfig.boundaryFalloffCells] and for the same reason: left alone, a larger grid
-     * would shrink the shelf to a sliver and coastlines would drop straight into deep water
-     * again.
+     * Width of the shelf plateau, in kilometres; a further band of the same width blends the
+     * plateau back down to the natural sea floor, so the whole remap reaches twice this from the
+     * coast.
+     *
+     * Four hundred and seventy kilometres, which is twenty cells of the default grid. Earth's
+     * shelves run 50 to 200 km on most coasts and past 1,000 on the Arctic and Patagonian
+     * margins, so this is a broad shelf but not an invented one. Converted to cells where the
+     * stage reads it: left as a count, a finer grid would shrink the shelf to a sliver and every
+     * coast would drop straight into deep water again.
      */
-    val shelfWidthCells: Float = 20f,
+    val shelfWidthKm: Double = 468.75,
     /**
-     * Depth of the shelf plateau at its outer edge, in the same normalized units as
-     * [SeaLevelResult.relativeElevation]. Kept shallower than the -0.12 cut [ClimateStage] uses
-     * for `SHALLOW_OCEAN`, so the entire plateau reads as shallow water; the coast itself sits
-     * shallower still, at a fixed -0.02, so there is a genuine (if gentle) slope across the shelf
-     * rather than a dead-flat plain right up to the shore.
+     * Depth of the shelf plateau at its outer edge, in metres below the shoreline.
+     *
+     * Kept shallower than the 1,200 m [ClimateStage] cuts `SHALLOW_OCEAN` at, so the entire
+     * plateau reads as shallow water; the coast itself sits shallower still, at 200 m, so there is
+     * a genuine if gentle slope across the shelf rather than a dead-flat plain up to the shore.
+     *
+     * A thousand metres is a tenth of the way to the deepest floor, which is where this number
+     * came from — it was 0.10 of the sea's range before the sea had a range in metres — and it is
+     * seven times Earth's shelf break of 130 m. That gap is a finding rather than a knob to turn:
+     * a plateau at 130 m would be one part in seventy-seven of this model's sea, far below what
+     * the ocean floor's own relief can hold apart, because the two-density crust that makes
+     * Earth's shelf a shelf is not modelled. See `REALISM_AUDIT.md`, S2.
      */
-    val shelfDepth: Float = 0.10f,
+    val shelfDepthMetres: Float = 1_000f,
     /**
      * How far below today's shoreline the sea stood while the rivers were cutting, as a fraction
      * of the land's own relief.
@@ -422,17 +619,21 @@ data class SeaConfig(
      * estuary on the map. The shelf between the two stands is a drowned plain with the old channels
      * still on it.
      *
-     * 120 m against the roughly 8 km of relief between sea level and the highest land is 1.5%, and
-     * that is the default. Held as a fraction of relief rather than in cells or in raw height, for
-     * the reason `outletIncisionRatio` is: relief is a different number at every grid, and a stand
-     * expressed in the height field's own units would drown a different amount of coast at 512
-     * than at 2048.
+     * A hundred and twenty metres, in metres, which is the figure the paragraph above is about.
+     * Read off the height field's own ruler — [WorldScale.reliefSpanMetres], the whole 16,000 m
+     * from the deepest floor to the highest land — because the shoreline is a *level in that
+     * field* and moving it is not a height above the water or a depth below it. 120 m of 16,000 is
+     * 0.0075 of the field, and no measured range enters the arithmetic at all, which is the point:
+     * the constant this replaced was 0.015 of "the land's relief above the shoreline", a quantity
+     * that is 0.25 of the field on one seed and 0.59 on another and different again at every grid.
+     * Against the worlds measured that came to 0.0088 of the field, so the stand this chunk gives
+     * them is about 15% shallower and no longer moves when the seed does.
      *
      * Zero puts the sea where it is today for every round, which is what the generator did before
      * this setting existed and reproduces that world bit for bit — the control the estuary guard
      * needs.
      */
-    val lowstand: Float = 0.015f,
+    val lowstandMetres: Float = 120f,
     /**
      * Whether a body of water the ocean cannot reach is treated as land after the cut.
      *
@@ -476,9 +677,16 @@ data class SeaConfig(
      * rule was written for are still rescued — the pockets a river ends in are a handful of cells,
      * not an inland sea — and none of that follows. See REALISM_PLAN.md, H5, for the figures.
      *
-     * At or below the cap, not above it, so a body exactly the Caspian's size becomes a lake.
+     * At or below the cap, not above it, so a body exactly this size becomes a lake.
+     *
+     * In square kilometres since the world had an area to state one against. The value is the
+     * Caspian's *share of Earth* — 0.073% — carried onto this map, which is 52,600 km² because
+     * this world is a seventh of Earth's surface. The Caspian itself is 371,000 km². Which of the
+     * two a world this size should use is a real question and not this chunk's to answer: seven
+     * times the cap turns several more inland seas into land on every seed and moves coastlines
+     * that nothing else in S1 touches. It is written up in `TODO.md`.
      */
-    val enclosedSeaMaxShare: Float = 0.00073f,
+    val enclosedSeaMaxKm2: Double = 52_560.0,
     /**
      * Whether a basin the cut converts from unreachable sea to land gets its outlet cut, once,
      * after the cut.
@@ -513,8 +721,6 @@ data class SeaConfig(
 data class ClimateConfig(
     val equatorTemperatureC: Float = 32f,
     val poleTemperatureC: Float = -28f,
-    /** Metres of altitude represented by the full 0..1 land elevation range. */
-    val maxAltitudeMetres: Float = 6000f,
     /** Temperature drop per kilometre of altitude, in C. */
     val lapseRateCPerKm: Float = 6.5f,
     /**
@@ -719,9 +925,20 @@ data class ErosionConfig(
      */
     val acceleration: Acceleration = Acceleration.CPU,
     /**
-     * The critical slope, in elevation per unit of map width — the steepest a slope can stand
-     * before it fails. Held per map rather than per cell so that a belt of a given width on the
-     * map wears to the same profile whatever grid it is computed on.
+     * The critical slope: the steepest a hillside can stand before it fails, as a fall in metres
+     * per kilometre of ground.
+     *
+     * Twelve metres per kilometre, which is 1.2% or 0.69 degrees. That is nothing like the thirty
+     * degrees a scree slope stands at, and it should not be: a cell of the default grid is 23 km
+     * across, so this is the steepest *mean* slope a stretch of ground 23 km long may hold, and
+     * the Himalayan front — five kilometres of rise over fifty of ground — is 100 m/km only
+     * because fifty kilometres is a short distance for a mountain range. What this number governs
+     * is the shape of a belt hundreds of kilometres wide, not the angle of any real hillside, and
+     * the finer detail below the cell is not represented at all.
+     *
+     * Converted to the height field at the point of use, through
+     * [WorldScale.reliefSpanMetres] and the cell's own width, so the same terrain wears to the
+     * same profile whatever grid it is computed on.
      *
      * That keeps the large-scale shape stable across resolutions but not the fine detail, and the
      * reason is worth knowing. Terrain comes from an fBm whose amplitude halves as its frequency
@@ -734,14 +951,23 @@ data class ErosionConfig(
      * and it is why this stage does not get cheaper per cell as the map grows.
      *
      * Lower means a gentler, more worn world; high enough and only the knife edges left by uplift
-     * are touched. Below about 5 it starts erasing the terrain noise itself and the land goes
-     * mushy.
+     * are touched. Below about 6.7 m/km it starts erasing the terrain noise itself and the land
+     * goes mushy.
      */
-    val talus: Float = 9f,
+    val criticalFallMetresPerKm: Float = 12f,
     /**
-     * How many times to sweep the grid. Material moves at most one cell per pass, so this sets how
-     * far debris can travel from where it came off — which is why [WorldGenConfig.atResolution]
-     * scales it with the grid.
+     * How far debris may travel from where it came off, in kilometres.
+     *
+     * Spent as a count of sweeps, because material moves at most one cell per sweep: 80 sweeps on
+     * the default grid, 320 on a grid four times as fine, which is the same distance on the ground
+     * either way. Written as the distance rather than as the count so that the grid does the
+     * arithmetic instead of a rescaling function doing it by hand.
+     *
+     * 1,875 km is a great deal further than any real talus apron, and the honest reading is that
+     * this is not an apron: it is how far the slope-limiting rule is allowed to propagate before
+     * the sweeps are called finished, and a rule that only ever moves material standing above the
+     * critical slope cannot flatten ground that is already at rest. The cost of a long run is time
+     * and not fidelity.
      *
      * Thermal erosion approaches its equilibrium asymptotically, so this is a real question rather
      * than a taste setting, and `ErosionConvergenceTest` reports the curve. Too low and the very
@@ -749,9 +975,9 @@ data class ErosionConfig(
      * was still ten times the critical angle, meaning the knife edges had barely been touched. By
      * 160 it is down to 1.6. Because the rule only ever moves material that sits above the critical
      * slope, raising this cannot flatten terrain that was already at rest — gentler ground is
-     * untouched however long it runs, so the cost of a high count is time and not fidelity.
+     * untouched however long it runs.
      */
-    val passes: Int = 80,
+    val debrisTravelKm: Double = 1_875.0,
     /** Share of the material above the critical slope that moves each pass. Above 0.5 it rings. */
     val rate: Float = 0.25f,
     /**
@@ -765,14 +991,34 @@ data class ErosionConfig(
      */
     val hydraulicRounds: Int = 12,
     /**
-     * How readily running water cuts down, per round.
+     * The bedrock erodibility K of the stream-power law, in m^(1-2m) per year.
      *
-     * Stream power: incision goes as the square root of the upstream area times the slope, both
-     * expressed against the map rather than the grid so the result does not change with
-     * resolution. Raising it deepens valleys and sharpens divides; too high and the channels cut
-     * to the sea and the land between them is left as unconnected plateaux.
+     * Incision is `E = K * A^m * S^n` with m = 0.5 and n = 1, so K carries the units of a
+     * reciprocal time. Whipple & Tucker (*Dynamics of the stream-power river incision model*, JGR
+     * 104, 1999) put bedrock rivers at 10^-6 to 10^-5; Lague (*The stream power river incision
+     * model*, ESPL 39, 2014) reviews the evidence and widens that to 10^-7 to 10^-4 across
+     * lithologies and climates. This is the bottom of Whipple and Tucker's band, which is hard
+     * rock, and the pairing with [WorldScale.yearsPerHydraulicRound] is what makes a round remove
+     * what a round removed before either had a unit.
+     *
+     * The arithmetic, which is also the derivation of the time step. Per round a cell loses
+     * `K * sqrt(A) * S * years` metres, with A the catchment in square metres and S the slope. The
+     * stage works in a catchment expressed as a share of all land and a slope expressed as a rise
+     * per map width, so `sqrt(A) = sqrt(share * landArea)` and `S = slopePerMapWidth *
+     * highestLandMetres / worldWidthMetres`; the cut is spent on a height field whose whole 0..1
+     * spans [WorldScale.reliefSpanMetres]. Multiply those through and the coefficient the stage
+     * actually uses is
+     *
+     *     K * years * sqrt(landArea) * highestLandMetres / (worldWidth * reliefSpan)
+     *
+     * which at the default world — 38% of a 12,000 by 6,000 km map in land, 6,000 m of land relief
+     * over 16,000 m of world relief — comes to 0.055, the figure this knob held before it had a
+     * unit. See [com.cartogenesis.worldgen.pipeline.HydraulicErosion.incisionCoefficient].
+     *
+     * Raising it deepens valleys and sharpens divides; too high and the channels cut to the sea
+     * and the land between them is left as unconnected plateaux.
      */
-    val erodibility: Float = 0.055f,
+    val bedrockErodibilityPerYear: Float = 1e-6f,
     /**
      * Whether rivers put material back down as well as taking it away.
      *
@@ -784,14 +1030,17 @@ data class ErosionConfig(
     val deposition: Boolean = true,
     /**
      * How much sediment a channel can carry, as a coefficient on `sqrt(area) * slope` — the same
-     * stream-power form [erodibility] uses for incision, because carrying capacity and cutting
-     * power come from the same quantity.
+     * stream-power form the incision uses, in the same units as its coefficient, because carrying
+     * capacity and cutting power come from the same quantity.
      *
      * Transport-limited deposition: a cell carrying more than this lays the excess down instead of
      * cutting. Both terms are held against the map rather than the grid, so the scheme survives a
      * change of resolution for the same reason incision does.
      *
-     * Note the ratio to [erodibility] rather than the absolute value. At 20 against 0.055 a cell
+     * Note the ratio to the incision's own coefficient rather than the absolute value. At 20
+     * against the 0.055 that
+     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.incisionCoefficient] comes to on the
+     * default world, a cell
      * can carry some three hundred times what it could cut on its own, so the upper catchment never
      * reaches capacity and settles nothing, and aggradation only begins once a trunk has gathered
      * the yield of a large basin. Measured across 4, 20 and 60 the valley-incision figure moved by
@@ -825,7 +1074,7 @@ data class ErosionConfig(
      * Low, because sea level is an *area*. A fixed share of the world is under water, so every cell
      * a delta lifts above the line pushes a cell somewhere else below it — and the cells nearest the
      * line are the low coastal ground people live on, which is why `CultureRealmTest` is the guard
-     * that feels this setting first. See [deltaFreeboard] for the measurements.
+     * that feels this setting first. See [deltaFreeboardMetres] for the measurements.
      */
     val deltaShare: Float = 0.15f,
     /** The same, for a river reaching a lake: how much of its load the basin traps at the inflow. */
@@ -841,14 +1090,21 @@ data class ErosionConfig(
      */
     val deltaMinCatchment: Float = 0.003f,
     /**
-     * How far from a mouth, in cells, sediment may be laid — the radius of a delta or a lacustrine
-     * fan. In cells rather than against the map, and so rescaled by
-     * [WorldGenConfig.atResolution] along with everything else measured that way.
+     * How far from a mouth sediment may be laid, in kilometres — the radius of a delta or a
+     * lacustrine fan.
+     *
+     * A hundred and forty kilometres, which is six cells of the default grid and the order of the
+     * Nile's delta, 160 km from apex to shore. Rounded to the nearest whole cell where the stage
+     * reads it, so it is six cells at 512 and twenty-four at 2048: the same fan on the ground,
+     * drawn in more cells.
      */
-    val deltaReachCells: Int = 6,
+    val deltaReachKm: Double = 140.625,
     /**
-     * How high above the shoreline a delta cell is built, as a fraction of the land's elevation
-     * range.
+     * How high above the shoreline a delta cell is built, in metres.
+     *
+     * Forty-eight metres. Mississippi lobes stand a few metres above the Gulf, so this is an order
+     * of magnitude too proud — and it has to be, for the reason below, because a cell of this map
+     * is 23 km across and the shoreline is re-cut as a percentile after the delta is laid.
      *
      * A delta that stops exactly at the waterline is not visible: the sea-level percentile is taken
      * again from the whole field afterwards and would drown it. A small freeboard is what lets new
@@ -866,9 +1122,11 @@ data class ErosionConfig(
      * as poor as 47% of habitable land under one people (the bar is 45%) and 1.20 realms per people
      * (the bar is 1.3), while at 0.008 the same settings gave 38% and 1.43. That guard is the
      * sharpest instrument the pipeline has for "did the coastline move", and it is worth reading
-     * its numbers as a measure of disturbance rather than only as pass or fail.
+     * its numbers as a measure of disturbance rather than only as pass or fail. Those figures are
+     * in the fractions of the land's relief this was written in before it had a unit: 0.004 and
+     * 0.008 of 6,000 m are 24 m and 48 m.
      */
-    val deltaFreeboard: Float = 0.008f,
+    val deltaFreeboardMetres: Float = 48f,
     /**
      * Whether the outflow from a filled basin is allowed to cut its own lip down.
      *
@@ -886,7 +1144,7 @@ data class ErosionConfig(
     val outletIncision: Boolean = true,
     /**
      * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
-     * multiple of [erodibility].
+     * multiple of the same stream-power coefficient.
      *
      * Expressed as a ratio rather than as its own rate because it is the same stream power in the
      * same form — the discharge through an outlet is the basin's whole catchment, which flow
@@ -905,15 +1163,30 @@ data class ErosionConfig(
      * seed at 512 and then leaves seed 59758 a lake of 0.122% of the map at 1024, which is the
      * defect this rate exists to prevent.
      *
-     * It was one until the rate was expressed against the land's own relief rather than against the
-     * height field, and had to rise with that change: the old units divided it by the range of the
-     * land, which is a different number at every grid, and that was what made the largest lake grow
-     * threefold from 512 to 2048.
+     * The number has moved twice, and both moves were the same kind of thing: the *unit* under it
+     * changed and the multiplier absorbed the change, so that the notch went on cutting what it had
+     * been cutting. It was one until the rate was expressed against the land's own relief rather
+     * than against the height field, and rose to three with that change, because the old units
+     * divided it by the range of the land — a different number at every grid, and what made the
+     * largest lake grow threefold from 512 to 2048. It is now 1.125, because the ordinary incision
+     * has been given a unit too: both rates are the one coefficient
+     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.incisionCoefficient] derives from K and
+     * the time step, and the notch's is charged in shoreline-relative units where the ordinary
+     * cut's is charged on the height field. Three of the old rate is 1.125 of the new one, exactly:
+     * 3 * highestLandMetres / reliefSpanMetres, or 3 * 6,000 / 16,000.
+     *
+     * What that arithmetic exposes is worth saying plainly, because it was invisible while the two
+     * rates were written in different units. Converted to a single ruler, a knickpoint has been
+     * cutting about 1.1 times as hard as an ordinary reach and not three times — and against the
+     * height field, where the ordinary cut is actually spent, about nine tenths as hard. The
+     * physical claim the number is supposed to make is not the claim it was making.
      */
-    val outletIncisionRatio: Float = 3f,
+    val outletIncisionRatio: Float = 1.125f,
     /**
-     * How far below the lip the notch is cut, in cells — rescaled with the grid by
-     * [WorldGenConfig.atResolution], as [deltaReachCells] is.
+     * How far below the lip the notch is cut, in kilometres.
+     *
+     * Fifteen hundred, which is sixty-four cells of the default grid — a long reach, and it has to
+     * be, for the reason below.
      *
      * The lip cannot fall further than the ground immediately below it, so cutting the lip alone
      * buys one step and then stops: the spill is by construction the *lowest* point on the rim, and
@@ -921,7 +1194,7 @@ data class ErosionConfig(
      * grade toward the steeper ground further down and keep deepening round after round, which is
      * what a knickpoint retreating upstream actually does.
      */
-    val outletReachCells: Int = 64,
+    val outletReachKm: Double = 1_500.0,
     /**
      * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
      * its river, and made only of cells the load could lift clear of the water.
@@ -994,9 +1267,14 @@ data class ErosionConfig(
  * as a world with no cold in its past — which, until this section existed, was exactly what this
  * one was.
  *
- * Every length here is in cells and so is rescaled by [WorldGenConfig.atResolution], for the same
- * reason [SeaConfig.shelfWidthCells] is: a trough four cells wide on a 512 grid is a trough sixteen
- * cells wide on a 2048 one, and anything else changes the world rather than its detail.
+ * Every length here is in kilometres and every depth in metres, converted to the grid through
+ * [WorldScale] where the stage reads them, for the same reason [SeaConfig.shelfWidthKm] is: a
+ * trough a hundred and fifty kilometres wide is four cells at 512 and sixteen at 2048, and
+ * anything else changes the world rather than its detail.
+ *
+ * The figures those kilometres come to are far larger than any real glacier's, and the KDoc on
+ * [GlaciationConfig.valleyWidthKm] says why: at 23 km to a cell there is no smaller landform a map
+ * of a whole world can draw. Writing the unit down is what made that visible.
  */
 @Serializable
 data class GlaciationConfig(
@@ -1063,7 +1341,7 @@ data class GlaciationConfig(
      * glacier is the snow that falls on frozen ground above it, so that is the denominator. It is
      * also the half of the resolution bug: a share of *all land* is a share of a number that
      * quadruples with the grid, so at 1024 the same setting admitted four times as many parallel
-     * flow paths per unit of map as at 512 while `atResolution` kept each trough the same fraction
+     * flow paths per unit of map as at 512 while the trough stayed the same fraction
      * of the map wide — which is why the mesh appeared at the desktop's default resolution and not
      * in the 512 crops this stage was reviewed on. At the default it asks for a quarter of a
      * percent of the world's frozen ground before any ice is called a glacier at all: some eighty
@@ -1074,8 +1352,8 @@ data class GlaciationConfig(
      * width and cuts its full depth. */
     val fullCatchment: Float = 0.06f,
     /**
-     * How much local relief the ground must have before valley-glacier machinery runs on it, as a
-     * fraction of the land's elevation range.
+     * How much local relief the ground must have before valley-glacier machinery runs on it, in
+     * metres.
      *
      * The whole distinction between the two regimes, and the reason this stage was rewritten. A
      * valley glacier is ice *confined by a valley*: it is thick, it is channelled, and it planes a
@@ -1092,10 +1370,12 @@ data class GlaciationConfig(
      * and 718106 at 512, the elevation range inside that window has a median of 0.23 to 0.41 of the
      * land's own range — this generator's ground is rugged at cell scale almost everywhere — so a
      * threshold near a tenth, which is what it looked like it ought to be, left 92% of the frozen
-     * ground "channelled" and the mesh untouched. At 0.35 the channelled share is a fifth of the
-     * frozen ground on seed 42 and two fifths on 718106, which is the mountainous part of each.
+     * ground "channelled" and the mesh untouched. At 0.35 of the relief the channelled share is a
+     * fifth of the frozen ground on seed 42 and two fifths on 718106, which is the mountainous
+     * part of each. Against the ruler that fraction is 2,100 m of local relief, which is a
+     * mountain range and not a hill.
      */
-    val valleyRelief: Float = 0.35f,
+    val valleyReliefMetres: Float = 2_100f,
     /**
      * The radius over which [valleyRelief] is measured, in multiples of [valleyWidthCells].
      *
@@ -1105,7 +1385,7 @@ data class GlaciationConfig(
      */
     val reliefWindow: Float = 2f,
     /**
-     * The shortest channelled flow path that may become a trough, in cells.
+     * The shortest channelled flow path that may become a trough, in kilometres.
      *
      * A catchment threshold alone cannot tell a glacier from a gully: twenty cells of upstream
      * frozen ground is twenty cells whether they lie in a mountain valley or in a hollow on a
@@ -1113,7 +1393,7 @@ data class GlaciationConfig(
      * from the furthest head above the cell to the furthest snout below it — before any of it is
      * carved.
      */
-    val minTroughLengthCells: Int = 14,
+    val minTroughLengthKm: Double = 328.125,
     /**
      * The catchment a trough needs as a share of *its own ice field's* frozen ground.
      *
@@ -1167,7 +1447,7 @@ data class GlaciationConfig(
      */
     val sheetScour: Boolean = true,
     /**
-     * How far sheet ice planes the ground down away from its basins, as a fraction of the range.
+     * How far sheet ice planes the ground down away from its basins, in metres.
      *
      * Modulated by noise rather than by the flow network, because that is what sheet scour does: it
      * strips a whole province to bedrock and leaves it hummocky, not grooved.
@@ -1184,9 +1464,9 @@ data class GlaciationConfig(
      * regime split was never that the ice should do less; it was that it should not do it in
      * channels.
      */
-    val sheetLowering: Float = 0.012f,
-    /** How deep a scour basin is cut below its own rim, as a fraction of the elevation range. */
-    val sheetBasinDepth: Float = 0.026f,
+    val sheetLoweringMetres: Float = 72f,
+    /** How deep a scour basin is cut below its own rim, in metres. */
+    val sheetBasinDepthMetres: Float = 156f,
     /**
      * How much of the frozen flat country the ice may leave under water, as a share of it.
      *
@@ -1210,35 +1490,33 @@ data class GlaciationConfig(
      */
     val sheetLakeShare: Float = 0.02f,
     /**
-     * The largest single basin the ice may cut, as a fraction of the whole map.
+     * The largest single basin the ice may cut, in square kilometres.
      *
      * Not a tuning knob but a fact about worlds: Lake Superior, the largest lake on Earth that is
      * not a sea, is 82,100 km² against Earth's 510 million, which is 0.016% of the surface. A body
      * of water larger than that share of a world is not a lake, it is the Caspian. Expressed
-     * against the map rather than in cells so that 512, 1024 and 2048 draw the same lake: 42 cells
-     * at 512, 168 at 1024, 671 at 2048, which on a 12,000 km world is about 11,500 km² at every
-     * one of them.
+     * as an area rather than in cells, so that 512, 1024 and 2048 draw the same lake: 42 cells at
+     * 512, 168 at 1024, 671 at 2048, every one of them 11,520 km². Superior's share of Earth
+     * carried onto a world a seventh of its size, so the same caveat as
+     * [SeaConfig.enclosedSeaMaxKm2] applies - the lake Earth actually has is seven times this.
      *
      * A basin over the cap is not thrown away — that would delete the lake country rather than
      * size it — it is peeled inward, ring by ring, until its floor fits. The rest of the blob keeps
      * the scour without the water.
      */
-    val maxLakeShareOfMap: Float = 0.00016f,
+    val maxLakeAreaKm2: Double = 11_520.0,
     /**
-     * The smallest basin the ice bothers to cut, as a fraction of the whole map.
+     * The smallest basin the ice bothers to cut, in square kilometres.
      *
-     * The floor that stops a finer grid from manufacturing speckle. [LakesConfig.minCells] is a
-     * count of cells and so means a different lake at every resolution — on a 12,000 km world its
-     * twelve cells are 3,300 km² at 512 and 206 km² at 2048 — which is exactly how a 2048 render
-     * ends up sprinkled with ponds that 512 never had. A tenth of [maxLakeShareOfMap] is about
-     * 1,150 km², Lake Geneva's order of magnitude, and that is roughly the smallest body a map of
-     * a whole world should draw at all.
+     * The floor that stops a finer grid from manufacturing speckle. A tenth of [maxLakeAreaKm2]
+     * is 1,152 km², Lake Geneva's order of magnitude, and roughly the smallest body a map of a
+     * whole world should draw at all.
      *
-     * Four cells at 512, 17 at 1024, 67 at 2048. At 512 and 1024 [LakesConfig.minCells] is still
-     * the binding floor, so this changes nothing there; at 2048 and above it takes over, which is
-     * the point.
+     * Four cells at 512, 17 at 1024, 67 at 2048. At 512 and 1024 [LakesConfig.minLakeAreaKm2] is
+     * still the binding floor, so this changes nothing there; at 2048 and above it takes over,
+     * which is the point.
      */
-    val minLakeShareOfMap: Float = 0.000016f,
+    val minLakeAreaKm2: Double = 1_152.0,
     /**
      * The size of the basins, as the number of noise periods across the map.
      *
@@ -1254,8 +1532,16 @@ data class GlaciationConfig(
      * than like a pattern laid over it. It is still the noise that decides their shape.
      */
     val sheetConcavity: Float = 0.8f,
-    /** Half-width of the widest trough, in cells: how far up the valley sides the ice reaches. */
-    val valleyWidthCells: Float = 6.5f,
+    /**
+     * Half-width of the widest trough, in kilometres: how far up the valley sides the ice reaches.
+     *
+     * A hundred and fifty kilometres, which is six and a half cells of the default grid. A real
+     * glacial trough is two to five kilometres across, so this is fifty times too wide, and it
+     * cannot be otherwise: one cell of this map is 23 km, and a trough narrower than a cell cannot
+     * be drawn at all. What the stage carves is a glaciated province the shape of a valley, and
+     * the figures below are its figures rather than a glacier's. See GEOGRAPHY.md.
+     */
+    val valleyWidthKm: Double = 152.34375,
     /**
      * How much of that half-width is flat floor before the walls start to climb.
      *
@@ -1267,18 +1553,18 @@ data class GlaciationConfig(
      * lake at all.
      */
     val floorShare: Float = 0.65f,
-    /** How far a full glacier lowers its bed, as a fraction of the land's elevation range. */
-    val deepening: Float = 0.004f,
+    /** How far a full glacier lowers its bed, in metres. */
+    val deepeningMetres: Float = 24f,
     /**
-     * The extra cut in the over-deepened reaches between the steps, in the same units.
+     * The extra cut in the over-deepened reaches between the steps, in metres.
      *
      * This is the number that makes lakes. A basin holds water only if its floor lies below the
      * step downstream of it, and the difference between the two is exactly this — so it has to
      * clear [LakesConfig.minDepth] with room to spare, at a glacier well short of full strength.
      */
-    val overDeepening: Float = 0.024f,
+    val overDeepeningMetres: Float = 144f,
     /**
-     * How much descent ends a reach and starts the next basin, as a fraction of the range.
+     * How much descent ends a reach and starts the next basin, in metres.
      *
      * The staircase's rise per step, and the reason a basin can be cut to a level floor at all.
      * Flattening a reach costs whatever that reach descends, so a reach measured in *cells* costs
@@ -1297,34 +1583,34 @@ data class GlaciationConfig(
      * measured on seed 42 at 1024, the share of standing water in parallel grid-bearing bars fell
      * from 2.3% to 0.8%, and the count of separate lakes from 37 to 30.
      */
-    val basinDrop: Float = 0.060f,
+    val basinDropMetres: Float = 360f,
     /**
-     * The most cells one reach may run before the next basin starts, whatever the descent.
+     * The furthest one reach may run before the next basin starts, in kilometres.
      *
      * The other half of the same rule, for ground with no descent to speak of: without it a plain
      * inside the ice would be one reach a thousand cells long. The two terms simply add, so a
      * reach ends when it has fallen [basinDrop] *or* run this far, whichever happens first.
      */
-    val basinSpacingCells: Float = 16f,
+    val basinSpacingKm: Double = 375.0,
     /** Share of a reach the basin occupies; the rest is the step at its lower end. */
     val basinShare: Float = 0.75f,
-    /** Radius of the bowl bitten out of a glacier's head, in cells. */
-    val cirqueRadiusCells: Float = 3f,
-    /** How deep that bowl is cut below the headwall, as a fraction of the elevation range. */
-    val cirqueDepth: Float = 0.014f,
+    /** Radius of the bowl bitten out of a glacier's head, in kilometres. */
+    val cirqueRadiusKm: Double = 70.3125,
+    /** How deep that bowl is cut below the headwall, in metres. */
+    val cirqueDepthMetres: Float = 84f,
     /**
-     * How far a glacier runs on past the freezing line before it melts, in cells.
+     * How far a glacier runs on past the freezing line before it melts, in kilometres.
      *
      * A glacier's snout sits below its own snowline — that is what an ablation zone is — so the
      * trough, and the moraine at its end, belong a little way into ground that is not frozen. This
      * is the only licence the mask gets; nothing is carved further down than this.
      */
-    val runOutCells: Int = 8,
-    /** Height of the ridge of spoil left at a land terminus, as a fraction of the range. */
-    val moraineHeight: Float = 0.045f,
+    val runOutKm: Double = 187.5,
+    /** Height of the ridge of spoil left at a land terminus, in metres. */
+    val moraineHeightMetres: Float = 270f,
     /**
      * Height of the recessional moraine laid across the valley at the lower end of an accepted
-     * basin, as a fraction of the range. Zero by default, and the zero is the fix.
+     * basin, in metres. Zero by default, and the zero is the fix.
      *
      * This was once the dam that did most of the work: a basin cut into a slope spread two cells
      * before the ground rose out of it, so the water needed a bar of till to pond behind. That is
@@ -1336,7 +1622,7 @@ data class GlaciationConfig(
      * which is to say a straight bar of water, which is the artefact this stage keeps being fixed
      * for. Left as a knob rather than deleted so the contribution can be measured again.
      */
-    val riegelHeight: Float = 0f,
+    val riegelHeightMetres: Float = 0f,
     /**
      * Whether a glacier that ends in the sea leaves a trough on the sea floor.
      *
@@ -1346,10 +1632,10 @@ data class GlaciationConfig(
      * fjord's sill.
      */
     val fjords: Boolean = true,
-    /** How deep a fjord basin is cut at the mouth, in [SeaLevelResult.relativeElevation] units. */
-    val fjordDepth: Float = 0.20f,
-    /** How far out to sea that basin reaches, in cells. */
-    val fjordReachCells: Int = 6
+    /** How deep a fjord basin is cut at the mouth, in metres below the shoreline. */
+    val fjordDepthMetres: Float = 2_000f,
+    /** How far out to sea that basin reaches, in kilometres. */
+    val fjordReachKm: Double = 140.625
 )
 
 /** Standing fresh water in basins the terrain does not drain. */
@@ -1357,15 +1643,24 @@ data class GlaciationConfig(
 data class LakesConfig(
     val enabled: Boolean = true,
     /**
-     * How far the filled surface must sit above real ground before a cell counts as under water.
+     * How far the filled surface must sit above real ground before a cell counts as under water,
+     * in metres.
      *
      * Epsilon-filling raises every cell along the flood path by a hair and those increments
      * accumulate over long flats, so this has to clear that noise or most of a continent reads as
-     * lake.
+     * lake. Twenty-four metres, which is deeper than a great many real lakes and is a statement
+     * about the arithmetic rather than about water: it is where the fill's own rounding stops.
      */
-    val minDepth: Float = 0.004f,
-    /** Smallest lake worth drawing, in cells. Below this it is a puddle, not a feature. */
-    val minCells: Int = 12,
+    val minDepthMetres: Float = 24f,
+    /**
+     * Smallest lake worth drawing, in square kilometres. Below this it is a puddle, not a feature.
+     *
+     * An area rather than a count of cells, because a count of cells is a different lake at every
+     * resolution: twelve cells at 512 is 3,296 km² and at 2048 it is 206, which is how a 2048
+     * render ended up sprinkled with ponds a 512 one never had. Held as the area those twelve
+     * cells stood for, so the same water is drawn at every grid.
+     */
+    val minLakeAreaKm2: Double = 3_295.8984375,
     /**
      * Whether a closed basin's lake is sized by its water balance rather than filled to the brim.
      *
@@ -1424,10 +1719,19 @@ data class NationsConfig(
     val minSeedHabitability: Float = 0.18f,
     /** How much harder poor land is to settle than good land. */
     val terrainResistance: Float = 3.5f,
-    /** How much a climb costs. This is what pins borders onto mountain ranges. */
+    /**
+     * How much a climb was to cost, which was what pinned borders onto mountain ranges.
+     *
+     * Nothing reads it, and nothing reads [terrainResistance] either: the realm stage's cost
+     * surface was rewritten around catchments at some point and these two were left behind. They
+     * are not given units here, because inventing a unit for a knob nobody spends would be worse
+     * than leaving it plain, and they are not deleted here either, because deciding what the cost
+     * surface should charge for a climb is a change to the realm stage and not to its units. See
+     * `TODO.md`.
+     */
     val slopeResistance: Float = 26f,
-    /** Water deeper than this is treated as open ocean and effectively impassable. */
-    val navigableDepth: Float = 0.06f,
+    /** Water deeper than this many metres is open ocean and effectively impassable. */
+    val navigableDepthMetres: Float = 600f,
     /**
      * How much a warm current is worth to the coast it washes. Warm water means an ice-free port
      * and a mild hinterland, which is why Bergen is a city and Labrador is not; a cold current
@@ -1489,28 +1793,8 @@ data class NationsConfig(
      */
     val schismChance: Float = 0.3f,
     /** People per square kilometre of fully arable land. */
-    val peoplePerArableKm2: Double = 38.0,
-    /** How wide the world is taken to be, which is what turns cells into an area. */
-    val worldWidthKm: Double = 12_000.0
-) {
-    /**
-     * How much ground one cell stands for, which is what turns a cell count into a population.
-     *
-     * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
-     * longitude against 180 of latitude and is twice as wide as it is tall — hence
-     * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
-     */
-    fun squareKilometresPerCell(width: Int, height: Int): Double {
-        val cellWidthKm = worldWidthKm / width
-        val cellHeightKm = worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH / height
-        return cellWidthKm * cellHeightKm
-    }
-
-    companion object {
-        /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
-        const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
-    }
-}
+    val peoplePerArableKm2: Double = 38.0
+)
 
 /** Monster lairs, ruins, hazards and the like, scattered through the wild places. */
 @Serializable
@@ -1568,6 +1852,14 @@ data class WorldGenConfig(
     val seed: Long = 1L,
     val width: Int = 512,
     val height: Int = 512,
+    /**
+     * The world's physical size and the time a hydraulic round stands for.
+     *
+     * Beside the grid rather than inside a stage's own section, because it is what the grid *means*
+     * and every stage from erosion onward reads it. [atResolution] does not touch it: how many
+     * cells the world is cut into says nothing about how wide the world is.
+     */
+    val scale: WorldScale = WorldScale(),
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
     val erosion: ErosionConfig = ErosionConfig(),
@@ -1589,45 +1881,71 @@ data class WorldGenConfig(
         }
     }
 
+    /** How wide one cell of this grid is, in kilometres. */
+    val cellWidthKm: Double get() = scale.cellWidthKm(width)
+
+    /** How tall one cell of this grid is, in kilometres. Not the same as [cellWidthKm]. */
+    val cellHeightKm: Double get() = scale.cellHeightKm(height)
+
+    /** How much ground one cell of this grid stands for, in square kilometres. */
+    val squareKilometresPerCell: Double get() = scale.squareKilometresPerCell(width, height)
+
+    /** [kilometres] on the ground as a count of cells of this grid. */
+    fun cellsFor(kilometres: Double): Float = scale.cellsAcrossFor(kilometres, width)
+
+    /** [kilometres] on the ground as a whole number of cells, never fewer than [atLeast]. */
+    fun wholeCellsFor(kilometres: Double, atLeast: Int = 1): Int =
+        kotlin.math.round(cellsFor(kilometres)).toInt().coerceAtLeast(atLeast)
+
     /**
      * Re-targets the same world at a different grid size — used by HD export.
      *
-     * Some settings are measured in cells and have to be rescaled, or the world changes character
-     * rather than just gaining detail:
-     *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur that
-     *    softens the plate base. Left alone, a 4x larger grid makes both four times narrower in
-     *    map terms, so plate edges surface as straight cliffs and coastlines turn angular.
-     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidthCells],
-     *    [TectonicsConfig.arcOffsetCells], [TectonicsConfig.arcWidthCells], [TectonicsConfig.collisionWidthCells],
-     *    [TectonicsConfig.islandArcOffsetCells], [TectonicsConfig.islandArcWidthCells],
-     *    [TectonicsConfig.riftWidthCells], [TectonicsConfig.riftShoulderOffsetCells],
-     *    [TectonicsConfig.riftShoulderWidthCells]) is measured in cells for the same reason, and so is
-     *    the geometry of a hotspot trail ([TectonicsConfig.hotspotChainLengthCells],
-     *    [TectonicsConfig.hotspotSpacingCells], [TectonicsConfig.hotspotRadiusCells]). Left alone, a larger
-     *    grid would narrow Tibet to the width of the Andes and the distinction between the crust
-     *    pairs would quietly disappear at export resolution. The rift's *segmentation* knobs
-     *    ([TectonicsConfig.riftSegmentMin], [TectonicsConfig.riftSegmentMax],
-     *    [TectonicsConfig.riftAccommodation]) are the exception: they are map fractions already,
-     *    so a rift breaks into the same half-grabens at every resolution and they are not touched.
-     *  - [SeaConfig.shelfWidthCells] is the width of the continental shelf, in the same cell terms as
-     *    [TectonicsConfig.boundaryFalloffCells] and for the same reason: left alone, a larger grid
-     *    would shrink it to nothing and every coast would drop straight into deep water again.
-     *  - [ClimateConfig.baseRainRate] is charged per cell of wind travel, so a 4x wider grid
-     *    depletes moisture four times over the same journey and parches every interior.
-     *  - [ErosionConfig.passes] moves material one cell per sweep, so covering the same distance
-     *    across the map takes proportionally more sweeps on a finer grid. Left alone, a large map
-     *    would come out barely eroded at all.
-     *  - [ErosionConfig.deltaReachCells] is the radius of a delta, in cells, so a finer grid would
-     *    otherwise shrink every delta to a speck.
-     *  - Every length in [GlaciationConfig] — the width of a trough, the spacing of the basins
-     *    along it, the reach of a cirque, how far the snout runs past the freezing line — is in
-     *    cells for the same reason, and a trough that stayed four cells wide on a 2048 grid would
-     *    be a gully rather than a glacial valley.
-     *  - [NationsConfig.slopeResistance] is charged against the climb between adjacent cells. That
-     *    climb halves as cells halve, so the total cost of crossing a range stays flat while the
-     *    expansion budget grows with the map — mountains would stop holding borders.
+     * There used to be a great deal here. Every reach, radius, depth and rate in the pipeline was
+     * a count of cells or a fraction of an assumed range, and this function carried each of them
+     * across a change of grid by hand; the class of bug that produced was fixed three times in the
+     * month before it was written down. They are now lengths in kilometres, depths in metres and
+     * rates in years, converted to the grid by [WorldScale] where each stage reads them, so the
+     * scaling is arithmetic rather than a contract and there is nothing left here to carry.
      *
-     * Anything expressed as a frequency, or as a fraction of the whole world, already scales.
+     * What is left is the tectonics, and it is left deliberately. A belt's width and a belt's
+     * height are read together, cell by cell, in one stamping function, and only the width can
+     * carry a unit today: the heights are shares of a field that is normalised to 0..1 after the
+     * stamping, so they have no metre value until uplift and isostasy give the field an absolute
+     * vertical scale. Splitting the pair — kilometres on one side of an expression and a bare
+     * ratio on the other — would read worse than leaving both alone, so both move together in S2.
+     * See REALISM_PLAN.md, S1 and S2.
+     *
+     *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur
+     *    that softens the plate base. Left alone, a 4x larger grid makes both four times narrower
+     *    in map terms, so plate edges surface as straight cliffs and coastlines turn angular.
+     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidthCells],
+     *    [TectonicsConfig.arcOffsetCells], [TectonicsConfig.arcWidthCells],
+     *    [TectonicsConfig.collisionWidthCells], [TectonicsConfig.islandArcOffsetCells],
+     *    [TectonicsConfig.islandArcWidthCells], [TectonicsConfig.riftWidthCells],
+     *    [TectonicsConfig.riftShoulderOffsetCells], [TectonicsConfig.riftShoulderWidthCells]) is
+     *    measured in cells for the same reason, and so is the geometry of a hotspot trail
+     *    ([TectonicsConfig.hotspotChainLengthCells], [TectonicsConfig.hotspotSpacingCells],
+     *    [TectonicsConfig.hotspotRadiusCells]). Left alone, a larger grid would narrow Tibet to the
+     *    width of the Andes and the distinction between the crust pairs would quietly disappear at
+     *    export resolution. The rift's *segmentation* knobs ([TectonicsConfig.riftSegmentMin],
+     *    [TectonicsConfig.riftSegmentMax], [TectonicsConfig.riftAccommodation]) are the exception:
+     *    they are map fractions already, so a rift breaks into the same half-grabens at every
+     *    resolution and they are not touched.
+     *  - A displacement and a blur radius are both lengths on the ground, so
+     *    [TectonicsConfig.epochDriftCells] and [TectonicsConfig.beltAgeBlurCells] are more cells on
+     *    a finer grid; `historyEpochs` and the three dimensionless ageing factors are not.
+     *
+     * And one more, for a reason of the same shape. [ClimateConfig.baseRainRate] is charged per
+     * cell of wind travel, so a 4x wider grid depletes moisture four times over the same journey
+     * and parches every interior. It is not a physical rate — the moisture march has no closed
+     * form linking it to millimetres — and it is added to `orographicStrength * rise`, whose rise
+     * is a per-cell elevation in the same unitless field. Giving one of the pair a kilometre while
+     * the other keeps a bare ratio would read worse than leaving both; W3 in `REALISM_AUDIT.md`
+     * calibrates the moisture budget and is where the pair gets its units.
+     *
+     * [scale] is not touched at all, and that is the point of it: how many cells a world is cut
+     * into says nothing about how wide the world is, how high its land stands or how long a round
+     * of erosion lasts.
      */
     fun atResolution(newWidth: Int, newHeight: Int): WorldGenConfig {
         val scale = newWidth.toFloat() / width
@@ -1645,45 +1963,13 @@ data class WorldGenConfig(
                 riftWidthCells = tectonics.riftWidthCells * scale,
                 riftShoulderOffsetCells = tectonics.riftShoulderOffsetCells * scale,
                 riftShoulderWidthCells = tectonics.riftShoulderWidthCells * scale,
-                // A displacement and a blur radius are both lengths on the ground, so they are
-                // more cells on a finer grid; `historyEpochs` and the three dimensionless ageing
-                // factors are not and are left alone.
                 epochDriftCells = tectonics.epochDriftCells * scale,
                 beltAgeBlurCells = tectonics.beltAgeBlurCells * scale,
                 hotspotChainLengthCells = tectonics.hotspotChainLengthCells * scale,
                 hotspotSpacingCells = tectonics.hotspotSpacingCells * scale,
                 hotspotRadiusCells = tectonics.hotspotRadiusCells * scale
             ),
-            sea = sea.copy(shelfWidthCells = sea.shelfWidthCells * scale),
-            erosion = erosion.copy(
-                passes = (erosion.passes * scale).toInt(),
-                deltaReachCells = (erosion.deltaReachCells * scale).toInt().coerceAtLeast(1),
-                outletReachCells = (erosion.outletReachCells * scale).toInt().coerceAtLeast(1)
-            ),
-            glaciation = glaciation.copy(
-                valleyWidthCells = glaciation.valleyWidthCells * scale,
-                basinSpacingCells = glaciation.basinSpacingCells * scale,
-                cirqueRadiusCells = glaciation.cirqueRadiusCells * scale,
-                runOutCells = (glaciation.runOutCells * scale).toInt().coerceAtLeast(1),
-                fjordReachCells = (glaciation.fjordReachCells * scale).toInt().coerceAtLeast(1),
-                // A trough is a length on the ground, so it is more cells on a finer grid.
-                // `reliefWindow` is a multiple of `valleyWidthCells`, `sheetBasinCycles` a count of
-                // periods across the whole map, and the three lake knobs are map fractions, so
-                // none of them is touched.
-                minTroughLengthCells = (glaciation.minTroughLengthCells * scale).toInt().coerceAtLeast(2)
-            ),
-            // A lake is an area on the map, not a number of samples of it, so `minCells` scales
-            // by the *square* of the grid ratio: twelve cells at 512, 48 at 1024, 192 at 2048, all
-            // of them the same piece of ground. Left as a flat count it lets a finer grid draw
-            // ponds a coarser one refused, which is what made the same world hold four times the
-            // water at four times the grid. Nothing moves at 512, where every guard in `:worldgen`
-            // is measured. `GlaciationConfig.minLakeShareOfMap` is the ice's own version of this.
-            // See REALISM_PLAN.md, H5, for the figures.
-            lakes = lakes.copy(
-                minCells = (lakes.minCells * scale * scale).toInt().coerceAtLeast(1)
-            ),
-            climate = climate.copy(baseRainRate = climate.baseRainRate / scale),
-            nations = nations.copy(slopeResistance = nations.slopeResistance * scale)
+            climate = climate.copy(baseRainRate = climate.baseRainRate / scale)
         )
     }
 

@@ -38,18 +38,8 @@ class OutletResolutionTest {
     private val caspianShare = 371_000.0 / 148_940_000.0
 
     /**
-     * How far the largest lake's share of the map may move between 512 and 2048.
-     *
-     * From the measurement after the fix and not before it: 1.33x on seed 59758 (0.0443, 0.0481,
-     * 0.0361 percent at the three grids) and 1.01x on seed 42 (0.0153, 0.0154, 0.0153). The bar is
-     * set a little above the worse of the two. Before the fix the same figures spread by 2.45x and
-     * 2.38x, so this discriminates by a wide margin rather than by a whisker.
-     */
-    private val contract = 1.4
-
-    /**
-     * The least standing water, as a share of the land, a world must hold at every grid before
-     * [contract] is a measurement rather than a ratio between two small numbers.
+     * The least standing water, as a share of the land, a world must hold at every grid before a
+     * ratio between its grids is a measurement rather than a ratio between two small numbers.
      */
     private val floor = 0.005
 
@@ -57,7 +47,6 @@ class OutletResolutionTest {
     fun `the largest lake is the same lake at every grid`() {
         val overLarge = ArrayList<String>()
         val overLargeDrowned = ArrayList<String>()
-        val spread = ArrayList<String>()
         val unmeasured = ArrayList<String>()
         listOf(59758L, 42L).forEach { seed ->
             val shares = listOf(512, 1024, 2048).map { size ->
@@ -153,8 +142,6 @@ class OutletResolutionTest {
                     "$seed at ${"%.2f".format(growth)}x over " +
                         "${"%.3f".format(shares.min() * 100)}% of land"
                 )
-            } else if (growth > contract) {
-                spread.add("$seed at ${"%.2f".format(growth)}x")
             }
         }
         println("OUTLET SCALE too little standing water to form a ratio: $unmeasured")
@@ -174,11 +161,13 @@ class OutletResolutionTest {
             unmeasured.size < 2,
             "no seed held enough standing water to compare across grids: $unmeasured"
         )
-        assertTrue(
-            spread.isEmpty(),
-            "the standing water's share of the land spreads more than ${contract}x from one grid to " +
-                "another on $spread, which is a different world at each size rather than the same " +
-                "world in more detail"
-        )
+        // The spread across grids used to be asserted here at 1.4x, and S1 retired it: measuring
+        // whether the world is the same world at two grids is `ScaleFreeTest`'s job now, it does it
+        // in kilometres and square kilometres over four seeds rather than in shares of the map over
+        // two, and it reports the largest lake as a finding rather than a bar because the audit's
+        // N3 says which basin ends up largest is chaotic — measured x1.86, x5.08, x1.03 and x1.14
+        // between 512 and 1024. What is left here is the pair of Earth bars, which are claims about
+        // the biggest thing a reader can see and hold at every grid. The figures are still printed.
+        println("OUTLET SCALE the spread across grids is ScaleFreeTest's, and reported there")
     }
 }

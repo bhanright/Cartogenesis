@@ -139,6 +139,12 @@ object WorldGenerationEngine {
             ?.takeIf {
                 it.plates === plates &&
                     it.config.erosion == config.erosion &&
+                    // Every rate and reach in the erosion stage is now a length, a depth or a
+                    // time, converted to the grid through `scale` where it is read, so the world's
+                    // own size is one of this stage's settings. It is guarded here rather than at
+                    // every stage below because erosion is the first to read it and each later
+                    // guard already requires this stage's own result to be the one it was handed.
+                    it.config.scale == config.scale &&
                     // Hydraulic erosion routes water against a provisional shoreline, so where the
                     // sea sits changes what gets carved. Guarding on `erosion` alone reused a
                     // stale height field whenever sea level moved.
@@ -149,7 +155,7 @@ object WorldGenerationEngine {
                     // enclosed-water rule both happen after erosion, and re-running twelve
                     // hydraulic rounds because someone moved a shelf slider would undo the whole
                     // point of this chain.
-                    it.config.sea.lowstand == config.sea.lowstand
+                    it.config.sea.lowstandMetres == config.sea.lowstandMetres
             }
             ?.erosion
             ?: ErosionStage.apply(config, plates.height, accelerator)

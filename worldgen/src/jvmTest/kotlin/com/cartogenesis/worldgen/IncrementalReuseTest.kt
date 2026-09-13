@@ -58,6 +58,16 @@ class IncrementalReuseTest {
         assertTrue(previous.landmarks.landmarks.isNotEmpty(), "base world has no landmarks")
 
         val variants = listOf(
+            // S1: the world's own size and the years a round stands for. Every rate and reach from
+            // erosion onward is converted through it, so a stale erosion stage would carry a
+            // terrain cut to the wrong ruler through everything below it. A taller world is the
+            // largest change the section can make short of resizing the map itself.
+            "scale" to base.copy(
+                scale = base.scale.copy(highestLandMetres = base.scale.highestLandMetres * 1.5f)
+            ),
+            "worldWidthKm" to base.copy(
+                scale = base.scale.copy(worldWidthKm = base.scale.worldWidthKm * 0.5)
+            ),
             "terrain" to base.copy(terrain = base.terrain.copy(octaves = base.terrain.octaves - 1)),
             "tectonics" to base.copy(
                 tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)
@@ -70,12 +80,12 @@ class IncrementalReuseTest {
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
-            "sea" to base.copy(sea = base.sea.copy(shelfDepth = base.sea.shelfDepth + 0.05f)),
+            "sea" to base.copy(sea = base.sea.copy(shelfDepthMetres = base.sea.shelfDepthMetres + 500f)),
             // H5: the lowstand is the one field of the sea section that reaches *back* into
             // erosion, since it is the base level the hydraulic rounds grade to. The sea stage's
             // own guard would never have caught it going stale, because the sea stage would have
             // been recomputed anyway and would simply have recut a terrain nobody re-eroded.
-            "lowstand" to base.copy(sea = base.sea.copy(lowstand = 0f)),
+            "lowstand" to base.copy(sea = base.sea.copy(lowstandMetres = 0f)),
             // And the other half of H5, which changes only the cut: water the ocean cannot reach
             // is land, so this moves `isLand` and everything downstream of it without touching a
             // single height.

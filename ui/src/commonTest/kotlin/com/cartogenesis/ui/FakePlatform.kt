@@ -111,7 +111,7 @@ internal object FakeAccelerator : ErosionAccelerator {
         width: Int,
         height: Int,
         heights: FloatArray,
-        talus: Float,
+        maxOrthogonalDrop: Float,
         passes: Int,
         rate: Float
     ): FloatArray? = null

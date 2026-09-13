@@ -767,7 +767,7 @@ class DebugMapDump {
      * generator: the plateau window holds the most cells sitting on a collision plateau's *outer
      * rim* (boundary distance within a fifth of `collisionWidthCells` of it), and the shelf window the
      * most ocean cells on the continental *slope* — distance to land between one and two
-     * `shelfWidthCells`, the band `SeaLevelStage` smoothsteps back down to the natural sea floor.
+     * `shelfWidthKm` on the ground, the band `SeaLevelStage` smoothsteps back down to the natural sea floor.
      * Those two bands are the iso-contours of the distance field, which is what this is looking
      * at. The chosen corners are printed so a before-and-after pair can be checked to be looking
      * at the same ground.
@@ -870,7 +870,7 @@ class DebugMapDump {
             if (world.sea.isLand[i]) { toLand[i] = 0f; label[i] = i }
         }
         JumpFloodDistance.run(size, size, toLand, label)
-        val shelf = config.sea.shelfWidthCells
+        val shelf = config.cellsFor(config.sea.shelfWidthKm)
         val (sx, sy) = bestWindow { i ->
             !world.sea.isLand[i] && toLand[i] > shelf && toLand[i] <= 2f * shelf
         }

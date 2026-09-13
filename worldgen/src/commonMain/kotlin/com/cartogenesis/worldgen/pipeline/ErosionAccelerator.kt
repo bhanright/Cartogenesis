@@ -24,6 +24,11 @@ interface ErosionAccelerator {
      *
      * [heights] must not be modified; the result is a separate array.
      *
+     * [maxOrthogonalDrop] is the steepest drop one cell may hold, in the height field's own units,
+     * already converted from the critical slope and this grid's cell width. Every physical
+     * constant arrives on the device converted: a kernel has no business knowing how wide the
+     * world is.
+     *
      * Suspending, because the obvious second implementation cannot be anything else: WebGPU hands
      * back promises for its device, its queue and every read of a buffer, and Kotlin/Wasm has no
      * way to block on one. An accelerator that happens to be synchronous simply never suspends.
@@ -32,7 +37,7 @@ interface ErosionAccelerator {
         width: Int,
         height: Int,
         heights: FloatArray,
-        talus: Float,
+        maxOrthogonalDrop: Float,
         passes: Int,
         rate: Float
     ): FloatArray?

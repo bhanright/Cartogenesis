@@ -18,19 +18,50 @@
   largest lake was four times the Caspian. E7 refused deepening the stamp and hashing sub-basins
   onto the floor on the same bar. What is left is subsidence that scales with how far the rift has
   opened (S2 in REALISM_AUDIT.md). 2026-09-12.
-- **One unit of land elevation is six kilometres in the climate and eight everywhere else.**
-  `ClimateConfig.maxAltitudeMetres` is 6000 and the lapse rate reads a cell's altitude straight off
-  it, so the highest land on every map stands six kilometres up. `SeaConfig.lowstand` and
-  `HydraulicErosion.SHELF_BREAK` both derive their defaults from "the roughly 8 km of relief between
-  sea level and the highest land" — 120 m of glacial lowstand and a 130 m shelf break, each over
-  eight kilometres to give 0.015. Over six they would be 0.020 and 0.022. Both cannot be right, and
-  nothing reconciles them, because the sea has no depth setting at all: below the shoreline
-  `relativeElevation` is normalised against whatever the deepest cell happens to be, so no constant
-  in the pipeline says how deep an ocean is. Found by M1, whose hypsometry has to carry the land's
-  ruler down past the shoreline to draw a curve at all and reads the whole world's relief as
-  11,913 m pooled against Earth's 20,000. S1 in `REALISM_AUDIT.md` owns the repair; recorded here
-  because it is a live disagreement between constants that ship, not only a feature that is absent.
-  2026-09-12.
+- **A cap that is the Caspian's *share of Earth* is a seventh of the Caspian.**
+  `SeaConfig.enclosedSeaMaxKm2` is 52,600 km² and `GlaciationConfig.maxLakeAreaKm2` is 11,520, and
+  both came from carrying a share of Earth's surface — the Caspian's 0.073%, Superior's 0.016% —
+  onto a world of 72 million km² against Earth's 510. The lakes they are named for are 371,000 km²
+  and 82,100. S1 turned both into areas, which is what made the question visible, and deliberately
+  kept the value that reproduces today's behaviour: seven times the cap turns several more inland
+  seas into land on every seed and moves coastlines nothing else in S1 touches. Which of the two a
+  world a seventh of Earth's size should use is a question about what a fantasy world is, not about
+  units. 2026-09-13, S1.
+- **The height field has no absolute vertical scale, so the three parts of the ruler disagree.**
+  `WorldScale` declares the land's relief above the shoreline (6,000 m), the sea's below it
+  (10,000 m) and the raw height field's whole range (their sum, 16,000 m). The three are consistent
+  only if the shoreline sits at 0.625 of the field, and it does not: it is a percentile of the
+  *cells*, so where it lands in the *range* is an output. Measured on the standard seeds at 512 it
+  sits at 0.395, 0.437, 0.477 and 0.554, which puts the metres one unit of the field is worth,
+  read off the land, at 10,228 to 17,370 against the 16,000 declared — a spread of 0.64x to 1.09x.
+  `UnitsTest` holds it inside a stated factor as a regression guard. Not closable by declaring
+  anything; uplift and isostasy (S2) give the field a scale that does not move with the sea level.
+  2026-09-13, S1.
+- **The in-round outlet notch makes drowned basins larger, not smaller.** On seed 718106 at 512 the
+  largest basin below the sea-level cut is 0.176% of the land with `ErosionConfig.outletIncision`
+  off and 0.352% with it on: the notch cuts channels across ground that is dry at the lowstand and
+  drowns when the sea returns, and those channels join hollows that would otherwise be separate
+  basins. On Earth that is how the Bosphorus and the North Sea's Silver Pit work, so it is not
+  obviously wrong — but it is the mechanism behind the one seed that now sits over the Caspian, and
+  nothing measures it apart from this note. 2026-09-13, S1.
+- **`NationsConfig.slopeResistance` and `terrainResistance` are dead.** Nothing reads either. The
+  realm stage's cost surface was rewritten around catchments and the two were left behind, still
+  serialised, still rescaled by `atResolution` until S1 stopped doing that. They are not given
+  units, because inventing a unit for a knob nobody spends is worse than leaving it plain, and not
+  deleted, because deciding what a realm should pay for a climb is a change to the realm stage.
+  2026-09-13, S1.
+- **`RiverConfig.maxRivers` is a count of courses, so the drawn network thins on a finer grid.**
+  Four hundred courses at 512 and four hundred at 2048, over sixteen times the cells: the map draws
+  a smaller share of its own network the further in it is generated. `ScaleFree` measures drainage
+  density off the terrain's channel network rather than the drawn one for exactly this reason, and
+  says so. The cure is a cap that is an area or a share rather than a count, and it belongs with
+  R2's rivers-drawn-as-rivers. 2026-09-13, S1.
+- **The generator's ocean is nearly all shallow.** With the sea's own depth declared, the
+  Earth-likeness suite reads the oceanic mode at about -390 m against Earth's -3,700: the height
+  field is roughly normal and the shoreline is its 62nd percentile, so most water cells sit just
+  below the waterline with a long tail down to a few trenches. Earth's floor is bimodal because two
+  crusts of different density float at two levels, which is an isostatic fact and is S2's. The same
+  cause puts the continental shelf at 1,000 m against Earth's 130. 2026-09-13, S1.
 - **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
   sorts channel heads by the flow each already carries and traces the largest first, so the course a
   `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
@@ -47,6 +78,19 @@
   than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
 
 ## Done
+
+- **One unit of land elevation was six kilometres in the climate and eight everywhere else**
+  (2026-09-13, S1) — `WorldScale` is now the only place a physical unit is declared: the map's
+  width in kilometres, the two ends of its vertical range in metres and the years a hydraulic round
+  stands for. The ruler chosen is the climate's 6,000 m, because a cell of the default grid is
+  23 km across and 6,000 m is a cell mean where 8,849 is a summit; the sea gained a depth of its
+  own, 10,000 m, so the hypsometry no longer has to carry the land's ruler past the shoreline. The
+  two constants that disagreed took the figures they always claimed — 120 m of lowstand and a 130 m
+  shelf break — read off the height field's own 16,000 m, because both are levels in that field
+  rather than heights above the water or depths below it. They come to 0.0075 and 0.0081 where they
+  had been 0.015 of a *measured* land relief, which was 0.0037 of the field on one seed and 0.0088
+  on another; the world moved by that much, once, with the pins re-recorded in the same commit. The
+  relief the Earth-likeness suite reads went from 11,913 m pooled to about 15,600.
 
 - **The rift-mouth valley: pocket, moats and terrace** (2026-09-12, E6) — the three things in the
   author's crop of 718106's southern rift turned out to be three different causes, found with the

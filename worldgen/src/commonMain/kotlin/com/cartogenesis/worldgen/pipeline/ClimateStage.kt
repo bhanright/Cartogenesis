@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.abs
 import kotlin.math.pow
@@ -261,9 +262,6 @@ object ClimateStage {
 
     /** Degrees of latitude the whole map spans, top row to bottom row. */
     private const val POLE_TO_POLE_DEGREES = 180f
-
-    /** Metres in a kilometre, which is what turns an altitude into a lapse-rate multiplier. */
-    private const val METRES_PER_KM = 1000f
 
     /**
      * Decorrelates this stage's noise from every other stage's, which all draw on the same world
@@ -929,8 +927,8 @@ object ClimateStage {
                     val cell = row * cellsAcross + column
                     val elevation = sea.relativeElevation.data[cell]
                     val altitudeDropC = if (sea.isLand[cell]) {
-                        elevation * climateConfig.maxAltitudeMetres / METRES_PER_KM *
-                            climateConfig.lapseRateCPerKm
+                        config.scale.metresAboveShoreline(elevation) /
+                            WorldScale.METRES_PER_KM * climateConfig.lapseRateCPerKm
                     } else 0f
                     val variationC = WEATHER_NOISE_C * noise.fbm(
                         column * WEATHER_NOISE_CYCLES.toFloat() / cellsAcross,

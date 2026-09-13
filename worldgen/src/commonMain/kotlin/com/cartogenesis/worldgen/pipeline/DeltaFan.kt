@@ -199,8 +199,8 @@ internal object DeltaFan {
      *
      * @param outX horizontal component of the step the river took as it arrived. Need not be a unit
      *   vector; a zero vector gives a fan that reaches equally in every direction.
-     * @param reachCells the lobe's full reach straight ahead, in cells. Scaled with the grid by
-     *   `WorldGenConfig.atResolution`, so it is a length on the ground.
+     * @param reachCells the lobe's full reach straight ahead, in cells. Converted from
+     *   `ErosionConfig.deltaReachKm` and the grid by the caller, so it is a length on the ground.
      */
     class Rim(
         val apex: Int,

@@ -36,7 +36,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         width: Int,
         height: Int,
         heights: FloatArray,
-        talus: Float,
+        maxOrthogonalDrop: Float,
         passes: Int,
         rate: Float
     ): FloatArray? {
@@ -54,7 +54,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         val stillWanted = currentCoroutineContext()[Job]
         return GlContext.run("Erosion") {
             val cells = width * height
-            val orthogonal = talus / width
+            val orthogonal = maxOrthogonalDrop
             val diagonal = orthogonal * kotlin.math.sqrt(2f)
             val settled = orthogonal * 1e-3f
 

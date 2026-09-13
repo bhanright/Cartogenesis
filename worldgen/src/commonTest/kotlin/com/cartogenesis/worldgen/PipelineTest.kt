@@ -107,6 +107,7 @@ class PipelineTest {
         val target = world.rivers.flowTarget
         val lakes = world.rivers.lakes
         var stranded = 0
+        val minDepth = config.scale.reliefShareOfMetres(config.lakes.minDepthMetres)
         var insideBasins = 0
         for (i in target.indices) {
             if (!world.sea.isLand[i]) continue
@@ -114,7 +115,7 @@ class PipelineTest {
             // Polar rows drain off the map, so -1 is legitimate there.
             if (row == 0 || row == world.height - 1) continue
 
-            if (filled.data[i] - ground.data[i] >= config.lakes.minDepth) {
+            if (filled.data[i] - ground.data[i] >= minDepth) {
                 insideBasins++
                 // A cell under, or on the drained floor of, a basin the flood had to raise.
                 if (lakes.isLake(i) || lakes.isPlaya(i)) continue

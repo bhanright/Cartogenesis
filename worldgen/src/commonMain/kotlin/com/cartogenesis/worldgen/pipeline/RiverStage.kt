@@ -159,7 +159,7 @@ object RiverStage {
      * A cell is under water when the filled surface sits meaningfully above the real ground. The
      * threshold matters: epsilon-filling nudges every cell along the flood path upward by a hair,
      * and those increments accumulate over a long flat run, so a naive `filled > raw` test would
-     * flag half a continent. `LakesConfig.minDepth` has to clear that accumulated noise.
+     * flag half a continent. `LakesConfig.minDepthMetres` has to clear that accumulated noise.
      *
      * That gives the basin's footprint *at its spill level*, which is where the lake sits only if
      * the catchment can keep it there. [LakeWaterBalance] decides that, and this is where a basin
@@ -180,6 +180,12 @@ object RiverStage {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val lakesConfig = config.lakes
+        // The two thresholds a lake has to clear, converted out of the world's own scale once: a
+        // depth in metres as a share of the land's relief, and an area in square kilometres as a
+        // count of cells of this grid.
+        val minDepth = config.scale.reliefShareOfMetres(lakesConfig.minDepthMetres)
+        val minLakeCells =
+            (lakesConfig.minLakeAreaKm2 / config.squareKilometresPerCell).toInt().coerceAtLeast(1)
         val lakeId = IntArray(cellCount) { LakeResult.NO_LAKE }
         val playa = BooleanArray(cellCount)
         if (!lakesConfig.enabled) return LakeResult(lakeId, emptyList(), playa)
@@ -187,7 +193,7 @@ object RiverStage {
         val ground = sea.relativeElevation
         val submerged = BooleanArray(cellCount) { cell ->
             sea.isLand[cell] &&
-                (filled.data[cell] - ground.data[cell]) >= lakesConfig.minDepth
+                (filled.data[cell] - ground.data[cell]) >= minDepth
         }
 
         // Potential evaporation is a per-cell property of the climate, not of any basin, so it is
@@ -236,7 +242,7 @@ object RiverStage {
             }
 
             // Too small to read as water; hand it back to the land.
-            if (basinCells.size < lakesConfig.minCells) continue
+            if (basinCells.size < minLakeCells) continue
 
             // The brim, and the cell the water leaves through — wherever the basin drains to dry
             // ground.
@@ -287,7 +293,7 @@ object RiverStage {
 
             val balance = LakeWaterBalance.solve(
                 sortedGround, rainPrefixMm, evaporationPrefixMm,
-                catchmentMm, spillElevation, lakesConfig.minDepth, lakesConfig.runoffFraction
+                catchmentMm, spillElevation, minDepth, lakesConfig.runoffFraction
             )
 
             if (balance.atSpill) {
@@ -304,7 +310,7 @@ object RiverStage {
             }
 
             val waterCells: IntArray
-            if (balance.submergedCells >= lakesConfig.minCells) {
+            if (balance.submergedCells >= minLakeCells) {
                 for (cell in balancedCells) lakeId[cell] = id
                 lakes.add(
                     Lake(
@@ -321,7 +327,7 @@ object RiverStage {
                 val floor = sortedGround[0]
                 var flatCells = balance.submergedCells
                 while (flatCells < basinCellCount &&
-                    sortedGround[flatCells] <= floor + lakesConfig.minDepth
+                    sortedGround[flatCells] <= floor + minDepth
                 ) {
                     flatCells++
                 }

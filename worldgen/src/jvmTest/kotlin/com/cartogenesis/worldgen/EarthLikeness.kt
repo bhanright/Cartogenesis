@@ -186,7 +186,7 @@ internal object EarthLikeness {
      * Every metric of the suite for one finished world.
      *
      * [label] is what the printed block is keyed by — a seed, or "pooled". Areas are in square
-     * kilometres from [com.cartogenesis.worldgen.model.NationsConfig.squareKilometresPerCell],
+     * kilometres from [com.cartogenesis.worldgen.model.WorldScale.squareKilometresPerCell],
      * which is the generator's own plate-carree cell area and takes no cosine of latitude; the
      * spherical metric is P2 in `REALISM_AUDIT.md` and is not this chunk's to invent.
      */
@@ -223,7 +223,7 @@ internal object EarthLikeness {
         val cellsDown = world.height
         val cellCount = cellsAcross * cellsDown
         val squareKilometresPerCell =
-            world.config.nations.squareKilometresPerCell(cellsAcross, cellsDown)
+            world.config.scale.squareKilometresPerCell(cellsAcross, cellsDown)
 
         val hypsometry = hypsometryOf(world)
         val coastline = coastlineBoxCount(world.sea.isLand, cellsAcross, cellsDown)
@@ -312,15 +312,16 @@ internal object EarthLikeness {
      * The share of the surface at each elevation, in bands a twentieth of the world's own relief
      * span wide, with one band edge exactly at the shoreline.
      *
-     * Metres come from the generator's own ruler: `ClimateConfig.maxAltitudeMetres` is the altitude
-     * of the highest land, so one unit of raw height is
-     * `maxAltitudeMetres / (highest land - shoreline)` metres, and that same ruler is carried on
-     * below the shoreline. It has to be: `SeaLevelResult.relativeElevation` normalises each side of
-     * the shoreline against its own range, so its -1 is the deepest water whatever depth that is,
-     * and a hypsometric curve drawn on two different rulers is not a hypsometric curve. The sea's
-     * metres are therefore a *consequence* of the land's calibration and not a calibration of their
-     * own — the generator has no ocean depth setting — which is why nothing below is asserted in
-     * metres. The bands are a fixed fraction of the span for the same reason.
+     * Metres come from the generator's own ruler, `WorldScale`, which declares both ends of the
+     * vertical range: `highestLandMetres` above the shoreline and `deepestOceanMetres` below it.
+     * `SeaLevelResult.relativeElevation` normalises each side of the shoreline against its own
+     * range, so the two figures are exactly what its +1 and its -1 stand for.
+     *
+     * That makes the relief span a *declaration* rather than a measurement — the highest land cell
+     * is at +1 and the deepest floor at -1 by construction, so the span is always the two added
+     * together. What is still measured, and still worth measuring, is the shape between them: where
+     * the two modes fall, how deep the trough between them is, and how much of the surface the two
+     * modes hold. Those are the rows that discriminate.
      */
     internal class Hypsometry(
         val bandMetres: Double,
@@ -388,15 +389,14 @@ internal object EarthLikeness {
 
     /** The band histogram of one world's whole surface, land and sea alike. */
     fun hypsometryOf(world: WorldMap): Hypsometry {
-        val heights = world.erosion.height.data
-        val shoreline = world.sea.shorelineHeight
-        var highestLand = shoreline
-        for (cell in heights.indices) if (heights[cell] > highestLand) highestLand = heights[cell]
-        val landSpan = (highestLand - shoreline).toDouble()
-        val metresPerHeightUnit =
-            if (landSpan <= 0.0) 0.0 else world.config.climate.maxAltitudeMetres / landSpan
-        val elevations = DoubleArray(heights.size) {
-            (heights[it] - shoreline).toDouble() * metresPerHeightUnit
+        val scale = world.config.scale
+        val relative = world.sea.relativeElevation.data
+        val isLand = world.sea.isLand
+        val elevations = DoubleArray(relative.size) {
+            val metres =
+                if (isLand[it]) scale.metresAboveShoreline(relative[it])
+                else scale.metresBelowShoreline(relative[it])
+            metres.toDouble()
         }
         return hypsometryOfMetres(elevations)
     }
@@ -611,8 +611,8 @@ internal object EarthLikeness {
 
     /** How much wider a cell is than it is tall, on this world's grid. */
     private fun cellAspect(world: WorldMap): Double {
-        val cellWidthKm = world.config.nations.worldWidthKm / world.width
-        val cellHeightKm = world.config.nations.worldWidthKm * 0.5 / world.height
+        val cellWidthKm = world.config.scale.cellWidthKm(world.width)
+        val cellHeightKm = world.config.scale.cellHeightKm(world.height)
         return cellWidthKm / cellHeightKm
     }
 
@@ -1348,7 +1348,8 @@ internal object EarthLikeness {
                 "the world's relief spans ${"%.0f".format(metrics.hypsometry.reliefSpanMetres)} m" +
                     " against Earth's $EARTH_RELIEF_SPAN_METRES (x${
                         "%.2f".format(metrics.hypsometry.reliefSpanMetres / EARTH_RELIEF_SPAN_METRES)
-                    })"
+                    }); declared by WorldScale rather than measured, and against a summit-to-deep" +
+                    " Earth where the generator's two ends are cell means"
         )
         // Ranked farthest from Earth first, distance being how far the ratio is from one either
         // way, on a log scale so that half and double are the same distance.

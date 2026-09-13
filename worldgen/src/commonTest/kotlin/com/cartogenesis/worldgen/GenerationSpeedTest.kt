@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.concurrent.parallelism
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.ErosionStage
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -29,7 +30,7 @@ class GenerationSpeedTest {
             val elapsed = measureTime { WorldGenerationEngine.generate(config) }
             println(
                 "SPEED ${size}x$size in ${elapsed.inWholeMilliseconds} ms " +
-                    "on ${parallelism()} thread(s), ${config.erosion.passes} erosion sweeps"
+                    "on ${parallelism()} thread(s), ${ErosionStage.sweepsFor(config)} erosion sweeps"
             )
         }
     }

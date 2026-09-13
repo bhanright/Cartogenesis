@@ -128,6 +128,13 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 7 because the world gained a `scale` section — its width in kilometres, the two ends of its
+     * vertical range in metres and the years a hydraulic round stands for — and every physical
+     * knob moved onto it: the sea's lowstand and the glacial depths became metres, every reach and
+     * radius became kilometres, and `climate.maxAltitudeMetres` and `nations.worldWidthKm` left the
+     * sections they were lodged in. An older file's keys would parse and be ignored, leaving the
+     * world at this build's defaults wherever one has moved.
+     *
      * 6 because a river's drawn size stopped being a width in cells and became
      * [com.cartogenesis.worldgen.pipeline.River.widthRatio], a fraction of the map's largest river:
      * the old key would parse and be ignored, leaving every river at the hairline. 5 and 4 were the
@@ -137,7 +144,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 6
+    const val FORMAT_VERSION = 7
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

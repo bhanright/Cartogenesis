@@ -5,20 +5,23 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
 /**
- * What the ground looks like, as two numbers rather than as an opinion.
+ * What the ground looks like, in figures rather than as an opinion.
  *
- * S2's first two passes were right about the physics and wrong about the picture, and neither of
- * the guards they wrote could see it: the hypsometry was bimodal, the sea floor was at Earth's
- * depth, the uplift balanced the denudation, and the render showed continents pocked with lakes,
- * regions drowned into mazes of inlets and a collision belt drawn as a smooth pale ring round a
- * ponded plateau. These two measurements are what the eye was reading, in figures a test can hold.
+ * Every one of S2's passes was right about the physics and wrong about the picture, and none of the
+ * guards written before this class could see it: the hypsometry was bimodal, the sea floor was at
+ * Earth's depth, the uplift balanced the denudation, and the render showed continents pocked with
+ * lakes, regions drowned into mazes of inlets, a collision belt drawn as a smooth pale ring round a
+ * ponded plateau, then — the third pass — the whole of the land under one uniform sandpaper and
+ * continents flooded through the middle. These four measurements are what the eye was reading.
  *
- * Both are compared against `main` at 2eb0f0d — the tree before S2 — measured by exactly this
- * arithmetic on the same five seeds, and both carry the control that shows the bar bite.
+ * All four are compared against `main` measured by exactly this arithmetic on the same five seeds —
+ * the first two against 2eb0f0d, the tree before S2, and the last two against 230deb9, the tree S2's
+ * fourth pass merged — and all four carry the control that shows the bar bite.
  */
 class GroundTextureTest {
 
@@ -41,7 +44,7 @@ class GroundTextureTest {
         val controls = ArrayList<Double>()
         SEEDS.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val here = flankTexture(WorldGenerationEngine.generateBlocking(config))
+            val here = flankTexture(world(seed))
             val control = flankTexture(
                 WorldGenerationEngine.generateBlocking(
                     config.copy(
@@ -90,6 +93,15 @@ class GroundTextureTest {
      *
      * Two rows, both M1's. The lake share of land against Earth's own at this cell area, and the
      * drainage density against what the tree before S2 measured.
+     *
+     * The lake bar no longer has a control, and the reason is worth stating rather than hiding:
+     * nothing this chunk can switch off ponds the water any more. A tenth of the map-scale relief
+     * *and* a crust with no profile of its own — which is the ground S2's second pass measured
+     * 3.55% of land in lakes on — reads 0.96% here, comfortably inside the bar, because the
+     * crust's own thickness profile now supplies the long slope `regionalReliefShare` was raised
+     * to a sixth to supply. So the control is printed and not asserted (ground rule 5: a guard
+     * that cannot discriminate says so), and whether the sixth is still needed at all is in
+     * `TODO.md`.
      */
     @Test
     fun `a continent's long slopes drain it, and a tenth of them does not`() {
@@ -99,13 +111,19 @@ class GroundTextureTest {
         var squareKilometresPerCell = 0.0
         SEEDS.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val world = WorldGenerationEngine.generateBlocking(config)
-            val metrics = EarthLikeness.measure(world, "ground/$seed")
+            val metrics = EarthLikeness.measure(world(seed), "ground/$seed")
             val control = EarthLikeness.measure(
                 WorldGenerationEngine.generateBlocking(
                     config.copy(
                         terrain = config.terrain.copy(
                             regionalReliefShare = REGIONAL_RELIEF_SHARE_BEFORE
+                        ),
+                        // And the crust with no profile of its own, which is where the tenth was
+                        // measured: see the note on the control below.
+                        isostasy = config.isostasy.copy(cratonThickeningKm = 0f),
+                        tectonics = config.tectonics.copy(
+                            cratonReliefStandardDeviationMetres =
+                                config.tectonics.marginReliefStandardDeviationMetres
                         )
                     )
                 ),
@@ -138,18 +156,264 @@ class GroundTextureTest {
             pooledLakes <= earthLakeShare * LAKE_SHARE_ALLOWANCE
         )
         assertTrue(
-            "the control at a tenth of the map-scale relief reads" +
-                " ${"%.4f".format(pooledControlLakes)} of land in lakes, which is already inside" +
-                " the bar — so this guard would pass without the fix and proves nothing",
-            pooledControlLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE
-        )
-        assertTrue(
             "the drainage density is ${"%.4f".format(pooledDensity)} km/km2 against the" +
                 " ${"%.4f".format(MAIN_DRAINAGE_DENSITY_KM_PER_KM2)} the tree before S2 measured," +
                 " which is further than a fifth either way",
             pooledDensity in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * 0.8)..
                 (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * 1.2)
         )
+    }
+
+    /**
+     * A plain is smooth at the cell and a range is not, and a stationary field cannot tell them
+     * apart.
+     *
+     * William, looking at S2's third pass at 2048: *"the entire land has a very rough texture it
+     * did not have before ... no map of Earth at any scale I've seen has that appearance."* The
+     * base relief was one random surface with one amplitude per crust, so the finest thing the
+     * grid could draw was as loud on a coastal plain as on a mountain front. Earth's is not:
+     * roughness grows with relief, because it is the rivers draining that relief that cut it
+     * (Ahnert 1970).
+     *
+     * Measured as the median departure from a four-cell box mean, in metres, over the lowest and
+     * the highest quarter of the land by elevation — the same arithmetic
+     * [flankTexture] uses on a belt, spread over the whole map. The lowest quarter must be no
+     * rougher than `main`'s and the highest no smoother, which is a pair of bars that pull against
+     * each other: anything that quiets the plains quiets the ranges too unless it is told the
+     * difference between them. The control is `textureCornerKm` at zero, which leaves the base
+     * relief the one stationary field it was, and it fails the first bar.
+     */
+    @Test
+    fun `the ground's texture follows its relief`() {
+        val lowest = ArrayList<Double>()
+        val highest = ArrayList<Double>()
+        val controlLowest = ArrayList<Double>()
+        val controlHighest = ArrayList<Double>()
+        SEEDS.forEach { seed ->
+            val here = textureByElevation(world(seed))
+            val control = textureByElevation(
+                WorldGenerationEngine.generateBlocking(
+                    standard(seed).let {
+                        it.copy(
+                            isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
+                            tectonics = it.tectonics.copy(
+                                textureCornerKm = TEXTURE_OFF,
+                                cratonReliefStandardDeviationMetres =
+                                    it.tectonics.marginReliefStandardDeviationMetres
+                            )
+                        )
+                    }
+                )
+            )
+            lowest.add(here.first)
+            highest.add(here.second)
+            controlLowest.add(control.first)
+            controlHighest.add(control.second)
+            println(
+                ("TEXTURE ground seed %d: lowest quarter %.0f m against main's %.0f, highest %.0f" +
+                    " against %.0f; stationary control %.0f and %.0f")
+                    .format(
+                        seed, here.first, MAIN_LOWEST_QUARTER_TEXTURE_METRES,
+                        here.second, MAIN_HIGHEST_QUARTER_TEXTURE_METRES,
+                        control.first, control.second
+                    )
+            )
+        }
+        val pooledLowest = lowest.average()
+        val pooledHighest = highest.average()
+        println(
+            ("TEXTURE ground pooled: lowest quarter %.1f m against main's %.1f, highest %.1f" +
+                " against %.1f; stationary control %.1f and %.1f")
+                .format(
+                    pooledLowest, MAIN_LOWEST_QUARTER_TEXTURE_METRES,
+                    pooledHighest, MAIN_HIGHEST_QUARTER_TEXTURE_METRES,
+                    controlLowest.average(), controlHighest.average()
+                )
+        )
+        assertTrue(
+            "the lowest quarter of the land departs from its own smoothed self by" +
+                " ${"%.1f".format(pooledLowest)} m, where the tree before S2 manages" +
+                " ${"%.1f".format(MAIN_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
+            pooledLowest <= MAIN_LOWEST_QUARTER_TEXTURE_METRES
+        )
+        assertTrue(
+            "the highest quarter departs by ${"%.1f".format(pooledHighest)} m against the" +
+                " ${"%.1f".format(MAIN_HIGHEST_QUARTER_TEXTURE_METRES)} m the tree before S2" +
+                " manages: the ranges have been smoothed along with the plains",
+            pooledHighest >= MAIN_HIGHEST_QUARTER_TEXTURE_METRES
+        )
+        assertTrue(
+            "with the texture rule off the lowest quarter reads" +
+                " ${"%.1f".format(controlLowest.average())} m, which is already inside main's" +
+                " ${"%.1f".format(MAIN_LOWEST_QUARTER_TEXTURE_METRES)} — so this guard would pass" +
+                " without the fix and proves nothing",
+            controlLowest.average() > MAIN_LOWEST_QUARTER_TEXTURE_METRES
+        )
+    }
+
+    /**
+     * What a continent drowns is its rim, because that is where its crust is thin.
+     *
+     * William, on the same render: *"still substantial flooded continents / inland seas."*
+     * Isostasy drowns whatever continental crust stands below the datum, and with the crust one
+     * thickness everywhere and one spread of relief on it, that is wherever the noise happens to
+     * dip — the middle of a continent as readily as its edge. Earth's continental crust is
+     * thickest and flattest in the middle (Christensen & Mooney 1995), so the drowned part of a
+     * continent is its shelf.
+     *
+     * Measured as the share of the drowned continental crust lying within [SHELF_REACH_KM] of the
+     * nearest cell that is not continental crust. Pooled, because the geometry of a single world's
+     * continents decides how much of one is rim at all — a continent six thousand kilometres
+     * across has far less of itself near an edge than two of three thousand — and the per-seed
+     * spread is printed.
+     */
+    @Test
+    fun `a continent drowns at its rim`() {
+        val marginal = ArrayList<Double>()
+        val controls = ArrayList<Double>()
+        val submerged = ArrayList<Double>()
+        SEEDS.forEach { seed ->
+            val here = drownedCrust(world(seed))
+            val control = drownedCrust(
+                WorldGenerationEngine.generateBlocking(
+                    standard(seed).let {
+                        it.copy(
+                            isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
+                            tectonics = it.tectonics.copy(
+                                cratonReliefStandardDeviationMetres =
+                                    it.tectonics.marginReliefStandardDeviationMetres
+                            )
+                        )
+                    }
+                )
+            )
+            marginal.add(here.second)
+            controls.add(control.second)
+            submerged.add(here.first)
+            println(
+                ("TEXTURE drowned seed %d: %.3f of the continental crust is under water and %.3f" +
+                    " of that lies within %.0f km of the crust's edge; flat-crust control %.3f")
+                    .format(seed, here.first, here.second, SHELF_REACH_KM, control.second)
+            )
+        }
+        val pooled = marginal.average()
+        val pooledControl = controls.average()
+        println(
+            ("TEXTURE drowned pooled: %.3f of the continental crust under water, %.3f of it within" +
+                " %.0f km of the crust's edge (control %.3f)")
+                .format(submerged.average(), pooled, SHELF_REACH_KM, pooledControl)
+        )
+        assertTrue(
+            "only ${"%.3f".format(pooled)} of the drowned continental crust lies within" +
+                " ${"%.0f".format(SHELF_REACH_KM)} km of the crust's edge, against the" +
+                " ${"%.2f".format(MARGINAL_SHARE_OF_DROWNED_CRUST)} Earth's shelves make of it:" +
+                " the continents are flooded rather than shelved",
+            pooled >= MARGINAL_SHARE_OF_DROWNED_CRUST
+        )
+        assertTrue(
+            "with the crust one thickness and one relief everywhere the drowning is already" +
+                " ${"%.3f".format(pooledControl)} marginal, which clears the bar — so this guard" +
+                " would pass without the profile and proves nothing",
+            pooledControl < MARGINAL_SHARE_OF_DROWNED_CRUST
+        )
+    }
+
+    /**
+     * The median departure from a four-cell box mean, in metres, over the lowest and the highest
+     * quarter of the land by elevation.
+     */
+    private fun textureByElevation(world: WorldMap): Pair<Double, Double> {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val scale = world.config.scale
+        val isLand = world.sea.isLand
+        val metres = FloatArray(cellsAcross * cellsDown) {
+            if (isLand[it]) scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) else 0f
+        }
+        val landWeight = FloatArray(cellsAcross * cellsDown) { if (isLand[it]) 1f else 0f }
+        val radius = (FLANK_WINDOW_CELLS * cellsAcross / 512f).roundToInt().coerceAtLeast(1)
+        val smoothed = boxMean(cellsAcross, cellsDown, metres, radius)
+        val cover = boxMean(cellsAcross, cellsDown, landWeight, radius)
+        val land = ArrayList<Int>()
+        for (cell in isLand.indices) if (isLand[cell] && cover[cell] > 1e-3f) land.add(cell)
+        if (land.isEmpty()) return 0.0 to 0.0
+        land.sortBy { metres[it] }
+        val quarter = land.size / 4
+        fun median(from: Int, to: Int): Double {
+            val residuals = ArrayList<Double>(to - from)
+            for (index in from until to) {
+                val cell = land[index]
+                residuals.add(abs(metres[cell] - smoothed[cell] / cover[cell]).toDouble())
+            }
+            if (residuals.isEmpty()) return 0.0
+            residuals.sort()
+            return residuals[residuals.size / 2]
+        }
+        return median(0, quarter) to median(land.size - quarter, land.size)
+    }
+
+    /**
+     * How much of the continental crust is under water, and how much of *that* lies within
+     * [SHELF_REACH_KM] of the crust's own edge.
+     *
+     * The edge is the nearest cell that is less than half continental, and the distance to it is
+     * walked in kilometres rather than in cells, because an equirectangular map's cells are twice
+     * as wide as they are tall and a shelf is a length on the ground.
+     */
+    private fun drownedCrust(world: WorldMap): Pair<Double, Double> {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val share = world.plates.continentalShare.data
+        val isLand = world.sea.isLand
+        val cellKm = world.config.cellWidthKm.toFloat()
+        val rowKm = world.config.cellHeightKm.toFloat()
+        val diagonalKm = sqrt(cellKm * cellKm + rowKm * rowKm)
+        val distanceKm = FloatArray(cellsAcross * cellsDown) { Float.MAX_VALUE }
+        val queue = ArrayDeque<Int>()
+        for (cell in share.indices) {
+            if (share[cell] < 0.5f) {
+                distanceKm[cell] = 0f
+                queue.addLast(cell)
+            }
+        }
+        while (queue.isNotEmpty()) {
+            val cell = queue.removeFirst()
+            val row = cell / cellsAcross
+            val column = cell % cellsAcross
+            for (stepDown in -1..1) {
+                for (stepAcross in -1..1) {
+                    if (stepDown == 0 && stepAcross == 0) continue
+                    val neighbourRow = row + stepDown
+                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    val neighbourColumn =
+                        ((column + stepAcross) % cellsAcross + cellsAcross) % cellsAcross
+                    val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                    if (share[neighbour] < 0.5f) continue
+                    val stepKm = when {
+                        stepAcross != 0 && stepDown != 0 -> diagonalKm
+                        stepAcross != 0 -> cellKm
+                        else -> rowKm
+                    }
+                    val candidate = distanceKm[cell] + stepKm
+                    if (candidate < distanceKm[neighbour] - 1e-3f) {
+                        distanceKm[neighbour] = candidate
+                        queue.addLast(neighbour)
+                    }
+                }
+            }
+        }
+        var continental = 0
+        var wet = 0
+        var wetAndMarginal = 0
+        for (cell in share.indices) {
+            if (share[cell] < 0.5f) continue
+            continental++
+            if (isLand[cell]) continue
+            wet++
+            if (distanceKm[cell] <= SHELF_REACH_KM) wetAndMarginal++
+        }
+        if (continental == 0 || wet == 0) return 0.0 to 0.0
+        return wet.toDouble() / continental to wetAndMarginal.toDouble() / wet
     }
 
     /** Channel length over land area, over every aridity class: M1's drainage-density row. */
@@ -230,9 +494,47 @@ class GroundTextureTest {
         return out
     }
 
+    private fun standard(seed: Long) = WorldGenConfig(seed = seed, width = 512, height = 512)
+
+    /** The five worlds on the defaults, built once and shared by every clause below. */
+    private fun world(seed: Long): WorldMap =
+        WORLDS.getOrPut(seed) { WorldGenerationEngine.generateBlocking(standard(seed)) }
+
     private companion object {
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
+
+        val WORLDS = HashMap<Long, WorldMap>()
+
+        /**
+         * What `main` at 230deb9 measures, by [textureByElevation], on these five seeds.
+         *
+         * Taken by running the measurement on that tree rather than remembered: the lowest quarter
+         * reads 46, 45, 73, 74 and 89 m and the highest 70, 83, 141, 116 and 170.
+         */
+        const val MAIN_LOWEST_QUARTER_TEXTURE_METRES = 65.2
+        const val MAIN_HIGHEST_QUARTER_TEXTURE_METRES = 115.9
+
+        /**
+         * How far from the crust's own edge a drowned continental cell may lie and still count as
+         * shelf, in kilometres, and how much of the drowning has to be inside it.
+         *
+         * Earth's shelf averages 78 km wide (Cogley 1984), but the figure that matters here is the
+         * widest it gets rather than the mean, because what the bar is refusing is a drowned
+         * *interior*: the Siberian shelf reaches 800 km and more from the crust's edge across the
+         * Barents, Kara and Laptev seas, the Sunda shelf about the same, and Hudson Bay a
+         * thousand. Eight hundred kilometres is the near end of Earth's own widest shelves, so a
+         * fifth of the drowning further in than that is as much epicontinental sea as Earth has.
+         *
+         * At 500 km — wider than every shelf on Earth bar those three — the same worlds read 0.744
+         * against the flat crust's 0.522, so the profile is worth the same 0.22 of the drowning at
+         * either distance and what the choice of distance settles is only where the bar can stand.
+         */
+        const val SHELF_REACH_KM = 800.0
+        const val MARGINAL_SHARE_OF_DROWNED_CRUST = 0.80
+
+        /** A corner of zero leaves the base relief stationary, which is the texture rule's control. */
+        const val TEXTURE_OFF = 0.0
 
         /** The window the flank's roughness is measured in, in cells of a 512 grid. */
         const val FLANK_WINDOW_CELLS = 4f

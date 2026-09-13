@@ -90,6 +90,33 @@ class IsostasyTest {
                 isostasy.seafloorSubsidenceMetresPerRootMyr * sqrt(20f)).toDouble(),
             columns.altitudeMetres(0f, 20f).toDouble(), 1.0
         )
+        // The cratonic profile, which is the same equation spent on thickness rather than on
+        // density: a kilometre of continental crust is worth `(mantle - crust) / mantle` of itself
+        // in freeboard, so Christensen and Mooney's shield-to-extended-crust swing of
+        // `cratonThickeningKm` lifts a craton this far above the rim of its own continent.
+        val perKilometre = (isostasy.mantleDensity - isostasy.continentalCrustDensity) /
+            isostasy.mantleDensity * 1_000f
+        val half = isostasy.cratonThickeningKm / 2f
+        val tiltMetres =
+            columns.altitudeMetres(1f, 0f, half) - columns.altitudeMetres(1f, 0f, -half)
+        println(
+            "ISOSTASY craton profile %.0f m per km of crust, %.0f m of tilt across %.1f km"
+                .format(perKilometre, tiltMetres, isostasy.cratonThickeningKm)
+        )
+        // Five metres of slack on seventeen hundred, because the two sides are not the same
+        // arithmetic in the same precision: the left is one product and the right is a difference
+        // of two column masses that each carry the datum, a number near a hundred million.
+        assertEquals(
+            "the cratonic profile is not Airy's own arithmetic on its thickness swing",
+            (isostasy.cratonThickeningKm * perKilometre).toDouble(),
+            tiltMetres.toDouble(), 5.0
+        )
+        assertEquals(
+            "a column with no extra crust is not the standard continental column",
+            columns.altitudeMetres(1f, 0f).toDouble(),
+            columns.altitudeMetres(1f, 0f, 0f).toDouble(), 1e-6
+        )
+
         val oldestFloor = columns.altitudeMetres(0f, isostasy.oldestSeafloorAgeMyr)
         assertTrue(
             "the oldest floor does not approach Parsons & Sclater's asymptote: " +

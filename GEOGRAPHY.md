@@ -115,6 +115,30 @@ world is drawn as continental crust rather than where to cut a histogram, and th
 the check: measured on five worlds it lands within 200 m of the level isostasy puts the
 shoreline at.
 
+**A continent is thickest in the middle, so what it drowns is its rim.** Continental crust is not
+one thickness: Christensen and Mooney measure shields and platforms at 41 to 45 km and extended,
+rifted crust at 30, so the crust thickens inland from its own edge over the 200 to 500 km a rifted
+margin takes to thin. Both the thickness and the relief the base noise carries on it now follow
+that profile — the craton stands 44.6 km thick and as flat as the West Siberian Plain, the crust's
+outer edge 32.6 km and as varied as an Atlantic margin — and the thickness half of it is
+mass-neutral, so the average column is still 41 km and the datum is still Earth's 840 m of
+freeboard. What changes is where a continent drowns. With one thickness and one spread everywhere,
+isostasy put a continent under water wherever the noise happened to dip, which drew flooded
+interiors and inland seas; now four fifths of the drowned continental crust lies within 500 km of
+the crust's own edge, which is a shelf.
+
+**Cell-scale texture is proportional to relief, so plains are born smooth.** The base relief is
+split at 200 km. Everything broader is the shape of the country and carries the crust's own
+deviation; everything finer is dissection, and its amplitude at each cell is the local relief of
+the ground the noise and the belts make, scaled down self-affinely with Earth's own Hurst exponent
+of 0.7. That is Ahnert's relation — denudation grows linearly with local relief — and the rendering
+tradition's heterogeneous terrain, which is the same statement. The window the relief is read over
+cancels out of the arithmetic, because a self-affine surface's relief grows as `window^H`, so the
+only figure chosen is the corner. Before it, the finest thing the grid could draw was as loud on a
+coastal plain as on a mountain front and the whole of the land read as sandpaper. Measured as the
+median departure from a four-cell box mean, the lowest quarter of the land now reads 63 m against
+the pre-S2 generator's 65 and the highest 156 against its 116.
+
 **The sea floor is as deep as it is old.** Ocean floor is made at a spreading ridge and sinks as it
 cools, as the square root of its age — Parsons and Sclater's `2,500 + 350*sqrt(t)` metres,
 flattening onto their 6,400 m asymptote past about seventy million years. So the depth of every
@@ -164,9 +188,10 @@ where a continent stands: the tilt fought the crust and smeared the two hypsomet
 So the spectrum is shaped rather than scaled — a first-order high pass in the same transform that
 integrates it, leaving the relief loudest at 400 km, which is the scale Earth's non-orogenic
 continental relief sits at and the scale a range is read at on a map. Its amplitude is a standard
-deviation in metres: 700 m on continental crust, which is Earth's own spread away from its orogens,
-250 on the sea floor, which is Goff and Jordan's abyssal hills, and 700 m more inside an active
-orogen, which is the relief between the cordilleras of one. A sixth of the map-scale component is
+deviation in metres: 700 m at a continental margin, which is Earth's own spread away from its
+orogens, 500 in a craton, which is a shield or a platform with the epeirogenic swells that sit on
+one, 250 on the sea floor, which is Goff and Jordan's abyssal hills, and 700 m more inside an
+active orogen, which is the relief between the cordilleras of one. A sixth of the map-scale component is
 kept, because drainage is organised by a continent's longest slopes and a surface with nothing at
 that wavelength grows many short rivers instead of a few long ones — and, as S2's third pass found,
 ponds the water where it falls. At a tenth, which is what the second pass measured the bifurcation
@@ -174,7 +199,9 @@ ratio against, lakes covered 3.55% of the land against Earth's 1.48% at this cel
 sea-level cut landed on a platform flat enough to drown into an archipelago; at a sixth the lakes
 are 1.73%, the drainage density is 0.0029 km/km² against the pre-S2 generator's 0.0026, and every
 seed's coastline clears Mandelbrot's floor. Above a sixth the coast goes: a map-scale tilt moves a
-shoreline bodily.
+shoreline bodily. Since S2's fourth pass gave the crust a thickness that rises inland, the sixth is
+no longer what stops the ponding — at a tenth *and* a crust with no profile of its own the lakes
+read 0.96% — and whether it is still needed at all is in `TODO.md`.
 
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind

@@ -64,8 +64,18 @@ internal object FlowRouting {
                     seedOutlet(cell)
                     continue
                 }
+                // Touching water is not the same as being able to drain into it. The
+                // enclosed-water rule turns unreachable sea into land without raising it, so a
+                // converted cell keeps a level *below* the shoreline and can sit lower than the
+                // ocean beside it; seeded as an outlet it is never filled, and the router then
+                // finds it nothing to drain to at all. Nine such cells on seed 42 at 512 and
+                // seven on 298405 at 1024 were what `PipelineTest` and `StraightRunTest` caught.
+                // Every ordinary coast is unaffected: land stands at or above the shoreline and
+                // water below it.
                 forEachNeighbour(width, height, column, row) { neighbour ->
-                    if (!isLand[neighbour]) seedOutlet(cell)
+                    if (!isLand[neighbour] && filled.data[neighbour] < filled.data[cell]) {
+                        seedOutlet(cell)
+                    }
                 }
             }
         }

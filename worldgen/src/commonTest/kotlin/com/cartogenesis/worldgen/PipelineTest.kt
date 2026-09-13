@@ -109,6 +109,27 @@ class PipelineTest {
         var stranded = 0
         val minDepth = config.scale.reliefShareOfMetres(config.lakes.minDepthMetres)
         var insideBasins = 0
+        // Every stranded cell is printed rather than counted, because the count on its own says
+        // nothing about which of the two rules below let it through, and a handful of cells in four
+        // million is a needle that has to be described to be found. See `GEOGRAPHY.md`.
+        fun report(cell: Int, why: String) {
+            val target1 = target[cell]
+            println(
+                "PIPELINE stranded at (${cell % world.width}, ${cell / world.width}): $why," +
+                    " ground ${ground.data[cell]}, filled ${filled.data[cell]}," +
+                    " fill depth ${filled.data[cell] - ground.data[cell]} against a minimum" +
+                    " of $minDepth, target $target1" +
+                    (
+                        if (target1 >= 0) {
+                            ", which is ${if (world.sea.isLand[target1]) "land" else "water"}" +
+                                " at ${filled.data[target1]}"
+                        } else {
+                            ""
+                        }
+                        ) +
+                    ", lake ${lakes.isLake(cell)}, playa ${lakes.isPlaya(cell)}"
+            )
+        }
         for (i in target.indices) {
             if (!world.sea.isLand[i]) continue
             val row = i / world.width
@@ -120,15 +141,20 @@ class PipelineTest {
                 // A cell under, or on the drained floor of, a basin the flood had to raise.
                 if (lakes.isLake(i) || lakes.isPlaya(i)) continue
                 val t = target[i]
-                if (t < 0 || (world.sea.isLand[t] && !reachesWater(world, t))) stranded++
+                if (t < 0 || (world.sea.isLand[t] && !reachesWater(world, t))) {
+                    stranded++
+                    report(i, "inside a filled basin and its water reaches no standing water")
+                }
                 continue
             }
 
             val t = target[i]
             if (t < 0) {
                 stranded++
+                report(i, "no receiver at all, away from the poles")
             } else if (world.sea.isLand[t] && filled.data[t] >= filled.data[i]) {
                 stranded++
+                report(i, "its receiver stands no lower than it does on the filled surface")
             }
         }
         println("PIPELINE $insideBasins cells inside filled basins, $stranded stranded")

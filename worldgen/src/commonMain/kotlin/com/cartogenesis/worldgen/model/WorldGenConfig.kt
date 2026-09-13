@@ -516,15 +516,22 @@ data class TectonicsConfig(
      * enough in from its own edge that the crust is at full thickness.
      *
      * The counterpart of [marginReliefStandardDeviationMetres], and the reason it is a separate
-     * figure is that the two are separated by a factor of two and more on Earth. A craton is the
-     * flattest large thing there is: the Canadian Shield runs 100 to 500 m over three thousand
-     * kilometres, the West Siberian Plain stays under 200 m over two thousand, the Russian
-     * Platform 100 to 300 and the West African craton 200 to 400. Two hundred metres is the middle
-     * of the two platforms, and the Shield's own 500 is glacial roughening rather than crustal
-     * relief. A margin is the opposite — the shelf, the coastal plain, the piedmont and
-     * the marginal upwarp are four provinces inside a few hundred kilometres — which is why the
-     * spread of Earth's continental crust *as a whole* is the margin's figure rather than an
-     * average of the two.
+     * figure is that the two are not the same on Earth. A margin carries four provinces inside a
+     * few hundred kilometres — the shelf, the coastal plain, the piedmont and the marginal upwarp
+     * — which is why the spread of Earth's continental crust *as a whole* is the margin's figure
+     * rather than an average of the two. A craton carries one: the Canadian Shield runs 100 to
+     * 500 m over three thousand kilometres, the West Siberian Plain stays under 200 m over two
+     * thousand, the Russian Platform 100 to 300 and the West African craton 200 to 400.
+     *
+     * Five hundred metres, which is above the shields' own spread and deliberately so. This model
+     * has no separate mechanism for an epeirogenic swell, and the swells sit on cratons — the
+     * Brazilian and East African highlands at 1,000 to 1,700 m, the Colorado Plateau at 2,000 — so
+     * the craton's noise has to carry them or the map has no high interior at all. Measured over
+     * 400, 500 and 600 m on the five standard worlds at 512, as the median cell-scale departure on
+     * the lowest quarter of the land against the ice share of land: 57 m and 5.10%, 62 m and
+     * 5.83%, 69 m and 6.83%. Below 500 the ice goes — `SnowBalanceTest` holds it at half Earth's
+     * 10.1% and there is no other high cold ground on the map — and above it the plains come back
+     * as sandpaper, past the 65 m the tree before S2 manages.
      *
      * Spent through [cratonReachKm], so the two are the ends of one profile and there is no step
      * anywhere. It is what puts the drowning at the rim: a stationary field with the whole
@@ -532,7 +539,7 @@ data class TectonicsConfig(
      * what S2's third pass drew and what William named as flooded continents. Earth's drowned
      * continental crust is its shelves.
      */
-    val cratonReliefStandardDeviationMetres: Float = 200f,
+    val cratonReliefStandardDeviationMetres: Float = 550f,
     /**
      * How far in from the edge of its own crust a continent becomes cratonic, in kilometres.
      *
@@ -551,9 +558,9 @@ data class TectonicsConfig(
      * leaves a coastal plain cratonic and flat while a long one keeps the drowned band narrow.
      * Measured over 300, 400, 600 and 1,000 km on the five standard worlds at 512, as the median
      * cell-scale departure on the lowest quarter of the land against the share of the drowned
-     * continental crust lying within 500 km of the crust's edge: 54 m and 76.6%, 63 m and 81.4%,
-     * 66 m and 78.4%, 77 m and 73.4%. Four hundred is the only one of them that clears both bars —
-     * `main`'s own 65 m and the 80% `GroundTextureTest` holds.
+     * continental crust lying within 800 km of the crust's edge: 60 m and 82.2%, 62 m and 85.3%,
+     * 67 m and 88.7%, 70 m and 89.3%. Four hundred is the last of them inside `main`'s own 65 m,
+     * and it clears the four fifths `GroundTextureTest` holds by five points.
      */
     val cratonReachKm: Double = 400.0,
     /**
@@ -581,10 +588,11 @@ data class TectonicsConfig(
      * Two hundred kilometres is about where a drainage basin stops: a fourth-order catchment is a
      * hundred kilometres across and the ground inside one is the rivers' work, while above that
      * the shape is the crust's — a basin, an arch, a province. Measured over 100, 150, 200 and
-     * 300 km on the five standard worlds at 512, the lowest quarter of the land reads 67, 62, 61
-     * and 67 m of cell-scale departure against `main`'s 65: below 200 the band left unscaled
-     * between the corner and the eye's own window is loud enough to undo the rule, and above it
-     * the amplitude the law asks for grows faster than the band it is spread over.
+     * 300 km on the five standard worlds at 512, the lowest quarter of the land reads 73, 68, 62
+     * and 58 m of cell-scale departure and the highest 144, 137, 126 and 120, against `main`'s 65
+     * and 116. Below 200 the band left unscaled between the corner and the four cells the eye's
+     * own window spans is loud enough to undo the rule; above it the ranges start to go with the
+     * plains.
      *
      * The window cancels, which is the check that the law is self-consistent rather than a knob:
      * a self-affine surface's relief grows as `window^H`, so `relief(window) * (corner/window)^H`
@@ -612,6 +620,33 @@ data class TectonicsConfig(
      * cell in a 200 km window.
      */
     val topographyHurstExponent: Double = 0.7,
+    /**
+     * The local relief, in metres, at which a landscape is half as dissected as its relief alone
+     * would make it.
+     *
+     * Ahnert's relation is linear, and it is fitted to basins that all have relief; at the flat end
+     * of the range it is not what happens. Montgomery and Brandon (*Nonlinear controls on erosion
+     * rates in the Washington Cascades and Olympic Mountains*, EPSL 201, 2002) measure erosion
+     * rates that barely move with relief across low-relief country and then climb steeply once
+     * hillslopes approach their threshold angle: a plain is transport-limited and aggrades, and
+     * only ground with relief to spare cuts into itself in proportion to it. So the texture's
+     * amplitude is `relief * relief / (relief + this)` rather than `relief` — Ahnert's line where
+     * there is relief to spend, and a landscape that stays flat where there is not.
+     *
+     * Zero recovers Ahnert's line unmodified, which is what this rule is measured against. Twelve
+     * hundred metres, measured over 0, 600, 1,200 and 2,400 m on the five standard worlds at 512
+     * as the median cell-scale departure on the lowest quarter of the land against the same on the
+     * highest, with the crust's relief held at its margin figure so the threshold is the only
+     * thing moving: 94 and 168, 77 and 140, 74 and 131, 71 and 124. It quiets the whole field
+     * rather than tilting it — the ratio of the two quarters barely moves — because most of what a
+     * four-cell window reads on this map is the rivers' own incision and not the base field. What
+     * it buys is the room to keep the crust's relief near Earth's instead of flattening the
+     * cratons to quiet the plains, and the ice sheets that go with a high cold interior: at the
+     * linear law the craton has to come down to 200 m of spread and the ice with it, 5.8% of land
+     * to 4.2% against Earth's 10.1%. Past 1,200 the ranges start to go — at 2,400 the highest
+     * quarter is eight metres above `main`'s floor.
+     */
+    val textureReliefThresholdMetres: Float = 2_400f,
     /**
      * How much more relief an active orogen carries than the plain beside it, in metres of
      * standard deviation, at a cell the present epoch raised in full.

@@ -42,14 +42,21 @@ rate below is written in those units and converted to whatever grid the world is
    from its mountains sits at — because the broad shape of the ground is the crust's business and
    not the noise's. A sixth of the map-wide component survives that filter, because a continent
    that tilts one way for two thousand kilometres is what makes a long river, and a continent that
-   does not ponds its water where it falls.
+   does not ponds its water where it falls. Below 200 km the field stops being one amplitude
+   everywhere: how rough the ground is at the cell is set by how much relief there is around it,
+   scaled down with Earth's own Hurst exponent of 0.7, because it is the rivers draining a relief
+   that cut it. So a plain is born smooth and a range is born rough, instead of the whole of the
+   land carrying one sandpaper.
 2. **Plates.** The world splits into drifting Voronoi plates, each made of continental or oceanic
    crust; boundaries are classified by relative motion and by which crusts meet, raising coastal
    ranges, collision plateaus, island arcs, rifts or ridges accordingly. Three past epochs of the
    same history are stamped first and aged before the present one, so a range can stand old and
    worn far from any boundary, the way the Appalachians do — and the ageing is the time since its
    uplift stopped rather than a factor per epoch. Isostasy then turns the crust into an altitude:
-   a continental column floats at Earth's mean land elevation of 840 m, and the sea floor at the
+   a continental column floats at Earth's mean land elevation of 840 m — thicker and so higher in
+   the craton, thinner and lower toward its own edge, the way Earth's crust runs from a 45 km
+   shield to 30 km of rifted margin, which is what makes the part of a continent that drowns its
+   shelf rather than its middle — and the sea floor at the
    depth its own age puts it — distance to the nearest spreading ridge over the spreading rate,
    through Parsons and Sclater's depth-age curve, so a ridge stands at 2.5 km and the old floor
    sinks away from it along a smooth curve. The world's hypsometry comes out with two modes and a

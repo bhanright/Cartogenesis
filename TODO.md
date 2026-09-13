@@ -73,6 +73,27 @@
   epicontinental seas below: drown the continents as much as Earth drowns its own and the two
   figures reconcile. 2026-09-13, S2.
 
+- **The lowest ground on the map is the roughest, and on Earth it is the flattest.** Since S2's
+  fourth pass the base relief's texture follows the local relief, and the relief itself follows the
+  crust: `TectonicsConfig.marginReliefStandardDeviationMetres` at the crust's own edge falling to
+  `cratonReliefStandardDeviationMetres` inland. What that leaves is a coastal band carrying the
+  margin's 700 m of spread, so on four of the five standard worlds at 512 the *lowest* quarter of
+  the land is rougher than the second quarter — 69/47, 91/66, 44/37, 44/41 and 66/35 m of
+  cell-scale departure — where `main`'s rises monotonically with elevation on all five. Earth's
+  coastal plains are the flattest large ground there is (the Gulf, the Atlantic, the Amazon, the
+  Ganges, the West Siberian), and they are flat because they are built by deposition rather than
+  left by erosion. The margin's figure is doing two jobs at once — the structure of the shelf and
+  the texture of the plain behind it — and only the first of them is what it was derived for. What
+  is wanted is the coastal plain as a depositional apron, which is the deposition stage's business
+  rather than the noise's. 2026-09-13, S2.
+- **The continental crust's altitude spreads by a fifth more than Earth's.** With the field on an
+  absolute ruler the spread can be read directly: over the five standard worlds at 512 the standard
+  deviation of altitude over cells that are more than half continental crust is 1,341 m. Earth's,
+  worked from its own hypsometry — 71% land at a mean of 840 m and a spread near 1,090, 29% drowned
+  at a mean near −400 and a spread near 500 — is about 1,110. The excess is the same one the entry
+  below names as too much high ground, and it is now a single number that a guard could hold if
+  anybody decided which of the model's amplitudes should give: the margin's relief, the belts'
+  along-strike swell, or the gravitational limit. 2026-09-13, S2.
 - **This generator's continents have no epicontinental seas.** Earth's continental crust covers
   41.2% of the surface and its land 29.2%, so 29% of the continents are under water; this generator
   drowns a fifth of its own, which is what `TectonicsConfig.continentalCrustSubmergedShare` carries
@@ -85,7 +106,15 @@
   not represent — every continental column is 41 km of crust. A swell of the surface at Bond's
   amplitude and wavelength was built for S2's second pass and measured: it is not the same thing and
   the metrics could not see it, so it was removed again. What is wanted is thickness.
-  2026-09-13, S2.
+
+  S2's fourth pass gave the crust a thickness that varies *with distance in from its own edge* —
+  44.6 km in the craton against 32.6 at the rim — and that is what moved the drowning to the
+  margins, from 68% of it within 500 km of the crust's edge to 81%. It is not what this entry
+  wants. A Hudson Bay is thin crust in the *middle* of a craton, which is a failed rift or an old
+  suture and not a distance from anywhere; the profile this pass added cannot draw one, and the
+  drowned share fell from a fifth toward the rim rather than rising toward Earth's three tenths.
+  What is wanted is still thickness, and now specifically thickness that varies with the crust's
+  own history rather than with its geometry. 2026-09-13, S2.
 - **There is half again too much high ground.** With the field on an absolute ruler the land's
   elevation distribution can be read against Earth's for the first time, and the top of it is fat:
   over the five standard worlds at 512, 4.0-13.0% of land stands above 3 km against Earth's 5% and

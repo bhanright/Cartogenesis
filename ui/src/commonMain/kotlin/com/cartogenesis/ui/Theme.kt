@@ -103,11 +103,11 @@ fun CartogenesisTheme(
  * two chromes F1 wrote are literally two of them (Vellum's paper, and the author's site). F4's
  * three are lifted from the styles rather than invented: choosing Nautical dresses the window in
  * the admiralty chart's buff and oxide, Midnight in its slate and brass-gold, Mars in basalt and
- * rust, so a reader who works in one style can put the whole window in it. F6's five, F7's four and
- * F24's one are asked for by name — high contrast, colour-blind, Allied, Hallowed, Baroque, Matrix,
- * Hessian, Roman, Hitchcock, Lemon Blueberry — and each is a room rather than a chart. Sixteen is
- * more than a flat list can carry, so [group] puts them on three shelves; nothing about a name or a
- * stored value moves.
+ * rust, so a reader who works in one style can put the whole window in it. F6's five, F7's four,
+ * F24's one and F28's one are asked for by name — high contrast, colour-blind, Allied, Hallowed,
+ * Baroque, Matrix, Hessian, Roman, Hitchcock, Lemon Blueberry, Blacklight — and each is a room
+ * rather than a chart. Seventeen is more than a flat list can carry, so [group] puts them on three
+ * shelves; nothing about a name or a stored value moves.
  *
  * The map is *not* restyled by this, and that separation is deliberate: which style a map is drawn
  * in is a property of the map (and of the exported file), while this is a property of the room the
@@ -129,7 +129,8 @@ enum class ThemeChoice(val label: String) {
     HESSIAN("Hessian"),
     ROMAN("Roman"),
     HITCHCOCK("Hitchcock"),
-    LEMON_BLUEBERRY("Lemon Blueberry");
+    LEMON_BLUEBERRY("Lemon Blueberry"),
+    BLACKLIGHT("Blacklight");
 
     /** [systemDark] is consulted only by [SYSTEM]; every other choice is an answer already. */
     internal fun scheme(systemDark: Boolean): ColorScheme = when (this) {
@@ -149,6 +150,7 @@ enum class ThemeChoice(val label: String) {
         ROMAN -> RomanChrome
         HITCHCOCK -> HitchcockChrome
         LEMON_BLUEBERRY -> LemonBlueberryChrome
+        BLACKLIGHT -> BlacklightChrome
     }
 
     /**
@@ -160,30 +162,31 @@ enum class ThemeChoice(val label: String) {
         SYSTEM -> null
         LIGHT, NAUTICAL, ALLIED, HALLOWED, BAROQUE, HESSIAN, ROMAN -> false
         DARK, MIDNIGHT, MARS, HIGH_CONTRAST, COLORBLIND, MATRIX, HITCHCOCK,
-        LEMON_BLUEBERRY -> true
+        LEMON_BLUEBERRY, BLACKLIGHT -> true
     }
 
     /**
      * Which of the three shelves this chrome sits on in the picker and in the View menu.
      *
-     * Sixteen names in one flat run is a list nobody reads to the end of, and the three groups are
-     * not arbitrary: [ThemeGroup.STANDARD] is what the application shipped with and what a reader
-     * who wants no opinion should take, [ThemeGroup.ACCESSIBLE] is the two whose promise is a
-     * measured threshold rather than a look, and [ThemeGroup.STYLED] is the eleven that are a room
-     * to work in. No name and no stored value moves: this is a heading over a list, nothing more.
+     * Seventeen names in one flat run is a list nobody reads to the end of, and the three groups
+     * are not arbitrary: [ThemeGroup.STANDARD] is what the application shipped with and what a
+     * reader who wants no opinion should take, [ThemeGroup.ACCESSIBLE] is the two whose promise is
+     * a measured threshold rather than a look, and [ThemeGroup.STYLED] is the twelve that are a
+     * room to work in. No name and no stored value moves: this is a heading over a list, nothing
+     * more.
      */
     internal fun group(): ThemeGroup = when (this) {
         SYSTEM, LIGHT, DARK -> ThemeGroup.STANDARD
         HIGH_CONTRAST, COLORBLIND -> ThemeGroup.ACCESSIBLE
         NAUTICAL, MIDNIGHT, MARS, ALLIED, HALLOWED, BAROQUE,
-        MATRIX, HESSIAN, ROMAN, HITCHCOCK, LEMON_BLUEBERRY -> ThemeGroup.STYLED
+        MATRIX, HESSIAN, ROMAN, HITCHCOCK, LEMON_BLUEBERRY, BLACKLIGHT -> ThemeGroup.STYLED
     }
 
     /**
      * Everything about a chrome that is not a colour or a type size.
      *
-     * See [ChromeDetail]. Ten of the sixteen answer with something other than the default, and the
-     * six that came before F6 all answer with the default itself — which is what keeps their
+     * See [ChromeDetail]. Eleven of the seventeen answer with something other than the default, and
+     * the six that came before F6 all answer with the default itself — which is what keeps their
      * screenshots pixel-identical.
      */
     internal fun detail(): ChromeDetail = when (this) {
@@ -198,11 +201,12 @@ enum class ThemeChoice(val label: String) {
         ROMAN -> RomanDetail
         HITCHCOCK -> HitchcockDetail
         LEMON_BLUEBERRY -> LemonBlueberryDetail
+        BLACKLIGHT -> BlacklightDetail
     }
 }
 
 /**
- * The three shelves the sixteen chromes are offered on.
+ * The three shelves the seventeen chromes are offered on.
  *
  * A grouping, not a setting: nothing here is stored, nothing here is a name a reader has already
  * chosen, and [ThemeChoice.entries] is still the whole list in its own order for anything that
@@ -380,7 +384,7 @@ internal class ChromeDetail(
      * premise is a *panel set against a ground*: burlap with linen labels sewn to it, marble panels
      * on a Pompeian wall, a terminal's windows on a black screen, a Bass card's blocks on charcoal.
      * Material's `background` role is the colour each of those wants and the frame does not read it,
-     * so the chrome says so here rather than the frame changing its mind for all sixteen.
+     * so the chrome says so here rather than the frame changing its mind for all seventeen.
      */
     val windowGround: Color? = null,
     /** What shape the cartouche is, the way a map margin decides about its title block. */
@@ -1566,6 +1570,141 @@ private val LemonBlueberryDetail = ChromeDetail(
     windowGround = BlueberryGround
 )
 
+// ---- F28's one. ----
+
+// BLACKLIGHT: #E6FF42 and #520C94, and the same question F24 asked of its two.
+//
+// William gave the pair and nothing else, so which of them is the room was decided by measuring.
+// Both arrangements were built to one set of rules — the named colour is the panel a word is read
+// on, the window and the sunk well are that same colour a step either side of it, the ink is the
+// *other* colour taken as far from the panel as the panel's own room allows, the accent is the
+// other colour at full strength, and the armed button is F1's stain: the panel taken about ten
+// L* toward the ground, never an inverted block. Every text pair in each was then measured
+// against WCAG AA, and the armed Stop button with them:
+//
+//   violet room, lime writing   worst pair 5.57:1 (the alarm as a word), Stop 13.97:1
+//   lime room, violet ink       worst pair 4.63:1 (the alarm as a word), Stop  7.73:1
+//
+// Both clear AA, so the Stop button decided it, and it decided by a factor of nearly two. The
+// reason is the lime: #E6FF42 has a relative luminance of 0.887, paler than most papers, so as a
+// *ground* it forces everything that has to be seen against it down into the dark end together —
+// the alarm can only be a rust at 4.63:1, the secondary a plum at 4.69:1, the hairline barely
+// clears 1.4.11 at 3.08:1, and a stain under a button cannot travel far before the button stops
+// being a stain and becomes a block. As *writing* the same lime is the brightest thing in the room
+// and the wash beneath it the darkest, which is where 13.97:1 comes from. So the lamp is the room
+// and the highlighter is the writing, which is also what the name describes: a blacklight is a
+// violet tube, and what glows under it is not violet.
+//
+// The rest of the palette is derived from the pair rather than chosen beside it. Every violet here
+// is #520C94's own hue — 312.7 degrees in CIE L*a*b*, and no tone in the scheme is more than 0.4
+// of a degree off its hue — moved only in lightness and chroma, and every lime is the
+// highlighter's 110.5 degrees the same way, so the chrome has two hues in it and no third. The
+// alarm is the one exception and it is derived too: a blacklight is an excitation, not a colour,
+// and the lime is one dye's answer to it. A highlighter set holds more than one dye, and the
+// orange one under the same lamp emits further down the spectrum — which is why the alarm is
+// neither of the two colours and cannot be read as a hotter lime or a warmer violet.
+
+/** The room past the lamp's reach: William's violet at half its lightness, L* 24.3 down to 10.6. */
+private val VioletGround = Color(0xFF2B064F)
+
+/** The panel, and it is William's violet exactly. Every word in the chrome is read on this. */
+private val VioletPanel = Color(0xFF520C94)
+
+/** A sunk panel: the same violet one step nearer the tube, where the lamp's own light pools. */
+private val VioletSunk = Color(0xFF601BA4)
+
+/**
+ * The stain under an armed control: the window ground with a trace of the highlighter worked in.
+ *
+ * F1's wash rather than a block, and ten L* below the panel because a stain darkens what it soaks
+ * into — which is the whole of why this arrangement's Stop button measures 13.97:1 and the
+ * other's 7.73:1.
+ */
+private val VioletWash = Color(0xFF32134F)
+
+/** The hairline. 3.31:1 on a panel, past WCAG 1.4.11's 3:1 for a control's own boundary. */
+private val VioletRule = Color(0xFFA577CA)
+
+/** The fainter rule, for a division that is a hint rather than an edge. */
+private val VioletRuleFaint = Color(0xFF52287A)
+
+/** The haze a tube throws around itself, and the chrome's secondary. 5.66:1 on a panel. */
+private val VioletHaze = Color(0xFFD0A6F1)
+
+/** The text: the highlighter thinned almost to white, still green. 10.18:1 on a panel. */
+private val LimeInk = Color(0xFFF3F5C9)
+
+/** The same ink thinned less, for anything secondary. 7.66:1 on a panel, 6.43:1 in a well. */
+private val LimeInkDim = Color(0xFFD2DA80)
+
+/** The highlighter at full strength, and it is William's lime exactly. 10.19:1 on a panel. */
+private val LimeGlow = Color(0xFFE6FF42)
+
+/** The same pigment with the lamp off, for the inverse accent Material asks for. */
+private val LimeGlowShaded = Color(0xFF6E7D0F)
+
+/**
+ * The alarm, and it is what the same lamp fires in a different dye.
+ *
+ * A blacklight is an excitation rather than a colour: the ultraviolet goes in and the pigment
+ * decides what comes out, which is why one highlighter glows lime and the orange one beside it in
+ * the box glows orange. So the third colour in this room is arrived at the same way the second one
+ * was, and it is the only tone here that is neither hue — 39.3 CIEDE2000 from the lime, 71.0 from
+ * the panel it is read on and 30.0 from the ink beside it. 5.57:1 on a panel.
+ */
+private val FlareOrange = Color(0xFFFF9E4D)
+
+/** The flare banked down to an ember: an error's own block, deep enough to hold pale lettering. */
+private val FlareOrangeDeep = Color(0xFF4A1E05)
+
+private val BlacklightChrome: ColorScheme = darkColorScheme(
+    primary = LimeGlow,
+    onPrimary = VioletGround,
+    primaryContainer = VioletWash,
+    onPrimaryContainer = LimeGlow,
+    inversePrimary = LimeGlowShaded,
+    secondary = VioletHaze,
+    onSecondary = VioletGround,
+    secondaryContainer = VioletWash,
+    onSecondaryContainer = LimeInk,
+    tertiary = LimeInkDim,
+    onTertiary = VioletGround,
+    tertiaryContainer = VioletSunk,
+    onTertiaryContainer = LimeInk,
+    background = VioletGround,
+    onBackground = LimeInk,
+    surface = VioletPanel,
+    onSurface = LimeInk,
+    surfaceVariant = VioletSunk,
+    onSurfaceVariant = LimeInkDim,
+    surfaceTint = VioletPanel,
+    inverseSurface = LimeInk,
+    inverseOnSurface = VioletGround,
+    error = FlareOrange,
+    // The room showing through the flare, which is both the better number (8.25:1 against 8.01:1
+    // for a burnt brown) and the only dark tone this chrome owns.
+    onError = VioletGround,
+    errorContainer = FlareOrangeDeep,
+    onErrorContainer = Color(0xFFFFD3A6),
+    outline = VioletRule,
+    outlineVariant = VioletRuleFaint,
+    scrim = Color(0xFF1D0233),
+    surfaceBright = Color(0xFF732DB7),
+    surfaceDim = VioletGround,
+    surfaceContainerLowest = Color(0xFF250546),
+    surfaceContainerLow = Color(0xFF420C77),
+    surfaceContainer = VioletPanel,
+    surfaceContainerHigh = Color(0xFF58139B),
+    surfaceContainerHighest = Color(0xFF6520A8)
+)
+
+private val BlacklightDetail = ChromeDetail(
+    // The room behind the panels, so a panel reads as a lit surface in a dark room rather than as
+    // one flat violet with hairlines ruled across it. The same move Lemon Blueberry makes, and the
+    // only piece of ornament this chrome takes either.
+    windowGround = VioletGround
+)
+
 /**
  * The handful of colours that sit *over the map* rather than beside it.
  *
@@ -1646,7 +1785,7 @@ private fun cartogenesisTypography(choice: ThemeChoice): Typography {
     )
     // The third face, and it is built only by the chrome that sets its type in it. `Font` reads the
     // resource where it is called, so building this family unconditionally would have a browser
-    // fetch 314 KB of a face fifteen of the sixteen chromes never draw a glyph of.
+    // fetch 314 KB of a face sixteen of the seventeen chromes never draw a glyph of.
     val mono = if (choice == ThemeChoice.MATRIX) {
         FontFamily(
             Font(Res.font.plex_mono_regular, FontWeight.Normal),
@@ -1661,13 +1800,13 @@ private fun cartogenesisTypography(choice: ThemeChoice): Typography {
 /**
  * The same faces, set the way this chrome sets them.
  *
- * Eight of the sixteen chromes ask for a change of *type* rather than of colour, and none of them
+ * Nine of the seventeen chromes ask for a change of *type* rather than of colour, and none of them
  * is a thing a call site should be doing: High contrast wants everything one step larger, Allied,
  * Hessian and Roman want the display face tracked out for capitals, Baroque wants the headings in
- * italic, Hitchcock wants them heavy and tight, Lemon Blueberry wants a hair more air between the
- * letters of a heading, and Matrix wants a different face entirely. So each is a transformation of
- * the one [Typography] rather than a second one written out, which is also what guarantees the
- * other eight chromes are untouched — they take the identity transformation.
+ * italic, Hitchcock wants them heavy and tight, Lemon Blueberry and Blacklight want a hair more air
+ * between the letters of a heading, and Matrix wants a different face entirely. So each is a
+ * transformation of the one [Typography] rather than a second one written out, which is also what
+ * guarantees the other eight chromes are untouched — they take the identity transformation.
  */
 private fun typographyFor(
     choice: ThemeChoice,
@@ -1733,8 +1872,11 @@ private fun typographyFor(
         // white — and Spectral's headings close up under it. 0.3sp is the smallest step that opens
         // them again without the heading reading as tracked-out capitals, which is a different
         // chrome's idea. The sans is left alone: it carries figures, and a tracked figure is a
-        // figure read one digit at a time.
-        ThemeChoice.LEMON_BLUEBERRY -> base.mapDisplay {
+        // figure read one digit at a time. Blacklight takes the same step for the same reason and
+        // wants it more, since its ink is a saturated lime rather than a cream: irradiation is
+        // strongest where the glyph is brightest and the ground darkest, and those are the two
+        // extremes this chrome is built out of.
+        ThemeChoice.LEMON_BLUEBERRY, ThemeChoice.BLACKLIGHT -> base.mapDisplay {
             it.copy(letterSpacing = (it.letterSpacing.value + 0.3f).sp)
         }
 

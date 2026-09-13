@@ -656,7 +656,7 @@ enum class MapStyle(
      * toward the paper by the cold, darkened under a canopy, and finally washed with the biome's own
      * colour exactly as [tint] always did. [dryness], [coldness] and [canopy] are the three numbers
      * [ClimateTint] computes for the cell; at [climateTint] 0 none of them is read and this is the
-     * pre-F13 colour to the bit.
+     * colour the plain ramp gave before the climate reached it, to the bit.
      */
     internal fun ground(
         relative: Float,
@@ -704,7 +704,7 @@ enum class MapStyle(
      * Whether the political and peoples views take this style's own realm set.
      *
      * False for every style but [CLEAR], which is what leaves the other ten drawing exactly the
-     * pixels they drew before F6.
+     * pixels they drew before a realm set existed.
      */
     internal val ownsRealms: Boolean get() = realmRamp != null
 
@@ -736,7 +736,7 @@ enum class MapStyle(
      */
     internal fun people(id: Int): Int {
         val ramp = realmRamp ?: return MapPalette.culture(id)
-        return ramp[(id + 4).mod(ramp.size)]
+        return ramp[(id + PEOPLES_OFFSET_IN_THE_SET).mod(ramp.size)]
     }
 
     /**
@@ -748,28 +748,37 @@ enum class MapStyle(
      * coarser pitch — two cells of ink in six — so that it reads as a hatch at map scale rather
      * than as a dither.
      */
-    internal fun hatched(id: Int, x: Int, y: Int): Boolean {
+    internal fun hatched(id: Int, column: Int, row: Int): Boolean {
         val ramp = realmRamp ?: return false
-        return when ((id / ramp.size) % 3) {
-            1 -> (x + y) % 6 < 2
-            // Written with no negative operand anywhere, rather than as (x - y) mod 6: GLSL
-            // leaves % undefined when either side is negative, and the shader has to agree with
-            // this to the bit. (x + (6 - y mod 6)) mod 6 is the same anti-diagonal.
-            2 -> (x + (6 - y % 6)) % 6 < 2
+        return when ((id / ramp.size) % HATCHES_BEFORE_REPEATING) {
+            1 -> (column + row) % COMB_PITCH_CELLS < COMB_INK_CELLS
+            // Written with no negative operand anywhere, rather than as (column - row) mod 6:
+            // GLSL leaves % undefined when either side is negative, and the shader has to agree
+            // with this to the bit. (column + (6 - row mod 6)) mod 6 is the same anti-diagonal.
+            2 -> (column + (COMB_PITCH_CELLS - row % COMB_PITCH_CELLS)) % COMB_PITCH_CELLS <
+                COMB_INK_CELLS
             else -> false
         }
     }
 
     /** A realm fill with its hatch applied, where the cell takes one. */
-    internal fun realmFill(id: Int, x: Int, y: Int): Int {
+    internal fun realmFill(id: Int, column: Int, row: Int): Int {
         val fill = realm(id)
-        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+        return if (hatched(id, column, row)) {
+            MapPalette.blend(fill, coastline, HATCH_STRENGTH)
+        } else {
+            fill
+        }
     }
 
     /** The same for a people. */
-    internal fun peopleFill(id: Int, x: Int, y: Int): Int {
+    internal fun peopleFill(id: Int, column: Int, row: Int): Int {
         val fill = people(id)
-        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+        return if (hatched(id, column, row)) {
+            MapPalette.blend(fill, coastline, HATCH_STRENGTH)
+        } else {
+            fill
+        }
     }
 
     companion object {
@@ -778,8 +787,36 @@ enum class MapStyle(
          *
          * Far enough to be a texture at a glance (7.52 CIEDE2000 at worst against the fill it
          * crosses, over every ground and under both red-green deficiencies, measured in
-         * `ClearStyleTest`), short of far enough to swallow which colour is underneath it. Public only because [RasterRecipe] carries it to the graphics card.
+         * `ClearStyleTest`), short of far enough to swallow which colour is underneath it.
+         *
+         * Public only because [RasterRecipe] carries it to the graphics card.
          */
         const val HATCH_STRENGTH: Float = 0.45f
+
+        /**
+         * How many turns of the realm set are told apart before the textures repeat.
+         *
+         * Three: the plain fill, one diagonal, the other. Twenty-eight realms would begin the
+         * whole cycle again, which is well past the point at which a reader is counting rather
+         * than recognising.
+         */
+        private const val HATCHES_BEFORE_REPEATING = 3
+
+        /**
+         * The comb the hatch is ruled at: two cells of ink in every six.
+         *
+         * Coarser than the comb [MapStyle.PEN_AND_INK] draws with, deliberately, so that at map
+         * scale it reads as a hatch rather than as a dither of the fill it crosses.
+         */
+        private const val COMB_PITCH_CELLS = 6
+        private const val COMB_INK_CELLS = 2
+
+        /**
+         * How far along the realm set the peoples' colours start.
+         *
+         * Four of nine, so no people shares a colour with the realm of the same id and the two
+         * layers are plainly a change of subject. See [people].
+         */
+        private const val PEOPLES_OFFSET_IN_THE_SET = 4
     }
 }

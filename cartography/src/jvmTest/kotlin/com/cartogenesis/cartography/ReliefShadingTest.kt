@@ -103,13 +103,15 @@ class ReliefShadingTest {
         val elevation = world.sea.relativeElevation
         val land = world.sea.isLand
         val slopes = ArrayList<Float>()
-        for (y in 0 until world.height) {
-            for (x in 0 until world.width) {
-                if (!land[y * world.width + x]) continue
+        for (row in 0 until world.height) {
+            for (column in 0 until world.width) {
+                if (!land[row * world.width + column]) continue
                 val eastward =
-                    (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * SLOPE_SCALE
+                    (elevation.sample(column + 1, row) -
+                        elevation.sample(column - 1, row)) * SLOPE_SCALE
                 val southward =
-                    (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * SLOPE_SCALE
+                    (elevation.sample(column, row + 1) -
+                        elevation.sample(column, row - 1)) * SLOPE_SCALE
                 slopes.add(sqrt(eastward * eastward + southward * southward))
             }
         }
@@ -162,7 +164,7 @@ class ReliefShadingTest {
      * How many bearings round the flank the single lamp gives no light to at all.
      *
      * The lamp reproduced here rather than called, so that what fails is a control this test owns:
-     * the north-west light at 32 degrees, exactly as every render before F13 was drawn under. Where
+     * the north-west light at 32 degrees, exactly as every render before the sky model. Where
      * this dot product is at or below zero the face is turned away from the only light there is —
      * and the drawing goes on darkening it past that point, which is what "unlit" means on a map
      * lit by one lamp.
@@ -305,12 +307,13 @@ class ReliefShadingTest {
         val elevation = world.sea.relativeElevation
         val land = world.sea.isLand
         val light = FloatArray(world.width * world.height)
-        for (y in 0 until world.height) {
-            for (x in 0 until world.width) {
-                val cell = y * world.width + x
+        for (row in 0 until world.height) {
+            for (column in 0 until world.width) {
+                val cell = row * world.width + column
                 if (!land[cell]) continue
-                light[cell] =
-                    ReliefShading.illumination(x, y, elevation, SLOPE_SCALE, OPENNESS_STEP, sky)
+                light[cell] = ReliefShading.illumination(
+                    column, row, elevation, SLOPE_SCALE, OPENNESS_STEP, sky
+                )
             }
         }
         return light
@@ -366,7 +369,7 @@ class ReliefShadingTest {
         init {
             val land = world.sea.isLand
             val lit = ArrayList<Float>()
-            for (i in shade.indices) if (land[i]) lit.add(shade[i])
+            for (cell in shade.indices) if (land[cell]) lit.add(shade[cell])
             lit.sort()
             cells = lit.size
             val mean = lit.sumOf { it.toDouble() } / cells

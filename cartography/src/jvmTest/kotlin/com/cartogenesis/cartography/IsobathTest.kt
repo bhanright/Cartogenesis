@@ -12,8 +12,8 @@ import kotlin.test.assertTrue
  * On a slope it is: the floor crosses the level once, and the pixels near that crossing are a curve
  * a pixel or so wide. On an abyssal plain it is not. The floor there is level to within its own
  * roughness over a whole basin, so the level of any contour lying in it is crossed again and again,
- * and the drawing fills the open sea with a ragged nest of closed loops that say nothing. The first
- * render review of F13 caught it in the open basin of seed 718106 at 2048.
+ * and the drawing fills the open sea with a ragged nest of closed loops that say nothing. A render
+ * review caught it in an open basin at 2048; see REALISM_PLAN.md, F13.
  *
  * The floor below is made rather than generated, for the same reason the cone in `ReliefShadingTest`
  * is: the defect is a property of flat ground, and a made floor has exactly as much flat ground as
@@ -91,19 +91,21 @@ class IsobathTest {
      */
     private fun madeFloor(): FloatArray {
         val depth = FloatArray(SIDE * SIDE)
-        for (y in 0 until SIDE) {
-            for (x in 0 until SIDE) {
-                depth[y * SIDE + x] = if (x < SLOPE_COLUMNS) {
-                    SLOPE_FROM + (SLOPE_TO - SLOPE_FROM) * x / SLOPE_COLUMNS
+        for (row in 0 until SIDE) {
+            for (column in 0 until SIDE) {
+                depth[row * SIDE + column] = if (column < SLOPE_COLUMNS) {
+                    SLOPE_FROM + (SLOPE_TO - SLOPE_FROM) * column / SLOPE_COLUMNS
                 } else {
                     // The floor of a filled basin: level in the middle, turning up at the margins,
                     // with a fine roughness over all of it. See [PLAIN_ROUGHNESS].
                     val acrossPlain =
-                        (x - (SLOPE_COLUMNS + SIDE) / 2f) / ((SIDE - SLOPE_COLUMNS) / 2f)
-                    val downPlain = (y - SIDE / 2f) / (SIDE / 2f)
+                        (column - (SLOPE_COLUMNS + SIDE) / 2f) / ((SIDE - SLOPE_COLUMNS) / 2f)
+                    val downPlain = (row - SIDE / 2f) / (SIDE / 2f)
                     val fromMiddle = maxOf(kotlin.math.abs(acrossPlain), kotlin.math.abs(downPlain))
+                    // To the fourth power: dead level in the centre, turning up at the edges.
                     val margin = fromMiddle * fromMiddle * fromMiddle * fromMiddle
-                    PLAIN_DEPTH - PLAIN_RIPPLE * margin + PLAIN_ROUGHNESS * roughness(x, y)
+                    PLAIN_DEPTH - PLAIN_RIPPLE * margin +
+                        PLAIN_ROUGHNESS * roughness(column, row)
                 }
             }
         }
@@ -117,8 +119,8 @@ class IsobathTest {
      * that is what makes the defect a solid patch instead of a speckle. Deterministic, so the
      * figures below are the same every run.
      */
-    private fun roughness(x: Int, y: Int): Float =
-        (sin(x * 1.1f + y * 0.7f) + sin(x * 0.6f - y * 1.3f)) * 0.5f
+    private fun roughness(column: Int, row: Int): Float =
+        (sin(column * 1.1f + row * 0.7f) + sin(column * 0.6f - row * 1.3f)) * 0.5f
 
     /** The ink each cell of the made floor takes, with the flatness rule on or off. */
     private fun contourInk(depth: FloatArray, flatnessRule: Boolean): FloatArray {
@@ -127,19 +129,25 @@ class IsobathTest {
         val reach = Isobaths.slopeStencil(SIDE)
         val span = 1f / (2f * reach)
         val ink = FloatArray(depth.size)
-        for (y in 0 until SIDE) {
-            for (x in 0 until SIDE) {
-                val eastward = (sample(depth, x + reach, y) - sample(depth, x - reach, y)) * span
-                val southward = (sample(depth, x, y + reach) - sample(depth, x, y - reach)) * span
+        for (row in 0 until SIDE) {
+            for (column in 0 until SIDE) {
+                val cell = row * SIDE + column
+                val eastward =
+                    (sample(depth, column + reach, row) -
+                        sample(depth, column - reach, row)) * span
+                val southward =
+                    (sample(depth, column, row + reach) -
+                        sample(depth, column, row - reach)) * span
                 val slope = sqrt(eastward * eastward + southward * southward)
-                ink[y * SIDE + x] = Isobaths.ink(depth[y * SIDE + x], slope, interval, flattest)
+                ink[cell] = Isobaths.ink(depth[cell], slope, interval, flattest)
             }
         }
         return ink
     }
 
-    private fun sample(depth: FloatArray, x: Int, y: Int): Float =
-        depth[y.coerceIn(0, SIDE - 1) * SIDE + ((x % SIDE) + SIDE) % SIDE]
+    /** Clamped north and south, wrapped east and west, exactly as the raster samples a field. */
+    private fun sample(depth: FloatArray, column: Int, row: Int): Float =
+        depth[row.coerceIn(0, SIDE - 1) * SIDE + ((column % SIDE) + SIDE) % SIDE]
 
     /**
      * How much of one half of the floor took ink, and the largest connected patch of it.
@@ -149,8 +157,8 @@ class IsobathTest {
      */
     private class Patch(ink: FloatArray, val from: Int, val until: Int) {
         val cells = (until - from) * SIDE
-        val inked = (0 until SIDE).sumOf { y ->
-            (from until until).count { x -> ink[y * SIDE + x] >= INKED }
+        val inked = (0 until SIDE).sumOf { row ->
+            (from until until).count { column -> ink[row * SIDE + column] >= INKED }
         }
         val largest: Int
 
@@ -166,13 +174,13 @@ class IsobathTest {
                 while (stack.isNotEmpty()) {
                     val cell = stack.removeLast()
                     size++
-                    val x = cell % SIDE
-                    val y = cell / SIDE
+                    val column = cell % SIDE
+                    val row = cell / SIDE
                     val neighbours = intArrayOf(
-                        y * SIDE + (x + 1) % SIDE,
-                        y * SIDE + (x + SIDE - 1) % SIDE,
-                        if (y + 1 < SIDE) (y + 1) * SIDE + x else cell,
-                        if (y > 0) (y - 1) * SIDE + x else cell
+                        row * SIDE + (column + 1) % SIDE,
+                        row * SIDE + (column + SIDE - 1) % SIDE,
+                        if (row + 1 < SIDE) (row + 1) * SIDE + column else cell,
+                        if (row > 0) (row - 1) * SIDE + column else cell
                     )
                     for (next in neighbours) {
                         if (next == cell || seen[next] || ink[next] < INKED) continue
@@ -239,8 +247,8 @@ class IsobathTest {
         // One row across the slope, counting the runs of ink it crosses.
         var lines = 0
         var inside = false
-        for (x in 0 until SLOPE_COLUMNS) {
-            val wet = ink[(SIDE / 2) * SIDE + x] >= INKED
+        for (column in 0 until SLOPE_COLUMNS) {
+            val wet = ink[(SIDE / 2) * SIDE + column] >= INKED
             if (wet && !inside) lines++
             inside = wet
         }

@@ -74,10 +74,15 @@ data class MapSheet(
     val simplifyToleranceCells: Float get() = HALF_A_PIXEL / pixelsPerCell
 
     companion object {
-        /** The sheet itself, a cell to a pixel: what an export and every offline render draw on. */
-        val SHEET: MapSheet = MapSheet(1f)
+        /**
+         * A cell to a pixel, where nothing is dropped and nothing is simplified.
+         *
+         * What an export and every offline render draw on: the world was generated at the size it
+         * is being drawn at, so the scale is 1 and Töpfer's law asks for every feature there is.
+         */
+        val UNGENERALISED: MapSheet = MapSheet(1f)
 
-        /** The same sheet, carrying the scale bar a printed map has to carry for itself. */
+        /** The same, carrying the scale bar a printed map has to carry for itself. */
         val PRINTED: MapSheet = MapSheet(1f, carriesScaleBar = true)
 
         /**

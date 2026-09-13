@@ -12,10 +12,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * F14: that the map is drawn for the scale it is being seen at, and says what that scale is.
+ * That the map is drawn for the scale it is being seen at, and says what that scale is.
  *
- * Four claims, and each has a control that is what the renderer did before this chunk or what a
- * plausible shortcut would do instead:
+ * Four claims, and each has a control that is what the renderer did before generalisation existed
+ * or what a plausible shortcut would do instead. See REALISM_PLAN.md, F14.
  *
  *  - **The coast stays inside its own band.** Douglas-Peucker promises the simplified line never
  *    strays further from the original than the tolerance it was given. The control is decimation —
@@ -45,6 +45,14 @@ class GeneralisationTest {
          */
         const val AT_FIT = 900f / 2048f
         const val AT_FOUR_TIMES = 4f * AT_FIT
+
+        /**
+         * How near a half-cell boundary a coordinate has to fall to count as being on one.
+         *
+         * A ten-thousandth of a cell. Every traced coordinate is a whole or a half exactly, so
+         * this is only against a float that arrived through arithmetic rather than a literal.
+         */
+        const val ON_A_CELL_CENTRE = 1e-4f
     }
 
     private fun world(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
@@ -76,7 +84,7 @@ class GeneralisationTest {
         }
 
         println(
-            "F14 coast at $SIDE: ${traced.size} lines, $full vertices traced in $traceMs ms, " +
+            "SCALE coast at $SIDE: ${traced.size} lines, $full vertices traced in $traceMs ms, " +
                 "$kept kept at a tolerance of $tolerance cells; " +
                 "Douglas-Peucker strays ${worst.round()} cells, decimation to the same count " +
                 "strays ${worstDecimated.round()}"
@@ -100,38 +108,40 @@ class GeneralisationTest {
         Shoreline.trace(land, map.width, map.height).forEach { line ->
             var at = 0
             while (at < line.size) {
-                val x = line[at]
-                val y = line[at + 1]
+                val vertexX = line[at]
+                val vertexY = line[at + 1]
                 // A vertex is halfway along a cell edge: one coordinate lands on a cell centre and
                 // the other between two of them, and those two are the pair the coast divides.
                 val (first, second) =
-                    if (abs(x - x.toInt() - 0.5f) < 1e-4f) {
-                        cellAt(map, x, y - 0.5f) to cellAt(map, x, y + 0.5f)
+                    if (abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE) {
+                        cellAt(map, vertexX, vertexY - 0.5f) to
+                            cellAt(map, vertexX, vertexY + 0.5f)
                     } else {
-                        cellAt(map, x - 0.5f, y) to cellAt(map, x + 0.5f, y)
+                        cellAt(map, vertexX - 0.5f, vertexY) to
+                            cellAt(map, vertexX + 0.5f, vertexY)
                     }
                 assertTrue(
                     land[first] != land[second],
-                    "a coast vertex at $x, $y has the same ground on both sides of it"
+                    "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it"
                 )
                 checked++
                 at += 2
             }
         }
-        println("F14 checked $checked coast vertices against the land mask at $SIDE")
+        println("SCALE checked $checked coast vertices against the land mask at $SIDE")
     }
 
     @Test
     fun `a coast is simplified harder the further out the reader stands`() {
         val map = world(42L)
         val counts = listOf(AT_FIT, AT_FOUR_TIMES, 1f).map { pixelsPerCell ->
-            val sheet = if (pixelsPerCell == 1f) MapSheet.SHEET else MapSheet.onScreen(pixelsPerCell)
+            val sheet = if (pixelsPerCell == 1f) MapSheet.UNGENERALISED else MapSheet.onScreen(pixelsPerCell)
             sheet to Shoreline.of(map.sea.isLand, map.width, map.height, sheet)
                 .sumOf { it.size / 2 }
         }
         counts.forEach { (sheet, vertices) ->
             println(
-                "F14 coast vertices at ${sheet.pixelsPerCell} px per cell " +
+                "SCALE coast vertices at ${sheet.pixelsPerCell} px per cell " +
                     "(tolerance ${sheet.simplifyToleranceCells} cells): $vertices"
             )
         }
@@ -148,18 +158,18 @@ class GeneralisationTest {
         val map = world(42L)
         val options = RenderOptions()
 
-        // The control is the call every front end made before this chunk: no sheet, so nothing to
-        // generalise for, and the same overlay whatever the reader was looking at. It comes out
-        // equal at both zooms *by construction*, which is exactly the defect.
+        // The control is the call every front end made before generalisation existed: no sheet,
+        // so nothing to generalise for, and the same overlay whatever the reader was looking at.
+        // It comes out equal at both zooms *by construction*, which is exactly the defect.
         val unaware = MapRasterizer.overlay(map, options).riversDrawn
-        println("F14 CONTROL rivers drawn with no sheet to draw for: $unaware at every zoom")
+        println("SCALE CONTROL rivers drawn with no sheet to draw for: $unaware at every zoom")
         assertEquals(map.rivers.rivers.size, unaware, "the sheetless overlay already drops rivers")
 
         val atFit = MapRasterizer.overlay(map, options, MapSheet.onScreen(AT_FIT)).riversDrawn
         val zoomed = MapRasterizer.overlay(map, options, MapSheet.onScreen(AT_FOUR_TIMES)).riversDrawn
-        val onTheSheet = MapRasterizer.overlay(map, options, MapSheet.SHEET).riversDrawn
+        val onTheSheet = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).riversDrawn
         println(
-            "F14 rivers drawn: $atFit at fit, $zoomed at 4x, $onTheSheet on the sheet " +
+            "SCALE rivers drawn: $atFit at fit, $zoomed at 4x, $onTheSheet on the sheet " +
                 "(of ${map.rivers.rivers.size} traced)"
         )
 
@@ -183,7 +193,7 @@ class GeneralisationTest {
             .sortedDescending()
         val cut = peaks[drawn.riversDrawn - 1]
         println(
-            "F14 the cut at fit falls at a width ratio of ${cut.round()}, " +
+            "SCALE the cut at fit falls at a width ratio of ${cut.round()}, " +
                 "between ${peaks.size} rivers running ${peaks.first().round()} down to " +
                 "${peaks.last().round()}"
         )
@@ -212,9 +222,9 @@ class GeneralisationTest {
         assertEquals(scale.cellWidthKm(cellsAcross), perPixel, 1e-9)
 
         val frame = cellsAcross.toFloat()
-        val bar = MapScale.bar(perPixel, frame)
+        val bar = MapScale.longestBarThatFits(perPixel, frame)
         println(
-            "F14 scale bar on a $cellsAcross sheet: ${bar.label} over ${bar.lengthPixels} px, " +
+            "SCALE scale bar on a $cellsAcross sheet: ${bar.label} over ${bar.lengthPixels} px, " +
                 "at ${MapScale.oneDecimal(perPixel)} km per pixel; " +
                 MapScale.cartoucheLine(scale, cellsAcross)
         )
@@ -241,14 +251,14 @@ class GeneralisationTest {
     fun `the bar shortens as the reader zooms in, and stays a round number`() {
         val scale = WorldGenConfig().scale
         val quoted = listOf(0.25f, 0.5f, 1f, 2f, 8f, 32f).map { pixelsPerCell ->
-            val bar = MapScale.bar(
+            val bar = MapScale.longestBarThatFits(
                 MapScale.kilometresPerPixel(scale, 2048, pixelsPerCell),
                 900f
             )
             assertTrue(oneTwoOrFive(bar.kilometres), "${bar.label} is not a 1-2-5 distance")
             pixelsPerCell to bar.label
         }
-        println("F14 the legend's bar as the zoom climbs: $quoted")
+        println("SCALE the legend's bar as the zoom climbs: $quoted")
         assertTrue(
             quoted.first().second != quoted.last().second,
             "the bar quotes the same distance at every zoom"
@@ -292,7 +302,7 @@ class GeneralisationTest {
             )
         }
         println(
-            "F14 graticule spacing at 512/1024/2048/4096: " +
+            "SCALE graticule spacing at 512/1024/2048/4096: " +
                 listOf(512, 1024, 2048, 4096).map { Graticule.of(it, it).meridianSpacingCells }
         )
     }
@@ -305,7 +315,7 @@ class GeneralisationTest {
         assertTrue("90°E" in texts && "90°W" in texts)
         assertTrue("60°N" in texts && "60°S" in texts)
         assertTrue("180°" !in texts, "the antimeridian is labelled half off the paper")
-        println("F14 graticule figures at 2048: ${graticule.labels.size} of them, ${texts.size} distinct")
+        println("SCALE graticule figures at 2048: ${graticule.labels.size} of them, ${texts.size} distinct")
     }
 
     /**
@@ -343,7 +353,7 @@ class GeneralisationTest {
                 )
             }
             println(
-                "F14 at $side: $figured figures, set every " +
+                "SCALE at $side: $figured figures, set every " +
                     "${Graticule.figuresEveryNthLine(
                         graticule.meridianSpacingCells,
                         Graticule.labelHeightPixels(graticule.meridianSpacingCells)
@@ -357,7 +367,7 @@ class GeneralisationTest {
     fun `an export carries a scale bar and the live view does not`() {
         val map = world(42L)
         assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.PRINTED).scaleBar != null)
-        assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.SHEET).scaleBar == null)
+        assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.UNGENERALISED).scaleBar == null)
         assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.onScreen(1f)).scaleBar == null)
 
         val graticuled = MapRasterizer.overlay(map, RenderOptions(showGraticule = true))

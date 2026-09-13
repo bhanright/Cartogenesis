@@ -42,9 +42,9 @@ class DesktopWorldStore(
      * Without this, listing a library of 1024 worlds would read every array in every one of them
      * to put a title and a date on screen.
      */
-    override suspend fun readPrefix(name: String, limit: Int): ByteArray? {
+    override suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? {
         val file = File(directory, name).takeIf { it.exists() } ?: return null
-        val wanted = minOf(limit.toLong(), file.length()).toInt()
+        val wanted = minOf(limitBytes.toLong(), file.length()).toInt()
         return RandomAccessFile(file, "r").use { handle ->
             ByteArray(wanted).also { handle.readFully(it) }
         }

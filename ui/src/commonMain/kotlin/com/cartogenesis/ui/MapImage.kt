@@ -37,7 +37,7 @@ object MapImage {
     fun render(
         world: WorldMap,
         options: RenderOptions,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): ImageBitmap = finish(toBitmap(world, options, sheet))
 
     /**
@@ -71,7 +71,7 @@ object MapImage {
     fun toBitmap(
         world: WorldMap,
         options: RenderOptions,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): Bitmap = toBitmap(world, options, MapRasterizer.rasterize(world, options), sheet)
 
     /**
@@ -85,7 +85,7 @@ object MapImage {
         world: WorldMap,
         options: RenderOptions,
         pixels: IntArray,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): Bitmap {
         val widthPixels = world.width
         val heightPixels = world.height
@@ -147,8 +147,8 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
             }
             overlay.rivers.forEach { segment ->
-                paint.strokeWidth = segment.width
-                canvas.drawLine(segment.x0, segment.y0, segment.x1, segment.y1, paint)
+                paint.strokeWidth = segment.widthPixels
+                canvas.drawLine(segment.fromX, segment.fromY, segment.toX, segment.toY, paint)
             }
         }
 
@@ -159,22 +159,22 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
             }
             overlay.flow.forEach { arrow ->
-                val length = overlay.flowScale *
+                val length = overlay.flowArrowReachCells *
                     (SHORTEST_ARROW_SHARE + (1f - SHORTEST_ARROW_SHARE) * arrow.strength)
                 val alpha = (FAINTEST_ARROW_ALPHA + ARROW_ALPHA_RANGE * arrow.strength)
                     .toInt().coerceIn(0, 255)
                 paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
                 paint.strokeWidth =
-                    (overlay.flowScale * ARROW_WIDTH_SHARE).coerceAtLeast(1f)
-                val tipX = arrow.x + arrow.dx * length
-                val tipY = arrow.y + arrow.dy * length
+                    (overlay.flowArrowReachCells * ARROW_WIDTH_SHARE).coerceAtLeast(1f)
+                val tipX = arrow.x + arrow.directionX * length
+                val tipY = arrow.y + arrow.directionY * length
                 canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)
                 // The barbs meet the shaft a little behind the tip and stand out either side of
                 // it, which is a head drawn with two strokes rather than a filled triangle.
-                val barbRootX = tipX - arrow.dx * length * BARB_LENGTH_SHARE
-                val barbRootY = tipY - arrow.dy * length * BARB_LENGTH_SHARE
-                val barbSpreadX = arrow.dy * length * BARB_SPREAD_SHARE
-                val barbSpreadY = arrow.dx * length * BARB_SPREAD_SHARE
+                val barbRootX = tipX - arrow.directionX * length * BARB_LENGTH_SHARE
+                val barbRootY = tipY - arrow.directionY * length * BARB_LENGTH_SHARE
+                val barbSpreadX = arrow.directionY * length * BARB_SPREAD_SHARE
+                val barbSpreadY = arrow.directionX * length * BARB_SPREAD_SHARE
                 canvas.drawLine(
                     tipX, tipY, barbRootX + barbSpreadX, barbRootY - barbSpreadY, paint
                 )

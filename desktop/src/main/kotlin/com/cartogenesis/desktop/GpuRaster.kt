@@ -274,7 +274,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uStrokeHalfLength"), plan.strokeHalfLengthCells)
         GL43C.glUniform1f(uniform("uStrokeHalfWidth"), plan.strokeHalfWidthCells)
         GL43C.glUniform1f(uniform("uSlopeFloor"), EngravingPlan.SLOPE_FLOOR)
-        GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT)
+        GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT_STEEPNESS)
         GL43C.glUniform1f(uniform("uAntialias"), EngravingPlan.ANTIALIAS_CELLS)
         GL43C.glUniform1f(uniform("uVignetteBase"), plan.vignetteBaseCells)
         GL43C.glUniform1f(uniform("uVignetteHalf"), plan.vignetteHalfWidthCells)

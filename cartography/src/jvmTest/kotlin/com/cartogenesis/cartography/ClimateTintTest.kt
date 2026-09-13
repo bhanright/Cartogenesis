@@ -16,10 +16,10 @@ import kotlin.test.assertTrue
  * green band is a surface with chlorophyll on it, which is exactly what a desert has none of; sand
  * is red-first at every lightness, and so is every earth.
  *
- * The control is the land colour as it was drawn before F13 — the ramp read at the cell's own height
- * and washed with the biome — reproduced here rather than remembered, so what fails is something
- * this file can still run. The relief cannot rescue either of them: it multiplies all three channels
- * by one factor, which cannot change which of them is largest.
+ * The control is the land colour as it was drawn before the climate reached the ramp — the ramp
+ * read at the cell's own height and washed with the biome — reproduced here rather than remembered,
+ * so what fails is something this file can still run. The relief cannot rescue either of them: it
+ * multiplies all three channels by one factor, which cannot change which of them is largest.
  *
  * [MapStyle.CLEAR] is measured beside the rest and asserted differently, because it promises
  * something else. Its ramp is ordered by lightness and nothing on it is told by hue at all — that is
@@ -86,7 +86,10 @@ class ClimateTintTest {
          */
         const val MIN_STEPPE_SHARE = 0.25
 
-        /** The single bare-earth figure the first pass of F13 gave a grassland. See [steppeBefore]. */
+        /**
+         * The single bare-earth figure a grassland had before the biome's band bounded the
+         * drought's lift. See [steppeBefore], and REALISM_PLAN.md, F13.
+         */
         const val BEFORE_GRASSLAND_BARE = 0.15f
 
         /** How much of a desert's bare ground a steppe may read as. See the assertion's note. */
@@ -120,10 +123,10 @@ class ClimateTintTest {
     /** Which cells are desert, on dry land, and how high each of them stands. */
     private fun desertCells(world: WorldMap): List<Int> {
         val cells = ArrayList<Int>()
-        for (i in 0 until world.width * world.height) {
-            if (!world.sea.isLand[i]) continue
-            if (world.rivers.lakes.isLake(i)) continue
-            if (world.climate.biome[i] == Biome.DESERT) cells.add(i)
+        for (cell in 0 until world.width * world.height) {
+            if (!world.sea.isLand[cell]) continue
+            if (world.rivers.lakes.isLake(cell)) continue
+            if (world.climate.biome[cell] == Biome.DESERT) cells.add(cell)
         }
         return cells
     }
@@ -161,7 +164,7 @@ class ClimateTintTest {
             if (controlShare > controlWorst) controlWorst = controlShare
             println(
                 ("DESERT %-13s %.1f%% of %d desert cells read green, mean hue %.0f degrees; " +
-                    "before F13, %.1f%% and %.0f degrees")
+                    "before the climate reached the ramp, %.1f%% and %.0f degrees")
                     .format(
                         style.label, share, desert.size, hueTotal / desert.size,
                         controlShare, controlHueTotal / desert.size
@@ -176,21 +179,20 @@ class ClimateTintTest {
         }
         assertTrue(
             controlWorst > 0.0,
-            "no style drew a green desert before F13 either, so this guard proves nothing"
+            "no style drew a green desert before the ramp was modulated either, so this guard " +
+                "proves nothing"
         )
     }
 
     /**
      * That a steppe is drawn between a forest and a desert, and not as either.
      *
-     * The other end of the same claim the desert guard makes, and the one the first pass of F13 got
-     * wrong: the drought lift saturated well before the arid line, so grassland came out at 0.74 of
-     * the way to bare ground and the interior of a continent read as Sahara. On a physical atlas
-     * the Great Plains and the Kazakh steppe are straw or olive — plainly not forest, plainly not
-     * sand — and hue is where that difference lives: measured on the rendered pixels of Atlas,
-     * desert sits at 40 degrees, forest at 78, and a steppe belongs between them with room either
-     * side. Before the fix it measured 46, six degrees off the desert and thirty-two off the
-     * forest.
+     * The other end of the same claim the desert guard makes. On a physical atlas the Great Plains
+     * and the Kazakh steppe are straw or olive — plainly not forest, plainly not sand — and hue is
+     * where that difference lives: measured on the rendered pixels of Atlas, desert sits at 40
+     * degrees, forest at 78, and a steppe belongs between them with room either side. Before the
+     * biome's band bounded the drought's lift it measured 46, six degrees off the desert and
+     * thirty-two off the forest. See REALISM_PLAN.md, F13.
      */
     @Test
     fun `a steppe is drawn between the forest and the desert`() {
@@ -226,10 +228,9 @@ class ClimateTintTest {
     /**
      * What this style gave a steppe before the biome's band bounded the drought's lift.
      *
-     * The first pass of F13 took the drier of two numbers — the climate's drought and one
-     * bare-earth figure per biome — so a grassland with an arid index went all the way to bare
-     * ground. Reproduced here rather than remembered, so the control is something this file can
-     * still run.
+     * It took the drier of two numbers — the climate's drought and one bare-earth figure per biome
+     * — so a grassland with an arid index went all the way to bare ground. Reproduced here rather
+     * than remembered, so the control is something this file can still run.
      */
     private fun steppeBefore(world: WorldMap, style: MapStyle): Int {
         var red = 0L
@@ -289,10 +290,10 @@ class ClimateTintTest {
         val cells = world.width * world.height
         val total = DoubleArray(Biome.entries.size)
         val count = IntArray(Biome.entries.size)
-        for (i in 0 until cells) {
-            if (!world.sea.isLand[i]) continue
-            val biome = world.climate.biome[i].ordinal
-            total[biome] += ClimateTint.drynessAt(world, i).toDouble()
+        for (cell in 0 until cells) {
+            if (!world.sea.isLand[cell]) continue
+            val biome = world.climate.biome[cell].ordinal
+            total[biome] += ClimateTint.drynessAt(world, cell).toDouble()
             count[biome]++
         }
         Biome.entries.forEach { biome ->
@@ -313,11 +314,9 @@ class ClimateTintTest {
             )
         }
 
-        // And the steppe's own bound, which is where the first pass of F13 went wrong: it took the
-        // drier of the climate's drought and one figure per biome, so a grassland with an arid
-        // index went all the way to bare ground and measured 0.74 against a desert's 1.00. The
-        // classes these biomes are named for put a grassland's bare ground at half a desert's at
-        // the very driest, so half is the bound rather than a target.
+        // And the steppe's own bound. The classes these biomes are named for put a grassland's
+        // bare ground at half a desert's at the very driest, so half is the bound rather than a
+        // target; the version this replaced measured 0.74 against a desert's 1.00.
         val steppe = total[Biome.GRASSLAND.ordinal] / count[Biome.GRASSLAND.ordinal]
         val desert = total[Biome.DESERT.ordinal] / count[Biome.DESERT.ordinal]
         println("DESERT a steppe reads %.2f dry against a desert's %.2f".format(steppe, desert))

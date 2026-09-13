@@ -93,10 +93,11 @@ class Graticule(
         internal fun figuresEveryNthLine(spacingCells: Float, figurePixels: Float): Int {
             val room = spacingCells * SHARE_OF_GAP_A_FIGURE_MAY_TAKE
             if (room <= 0f) return 1
-            // The epsilon is against the exact-fit case: where the figure was sized from the
+            // The nudge is against the exact-fit case: where the figure was sized from the
             // spacing, the ratio is one to the last bit and must not be rounded up to two.
-            return ceil(Numerals.widthOf(WIDEST_FIGURE, figurePixels) / room - 1e-3f)
-                .toInt().coerceAtLeast(1)
+            return ceil(
+                Numerals.widthOf(WIDEST_FIGURE, figurePixels) / room - EXACT_FIT_TOLERANCE
+            ).toInt().coerceAtLeast(1)
         }
 
         /** The longest thing that ever appears in the margin: five glyphs of longitude. */
@@ -106,6 +107,9 @@ class Graticule(
         private const val SHARE_OF_GAP_A_FIGURE_MAY_TAKE = 0.66f
 
         private const val SMALLEST_LEGIBLE_FIGURE_PIXELS = 6f
+
+        /** See [figuresEveryNthLine]: a thousandth of a figure's width, which no real case is. */
+        private const val EXACT_FIT_TOLERANCE = 1e-3f
 
         private val figureShareOfSpacing: Float =
             SHARE_OF_GAP_A_FIGURE_MAY_TAKE / Numerals.widthOf(WIDEST_FIGURE, 1f)
@@ -123,9 +127,9 @@ class Graticule(
         fun of(cellsAcross: Int, cellsDown: Int): Graticule {
             val meridianSpacing = cellsAcross.toFloat() * DEGREES / DEGREES_OF_LONGITUDE
             val parallelSpacing = cellsDown.toFloat() * DEGREES / DEGREES_OF_LATITUDE
-            val figure = labelHeightPixels(meridianSpacing)
-            val margin = figure * MARGIN_SHARE_OF_FIGURE
-            val figuredEvery = figuresEveryNthLine(meridianSpacing, figure)
+            val figurePixels = labelHeightPixels(meridianSpacing)
+            val marginPixels = figurePixels * MARGIN_SHARE_OF_FIGURE
+            val figuredEvery = figuresEveryNthLine(meridianSpacing, figurePixels)
 
             val lines = ArrayList<GraticuleLine>()
             val labels = ArrayList<GraticuleLabel>()
@@ -134,33 +138,40 @@ class Graticule(
             // drawn as lines but left unlabelled: they would sit half off the paper.
             for (step in 0..DEGREES_OF_LONGITUDE / DEGREES) {
                 val degrees = -DEGREES_OF_LONGITUDE / 2 + step * DEGREES
-                val x = step * meridianSpacing
-                lines.add(GraticuleLine(x, 0f, x, cellsDown.toFloat()))
+                val atX = step * meridianSpacing
+                lines.add(GraticuleLine(atX, 0f, atX, cellsDown.toFloat()))
                 if (abs(degrees) == DEGREES_OF_LONGITUDE / 2) continue
                 if (step % figuredEvery != 0) continue
                 val text = eastWest(degrees)
-                val left = x - Numerals.widthOf(text, figure) / 2f
-                labels.add(GraticuleLabel(text, left, figure + margin, figure))
-                labels.add(GraticuleLabel(text, left, cellsDown - margin, figure))
+                val left = atX - Numerals.widthOf(text, figurePixels) / 2f
+                labels.add(
+                    GraticuleLabel(text, left, figurePixels + marginPixels, figurePixels)
+                )
+                labels.add(
+                    GraticuleLabel(text, left, cellsDown - marginPixels, figurePixels)
+                )
             }
 
             // Latitude, north to south. The poles are the top and bottom edges, and are the same
             // case as the antimeridians.
             for (step in 0..DEGREES_OF_LATITUDE / DEGREES) {
                 val degrees = DEGREES_OF_LATITUDE / 2 - step * DEGREES
-                val y = step * parallelSpacing
-                lines.add(GraticuleLine(0f, y, cellsAcross.toFloat(), y))
+                val atY = step * parallelSpacing
+                lines.add(GraticuleLine(0f, atY, cellsAcross.toFloat(), atY))
                 if (abs(degrees) == DEGREES_OF_LATITUDE / 2) continue
                 // Figured at the same interval as the meridians, because a graticule figured every
                 // twenty degrees one way and every ten the other reads as two grids.
                 if (step % figuredEvery != 0) continue
                 val text = northSouth(degrees)
                 // Half the cap height above the line, so the figure is centred on what it names.
-                val baseline = y + figure / 2f
-                labels.add(GraticuleLabel(text, margin, baseline, figure))
+                val baseline = atY + figurePixels / 2f
+                labels.add(GraticuleLabel(text, marginPixels, baseline, figurePixels))
                 labels.add(
                     GraticuleLabel(
-                        text, cellsAcross - margin - Numerals.widthOf(text, figure), baseline, figure
+                        text,
+                        cellsAcross - marginPixels - Numerals.widthOf(text, figurePixels),
+                        baseline,
+                        figurePixels
                     )
                 )
             }

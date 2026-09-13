@@ -174,9 +174,9 @@ internal object ClimateTint {
      * the straw end, and neither reaches a desert's ground, because a desert is the class where the
      * ground is nearly all there is.
      *
-     * The first pass of F13 had one number per biome and let the index take a cell all the way to
-     * bare from any class, which drew the interior of a continent as Sahara: seed 234475's
-     * grassland measured 0.74 of the way to bare ground against a desert's 1.00.
+     * A single number per biome, with nothing bounding how far the index could take a cell, drew
+     * the interior of a continent as Sahara. See REALISM_PLAN.md, F13, for the figures, and
+     * `ClimateTintTest`, which keeps that version as its control.
      */
     private val BARE_EARTH_LEAST = floatArrayOf(
         0f,    // OCEAN

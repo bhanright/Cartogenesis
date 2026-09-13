@@ -43,9 +43,9 @@ private class FakeByteWorldLibrary(
         blobs.remove(name)
     }
 
-    override suspend fun readPrefix(name: String, limit: Int): ByteArray? {
+    override suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? {
         val bytes = blobs[name] ?: return null
-        return bytes.copyOfRange(0, minOf(limit, bytes.size))
+        return bytes.copyOfRange(0, minOf(limitBytes, bytes.size))
     }
 }
 

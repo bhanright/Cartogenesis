@@ -55,7 +55,7 @@ class MenusTest {
     }
 
     /**
-     * The three shelves F7 put the fifteen chromes on, and what they must not have changed.
+     * The three shelves F7 put the chromes on, and what they must not have changed.
      *
      * A grouping is the one change to a list of settings that can silently lose one: drop a chrome
      * from every group and it disappears from the picker and from the View menu while the enum,

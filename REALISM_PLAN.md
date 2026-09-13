@@ -1767,6 +1767,24 @@ ink tab replaced by a four-view mosaic of the same crop labelled rainfall, tempe
 winds and ocean currents, the section retitled "One world, many readings") follows as a
 site-only deploy from the branch.
 
+### Release 2.0.3 (2026-09-13)
+
+Cut from `release/2.0` at 5fa887d, tagged `v2.0.3`: F13 (tints by climate, relief lit by a sky,
+isobaths; two passes), F14 (Töpfer generalisation by zoom, a traced and simplified coast stroke,
+a 10-degree graticule with margin figures, a 1-2-5 scale bar and the map's scale in the
+cartouche), F15 (the pen as 0.24% of the sheet, mouths ending at the shore, water one cell wide
+no longer breaking a course, rivers from their farthest source) and F17 (drowned valleys narrower
+than half a cell filled back, Earth's 31% of shoreline graded by a littoral pass; two passes).
+Every chunk looked at by Fable on 718106 at 2048 and 298405 at 1024 before merging, F13 and F17
+each sent back once. Per-merge tier green on the merged tree (worldgen 124, cartography 50, ui 97
+JVM and 97 wasm, desktop 63; 25 min). Portable zip 97 MB, MSI 98 MB, web zip 5.4 MB; the
+packaged exe passes `--gpu-check`. A world regenerated from its seed differs at the coast and in
+its drawn rivers; saves open and draw as saved. The site's hero regenerates on the tag with the
+new tints and the coast stroke. Known and recorded: the coast's remaining cell-scale fringe (F21,
+hillslope diffusion on the 3.0 line), the straight-bar lakes (F18, in progress for 2.0.4), the
+belts' aprons (F19, S2's), the equatorial stripe (F20, W1/W2's), a phone cartouche line that
+truncates, and the sky model's CPU cost in the browser.
+
 ## Track M — the Earth-likeness yardstick (3.0)
 
 ### M1. Earth-likeness metric suite — Opus

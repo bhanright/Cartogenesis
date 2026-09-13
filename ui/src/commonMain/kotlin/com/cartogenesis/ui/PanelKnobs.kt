@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import androidx.compose.runtime.mutableStateMapOf
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -457,6 +458,12 @@ internal object Exports {
     /** The three the row offers. Powers of two, as the working resolutions are. */
     val SIZES: List<Int> = listOf(2048, 4096, 8192)
 
+    /** The picture formats, in the order the chips sit: lossless, small, compatible. */
+    val PICTURES: List<ExportFormat> = ExportFormat.entries
+
+    /** The data layers, which are the second kind of export F12 added. */
+    val LAYERS: List<DataLayer> = DataLayer.entries
+
     fun reachable(size: Int, ceiling: Int): Boolean = size <= ceiling
 
     /**
@@ -473,6 +480,39 @@ internal object Exports {
 
     /** Why a size is greyed out, in the small print, when someone reaches for it. */
     fun unreachableNote(size: Int): String = "$size needs more memory than this build can hold"
+}
+
+/**
+ * What an Export button writes when it is pressed.
+ *
+ * One selection across both chip rows rather than one per row, and that is a deliberate choice
+ * about the interface rather than about the data. The size buttons are the verb — they are what
+ * "do it" looks like here — and a verb needs one object. Two selections would need two rows of
+ * size buttons, which is 48 dp of a phone sheet spent saying the same thing twice, or a size row
+ * whose meaning depends on which chip you touched last, which is worse than either.
+ *
+ * The reader's preferred *picture* format is still the only thing the settings file carries (see
+ * [AppSettings.exportFormat]): a data layer is something someone reaches for on the occasion they
+ * need it, not a standing preference, so a session that has exported a heightmap does not open
+ * tomorrow pointed at one.
+ */
+internal sealed interface ExportChoice {
+
+    /** The chip's word, which is also what the notice says was written. */
+    val label: String
+
+    /** The one line of small print under the two rows. */
+    val detail: String
+
+    data class Picture(val format: ExportFormat) : ExportChoice {
+        override val label: String get() = format.label
+        override val detail: String get() = format.detail
+    }
+
+    data class Layer(val layer: DataLayer) : ExportChoice {
+        override val label: String get() = layer.label
+        override val detail: String get() = layer.detail
+    }
 }
 
 /**

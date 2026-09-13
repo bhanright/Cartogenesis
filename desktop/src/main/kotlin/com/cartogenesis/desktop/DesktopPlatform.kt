@@ -1,6 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.ExportFormat
@@ -140,6 +141,27 @@ class DesktopPlatform(
             Exporter.export(config, options, size, destination, format, gpuRaster.accelerator)
         }
         return ExportOutcome(result.file.name, result.millis, result.bytes)
+    }
+
+    /**
+     * One dialog, two files, side by side in the directory the reader chose.
+     *
+     * The alternative — a second dialog for the sidecar — was not seriously considered: the JSON is
+     * not a file anybody has an opinion about the location of, it is the label on the PNG, and
+     * asking twice invites somebody to put the label somewhere else and lose it. The notice names
+     * both so nobody is surprised by a file they did not ask for.
+     */
+    override suspend fun exportData(
+        config: WorldGenConfig,
+        size: Int,
+        layer: DataLayer
+    ): ExportOutcome? {
+        val destination = chooseSaveFile(Exporter.defaultDataName(config, size, layer)) ?: return null
+        val result = withContext(Dispatchers.Default) {
+            Exporter.exportData(config, size, destination, layer)
+        }
+        val sidecar = Exporter.sidecarNameFor(result.file.name)
+        return ExportOutcome("${result.file.name} and $sidecar", result.millis, result.bytes)
     }
 }
 

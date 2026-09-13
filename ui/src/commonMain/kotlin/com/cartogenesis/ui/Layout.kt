@@ -3,6 +3,7 @@ package com.cartogenesis.ui
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 
@@ -123,6 +124,10 @@ internal class Reachable(
     val styles: List<MapStyle>,
     val views: List<MapView>,
     val exportSizes: List<Int>,
+    /** The picture formats the export row offers: PNG, WebP and, since F12, JPEG. */
+    val pictureFormats: List<ExportFormat>,
+    /** The data layers beside them: the heightmap and the two index maps. */
+    val dataLayers: List<DataLayer>,
     val commands: List<MenuCommand>,
     val legend: List<LegendPart>
 )
@@ -162,6 +167,8 @@ internal object Arrangements {
         styles = MapChrome.styles,
         views = MapChrome.views,
         exportSizes = Exports.SIZES,
+        pictureFormats = Exports.PICTURES,
+        dataLayers = Exports.LAYERS,
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,
         legend = listOf(
             LegendPart.CARTOUCHE,
@@ -181,13 +188,16 @@ internal object Arrangements {
      * strip is 390 dp wide and has a world's name to print on it, and Fit stays because there is no
      * gesture for "show me all of it" that anyone would guess. Nothing else is lost: the ten styles
      * move from a segmented row into a menu, the three menus into one button, and every knob is in
-     * the sheet.
+     * the sheet. The export chips are not lost either — both the picture formats and the data
+     * layers are in the sheet's header, at the sizes [Platform.exportCeiling] allows a phone.
      */
     private fun compact(platform: Platform) = Reachable(
         knobs = headerKnobs(platform) + PANEL_SECTIONS.flatMap { Knobs.inSection(it) },
         styles = MapChrome.styles,
         views = MapChrome.views,
         exportSizes = Exports.SIZES,
+        pictureFormats = Exports.PICTURES,
+        dataLayers = Exports.LAYERS,
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,
         legend = listOf(LegendPart.CARTOUCHE, LegendPart.FIT)
     )

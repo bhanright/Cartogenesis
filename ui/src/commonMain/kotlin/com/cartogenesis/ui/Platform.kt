@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
@@ -17,10 +18,37 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
  * Measured against the PNG of the same world, the average pixel drifts about 4 of 255 — invisible
  * — but the worst 0.1% drift by about 75, and those are the river lines, borders and coastlines,
  * because that is where the sharp edges are.
+ *
+ * JPEG is here for compatibility, for the programs that still will not open a WebP, and the small
+ * print says so rather than presenting it as a third equally good choice. What it does *not* say is
+ * that WebP is the smaller file, which was the expectation this chunk went in with and is not what
+ * the encoders do: at the qualities shipped here — WebP at Skia's lossy maximum, JPEG at
+ * [JPEG_QUALITY] — the JPEG is smaller and slightly worse, and at a matched quality of 100 the JPEG
+ * is the larger of the two. So the note claims the one thing that measures true both ways round,
+ * which is that WebP is kinder to the thin marks a map is made of. `DataExportTest` prints all four
+ * figures on every run.
  */
 enum class ExportFormat(val label: String, val extension: String, val detail: String) {
     PNG("PNG", "png", "Lossless. Larger file, exact detail."),
-    WEBP("WebP", "webp", "About a quarter the size. Slightly softens rivers and borders.")
+    WEBP("WebP", "webp", "About a quarter the size. Slightly softens rivers and borders."),
+    JPEG(
+        "JPEG",
+        "jpg",
+        "For tools that will not open a WebP. Smaller than WebP here, and harder on thin " +
+            "lines: rivers and borders soften more."
+    );
+
+    companion object {
+        /**
+         * Where the JPEG encoders on both hosts are asked to sit.
+         *
+         * High enough that the loss stays in the same band as the WebP this stands in for — 55
+         * against WebP's 53 of 255 at the 99th percentile on seed 42 at 512 — and low enough to be
+         * worth writing at all: the same encoder at 100 produces a file larger than the WebP and
+         * still not lossless.
+         */
+        const val JPEG_QUALITY = 90
+    }
 }
 
 /** Where an exported map ended up, in whatever terms the host can describe. */
@@ -166,6 +194,26 @@ interface Platform {
         size: Int,
         format: ExportFormat
     ): ExportOutcome?
+
+    /**
+     * The same at [size], but writing the world's own numbers rather than a picture of them: a
+     * sixteen-bit heightmap, or a biome or realm index map. Returns null if the user backed out.
+     *
+     * No [RenderOptions], and that is the whole difference in the signature: a data export carries
+     * no style, no view and no overlays, because none of those are properties of the world. What it
+     * carries instead is a sidecar — see [com.cartogenesis.cartography.DataFiles] — which is why
+     * this is a second call rather than another [ExportFormat]: the result is two files, and how a
+     * host hands somebody two files is exactly the sort of question this interface exists to ask.
+     * The desktop writes them side by side; the browser sends one zip.
+     *
+     * Declining by default, as [downloadWorld] does: a host with nowhere to put a file says so by
+     * saying nothing, and the interface reports that the export did not happen.
+     */
+    suspend fun exportData(
+        config: WorldGenConfig,
+        size: Int,
+        layer: DataLayer
+    ): ExportOutcome? = null
 
     // ---- F4: what a menu strip, a settings file and an update check need from the host. ----
 

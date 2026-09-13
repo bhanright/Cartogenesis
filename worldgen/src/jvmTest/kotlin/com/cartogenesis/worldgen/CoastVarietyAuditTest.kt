@@ -129,7 +129,7 @@ class CoastVarietyAuditTest {
         val seaRelief = cut.threshold - eroded.height.min()
 
         repeat(2) {
-            DrownedValleys.apply(cut, eroded.height, config.sea)
+            DrownedValleys.apply(cut, eroded.height, config.sea, config.seed, config.facetRouting)
             LittoralGrading.apply(cut, config.sea, landRelief, seaRelief)
         }
         var valleys = Long.MAX_VALUE
@@ -137,7 +137,7 @@ class CoastVarietyAuditTest {
         repeat(5) {
             valleys = minOf(
                 valleys,
-                measureTime { DrownedValleys.apply(cut, eroded.height, config.sea) }
+                measureTime { DrownedValleys.apply(cut, eroded.height, config.sea, config.seed, config.facetRouting) }
                     .inWholeMilliseconds
             )
             littoral = minOf(

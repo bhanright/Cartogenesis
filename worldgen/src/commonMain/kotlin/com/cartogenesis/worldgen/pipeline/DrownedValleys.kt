@@ -112,6 +112,8 @@ internal object DrownedValleys {
         cut: SeaLevelResult,
         height: FloatField,
         sea: SeaConfig,
+        seed: Long,
+        byFacet: Boolean,
         resolvedShareOfCell: Float = RESOLVED_SHARE_OF_A_CELL
     ): SeaLevelResult {
         if (!sea.drownedValleyFill) return cut
@@ -138,7 +140,7 @@ internal object DrownedValleys {
         val drowned = drownedNotches(cut, height, transgression, oceanOf(cut))
         if (drowned.isEmpty()) return cut
 
-        val arriving = catchmentArrivingByCell(cut, cellCount)
+        val arriving = catchmentArrivingByCell(cut, cellCount, seed, byFacet)
         carryCatchmentDownTheValleys(drowned, arriving, cut.isLand, height)
 
         val cellWidthKilometres = LittoralGrading.WORLD_WIDTH_KILOMETRES / cellsAcross
@@ -373,14 +375,19 @@ internal object DrownedValleys {
      * so a catchment here means what it means everywhere else in the pipeline. A graph walk and a
      * priority queue, which by plan ground rule 8 is work that stays on the processor.
      */
-    private fun catchmentArrivingByCell(cut: SeaLevelResult, cellCount: Int): FloatArray {
+    private fun catchmentArrivingByCell(
+        cut: SeaLevelResult,
+        cellCount: Int,
+        seed: Long,
+        byFacet: Boolean
+    ): FloatArray {
         val cellsAcross = cut.relativeElevation.width
         val cellsDown = cut.relativeElevation.height
         val filled = FlowRouting.fillDepressions(
             cellsAcross, cellsDown, cut.isLand, cut.relativeElevation
         )
         val directions = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, cut.isLand, cut.relativeElevation, filled
+            cellsAcross, cellsDown, cut.isLand, cut.relativeElevation, filled, seed, byFacet
         )
         val catchment = FlowRouting.accumulate(
             cellsAcross, cellsDown, cut.isLand, filled, directions, cut.landCellCount

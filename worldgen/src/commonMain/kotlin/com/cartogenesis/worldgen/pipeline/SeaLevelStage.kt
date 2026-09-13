@@ -161,7 +161,9 @@ object SeaLevelStage {
         // water into land, and neither will touch a cell whose filling would cut the water around it
         // in two, so no body of water can be enclosed by them. See [WaterTopology], and
         // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
-        val resolved = DrownedValleys.apply(drained, height, sea, resolvedShareOfCell)
+        val resolved = DrownedValleys.apply(
+            drained, height, sea, config.seed, config.facetRouting, resolvedShareOfCell
+        )
         val base = LittoralGrading.apply(
             resolved,
             sea,

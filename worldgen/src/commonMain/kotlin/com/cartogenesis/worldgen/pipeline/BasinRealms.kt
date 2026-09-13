@@ -6,6 +6,8 @@ import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Hands the catchments out to realms.
@@ -34,7 +36,7 @@ internal object BasinRealms {
      * wilderness, together with one origin cell per realm — indexed by the same ids the map holds,
      * renumbered so they are contiguous.
      */
-    fun assign(
+    suspend fun assign(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         units: BasinUnits,
@@ -107,6 +109,9 @@ internal object BasinRealms {
             units.neighbours[unit].forEach { offer(realm, unit, it) }
         }
 
+        // The expansion itself is one walk of a heap over catchments rather than over cells, so
+        // there is no useful boundary inside it; the question is asked on the way in.
+        currentCoroutineContext().ensureActive()
         while (!frontier.isEmpty()) {
             val packed = decodeIndex(frontier.pop())
             val realm = packed / units.unitCount
@@ -210,7 +215,7 @@ internal object BasinRealms {
      * Gives every remaining catchment to the nearest realm, spreading outward so the result stays
      * contiguous rather than handing a far island to whoever happens to score best.
      */
-    private fun claimStragglers(
+    private suspend fun claimStragglers(
         units: BasinUnits,
         owner: IntArray,
         realmCount: Int,
@@ -218,6 +223,7 @@ internal object BasinRealms {
     ): Int {
         var changed = true
         while (changed) {
+            currentCoroutineContext().ensureActive()
             changed = false
             for (unit in 0 until units.unitCount) {
                 if (owner[unit] != NationResult.UNCLAIMED) continue

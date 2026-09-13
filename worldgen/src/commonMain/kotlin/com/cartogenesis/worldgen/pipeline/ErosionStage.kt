@@ -5,6 +5,8 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 data class ErosionResult(
     /** Height after erosion, one entry per cell, row-major, in the 0..1 range uplift produced. */
@@ -133,6 +135,12 @@ object ErosionStage {
         val erosion = config.erosion
         if (erosion.passes <= 0) return ErosionResult(height)
 
+        // Asked before the batch rather than only inside it. A batch handed to the graphics card is
+        // a single call that cannot be interrupted part-way, so the place to notice a stop is
+        // before one is started; the round the reader interrupted finishes and frees its buffers,
+        // and no further round begins.
+        currentCoroutineContext().ensureActive()
+
         if (erosion.acceleration == Acceleration.GPU && accelerator != null) {
             // A null result means the accelerator looked at the job and declined it, which is a
             // normal outcome rather than a failure, so the CPU simply picks it up.
@@ -162,7 +170,7 @@ object ErosionStage {
      * @param skipSettled leave the settled parts of the map alone instead of re-scanning them.
      *   Only ever false in the test that proves doing so changes nothing.
      */
-    internal fun thermalSweep(
+    internal suspend fun thermalSweep(
         config: WorldGenConfig,
         height: FloatField,
         skipSettled: Boolean
@@ -204,6 +212,11 @@ object ErosionStage {
         var canHoldExcess = BooleanArray(tilesAcross * tilesDown) { true }
 
         repeat(erosion.passes) {
+            // One sweep is one walk of the grid, and the finest a stop can be answered at: the
+            // sweeps that open the stage and the few that relax the field between hydraulic rounds
+            // all pass through here, so a reader who presses Stop waits out at most one of them.
+            currentCoroutineContext().ensureActive()
+
             val current = heights
             val scan = canHoldExcess
 

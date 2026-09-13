@@ -190,6 +190,46 @@ class ChromeGalleryTest {
     }
 
     /**
+     * F11's subject: the button that stops a generation, in both arrangements.
+     *
+     * Stop takes Generate's place while a world is being built and nowhere else, so photographing
+     * it means photographing an application in the middle of something — which is what the two
+     * shots here are of, caught between the frame the busy state paints and the world arriving a
+     * few seconds later. In the wide arrangement it is in the header at the top of the panel; on a
+     * phone the header lives in the pull-up sheet, so the sheet is up.
+     *
+     * The claims are the two a screenshot cannot make: that pressing it does end the generation —
+     * the button goes back to reading Generate — and that the reader is told so, in a sentence that
+     * names the stage it had reached rather than merely saying something stopped.
+     */
+    @Test
+    fun `the stop button is photographed in both arrangements`() {
+        val dir = File("build/screens").apply { mkdirs() }
+
+        val wide = shootWhileGenerating(WIDTH, HEIGHT, compact = false)
+        val phone = shootWhileGenerating(PHONE_WIDTH, PHONE_HEIGHT, compact = true)
+
+        File(dir, "f11-stop-wide.png").writeBytes(wide.second.png)
+        File(dir, "f11-stop-phone.png").writeBytes(phone.second.png)
+        println(
+            "CHROME wrote f11-stop-wide.png (${WIDTH}x$HEIGHT) and f11-stop-phone.png " +
+                "(${PHONE_WIDTH}x$PHONE_HEIGHT) to ${dir.absolutePath}"
+        )
+
+        // The canvas is blank in both shots - nothing has finished being generated - so a colour
+        // count says nothing here. What can be asserted is that pressing Generate changed the
+        // picture: the button's label, the progress banner over the map and the line in the legend.
+        assertTrue(
+            wide.first.fingerprint != wide.second.fingerprint,
+            "the wide window looks the same generating as it does idle"
+        )
+        assertTrue(
+            phone.first.fingerprint != phone.second.fingerprint,
+            "the phone looks the same generating as it does idle"
+        )
+    }
+
+    /**
      * The guard the spec asks `PanelKnobsTest` for, asked again from outside the module and against
      * a real composition.
      *
@@ -453,6 +493,62 @@ class ChromeGalleryTest {
             down = capture()
         }
         return (down ?: error("no frame")) to (up ?: error("no frame"))
+    }
+
+    /**
+     * The window while a world is being built, and what happens when the reader stops it.
+     *
+     * No test hook and no held generation: a 512 world takes a couple of seconds on any machine
+     * this runs on, and the busy state is painted before the first cell is computed — that is
+     * exactly what F8's opening frame yield is for — so waiting for the button to read Stop lands
+     * the shot squarely inside the generation.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun shootWhileGenerating(
+        width: Int,
+        height: Int,
+        compact: Boolean
+    ): Pair<Shot, Shot> {
+        var idle: Shot? = null
+        var busy: Shot? = null
+        runDesktopComposeUiTest(width = width, height = height) {
+            val platform = if (compact) TouchPlatform() else ChromePlatform()
+            setContent {
+                CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            // On a phone the header, and so the button, is in the pull-up sheet.
+            if (compact) {
+                onNodeWithText("Settings").performClick()
+                waitForIdle()
+            }
+
+            idle = capture()
+            onNodeWithText("Generate").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("Stop").fetchSemanticsNodes().isNotEmpty()
+            }
+            busy = capture()
+
+            onNodeWithText("Stop").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("Generate").fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+            val told = onAllNodesWithText("Generation stopped", substring = true)
+                .fetchSemanticsNodes()
+            assertTrue(
+                told.isNotEmpty(),
+                "the generation was stopped and nothing on screen said so"
+            )
+            println(
+                "CHROME stopped at ${width}x$height: " +
+                    told.first().config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }
+            )
+        }
+        return (idle ?: error("no frame")) to (busy ?: error("no frame"))
     }
 
     /** Every string in the semantics tree of a 1440x900 window with all six sections unrolled. */

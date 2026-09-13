@@ -49,7 +49,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -77,11 +76,13 @@ import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
 import com.cartogenesis.cartography.StoredTerrain
 import com.cartogenesis.cartography.TerrainSnapshot
+import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.min
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -185,6 +186,15 @@ private fun Application(
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     var stage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    /**
+     * The generation now running, and the whole of what Stop cancels. Null when none is.
+     *
+     * Distinct from [busy], which an export sets too: a Stop button over a running export would be
+     * a button for something else. See [stopGenerating].
+     */
+    var generating by remember { mutableStateOf<Job?>(null) }
+    /** Which stage the running generation has reached, so a stop can say where it was stopped. */
+    var reached by remember { mutableStateOf<GenerationStage?>(null) }
     // Notices only, now: what an export or a save did. What used to be the status line — the seed,
     // the size, the realm count and the time — is the cartouche in the map's legend, and is read
     // off the world itself rather than accumulated into a sentence here.
@@ -361,14 +371,34 @@ private fun Application(
         }
     }
 
+    /**
+     * Stop: the reader has decided they want their settings back rather than this world.
+     *
+     * Said here rather than where the generation unwinds, because that unwinding also happens when
+     * the composition goes away or when a settings change restarts the effect, and neither of those
+     * is a thing to write on the status line. Which stage it had reached goes in the sentence: "it
+     * was stopped" answers less than "it was stopped while it was carving rivers".
+     */
+    fun stopGenerating() {
+        val running = generating ?: return
+        status = reached?.let { "Generation stopped while ${it.label.lowercase()}." }
+            ?: "Generation stopped."
+        running.cancel()
+    }
+
     // Regenerate whenever the settings change - but only once a generation has been asked for.
     // The app opens on a blank canvas, so the very first run must wait for Go, New world, or
     // Generate; after that, no debounce, since on desktop a generation is fast enough that the
-    // settings panel uses explicit buttons rather than live-dragging sliders. Keyed on
-    // gate.hasGenerated too, not just config, because pressing Generate with nothing changed
-    // still has to run - the one case a key on the settings alone would miss.
-    LaunchedEffect(config, gate.hasGenerated) {
+    // settings panel uses explicit buttons rather than live-dragging sliders. Keyed on the count of
+    // asks rather than on the settings alone, because pressing Generate with nothing changed still
+    // has to run - and because after a Stop it is the only key that can move.
+    LaunchedEffect(config, gate.requests) {
         if (!gate.hasGenerated) return@LaunchedEffect
+        // This effect's own coroutine is what Stop cancels: cancelling it unwinds the pipeline
+        // wherever it has got to, and the engine notices between rounds rather than at the end.
+        val thisRun = coroutineContext[Job]
+        generating = thisRun
+        reached = null
         busy = true
         val started = epochMillis()
         // The world we already have, so the engine can skip any stage whose settings did not
@@ -377,27 +407,47 @@ private fun Application(
         // is the difference between a redraw and a full regeneration. The engine drops it entirely
         // if the seed or resolution moved, so there is nothing to guard here.
         val reusable = world
-        val generated = withContext(Dispatchers.Default) {
-            // A version-2 GPU save's terrain takes precedence: it is the world as it was saved,
-            // and recomputing it on this machine's hardware could only be a worse answer.
-            val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: accelerator
-            // Through [Generation] rather than straight to the engine: in a browser the generator
-            // and the interface share one thread, so a stage name written here is invisible unless
-            // the thread is handed back to let a frame out. See that object for the whole of it.
-            Generation.run(config, reusable, accelerator) { stage = it.label }
+        // Everything a stop has to undo is in here, and none of it is the world: [world] and
+        // [image] are written only where a generation finished, so a stopped one leaves the map
+        // that was on screen exactly as it was — and leaves nothing half-built for the next
+        // generation to reuse, since what the engine is handed to reuse is that same finished
+        // world. An empty canvas that was never filled simply stays empty.
+        try {
+            val generated = withContext(Dispatchers.Default) {
+                // A version-2 GPU save's terrain takes precedence: it is the world as it was saved,
+                // and recomputing it on this machine's hardware could only be a worse answer.
+                val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: accelerator
+                // Through [Generation] rather than straight to the engine: in a browser the
+                // generator and the interface share one thread, so a stage name written here is
+                // invisible unless the thread is handed back to let a frame out. See that object
+                // for the whole of it.
+                Generation.run(config, reusable, accelerator) { reached = it; stage = it.label }
+            }
+            val rendered = withContext(Dispatchers.Default) { MapImage.render(generated, options) }
+            world = generated
+            image = rendered
+            generationMillis = epochMillis() - started
+            // A world nobody has named yet, or a world at a seed this name was not given to, takes
+            // the name its largest people would give it. A settings edit at the same seed keeps
+            // whatever is in the field.
+            naming.generated(config.seed, Cartouches.suggest(generated))
+            // Any notice from an earlier export or save is about a world no longer on screen.
+            status = ""
+        } finally {
+            // In a `finally` because the settings have to come back whichever way this ended, and
+            // the way that matters is the throw a cancelled coroutine unwinds with. Writing a
+            // snapshot value is not a suspending call, so it still works after the cancellation.
+            //
+            // Guarded on this run still being the current one: a settings change cancels this
+            // effect and starts the next before this one's unwinding gets the thread back, and
+            // clearing then would put the interface back to idle over a generation still running.
+            if (generating === thisRun) {
+                stage = null
+                reached = null
+                busy = false
+                generating = null
+            }
         }
-        val rendered = withContext(Dispatchers.Default) { MapImage.render(generated, options) }
-        world = generated
-        image = rendered
-        stage = null
-        busy = false
-        generationMillis = epochMillis() - started
-        // A world nobody has named yet, or a world at a seed this name was not given to, takes the
-        // name its largest people would give it. A settings edit at the same seed keeps whatever
-        // is in the field.
-        naming.generated(config.seed, Cartouches.suggest(generated))
-        // Any notice from an earlier export or save is about a world that is no longer on screen.
-        status = ""
     }
 
     LaunchedEffect(options) {
@@ -683,6 +733,7 @@ private fun Application(
         PanelHeader(
             config = config,
             busy = busy,
+            generating = generating != null,
             status = status,
             hasWorld = world != null,
             exportFormat = exportFormat,
@@ -702,6 +753,7 @@ private fun Application(
                 gate.request()
             },
             onGenerate = { gate.request() },
+            onStop = { stopGenerating() },
             onExportFormat = { exportFormat = it },
             // Clamped here as well as at the button. The disabled chip is a courtesy; this
             // is the guarantee, and it is what a size restored from an older build's
@@ -1283,6 +1335,8 @@ private fun NameField(name: String, onName: (String) -> Unit) {
 private fun PanelHeader(
     config: WorldGenConfig,
     busy: Boolean,
+    /** Whether a *world* is being built, as against an export rendering, which also sets [busy]. */
+    generating: Boolean,
     status: String,
     hasWorld: Boolean,
     exportFormat: ExportFormat,
@@ -1299,6 +1353,7 @@ private fun PanelHeader(
     onResolution: (Int) -> Unit,
     onNewWorld: () -> Unit,
     onGenerate: () -> Unit,
+    onStop: () -> Unit,
     onExportFormat: (ExportFormat) -> Unit,
     onExport: (Int) -> Unit,
     onToggleAtlas: () -> Unit,
@@ -1310,12 +1365,19 @@ private fun PanelHeader(
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // The one unambiguous "start" action - Go and New world both change the seed and so also
         // generate, but this is the button for someone who has touched nothing yet.
+        //
+        // While a world is being built it is Stop instead, in the same place and at the same size:
+        // the reader who wants out of a generation is looking at the button they started it with,
+        // and a Generate greyed out beside a Stop elsewhere would be two controls for one decision.
+        // The label is the whole of the difference - no colour of its own, because the danger roles
+        // are not part of what the fifteen chromes were measured against and a hand-styled button
+        // is what F1 took out of this file.
         Button(
-            onClick = onGenerate,
-            enabled = !busy,
+            onClick = if (generating) onStop else onGenerate,
+            enabled = generating || !busy,
             contentPadding = TIGHT,
             modifier = Modifier.weight(1f)
-        ) { Text("Generate", maxLines = 1) }
+        ) { Text(if (generating) "Stop" else "Generate", maxLines = 1) }
         OutlinedButton(
             onClick = onNewWorld,
             enabled = !busy,

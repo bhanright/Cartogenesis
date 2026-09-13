@@ -137,6 +137,12 @@ which on a single-threaded target is the difference between a pause and a wait.
 It must be served over HTTP: Wasm will not load from `file://`, and WebGPU needs a secure context,
 which `localhost` counts as.
 
+While a world is being built the Generate button reads **Stop**, and pressing it hands the settings
+straight back: the generation is abandoned within a round of erosion rather than at the end of it,
+the map that was on screen stays there — an empty canvas stays empty — and the status line says
+which stage it had reached. Nothing half-built is kept, so the next generation reuses whatever
+stages of the last *finished* world its settings still allow.
+
 ### Putting it somewhere
 
 Upload the contents of `web/build/dist/wasmJs/productionExecutable` to any static host; there is no

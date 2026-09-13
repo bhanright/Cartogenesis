@@ -15,6 +15,8 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * The steps of the pipeline, in the order they run.
@@ -110,8 +112,17 @@ object WorldGenerationEngine {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
 
         val stages = GenerationStage.entries
-        suspend fun report(stage: GenerationStage) =
+        /*
+         * Every stage boundary is also a chance to give up. A reader who presses Stop is asking for
+         * the settings back, not for the world, and the pipeline is ordinary blocking arithmetic
+         * with no suspension point of its own, so without this a cancelled generation would run to
+         * the last landmark and hand back a world nobody wanted. The long stages ask the same
+         * question between their own rounds; between the short ones this is enough.
+         */
+        suspend fun report(stage: GenerationStage) {
+            currentCoroutineContext().ensureActive()
             progress.onStage(stage, stage.ordinal, stages.size)
+        }
 
         report(GenerationStage.TERRAIN)
         val terrain = reusable?.takeIf { it.config.terrain == config.terrain }?.terrain

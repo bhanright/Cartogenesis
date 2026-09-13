@@ -111,7 +111,6 @@
        break is chosen, not left to the browser: at this width line one is "Build a world".
        The crop is 2:1, so half the row is already more height than it needs. */
     .hero{grid-template-columns:minmax(0,1fr) minmax(0,.9fr);padding:64px 0 16px}
-    h1 .line{display:block}
   }
   .eyebrow{
     font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
@@ -126,6 +125,7 @@
      stranding "up." alone on a line of its own. The chosen break is switched on with the
      two-column hero below, where there is room for it. */
   h1 .line{display:inline}
+  @media (min-width:900px){ h1 .line{display:block} }
   .lede{margin:20px 0 0;color:var(--bone-dim);font-size:17px;max-width:38ch}
 
   .actions{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 0}

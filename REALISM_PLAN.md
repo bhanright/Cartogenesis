@@ -1071,6 +1071,80 @@ audit's S1 units and P1 projection is done here; the north arrow and the project
   cells; `GpuRasterTest` unaffected (these are overlay and legend); phone captures with the
   graticule on. Render both worlds at 2048 at fit and at 4x and look.
 
+### F15. Rivers as William sees them at 1024 — Opus, on `release/2.0`
+
+*William, 2026-09-12, from seed 298405 at 1024 in 2.0.2, with crops: "The maximum width of this
+river is too wide, and it visibly flows over onto the ocean instead of seamlessly flowing into
+the sea. Also shown are two other artifacts that do not look right - the strange thin squiggly
+connection between two thicker rivers, and this diagonal rectangle section of river." Joined
+here by M1's finding that a drawn river starts at its biggest headwater rather than its
+farthest (TODO.md, 2026-09-12). All five are in how rivers are traced and drawn, so one chunk.*
+
+- **The pen scales with the sheet.** F10 sized the pen in output pixels (0.8 to 5.0 px), which
+  at 2048 William called immensely better and at 1024 is twice the weight against the same
+  country. A river's drawn weight is a cartographic exaggeration of a physical width: the
+  Amazon's mouth is about 10 km on a 12,000 km world, 0.08% of the width, and a printed map
+  exaggerates such a river about threefold; 5 px on a 2048 sheet is 0.24% of the width. So the
+  full pen becomes a fraction of the map width (0.24%, that derivation beside it) with the
+  hairline floor kept at 0.8 px: 2.5 px at 1024, unchanged at 2048, 10 px at 4096, the same
+  weight at fit at every size. `RiverPen` and `RiverWidthTest` restated; F9's hachures, which
+  are a texture and not a line, stay in output pixels.
+- **The mouth ends at the shoreline.** The drawn stroke runs past the coast into the sea. Find
+  why — the course's last vertex offshore, the round cap, a delta lobe's channel drawn over
+  water, the tracer's sea mask differing from the drawn coast — and make the stroke's last
+  pixel the shoreline pixel, the sea taking over without a seam: no river pixel over open water
+  beyond the coast, measured on 298405 and the four standard seeds, shown failing today.
+- **A lake's outlet carries its lake.** The hairline squiggle between two thick channels is,
+  as a hypothesis to verify, an outlet whose accumulation starts near zero because the lake's
+  interior is a sink in the flow graph, so the channel that drains a whole catchment is drawn
+  as a thread. The outlet's width follows the flow the lake receives; shown failing today on
+  the crop's lake.
+- **No straight diagonal channel.** The rectangular diagonal section — hypothesis: E1's breach
+  carving its reach along a straight line, or a delta-fan channel — is diagnosed, and the
+  channel follows the terrain's own routing; shown failing today.
+- **Rivers begin at their farthest source.** `RiverStage.traceRivers` ranks heads by the flow at
+  them; rank them by the length of the path below them, or trace each mouth upstream along its
+  longest branch, so a `River` is its own longest watercourse. Drawn coverage of the watercourse
+  from 0.484 at 512 and 0.408 at 2048 to 1.0 on the four seeds, shown failing today.
+- Guards: each of the five above; `GpuRasterTest` parity; world fingerprints unchanged unless a
+  world changes (the lake outlet and the breach may move the flow field: re-pin once, with the
+  reason in the commit); render 298405 at 1024 and 718106 at 2048, crop the mouths, the lake and
+  the diagonal at the render's own pixels, and look.
+- Rule 8: the pen is per-pixel raster work already on both paths; nothing new per cell.
+
+### F17. Not every coast is a ria — Opus, on `release/2.0`
+
+*William, 2026-09-12: "overall, every coastline is too jagged. in real life some coastlines are
+like that but not all - the effect is too extreme at this scale." (crops at 1024). GEOGRAPHY.md
+already lists the lowstand's roughening of every coast as a deviation, and M1 measures the
+coastline's box dimension at 1.20 pooled (1.12 to 1.24 per seed) — inside Earth's band — so the
+fault is not the pooled figure but its uniformity: every coast carries the same cell-scale
+saw-tooth, where Earth's coasts run from smooth depositional shores (barrier beaches, mudflats,
+deltas: Texas, Holland, Bengal) to drowned rias and fjords.*
+
+- **Diagnose the fringe.** Which stage puts the cell-scale saw-tooth on every coast (the
+  lowstand cut's roughening, the shelf remap, the erosion's coastal cells, the percentile cut
+  on a noisy field) and at what scale, measured as the coast's roughness by octave (box counts
+  at 1, 2, 4, 8 and 16 cells) on the four standard seeds and 298405.
+- **Smooth where the sea would.** A littoral pass after the cut: on low-relief, low-energy
+  coasts — the cell's slope and its exposure, a cheap fetch estimate as open-water distance in
+  the onshore direction — sediment fills re-entrants narrower than a stated width and rounds
+  headlands, while steep rocky coasts keep their relief-controlled outline. Earth's split is
+  the bar: about a third of the world's shoreline is depositional (Luijendijk et al. 2018 find
+  31% of the ice-free shoreline sandy; Bird 2000, *Coastal Geomorphology*), with the derivation
+  beside it. The lowstand roughening's amplitude at the cell scale reconsidered against what a
+  6 km cell can hold.
+- Guards: the pooled box dimension stays inside 1.2 to 1.3 (M1's bar; copy the box-counting
+  from main's `worldgen/src/jvmTest/.../EarthLikeness.kt` into the test rather than
+  re-deriving it); the roughness *spread* across coast segments (the share of coast that is
+  smooth by the littoral criterion, or the standard deviation of the per-segment dimension)
+  reaches Earth's third, shown failing today at near zero; the glaciation and lake guards hold;
+  fingerprints re-pinned once with the reason; render 298405 at 1024 and 718106 at 2048 and
+  look at a low coast and a mountain coast side by side.
+- Rule 8: the littoral pass is per-cell over the coast band; write it against the accelerator
+  seam's shape and measure its time at 2048; under 50 ms it stays on the processor, as H2's
+  balance did.
+
 ### Site 2. cartogenesis.com in the app's own identity — Opus, on `release/2.0`
 
 *From the design review of 2026-09-12 (a Codex handoff William asked Fable to critique; the
@@ -1872,7 +1946,8 @@ guard reported, so the next chunk knows its baseline.
 | F12 JPEG, heightmap and layer exports | Opus | done, for 2.0.2 | 2026-09-12 | 1aebd4d (merged into release/2.0) | ExportFormat.JPEG at quality 90 (ImageIO on the desktop, Skia on the web; the wasm Skia build's JPEG encoder confirmed live by the ?selftest line); Platform.exportData(config, size, layer) with three DataLayers: a 16-bit greyscale heightmap of sea.relativeElevation with sea level at grey 32768 on every world (32767 levels a side, 0.1831 m per level at the default 6,000 m ceiling, so the number is one a stranger's program can use) and a sidecar JSON with the width in km, the cell size, the metres per grey level and the seed; biome and realm index maps as 8-bit palette PNGs with the legend in the sidecar. One PNG encoder in :cartography (PngWriter, DataExport) because Skia is 8 bits a channel everywhere and a canvas writes neither 16-bit grey nor an indexed image; its IDAT comes from the gzip each host already has (GzipRewrappingDeflater, header validated at runtime, a stored-deflate fallback shown to give identical samples at 512 KB vs 338 KB). Desktop writes the PNG and its .json beside each other from one save dialog; the web downloads one stored zip, because two downloads in a row raise Chrome's multiple-file prompt and have lost the second in Safari. Interface: Export [PNG][WebP][JPEG] and Data [Heightmap][Biomes][Realms] as two chip rows with one selection across both, since the size buttons are the verb and need one object; the settings file still stores only the picture format; the phone's 2048 ceiling greys out 4096 and 8192 for all six. Guards shown failing first: heightmap round-trip within 1.5e-5 of the field's range (one grey level is 3.1e-5; the same field at 8 bits misses by 129 levels); layer indices and legend exact over 262,144 cells, all 16 biomes and 14 realms named (an index dropped from the legend is caught); JPEG q90 within 55 of 255 at the 99th percentile of PNG and within 5 of WebP's 53 (q30 reads 72 and fails both); PanelKnobsTest 36/36 on JVM and wasm (2 fail with the chips dropped from the compact arrangement). Per-merge tier green (cartography 6 suites, ui 97 JVM + 97 wasm, desktop 58); worldgen untouched. Desktop, seed 42 (ExportAuditTest now generates one world per size and measures the six exports from it): 2048 generation 39.8 s, raster 0.4 s, PNG 4.6 MB 3.7 s, WebP 1.3 MB 0.4 s, JPEG 0.9 MB 0.2 s, heightmap 5.0 MB 0.9 s, biomes and realms 0.1 MB each; 4096: 173.8 s generation, PNG 16.3 MB 12.1 s, WebP 4.4 MB, JPEG 3.0 MB, heightmap 18.1 MB 3.0 s, peak heap 4.1 GB. Browser: a 2048 heightmap zip of 4.6 MB downloaded from the real wasm build on a 375x812 layout, eight minutes on the page's one thread, nearly all of it generation. Found and recorded, not changed: the plan's premise that WebP is smaller than JPEG at the same quality was wrong at the shipped qualities (see the F12 section); 497 land cells on seed 42 at 512 sit below the waterline, which is SeaConfig.enclosedSeaIsLand turning an unreachable sea into land and postCutOutlet draining it to a salt flat, a Qattara, 0 with the rule off, so the heightmap records them as they are and the guard asks only that no open sea sit above the line. The site's export line updated in the same merge; the README gained the new export table beside the older one rather than overwriting figures measured under other conditions. Fable looked at the 2048 heightmap, biome layer and JPEG. |
 | F13 Tints by climate and shading by sky (V1) | Opus | queued behind F12, on release/2.0 | 2026-09-12 | | |
 | F14 Generalisation, graticule and scale (V2) | Opus | queued behind F13, on release/2.0 | 2026-09-12 | | |
-| F15 Rivers drawn from their farthest source | Opus | queued behind F14, on release/2.0 | 2026-09-12 | | From M1's finding (TODO.md, 2026-09-12): `RiverStage.traceRivers` ranks channel heads by the flow at them, so a drawn River runs from the biggest headwater and the longest watercourse in the same catchment is drawn as a tributary stopping at the junction; drawn courses cover 0.484 of their watercourses at 512 and 0.408 at 2048 where 1.0 is the definition. Rank heads by the length of the path below them, or trace each mouth upstream along its longest branch; the union of drawn cells stays the same network. Visible on labels and lengths, and on what RiverWidth calls a trunk; a 2.0.x fix because it is tracing, not physics. Guard: the coverage share at 1.0 on the four seeds, shown failing today at 0.484. |
+| F17 Not every coast is a ria | Opus | in progress on release/2.0, beside F13 and F15 | 2026-09-12 | | |
+| F15 Rivers as William sees them at 1024 (pen scaled to the sheet, mouths at the shore, lake outlets, the diagonal channel, farthest source) | Opus | in progress on release/2.0, beside F13 | 2026-09-12 | | From M1's finding (TODO.md, 2026-09-12): `RiverStage.traceRivers` ranks channel heads by the flow at them, so a drawn River runs from the biggest headwater and the longest watercourse in the same catchment is drawn as a tributary stopping at the junction; drawn courses cover 0.484 of their watercourses at 512 and 0.408 at 2048 where 1.0 is the definition. Rank heads by the length of the path below them, or trace each mouth upstream along its longest branch; the union of drawn cells stays the same network. Visible on labels and lengths, and on what RiverWidth calls a trunk; a 2.0.x fix because it is tracing, not physics. Guard: the coverage share at 1.0 on the four seeds, shown failing today at 0.484. |
 | Site 2 cartogenesis.com in the app's identity | Opus | done, then cut back the same evening (see the section) | 2026-09-12 | 122d263, 71eaf1c (merge f078688 on release/2.0); cards back after v2.0.2 | The landing page set in the app's own faces (Spectral, IBM Plex Sans, IBM Plex Mono, copied out of the ui font resources at assembly, no font host asked for) and its flat ink/bone/brass/oxblood palette; the giant wordmark, gradient, diamond rule and bevel gone. Hero: eyebrow, the two-line headline, one sentence, oxblood "Open in the browser" and brass-outlined "Download for Windows (recommended)" beside a real Atlas crop of 718106 (62% ocean, 14 plates, 12 realms) at 2048. "One world, four readings" (Atlas, biomes, political, pen and ink) as tabs on wide screens and a stack on phones; three annotated details with HTML labels over real crops (a rain shadow on the rainfall view, a trunk river widening below each junction, a rift breaking into gulfs) replace the six cards; the browser and Atlas notices moved to a practical-details section. Every image is rendered by :desktop:renderSiteImagery when the site is assembled (57 s on sixteen cores, 219 s pinned to two, nearly all of it the one generation; the seven rasterisations and WebP encodes are three seconds between them); poster.webp deleted. SitePaletteContrastTest: 23 text pairs at AA, the weakest 5.39:1; SiteAssemblyTest +4 (every figure present at the size the page reserves, no font host, a rule-10 host allowlist). Page weight before the app: the whole tree 2055 KB uncompressed (html 28, fonts 1067, images 960); a first visit that scrolls the page fetches about 1478 KB of it, roughly 872 KB compressed, because the three other readings are lazy images in hidden panels and are only fetched when their tab is chosen; the plan's 1.5 MB target is met on that reading and missed on the whole tree, the fonts being the difference; screenshots at 1280 and 390 looked at band by band. Follow-ups: the TTFs would be about half the bytes as WOFF2; the rainfall view is a weak reading on 718106; the pen-and-ink figure is 318 KB, the heaviest on the page; `_headers` gives the figures and faces no Cache-Control rule, so they get Pages' default of four hours (`max-age=14400, must-revalidate`, seen live) and a returning visitor re-fetches a megabyte of faces after that; hashed names and an immutable rule, as the wasm has, would fix it. Deployed by hand from release/2.0 (run 34730941195), live and checked 2026-09-12: stamp f078688, the seven figures and five faces served, wasm still application/wasm, Brotli, immutable. |
 | H1 Tectonic history | Opus | done | 2026-09-12 | 31dc575 (merge 3b3ae05) | PlateStage runs historyEpochs times (default 3), oldest first: seeds carried back along minus their drift by epochDrift (45 cells at 512, atResolution), Voronoi and pair classification redone in that configuration, the same five profiles stamped and aged (amplitude x beltAgeDecay^n = 0.45^n, half-width x 1.45^n, blur 3 cells x n); a past continental rift becomes an aulacogen (trough 55% filled, shoulders 35%); present epoch last with every factor 1, so 0 or 1 epoch reproduces the old field bit for bit (TectonicHistoryTest pins pre-H1 checksums on 7/42/1234); crustAge field saved as plates.crustAge (34 sections); old belts beyond 52 cells of any present boundary +0.080/+0.141/+0.096 (bar 0.04), pooled 2.19x lower and 1.50x broader than present belts (bars 1.8, 1.3); crust-age bands ~37% present, ~25% one back, ~20% two back, ~18% cratonic; K = 1 gives a zero difference field; 2048 tectonics 1.37 -> 3.67 s, per-cell work the minority so no GPU (rule 8, measured in TectonicHistoryAuditTest); moved guards each with a written reason: RibbonLand and OutletIncision round-by-round run at one epoch with shipped-world bounds added, OutletIncision's Caspian bar restated as share of Earth's land (0.249%), GlaciationTest comb at one epoch and its 2048 case bounds ice bars against the un-glaciated world, LakeWaterBalance basin cases at one epoch, MeridionalWindTest monsoon sample re-picked to seed 28 by its own scan; render: a sharp coastal range with a broad worn upland inland of it |
 | H3 Lithology | Opus | queued behind G1 | | | |

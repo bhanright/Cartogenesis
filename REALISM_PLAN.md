@@ -1780,7 +1780,21 @@ each sent back once. Per-merge tier green on the merged tree (worldgen 124, cart
 JVM and 97 wasm, desktop 63; 25 min). Portable zip 97 MB, MSI 98 MB, web zip 5.4 MB; the
 packaged exe passes `--gpu-check`. A world regenerated from its seed differs at the coast and in
 its drawn rivers; saves open and draw as saved. The site's hero regenerates on the tag with the
-new tints and the coast stroke. Known and recorded: the coast's remaining cell-scale fringe (F21,
+new tints and the coast stroke. **Forward merge into `main`** the same day (7375d9d, fast-forwarded
+as 050bffa): F14's cell-size helpers folded into S1's `WorldScale`; F17's littoral reaches and the
+postglacial rise expressed in kilometres and metres through `WorldScale` (23.4 km reach, 187.5 km
+backshore, 492 km fetch, 120 m rise; the coastal-plain rise per cell 0.00293 -> 0.00391 of relief
+at 512, the "one metre" 6.25e-5 of the field), `Isobaths` on the sea's own depth ruler (500 m =
+0.05 of depth); C2 names applied to F15's and F17's code; `DepositionTest` land 6290/6464 ->
+6426 (the same 136 cells filled on a shoreline 37 cells further out); `RiverCourseTest`'s break
+predicate narrowed to exclude arrivals at endorheic lakes (seed 99's three "breaks" were one
+242-cell sink); `OutletResolutionTest`'s vestigial standing-water clause retired to
+`ScaleFreeTest` (floor not lowered); estuary gain 2.71x -> 2.64x over a 1.5 bar; style records
+re-taken; 479 tests green, siteTest green; 718106 at 2048 rendered on the merged tree and looked
+at by the agent and by Fable. Found: `DrownedValleys` takes a cell's area as its width squared
+(twice the ground on a 2:1 world; F17's 39-cell catchment bar is calibrated against it), and
+`SeaConfig.enclosedSeaMaxKm2` carries the Caspian's share of Earth onto a map a seventh the
+size (both TODO). Known and recorded: the coast's remaining cell-scale fringe (F21,
 hillslope diffusion on the 3.0 line), the straight-bar lakes (F18, in progress for 2.0.4), the
 belts' aprons (F19, S2's), the equatorial stripe (F20, W1/W2's), a phone cartouche line that
 truncates, and the sky model's CPU cost in the browser.

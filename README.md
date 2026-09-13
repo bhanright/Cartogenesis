@@ -127,12 +127,48 @@ A style changes appearance and nothing else — the same seed gives the same wor
 the diagnostic views ignore styles entirely, because their colours mean something and a prettier
 ramp would make them lie.
 
-Most of the difference between them is three numbers rather than five separate repaints. How much
+Most of the difference between them is four numbers rather than five separate repaints. How much
 vegetation colour is let through decides whether a map reads as terrain seen from above or as
 something drawn. How far each biome colour is dragged toward the paper first is what stops an aged
-chart looking like a modern one with a filter over it — old inks are earths, not dimmed greens. And
-how hard the hillshade is exaggerated is why the ink style works at all: with the colour gone,
-relief is the only thing left describing the mountains.
+chart looking like a modern one with a filter over it — old inks are earths, not dimmed greens. The
+third is how far the height ramp itself follows the climate, which is what the next section is
+about. And how hard the hillshade is exaggerated is why the ink style works at all: with the colour
+gone, relief is the only thing left describing the mountains.
+
+### Tints that follow the climate, and light from the sky
+
+A hypsometric ramp says that this height is that colour, and on a world with more than one climate
+that is a lie: the green a ramp gives a coastal plain is a wet plain's green, and drawn over a
+desert it puts a lawn on the Sahara. Imhof's answer, and every good atlas's, is that the ramp is not
+one series but a series modulated by what grows there, and that is what the land colour now is. Each
+cell carries three numbers about its own ground — how bare it is, how frozen, and how closed the
+canopy over it — and each style says through one lever how much of that to let through: the full
+effect on Atlas and Schoolroom, a suggestion on the aged papers, nothing at all on Pen and ink,
+which has no tint, or on Colour-blind, whose ramp is a measured promise nothing may move. Dryness
+comes from De Martonne's aridity index, the year's rain over the mean temperature plus ten, which is
+the oldest measure of how far a place is from having enough water to cover its own ground; on a
+world with a desert in it, the desert now comes out sand at every height and the forest darkens the
+lowland greens.
+
+The relief is lit by a sky rather than a lamp. One light in the north-west is the convention every
+shaded-relief map has used since the nineteenth century, and it has one failure no exaggeration
+fixes: a slope facing away from it receives nothing at all, so a range running the wrong way comes
+out with one side white, the other black, and nothing readable inside the black. After Kennelly and
+Stewart's sky models, the light now comes from eight lamps round the whole compass, each as bright
+as its own quarter of the sky — brightest around the old north-west convention and a quarter of that
+opposite it — plus an ambient term that falls with how much sky the ground can actually see, which
+is measured as a horizon along those same eight bearings. On a synthetic cone as steep as the
+steepest tenth of a world's land, a third of the bearings receive no light at all from the single
+lamp; under the sky the darkest face keeps 0.53 of the light of the brightest and none of it is
+crushed flat. The single lamp is still there, as **Single-lamp relief** in the Cartography section
+of the panel, and under it the older picture comes back bit for bit.
+
+Two smaller things come with it. **Aerial perspective**: the low ground is veiled slightly toward
+the colour of the paper, because it is the ground furthest from a reader looking down and the air
+between is doing the same thing to it that distance does in a landscape. And **depth contours** in
+the sea, every 500 m, which is what GEBCO's small-scale sheets are drawn at — held at a fixed width
+in pixels by dividing by how fast the floor falls, and faded out where they would crowd closer than
+four pixels, so a continental slope reads as a slope rather than as a moiré.
 
 `StyleGalleryTest` writes all ten out to be looked at, since no number says whether something
 resembles vellum. What it does assert is that they differ from one another — a style quietly
@@ -356,14 +392,18 @@ because terrain roughness at cell scale rises with resolution and most of a fine
 still moving.
 
 Drawing the map is on the graphics card too, and not behind that toggle. `MapRasterizer`'s work is
-per-pixel — a ramp lookup, a biome wash, a relief shade, a coast and border test — so the whole of
-it is one compute dispatch per tile of the export (`GpuRaster`, behind the `RasterAccelerator` seam
-in `:cartography`). At 4096 it draws 16.7 million pixels in 0.37 s against the processor's 0.71 s,
-and at 8192, in sixteen tiles, in 1.4 s. The shader is handed a `RasterRecipe` — every colour
-already packed, every ramp already chosen, a colour table per realm, people and plate — so nothing
-about the palette is written twice; the blends are integer and truncate where `MapPalette`
-truncates, and `GpuRasterTest` holds the two within one channel step of 255 at the 99.9th percentile
-across all fifteen views in all nine styles. It is not behind the acceleration toggle because that
+per-pixel — a ramp lookup, a climate-modulated tint, the sky's light and the ground's horizon, a
+coast, a contour and a border test — so the whole of it is one compute dispatch per tile of the
+export (`GpuRaster`, behind the `RasterAccelerator` seam in `:cartography`). At 4096 it draws 16.7
+million pixels in 0.43 s against the processor's 1.65 s, and at 8192, in sixteen tiles, in 0.84 s.
+The sky model is what widened that gap: it asks the terrain twenty-four more questions per land
+pixel than a single lamp does, which doubles the processor's raster (0.81 s at 4096 under the lamp)
+and costs the device nothing it notices. The shader is handed a `RasterRecipe` — every colour
+already packed, every ramp already chosen, a colour table per realm, people and plate, and the two
+per-cell numbers the climate has to say about the ground — so nothing about the palette or the
+aridity index is written twice; the blends are integer and truncate where `MapPalette` truncates,
+and `GpuRasterTest` holds the two within one channel step of 255 at the 99.9th percentile across all
+fifteen views in all eleven styles. It is not behind the acceleration toggle because that
 toggle is a promise about whether the *world* can be regenerated from its seed, and drawing pixels
 makes no such promise either way.
 

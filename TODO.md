@@ -392,3 +392,17 @@
   the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
   anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
   render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
+- **The colour-blind style draws a coastal desert dark olive.** Its ramp starts at #2B2E1C, whose
+  green channel is three of 255 above its red, so a desert at the shoreline is the one place on any
+  style where sand reads as vegetation — and it must, because that ramp is ordered by lightness and
+  cannot spend any of it on climate without breaking the promise it exists for. Measured at F13:
+  45% of the desert cells of seed 234475, which is the same 45% it was before the chunk. Fixing it
+  properly means a second ordered ramp for arid ground whose stops are also 8.00 CIEDE2000 apart
+  from each other under both deficiencies, which is a palette exercise rather than a rendering one.
+- **The sky model doubles the processor's raster.** Twenty-four horizon samples a land pixel against
+  the single lamp's four central differences: 0.44 s against 0.21 s at 2048 and 1.65 s against
+  0.81 s at 4096, measured on seed 42 at F13. The desktop draws exports on the graphics card, where
+  it costs nothing measurable, but the browser has no raster device and pays it in full. If it ever
+  matters, the horizon is separable — one sweep along each of the eight bearings with a running
+  maximum is O(1) a pixel instead of three samples — at the cost of the two paths no longer being
+  the same arithmetic per pixel.

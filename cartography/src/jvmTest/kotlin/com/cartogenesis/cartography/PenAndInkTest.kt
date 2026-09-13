@@ -80,32 +80,32 @@ class PenAndInkTest {
         const val MAX_DENSITY_DRIFT = 0.08
 
         /**
-         * Every style's 512 fantasy render, hashed, as it stood at v2.0.0 — before F9 touched
-         * anything.
+         * Every style's 512 fantasy render, hashed, as it stands today.
          *
-         * F9 redraws one style, and the cheapest way to be sure it redrew only that one is to hold
-         * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
-         * that is supposed to have changed.
+         * A change detector rather than a claim about any particular colour: a chunk that means to
+         * redraw one style can check here that it redrew only that one, and a chunk that means to
+         * redraw them all re-records the lot and says so in its report. F9 wrote it with ten
+         * entries and pen and ink deliberately absent, because that chunk changed exactly one
+         * style; F13 changed every one of them — the climate reaches the land ramp, the sky
+         * replaces the lamp and the sea carries depth contours — so all eleven were recorded again
+         * against that chunk's renders.
          */
-        val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1505162113,
-            MapStyle.VELLUM to 1731718276,
-            MapStyle.INK_WASH to 940010414,
-            MapStyle.NAUTICAL to -615327928,
-            MapStyle.MIDNIGHT to -337638301,
-            MapStyle.SCHOOLROOM to 1860155522,
-            MapStyle.VERDANT to -206922609,
-            MapStyle.SCROLL to -1085895034,
-            MapStyle.MARS to 1710409417,
-            MapStyle.CLEAR to -958663001
+        val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
+            MapStyle.ATLAS to 2098735428,
+            MapStyle.VELLUM to -1176442695,
+            MapStyle.INK_WASH to 752517727,
+            MapStyle.NAUTICAL to -1649287768,
+            MapStyle.MIDNIGHT to 1804762079,
+            MapStyle.SCHOOLROOM to -1516353490,
+            MapStyle.VERDANT to -676025039,
+            MapStyle.SCROLL to -1483607860,
+            MapStyle.PEN_AND_INK to 2027689450,
+            MapStyle.MARS to 1678113644,
+            MapStyle.CLEAR to 1766017879
         )
 
-        /** The gallery's world, at the size the guards measure on. */
-        val WORLD: WorldMap by lazy {
-            WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            )
-        }
+        /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
+        val WORLD: WorldMap get() = TestWorlds.gallery
 
         /** How far the structure tensor looks, in stroke pitches. */
         const val TENSOR_WINDOW_PITCHES = 1.5f
@@ -127,21 +127,21 @@ class PenAndInkTest {
     }
 
     @Test
-    fun `every other style is left alone to the pixel`() {
-        UNCHANGED_STYLES.forEach { (style, expected) ->
-            assertEquals(
-                expected,
-                fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = style))),
-                "${style.label} no longer renders the pixels it rendered at 2.0.0"
-            )
+    fun `every style renders the pixels it is recorded as rendering`() {
+        val drawn = MapStyle.entries.associateWith {
+            fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = it)))
         }
         println(
-            "PENINK the other ${UNCHANGED_STYLES.size} styles are unchanged at 512; " +
-                "pen and ink now fingerprints " +
-                fingerprint(
-                    MapRasterizer.rasterize(WORLD, RenderOptions(style = MapStyle.PEN_AND_INK))
-                )
+            "PENINK fingerprints at 512: " +
+                drawn.entries.joinToString(", ") { "${it.key.name} ${it.value}" }
         )
+        RECORDED_STYLES.forEach { (style, expected) ->
+            assertEquals(
+                expected,
+                drawn[style],
+                "${style.label} no longer renders the pixels recorded for it"
+            )
+        }
     }
 
     @Test
@@ -353,7 +353,7 @@ class PenAndInkTest {
         val height = world.height
         val elevation = world.sea.relativeElevation
         val style = MapStyle.PEN_AND_INK
-        val zScale = MapRasterizer.hillshadeScale(width)
+        val zScale = ReliefShading.slopeScale(width)
         val pixels = IntArray(width * height) { style.paper }
         for (y in 0 until height) {
             for (x in 0 until width) {

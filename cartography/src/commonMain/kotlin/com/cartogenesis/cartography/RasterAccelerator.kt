@@ -79,7 +79,7 @@ object RasterView {
  *
  * | view      | scalarA            | scalarB | indexA  | indexB         | biome |
  * |-----------|--------------------|---------|---------|----------------|-------|
- * | fantasy   | -                  | -       | -       | -              | yes   |
+ * | fantasy   | ground dryness     | ground coldness | - | -            | yes   |
  * | political | -                  | -       | realm   | -              | -     |
  * | peoples   | -                  | -       | people  | -              | -     |
  * | elevation | -                  | -       | -       | -              | -     |
@@ -151,9 +151,28 @@ class RasterRecipe(
     val temperatureRamp: IntArray,
     val precipitationRamp: IntArray,
     val biomeColors: IntArray,
+    /**
+     * How much of each biome's ground is under a closed canopy, in [Biome] order.
+     *
+     * The one thing about a cell's climate that is a property of its vegetation rather than of its
+     * weather, so it travels as a table indexed by the biome the device already has rather than as
+     * a third field the size of the map. See [ClimateTint].
+     */
+    val biomeCanopy: FloatArray,
     val paper: Int,
     val biomeWash: Float,
     val biomeMuting: Float,
+    /** How far the land ramp follows the climate. See [MapStyle.climateTint]. */
+    val climateTint: Float,
+    /** How far the air veils the low ground. See [MapStyle.aerialPerspective]. */
+    val aerialPerspective: Float,
+    /**
+     * How black the depth contours run, and how far apart they are as a fraction of the elevation
+     * field's own range. See [Isobaths]. The interval depends on the world's metre scale, which is
+     * why it travels rather than being a constant on the device.
+     */
+    val isobathInk: Float,
+    val isobathInterval: Float,
     val lake: Int,
     val lakeDeep: Int,
     val coastline: Int,
@@ -198,11 +217,18 @@ class RasterRecipe(
 
     // ---- which passes run ----
     val hillshade: Boolean,
+    /** Light the relief from one lamp rather than from the sky. See [RenderOptions.singleLamp]. */
+    val singleLamp: Boolean,
     /**
-     * How far the hillshade's central differences are exaggerated. Scales with resolution, because
+     * How far the relief's central differences are exaggerated. Scales with resolution, because
      * at four times the grid a step covers a quarter of the ground.
      */
-    val hillshadeScale: Float,
+    val slopeScale: Float,
+    /**
+     * How far the openness stencil's shortest step reaches, in cells. Scales with resolution too,
+     * and for the opposite reason: it measures the country rather than the sheet.
+     */
+    val opennessStep: Int,
     val showLakes: Boolean,
     val showCoastline: Boolean,
     val showBorders: Boolean
@@ -238,6 +264,13 @@ class RasterRecipe(
             val viewId = when (view) {
                 MapView.FANTASY -> {
                     biomes = biomeOrdinals(world)
+                    // The climate's two per-cell numbers, computed here rather than on the device
+                    // for the reason the colour tables are: an aridity index solved twice would be
+                    // two slightly different deserts.
+                    if (style.climateTint > 0f) {
+                        scalarA = ClimateTint.drynessField(world)
+                        scalarB = ClimateTint.coldnessField(world)
+                    }
                     RasterView.FANTASY
                 }
 
@@ -363,9 +396,14 @@ class RasterRecipe(
                 temperatureRamp = MapPalette.temperatureRamp,
                 precipitationRamp = MapPalette.precipitationRamp,
                 biomeColors = IntArray(Biome.entries.size) { MapPalette.biome(Biome.entries[it]) },
+                biomeCanopy = ClimateTint.canopyTable(),
                 paper = style.paper,
                 biomeWash = style.biomeWash,
                 biomeMuting = style.biomeMuting,
+                climateTint = if (view == MapView.FANTASY) style.climateTint else 0f,
+                aerialPerspective = if (view == MapView.FANTASY) style.aerialPerspective else 0f,
+                isobathInk = if (view == MapView.FANTASY) style.isobathInk else 0f,
+                isobathInterval = Isobaths.interval(world.config.climate.maxAltitudeMetres),
                 lake = style.lake,
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,
@@ -390,7 +428,9 @@ class RasterRecipe(
                 anomalyWarm = MapPalette.ANOMALY_WARM,
                 anomalyCold = MapPalette.ANOMALY_COLD,
                 hillshade = options.showHillshade && view != MapView.NORMALS,
-                hillshadeScale = MapRasterizer.hillshadeScale(w),
+                singleLamp = options.singleLamp,
+                slopeScale = ReliefShading.slopeScale(w),
+                opennessStep = ReliefShading.opennessStep(w),
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,
                 showBorders = borders

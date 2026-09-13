@@ -36,3 +36,12 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
+
+/**
+ * A 1024 world and the pictures drawn from it do not fit in a test worker's default half gigabyte.
+ * `WorldLibraryTest` saves one, and the drawing guards hold a 512 world and several rasters of it
+ * at once; four gigabytes is what `:desktop` gives the same work, less the export sizes.
+ */
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "4g"
+}

@@ -217,31 +217,39 @@ class DataExportTest {
         assertEquals(16, json.int("bitsPerSample"))
         assertEquals(DataExports.SEA_LEVEL_GREY_LEVEL, json.int("seaLevelGreyLevel"))
 
-        // The scale, against the config's own arithmetic rather than against a repeated constant.
-        assertClose(config.nations.worldWidthKm, json.number("worldWidthKm"))
-        assertClose(config.nations.worldWidthKm / world.width, json.number("cellWidthKm"))
+        // The scale, read back against `WorldScale` itself rather than against a repeated
+        // constant: the sidecar is the one place a reader of the file meets the generator's ruler,
+        // so it must be that ruler and not a second copy of it.
+        val scale = config.scale
+        assertClose(scale.worldWidthKm, json.number("worldWidthKm"))
+        assertClose(scale.cellWidthKm(world.width), json.number("cellWidthKm"))
+        assertClose(scale.cellHeightKm(world.height), json.number("cellHeightKm"))
         assertClose(
-            config.nations.worldWidthKm / 2.0 / world.height,
-            json.number("cellHeightKm")
-        )
-        assertClose(
-            config.nations.squareKilometresPerCell(world.width, world.height),
+            scale.squareKilometresPerCell(world.width, world.height),
             json.number("squareKilometresPerCell")
         )
-        assertClose(
-            config.climate.maxAltitudeMetres.toDouble(),
-            json.number("maxAltitudeMetres")
-        )
-        // And the two derived figures a reader actually multiplies by: one grey level in metres,
-        // and where the top of the range lands. Whiteness must be the full declared altitude.
+        assertClose(scale.highestLandMetres.toDouble(), json.number("highestLandMetres"))
+        assertClose(scale.deepestOceanMetres.toDouble(), json.number("deepestOceanMetres"))
+        // And the figures a reader actually multiplies by: one grey level in metres on each side
+        // of the waterline, and where each end of the range lands. Whiteness must be the full
+        // declared altitude and blackness the full declared depth.
         val metresPerLevel = json.number("metresPerGreyLevel")
+        val metresPerLevelBelow = json.number("metresPerGreyLevelBelowSeaLevel")
         assertClose(
-            config.climate.maxAltitudeMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
+            scale.highestLandMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
             metresPerLevel
+        )
+        assertClose(
+            scale.deepestOceanMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
+            metresPerLevelBelow
         )
         assertClose(
             metresPerLevel * (65535 - DataExports.SEA_LEVEL_GREY_LEVEL),
             json.number("metresAtGreyLevel65535")
+        )
+        assertClose(
+            metresPerLevelBelow * (0 - DataExports.SEA_LEVEL_GREY_LEVEL),
+            json.number("metresAtGreyLevel0")
         )
         println(
             "HEIGHTMAP sidecar: %.4f m per grey level, white = %.0f m, black = %.0f m".format(

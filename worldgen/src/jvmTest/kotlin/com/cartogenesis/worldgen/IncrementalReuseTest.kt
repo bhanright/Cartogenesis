@@ -58,6 +58,16 @@ class IncrementalReuseTest {
         assertTrue(previous.landmarks.landmarks.isNotEmpty(), "base world has no landmarks")
 
         val variants = listOf(
+            // S1: the world's own size and the years a round stands for. Every rate and reach from
+            // erosion onward is converted through it, so a stale erosion stage would carry a
+            // terrain cut to the wrong ruler through everything below it. A taller world is the
+            // largest change the section can make short of resizing the map itself.
+            "scale" to base.copy(
+                scale = base.scale.copy(highestLandMetres = base.scale.highestLandMetres * 1.5f)
+            ),
+            "worldWidthKm" to base.copy(
+                scale = base.scale.copy(worldWidthKm = base.scale.worldWidthKm * 0.5)
+            ),
             "terrain" to base.copy(terrain = base.terrain.copy(octaves = base.terrain.octaves - 1)),
             "tectonics" to base.copy(
                 tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)

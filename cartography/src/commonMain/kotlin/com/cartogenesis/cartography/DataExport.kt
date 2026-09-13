@@ -86,14 +86,20 @@ object DataExports {
     /**
      * Grey levels between the shoreline and each end of the range.
      *
-     * The same count above and below, so there is one metres-per-grey-level for the whole image
-     * rather than one for the land and another for the sea. That costs the single darkest level:
-     * the deepest sea floor lands on 1 rather than 0, and nothing is ever written as 0.
+     * The same count above and below, so the shoreline sits at the middle grey whatever the two
+     * halves of the world's relief are worth in metres. That costs the single darkest level: the
+     * deepest sea floor lands on 1 rather than 0, and nothing is ever written as 0.
      */
     const val LEVELS_PER_SIDE = 32767
 
-    /** Bumped when a field in the sidecar changes meaning, so a reader's parser can tell. */
-    const val SIDECAR_VERSION = 1
+    /**
+     * Bumped when a field in the sidecar changes meaning, so a reader's parser can tell.
+     *
+     * 2 gave the sea a depth of its own: a grey level below the waterline is worth
+     * `metresPerGreyLevelBelowSeaLevel` rather than the land's `metresPerGreyLevel`, and
+     * `maxAltitudeMetres` became `highestLandMetres` beside a new `deepestOceanMetres`.
+     */
+    const val SIDECAR_VERSION = 2
 
     /**
      * Where the shoreline-relative elevation of a cell lands in the sixteen-bit range.
@@ -114,19 +120,28 @@ object DataExports {
         (greyLevel - SEA_LEVEL_GREY_LEVEL).toFloat() / LEVELS_PER_SIDE
 
     /**
-     * Metres of altitude one grey level is worth.
+     * Metres of altitude one grey level above the sea-level grey is worth.
      *
-     * [com.cartogenesis.worldgen.model.ClimateConfig.maxAltitudeMetres] is the metre scale the
-     * generator declares, and it declares it for the land: the full 0..1 above the shoreline is
-     * that many metres, which is what the lapse rate in `ClimateStage` is computed against. The sea
-     * floor is normalised to the same span below the shoreline, so continuing the same scale
-     * downwards is the reading that keeps one number for the whole image; it puts the deepest sea
-     * floor as far below the waterline as the highest summit is above it, which for the default
-     * 6,000 m is deeper than Earth's mean ocean and shallower than its trenches. The sidecar states
-     * both ends, so a reader who wants a different ocean can rescale the lower half themselves.
+     * [com.cartogenesis.worldgen.model.WorldScale.highestLandMetres] is the top of the land's half
+     * of the generator's ruler: the full 0..1 above the shoreline is that many metres, which is
+     * what the lapse rate in `ClimateStage` is computed against.
+     *
+     * Below the waterline the scale is a different one — see [metresPerGreyLevelBelowSeaLevel] —
+     * because the sea now has a depth of its own rather than borrowing the land's. The sidecar
+     * states both, and both ends of the range, so a reader can convert either half.
      */
     fun metresPerGreyLevel(config: WorldGenConfig): Double =
-        config.climate.maxAltitudeMetres.toDouble() / LEVELS_PER_SIDE
+        config.scale.highestLandMetres.toDouble() / LEVELS_PER_SIDE
+
+    /**
+     * Metres of depth one grey level below the sea-level grey is worth.
+     *
+     * The sea's half of the ruler, [com.cartogenesis.worldgen.model.WorldScale.deepestOceanMetres]
+     * over the same number of grey levels. Steeper than the land's, because the deepest floor is
+     * further from the waterline than the highest ground is.
+     */
+    fun metresPerGreyLevelBelowSeaLevel(config: WorldGenConfig): Double =
+        config.scale.deepestOceanMetres.toDouble() / LEVELS_PER_SIDE
 
     /** What the file is called, before the extension. */
     fun baseName(config: WorldGenConfig, size: Int, layer: DataLayer): String =
@@ -259,18 +274,22 @@ object DataExports {
     private fun heightmapSidecar(world: WorldMap, appVersion: String): String {
         val config = world.config
         val metresPerLevel = metresPerGreyLevel(config)
+        val metresPerLevelBelow = metresPerGreyLevelBelowSeaLevel(config)
         val json = JsonLines()
         common(json, world, DataLayer.HEIGHTMAP, appVersion)
         json.number("bitsPerSample", 16)
         json.number("seaLevelGreyLevel", SEA_LEVEL_GREY_LEVEL)
         json.number("greyLevelsPerSide", LEVELS_PER_SIDE)
         json.number("metresPerGreyLevel", metresPerLevel)
+        json.number("metresPerGreyLevelBelowSeaLevel", metresPerLevelBelow)
         json.number("metresAtGreyLevel65535", metresPerLevel * (65535 - SEA_LEVEL_GREY_LEVEL))
-        json.number("metresAtGreyLevel0", metresPerLevel * (0 - SEA_LEVEL_GREY_LEVEL))
-        json.number("maxAltitudeMetres", config.climate.maxAltitudeMetres.toDouble())
+        json.number("metresAtGreyLevel0", metresPerLevelBelow * (0 - SEA_LEVEL_GREY_LEVEL))
+        json.number("highestLandMetres", config.scale.highestLandMetres.toDouble())
+        json.number("deepestOceanMetres", config.scale.deepestOceanMetres.toDouble())
         json.text(
             "metresFromGreyLevel",
-            "(greyLevel - $SEA_LEVEL_GREY_LEVEL) * metresPerGreyLevel"
+            "(greyLevel - $SEA_LEVEL_GREY_LEVEL) * (greyLevel >= $SEA_LEVEL_GREY_LEVEL ?" +
+                " metresPerGreyLevel : metresPerGreyLevelBelowSeaLevel)"
         )
         return json.finish()
     }
@@ -291,7 +310,7 @@ object DataExports {
 
     private fun common(json: JsonLines, world: WorldMap, layer: DataLayer, appVersion: String) {
         val config = world.config
-        val nations = config.nations
+        val scale = config.scale
         json.text("generator", "Cartogenesis")
         json.text("appVersion", appVersion)
         json.number("sidecarVersion", SIDECAR_VERSION)
@@ -300,12 +319,12 @@ object DataExports {
         json.number("seed", config.seed)
         json.number("widthPixels", world.width)
         json.number("heightPixels", world.height)
-        json.number("worldWidthKm", nations.worldWidthKm)
-        json.number("cellWidthKm", nations.worldWidthKm / world.width)
-        json.number("cellHeightKm", nations.worldWidthKm / 2.0 / world.height)
+        json.number("worldWidthKm", scale.worldWidthKm)
+        json.number("cellWidthKm", scale.cellWidthKm(world.width))
+        json.number("cellHeightKm", scale.cellHeightKm(world.height))
         json.number(
             "squareKilometresPerCell",
-            nations.squareKilometresPerCell(world.width, world.height)
+            scale.squareKilometresPerCell(world.width, world.height)
         )
     }
 }

@@ -2,6 +2,165 @@ package com.cartogenesis.worldgen.model
 
 import kotlinx.serialization.Serializable
 
+/**
+ * How big the world is, and how long a round of erosion lasts: the only place a physical unit is
+ * declared.
+ *
+ * Every stage that needs metres, kilometres or years reads them from here and converts to the grid
+ * where it uses them. Nothing else in the pipeline may hold a metre of its own — before this
+ * section existed, one unit of land elevation was 6,000 m in the climate and about 8,000 m in the
+ * sea-level and erosion constants, and the sea had no depth at all, so a hypsometric curve had to
+ * carry the land's ruler past the shoreline. `UnitsTest` is what keeps that from coming back.
+ *
+ * The vertical range is two numbers rather than one because the shoreline is where the map's two
+ * halves meet: [SeaLevelResult.relativeElevation] runs 0..1 from the shoreline to the highest land
+ * and -1..0 from the shoreline to the deepest floor, each side normalised against its own range.
+ * So the ruler is piecewise, with a knot at zero, and [metresAtRelativeElevation] is the whole of
+ * it.
+ */
+@Serializable
+data class WorldScale(
+    /**
+     * How wide the world is taken to be, which is what turns cells into kilometres and an area.
+     *
+     * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
+     * longitude against 180 of latitude and is twice as wide as it is tall — hence
+     * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
+     * Earth's equator is 40,075 km; 12,000 km is a smaller world, and the one every knob in this
+     * file is calibrated against.
+     */
+    val worldWidthKm: Double = 12_000.0,
+    /**
+     * The altitude of the highest land, in metres: the top of the land's half of the ruler.
+     *
+     * A cell mean and not a summit. A cell of the default 512 grid is 23 km by 12 km, and no cell
+     * that size holds Everest's 8,849 m — a summit is a point. The highest ground a cell this
+     * coarse can hold is a plateau: Tibet's interior averages 5,023 m (Fielding, Isacks, Barazangi
+     * & Duncan, *How flat is Tibet?*, Geology 22, 1994) and the Karakoram-Himalaya cells above it
+     * a little more, so 6,000 m is where a 23 km cell tops out.
+     *
+     * This is the figure the climate has always used for the lapse rate, and choosing it as the one
+     * ruler is why every temperature on the map is where it was. The 8 km the sea-level and erosion
+     * constants assumed was Everest, which is to say a summit; see `REALISM_PLAN.md`, S1.
+     */
+    val highestLandMetres: Float = 6_000f,
+    /**
+     * The depth of the deepest sea floor, in metres: the bottom of the sea's half of the ruler.
+     *
+     * A cell mean on the same terms, but a trench survives a cell mean far better than a summit
+     * does, because a trench is a line where a peak is a point: the Mariana axis holds below 10 km
+     * for hundreds of kilometres along strike, so a cell laid along it loses little of the
+     * Challenger Deep's 10,935 m. Ten kilometres is that figure less the cell's share of the trench
+     * walls.
+     *
+     * Before this existed the sea had no depth: below the shoreline `relativeElevation` was
+     * normalised to whatever the deepest cell happened to be, so the only way to read a depth in
+     * metres was to carry the land's ruler downward, which put the deepest floor exactly as far
+     * below the water as the highest summit stood above it.
+     */
+    val deepestOceanMetres: Float = 10_000f,
+    /**
+     * How long one hydraulic round stands for, in years.
+     *
+     * Derived rather than chosen, which is why it is not a round number. Stream-power incision is
+     * `E = K * A^m * S^n` with m near 0.5 and n near 1, and K in m^(1-2m)/yr — for bedrock rivers
+     * 10^-6 to 10^-5 (Whipple & Tucker, *Dynamics of the stream-power river incision model*, JGR
+     * 104, 1999; Lague, *The stream power river incision model*, ESPL 39, 2014, for the range
+     * across lithologies). Fix K at the bottom of that band, in
+     * [ErosionConfig.bedrockErodibilityPerYear], and the time step is whatever makes a round remove
+     * what a round removes today: see [ErosionConfig.bedrockErodibilityPerYear] for the arithmetic.
+     *
+     * Twelve rounds of it is 4.0 million years, which is the right order for the time a mountain
+     * belt takes to reach a steady state between uplift and erosion, and a reassuring answer to a
+     * question the generator could not previously be asked.
+     */
+    val yearsPerHydraulicRound: Double = 336_474.0
+) {
+
+    /**
+     * The altitude, in metres, of a **land** cell standing at [relativeElevation].
+     *
+     * The land's half of the ruler. A land cell can stand below the waterline — ice carves troughs
+     * into ground the coastline has already been drawn around, and a drowned basin's outlet is cut
+     * below it — and such a cell keeps the land's scale rather than crossing to the sea's, because
+     * which half a cell belongs to is a question about `SeaLevelResult.isLand` and not about the
+     * sign of a float.
+     */
+    fun metresAboveShoreline(relativeElevation: Float): Float =
+        relativeElevation * highestLandMetres
+
+    /** The altitude, in metres and so negative, of a **water** cell at [relativeElevation]. */
+    fun metresBelowShoreline(relativeElevation: Float): Float =
+        relativeElevation * deepestOceanMetres
+
+    /**
+     * The altitude in metres of a cell whose side of the shoreline the caller does not know, read
+     * off whichever half of the ruler the sign points at.
+     *
+     * For converting a *constant* rather than a cell: a depth written as a negative number of
+     * metres, or a height as a positive one, lands on the right half without the caller saying so.
+     * A stage walking a grid should use [metresAboveShoreline] or [metresBelowShoreline] and let
+     * `isLand` decide, for the reason the first of those gives.
+     */
+    fun metresAtRelativeElevation(relativeElevation: Float): Float =
+        if (relativeElevation >= 0f) metresAboveShoreline(relativeElevation)
+        else metresBelowShoreline(relativeElevation)
+
+    /** [metres] of altitude as a share of the land's relief above the shoreline. */
+    fun reliefShareOfMetres(metres: Float): Float = metres / highestLandMetres
+
+    /** [metres] of depth as a share of the sea's own range below the shoreline. */
+    fun depthShareOfMetres(metres: Float): Float = metres / deepestOceanMetres
+
+    /**
+     * The metres one unit of the *raw* height field is worth, which is the whole world's relief.
+     *
+     * The field the terrain and erosion stages work in is normalised to 0..1 between the deepest
+     * floor and the highest land, so its span is by construction the two figures above added
+     * together. This is the ruler a stage has to use when it is working before the shoreline
+     * exists — the thermal sweeps and the stream-power incision both do — and it agrees with
+     * [metresAtRelativeElevation] exactly when the shoreline sits at
+     * `deepestOceanMetres / reliefSpanMetres` of the field. It does not sit exactly there: the
+     * shoreline is a percentile of the cells rather than of the range, so the two rulers differ by
+     * however far the world's own hypsometry is from that. `UnitsTest` measures the difference and
+     * holds it inside a stated factor; closing it needs an absolute vertical scale, which is S2's
+     * uplift and isostasy.
+     */
+    val reliefSpanMetres: Float get() = highestLandMetres + deepestOceanMetres
+
+    /** How wide one cell is, in kilometres, on a grid [cellsAcross] cells wide. */
+    fun cellWidthKm(cellsAcross: Int): Double = worldWidthKm / cellsAcross
+
+    /** How tall one cell is, in kilometres, on a grid [cellsDown] cells tall. */
+    fun cellHeightKm(cellsDown: Int): Double =
+        worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH / cellsDown
+
+    /** How much ground one cell stands for, which is what turns a cell count into an area. */
+    fun squareKilometresPerCell(cellsAcross: Int, cellsDown: Int): Double =
+        cellWidthKm(cellsAcross) * cellHeightKm(cellsDown)
+
+    /**
+     * [kilometres] as a count of cells across a grid [cellsAcross] cells wide.
+     *
+     * This is the conversion that retired [WorldGenConfig.atResolution] for every reach, radius and
+     * width in the pipeline: a length on the ground is more cells on a finer grid, and saying so
+     * once here is arithmetic where carrying it by hand through a rescaling function was a contract.
+     */
+    fun cellsAcrossFor(kilometres: Double, cellsAcross: Int): Float =
+        (kilometres * cellsAcross / worldWidthKm).toFloat()
+
+    /** The whole world's surface in square kilometres, land and sea alike. */
+    val worldAreaKm2: Double get() = worldWidthKm * worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
+
+    companion object {
+        /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
+        const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
+
+        /** Metres in a kilometre, so no stage has to write the conversion out. */
+        const val METRES_PER_KM = 1_000f
+    }
+}
+
 /** Base terrain: the random gradient ("normal map") field that gets integrated into elevation. */
 @Serializable
 data class TerrainConfig(
@@ -513,8 +672,6 @@ data class SeaConfig(
 data class ClimateConfig(
     val equatorTemperatureC: Float = 32f,
     val poleTemperatureC: Float = -28f,
-    /** Metres of altitude represented by the full 0..1 land elevation range. */
-    val maxAltitudeMetres: Float = 6000f,
     /** Temperature drop per kilometre of altitude, in C. */
     val lapseRateCPerKm: Float = 6.5f,
     /**
@@ -1489,28 +1646,8 @@ data class NationsConfig(
      */
     val schismChance: Float = 0.3f,
     /** People per square kilometre of fully arable land. */
-    val peoplePerArableKm2: Double = 38.0,
-    /** How wide the world is taken to be, which is what turns cells into an area. */
-    val worldWidthKm: Double = 12_000.0
-) {
-    /**
-     * How much ground one cell stands for, which is what turns a cell count into a population.
-     *
-     * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
-     * longitude against 180 of latitude and is twice as wide as it is tall — hence
-     * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
-     */
-    fun squareKilometresPerCell(width: Int, height: Int): Double {
-        val cellWidthKm = worldWidthKm / width
-        val cellHeightKm = worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH / height
-        return cellWidthKm * cellHeightKm
-    }
-
-    companion object {
-        /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
-        const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
-    }
-}
+    val peoplePerArableKm2: Double = 38.0
+)
 
 /** Monster lairs, ruins, hazards and the like, scattered through the wild places. */
 @Serializable
@@ -1568,6 +1705,14 @@ data class WorldGenConfig(
     val seed: Long = 1L,
     val width: Int = 512,
     val height: Int = 512,
+    /**
+     * The world's physical size and the time a hydraulic round stands for.
+     *
+     * Beside the grid rather than inside a stage's own section, because it is what the grid *means*
+     * and every stage from erosion onward reads it. [atResolution] does not touch it: how many
+     * cells the world is cut into says nothing about how wide the world is.
+     */
+    val scale: WorldScale = WorldScale(),
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
     val erosion: ErosionConfig = ErosionConfig(),
@@ -1588,6 +1733,22 @@ data class WorldGenConfig(
             "width/height must be powers of two for the FFT-based height integration (got $width x $height)"
         }
     }
+
+    /** How wide one cell of this grid is, in kilometres. */
+    val cellWidthKm: Double get() = scale.cellWidthKm(width)
+
+    /** How tall one cell of this grid is, in kilometres. Not the same as [cellWidthKm]. */
+    val cellHeightKm: Double get() = scale.cellHeightKm(height)
+
+    /** How much ground one cell of this grid stands for, in square kilometres. */
+    val squareKilometresPerCell: Double get() = scale.squareKilometresPerCell(width, height)
+
+    /** [kilometres] on the ground as a count of cells of this grid. */
+    fun cellsFor(kilometres: Double): Float = scale.cellsAcrossFor(kilometres, width)
+
+    /** [kilometres] on the ground as a whole number of cells, never fewer than [atLeast]. */
+    fun wholeCellsFor(kilometres: Double, atLeast: Int = 1): Int =
+        kotlin.math.round(cellsFor(kilometres)).toInt().coerceAtLeast(atLeast)
 
     /**
      * Re-targets the same world at a different grid size — used by HD export.

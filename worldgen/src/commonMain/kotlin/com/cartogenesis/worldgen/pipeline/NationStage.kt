@@ -664,8 +664,7 @@ object NationStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val drawableRiverFlow = drawableRiverFlow(sea, climate)
-        val squareKmPerCell =
-            config.nations.squareKilometresPerCell(cellsAcross, cellsDown)
+        val squareKmPerCell = config.squareKilometresPerCell
 
         // Resources discovered near a realm are folded in later by the landmark stage; realms
         // start from what their own land yields.

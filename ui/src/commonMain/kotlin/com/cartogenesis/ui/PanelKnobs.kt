@@ -394,6 +394,21 @@ internal object Knobs {
     )
 
     /**
+     * Which light the relief is shaded by: off is the sky, on is one lamp in the north-west.
+     *
+     * The lamp is what every map here was drawn under before the sky model, and it is kept because
+     * a reader may prefer the harder, more familiar picture it makes. Written the way round it is —
+     * a switch that turns the older behaviour *on* — so that leaving every control alone gives the
+     * drawing the application means to make.
+     */
+    val singleLamp = Mark(
+        section = PanelSection.CARTOGRAPHY,
+        label = "Single-lamp relief",
+        read = { it.singleLamp },
+        write = { options, on -> options.copy(singleLamp = on) }
+    )
+
+    /**
      * The one control here that the old panel did not have at all. [RenderOptions.showCoastline]
      * has existed since the rasterizer did and was reachable only by editing code, which for a
      * line that is drawn on every map of every style is an odd thing to have hidden.
@@ -446,7 +461,7 @@ internal object Knobs {
         seasonalTilt, rainShadow, ice,
         rivers, lakes, dryBasins,
         realms, wilderness, borders,
-        hillshade, coastline, graticule,
+        hillshade, singleLamp, coastline, graticule,
         landmarkCount, landmarks
     )
 

@@ -13,12 +13,14 @@ import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
 /**
- * What the engraved style costs to draw, at export sizes, on each path.
+ * What a style costs to draw, at export sizes, on each path.
  *
  * The engraving is more arithmetic than the hatch it replaced — a distance field over the whole
  * grid, and nine lattice cells asked per land pixel instead of one modulo — so the question is how
  * much more. Atlas is measured beside it as the same machine's baseline, since the raster's absolute
- * speed depends on the device and the comparison does not.
+ * speed depends on the device and the comparison does not, and twice: once under the sky model,
+ * which asks the terrain twenty-four more questions a land pixel for its horizon, and once under
+ * the single lamp, which is what the raster cost before that.
  *
  * Off unless asked for, like the rest of the benchmarks here:
  *
@@ -60,9 +62,12 @@ class EngravedRasterBenchmarkTest {
         if (gpu == null) println("ENGRAVED GPU unavailable here: ${found.unavailableBecause}")
         else println("ENGRAVED GPU device: ${gpu.name}")
 
-        listOf(MapStyle.PEN_AND_INK, MapStyle.ATLAS).forEach { style ->
-            val options = RenderOptions(style = style)
-
+        val cases = listOf(
+            "Pen and ink" to RenderOptions(style = MapStyle.PEN_AND_INK),
+            "Atlas under the sky" to RenderOptions(style = MapStyle.ATLAS),
+            "Atlas under one lamp" to RenderOptions(style = MapStyle.ATLAS, singleLamp = true)
+        )
+        cases.forEach { (label, options) ->
             // Warm the JIT once, then measure. The first raster of a run pays for class loading and
             // for the collector's first look at a buffer this size.
             MapRasterizer.rasterize(world, options)
@@ -79,7 +84,7 @@ class EngravedRasterBenchmarkTest {
             }
 
             println(
-                "ENGRAVED $side ${style.label}: CPU ${cpuMillis}ms, " +
+                "ENGRAVED $side $label: CPU ${cpuMillis}ms, " +
                     "recipe ${recipeMillis}ms + GPU ${gpuMillis}ms"
             )
         }

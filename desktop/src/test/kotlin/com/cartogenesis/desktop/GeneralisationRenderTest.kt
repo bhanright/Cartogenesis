@@ -22,7 +22,7 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 
 /**
- * F14 at the size the author looks at his worlds: both of them, at 2048, generalised two ways.
+ * Generalisation at the size the author looks at his worlds: both worlds, at 2048, two ways.
  *
  * The arithmetic is guarded in `:cartography`'s `GeneralisationTest`, which runs on every merge.
  * What cannot be guarded by a number is whether the picture is *better* — whether the coast reads
@@ -33,7 +33,8 @@ import org.jetbrains.skia.ImageInfo
  * In the audit tier for the reason `ExportAuditTest` and `SeaLevelHistoryAuditTest` are: two 2048
  * worlds is minutes of generation, and none of it is per-merge work.
  *
- * It also measures the one cost F14 adds to every drawing — tracing the shoreline off the land mask
+ * It also measures the one cost generalisation adds to every drawing — tracing the shoreline off
+ * the land mask
  * — against the raster it sits on top of, because rule 8 asks that a per-cell pass state its figure.
  */
 class GeneralisationRenderTest {
@@ -91,7 +92,7 @@ class GeneralisationRenderTest {
                 world = WorldGenerationEngine.generateBlocking(config)
             }
             val map = world!!
-            println("F14 seed $name at $SIZE generated in $generateMs ms")
+            println("GENERALISATION seed $name at $SIZE generated in $generateMs ms")
 
             val plain = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
             val figured = plain.copy(showGraticule = true)
@@ -151,7 +152,7 @@ class GeneralisationRenderTest {
             val atFit = MapRasterizer.overlay(map, plain, MapSheet.onScreen(AT_FIT))
             val zoomedIn = MapRasterizer.overlay(map, plain, MapSheet.onScreen(AT_FOUR_TIMES))
             println(
-                "F14 seed $name at $SIZE: ${atFit.riversDrawn} rivers and " +
+                "GENERALISATION seed $name at $SIZE: ${atFit.riversDrawn} rivers and " +
                     "${atFit.coastline.sumOf { it.size / 2 }} coast vertices at fit, " +
                     "${zoomedIn.riversDrawn} rivers and " +
                     "${zoomedIn.coastline.sumOf { it.size / 2 }} at 4x, " +
@@ -160,7 +161,7 @@ class GeneralisationRenderTest {
             assertTrue(atFit.riversDrawn < zoomedIn.riversDrawn)
         }
 
-        written.forEach { println("F14 CROP $it") }
+        written.forEach { println("GENERALISATION CROP $it") }
     }
 
     /**
@@ -203,7 +204,7 @@ class GeneralisationRenderTest {
         wholeOverlayMs /= 3
 
         println(
-            "F14 at $SIZE: raster $rasterMs ms, shoreline trace $traceMs ms for $vertices " +
+            "GENERALISATION at $SIZE: raster $rasterMs ms, trace $traceMs ms for $vertices " +
                 "vertices, whole overlay (trace, simplify, rivers) $wholeOverlayMs ms"
         )
         assertTrue(
@@ -216,7 +217,7 @@ class GeneralisationRenderTest {
     /**
      * The top-left corner of the [CROP]-square window with the most river in it.
      *
-     * River segments rather than land, because the two things F14 changes about the picture — how
+     * River segments rather than land, because the two things generalisation changes — how
      * many rivers are drawn and how the coast is stroked — both live where the drainage is, and a
      * window full of drainage is a window full of coast as well.
      */
@@ -240,7 +241,9 @@ class GeneralisationRenderTest {
             }
             top += CROP / 4
         }
-        println("F14 crop window at ${at.first}, ${at.second} with $best river segments in it")
+        println(
+            "GENERALISATION crop window at ${at.first}, ${at.second} with $best segments"
+        )
         return at
     }
 

@@ -37,7 +37,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
 /**
- * F8: that the atlas on a phone can be got out of again.
+ * That the atlas on a phone can be got out of again.
  *
  * William opened it on his phone against 2.0.0 and could not close it: "it opens up an atlas menu
  * that becomes hidden by the top transparent menu screen and isn't navigable so it's impossible to
@@ -93,7 +93,7 @@ class PhoneAtlasTest {
             back.assertIsDisplayed()
             val bounds = back.fetchSemanticsNode().boundsInRoot
             println(
-                "F8 Map button at ${bounds.left}, ${bounds.top} to ${bounds.right}, " +
+                "PHONE Map button at ${bounds.left}, ${bounds.top} to ${bounds.right}, " +
                     "${bounds.bottom} in a ${PHONE_WIDTH}x$PHONE_HEIGHT viewport"
             )
             assertTrue(
@@ -103,7 +103,7 @@ class PhoneAtlasTest {
             )
 
             val strips = onAllNodesWithContentDescription(MAP_TOOLBAR).fetchSemanticsNodes()
-            println("F8 map toolbars drawn over the atlas: ${strips.size}")
+            println("PHONE map toolbars drawn over the atlas: ${strips.size}")
             assertEquals(
                 0,
                 strips.size,
@@ -173,7 +173,7 @@ class PhoneAtlasTest {
     }
 
     /**
-     * The wide arrangement's own version of the same question, which F8 expected to find already
+     * The wide arrangement's own version of the same question, which was expected to be already
      * answered: the header there is always on screen, so "Show map" is never hidden, and the strips
      * are already withheld from anything that is not the map. Written down because "we checked"
      * is worth less than a test that fails if somebody stops it being true.
@@ -226,7 +226,7 @@ class PhoneAtlasTest {
                 if (ratio < LEGIBLE) illegible += "${choice.name} in $tone at ${ratio.round()}:1"
             }
         }
-        println("F8 library heading contrast $measured")
+        println("PHONE library heading contrast $measured")
         assertTrue(
             illegible.isEmpty(),
             "the library's heading is below $LEGIBLE:1 against its own ground: $illegible"
@@ -250,7 +250,7 @@ class PhoneAtlasTest {
             measured[choice.name] = ratio.round()
             if (ratio < LEGIBLE) illegible += "${choice.name} at ${ratio.round()}:1"
         }
-        println("F8 realm page contrast $measured")
+        println("PHONE realm page contrast $measured")
         assertTrue(
             illegible.isEmpty(),
             "a realm's page is below $LEGIBLE:1 against its own ground: $illegible"
@@ -315,7 +315,7 @@ class PhoneAtlasTest {
     }
 
     /**
-     * F14 on a phone: the graticule can be turned on from the sheet, and it reaches the map.
+     * The graticule on a phone: it can be turned on from the sheet, and it reaches the map.
      *
      * The toggle is in the Cartography section, which rolls up like every other, so the route is
      * the reader's own: pull the sheet up, generate, unroll Cartography, flip Graticule, put the
@@ -323,7 +323,7 @@ class PhoneAtlasTest {
      * is reachable at 390 dp, and that flipping it changes the picture rather than only the state —
      * plus the third, that the legend prints the scale the sheet is at.
      *
-     * The shot is written out because the graticule is the one thing in F14 whose worth is a matter
+     * The shot is written out because the graticule is the one thing here whose worth is a matter
      * of looking: whether ten degrees is fine enough to place a coast by and coarse enough not to
      * bury one, at the size a phone shows a whole world.
      */
@@ -371,14 +371,14 @@ class PhoneAtlasTest {
             File(dir, "f14-phone-graticule.png").writeBytes(figured.png)
 
             println(
-                "F14 phone at ${PHONE_WIDTH}x$PHONE_HEIGHT: plain ${plain.fingerprint}, " +
+                "PHONE graticule at ${PHONE_WIDTH}x$PHONE_HEIGHT: plain ${plain.fingerprint}, " +
                     "with the graticule ${figured.fingerprint}, written to ${dir.absolutePath}"
             )
             assertTrue(
                 figured.fingerprint != plain.fingerprint,
                 "turning the graticule on changed nothing on the phone's screen"
             )
-            // And the legend says what scale the sheet is at, which is the other half of F14.
+            // And the legend says what scale the sheet is at, which is the other half of it.
             assertTrue(
                 onAllNodesWithText("km per pixel", substring = true).fetchSemanticsNodes()
                     .isNotEmpty(),
@@ -459,7 +459,7 @@ class PhoneAtlasTest {
          */
         val REALM_ROW = hasText(" · ", substring = true) and hasClickAction()
 
-        /** An iPhone 14's viewport in CSS pixels, which is the size F5 was drawn against. */
+        /** An iPhone 14's viewport in CSS pixels: the size the compact arrangement is drawn for. */
         const val PHONE_WIDTH = 390
         const val PHONE_HEIGHT = 844
         const val WIDE_WIDTH = 1440

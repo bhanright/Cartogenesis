@@ -41,7 +41,7 @@ internal open class FakePlatform(
     /** Every settings document that has been written, in order. */
     val written = mutableListOf<String>()
 
-    /** Every URL the application has asked for. Empty is the assertion F4 cares about most. */
+    /** Every URL the application has asked for. Empty is the assertion that matters most. */
     val fetched = mutableListOf<String>()
 
     val links = mutableListOf<String>()

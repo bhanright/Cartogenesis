@@ -40,11 +40,11 @@ class RiverWidthTest {
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
 
-        /** F15's seeds for the mouth: William's own, and the four the audit standardised on. */
+        /** The seeds for the mouth: William's own, and the four the audit standardised on. */
         val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
 
         /**
-         * F10's full pen, in output pixels, whatever the size of the sheet.
+         * The full pen as a constant, in output pixels, whatever the size of the sheet.
          *
          * Kept as the control the pen guard is run against, for the reason [supersededPen] is
          * kept: a rule that has been replaced is the cheapest proof that its replacement can be
@@ -185,8 +185,8 @@ class RiverWidthTest {
      * How many times the widest drawn river beats the narrowest is a property of the *sheet* now,
      * not a bar of its own.
      *
-     * F10 held that ratio at four, which separated "these vary" from "these are alike" while the
-     * pen was five pixels wide whatever the size of the map. Since F15 the full pen is 0.24% of the
+     * That ratio was held at four, which separated "these vary" from "these are alike" while the
+     * pen was five pixels wide whatever the size of the map. The full pen is now 0.24% of the
      * width and the hairline is still 0.8 px, so the nib spans 1.5x at 512, 3.1x at 1024, 6.1x at
      * 2048 and 12.3x at 4096: a small sheet cannot show a trunk six times a headwater, because the
      * headwater is already the finest mark a nib leaves. What is still worth asserting is that a
@@ -294,7 +294,7 @@ class RiverWidthTest {
             )
             // One in five hundred, and the figure is about the flow graph rather than the pen.
             // A thousandth was written when seed 1234's drawn network ran to more steps than it
-            // does; S1's terrain leaves it 2517, so a thousandth is two steps and the graph's own
+            // does; this terrain leaves it 2517, so a thousandth is two steps and the graph's own
             // inconsistent cells are three. Measured over the three seeds the counts are 0, 0 and
             // 3, which is the handful the paragraph above describes and not a rate at all — what
             // holds the pen to account is `againstTheWater`, which is zero on every seed.
@@ -365,7 +365,8 @@ class RiverWidthTest {
      *
      * The world is regenerated at the export's size rather than upscaled, so the two renders share
      * no cell and cannot be compared pixel for pixel; what has to agree is the nib, which is the
-     * span of stroke widths the overlay asks for. F10 held that span fixed in output pixels, which
+     * span of stroke widths the overlay asks for. A constant pen holds that span fixed in output
+     * pixels, which
      * is the rule this replaces: the same country at 1024 got the same five-pixel trunk it got at
      * 2048, twice the weight of ink against half as much map.
      */
@@ -402,7 +403,7 @@ class RiverWidthTest {
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"
         )
-        // F10's pen was a constant: the same stroke on both sheets, so it fails the line above.
+        // A constant pen is the same stroke on both sheets, so it fails the line above.
         val supersededAt512 = SUPERSEDED_FULL_PIXELS
         val supersededAt1024 = SUPERSEDED_FULL_PIXELS
         assertTrue(
@@ -410,7 +411,7 @@ class RiverWidthTest {
             "the superseded pen now doubles with the sheet, so this guard has stopped discriminating"
         )
         println(
-            "RIVERWIDTH full pen %.2f px at 512, %.2f px at 1024, against F10's constant %.2f px"
+            "RIVERWIDTH full pen %.2f px at 512, %.2f px at 1024, against a constant %.2f px"
                 .format(spans[0].second, spans[1].second, SUPERSEDED_FULL_PIXELS)
         )
     }

@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * This records how big each format comes out and what WebP costs in fidelity — the UI makes a
  * claim about that, and a claim about an image format is exactly the sort that should not be
  * taken on trust. The larger exports (2048, 4096 — 4096 is the one that matters: it wants roughly
- * 2GB) moved to `ExportAuditTest` in T1, so this stays a fast per-merge smoke check; the audit
+ * 2GB) moved to `ExportAuditTest`, so this stays a fast per-merge smoke check; the audit
  * tier still proves the sizes the app actually ships.
  */
 class ExportSmokeTest {
@@ -38,7 +38,7 @@ class ExportSmokeTest {
     /**
      * The sizes this test renders are the sizes the interface offers, and no more.
      *
-     * 8192 is offered as a disabled chip because it does not complete: G2 measured it exhausting a
+     * 8192 is offered as a disabled chip because it does not complete: it exhausts a
      * 10 GB heap inside the generator after about nineteen minutes, before a pixel is drawn. The
      * ceiling lives on the platform so that the build which fixes the memory raises it in one
      * place — and this is the assertion that will fail, correctly, when it does, so that this test

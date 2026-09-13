@@ -19,11 +19,12 @@ import kotlin.test.assertTrue
  * Every export the desktop offers, at the two sizes it offers them at.
  *
  * 4096 is the one that matters: it wants roughly 2GB, and generating a world at that size is
- * minutes of work before anything is drawn. Split out of `ExportSmokeTest` in T1 so the per-merge
+ * minutes of work before anything is drawn. Split out of `ExportSmokeTest` so the per-merge
  * suite keeps a fast 1024 export as its smoke check while this — the on-demand / nightly audit
  * tier — still proves the sizes the app actually ships.
  *
- * One world per size, and the six exports measured from it. Until F12 this ran the whole pipeline
+ * One world per size, and the six exports measured from it. Before the data exports existed
+ * this ran the whole pipeline
  * again per export, which was affordable when there was one export and is not now that there are
  * six: at 4096 that would be six generations of two hundred seconds apiece to measure six encodes
  * of a few. Generation is timed and reported on its own line, so the figure a reader of the report

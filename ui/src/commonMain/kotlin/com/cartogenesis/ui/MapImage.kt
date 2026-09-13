@@ -87,22 +87,25 @@ object MapImage {
         pixels: IntArray,
         sheet: MapSheet = MapSheet.SHEET
     ): Bitmap {
-        val w = world.width
-        val h = world.height
-        require(pixels.size == w * h) { "raster is ${pixels.size} pixels, not ${w * h}" }
+        val widthPixels = world.width
+        val heightPixels = world.height
+        val wanted = widthPixels * heightPixels
+        require(pixels.size == wanted) { "raster is ${pixels.size} pixels, not $wanted" }
 
-        val bytes = ByteArray(w * h * 4)
-        for (i in pixels.indices) {
-            val argb = pixels[i]
-            val o = i * 4
-            bytes[o] = (argb and 0xFF).toByte()             // B
-            bytes[o + 1] = ((argb shr 8) and 0xFF).toByte()  // G
-            bytes[o + 2] = ((argb shr 16) and 0xFF).toByte() // R
-            bytes[o + 3] = ((argb shr 24) and 0xFF).toByte() // A
+        val bytes = ByteArray(wanted * BYTES_PER_PIXEL)
+        for (pixel in pixels.indices) {
+            val argb = pixels[pixel]
+            val at = pixel * BYTES_PER_PIXEL
+            bytes[at] = (argb and 0xFF).toByte()             // B
+            bytes[at + 1] = ((argb shr 8) and 0xFF).toByte()  // G
+            bytes[at + 2] = ((argb shr 16) and 0xFF).toByte() // R
+            bytes[at + 3] = ((argb shr 24) and 0xFF).toByte() // A
         }
 
         val bitmap = Bitmap()
-        bitmap.allocPixels(ImageInfo.makeS32(w, h, ColorAlphaType.PREMUL))
+        bitmap.allocPixels(
+            ImageInfo.makeS32(widthPixels, heightPixels, ColorAlphaType.PREMUL)
+        )
         bitmap.installPixels(bytes)
 
         drawOverlay(world, bitmap, options, sheet)
@@ -143,9 +146,9 @@ object MapImage {
                 mode = PaintMode.STROKE
                 strokeCap = PaintStrokeCap.ROUND
             }
-            overlay.rivers.forEach { s ->
-                paint.strokeWidth = s.width
-                canvas.drawLine(s.x0, s.y0, s.x1, s.y1, paint)
+            overlay.rivers.forEach { segment ->
+                paint.strokeWidth = segment.width
+                canvas.drawLine(segment.x0, segment.y0, segment.x1, segment.y1, paint)
             }
         }
 
@@ -156,19 +159,28 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
             }
             overlay.flow.forEach { arrow ->
-                val length = overlay.flowScale * (0.45f + 0.55f * arrow.strength)
-                val alpha = (70 + 150 * arrow.strength).toInt().coerceIn(0, 255)
+                val length = overlay.flowScale *
+                    (SHORTEST_ARROW_SHARE + (1f - SHORTEST_ARROW_SHARE) * arrow.strength)
+                val alpha = (FAINTEST_ARROW_ALPHA + ARROW_ALPHA_RANGE * arrow.strength)
+                    .toInt().coerceIn(0, 255)
                 paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
-                paint.strokeWidth = (overlay.flowScale * 0.15f).coerceAtLeast(1f)
+                paint.strokeWidth =
+                    (overlay.flowScale * ARROW_WIDTH_SHARE).coerceAtLeast(1f)
                 val tipX = arrow.x + arrow.dx * length
                 val tipY = arrow.y + arrow.dy * length
                 canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)
-                val backX = tipX - arrow.dx * length * 0.42f
-                val backY = tipY - arrow.dy * length * 0.42f
-                val barbX = arrow.dy * length * 0.26f
-                val barbY = arrow.dx * length * 0.26f
-                canvas.drawLine(tipX, tipY, backX + barbX, backY - barbY, paint)
-                canvas.drawLine(tipX, tipY, backX - barbX, backY + barbY, paint)
+                // The barbs meet the shaft a little behind the tip and stand out either side of
+                // it, which is a head drawn with two strokes rather than a filled triangle.
+                val barbRootX = tipX - arrow.dx * length * BARB_LENGTH_SHARE
+                val barbRootY = tipY - arrow.dy * length * BARB_LENGTH_SHARE
+                val barbSpreadX = arrow.dy * length * BARB_SPREAD_SHARE
+                val barbSpreadY = arrow.dx * length * BARB_SPREAD_SHARE
+                canvas.drawLine(
+                    tipX, tipY, barbRootX + barbSpreadX, barbRootY - barbSpreadY, paint
+                )
+                canvas.drawLine(
+                    tipX, tipY, barbRootX - barbSpreadX, barbRootY + barbSpreadY, paint
+                )
             }
         }
 
@@ -186,13 +198,17 @@ object MapImage {
 
         overlay.landmarks.forEach { glyph ->
             fill.color = glyph.fill
-            val r = glyph.radius
+            val radius = glyph.radius
             when (glyph.shape) {
                 GlyphShape.TRIANGLE -> {
+                    // Its base is drawn short of the circumscribed circle, so a triangle and a
+                    // diamond of the same radius look the same size rather than the triangle
+                    // looking the larger of the two.
+                    val baseY = glyph.y + radius * TRIANGLE_BASE_SHARE
                     val path = Path().apply {
-                        moveTo(glyph.x, glyph.y - r)
-                        lineTo(glyph.x + r, glyph.y + r * 0.8f)
-                        lineTo(glyph.x - r, glyph.y + r * 0.8f)
+                        moveTo(glyph.x, glyph.y - radius)
+                        lineTo(glyph.x + radius, baseY)
+                        lineTo(glyph.x - radius, baseY)
                         closePath()
                     }
                     canvas.drawPath(path, fill)
@@ -201,10 +217,10 @@ object MapImage {
 
                 GlyphShape.DIAMOND -> {
                     val path = Path().apply {
-                        moveTo(glyph.x, glyph.y - r)
-                        lineTo(glyph.x + r, glyph.y)
-                        lineTo(glyph.x, glyph.y + r)
-                        lineTo(glyph.x - r, glyph.y)
+                        moveTo(glyph.x, glyph.y - radius)
+                        lineTo(glyph.x + radius, glyph.y)
+                        lineTo(glyph.x, glyph.y + radius)
+                        lineTo(glyph.x - radius, glyph.y)
                         closePath()
                     }
                     canvas.drawPath(path, fill)
@@ -212,14 +228,17 @@ object MapImage {
                 }
 
                 GlyphShape.SQUARE -> {
-                    val rect = Rect(glyph.x - r, glyph.y - r, glyph.x + r, glyph.y + r)
+                    val rect = Rect(
+                        glyph.x - radius, glyph.y - radius,
+                        glyph.x + radius, glyph.y + radius
+                    )
                     canvas.drawRect(rect, fill)
                     canvas.drawRect(rect, outline)
                 }
 
                 GlyphShape.CIRCLE -> {
-                    canvas.drawCircle(glyph.x, glyph.y, r, fill)
-                    canvas.drawCircle(glyph.x, glyph.y, r, outline)
+                    canvas.drawCircle(glyph.x, glyph.y, radius, fill)
+                    canvas.drawCircle(glyph.x, glyph.y, radius, outline)
                 }
             }
         }
@@ -255,14 +274,16 @@ object MapImage {
      * and a bar inked straight onto that would be a dark line on a dark ground.
      */
     private fun drawScaleBar(canvas: Canvas, overlay: MapOverlay, placed: PlacedScaleBar) {
-        val figure = placed.figureHeightPixels
-        val labelWidth = Numerals.widthOf(placed.bar.label, figure)
-        val padding = figure * 0.6f
+        val figureHeight = placed.figureHeightPixels
+        val labelWidth = Numerals.widthOf(placed.bar.label, figureHeight)
+        // Everything about the plate is a share of the figure it has to hold, so the bar keeps its
+        // proportions from a 512 preview to an 8192 sheet.
+        val padding = figureHeight * PLATE_PADDING_SHARE
         val plate = Rect(
             placed.x - padding,
-            placed.y - figure * 2f - padding,
+            placed.y - figureHeight * PLATE_ABOVE_BAR_SHARE - padding,
             placed.x + maxOf(placed.bar.lengthPixels, labelWidth) + padding,
-            placed.y + figure * 0.6f + padding
+            placed.y + figureHeight * PLATE_BELOW_BAR_SHARE + padding
         )
         canvas.drawRect(
             plate,
@@ -282,12 +303,13 @@ object MapImage {
         }
         val right = placed.x + placed.bar.lengthPixels
         canvas.drawLine(placed.x, placed.y, right, placed.y, paint)
-        val tick = figure * 0.45f
+        val tick = figureHeight * TICK_HALF_HEIGHT_SHARE
         canvas.drawLine(placed.x, placed.y - tick, placed.x, placed.y + tick, paint)
         canvas.drawLine(right, placed.y - tick, right, placed.y + tick, paint)
 
         paint.strokeWidth = overlay.graticuleWidth
-        Numerals.strokes(placed.bar.label, placed.x, placed.y - figure * 0.9f, figure)
+        val baselineY = placed.y - figureHeight * LABEL_BASELINE_ABOVE_BAR_SHARE
+        Numerals.strokes(placed.bar.label, placed.x, baselineY, figureHeight)
             .forEach { canvas.drawPath(polyline(it), paint) }
     }
 
@@ -305,4 +327,47 @@ object MapImage {
 
     /** How opaque the scale bar's plate is: enough to read against, not enough to be a hole. */
     private const val PLATE_ALPHA = 0xD0
+
+    /** BGRA, one byte a channel, which is what Skia's S32 bitmap wants. */
+    private const val BYTES_PER_PIXEL = 4
+
+    // ---- The flow arrows, all as shares so they scale with the sheet. ----
+
+    /** How long the weakest arrow is, as a share of the strongest; the rest interpolate. */
+    private const val SHORTEST_ARROW_SHARE = 0.45f
+
+    /** The weakest arrow's ink, of 255: visible as a direction, not as a statement. */
+    private const val FAINTEST_ARROW_ALPHA = 70f
+
+    /** What full strength adds to [FAINTEST_ARROW_ALPHA], stopping short of opaque at 220. */
+    private const val ARROW_ALPHA_RANGE = 150f
+
+    /** The shaft's weight as a share of the arrow's own spacing, so arrows never touch. */
+    private const val ARROW_WIDTH_SHARE = 0.15f
+
+    /** How far back along the shaft the barbs meet it, as a share of the arrow's length. */
+    private const val BARB_LENGTH_SHARE = 0.42f
+
+    /** How far either side of the shaft the barbs stand, as a share of the arrow's length. */
+    private const val BARB_SPREAD_SHARE = 0.26f
+
+    /** A landmark triangle's base, as a share of its radius. See where it is drawn. */
+    private const val TRIANGLE_BASE_SHARE = 0.8f
+
+    // ---- The scale bar's plate, all as shares of the figure height it has to hold. ----
+
+    /** Air between the plate's edge and what it holds. */
+    private const val PLATE_PADDING_SHARE = 0.6f
+
+    /** Room above the bar for the distance written over it, which is one figure plus its lead. */
+    private const val PLATE_ABOVE_BAR_SHARE = 2f
+
+    /** Room below the bar, which only has to clear the ticks. */
+    private const val PLATE_BELOW_BAR_SHARE = 0.6f
+
+    /** Half the height of the tick standing at each end of the bar. */
+    private const val TICK_HALF_HEIGHT_SHARE = 0.45f
+
+    /** Where the distance sits above the bar: clear of the ticks, close enough to belong to it. */
+    private const val LABEL_BASELINE_ABOVE_BAR_SHARE = 0.9f
 }

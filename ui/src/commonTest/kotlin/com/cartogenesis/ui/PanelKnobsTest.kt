@@ -15,9 +15,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The guard F2 asks for: every setting the old panel could reach is still reachable, every knob
- * writes the field it claims to and no other, and the panel left alone still asks for the default
- * world.
+ * Every setting the panel could ever reach is still reachable, every knob writes the field it
+ * claims to and no other, and the panel left alone still asks for the default world.
  *
  * It works by walking [Knobs] — the same list [CartogenesisApp] draws — rather than by driving a
  * composition. That is the point of declaring the panel as data: a knob that is dropped from the
@@ -50,9 +49,9 @@ class PanelKnobsTest {
     /**
      * The graphics-acceleration switch is in the header now, not in World.
      *
-     * It spent F2 under Ocean coverage, where it read as something about the sea. It is not a
-     * setting of the world at all — the same seed makes the same world on either processor — so it
-     * sits with the working resolution, which is the other half of "how is this computed".
+     * Under Ocean coverage it would read as something about the sea. It is not a setting of the
+     * world at all — the same seed makes the same world on either processor — so it sits with the
+     * working resolution, which is the other half of "how is this computed".
      */
     @Test
     fun `where the work runs is in the header, not in World`() {
@@ -266,8 +265,8 @@ class PanelKnobsTest {
     // ---- defaults, and clamping --------------------------------------------------------------
 
     /**
-     * The four settings F2 exposes for the first time must sit at the config's own defaults, or a
-     * reader who touches nothing gets a different world than they got yesterday.
+     * Every knob must sit at the config's own default, or a reader who touches nothing gets a
+     * different world than they got yesterday.
      */
     @Test
     fun `the new knobs read the generator's own defaults`() {
@@ -325,11 +324,11 @@ class PanelKnobsTest {
     // ---- the toolbar over the map, which is where style and view went ------------------------
 
     /**
-     * F3's half of the same guard.
+     * The toolbar's half of the same guard.
      *
-     * Style and view were two of the things the old panel could set, and F3 took them off the
-     * panel. That is exactly the move this test exists to catch, so the coverage does not lapse
-     * because the control moved: it now asks the *toolbar* whether the interface can still reach
+     * Style and view were two of the things the panel could set, and they are on the map now.
+     * A control moving is exactly what would make the coverage above lapse quietly, so it does
+     * not: it now asks the *toolbar* whether the interface can still reach
      * every style and every view, in the same walk-the-declaration way. Deleting a style from
      * `MapChrome.styles`, or having `withStyle` write the view by mistake, fails here.
      */
@@ -353,8 +352,7 @@ class PanelKnobsTest {
     fun `the toolbar offers every style and every view`() {
         assertEquals(MapStyle.entries.toList(), MapChrome.styles)
         assertEquals(MapView.entries.toList(), MapChrome.views)
-        // Eleven since F6 added Colour-blind, which is the eleventh cell in the segmented row
-        // (Mars was the tenth, added by F4).
+        // Eleven cells in the segmented row, Colour-blind being the eleventh and Mars the tenth.
         assertEquals(11, MapChrome.styles.size)
         assertEquals(15, MapChrome.views.size)
     }
@@ -403,8 +401,8 @@ class PanelKnobsTest {
     // ---- the export ceiling -------------------------------------------------------------------
 
     /**
-     * 8192 does not complete on this build: G2 measured it exhausting a 10 GB heap inside the
-     * generator after about nineteen minutes, before a pixel of the map is drawn. So the size that
+     * 8192 does not complete on this build: it exhausts a 10 GB heap inside the generator after
+     * about nineteen minutes, before a pixel of the map is drawn (REALISM_PLAN.md, G2). So the size that
      * reaches the platform can never be 8192 while the ceiling stands at 4096 — not from the
      * button, which is disabled, and not from a preference written by an older build, which is why
      * [Exports.clamp] and not the button is what this test asks.
@@ -458,16 +456,16 @@ class PanelKnobsTest {
     @Test
     fun `the zoom buttons step and clamp, and Fit returns to the whole sheet`() {
         val camera = MapCamera()
-        assertEquals(100, camera.percent)
+        assertEquals(100, camera.zoomPercent)
 
-        camera.step(MapCamera.STEP)
-        assertEquals(115, camera.percent)
-        camera.step(1f / MapCamera.STEP)
-        assertEquals(100, camera.percent)
+        camera.step(MapCamera.ZOOM_STEP)
+        assertEquals(115, camera.zoomPercent)
+        camera.step(1f / MapCamera.ZOOM_STEP)
+        assertEquals(100, camera.zoomPercent)
 
-        repeat(100) { camera.step(MapCamera.STEP) }
+        repeat(100) { camera.step(MapCamera.ZOOM_STEP) }
         assertEquals(MapCamera.MAX_ZOOM, camera.zoom)
-        repeat(200) { camera.step(1f / MapCamera.STEP) }
+        repeat(200) { camera.step(1f / MapCamera.ZOOM_STEP) }
         assertEquals(MapCamera.MIN_ZOOM, camera.zoom)
 
         camera.about(Offset(120f, 80f), 2f)
@@ -476,7 +474,7 @@ class PanelKnobsTest {
         assertEquals(Offset.Zero, camera.pan)
     }
 
-    // ---- F5: the second arrangement, and what it does and does not lose ----------------------
+    // ---- the compact arrangement, and what it does and does not lose -------------------------
 
     /**
      * Which window gets which arrangement.
@@ -499,7 +497,7 @@ class PanelKnobsTest {
     }
 
     /**
-     * The guard F5 asks for: the sheet on a phone can set everything the 320 dp column can.
+     * The sheet on a phone can set everything the 320 dp column can.
      *
      * [Arrangements] declares the two arrangements as two independently written lists, and the
      * composables draw from those lists — so a control dropped from the compact arrangement is
@@ -540,8 +538,7 @@ class PanelKnobsTest {
         // Three export sizes, whichever of them this build can finish.
         assertEquals(wide.exportSizes, compact.exportSizes)
         // Three picture formats and three data layers, both rows in the sheet as well as in the
-        // column. F12 added JPEG to the first row and the second row entirely, and a phone gets
-        // both: the ceiling decides how large an export may be, not what kinds there are.
+        // column: the ceiling decides how large an export may be, not what kinds there are.
         assertEquals(wide.pictureFormats, compact.pictureFormats)
         assertEquals(wide.dataLayers, compact.dataLayers)
         // Three menus folded into one button, with nothing dropped on the way.
@@ -551,7 +548,7 @@ class PanelKnobsTest {
         assertTrue(MenuCommand.QUIT in compact.commands)
     }
 
-    // ---- F12: the second kind of export --------------------------------------------------------
+    // ---- the data exports, which are the second kind ---------------------------------------------
 
     /**
      * The export row's two lines of chips, against the enums rather than against each other.
@@ -729,14 +726,15 @@ class PanelKnobsTest {
     }
 
     /**
-     * The touch targets are the theme's, and the mouse's are exactly what F1 shipped.
+     * The touch targets are the theme's, and the mouse's are the geometry the controls were
+     * drawn at.
      *
      * The second half of that is what keeps the wide window pixel-for-pixel where it was: every
-     * control that grew under a fingertip reads these numbers, and under a pointer they are the
-     * literals that used to be written into `Controls.kt`.
+     * control that grows under a fingertip reads these numbers, and under a pointer they are the
+     * literals a control would otherwise have written into `Controls.kt`.
      */
     @Test
-    fun `the pointer's touch targets are the numbers F1 drew with`() {
+    fun `the pointer's touch targets are the geometry the controls were drawn at`() {
         assertEquals(26.dp, TouchTargets.POINTER.sliderHeight)
         assertEquals(13.dp, TouchTargets.POINTER.sliderThumb)
         assertEquals(0.dp, TouchTargets.POINTER.minTarget)
@@ -745,6 +743,25 @@ class PanelKnobsTest {
         assertTrue(TouchTargets.TOUCH.sliderHeight > TouchTargets.POINTER.sliderHeight)
         assertTrue(TouchTargets.TOUCH.sliderThumb > TouchTargets.POINTER.sliderThumb)
         assertTrue(TouchTargets.TOUCH.minTarget >= 48.dp)
+    }
+
+    /**
+     * The three dials printed as a percentage are printed against the generator's own defaults.
+     *
+     * Those defaults are copied into `PanelKnobs.kt` so that a `show` lambda need not build a
+     * config on every recomposition, and a copy is a thing that goes stale. 100% has to mean "the
+     * world the generator makes when left alone" or the percentage is worse than the raw number
+     * it replaced.
+     */
+    @Test
+    fun `a dial shown as a percentage reads 100 at the generator's own default`() {
+        val defaults = WorldGenConfig()
+        assertEquals("100%", Knobs.mountainHeight.show(defaults.tectonics.andeanHeight))
+        assertEquals(
+            "100%",
+            Knobs.erosionStrength.show(defaults.erosion.bedrockErodibilityPerYear)
+        )
+        assertEquals("100%", Knobs.rainShadow.show(defaults.climate.orographicStrength))
     }
 
     /** Zooming about a point has to leave that point where it was, or the map slides away. */

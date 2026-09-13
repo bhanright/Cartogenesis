@@ -130,10 +130,10 @@ interface Platform {
      * What the graphics device is actually doing here, for the line of small print under the
      * switch. [device] is [accelerator]'s own name.
      *
-     * The two front ends no longer do the same amount on it, and the panel was telling one of them
-     * a smaller truth than it was owed: since G2 the desktop draws the export raster on the device
-     * as well as running the erosion sweeps, while the browser's WGSL raster has not been written,
-     * so there it really is erosion alone. A sentence that says "erosion" everywhere understates
+     * The two front ends do not do the same amount on it, and one sentence for both would tell
+     * one of them a smaller truth than it is owed: the desktop draws the export raster on the
+     * device as well as running the erosion sweeps, while the browser's WGSL raster has not been
+     * written, so there it really is erosion alone. A sentence that says "erosion" everywhere understates
      * the desktop; one that says "erosion and export rendering" everywhere is simply wrong in a
      * browser. So the host answers, which is what this seam is for. The default is the desktop's,
      * because a `Platform` that has not thought about the question is one with a real graphics API
@@ -162,18 +162,18 @@ interface Platform {
      *
      * `(pointer: coarse)` in a browser, and false on the desktop. It decides two things: the
      * arrangement (a tablet in landscape is wide enough for the panel and still cannot be driven
-     * with a 13 dp slider thumb — see [Layouts.arrangement]) and the size of every touch target in
-     * the theme.
+     * with a 13 dp slider thumb — see [Layouts.shape]) and the size of every touch target in the
+     * theme.
      */
     val coarsePointer: Boolean get() = false
 
     /**
      * The largest export this build can actually finish.
      *
-     * Not a taste: 8192 does not complete. G2 measured it exhausting a 10 GB heap inside the
-     * generator after about nineteen minutes, before a single pixel of the map is drawn — so the
-     * chip for it is offered disabled rather than removed, and any size above this one falls back
-     * to it. It is a value on the platform, and not a constant in the panel, so that the build
+     * Not a taste: 8192 does not complete. It exhausts a 10 GB heap inside the generator after
+     * about nineteen minutes, before a single pixel of the map is drawn — so the chip for it is
+     * offered disabled rather than removed, and any size above this one falls back to it. See
+     * REALISM_PLAN.md for the measurement. It is a value on the platform, and not a constant in the panel, so that the build
      * which fixes the memory can raise the ceiling without the interface being touched: the export
      * row draws whatever this says.
      *
@@ -215,7 +215,7 @@ interface Platform {
         layer: DataLayer
     ): ExportOutcome? = null
 
-    // ---- F4: what a menu strip, a settings file and an update check need from the host. ----
+    // ---- What a menu strip, a settings file and an update check need from the host. ----
 
     /**
      * Where this platform keeps the settings, and how it reads and writes them.

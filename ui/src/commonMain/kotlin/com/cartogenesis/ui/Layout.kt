@@ -40,7 +40,7 @@ internal object Layouts {
      * 320 dp of panel, 10 dp of gutter either side and the map's own toolbar — whose narrowest
      * useful form is still the style menu, the view menu and the small print — need about 800 dp
      * between them before the map is the larger half of the window. Below that the map is a strip,
-     * and a map that is a strip is not the instrument F3 made it.
+     * and a map that is a strip is no longer an instrument.
      */
     const val COMPACT_BELOW_DP: Float = 800f
 
@@ -72,8 +72,8 @@ internal val LocalWindowShape = staticCompositionLocalOf { WindowShape.WIDE }
  *
  * Provided by [CartogenesisTheme] and read by [Slider], [Switch] and the two glyph buttons, so that
  * making the controls touchable is one change to the theme rather than an edit to every control —
- * which is the same argument `Controls.kt` is written around. [POINTER] is exactly what F1 shipped,
- * to the pixel, so a mouse-driven window is not touched by any of this.
+ * which is the same argument `Controls.kt` is written around. [POINTER] is the geometry a
+ * mouse-driven window has always been drawn at, to the pixel, so nothing here touches one.
  */
 internal class TouchTargets(
     val sliderHeight: Dp,
@@ -84,7 +84,7 @@ internal class TouchTargets(
     val extraRowPadding: Dp
 ) {
     companion object {
-        /** A mouse. The numbers F1 chose, unchanged. */
+        /** A mouse: the geometry the controls were drawn at, unchanged. */
         val POINTER = TouchTargets(
             sliderHeight = 26.dp,
             sliderThumb = 13.dp,
@@ -124,7 +124,7 @@ internal class Reachable(
     val styles: List<MapStyle>,
     val views: List<MapView>,
     val exportSizes: List<Int>,
-    /** The picture formats the export row offers: PNG, WebP and, since F12, JPEG. */
+    /** The picture formats the export row offers: PNG, WebP and JPEG. */
     val pictureFormats: List<ExportFormat>,
     /** The data layers beside them: the heightmap and the two index maps. */
     val dataLayers: List<DataLayer>,
@@ -158,9 +158,9 @@ internal object Arrangements {
         else Knobs.inSection(section)
 
     /**
-     * The wide window, which is what F1 to F4 built: a 320 dp panel column, a segmented row of
-     * every style over the map, the views behind a menu, and the legend carrying the cartouche,
-     * the zoom readout, its two steps and Fit.
+     * The wide window: a 320 dp panel column, a segmented row of every style over the map, the
+     * views behind a menu, and the legend carrying the cartouche, the zoom readout, its two
+     * steps and Fit.
      */
     private fun wide(platform: Platform) = Reachable(
         knobs = headerKnobs(platform) + PANEL_SECTIONS.flatMap { Knobs.inSection(it) },

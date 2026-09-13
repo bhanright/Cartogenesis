@@ -12,6 +12,11 @@ import kotlin.math.abs
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /**
  * What the graphics card buys, and what it costs.
@@ -97,6 +102,79 @@ class GpuErosionTest {
             "GPU terrain diverged from the CPU by $worst at its worst cell (mean $mean), which is " +
                 "more than one chaotic decision"
         )
+    }
+
+    /**
+     * F11: that a run stopped part-way leaves the context fit for the next one.
+     *
+     * A batch of sweeps is one blocking call on the graphics thread, so a stop can only be answered
+     * between two of them — which is what [GpuErosion] now looks for. The risk that buys is the one
+     * this measures: three grid-sized buffers are allocated per batch, and a run that walked out
+     * without freeing them would leave the context a little smaller each time and, sooner or later,
+     * a generation that fails for no reason the reader could name.
+     *
+     * So: erode on the card, stop it part-way, then erode the same terrain again on the same
+     * context and hold the answer to the same tolerance the uninterrupted comparison above uses. A
+     * context that had lost its buffers, or its bindings, could not produce it.
+     *
+     * Shown failing by taking the `ensureActive` out of the hydraulic round loop and the thermal
+     * sweep loop (which is the F11 fix): the stop was then never noticed, the run completed
+     * normally, and the first assertion — that it did not — failed.
+     */
+    @Test
+    fun `a run stopped part-way frees its buffers and the next one still matches the cpu`() {
+        val result = GpuErosion.createOrNull()
+        val gpu = result.accelerator
+        if (gpu == null) {
+            println("GPU unavailable here: ${result.unavailableBecause}")
+            return
+        }
+
+        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+            .atResolution(1024, 1024)
+        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val gpuConfig = config.copy(
+            erosion = config.erosion.copy(acceleration = Acceleration.GPU)
+        )
+        // Warms the driver, and gives the stop below something to be measured against.
+        val warmMs = measureTimeMillis { erodeBlocking(gpuConfig, uplift, gpu) }
+
+        val stopped = runBlocking {
+            val run = async(Dispatchers.Default) {
+                ErosionStage.apply(gpuConfig, uplift, gpu)
+            }
+            // Far enough in to be inside the hydraulic rounds, and well short of the whole run.
+            delay(warmMs / 3)
+            val latency = measureTimeMillis {
+                run.cancel()
+                withTimeout(60_000) { runCatching { run.await() } }
+            }
+            latency
+        }
+        println("GPU a stopped erosion returned $stopped ms after the ask (a full run is $warmMs ms)")
+        assertTrue(
+            stopped < warmMs,
+            "a stopped GPU erosion took ${stopped}ms, as long as the whole run (${warmMs}ms), so " +
+                "nothing noticed the stop"
+        )
+
+        // The same context, immediately afterwards, against the CPU's answer.
+        val onCpu = erodeBlocking(config, uplift).height.data
+        val onGpu = erodeBlocking(gpuConfig, uplift, gpu).height.data
+        var worst = 0f
+        var total = 0.0
+        for (i in onCpu.indices) {
+            val delta = abs(onCpu[i] - onGpu[i])
+            if (delta > worst) worst = delta
+            total += delta.toDouble()
+        }
+        val mean = total / onCpu.size
+        println(
+            "GPU after a stop: mean difference %.6f, worst %.6f (elevation is 0..1)"
+                .format(mean, worst)
+        )
+        assertTrue(mean < 5e-4, "after a stopped run the GPU diverged from the CPU by $mean")
+        assertTrue(worst < 0.05f, "after a stopped run the GPU's worst cell diverged by $worst")
     }
 
     @Test

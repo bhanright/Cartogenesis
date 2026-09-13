@@ -9,6 +9,8 @@ import com.cartogenesis.worldgen.naming.NameKind
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.random.Random
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.Serializable
 
 /** A generated realm. Everything here is a starting point the user is free to overrule. */
@@ -74,13 +76,20 @@ object NationStage {
     /** Scales cost into the sortable integer key the heap uses. */
     private const val COST_SCALE = 64f
 
-    fun generate(
+    suspend fun generate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult,
         rivers: RiverResult,
         ocean: OceanResult
     ): NationResult {
+        /*
+         * Between the sweeps below. Settling realms is the second-longest stage at export sizes and
+         * the last one a reader is likely to be waiting through, so a stop asked for while the
+         * frontiers are being drawn is answered at the next sweep rather than at the end.
+         */
+        suspend fun stopIfAsked() = currentCoroutineContext().ensureActive()
+
         val w = config.width
         val h = config.height
         val cfg = config.nations
@@ -107,6 +116,7 @@ object NationStage {
         val units = BasinPartition.mergeSmall(
             config, sea, banked, (land * cfgN.minBasinShare).toInt().coerceAtLeast(4)
         )
+        stopIfAsked()
         val assignment = BasinRealms.assign(
             config, sea, units, habitability, Random(config.seed * 8191 + 17)
         )
@@ -118,9 +128,11 @@ object NationStage {
         // Wilderness first, enclaves second. Releasing poor ground can cut a realm into pieces,
         // and dissolving enclaves before that happened left the fragments it made behind.
         val capitals = origins.toMutableList()
+        stopIfAsked()
         if (cfgN.wilderness != WildernessMode.CLAIM_ALL_LAND) {
             leaveWilderness(config, sea, habitability, nationId, capitals)
         }
+        stopIfAsked()
         dissolveEnclaves(config, sea, habitability, nationId, capitals)
         checkRealmIds(nationId, capitals.size, "dissolveEnclaves")
         return NationResult(nationId, describe(config, sea, climate, rivers, habitability, nationId, capitals), habitability)
@@ -168,7 +180,7 @@ object NationStage {
      * realm by land, and they stay — that is the difference between an accident and a colony. Nor
      * is the piece holding a realm's capital ever given away, whatever its size.
      */
-    private fun dissolveEnclaves(
+    private suspend fun dissolveEnclaves(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         habitability: FloatField,
@@ -183,6 +195,7 @@ object NationStage {
 
         // Repeated, because giving one pocket away can join two others into a piece worth keeping.
         repeat(3) {
+            currentCoroutineContext().ensureActive()
             val piece = IntArray(w * h) { -1 }
             val members = ArrayList<MutableList<Int>>()
             for (start in 0 until w * h) {

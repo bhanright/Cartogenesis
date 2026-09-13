@@ -13,6 +13,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.system.measureTimeMillis
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 /**
  * Where the time actually goes, per stage and per resolution.
@@ -65,7 +66,9 @@ class StageProfileTest {
                 rivers = RiverStage.generate(config, sea!!, climate!!)
             }
             timings["realms"] = measureTimeMillis {
-                nations = NationStage.generate(config, sea!!, climate!!, rivers!!, ocean!!)
+                nations = runBlocking {
+                    NationStage.generate(config, sea!!, climate!!, rivers!!, ocean!!)
+                }
             }
             timings["landmarks"] = measureTimeMillis {
                 LandmarkStage.generate(config, sea!!, climate!!, rivers!!, plates!!, nations!!)

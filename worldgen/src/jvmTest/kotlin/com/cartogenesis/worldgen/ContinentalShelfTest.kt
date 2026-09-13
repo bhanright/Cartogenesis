@@ -176,7 +176,13 @@ class ContinentalShelfTest {
             if (d <= shelfWidthCells) {
                 nearTotal++
                 if (shallow) nearShallow++
-            } else if (d > 2f * shelfWidthCells) {
+            } else if (d > 2f * shelfWidthCells && world.plates.continentalShare.data[i] < 0.5f) {
+                // Ocean floor, and not the drowned half of a continent. The two are different
+                // things and only since S2 does the model know it: the wedge this class guards is
+                // sediment laid over whatever the crust puts under it, and what the crust puts
+                // under a drowned platform is continental rock standing a hundred metres down for
+                // as far inland as the platform runs. Counting that as "open ocean still shallow"
+                // read 12.9% on seed 1234 against a bar of 10% and was measuring the continent.
                 farTotal++
                 if (shallow) farShallow++
             }

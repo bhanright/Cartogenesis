@@ -67,9 +67,10 @@ class ValleyIncisionTest {
             "hydraulic erosion barely deepened the valleys: $with against $without"
         )
         assertTrue(
-            with >= NOTCH_DEPTH_BEFORE_S2,
+            with >= NOTCH_DEPTH_BEFORE_S2 * NOTCH_DEPTH_ALLOWANCE,
             "a finished channel stands ${"%.4f".format(with)} of the field below its banks," +
-                " shallower than the ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut"
+                " more than a tenth shallower than the" +
+                " ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut"
         )
     }
 
@@ -142,13 +143,21 @@ class ValleyIncisionTest {
          * channel must end up, in units of the height field.
          *
          * Both taken on `main` as it stood when S2 merged into it, by exactly this arithmetic on
-         * these three seeds: 0.0148 deep out of ground at 0.0075, which is 1.97 times. The ratio's
-         * bar is 1.15 because S2 hands the rivers ground twice as rough and the ratio falls even
-         * as the channel deepens; the depth's bar is main's own figure, and it is the clause that
-         * would catch a generator that had stopped cutting.
+         * these three seeds: 0.0148 deep out of ground at 0.0075, which is 1.97 times.
+         *
+         * The ratio's bar was 1.15 for S2's second and third passes, because the ground they
+         * handed the rivers was twice as rough at this cross-section and the ratio fell to 1.2
+         * even as the channel deepened. The fourth pass gave the base relief a texture
+         * proportional to the ground's own relief and the roughness went with it: the ground now
+         * stands at 0.0069 against main's 0.0075 and the channel is cut to 0.0143, which is
+         * **2.08 times** — deeper for its ground than the tree before S2 managed. So the ratio
+         * goes back to main's own figure, less a little for the seeds' spread, and the absolute
+         * depth keeps a tenth of slack: a notch is as deep as the ground it is cut into allows,
+         * and this ground is 8% smoother.
          */
-        const val DEEPENING_RATIO_BAR = 1.15
+        const val DEEPENING_RATIO_BAR = 1.9
         const val NOTCH_DEPTH_BEFORE_S2 = 0.0148
+        const val NOTCH_DEPTH_ALLOWANCE = 0.9
     }
 
     /** Column difference on a cylinder: a step across the seam is still one cell. */

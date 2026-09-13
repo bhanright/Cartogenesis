@@ -673,11 +673,11 @@ class IsostasyTest {
         // uniform rise can is put a *local minimum* between the range it is under and the swell
         // beyond it, which is a moat and a forebulge. So that is what is measured: the lowest bin
         // clear of the belt, and the requirement that the ground comes back up past it.
-        val forelandBins = FIRST_FORELAND_BIN until FLEXURE_BINS
+        val forelandBins = FIRST_FORELAND_BIN..LAST_FORELAND_BIN
         val moatBin = forelandBins.filter { counts[it] > 0 }.minByOrNull { profile[it] }
             ?: FIRST_FORELAND_BIN
         val inTheForeland = profile[moatBin]
-        val beyondTheMoat = (moatBin + 1 until FLEXURE_BINS)
+        val beyondTheMoat = (moatBin + 1..LAST_FORELAND_BIN)
             .filter { counts[it] > 0 }.maxOfOrNull { profile[it] } ?: inTheForeland
         println(
             ("ISOSTASY foreland seed %d: the belt stands %+.0f m higher, the moat is %.0f m below" +
@@ -950,6 +950,23 @@ class IsostasyTest {
          * the Ouachitas - is a few tens of metres against a moat of kilometres.
          */
         const val FIRST_FORELAND_BIN = 3
+
+        /**
+         * The last bin a load can still be felt in, so that the moat is looked for where a moat
+         * can be and not in the far field.
+         *
+         * A load's basin and its peripheral swell lie within about three flexural parameters of it
+         * (Turcotte & Schubert), which at Te 30 km is some 200 km, or nine cells at 512; the
+         * sediment the belt sheds into the moat and the round of rivers that answers each bend
+         * carry it further, and measured on seed 42 the profile peaks at 16-24 cells, troughs at
+         * 32-48 and rises again by 56. Bin 6 is 48 cells, 1,100 km, five times the reach the
+         * closed form gives and comfortably past where the answer is. Beyond it the numbers are
+         * the far field of a filter whose mean has been removed — on seed 42 the ground reads
+         * +0, -50 and +0 m across bins 7, 8 and 9 — and taking the minimum of *those* as the moat
+         * finds a trough with nothing beyond it, which is how this clause failed at S2's fourth
+         * pass without the flexure having changed at all.
+         */
+        const val LAST_FORELAND_BIN = 6
         const val MIN_FOREBULGE_METRES = 2.0
 
         /**

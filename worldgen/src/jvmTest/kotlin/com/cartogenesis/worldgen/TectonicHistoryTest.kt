@@ -61,12 +61,14 @@ class TectonicHistoryTest {
      * They were re-taken here, once, and the property they pin is the one above rather than
      * agreement with a generator that no longer exists. Re-taken a second time when S2's third
      * pass moved the map-scale relief and the critical slope, for the same reason and with the
-     * same property: the two columns of the printed table still agree cell for cell.
+     * same property: the two columns of the printed table still agree cell for cell. And a third
+     * time when its fourth pass gave the crust a thickness profile and the base relief a texture
+     * proportional to its own relief, which moves every value in the field again.
      */
     private val presentOnlyChecksums = mapOf(
-        7L to 2334082564602675557L,
-        42L to 5259026240674932515L,
-        1234L to -3573775963666546281L
+        7L to -1289201520975330034L,
+        42L to -641253951434604805L,
+        1234L to -5801792433696045243L
     )
 
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {

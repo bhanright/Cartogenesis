@@ -170,12 +170,16 @@ class DepositionTest {
      * the land from 6464 to 6488 and then to 6403; on the pre-S2 line they take it from 6426 to
      * 6404.
      *
+     * And a fourteenth time at S2's fourth pass, which gave the crust a thickness that rises
+     * inland and the base relief a texture proportional to the ground's own relief: both move the
+     * rock, so the percentile sits on a different set of cells again.
+     *
      * The figure below is all of them together, re-measured on this merged tree rather than
      * carried over from any one side, because no side's number was read against the others'
      * terrain. The cut itself has not moved in any of them: exactly 62% of the cells still lie
      * below it, and the structural cases are untouched.
      */
-    private val startingPointLand = 6404
+    private val startingPointLand = 6283
 
     @Test
     fun `every round conserves mass`() {

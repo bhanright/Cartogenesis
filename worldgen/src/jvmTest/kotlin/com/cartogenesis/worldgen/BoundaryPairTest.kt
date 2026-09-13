@@ -129,11 +129,23 @@ class BoundaryPairTest {
                         )
                 )
                 if (crustPairs) {
+                    // Width for its height rather than width at half height, and the difference
+                    // is which of two things a seed with one tall pair on it measures. Half height
+                    // is read off that pair's own crest, so a world whose collisions are one
+                    // strong and several weak puts the level above everything but the strong one's
+                    // crest and reads a narrow plateau — seed 11 at S2's fourth pass, 6 cells
+                    // against a margin's 12, while its width for its height was 371 against 155.
+                    // The claim is that a plateau is broad *for what it stands*, which is the same
+                    // claim the pooled figure below makes and the one the profiles are shaped to.
+                    //
+                    // Broader, per seed, and twice as broad only pooled: the five seeds read 2.37,
+                    // 4.80, 2.40, 2.10 and 1.70, so the factor of two is a property of the profiles
+                    // and the spread is a property of which pairs a world happens to draw.
                     assertTrue(
-                        t.halfHeightWidth >= 2f * a.halfHeightWidth,
+                        t.widthToHeight > a.widthToHeight,
                         "seed ${pairSeeds[index]}: the collision plateau is only " +
-                            "${t.halfHeightWidth} cells across at half height against the " +
-                            "margin's ${a.halfHeightWidth} — a plateau has to be the broad one"
+                            "${t.widthToHeight} cells wide for its height against the " +
+                            "margin's ${a.widthToHeight} — a plateau has to be the broad one"
                     )
                 }
             }

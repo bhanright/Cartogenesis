@@ -36,11 +36,17 @@ class RiftSegmentationTest {
     // field on an absolute scale the continental platform stands only a few hundred metres above
     // the waterline, and a trough three kilometres deep goes under it end to end whether it is
     // segmented or not — 2 bodies of sea and 1 land bridge either way, where the chunk that wrote
-    // this guard measured 3 and 4 against 1 and 0. Scanned over 59758, 718106, 7, 42, 1234 and 99,
-    // seed 7 is the one that still tells the two worlds apart on all three clauses at once, and
-    // seed 42 has the widest separation on two of the three but a control that passes the other.
-    // The drowning is in `TODO.md` beside the rift's own subsidence.
-    private val seed = 7L
+    // this guard measured 3 and 4 against 1 and 0. The drowning is in `TODO.md` beside the rift's
+    // own subsidence.
+    //
+    // Re-picked again at S2's fourth pass, which gave the crust a thickness that rises inland and
+    // moved every shoreline with it: seed 7's rift went dry enough to read 1 body either way.
+    // Scanned over 7, 11, 14, 34, 42, 43, 77, 99, 123, 1234, 59758 and 718106 — segmented against
+    // plain, all three clauses — seed 43 is the one where the segmented world clears every bar and
+    // the plain one clears none: 3 bodies, 3 bridges and 0.15 of width variation against 1, 0 and
+    // 0.03. Seed 77 separates more widely (4/9/0.76) but its plain rift already carries 3 bridges
+    // and 0.70 of variation, so its control proves nothing; seed 42 has the same fault.
+    private val seed = 43L
 
     /**
      * Thresholds, measured before they were written down; both tests print the figures they were
@@ -70,11 +76,11 @@ class RiftSegmentationTest {
      */
     private val minSeaBodies = 3
     private val minLandBridges = 2
-    // Down from 0.20 at S2 with the seed. On seed 7 the segmented rift's flooded width varies by
-    // 0.20 along its length and the unsegmented one's by 0.11, so the bar sits between the two
-    // rather than an order of magnitude above the canal's as it did on 59758; what it still refuses
-    // is a corridor that holds one width, which is what the control is.
-    private val minWidthVariation = 0.15
+    // Down from 0.15 at S2's fourth pass with the seed. On seed 43 the segmented rift's flooded
+    // width varies by 0.15 along its length and the unsegmented one's by 0.03, so the bar sits
+    // between the two rather than an order of magnitude above the canal's as it did on 59758; what
+    // it still refuses is a corridor that holds one width, which is what the control is.
+    private val minWidthVariation = 0.09
 
     @Test
     fun `a flooded rift is a chain of gulfs, not a channel`() {

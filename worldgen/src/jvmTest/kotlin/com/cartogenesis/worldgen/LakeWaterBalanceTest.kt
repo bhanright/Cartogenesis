@@ -26,20 +26,22 @@ import kotlin.test.assertTrue
  */
 class LakeWaterBalanceTest {
 
-    // Both are samples, re-picked at S2 by the same scan that chose their predecessors: isostasy
-    // rewrote the relief the depression fill runs over, so it reshaped every hollow on every seed.
-    // Seed 43's dry basin survived at 627 cells but its catchment now keeps every cell of it wet,
-    // and seed 99's wet basin vanished entirely.
+    // Both are samples, re-picked at S2's fourth pass by the same scan that chose their
+    // predecessors, and for the same reason it has had to be run at every terrain change: the
+    // crust's thickness now rises inland, which moved every shoreline and reshaped every hollow.
+    // Seed 7's dry basin fell from 2,774 cells to 409 and seed 14's wet one from 1,004 to 37.
     //
-    // The dry sample is seed 7, which is one of the four `GeographyAuditTest` already watches: it
-    // carries 2,774 cells at 26 mm of rain and the balance leaves 28% of them wet. Size alone is
-    // not the criterion and the scan makes that plain — seed 34's basin is half again as large at
-    // the same rainfall and stays 100% full, because what decides a lake is the catchment feeding
-    // it and not the rain falling on its own footprint. Of the fifteen basins scanned, six empty
-    // to between 9% and 49% and nine stay full. The wet sample is seed 14, the largest basin in wet
-    // country of the forty-five scanned: 1,004 cells at 783 mm.
-    private val drySeed = 7L
-    private val wetSeed = 14L
+    // Scanned over seeds 1 to 48, largest spill-level basin per seed, dry country under 300 mm and
+    // wet country over 650. The dry sample is seed 6, the largest dry basin of the forty-eight:
+    // 4,817 cells at 112 mm. The wet sample is seed 9, 803 cells at 762 mm — the largest of the
+    // wet ones the balance leaves *full*, which is what the wet case is about. Seed 43's is larger
+    // again at 2,834 cells and 702 mm and the balance empties nearly half of it, so it is a second
+    // dry case wearing wet country's rainfall and not the sample this wants; seeds 3, 4 and 15 all
+    // stay full and are smaller. Size alone is not the criterion and the scan makes that plain — twenty of the
+    // forty-eight carry a dry basin over 500 cells and only some of them empty — because what
+    // decides a lake is the catchment feeding it and not the rain falling on its own footprint.
+    private val drySeed = 6L
+    private val wetSeed = 9L
 
     /**
      * Both worlds are generated with the outlet notch off, and that is not a convenience.

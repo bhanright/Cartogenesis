@@ -129,17 +129,31 @@ internal object Isostasy {
 
         /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
-         * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic.
+         * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic, carrying
+         * [extraContinentalThicknessKm] of crust beyond the standard continental column.
          *
          * The share is not a label but a mixture, and the mixture is the point: a continental
          * margin is crust that has been stretched and thinned on its way out to the ocean floor,
          * so a cell halfway across one carries a column halfway between the two in thickness, in
          * density and in heat. That is where the shelf, the slope and the rise come from, and it
          * is why [PlateStage] blurs the share across the plate boundary rather than stepping it.
+         *
+         * The extra thickness is the cratonic profile
+         * ([com.cartogenesis.worldgen.model.IsostasyConfig.cratonThickeningKm]) and is a signed
+         * figure with a mean of zero over the map's continental crust, so it tilts a continent
+         * without moving the datum. It buoys in proportion to the share, because it is continental
+         * crust that is being added and there is none of it to add on the ocean floor.
          */
-        fun altitudeMetres(continentalShare: Float, seafloorAgeMyr: Float): Float {
+        fun altitudeMetres(
+            continentalShare: Float,
+            seafloorAgeMyr: Float,
+            extraContinentalThicknessKm: Float = 0f
+        ): Float {
             val share = continentalShare.coerceIn(0f, 1f)
-            val buoyantMass = oceanicBuoyantMass + share * (continentalBuoyantMass - oceanicBuoyantMass)
+            val extraBuoyantMass = share * extraContinentalThicknessKm * METRES_PER_KM *
+                (mantleDensity - isostasy.continentalCrustDensity)
+            val buoyantMass = extraBuoyantMass +
+                oceanicBuoyantMass + share * (continentalBuoyantMass - oceanicBuoyantMass)
             val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr)
             val columnMass = datum + buoyantMass + mantleDensity * buoyancy
             return if (columnMass >= 0f) columnMass / mantleDensity

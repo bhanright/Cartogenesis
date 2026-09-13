@@ -259,7 +259,7 @@ class DebugMapDump {
                 val config = base.copy(
                     terrain = base.terrain.copy(reliefCornerKm = cornerKm),
                     tectonics = base.tectonics.copy(
-                        continentalReliefStandardDeviationMetres = relief
+                        marginReliefStandardDeviationMetres = relief
                     )
                 )
                 val world = WorldGenerationEngine.generateBlocking(config)

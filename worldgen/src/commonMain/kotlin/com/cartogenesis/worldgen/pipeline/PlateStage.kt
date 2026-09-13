@@ -383,7 +383,8 @@ object PlateStage {
         val isostatic = config.isostasy.enabled
         val elevationLimit = Limit(tectonics.elevationLimitKneeMetres, scale.highestLandMetres)
         val beltReliefMetres = tectonics.beltReliefMetres
-        val continentalReliefMetres = tectonics.continentalReliefStandardDeviationMetres
+        val marginReliefMetres = tectonics.marginReliefStandardDeviationMetres
+        val cratonReliefMetres = tectonics.cratonReliefStandardDeviationMetres
         val oceanicReliefMetres = tectonics.oceanicReliefStandardDeviationMetres
         val orogenReliefMetres = tectonics.orogenReliefStandardDeviationMetres
         val crustAgeReference = tectonics.crustAgeReference.coerceAtLeast(1e-6f)
@@ -409,29 +410,71 @@ object PlateStage {
         val detailNoise = PerlinNoise(config.seed * 7919 + 13)
         val detailCyclesAcrossMap = tectonics.detailFrequency.toFloat()
 
-        // Position-derived detail noise; every cell writes its own index.
+        // How far in from the edge of its own crust each cell sits, 0 at the edge and 1 in the
+        // craton. Both the crust's thickness and the relief it carries are read off it.
+        val interiorShare = cratonInteriorShare(config, continentalShare)
+        // Mass-neutral: the average continental column keeps the standard thickness, so the datum
+        // stays where `IsostasyConfig.continentalFreeboardMetres` puts it.
+        val meanInteriorShare = weightedMean(interiorShare, continentalShare.data)
+        val cratonThickeningKm = if (isostatic) config.isostasy.cratonThickeningKm else 0f
+
+        // The base noise split at `TectonicsConfig.textureCornerKm`: the shape of the country, and
+        // the texture on it. The shape keeps the crust's own deviation; the texture is scaled by
+        // the local relief, cell by cell, which is what makes a plain smooth and a range rough.
+        val shapeNoise = FloatField(cellsAcross, cellsDown, standardisedNoise.copyOf())
+        BoxBlur.apply(
+            shapeNoise,
+            radiusAcross = config.wholeCellsFor(tectonics.textureCornerKm / 2.0),
+            radiusDown = wholeRowsFor(config, tectonics.textureCornerKm / 2.0),
+            passes = 1
+        )
+        val textureNoise = FloatArray(standardisedNoise.size) {
+            standardisedNoise[it] - shapeNoise.data[it]
+        }
+        // To unit deviation, so the amplitude assigned below is the deviation it asks for rather
+        // than that times whatever share of the field's spread happened to fall in this band.
+        val textureSpread = deviationOf(textureNoise)
+        if (textureSpread > 0f) {
+            for (cell in textureNoise.indices) textureNoise[cell] /= textureSpread
+        }
+
+        // Position-derived detail noise; every cell writes its own index. First pass: everything
+        // but the texture — the crust's datum, the shape of the base relief on it, and the belts.
+        val datumMetres = FloatArray(cellsAcross * cellsDown)
+        val shapeMetres = FloatArray(cellsAcross * cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
                     val share = continentalShare.data[cell]
                     // Where the crust floats, and how much relief the base noise carries on it.
-                    // With isostasy switched off both crusts get the continental answer and the
+                    // With isostasy switched off both crusts get the margin's answer and the
                     // datum goes flat, which is the world before S2 and the control every guard in
                     // this chunk is shown to fail against.
-                    val baseMetres =
-                        if (isostatic) columns.altitudeMetres(share, seafloorAgeMyr[cell]) else 0f
+                    val thickeningKm =
+                        cratonThickeningKm * (interiorShare[cell] - meanInteriorShare)
+                    datumMetres[cell] =
+                        if (isostatic) {
+                            columns.altitudeMetres(share, seafloorAgeMyr[cell], thickeningKm)
+                        } else {
+                            0f
+                        }
                     // How hard the present epoch worked here, which is what makes an orogen
                     // rougher than the plain it stands on and leaves the foreland alone.
                     val orogenShare =
                         (uplift.data[cell] / crustAgeReference).coerceIn(0f, 1f)
+                    // Flat in the middle of a continent and loud at its rim: see
+                    // `TectonicsConfig.cratonReliefStandardDeviationMetres`.
+                    val crustReliefMetres =
+                        marginReliefMetres +
+                            interiorShare[cell] * (cratonReliefMetres - marginReliefMetres)
                     val reliefMetres =
                         if (isostatic) {
                             oceanicReliefMetres +
-                                share * (continentalReliefMetres - oceanicReliefMetres) +
+                                share * (crustReliefMetres - oceanicReliefMetres) +
                                 orogenShare * orogenReliefMetres
                         } else {
-                            continentalReliefMetres + orogenShare * orogenReliefMetres
+                            crustReliefMetres + orogenShare * orogenReliefMetres
                         }
                     val detail = tectonics.detailAmplitude * detailNoise.fbm(
                         column * detailCyclesAcrossMap / cellsAcross,
@@ -443,12 +486,33 @@ object PlateStage {
                     // The base noise is a standard score, so multiplying by a deviation in metres
                     // is all there is to it, and its mean of zero is what keeps it from moving the
                     // level the crust floats at.
-                    val noiseMetres = standardisedNoise[cell] * reliefMetres
-                    val stampedMetres = (uplift.data[cell] + detail) * beltReliefMetres
+                    shapeMetres[cell] = shapeNoise.data[cell] * reliefMetres +
+                        (uplift.data[cell] + detail) * beltReliefMetres
+                }
+            }
+        }
+
+        // The relief the texture answers to, measured on the ground the noise and the belts make
+        // rather than on the finished surface: the crust's own four and a half kilometre step from
+        // continent to ocean floor is structure and not relief, and reading it as relief would put
+        // a mountain range's worth of texture on every coast.
+        val localReliefMetres = localSpread(config, shapeMetres, tectonics.textureReliefWindowKm)
+        val textureShareOfRelief =
+            (tectonics.textureCornerKm / tectonics.textureReliefWindowKm)
+                .pow(tectonics.topographyHurstExponent)
+                .toFloat()
+
+        // Second pass: the texture, and the field.
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val textureMetres =
+                        textureNoise[cell] * localReliefMetres[cell] * textureShareOfRelief
                     height.data[cell] =
                         scale.fieldAtAltitude(
                             elevationLimit.applyTo(
-                                baseMetres + noiseMetres + stampedMetres
+                                datumMetres[cell] + shapeMetres[cell] + textureMetres
                             )
                         )
                 }
@@ -492,6 +556,104 @@ object PlateStage {
         val deviation = kotlin.math.sqrt(squares / values.size)
         if (deviation <= 0.0) return FloatArray(values.size)
         return FloatArray(values.size) { ((values[it].toDouble() - mean) / deviation).toFloat() }
+    }
+
+    /** The standard deviation of [values], in whatever unit they are in. */
+    private fun deviationOf(values: FloatArray): Float {
+        if (values.isEmpty()) return 0f
+        var sum = 0.0
+        for (value in values) sum += value.toDouble()
+        val mean = sum / values.size
+        var squares = 0.0
+        for (value in values) {
+            val offset = value.toDouble() - mean
+            squares += offset * offset
+        }
+        return sqrt(squares / values.size).toFloat()
+    }
+
+    /** The mean of [values] weighted by [weights], and zero where the weights sum to nothing. */
+    private fun weightedMean(values: FloatArray, weights: FloatArray): Float {
+        var weighted = 0.0
+        var total = 0.0
+        for (cell in values.indices) {
+            weighted += values[cell].toDouble() * weights[cell]
+            total += weights[cell].toDouble()
+        }
+        return if (total <= 0.0) 0f else (weighted / total).toFloat()
+    }
+
+    /** [kilometres] of ground as a whole number of *rows*, which are not as tall as a cell is wide. */
+    private fun wholeRowsFor(config: WorldGenConfig, kilometres: Double): Int =
+        kotlin.math.round(kilometres / config.cellHeightKm).toInt().coerceAtLeast(1)
+
+    /**
+     * How far in from the edge of its own crust each cell sits: 0 where the crust is half oceanic
+     * and approaching 1 in the middle of a continent.
+     *
+     * `1 - exp(-distance / cratonReachKm)` of the distance to the nearest cell that is not mostly
+     * continental crust. Exponential rather than a ramp because a ramp finishes at a distance
+     * contour and a distance contour drawn on a map is a visible ring — the annulus S2's earlier
+     * passes were called out for. Measured in kilometres, not in cells: an equirectangular map's
+     * cells are twice as wide as they are tall, so a reach counted in cells would take a continent
+     * twice as far inland from an eastern shore as from a northern one.
+     *
+     * The distance itself is Euclidean in cells, by the same jump flood every other distance field
+     * in this stage uses, and is converted with the map's own cell width. That leaves the profile
+     * a little wider north-south than east-west, which is the same approximation
+     * `TectonicsConfig.crustMarginKm` already makes for the margin it sits inside.
+     */
+    private fun cratonInteriorShare(
+        config: WorldGenConfig,
+        continentalShare: FloatField
+    ): FloatArray {
+        val cellCount = config.width * config.height
+        val distanceCells = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearest = IntArray(cellCount) { -1 }
+        var anyEdge = false
+        for (cell in 0 until cellCount) {
+            if (continentalShare.data[cell] < 0.5f) {
+                distanceCells[cell] = 0f
+                nearest[cell] = cell
+                anyEdge = true
+            }
+        }
+        // A world with no ocean at all has no crustal edge to measure from, and every cell of it is
+        // as cratonic as ground gets.
+        if (!anyEdge) return FloatArray(cellCount) { 1f }
+        JumpFloodDistance.run(config.width, config.height, distanceCells, nearest)
+        val reachCells = config.cellsFor(config.tectonics.cratonReachKm).coerceAtLeast(1e-3f)
+        return FloatArray(cellCount) {
+            val distance = distanceCells[it]
+            if (distance >= JumpFloodDistance.INFINITE) 1f else 1f - exp(-distance / reachCells)
+        }
+    }
+
+    /**
+     * The standard deviation of [field] within a window [windowKm] across, one entry per cell.
+     *
+     * `sqrt(mean of the squares - square of the mean)` over two box means, which is the cheapest
+     * honest reading of "how much relief is there around here" and costs four sweeps of the grid.
+     * The window is a length rather than a count of cells, so what it measures is the same
+     * quantity at every grid.
+     */
+    private fun localSpread(
+        config: WorldGenConfig,
+        field: FloatArray,
+        windowKm: Double
+    ): FloatArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val radiusAcross = config.wholeCellsFor(windowKm / 2.0)
+        val radiusDown = wholeRowsFor(config, windowKm / 2.0)
+        val mean = FloatField(cellsAcross, cellsDown, field.copyOf())
+        val squares = FloatField(cellsAcross, cellsDown, FloatArray(field.size) { field[it] * field[it] })
+        BoxBlur.apply(mean, radiusAcross, radiusDown, passes = 1)
+        BoxBlur.apply(squares, radiusAcross, radiusDown, passes = 1)
+        return FloatArray(field.size) {
+            val variance = squares.data[it] - mean.data[it] * mean.data[it]
+            if (variance <= 0f) 0f else sqrt(variance)
+        }
     }
 
     /**

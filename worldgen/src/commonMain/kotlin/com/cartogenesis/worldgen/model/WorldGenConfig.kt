@@ -463,8 +463,11 @@ data class TectonicsConfig(
      */
     val marginRoughness: Float = 0.35f,
     /**
-     * How much relief the base noise carries on continental crust and on oceanic — the standard
-     * deviation of the ground the belts and the isostatic levels are laid on, in metres.
+     * How much relief the base noise carries at a continental margin and on the sea floor — the
+     * standard deviation of the ground the belts and the isostatic levels are laid on, in metres.
+     *
+     * The margin's rather than the whole continent's since S2's fourth pass: the interior carries
+     * [cratonReliefStandardDeviationMetres] instead and the two are joined by [cratonReachKm].
      *
      * A standard deviation and not a peak-to-peak range since S2's second pass, because the field
      * these scale is no longer a smooth ramp with two ends. [TerrainConfig.reliefCornerKm] filters
@@ -490,11 +493,13 @@ data class TectonicsConfig(
      * about 900. Nothing outside an orogen stands higher than the high plains, and the orogens are
      * the belts' business: see [orogenReliefStandardDeviationMetres].
      *
-     * It is also what makes the continents drown. A platform floating at 840 m with 700 m of spread
-     * puts a fifth of itself under water, which is the figure
-     * [continentalCrustSubmergedShare] carries and the reason the sea-level cut can land on the
-     * isostatic datum; at 450 m it drowns a twentieth, the cut has to rise to meet the crust, and
-     * the shallow fringe that results is what closes the hypsometric trough.
+     * It is also what makes the continents drown, and *where* they drown. A platform floating at
+     * 840 m with 700 m of spread on it everywhere puts a fifth of itself under water wherever the
+     * noise happens to dip, interior included, which is the flooded continent William named in
+     * S2's third pass; with the spread falling to
+     * [cratonReliefStandardDeviationMetres] inland the same fifth drowns at the rim, which is
+     * where Earth's is. [continentalCrustSubmergedShare] carries what the model actually drowns
+     * and is what the sea-level cut is solved against.
      *
      * Two hundred and fifty on the sea floor. Abyssal hills carry 50 to 300 m of relief with a
      * spacing of two to eight kilometres (Goff & Jordan, *Stochastic modeling of seafloor
@@ -504,8 +509,109 @@ data class TectonicsConfig(
      * carries. The deep sea's *large* structure is no longer noise at all: it is the depth-age
      * curve in [IsostasyConfig.seafloorRidgeDepthMetres].
      */
-    val continentalReliefStandardDeviationMetres: Float = 700f,
+    val marginReliefStandardDeviationMetres: Float = 700f,
     val oceanicReliefStandardDeviationMetres: Float = 250f,
+    /**
+     * How much relief the base noise carries on cratonic crust — the middle of a continent, far
+     * enough in from its own edge that the crust is at full thickness.
+     *
+     * The counterpart of [marginReliefStandardDeviationMetres], and the reason it is a separate
+     * figure is that the two are separated by a factor of two and more on Earth. A craton is the
+     * flattest large thing there is: the Canadian Shield runs 100 to 500 m over three thousand
+     * kilometres, the West Siberian Plain stays under 200 m over two thousand, the Russian
+     * Platform 100 to 300 and the West African craton 200 to 400. Two hundred metres is the middle
+     * of the two platforms, and the Shield's own 500 is glacial roughening rather than crustal
+     * relief. A margin is the opposite — the shelf, the coastal plain, the piedmont and
+     * the marginal upwarp are four provinces inside a few hundred kilometres — which is why the
+     * spread of Earth's continental crust *as a whole* is the margin's figure rather than an
+     * average of the two.
+     *
+     * Spent through [cratonReachKm], so the two are the ends of one profile and there is no step
+     * anywhere. It is what puts the drowning at the rim: a stationary field with the whole
+     * continent's spread on it drowns the interior wherever the noise happens to dip, which is
+     * what S2's third pass drew and what William named as flooded continents. Earth's drowned
+     * continental crust is its shelves.
+     */
+    val cratonReliefStandardDeviationMetres: Float = 200f,
+    /**
+     * How far in from the edge of its own crust a continent becomes cratonic, in kilometres.
+     *
+     * The reach of the profile that carries both [cratonReliefStandardDeviationMetres] and
+     * [IsostasyConfig.cratonThickeningKm]: relief falls and the crust thickens as
+     * `1 - exp(-distance / this)`, so a cell this far in has made about two thirds of the journey
+     * and one twice as far in nearly all of it.
+     *
+     * Four hundred kilometres, the middle of the band Watts (*Isostasy and Flexure of the
+     * Lithosphere*, 2001) measures continental crust thinning from 40 km to 10 across at a rifted
+     * margin: 200 to 500. An exponential rather than a ramp because a ramp ends at a distance
+     * contour, and a distance contour drawn on a map is a ring — the annulus S2's earlier passes
+     * were called out for.
+     *
+     * The reach trades the two things this profile is for against each other, because a short one
+     * leaves a coastal plain cratonic and flat while a long one keeps the drowned band narrow.
+     * Measured over 300, 400, 600 and 1,000 km on the five standard worlds at 512, as the median
+     * cell-scale departure on the lowest quarter of the land against the share of the drowned
+     * continental crust lying within 500 km of the crust's edge: 54 m and 76.6%, 63 m and 81.4%,
+     * 66 m and 78.4%, 77 m and 73.4%. Four hundred is the only one of them that clears both bars —
+     * `main`'s own 65 m and the 80% `GroundTextureTest` holds.
+     */
+    val cratonReachKm: Double = 400.0,
+    /**
+     * Where the ground stops being a shape and starts being a texture, in kilometres, and the
+     * window the local relief that texture answers to is read over.
+     *
+     * Everything in the base relief broader than [textureCornerKm] is the shape of the country and
+     * keeps the crust's own deviation above; everything finer is dissection, and how deep a
+     * landscape is dissected is set by how much relief it has. That is Ahnert's relation
+     * (*Functional relationships between denudation, relief and uplift in large mid-latitude
+     * drainage basins*, Am. J. Sci. 268, 1970): denudation grows linearly with local relief over
+     * two orders of magnitude of it, so a plain is worn smooth and a range is cut to pieces. It is
+     * also Musgrave, Kolb and Mace's heterogeneous terrain (*The synthesis and rendering of eroded
+     * fractal terrains*, SIGGRAPH 1989), which is the same observation made in a renderer: scale
+     * the higher octaves by what the lower ones have already built.
+     *
+     * Without it every cell of land carried the same texture, because the base field is one
+     * stationary random surface with one amplitude per crust. William, looking at S2's third pass
+     * at 2048: *"the entire land has a very rough texture it did not have before ... no map of
+     * Earth at any scale I've seen has that appearance."* Measured on the five standard worlds,
+     * the tree before S2 puts 65 m of cell-scale departure on the lowest quarter of its land and
+     * 116 m on the highest; that pass put 96 m on the lowest and 188 on the highest — half again
+     * as rough as Earth's own map on ground that should be a plain. See `GroundTextureTest`.
+     *
+     * Two hundred kilometres is about where a drainage basin stops: a fourth-order catchment is a
+     * hundred kilometres across and the ground inside one is the rivers' work, while above that
+     * the shape is the crust's — a basin, an arch, a province. Measured over 100, 150, 200 and
+     * 300 km on the five standard worlds at 512, the lowest quarter of the land reads 67, 62, 61
+     * and 67 m of cell-scale departure against `main`'s 65: below 200 the band left unscaled
+     * between the corner and the eye's own window is loud enough to undo the rule, and above it
+     * the amplitude the law asks for grows faster than the band it is spread over.
+     *
+     * The window cancels, which is the check that the law is self-consistent rather than a knob:
+     * a self-affine surface's relief grows as `window^H`, so `relief(window) * (corner/window)^H`
+     * does not depend on the window at all. Measured over 500, 800 and 1,200 km it moves the
+     * lowest quarter by a metre and a half — the residual being the surface's departure from exact
+     * self-affinity. Five hundred is stated because a window has to be one length or another and
+     * this one is clear of the corner.
+     */
+    val textureCornerKm: Double = 200.0,
+    val textureReliefWindowKm: Double = 500.0,
+    /**
+     * The Hurst exponent of continental topography, which is what turns a relief measured over
+     * [textureReliefWindowKm] into an amplitude at [textureCornerKm].
+     *
+     * A self-affine surface's standard deviation over a window of length L grows as `L^H`, so the
+     * texture's share of the local relief is `(textureCornerKm / textureReliefWindowKm)^H` and
+     * nothing else has to be declared. Seven tenths: Turcotte (*Fractals and Chaos in Geology and
+     * Geophysics*, 2nd ed., chapter 7) puts continental topography between 0.5 and 0.8, and Gagnon,
+     * Lovejoy and Schertzer (*Multifractal earth topography*, Nonlin. Processes Geophys. 13, 2006)
+     * measure 0.66 over five decades of scale.
+     *
+     * It is checkable on this project's own maps, and it checks out: on the tree before S2 the
+     * median cell-scale departure over a 200 km local relief reads 0.16 to 0.28 of it across five
+     * worlds and four elevation quartiles, against the 0.22 this exponent predicts for a 23 km
+     * cell in a 200 km window.
+     */
+    val topographyHurstExponent: Double = 0.7,
     /**
      * How much more relief an active orogen carries than the plain beside it, in metres of
      * standard deviation, at a cell the present epoch raised in full.
@@ -1004,6 +1110,29 @@ data class IsostasyConfig(
     /** The two crusts' thicknesses, in kilometres; see [continentalCrustDensity] for the sources. */
     val continentalCrustThicknessKm: Float = 41f,
     val oceanicCrustThicknessKm: Float = 7.1f,
+    /**
+     * How much thicker a cratonic column is than the crust at its own margin, in kilometres.
+     *
+     * Continental crust is not one thickness. Christensen and Mooney's global compilation gives
+     * the mean as 41 km and reads shields and platforms at 41 to 45, orogens thicker again, and
+     * extended and rifted crust at 25 to 30 — so a continent is thickest in the middle and thins
+     * toward its own edge. Airy turns a kilometre of crust into 141 m of altitude, because a
+     * kilometre of crust is worth `(mantle - crust) / mantle` of itself in freeboard.
+     *
+     * Twelve kilometres is the *swing* across the profile rather than an excess over the mean, and
+     * what it comes to on this map is Christensen and Mooney's own two ends: with the profile's
+     * mean over the map's continental crust subtracted, a craton carries 44.6 km and the crust's
+     * own outer edge 32.6, against their 41 to 45 for shields and platforms and 30.5 for extended
+     * crust. The tilt between them is 1,700 m of freeboard.
+     *
+     * Spent through [TectonicsConfig.cratonReachKm], and *mass-neutral*: the profile's mean over
+     * the continental crust of the map is subtracted before it is applied, so the average column
+     * is still 41 km and the datum is still Earth's 840 m of freeboard
+     * ([continentalFreeboardMetres]). What it changes is not how high a continent stands but how
+     * it is tilted — up in the middle, down at the rim — which is what puts the drowned part of it
+     * where Earth's is.
+     */
+    val cratonThickeningKm: Float = 12f,
     /**
      * How high a standard continental column floats, in metres — the constant of integration for
      * every other column on the map.

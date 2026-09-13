@@ -485,6 +485,27 @@
   `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
   islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
   are. See GEOGRAPHY.md's "Known deviations".
+- **The model's sea column is a slab of water, and the map hands it to every coast as though it
+  were the air.** This is W1's open defect and it blocks the chunk. `EnergyBalance` gives each band
+  one temperature per surface, and the sea's carries the ocean's heat capacity — fifty metres of
+  water — so it barely moves through the year: at 55-60 degrees it reads a summer of 5.5 C and a
+  range of 4.4. That is about right for the *water* (Earth's zonal-mean SST range there is 5 to 8)
+  and badly wrong for the *air over it*, which on Earth swings half again as far and reaches 9 to
+  13 in August. `ClimateStage`'s marine blend then hands that summer to every coastal cell, because
+  a shoreline cell is 94% marine air, and a coast whose warmest month is 6 C is tundra by Koppen's
+  tree line whatever else is true of it.
+  Three symptoms, one cause, all measured: `ColdCapReportTest` — A6's own guard — reads 16%, 14%
+  and 6% of warm west-facing coasts at 50-60 degrees as forest against A6's recorded 65/53/59, and
+  prints the reason beside it (warmest month 6.3, 7.5 and 6.2 C against the 10 C tree line);
+  `OceanCurrentTest`'s warm-against-cold coastal habitability on seed 7 went from +13.2% before W1
+  to -2.4%, the warm quartile falling 0.090 where the cold fell 0.018, because the warm coasts are
+  the ones A6's gate made forest; and tundra holds 62/48/47/39% of the four seeds' land against
+  52/38/34/26% before W1.
+  The repair is structural rather than a constant: the marine air and the mixed layer are two
+  reservoirs with capacities two orders apart, coupled to each other, and the model conflates them.
+  A shallower slab does not reach it — 25 m buys two degrees of the seven that are missing and pushes
+  the winter sea colder, which moves the ice edge the wrong way. Whether that belongs in W1 or in
+  W2 with the pressure field is a scope question. 2026-09-13, W1.
 - **A drowned basin is over the Caspian cap again, and the cap is the thing to look at.**
   `OutletResolutionTest`'s clause on basins below the sea-level cut was an assertion from H5b and is
   a printed finding again from W1: seed 42's largest walled-off hollow at 2048 went from 3,453 cells

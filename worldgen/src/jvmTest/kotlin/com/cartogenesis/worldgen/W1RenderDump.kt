@@ -60,10 +60,20 @@ class W1RenderDump {
         }
     }
 
-    /** The zonal-mean annual temperature over land and over sea, every ten degrees. */
+    /**
+     * The zonal-mean annual temperature over land and over sea, every ten degrees, with the land's
+     * mean elevation and what the lapse rate takes off it.
+     *
+     * The elevation is there because without it the land column cannot be compared with anything.
+     * The model gives each latitude a sea-level land temperature and the stage then subtracts
+     * `metres / 1000 x lapseRate` cell by cell, so a world whose land stands high reads cold on the
+     * map for a reason that has nothing to do with the model. Printing both means the report can
+     * say which of the two a difference is.
+     */
     private fun reportZonalProfile(seed: Long, world: WorldMap) {
         val cellsAcross = world.width
         val cellsDown = world.height
+        val lapseRateCPerKm = world.config.climate.lapseRateCPerKm
         for (band in -8..8) {
             val centre = band * 10f
             var landSum = 0.0
@@ -72,6 +82,7 @@ class W1RenderDump {
             var seaCells = 0
             var summerLand = 0.0
             var winterLand = 0.0
+            var landMetres = 0.0
             for (row in 0 until cellsDown) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown)
                 if (abs(latitude - centre) > 5f) continue
@@ -81,6 +92,8 @@ class W1RenderDump {
                         landSum += world.climate.temperature.data[cell]
                         summerLand += world.climate.summerTemperature.data[cell]
                         winterLand += world.climate.winterTemperature.data[cell]
+                        landMetres += world.config.scale
+                            .metresAboveShoreline(world.sea.relativeElevation.data[cell])
                         landCells++
                     } else {
                         seaSum += world.climate.temperature.data[cell]
@@ -88,14 +101,18 @@ class W1RenderDump {
                     }
                 }
             }
+            val meanMetres = if (landCells == 0) Double.NaN else landMetres / landCells
+            val lapseC = meanMetres / 1000.0 * lapseRateCPerKm
             println(
                 ("W1 PROFILE %s seed %d %+4.0f deg: land %.1f C (summer %.1f, winter %.1f) over " +
-                    "%d cells, sea %.1f C over %d cells").format(
+                    "%d cells standing %.0f m up, so %.1f C of lapse and %.1f C at sea level; " +
+                    "sea %.1f C over %d cells").format(
                     label, seed, centre,
                     if (landCells == 0) Double.NaN else landSum / landCells,
                     if (landCells == 0) Double.NaN else summerLand / landCells,
                     if (landCells == 0) Double.NaN else winterLand / landCells,
-                    landCells,
+                    landCells, meanMetres, lapseC,
+                    if (landCells == 0) Double.NaN else landSum / landCells + lapseC,
                     if (seaCells == 0) Double.NaN else seaSum / seaCells,
                     seaCells
                 )

@@ -30,16 +30,28 @@ class SeaIceTest {
         const val size = 512
 
         /**
-         * Where a cold-season ice edge belongs, in degrees of latitude.
+         * Where a cold-season ice edge belongs on the map, in degrees of latitude, and where
+         * Earth's is.
          *
-         * Earth's winter pack reaches about 44 N in the Sea of Okhotsk and about 75 N off the
-         * Norwegian coast, with the zonal-mean March edge near 60 N; the Antarctic's September
-         * maximum sits near 60 S all the way round (Fetterer et al., *Sea Ice Index*, NSIDC). So
-         * the equatorward-most frozen water on a world belongs somewhere between 40 and 75 degrees,
-         * and a world that freezes the sea at 25 or leaves the pole open at 85 has got it wrong.
+         * This is the guard on what a reader sees, not on the model: it measures
+         * `ClimateResult.winterSeaIce`, cell by cell, on a generated world. Earth's winter pack
+         * reaches about 44 N in the Sea of Okhotsk and about 75 N off the Norwegian coast, with the
+         * zonal-mean March edge near 60 N; the Antarctic's September maximum sits near 60 S all the
+         * way round (Fetterer et al., *Sea Ice Index*, NSIDC). The equatorward-most frozen water is
+         * the Okhotsk end of that spread, so the bar is 45 to 70 and Earth's zonal mean of 60 is
+         * printed beside every measurement.
+         *
+         * It was 40 to 78 in W1's first pass, which was loose enough to accept an edge at 49
+         * degrees — nine degrees equatorward of Earth's zonal mean and past the Okhotsk. The second
+         * pass moved the edge to 54-55 by correcting the model's albedo and its heat transport, and
+         * tightened the bar to what Earth's own spread actually allows. Five degrees short of the
+         * zonal mean is what remains, and it is reported rather than tuned: the model's sea column
+         * at 60 degrees reads two degrees under Earth's marine air there, and two degrees is what
+         * five degrees of latitude costs at that gradient.
          */
-        const val ICE_EDGE_EQUATORWARD_LIMIT = 40f
-        const val ICE_EDGE_POLEWARD_LIMIT = 78f
+        const val ICE_EDGE_EQUATORWARD_LIMIT = 45f
+        const val ICE_EDGE_POLEWARD_LIMIT = 70f
+        const val EARTH_ZONAL_MEAN_ICE_EDGE = 60f
 
         /**
          * How much drier the frozen sea has to be than the open water at the same latitudes, as a
@@ -73,10 +85,11 @@ class SeaIceTest {
             val world = generate(seed, seaIce = true)
             val measured = measure(world)
             println(
-                ("SEA ICE seed %d: cold-season ice %.2f%% of the sea reaching %.1f deg, " +
-                    "warm-season ice %.2f%% reaching %.1f deg")
+                ("SEA ICE seed %d: cold-season ice %.2f%% of the sea reaching %.1f deg " +
+                    "(Earth's zonal mean %.0f, %.1f short), warm-season ice %.2f%% reaching %.1f deg")
                     .format(
                         seed, measured.winterShare * 100, measured.winterEdge,
+                        EARTH_ZONAL_MEAN_ICE_EDGE, EARTH_ZONAL_MEAN_ICE_EDGE - measured.winterEdge,
                         measured.summerShare * 100, measured.summerEdge
                     )
             )

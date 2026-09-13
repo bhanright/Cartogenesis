@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.sin
 import kotlin.math.tan
 
@@ -105,7 +106,8 @@ enum class Season { ANNUAL, SUMMER, WINTER }
  * infrared it radiates to space ([OUTGOING_OFFSET_W_PER_M2] and
  * [OUTGOING_PER_DEGREE_W_PER_M2_C], North, Cahalan and Coakley's 1981 fit to satellite
  * radiances), and the heat the atmosphere and ocean carry into it from its neighbours
- * ([DIFFUSION_W_PER_M2_C]). The insolation `Q` is the astronomical daily mean at that latitude
+ * ([DIFFUSION_TROPICS_W_PER_M2_C], which falls off toward the poles). The insolation `Q` is
+ * the astronomical daily mean at that latitude
  * and that day, so the seasons are the planet's tilt rather than a prescribed migration.
  *
  * ### Two columns per band
@@ -132,7 +134,7 @@ enum class Season { ANNUAL, SUMMER, WINTER }
  * ### The feedback
  *
  * The albedo is not a constant: a band whose year is below the ice line is white
- * ([FROZEN_ALBEDO]) and one above it is not ([ICE_FREE_ALBEDO_MEAN]), over a ramp a few degrees
+ * ([FROZEN_ALBEDO]) and one above it is not ([ICE_FREE_ALBEDO_BASE]), over a ramp a few degrees
  * wide either side of [ICE_LINE_C], because a band's mean being a degree below the line does not
  * mean every day and every square kilometre of it was. So
  * the model can grow a cap and can lose one, and a forcing applied uniformly comes out
@@ -213,38 +215,106 @@ object EnergyBalance {
      *
      * The published range for this parameter is 0.38 to 0.67 (North 1975 fits 0.382 against the
      * annual mean; North, Cahalan and Coakley 1981 tabulate values up to about 0.67 depending on
-     * what the model is asked to reproduce). 0.60 is the value inside that range that puts this
-     * model's annual zonal mean on Earth's observed one: it comes out at 13.8 C globally against
-     * Earth's 14, 26.4 C at the equator against 26, and -2.2 C at 60 degrees against -2.
-     * `EnergyBalanceTest` measures all of them and states them.
+     * what the model is asked to reproduce), and every value in it trades one end of the planet
+     * against the other: at 0.60 the model reads 26.4 C at the equator and -2.2 at 60 degrees,
+     * both right, but 7.7 at 45 where Earth has 12; raise it to 0.65 and 45 gains less than a
+     * degree while the pole runs away. The shape is wrong, not the size. Measured as transport
+     * rather than as temperature, the constant-D model carries 3.2 PW across 30 degrees where
+     * Earth carries 5.3, and about the right amount across 80 — it under-transports in the
+     * subtropics and mid-latitudes and nowhere else.
      *
-     * It is the single number that sets how flat the planet is from equator to pole: less of it
-     * and the tropics bake while the poles freeze over, more and the whole world is temperate.
+     * **Why `cos^2`.** Earth does not carry its heat poleward by one mechanism. The tropics have
+     * the Hadley circulation, a far more efficient conveyor than any eddy and what keeps the
+     * tropical troposphere nearly isothermal; the mid-latitudes have baroclinic eddies; the polar
+     * cap has weak ones. The total northward transport peaks at about 5.5 PW near 35 degrees and
+     * falls to zero at both ends (Trenberth and Caron, *Estimates of meridional atmosphere and
+     * ocean heat transports*, J. Climate 14, 2001). A diffusivity falling off as the cosine
+     * squared is the simplest shape with that property, and giving an energy-balance model a
+     * latitude-dependent diffusion for exactly this reason goes back to Lindzen and Farrell
+     * (*Some realistic modifications of simple climate models*, J. Atmos. Sci. 34, 1977).
+     *
+     * **The two numbers.** Swept against Earth's own land and sea profiles at 0, 20, 40, 60 and
+     * 80 degrees, 0.90 and 0.50 is the pair that lands on them; `EnergyBalanceTest` states what it
+     * produces at each. The polar figure sits inside the published range for a constant
+     * diffusivity; the tropical one is above it, which is what a number standing for the Hadley
+     * cell rather than for an eddy should be.
+     *
+     * It is the smaller of W1's two second-pass corrections and it is honest to say so. The larger
+     * was the albedo below, whose shape was wrong; with that fixed and the diffusivity left
+     * constant at 0.60 the profile is already close, and what the latitude dependence then buys is
+     * the equator (26.3 C against 28.1 for a constant one, where Earth has 26), 40 degrees (14.2
+     * against 13.0, where Earth has 14.5) and the cold-season ice edge (59.6 degrees against 56.6,
+     * where Earth's is 60). It costs half a degree of warmth at 60 and 80.
      */
-    internal const val DIFFUSION_W_PER_M2_C = 0.60
+    internal const val DIFFUSION_TROPICS_W_PER_M2_C = 0.90
+    internal const val DIFFUSION_POLAR_W_PER_M2_C = 0.50
 
     /**
-     * Planetary albedo of an ice-free surface at the equator and how far it climbs toward the
-     * poles, and the albedo of a frozen one.
+     * Planetary albedo of an ice-free surface: a clear-sky base that climbs toward the poles, plus
+     * the two cloud belts the circulation puts on it. And the albedo of a frozen surface.
      *
      * Planetary rather than surface figures, because [OUTGOING_OFFSET_W_PER_M2] and its slope are
      * measured at the top of the atmosphere: what matters here is what the whole column, cloud
      * included, sends back.
      *
-     * The ice-free part is not one number, and that turned out to matter. Earth's observed
-     * planetary albedo runs about 0.25 through the tropics and subtropics — clear dry air over dark
-     * water, with the sun overhead — and about 0.39 at 60-70 degrees before any ice, because the
-     * sun comes in at a slant and the storm track is under cloud. Written as
-     * `0.30 + 0.09 P2(sin latitude)`, the Legendre form these models are always written in, that is
-     * 0.255 at the equator and 0.39 at the poles, with a global mean of 0.30 — Earth's own. Holding
-     * it flat at 0.32 instead was measured, and it costs the tropics four degrees: the model came
-     * out at 23.6 C on the equator against Earth's 26.
+     * **The cloud belts are not decoration; they are why Earth's tropics are isothermal.** Earth's
+     * observed planetary albedo (CERES EBAF, annual zonal means) does not fall monotonically toward
+     * the equator: it reads 0.27 *at* the equator, dips to 0.235 near 20 degrees, and climbs again
+     * to 0.28 at 40 and 0.33 at 50. The dip is the subtropical highs, which are the clearest, driest
+     * skies over the darkest water on the planet; the two rises are the ITCZ's towering cloud and
+     * the mid-latitude storm track's. The consequence is that the subtropics *absorb as much as the
+     * equator does* — 305 W/m2 against 304 — which is why Earth has 26 C at the equator and 25 at
+     * 20 degrees, a drop of one.
+     *
+     * A monotonic form cannot have that. Written as `0.30 + 0.09 P2(sin latitude)`, the Legendre
+     * shape these models are usually given, the albedo is *lowest* at the equator, the subtropics
+     * absorb 21 W/m2 less than the equator, and the model came out at 26.2 C on the equator against
+     * 22.0 at 20 degrees where Earth has 26 and 25 — the whole tropics tilted, and every latitude
+     * poleward of it dragged down with them. Flat at 0.32 was worse again, four degrees cold on the
+     * equator itself.
+     *
+     * So the ITCZ's cloud is written down, at the latitude and width `ClimateStage` already puts
+     * its own rain belt on, because it is the same circulation.
+     *
+     * **And the clear sky needs two terms, not one.** A single `sin^2` climb was tried and cannot
+     * carry the poleward rise: fitted to the tropics it leaves the planet's global albedo at 0.271
+     * against Earth's 0.284 once its ice is taken out (Earth's observed 0.294 less the 3.3 W/m2 of
+     * shortwave forcing Flanner et al. 2011 attribute to the cryosphere), and the model came out
+     * four degrees warm everywhere. The reason is the solar zenith angle: a clear ocean reflects
+     * 0.06 with the sun overhead and more than 0.25 at a slant, a rise that is late and steep and
+     * that a quadratic cannot make. Written as a `sin^2` term that *dips* — the subtropics really
+     * are darker than the equator — and a `sin^4` term that climbs, it can.
+     *
+     * The four numbers are one least-squares fit to seven observations: the six ice-free zonal
+     * values (0.270 at 0 degrees, 0.258 at 10, 0.235 at 20, 0.245 at 30, 0.280 at 40, 0.330 at 50)
+     * and the ice-free global mean of 0.284, weighted by the insolation as a planetary albedo is.
+     * No residual is over 0.005. The fit is then checked where it was not constrained and is not
+     * adjusted to what it finds: it puts 60 degrees at 0.405 against the observed 0.400 and 70 at
+     * 0.479 against 0.480, and falls short at 80 and 90 — 0.535 and 0.556 against 0.580 and 0.620 —
+     * by about what the term below adds when the sea there freezes.
      *
      * Frozen is North's 0.62, and it replaces the ice-free figure rather than adding to it.
      */
-    private const val ICE_FREE_ALBEDO_MEAN = 0.30
-    private const val ICE_FREE_ALBEDO_TOWARD_THE_POLES = 0.09
+    private const val ICE_FREE_ALBEDO_BASE = 0.239
+    private const val ICE_FREE_ALBEDO_SUBTROPICAL_DIP = -0.067
+    private const val ICE_FREE_ALBEDO_AT_A_SLANT = 0.384
+    private const val CLOUD_ALBEDO_ITCZ = 0.033
     private const val FROZEN_ALBEDO = 0.62
+
+    /**
+     * Where the ITCZ's cloud belt sits and how wide it is, in degrees.
+     *
+     * `ClimateStage.ITCZ_DEGREES` and `ITCZ_WIDTH_DEGREES` hold the same two numbers, because the
+     * belt that rains is the belt that reflects. They are repeated rather than shared because that
+     * stage's are the *thermal* equator's, migrating with the season, and these are the annual
+     * mean's: the albedo here is read on the annual mean, so a migrating belt would average to a
+     * wider, shallower one and the fit above would not be to what it was fitted on.
+     *
+     * A storm-track belt was fitted alongside and came out at -0.006, which is nothing: the
+     * zenith-angle rise already carries the mid-latitudes, so the term is not here.
+     */
+    private const val CLOUD_ITCZ_DEGREES = 0.0
+    private const val CLOUD_ITCZ_WIDTH_DEGREES = 12.0
 
     /**
      * The spread of temperature within one band and one year, in degrees Celsius: how far either
@@ -441,11 +511,15 @@ object EnergyBalance {
         solarScale: Float = 1f,
         outgoingOffsetShiftW: Float = 0f,
         /**
-         * Meridional heat transport, in watts per square metre per degree Celsius. The default is
-         * [DIFFUSION_W_PER_M2_C]; the guards vary it to show what the transport is doing to the
-         * profile, and nothing in the pipeline passes anything else.
+         * Meridional heat transport at the equator and at the pole, in watts per square metre
+         * per degree Celsius; between them it follows the cosine squared. The defaults are
+         * [DIFFUSION_TROPICS_W_PER_M2_C] and [DIFFUSION_POLAR_W_PER_M2_C]; the guards vary them
+         * to show what the transport is doing to the profile — passing the same figure for both
+         * is the constant diffusivity the model had before, which is the control the profile
+         * guard is measured against — and nothing in the pipeline passes anything else.
          */
-        transportW: Float = DIFFUSION_W_PER_M2_C.toFloat(),
+        transportTropicsW: Float = DIFFUSION_TROPICS_W_PER_M2_C.toFloat(),
+        transportPolarW: Float = DIFFUSION_POLAR_W_PER_M2_C.toFloat(),
         /**
          * Whether the albedo follows the temperature. Off pins every band at its ice-free
          * albedo whatever it is doing, which is the control the ice-albedo guards are measured
@@ -454,7 +528,9 @@ object EnergyBalance {
          */
         iceAlbedoFeedback: Boolean = true
     ): ZonalClimate {
-        val geometry = Geometry(transportW.toDouble(), iceAlbedoFeedback)
+        val geometry = Geometry(
+            transportTropicsW.toDouble(), transportPolarW.toDouble(), iceAlbedoFeedback
+        )
         val insolation = insolationByBandAndStep(geometry, obliquityDegrees, solarScale.toDouble())
         val annualInsolation = DoubleArray(BANDS) { band ->
             var total = 0.0
@@ -554,7 +630,7 @@ object EnergyBalance {
         var scaleA = 1.0
         var missA = (presentMeanC - targetC).toDouble()
         var scaleB = 1.0 - OUTGOING_PER_DEGREE_W_PER_M2_C * coolingC /
-            (SOLAR_CONSTANT_W_PER_M2 / 4.0 * (1.0 - ICE_FREE_ALBEDO_MEAN))
+            (SOLAR_CONSTANT_W_PER_M2 / 4.0 * (1.0 - ICE_FREE_ALBEDO_BASE))
         scaleB = scaleB.coerceAtLeast(MIN_SOLAR_SCALE)
 
         for (pass in 0 until MAX_SECANT_PASSES) {
@@ -615,10 +691,25 @@ object EnergyBalance {
      * crosses them and the planet is closed by construction rather than by a special case.
      */
     private class Geometry(
-        /** See `solve`'s own parameter of the same name. */
-        val transportW: Double,
+        /** See `solve`'s own parameters of the same names. */
+        transportTropicsW: Double,
+        transportPolarW: Double,
         val iceAlbedoFeedback: Boolean
     ) {
+        /**
+         * The diffusivity on each edge between bands, which is where the flux is evaluated.
+         *
+         * Entry `i` sits on the edge poleward of band `i - 1`, so that band's poleward coefficient
+         * and band `i`'s equatorward one read the same number and the operator stays conservative.
+         * See [DIFFUSION_TROPICS_W_PER_M2_C] for the shape and where it comes from.
+         */
+        val transportAtEdge = DoubleArray(BANDS + 1) { edge ->
+            val latitudeRadians =
+                (POLE_DEGREES - POLE_TO_POLE_DEGREES * edge / BANDS) * PI / 180.0
+            val cosine = cos(latitudeRadians)
+            transportPolarW + (transportTropicsW - transportPolarW) * cosine * cosine
+        }
+
         val bandWidthRadians = (POLE_TO_POLE_DEGREES / BANDS) * PI / 180.0
         val cosCentre = DoubleArray(BANDS) {
             cos(latitudeOfBand(it) * PI / 180.0).coerceAtLeast(1e-6)
@@ -656,13 +747,33 @@ object EnergyBalance {
             .coerceIn(0.0, 1.0)
 
     /**
-     * The planetary albedo of a band that is [white] of the way to frozen, at a latitude whose
-     * sine is [sinLatitude].
+     * The planetary albedo of a band that is [white] of the way to frozen, at [latitudeDegrees].
+     *
+     * The clear-sky curve — flat through the tropics and rising late and steeply — plus the ITCZ's
+     * cloud. See [ICE_FREE_ALBEDO_BASE] for the observations these four were fitted to.
      */
-    private fun albedoOf(white: Double, sinLatitude: Double): Double {
-        val legendre = (3.0 * sinLatitude * sinLatitude - 1.0) * 0.5
-        val iceFree = ICE_FREE_ALBEDO_MEAN + ICE_FREE_ALBEDO_TOWARD_THE_POLES * legendre
+    private fun albedoOf(white: Double, latitudeDegrees: Double): Double {
+        val sinLatitude = sin(latitudeDegrees * PI / 180.0)
+        val towardsPole = sinLatitude * sinLatitude
+        val iceFree = ICE_FREE_ALBEDO_BASE +
+            ICE_FREE_ALBEDO_SUBTROPICAL_DIP * towardsPole +
+            ICE_FREE_ALBEDO_AT_A_SLANT * towardsPole * towardsPole +
+            CLOUD_ALBEDO_ITCZ *
+            cloudBelt(latitudeDegrees, CLOUD_ITCZ_DEGREES, CLOUD_ITCZ_WIDTH_DEGREES)
         return iceFree + (FROZEN_ALBEDO - iceFree) * white
+    }
+
+    /**
+     * A cloud belt's weight at a latitude: 1 on its centre, `1/e` one width away, and counted on
+     * both sides of the equator because a belt is a pair.
+     */
+    private fun cloudBelt(
+        latitudeDegrees: Double,
+        centreDegrees: Double,
+        widthDegrees: Double
+    ): Double {
+        val widths = (abs(latitudeDegrees) - centreDegrees) / widthDegrees
+        return exp(-(widths * widths))
     }
 
     /**
@@ -732,7 +843,7 @@ object EnergyBalance {
     ) {
         for (band in 0 until BANDS) {
             geometry.rightHandSide[band] = annualInsolation[band] *
-                (1.0 - albedoOf(white = 0.0, sinLatitude = geometry.sinCentre[band])) -
+                (1.0 - albedoOf(white = 0.0, latitudeDegrees = latitudeOfBand(band).toDouble())) -
                 outgoingOffset
         }
         solveDiffusion(
@@ -781,12 +892,14 @@ object EnergyBalance {
         for (band in 0 until BANDS) {
             val sunlight = insolation[step * BANDS + band]
 
-            val landAbsorbed = sunlight * (1.0 - albedoOf(geometry.white[band], geometry.sinCentre[band]))
+            val bandAlbedo =
+                albedoOf(geometry.white[band], latitudeOfBand(band).toDouble())
+            val landAbsorbed = sunlight * (1.0 - bandAlbedo)
             var land = (landC[band] + stepSeconds / landHeat * (landAbsorbed - outgoingOffset)) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / landHeat)
 
             val seaHeat = geometry.seaHeatCapacity[band]
-            val seaAbsorbed = sunlight * (1.0 - albedoOf(geometry.white[band], geometry.sinCentre[band]))
+            val seaAbsorbed = sunlight * (1.0 - bandAlbedo)
             var sea = (seaC[band] + stepSeconds / seaHeat * (seaAbsorbed - outgoingOffset)) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / seaHeat)
 
@@ -874,10 +987,11 @@ object EnergyBalance {
         val width = geometry.bandWidthRadians
         for (band in 0 until BANDS) {
             val capacity = perBandCapacity?.get(band) ?: 1.0
-            val scale = transportWeight / capacity * geometry.transportW /
-                (geometry.cosCentre[band] * width * width)
-            geometry.subDiagonal[band] = -scale * geometry.cosEdge[band]
-            geometry.superDiagonal[band] = -scale * geometry.cosEdge[band + 1]
+            val scale = transportWeight / capacity / (geometry.cosCentre[band] * width * width)
+            geometry.subDiagonal[band] =
+                -scale * geometry.transportAtEdge[band] * geometry.cosEdge[band]
+            geometry.superDiagonal[band] =
+                -scale * geometry.transportAtEdge[band + 1] * geometry.cosEdge[band + 1]
             geometry.diagonal[band] =
                 diagonalBase - geometry.subDiagonal[band] - geometry.superDiagonal[band]
         }

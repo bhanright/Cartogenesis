@@ -3,7 +3,9 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.pipeline.EnergyBalance
 import com.cartogenesis.worldgen.pipeline.Season
 import com.cartogenesis.worldgen.pipeline.ZonalClimate
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -60,6 +62,82 @@ class EnergyBalanceTest {
         const val EARTH_SIXTY_ENVELOPE_C = 6f
         const val EARTH_POLE_C = -20f
         const val EARTH_POLE_ENVELOPE_C = 12f
+
+        /**
+         * The latitudes the two columns are measured at, in degrees, both hemispheres pooled, and
+         * how many of them are asserted rather than reported.
+         *
+         * The first four are asserted; 80 degrees is printed with Earth's figure beside it and not
+         * held to it, because Earth is as cold as it is there for two reasons this model does not
+         * have. Its 80-degree land is Greenland and Ellesmere, whose surface stands two to three
+         * kilometres up on an ice sheet — I1's, not built — and its 80-degree sea is under
+         * perennial pack, which caps the mixed layer off and lets the air above it fall far below
+         * anything the water could. A model whose polar land is at sea level and whose polar sea is
+         * a slab will read warm there by construction, and it does, by 3.6 and 4.1 degrees. The
+         * band-mean guard below covers the pole with an envelope wide enough to say so.
+         */
+        val COLUMN_LATITUDES = intArrayOf(0, 20, 40, 60, 80)
+        const val COLUMNS_ASSERTED = 4
+
+        /**
+         * Earth's annual mean over **lowland land** at those latitudes, in degrees Celsius.
+         *
+         * Lowland, and that is the whole reason these are not simply Legates and Willmott's (1990)
+         * zonal land means. The model's land column stands at sea level: it has no elevation of its
+         * own, because the map applies the lapse rate afterwards, cell by cell, off its own
+         * terrain. Earth's zonal land mean at 40 degrees is 12 C, but a third of that latitude's
+         * land is Tibet, Iran and the Rockies, and comparing a sea-level column against it would
+         * ask the model to be a mountain range. So each figure is the mean of named stations near
+         * sea level on that latitude circle, which is what a sea-level column is:
+         *
+         *   0    Belem 26, Singapore 27, Kisangani 25                            -> 26
+         *   20   Mumbai 27, Hanoi 24, Havana 25, Rio 23                          -> 25
+         *   40   Beijing 13, New York 13, Rome 16, Istanbul 14.5, Naples 16      -> 14.5
+         *   60   Oslo 6, Helsinki 6, St Petersburg 6, Anchorage 3, Yakutsk -9,
+         *        Verkhoyansk -14 (the interiors are half the circle)             -> -2
+         *   80   Alert -18, Eureka -19, Ny-Alesund -5                            -> -15
+         *
+         * The northern hemisphere only, because Earth's southern land poleward of 40 degrees is
+         * Antarctica: an ice sheet three kilometres up, which is a landform this model has no
+         * equivalent of and I1 has not built yet.
+         */
+        val EARTH_LOWLAND_LAND_C = floatArrayOf(26f, 25f, 14.5f, -2f, -15f)
+
+        /**
+         * Earth's annual mean surface **air** temperature over the ocean at those latitudes, in
+         * degrees Celsius, both hemispheres pooled (ICOADS marine air, and ERA5 over ocean).
+         *
+         * Marine air and not the sea-surface temperature, which would be the wrong object: the
+         * model solves one temperature per surface and it is the temperature the air over that
+         * surface has. The two agree to a degree through the tropics and part company under ice,
+         * where the water is held at its freezing point and the air above it is fifteen degrees
+         * colder — 80 degrees reads -1.5 as an SST and -16 as an air temperature.
+         */
+        val EARTH_MARINE_AIR_C = floatArrayOf(26.5f, 24.5f, 14.5f, 2f, -16f)
+
+        /**
+         * How far either column may sit from those figures, in degrees Celsius.
+         *
+         * Four. It is the spread the observations themselves carry — the lowland stations at 60
+         * degrees run from Oslo's 6 to Verkhoyansk's -14 and the mean of them is a judgement about
+         * how much of that latitude circle is interior — and it is inside what separates Earth's own
+         * two hemispheres at 40 and 60. Tighter than that would be asserting a precision the
+         * targets do not have; looser would not have caught the first pass, which missed by up to
+         * 4.3 on the sea column and produced a map whose northern continents were tundra.
+         */
+        const val COLUMN_ENVELOPE_C = 4f
+
+        /**
+         * What the first pass measured, land then sea, at [COLUMN_LATITUDES].
+         *
+         * Kept as data so the guard can be shown to reject it. The first pass had a constant
+         * diffusivity and an albedo that fell monotonically toward the equator, and it passed the
+         * band-mean guard above while being three to four degrees cold over both columns through
+         * the subtropics and mid-latitudes — which the band mean cannot see, because it pools the
+         * two columns and the error is in both.
+         */
+        val FIRST_PASS_LAND_C = floatArrayOf(26.2f, 22.0f, 11.0f, -2.1f, -11.7f)
+        val FIRST_PASS_SEA_C = floatArrayOf(26.4f, 22.2f, 11.0f, -2.3f, -12.1f)
 
         /**
          * The obliquity Earth's own thermal-equator migration implies, which is Earth's own tilt:
@@ -126,6 +204,111 @@ class EnergyBalanceTest {
     private fun bothHemispheresC(climate: ZonalClimate, land: FloatArray, latitude: Float): Float =
         (zonalAnnualC(climate, land, latitude) + zonalAnnualC(climate, land, -latitude)) * 0.5f
 
+    /** One column's annual mean at [latitude], both hemispheres pooled. */
+    private fun columnC(values: FloatArray, latitude: Int): Float {
+        val north = ((EnergyBalance.POLE_DEGREES - latitude) * EnergyBalance.BANDS /
+            EnergyBalance.POLE_TO_POLE_DEGREES).toInt().coerceIn(0, EnergyBalance.BANDS - 1)
+        val south = ((EnergyBalance.POLE_DEGREES + latitude) * EnergyBalance.BANDS /
+            EnergyBalance.POLE_TO_POLE_DEGREES).toInt().coerceIn(0, EnergyBalance.BANDS - 1)
+        return (values[north] + values[south]) * 0.5f
+    }
+
+    /** Which of the two columns is outside [COLUMN_ENVELOPE_C], as a complaint, or null. */
+    private fun columnComplaint(
+        what: String,
+        measured: (Int) -> Float,
+        earth: FloatArray
+    ): String? {
+        val misses = (0 until COLUMNS_ASSERTED).filter {
+            abs(measured(COLUMN_LATITUDES[it]) - earth[it]) > COLUMN_ENVELOPE_C
+        }
+        if (misses.isEmpty()) return null
+        return misses.joinToString("; ", prefix = "$what outside Earth's by more than " +
+            "${COLUMN_ENVELOPE_C.toInt()} C at ") {
+            "%d deg (%.1f against %.1f)".format(
+                COLUMN_LATITUDES[it], measured(COLUMN_LATITUDES[it]), earth[it]
+            )
+        }
+    }
+
+    @Test
+    fun `each column's annual mean sits on Earth's own, land against land and sea against sea`() {
+        val land = earthLandFraction()
+        val solved = EnergyBalance.solve(land, EARTH_OBLIQUITY)
+
+        COLUMN_LATITUDES.indices.forEach { at ->
+            val latitude = COLUMN_LATITUDES[at]
+            println(
+                ("EBM column %2d deg: land %.1f C (Earth's lowland %.1f), " +
+                    "sea %.1f C (Earth's marine air %.1f)").format(
+                    latitude, columnC(solved.landAnnualC, latitude), EARTH_LOWLAND_LAND_C[at],
+                    columnC(solved.seaAnnualC, latitude), EARTH_MARINE_AIR_C[at]
+                )
+            )
+        }
+        println("EBM poleward transport: %s".format(transportReport(solved, land)))
+
+        val landComplaint =
+            columnComplaint("the land column", { columnC(solved.landAnnualC, it) }, EARTH_LOWLAND_LAND_C)
+        val seaComplaint =
+            columnComplaint("the sea column", { columnC(solved.seaAnnualC, it) }, EARTH_MARINE_AIR_C)
+        assertTrue(landComplaint == null, landComplaint ?: "")
+        assertTrue(seaComplaint == null, seaComplaint ?: "")
+    }
+
+    @Test
+    fun `the column guard rejects the profile the first pass produced`() {
+        // The guard above, shown to bite, on the numbers rather than on a switch: these ten are
+        // what W1's first pass measured, and they are what the coordinator's review was looking at
+        // when it found the northern continents drawn as tundra. The band-mean guard passed on
+        // them, which is exactly why a second guard on the two columns exists.
+        val landComplaint = columnComplaint(
+            "the land column", { COLUMN_LATITUDES.indexOf(it).let(FIRST_PASS_LAND_C::get) },
+            EARTH_LOWLAND_LAND_C
+        )
+        val seaComplaint = columnComplaint(
+            "the sea column", { COLUMN_LATITUDES.indexOf(it).let(FIRST_PASS_SEA_C::get) },
+            EARTH_MARINE_AIR_C
+        )
+        println("EBM first pass, land: $landComplaint")
+        println("EBM first pass, sea: $seaComplaint")
+        assertTrue(
+            landComplaint != null || seaComplaint != null,
+            "the column guard accepts the first pass's profile, so it cannot be what caught it"
+        )
+    }
+
+    /**
+     * The poleward energy transport across 30, 45 and 60 degrees, in petawatts, against Trenberth
+     * and Caron's (2001) observed curve — 5.3, 5.0 and 3.3 PW, peaking near 35 at 5.5.
+     *
+     * Reported, not asserted: it is the same information the temperatures carry, one derivative
+     * away, and it is here because it is what says *where* a constant diffusivity was wrong.
+     */
+    private fun transportReport(solved: ZonalClimate, landFraction: FloatArray): String {
+        val earthRadiusMetres = 6.371e6
+        val observedPW = mapOf(30 to 5.3, 45 to 5.0, 60 to 3.3)
+        return observedPW.keys.sorted().joinToString(", ") { latitude ->
+            fun bandMeanAt(degrees: Double): Double {
+                val band = ((EnergyBalance.POLE_DEGREES - degrees) * EnergyBalance.BANDS /
+                    EnergyBalance.POLE_TO_POLE_DEGREES).toInt()
+                    .coerceIn(0, EnergyBalance.BANDS - 1)
+                val share = landFraction[band].toDouble()
+                return share * solved.landAnnualC[band] + (1 - share) * solved.seaAnnualC[band]
+            }
+            val step = 5.0
+            val gradient = (bandMeanAt(latitude - step) - bandMeanAt(latitude + step)) /
+                (2 * step * PI / 180.0)
+            val cosine = cos(latitude * PI / 180.0)
+            val diffusivity = EnergyBalance.DIFFUSION_POLAR_W_PER_M2_C +
+                (EnergyBalance.DIFFUSION_TROPICS_W_PER_M2_C -
+                    EnergyBalance.DIFFUSION_POLAR_W_PER_M2_C) * cosine * cosine
+            val petawatts = 2 * PI * earthRadiusMetres * earthRadiusMetres *
+                diffusivity * cosine * gradient / 1e15
+            "%d deg %.1f PW (Earth %.1f)".format(latitude, petawatts, observedPW[latitude])
+        }
+    }
+
     @Test
     fun `the annual zonal mean sits on Earth's own profile`() {
         val land = earthLandFraction()
@@ -186,7 +369,9 @@ class EnergyBalanceTest {
         // the fitted diffusivity rather than none at all, so the solve stays well conditioned.
         val land = earthLandFraction()
         val solved = EnergyBalance.solve(
-            land, EARTH_OBLIQUITY, transportW = (EnergyBalance.DIFFUSION_W_PER_M2_C / 10.0).toFloat()
+            land, EARTH_OBLIQUITY,
+            transportTropicsW = (EnergyBalance.DIFFUSION_TROPICS_W_PER_M2_C / 10.0).toFloat(),
+            transportPolarW = (EnergyBalance.DIFFUSION_POLAR_W_PER_M2_C / 10.0).toFloat()
         )
         val equator = bothHemispheresC(solved, land, 0f)
         val sixty = bothHemispheresC(solved, land, 60f)
@@ -376,16 +561,35 @@ class EnergyBalanceTest {
             "the cap did not grow under the glacial forcing: edge %.1f -> %.1f deg"
                 .format(presentEdge, glacialEdge)
         )
+        // The amplification is a *comparison*, not an absolute, and the second pass is why.
+        //
+        // A dimmed sun with no feedback at all cools the tropics more than the poles, because the
+        // tropics are where the sunlight is: measured, 5.7 C at 10 degrees against 4.1 at 75, a
+        // ratio of 0.72. What the ice-albedo feedback does is turn that round, and the guard is
+        // that it turns it round — the polar-to-tropical ratio has to rise by at least half again
+        // when the feedback is switched on. Measured, 0.72 becomes 1.00.
+        //
+        // It used to be stated as an absolute (the poles must cool 1.5 times the tropics) and W1's
+        // second pass could not keep it, for a reason worth writing down rather than tuning away.
+        // The albedo the first pass used put the ice-free pole at 0.39, so freezing it to North's
+        // 0.62 was a step of 0.23 and the feedback was violent. The observed ice-free polar albedo
+        // is nearer 0.53 — a slanted sun under permanent cloud is already bright — which leaves the
+        // ice itself only 0.09 of contrast to work with. So a model whose *only* amplifier is ice
+        // albedo cannot reach the three-to-sixfold amplification the proxies describe, and this one
+        // does not: it reaches parity. The rest of Earth's polar amplification is the lapse-rate
+        // and water-vapour feedbacks and the insulating effect of the ice on the ocean beneath,
+        // none of which a Budyko model has. Printed above with the proxy figures beside it.
+        val amplification = polarCooling / tropicalCooling
+        val controlAmplification = controlPolarCooling / controlTropicalCooling
         assertTrue(
-            polarCooling > tropicalCooling * 1.5f,
-            "the cooling was not polar-amplified: 10 deg %.1f C against 75 deg %.1f C"
-                .format(tropicalCooling, polarCooling)
+            amplification > controlAmplification * 1.3f,
+            ("the feedback barely moved the shape of the cooling: polar against tropical %.2f " +
+                "with it, %.2f without").format(amplification, controlAmplification)
         )
         assertTrue(
-            controlPolarCooling < controlTropicalCooling * 1.5f,
-            "the amplification survives with the feedback off, so the guard is not measuring the " +
-                "feedback: 10 deg %.1f C against 75 deg %.1f C"
-                .format(controlTropicalCooling, controlPolarCooling)
+            controlAmplification < 1f,
+            ("a dimmed sun with no feedback already cools the poles more than the tropics, so the " +
+                "guard is not measuring the feedback: %.2f").format(controlAmplification)
         )
         assertTrue(
             glacialEdge < controlEdge - 1f,

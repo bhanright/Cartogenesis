@@ -1862,6 +1862,19 @@ hillslope diffusion on the 3.0 line), the straight-bar lakes (F18, in progress f
 belts' aprons (F19, S2's), the equatorial stripe (F20, W1/W2's), a phone cartouche line that
 truncates, and the sky model's CPU cost in the browser.
 
+### Release 2.0.4 (2026-09-13)
+
+Cut from `release/2.0` at 526aca6, tagged `v2.0.4`: F18 (flow follows Tarboton's steepest facet
+with Rho8's proportional receiver, so smooth aprons no longer rule straight trenches), F22 (the
+outlet breach counts its step into the water; the post-cut passes re-derived 8 → 10), F23 (the
+Natural map style, its palette measured off William's Blue Marble reference), F24 (the Lemon
+Blueberry chrome, and the export panel's chips reading in full). F25 (cloud cover) was built to
+a first pass and stopped at William's request after he saw its renders; its branch is kept
+unmerged. Full tier and `siteTest` green on the branch before the cut. Portable zip 97 MB, MSI
+98 MB, web zip 5.4 MB; the packaged exe passes `--gpu-check`. The save format on this line is 3
+(F25's bump never merged). Worlds regenerated from their seeds differ where rivers and drained
+basins moved; saves draw as saved.
+
 ## Track M — the Earth-likeness yardstick (3.0)
 
 ### M1. Earth-likeness metric suite — Opus

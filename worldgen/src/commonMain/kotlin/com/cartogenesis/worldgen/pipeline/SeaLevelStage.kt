@@ -90,6 +90,14 @@ object SeaLevelStage {
     }
 
     /**
+     * The whole cut: the percentile, the two rules that decide which water is sea, the grading the
+     * waves have done since the sea stopped rising, and the continental shelf under all of it.
+     *
+     * In that order, and the order is the argument. The percentile decides the coastline; [enclose]
+     * and [drainDrownedBasins] decide which of the water below it the ocean can actually reach;
+     * [LittoralGrading] moves the shoreline itself, so it has to run before anything is measured
+     * from it; and the shelf remap is measured from it and touches only water, so it runs last.
+     *
      * The continental shelf, remapped onto the ocean floor *after* the percentile cut above has
      * already decided the coastline.
      *
@@ -120,12 +128,26 @@ object SeaLevelStage {
         val enclosed = if (sea.enclosedSeaIsLand) enclose(cut, height, sea) else cut
         // H5b: and the basins the line above just turned into land get their outlets cut, once,
         // now that there is a shoreline for them to be measured against. See [drainDrownedBasins].
-        val base =
+        val drained =
             if (sea.enclosedSeaIsLand && sea.postCutOutlet) {
                 drainDrownedBasins(enclosed, height, config)
             } else {
                 enclosed
             }
+        // And then the six thousand years since the sea stopped rising, in which the waves grade
+        // the coasts that are low enough to be graded and leave the rest alone. See
+        // [LittoralGrading]; it runs here because everything downstream reads the mask, and before
+        // the shelf below because the shelf is measured from the coastline this leaves.
+        // The enclosure rule is not run again over what it leaves: the grading only ever turns water
+        // into land, and never a cell whose filling would cut the water around it in two, so no body
+        // of water can be enclosed by it. See `LittoralGrading.severs`, and `LittoralCoastTest`,
+        // which counts the bodies the ocean cannot reach on both sides of the pass.
+        val base = LittoralGrading.apply(
+            drained,
+            sea,
+            landRelief = height.max() - drained.threshold,
+            seaRelief = drained.threshold - height.min()
+        )
         if (sea.shelfWidth <= 0f) return base
 
         val w = base.relativeElevation.width

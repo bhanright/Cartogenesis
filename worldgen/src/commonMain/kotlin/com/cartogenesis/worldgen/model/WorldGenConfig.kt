@@ -522,7 +522,91 @@ data class SeaConfig(
      *
      * Off is the control the guard needs, and reproduces the H5 world exactly.
      */
-    val postCutOutlet: Boolean = true
+    val postCutOutlet: Boolean = true,
+    /**
+     * Whether the waves are allowed to put the coast back in order after the sea has finished
+     * rising.
+     *
+     * [lowstand] drops the base level for nine of the twelve hydraulic rounds, so running water
+     * works every cell within about 120 m of the shoreline, and the transgression floods all of it.
+     * That is the right half of the story and it is the only half the generator told: measured at
+     * 512 over five seeds, the lowstand takes the shoreline from 43,967 cells to 60,755 and puts a
+     * saw-tooth one to four cells deep on *every* coast, mountainous or flat, sheltered or exposed.
+     * Earth's coasts are not alike in that way. The sea reached its present level about six
+     * thousand years ago and the shore has been worked ever since, so a coast on low ground is a
+     * graded arc of beach, barrier and marsh — Texas, Holland, Bengal — while a coast on high
+     * ground keeps the outline the drowning gave it, which is Galicia, Maine and western Norway.
+     *
+     * See `LittoralGrading`, which holds the criterion and the Earth figures behind it. Off is the
+     * control its guard needs, and is the coast the 2.0.2 release drew.
+     */
+    val littoralGrading: Boolean = true,
+    /**
+     * How far along the shore the littoral system carries sediment, as a fraction of the map's
+     * width.
+     *
+     * A fraction rather than a count of cells, and the one place in this section where that matters
+     * enough to break the pattern [shelfWidth] sets. What this length means is a distance on the
+     * ground, and a count of cells only means that distance on the grid it was written for: a
+     * config built directly at 128 or 256, which several tests are, would take one cell to mean
+     * 94 km or 47 km and grade a coast the Holocene could not have touched. Held as a fraction, the
+     * pass is inert at 128 — correctly, since the whole six thousand years of it is well under a
+     * cell there — and reaches one cell at 512, two at 1024 and four at 2048.
+     *
+     * The distance is 23 km, a five-hundred-and-twelfth of a 12,000 km world. Earth's reference is
+     * the spacing of the inlets through a barrier coast, which is the length of shore a drift system
+     * holds unbroken: 10 to 30 km between the Frisian islands, 20 to 60 through the Outer Banks,
+     * 180 for Padre Island in one piece. It sets how many sweeps of the grading a fully depositional
+     * coast gets, so a re-entrant narrower than twice this is what fills.
+     */
+    val littoralReach: Float = 1f / 512f,
+    /**
+     * How large a window the land behind a coast is judged over, as a fraction of the map's width.
+     *
+     * 187 km, eight cells at 512, held as a fraction for the reason [littoralReach] is. A coastal
+     * plain's own scale: the United States' Atlantic plain runs 50 to 200 km inland, the Gulf plain
+     * 150 to 500, the North European plain 200 to 400. The window is square, so the same figure is
+     * also how far *along* the shore the judgement is averaged, and that is the half of it that
+     * turned out to matter. At 47 km — the width of the narrowest of those plains, which was the
+     * first figure tried — the classification flickered from cell to cell along a single coast and
+     * the coasts came out uniformly a little smoother instead of some smooth and some not: the
+     * spread of the per-stretch dimension went from 0.105 ungraded to 0.102 graded, the wrong way.
+     * At 187 km a coast keeps one character for a stretch, which is how Earth's coasts come, and
+     * the spread goes to 0.108.
+     */
+    val littoralBackshore: Float = 8f / 512f,
+    /**
+     * How far out to sea the exposure of a coast is measured, as a fraction of the map's width.
+     *
+     * 492 km, twenty-one cells at 512, held as a fraction for the reason [littoralReach] is. Wave
+     * height grows as the square root of the fetch until the sea is fully arisen, and for an
+     * ordinary wind that takes a few hundred kilometres of open water; five hundred is the round
+     * figure. Beyond it the waves stop growing, so measuring further would only average in coasts on
+     * the other side of an ocean.
+     */
+    val littoralFetch: Float = 21f / 512f,
+    /**
+     * The share of a world's shoreline that is a depositional coast, and so the share the littoral
+     * pass grades.
+     *
+     * Earth's own figure, put into the model directly rather than reached through a threshold on
+     * the height of the land — the way [enclosedSeaMaxShare] carries the Caspian's share of Earth's
+     * surface and `GlaciationConfig.maxLakeShareOfMap` carries Superior's. Luijendijk et al. (2018),
+     * *Scientific Reports* 8:6641, classify 31% of the world's ice-free shoreline as sandy from
+     * three decades of satellite imagery; Bird (2000), *Coastal Geomorphology: An Introduction*,
+     * puts the depositional share at about a third; Young and Carilli (2019) put the rocky share at
+     * 52%, leaving 48% for everything softer. Thirty-one per cent is the tightest of those and the
+     * one with a measurement behind it.
+     *
+     * It is a share rather than a height because no height can be derived. The postglacial rise —
+     * did the sea flood a flat, or run up a valley — calls 59% of this generator's shoreline
+     * depositional; a coastal plain's own one-metre-per-kilometre gradient calls 1.9% of it
+     * depositional; and picking a figure in between so that the answer came out at Earth's third
+     * would be tuning a threshold to a target. The gap between the two is real and it is the
+     * low-lying *rocky* coast — Finland, the Canadian Shield, western Scotland, flat and ragged
+     * both — which needs the lithology the plan's H3 has not built yet. See `LittoralGrading`.
+     */
+    val littoralDepositionalShare: Float = 0.31f
 )
 
 @Serializable

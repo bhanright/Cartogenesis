@@ -6,30 +6,61 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The contract of [WorldGenConfig.atResolution]: settings measured in cells scale with the grid.
+ * What is left of [WorldGenConfig.atResolution]: the tectonics, and the moisture march's rain rate.
  *
- * This is not decoration. Re-targeting the grid without rescaling them leaves mountain belts a
- * fraction of their proper width, which surfaces plate edges as straight cliffs and turns
- * coastlines angular — the UI shipped that bug by changing resolution with a plain
- * `copy(width = ...)`, so both the app and the desktop build now go through [atResolution] and
- * these assertions pin the behaviour they depend on.
+ * This class used to assert that a dozen named settings were multiplied by the grid ratio, which
+ * was the only way to ask "is this still the same world at export size" while every reach was a
+ * count of cells and every depth a fraction of an assumed range. They are lengths in kilometres and
+ * depths in metres now, converted where each stage reads them, so there is nothing left to carry
+ * for them and nothing here to assert about them — `ScaleFreeTest` asks the question the contracts
+ * were standing in for, and asks it of the finished world rather than of the settings.
+ *
+ * Two groups are still carried by hand and both are held here, because a contract that is still a
+ * contract still needs a guard. A belt's width could be a kilometre today but its *height* cannot
+ * be a metre until the height field has an absolute vertical scale, and the two are read together
+ * in one stamping expression; the moisture march's rain rate is one term of a sum whose other term
+ * is charged against a per-cell rise in the same unitless field. Both pairs move together in S2 and
+ * W3. See [WorldGenConfig.atResolution] for the whole of the reasoning.
  */
 class ResolutionScalingTest {
 
     private val base = WorldGenConfig(seed = 1L, width = 512, height = 512)
 
     @Test
-    fun `settings measured in cells scale with the grid`() {
+    fun `the tectonics and the rain rate are still carried by hand`() {
         val scaled = base.atResolution(2048, 2048)
 
         assertEquals(2048, scaled.width)
         // A belt four times as many cells wide, so it stays the same width on the map.
         assertEquals(base.tectonics.boundaryFalloffCells * 4f, scaled.tectonics.boundaryFalloffCells)
+        assertEquals(base.tectonics.andeanWidthCells * 4f, scaled.tectonics.andeanWidthCells)
+        assertEquals(base.tectonics.collisionWidthCells * 4f, scaled.tectonics.collisionWidthCells)
+        assertEquals(base.tectonics.epochDriftCells * 4f, scaled.tectonics.epochDriftCells)
+        assertEquals(base.tectonics.hotspotSpacingCells * 4f, scaled.tectonics.hotspotSpacingCells)
         // Charged per cell of wind travel, so a four-times-wider grid must charge a quarter as
         // much or every interior parches.
         assertEquals(base.climate.baseRainRate / 4f, scaled.climate.baseRainRate)
-        // Charged against the climb between adjacent cells, which halves as the cells do.
-        assertEquals(base.nations.slopeResistance * 4f, scaled.nations.slopeResistance)
+    }
+
+    @Test
+    fun `everything that carries a unit is left alone`() {
+        val scaled = base.atResolution(2048, 2048)
+
+        // The world's own size and its clock: how many cells the map is cut into says nothing
+        // about how wide the world is, how high its land stands or how long a round lasts.
+        assertEquals(base.scale, scaled.scale)
+        // A reach in kilometres, a depth in metres and an area in square kilometres are the same
+        // reach, depth and area at every grid. The conversion is the stage's, not this function's.
+        assertEquals(base.erosion.deltaReachKm, scaled.erosion.deltaReachKm)
+        assertEquals(base.erosion.outletReachKm, scaled.erosion.outletReachKm)
+        assertEquals(base.erosion.debrisTravelKm, scaled.erosion.debrisTravelKm)
+        assertEquals(base.erosion.criticalFallMetresPerKm, scaled.erosion.criticalFallMetresPerKm)
+        assertEquals(base.sea.shelfWidthKm, scaled.sea.shelfWidthKm)
+        assertEquals(base.sea.lowstandMetres, scaled.sea.lowstandMetres)
+        assertEquals(base.glaciation.valleyWidthKm, scaled.glaciation.valleyWidthKm)
+        assertEquals(base.glaciation.basinDropMetres, scaled.glaciation.basinDropMetres)
+        assertEquals(base.glaciation.maxLakeAreaKm2, scaled.glaciation.maxLakeAreaKm2)
+        assertEquals(base.lakes.minLakeAreaKm2, scaled.lakes.minLakeAreaKm2)
     }
 
     @Test

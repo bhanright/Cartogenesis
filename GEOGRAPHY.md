@@ -271,6 +271,79 @@ along one of its own internal watersheds, largest first, until none is over. Tha
 nothing to place, because the divide is already there, and it is the same mechanism as a voluntary
 schism. (Recorded here by C2, which found both figures in a code comment and nowhere else.)
 
+## The units these rules are stated in
+
+Every physical figure below is in metres, kilometres, square kilometres or years, and all of them
+come from one place: `WorldScale`, on `WorldGenConfig`. There is no second ruler, and until S1
+there were two — one unit of land elevation was 6,000 m in the climate, which reads it for the
+lapse rate, and about 8,000 m in the sea-level and erosion constants, which derived their defaults
+from "roughly 8 km of relief". The sea had no depth at all: below the shoreline the elevation field
+was normalised against whatever the deepest cell happened to be, so nothing in the pipeline said
+how deep an ocean is.
+
+The world is **12,000 km wide** and half that tall, being an equirectangular projection of a whole
+planet. Its highest land stands **6,000 m** above the waterline and its deepest floor **10,000 m**
+below it. One hydraulic round stands for about **340,000 years**, so the twelve of them are four
+million — the right order for a mountain belt to reach a steady state between uplift and erosion.
+
+Both ends of the vertical range are **cell means, not points**, and that is the thing to hold on to
+when a figure below looks too large. A cell of the default 512 grid is 23 km by 12 km. No cell that
+size holds Everest's 8,849 m: the highest ground a cell this coarse can carry is a plateau, and
+Tibet's interior averages 5,023 m (Fielding et al. 1994), so 6,000 m is where a 23 km cell tops
+out. A trench survives the same averaging far better, because a trench is a line where a peak is a
+point — the Mariana axis holds below 10 km for hundreds of kilometres — which is why the two
+figures are not the same.
+
+The ruler has three parts, and which one a figure takes is decided by where the figure is spent.
+A height above the water is the land's 6,000 m; a depth below it is the sea's 10,000 m; and a
+*level in the height field* — the shoreline itself, or a depth measured down from it into the raw
+elevation the erosion stages work on — is the whole 16,000 m. That third one matters more than it
+sounds: before S1 those quantities were written as shares of "the land's relief above the
+shoreline", which is a measured number and is a quarter of the height field on one seed and three
+fifths on another, so the same setting was a different figure on every world.
+
+Writing the units down made four things visible that were invisible while they were fractions:
+
+- **The last glacial lowstand was 45 m on one world and 141 m on another.** `SeaConfig.lowstand`
+  said 120 m in its own documentation and was written as 0.015 of the land's relief, which is not
+  a fixed quantity. It is 120 m of the height field now, on every world, and the world moves with
+  it: on the seeds where the stand deepens the sea comes back over a broader shelf and the basins
+  it leaves behind are larger, which on seed 718106 takes the largest drowned basin from 0.9 to 1.4
+  times the Caspian's share of the land. That is the deviation this document already records under
+  "an inland sea is left as sea", now acting on a wider population.
+
+- **A glacial trough here is 150 km wide.** The stage's half-width is six and a half cells, which
+  in kilometres is fifty times a real trough's two to five. It cannot be otherwise at 23 km to a
+  cell, and what the stage carves is better read as a glaciated *province* the shape of a valley
+  than as a glacier. Every other figure in that section is the province's rather than the ice's:
+  a 375 km reach between basins, a 70 km cirque, a 190 km run-out past the freezing line.
+- **The continental shelf stands at 1,000 m.** Against a sea 10 km deep the shelf plateau's outer
+  edge is a tenth of the way down, where Earth's shelf break is at 130 m. A plateau at 130 m would
+  be one part in seventy-seven of this model's sea, far below what its ocean floor's own relief can
+  hold apart, and the reason is that the two-density crust that makes Earth's shelf a shelf is not
+  modelled. S2's isostasy is where that is repaired.
+- **A knickpoint was cutting nine tenths as hard as an ordinary reach, not three times.**
+  `ErosionConfig.outletIncisionRatio` was three, but the two rates were written in different units:
+  the outlet's in the land's relief and the ordinary incision's on the height field. Converted to
+  one ruler the multiplier is 1.125, and against the field where the ordinary cut is actually spent
+  it is about 0.9. The number did not say what it appeared to say.
+
+Two more figures are the Caspian's and Superior's *shares of Earth* carried onto a world a seventh
+of Earth's size, which makes them a seventh of the lakes they are named for: the enclosure rule's
+cap is 52,600 km² where the Caspian is 371,000, and the ice's largest basin is 11,520 km² where
+Superior is 82,100. Which of the two a world this size should use is a real question and is written
+up in `TODO.md`; changing it would move coastlines that nothing else in S1 touches.
+
+One limit is worth stating plainly. The three parts of the ruler are consistent only if the
+shoreline sits where `WorldScale` implies it does — at `deepestOceanMetres / reliefSpanMetres`, or
+0.625 of the height field. It does not, because the shoreline is a percentile of the *cells* and
+where that lands in the *range* is an output: measured on the standard seeds at 512 it sits at
+0.395, 0.437, 0.477 and 0.554, so the metres one unit of the field is worth read off the land come
+to 10,228, 10,869, 17,370 and 15,377 against the 16,000 declared. `UnitsTest` measures that and
+holds it inside a stated factor; it is a regression guard on the disagreement rather than a claim
+that there is none. Closing it needs the height field to have an absolute vertical scale that does
+not move with the sea level, which is what S2's uplift and isostasy give it.
+
 ## Known deviations
 
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
@@ -282,9 +355,11 @@ they are drawn as ocean rather than as the Caspians they might be. The bodies be
 converted, and since H5b their outlets are cut like everyone else's, so a converted saucer no longer
 floods far wider than itself: `OutletIncisionTest` and `OutletResolutionTest` still measure the
 drowned basins apart from the ones the in-round notch owns, but both figures are now held to the
-same bar. The cap itself is still a share of the map rather than an area in square kilometres, which
-is S1's business in `REALISM_AUDIT.md`; 0.073% is the Caspian's share of *Earth's* surface, and this
-map's surface is not Earth's.
+same bar. The cap is an area in square kilometres now rather than a share of the map, which was
+S1's business, and writing it down is what made the question underneath it visible: 52,600 km² is
+0.073% — the Caspian's share of *Earth's* surface — carried onto a world a seventh of Earth's size,
+so it is a seventh of the Caspian. Whether a world this size should cap at the share or at the lake
+is not a units question and is in `TODO.md`.
 
 **Where a rift meets the coast, half its floor is dry.** A half-graben's floor is a wedge — deepest
 against the master fault and rising to about a fifth of that depth against the hinge — and where the

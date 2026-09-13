@@ -29,6 +29,13 @@ MIT licensed; see [LICENSE](LICENSE).
 
 Each stage feeds the next, and all of them are deterministic for a given seed.
 
+The world's physical size is declared once, in `WorldScale`, and every stage reads its metres,
+kilometres and years from there: the map is 12,000 km wide, its highest land stands 6,000 m above
+the waterline and its deepest floor 10,000 m below it, and one hydraulic round stands for about
+340,000 years. Both ends of the vertical range are cell means rather than points — a cell of the
+default grid is 23 km across, and no cell that size holds a summit — and every reach, depth and
+rate below is written in those units and converted to whatever grid the world is generated at.
+
 1. **Terrain.** Seeded Perlin noise generates a random gradient field, integrated into a height map
    by Frankot-Chellappa least-squares integration (a 2D FFT).
 2. **Plates.** The world splits into drifting Voronoi plates; boundaries are classified by relative
@@ -36,8 +43,9 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    or ridges accordingly. Three past epochs of the same history are stamped first and aged
    (lowered, widened, rounded) before the present one, so a range can stand old and worn far from
    any boundary, the way the Appalachians do.
-3. **Erosion.** Thermal erosion slides material off slopes steeper than a critical angle while
-   stream-power incision cuts channels in proportion to the water draining through them,
+3. **Erosion.** Thermal erosion slides material off slopes steeper than a critical gradient of
+   12 m per km while stream-power incision (`E = K A^0.5 S`, with K at Whipple and Tucker's 10^-6
+   for bedrock) cuts channels in proportion to the water draining through them,
    interleaved round by round. Every cell is clamped to never end a round below the neighbour it
    drains to (the receiver clamp), which keeps a channel grading smoothly instead of filling with a
    stitch of ponds.
@@ -263,9 +271,10 @@ always carries the seed, the pixel dimensions, the world's width in kilometres (
 size in kilometres at that export size, the square kilometres per cell, the save format version and
 the build that wrote it; the heightmap's adds the metre scale. **Sea level is grey level 32768, on
 every world** — fixed rather than derived per world, because its job is to be typed into somebody
-else's program, and there is one metres-per-grey-level for the whole image rather than one for the
-land and another for the sea: 32767 levels either side of the waterline, so at the default 6,000 m
-of relief a grey level is 0.1831 m and white and black are +6,000 m and -6,000 m. Land below the
+else's program. There are 32767 levels either side of the waterline and a metres-per-grey-level for
+each half, because the world's vertical range is two figures rather than one: at the defaults a
+grey level above the waterline is 0.1831 m and one below it is 0.3052 m, so white is +6,000 m and
+black is -10,000 m. The sidecar states both. Land below the
 waterline is written as it is rather than clamped — a basin the sea cannot reach is drained out
 into a salt flat below sea level, which is the Qattara, and on seed 42 at 512 that is 497 cells.
 

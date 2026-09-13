@@ -109,7 +109,10 @@ val auditOnlyClasses = listOf(
     // lake share of land is compared at. `EarthLikenessTest` holds the same metrics at 512 and
     // `EarthLikenessControlTest` the synthetic worlds each bar is shown to bite on; both are
     // per-merge and cost a few seconds between them.
-    "com.cartogenesis.worldgen.EarthLikenessAuditTest"
+    "com.cartogenesis.worldgen.EarthLikenessAuditTest",
+    // S1: the scale-free suite's third grid. `ScaleFreeTest` holds 512 against 1024 per
+    // merge; four worlds at 2048 is four minutes of erosion for one more octave of lever.
+    "com.cartogenesis.worldgen.ScaleFreeAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

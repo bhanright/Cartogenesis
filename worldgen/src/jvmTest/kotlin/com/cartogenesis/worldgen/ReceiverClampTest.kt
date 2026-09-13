@@ -152,7 +152,8 @@ class ReceiverClampTest {
         val sea = SeaLevelStage.apply(height, config)
         if (sea.landCellCount == 0) return 0
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
+        val flow =
+            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, config.seed)
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
         // The same figure `RiversConfig.sourceThreshold` draws a river at, and the same one the

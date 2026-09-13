@@ -1589,6 +1589,17 @@ data class WorldGenConfig(
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
     val erosion: ErosionConfig = ErosionConfig(),
+    /**
+     * Whether the water's direction is taken from the steepest triangular facet, with the one
+     * receiver drawn across it, rather than snapped to the steepest of the eight neighbours.
+     *
+     * Top level rather than inside a section because four stages route water — erosion, the
+     * post-cut outlet inside the sea-level step, glaciation and rivers — and the rule is the same
+     * rule for all of them. Off is the plain steepest-neighbour rule the generator used until F18,
+     * kept as the control the straight-bar census is measured against; see
+     * [com.cartogenesis.worldgen.pipeline.FlowRouting.flowDirections] for what it does and why.
+     */
+    val facetRouting: Boolean = true,
     /** Fraction of the world covered by ocean, 0..1. */
     val seaLevel: Float = 0.62f,
     val sea: SeaConfig = SeaConfig(),

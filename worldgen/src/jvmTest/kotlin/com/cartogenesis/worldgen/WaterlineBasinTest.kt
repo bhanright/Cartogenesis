@@ -68,8 +68,8 @@ class WaterlineBasinTest {
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground
             // is a hollow at the waterline that no sea-level rule ever saw.
-            val stage = count(SeaLevelStage.apply(world.erosion.height, config))
-            val finished = count(world.sea)
+            val stage = count(SeaLevelStage.apply(world.erosion.height, config), config.seed)
+            val finished = count(world.sea, config.seed)
             found += stage.at
             println(
                 ("E8 seed %d at 512: %d basins below the cut over %d cells — %d standing at the " +
@@ -111,11 +111,12 @@ class WaterlineBasinTest {
      * converted ground below the waterline, which is to say they lie inside a tract the ocean
      * cannot reach at all and belong to `SeaConfig.enclosedSeaIsLand` rather than to any surge.
      */
-    private fun count(sea: SeaLevelResult): Count {
+    private fun count(sea: SeaLevelResult, seed: Long): Count {
         val w = sea.relativeElevation.width
         val h = sea.relativeElevation.height
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
+        val flow =
+            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, seed)
         val notch = FlowRouting.spillways(
             w, h, sea.isLand, sea.relativeElevation.data, filled.data, flow,
             HydraulicErosion.POND_DEPTH

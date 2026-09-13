@@ -191,16 +191,11 @@ internal object LakeWaterBalance {
 
     private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
-    /** One lattice corner's value in -1..1. Integer mixing only, so every platform agrees. */
-    private fun hash(ix: Int, iy: Int, seed: Long): Float {
-        var h = seed xor (ix.toLong() * -0x61c8864680b583ebL) xor (iy.toLong() * 0x27220a95_1d5a2b1fL)
-        h = h xor (h ushr 30)
-        h *= -0x40a7b892e31b1a47L
-        h = h xor (h ushr 27)
-        h *= -0x6b2fb644ecceee15L
-        h = h xor (h ushr 31)
-        return (h ushr 40).toInt() / 8388608f - 1f
-    }
+    /**
+     * One lattice corner's value in -1..1, from [FlowRouting.seededNoise] — the same mixing the
+     * routing's own draw uses, sampled here on the lattice rather than per cell.
+     */
+    private fun hash(ix: Int, iy: Int, seed: Long): Float = FlowRouting.seededNoise(ix, iy, seed)
 
     /** Cells across one period of the jitter field: short enough to bend a path inside one basin. */
     private const val JITTER_PERIOD = 8

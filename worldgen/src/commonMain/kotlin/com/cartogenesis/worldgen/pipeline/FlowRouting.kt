@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.math.LongMinHeap
+import kotlin.math.sqrt
 
 /**
  * Where water goes: filling the hollows, picking the downhill neighbour, and adding up what
@@ -80,8 +81,148 @@ internal object FlowRouting {
         return filled
     }
 
-    /** Steepest-descent neighbour per land cell, or -1 where the water leaves the map. */
+    /**
+     * Which neighbour each land cell drains into, or -1 where the water leaves the map.
+     *
+     * Not simply the steepest of the eight, because eight bearings cannot express a slope that
+     * faces between two of them. Over ground that is smooth at the cell scale — the apron below a
+     * range, laid by deposition and worn by the thermal relaxation until it is a plane — every cell
+     * in turn faces the same way, the same neighbour wins by the same margin, and the water runs
+     * dead straight for as far as the plane goes. That is a property of the grid and not of the
+     * ground: a river crossing an apron wanders, because the real apron has relief at scales a
+     * six-kilometre cell cannot hold. Left alone, the stream power along such a run cuts a ruled
+     * trench, the trench ponds behind its own lip, and the map grows a lake shaped like a ruler.
+     * See `GEOGRAPHY.md`, "A river crossing smooth ground does not run in a ruled line".
+     *
+     * So the direction is taken from the surface rather than from the neighbour list, by Tarboton's
+     * method (1997, *Water Resources Research* 33(2), 309-319): the cell and each cardinal
+     * neighbour with one of the two diagonals flanking it make a triangular facet, eight in all,
+     * and the steepest descent over the steepest of those facets is the direction the water really
+     * takes. That direction points somewhere between the facet's two neighbours, at some share of
+     * the way from the cardinal to the diagonal.
+     *
+     * The whole flow then goes to *one* of the two, drawn at that share — Fairfield and Leymarie's
+     * Rho8 (1991, *Water Resources Research* 27(5), 709-717), which was written for exactly this
+     * defect. Every stage downstream of this one needs one receiver per cell: the drainage is a
+     * forest, a river cannot fork, and the incision walks the tree from the outlets upstream. So
+     * the split is spent on *which* cell rather than on how much, and a reach whose true bearing
+     * lies four fifths of the way toward the diagonal takes the diagonal four steps in five and the
+     * cardinal the fifth, which is a course that follows the same slope without being ruled.
+     *
+     * The draw is a plain hash of the cell and the world's seed, not the smooth field
+     * [LakeWaterBalance.jitter] lays down, and the difference is the point. That field exists to
+     * give ground with *no* gradient one to follow, where an unrelated choice per cell would leave
+     * the path staggering on the spot. Here the gradient is already known and the draw only decides
+     * how to round it, and what does the rounding in nature is the relief between one cell and the
+     * next — which is sub-grid, and therefore uncorrelated at this scale. The two share the hash
+     * and nothing else.
+     *
+     * Two invariants hold, and everything downstream rests on them. The receiver is always strictly
+     * lower on [filled] than the cell itself — where the drawn share is strictly between the ends,
+     * the diagonal is below the cardinal and the cardinal below the cell — so the network is still
+     * a forest with no cycles, [heightOrder] still places a cell before its receiver, and
+     * [drainageOrder] still terminates. And a cell has a receiver exactly where the plain
+     * steepest-descent rule gave it one, so the fill's promise that every land cell can reach the
+     * sea is untouched: no new sink, no river that stops inland.
+     *
+     * [seed] is the world's, so a world's courses are its own and are the same on every platform;
+     * the draw is integer mixing and a comparison, with no transcendental in it.
+     *
+     * @param byFacet false for the plain steepest-of-eight rule this replaced, which is the control
+     *   the straight-bar census is measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.facetRouting].
+     */
     fun flowDirections(
+        width: Int,
+        height: Int,
+        isLand: BooleanArray,
+        elevation: FloatField,
+        filled: FloatField,
+        seed: Long,
+        byFacet: Boolean = true
+    ): IntArray {
+        if (!byFacet) return steepestNeighbours(width, height, isLand, elevation, filled)
+        val target = IntArray(width * height) { -1 }
+        val routingSurface = filled.data
+        val trueGround = elevation.data
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val cell = y * width + x
+                if (!isLand[cell]) continue
+                val here = routingSurface[cell]
+
+                var steepestFacet = 0f
+                var facetCardinal = -1
+                var facetDiagonal = -1
+                var diagonalShare = 0f
+
+                for (side in CARDINAL_X.indices) {
+                    val cardinalX = CARDINAL_X[side]
+                    val cardinalY = CARDINAL_Y[side]
+                    val cardinal = neighbourAt(width, height, x + cardinalX, y + cardinalY)
+                    if (cardinal < 0) continue
+                    // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
+                    val cardinalDrop = here -
+                        if (isLand[cardinal]) routingSurface[cardinal] else trueGround[cardinal]
+
+                    for (turn in -1..1 step 2) {
+                        val diagonalX = if (cardinalX == 0) turn else cardinalX
+                        val diagonalY = if (cardinalY == 0) turn else cardinalY
+                        val diagonal = neighbourAt(width, height, x + diagonalX, y + diagonalY)
+                        if (diagonal < 0) continue
+                        val diagonalFall = here -
+                            if (isLand[diagonal]) routingSurface[diagonal] else trueGround[diagonal]
+                        val diagonalSlope = diagonalFall / DIAGONAL_DISTANCE
+                        // Tarboton's two components: the fall to the cardinal, and the further fall
+                        // from the cardinal on to the diagonal. Both over one cell, since the
+                        // diagonal is one cell from the cardinal as well as from here.
+                        val outward = diagonalFall - cardinalDrop
+
+                        // Where the descent points out of the facet it is clamped to the edge it
+                        // left by: to the cardinal when the diagonal is no lower than the cardinal,
+                        // and to the diagonal when the cardinal is not downhill at all or the
+                        // further fall on to the diagonal is the larger of the two.
+                        val clampedToTheCardinal = cardinalDrop > 0f && outward <= 0f
+                        val slope = if (clampedToTheCardinal) {
+                            cardinalDrop
+                        } else if (cardinalDrop <= 0f || outward >= cardinalDrop) {
+                            diagonalSlope
+                        } else {
+                            sqrt(cardinalDrop * cardinalDrop + outward * outward)
+                        }
+                        val share = when {
+                            clampedToTheCardinal -> 0f
+                            cardinalDrop <= 0f || outward >= cardinalDrop -> 1f
+                            else -> outward / cardinalDrop
+                        }
+                        if (slope > steepestFacet) {
+                            steepestFacet = slope
+                            facetCardinal = cardinal
+                            facetDiagonal = diagonal
+                            diagonalShare = share
+                        }
+                    }
+                }
+
+                target[cell] = when {
+                    steepestFacet <= 0f -> -1
+                    diagonalShare <= 0f -> facetCardinal
+                    diagonalShare >= 1f -> facetDiagonal
+                    subGridDraw(x, y, seed) < diagonalShare -> facetDiagonal
+                    else -> facetCardinal
+                }
+            }
+        }
+        return target
+    }
+
+    /**
+     * The steepest of the eight neighbours, which is what the water followed before F18.
+     *
+     * Kept because a guard that has only ever been green proves nothing: the straight-bar census
+     * is run against this as well as against [flowDirections]'s own answer, and asserts that this
+     * one fails it. See `REALISM_PLAN.md`, F18.
+     */
+    private fun steepestNeighbours(
         width: Int,
         height: Int,
         isLand: BooleanArray,
@@ -91,26 +232,70 @@ internal object FlowRouting {
         val target = IntArray(width * height) { -1 }
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val i = y * width + x
-                if (!isLand[i]) continue
+                val cell = y * width + x
+                if (!isLand[cell]) continue
 
-                var best = -1
-                var bestDrop = 0f
-                val here = filled.data[i]
-                forEachNeighbourWithDistance(width, height, x, y) { n, distance ->
+                var steepest = -1
+                var steepestDrop = 0f
+                val here = filled.data[cell]
+                forEachNeighbourWithDistance(width, height, x, y) { neighbour, distance ->
                     // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-                    val there = if (isLand[n]) filled.data[n] else elevation.data[n]
+                    val there =
+                        if (isLand[neighbour]) filled.data[neighbour] else elevation.data[neighbour]
                     val drop = (here - there) / distance
-                    if (drop > bestDrop) {
-                        bestDrop = drop
-                        best = n
+                    if (drop > steepestDrop) {
+                        steepestDrop = drop
+                        steepest = neighbour
                     }
                 }
-                target[i] = best
+                target[cell] = steepest
             }
         }
         return target
     }
+
+    /**
+     * A number in 0..1 standing for the relief between one cell and the next that a grid this
+     * coarse cannot hold, which is what decides a step the slope itself leaves open.
+     *
+     * Uncorrelated between neighbouring cells on purpose; see [flowDirections]. Salted so it is
+     * independent of [LakeWaterBalance.jitter], which mixes the same seed for a different question.
+     */
+    private fun subGridDraw(x: Int, y: Int, seed: Long): Float =
+        (seededNoise(x, y, seed xor SUB_GRID_DRAW_SALT) + 1f) * 0.5f
+
+    private const val SUB_GRID_DRAW_SALT = 0x5f3a91c7_2b64d8e3L
+
+    /**
+     * One lattice point's value in -1..1. Integer mixing only, so every platform agrees.
+     *
+     * Shared with [LakeWaterBalance.jitter], which samples it on a coarse lattice and smooths
+     * between the samples; [subGridDraw] takes it per cell.
+     */
+    fun seededNoise(ix: Int, iy: Int, seed: Long): Float {
+        var mixed = seed xor (ix.toLong() * -0x61c8864680b583ebL) xor
+            (iy.toLong() * 0x27220a95_1d5a2b1fL)
+        mixed = mixed xor (mixed ushr 30)
+        mixed *= -0x40a7b892e31b1a47L
+        mixed = mixed xor (mixed ushr 27)
+        mixed *= -0x6b2fb644ecceee15L
+        mixed = mixed xor (mixed ushr 31)
+        return (mixed ushr 40).toInt() / 8388608f - 1f
+    }
+
+    /** The cell index at these coordinates, wrapping east to west, or -1 off the poles. */
+    private fun neighbourAt(width: Int, height: Int, x: Int, y: Int): Int {
+        if (y < 0 || y >= height) return -1
+        var wrapped = x % width
+        if (wrapped < 0) wrapped += width
+        return y * width + wrapped
+    }
+
+    /** East, north, west, south: the four a facet is built around, each flanked by two diagonals. */
+    private val CARDINAL_X = intArrayOf(1, 0, -1, 0)
+    private val CARDINAL_Y = intArrayOf(0, -1, 0, 1)
+
+    private const val DIAGONAL_DISTANCE = 1.41421356f
 
     /**
      * Every land cell, lowest first, ordered by the depression-filled surface.

@@ -374,7 +374,9 @@ object SeaLevelStage {
             val relative = current.relativeElevation.copy()
             val isLand = current.isLand
             val filled = FlowRouting.fillDepressions(w, h, isLand, relative)
-            val directions = FlowRouting.flowDirections(w, h, isLand, relative, filled)
+            val directions = FlowRouting.flowDirections(
+                w, h, isLand, relative, filled, config.seed, config.facetRouting
+            )
             val area = FlowRouting.accumulate(
                 w, h, isLand, filled, directions, current.landCellCount
             ) { 1f }

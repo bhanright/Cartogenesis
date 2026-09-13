@@ -301,7 +301,9 @@ internal object HydraulicErosion {
             }
 
             val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
-            val directions = FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled)
+            val directions = FlowRouting.flowDirections(
+                w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.facetRouting
+            )
             // Uniform rain: every land cell contributes the same, so accumulation is simply the
             // number of cells upstream.
             val area = FlowRouting.accumulate(
@@ -812,7 +814,10 @@ internal object HydraulicErosion {
                     val spoilGround = after.relativeElevation
                     val spoilFilled = FlowRouting.fillDepressions(w, h, after.isLand, spoilGround)
                     val spoilFlow =
-                        FlowRouting.flowDirections(w, h, after.isLand, spoilGround, spoilFilled)
+                        FlowRouting.flowDirections(
+                            w, h, after.isLand, spoilGround, spoilFilled, config.seed,
+                            config.facetRouting
+                        )
                     val spoilArea = FlowRouting.accumulate(
                         w, h, after.isLand, spoilFilled, spoilFlow, after.landCellCount
                     ) { 1f }
@@ -845,7 +850,9 @@ internal object HydraulicErosion {
             // could not be reached from the ocean, and the ground it would have had to cross to
             // find the ocean was dead flat.
             if (closing && cfg.deltaLobe && spoil != null) {
-                val opened = openMouths(w, h, working, provisionalSeaLevel, spoil)
+                val opened = openMouths(
+                    w, h, working, provisionalSeaLevel, spoil, config.seed, config.facetRouting
+                )
                 incised += opened.removed
                 lost += opened.removed
             }
@@ -1085,7 +1092,9 @@ internal object HydraulicErosion {
         h: Int,
         working: FloatField,
         provisionalSeaLevel: Float,
-        spoil: FloatArray
+        spoil: FloatArray,
+        seed: Long,
+        byFacet: Boolean
     ): Opened {
         val size = w * h
         val sea = SeaLevelStage.apply(working, provisionalSeaLevel)
@@ -1104,7 +1113,8 @@ internal object HydraulicErosion {
         val floor = sea.threshold + step * LOBE_RIM
 
         val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
-        val flow = FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled)
+        val flow =
+            FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled, seed, byFacet)
         val area = FlowRouting.accumulate(
             w, h, isLand, filled, flow, sea.landCellCount
         ) { 1f }

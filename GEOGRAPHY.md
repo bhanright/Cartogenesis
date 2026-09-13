@@ -109,13 +109,12 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 **Deserts sit near the horse latitudes.** Desert mean latitude 31–33° against a land mean of 41–53°,
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
-**An interior swings more than a coast.** The seasonal departure is scaled by distance from
-water — a jump-flooded Euclidean distance transform from every sea and lake cell, saturating at
-three times the coastal reach — so a shore and an interior at the same latitude no longer swing
-alike. On seed 42 at 50° the interior-versus-coast gap in the seasonal swing is 0.6 °C with
-`continentality` at zero and 8.5 °C at the default 0.6 (measured again at G4; A2 first recorded
-0.2 and 7.5, and the chunks between have moved the coastline under it), and the annual mean is
-bit-identical either way, because the scaling applies to the departure and never to the mean.
+**An interior swings more than a coast.** How much of the sea's year a cell takes falls away from
+the coast with an e-folding of 350 km, measured on a jump-flooded Euclidean distance transform from
+every sea and lake cell, so a shore and an interior at the same latitude do not swing alike. Since
+W1 there is no setting for it: the gap is the difference between the band's two air columns — one
+with a fifty-metre mixed layer under it and one with three metres of soil — and the world's own
+coastline deciding how much of each a place gets. See "Temperature is solved, not drawn".
 
 **The sea has not always been where it is.** The hydraulic rounds grade every channel to the sea
 they can see, so with the sea fixed at today's level no valley may continue below it and every
@@ -339,8 +338,9 @@ reach and a terminal moraine at the snout. But the ground that shows those landf
 Finland, the Canadian Shield, the Lake District, the Finger Lakes — carries no glacier now and has
 not for ten thousand years. So the mask the carving works from is the snow balance of a *colder*
 world, `GlaciationConfig.glacialMaximumC`: the last glacial maximum's 6.1 C of global mean cooling
-(Tierney et al. 2020), applied as the latitude ramp the proxies describe rather than as a uniform
-shift, since the tropics cooled 1.5-3 C and the high latitudes 10-20. That puts 26% of seed 42's
+(Tierney et al. 2020), applied since W1 as a dimmer sun that the energy balance answers with a
+colder world of its own — so the tropics cool 1.5-3 C and the high latitudes far more because the
+poles turn white, rather than because a latitude ramp said so. That puts 26% of seed 42's
 land under ice at the maximum against Earth's roughly 25%, while the map still draws today's 4%.
 The signature is the standing water the ice leaves behind, because a river network cannot leave a
 hollow in its own bed and ice does nothing else: on seed 42 at 1024 `GlaciationTest` measures 9
@@ -458,6 +458,15 @@ not move with the sea level, which is what S2's uplift and isostasy give it.
 
 ## Known deviations
 
+**Half the land is tundra.** Over seeds 7/42/1234/99 at 512, tundra takes 40–58% of the ice-free
+land, pooled 47%, against Earth's 6% (Olson et al. 2001). The boreal forest beside it is 6.7%
+against Earth's 11%, which is the right order, and the zonal temperatures these worlds are built on
+sit within a degree or two of the reanalysis at every latitude from the equator to 70° — so the
+belts are where they should be and the tree line is not. What puts them there is the ground: this
+map's land stands 1200–1700 m above its own sea against Earth's 840, and a lapse rate of 6 °C/km
+takes three to five degrees off nearly every land cell. `ColdBiomeShareTest` prints both shares per
+seed and pooled and asserts only the boreal one; the hypsometry is `TODO.md`'s.
+
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
 0.073% of the surface: a body of unreachable water larger than that is a piece of the sea walled off
 by a sliver of ground, and calling it land invents a landform Earth has no example of — it would
@@ -466,8 +475,12 @@ five such inland seas survive on each of the standard seeds, holding 767 to 8386
 they are drawn as ocean rather than as the Caspians they might be. The bodies below the cap are
 converted, and since H5b their outlets are cut like everyone else's, so a converted saucer no longer
 floods far wider than itself: `OutletIncisionTest` and `OutletResolutionTest` still measure the
-drowned basins apart from the ones the in-round notch owns, but both figures are now held to the
-same bar. The cap is an area in square kilometres now rather than a share of the map, which was
+drowned basins apart from the ones the in-round notch owns. H5b held both to the same bar; W1 put
+the drowned half back over it and it is a reported figure again, because the glacial mask is now
+struck on a colder world's own rainfall and the ice carved somewhere slightly different, so seed
+42's largest walled-off hollow at 2048 went from 0.86 times the Caspian's share of its land to 1.23.
+The largest lake standing *in the land* is still held to the bar and is well inside it. The cap is
+an area in square kilometres now rather than a share of the map, which was
 S1's business, and writing it down is what made the question underneath it visible: 52,600 km² is
 0.073% — the Caspian's share of *Earth's* surface — carried onto a world a seventh of Earth's size,
 so it is a seventh of the Caspian. Whether a world this size should cap at the share or at the lake
@@ -637,24 +650,135 @@ halves" below for why, and for the third mechanism seasons made necessary.
 `DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,
 its upwind climb, and how far its air travelled over land.
 
+## Temperature is solved, not drawn
+
+Until W1 the temperature was a curve: an exponent and two anchors, with the seasonal swing over
+water damped by a constant and the swing inland scaled by a `continentality` setting. It could be
+made to pass through Earth's equator and Earth's pole and it still could not do the two things that
+decide where the interesting climates are, because a curve has no physics in it.
+
+What stands in its place is a one-dimensional energy-balance model — Budyko (1969), Sellers (1969),
+North (1975) — over 240 latitude bands, marched through 360 steps of the year for twenty years to a
+periodic steady state. Each band balances three terms: the sunlight it absorbs (the astronomical
+daily mean for its latitude and the day, at an obliquity read off `seasonalTiltDegrees` — Earth's
+zonal-mean thermal equator swings about ten degrees, which is that setting's default, and Earth's
+tilt is 23.44); the infrared it radiates, `A + B·T` with North, Cahalan and Coakley's slope of
+2.09 W/m² per degree and an offset of 210.7 fixed by Earth's own budget of 240 W/m² at 14 °C; and
+the heat its neighbours send it, a diffusion that is 0.90 W/m²/°C at the equator for the Hadley
+cell, falls to 0.30 at the pole, and carries a Gaussian bulge of 0.30 more centred on 50° and
+fifteen degrees wide for the mid-latitude storm track — two machines in two places, which is how
+Trenberth and Stepaniak (2003) separate the observed transport, and a single monotonic shape cannot
+be both. The poleward transport that comes out is 4.6, 4.9 and 3.2 PW at 30°, 45° and 60° against
+Trenberth and Caron's observed 5.3, 5.0 and 3.3.
+
+- **Three reservoirs per band, and that is the whole land–sea contrast.** Each band carries a land
+  column and a marine column with the world's own coastline as their areas, and under the marine
+  column a slab of sea water. Both columns are *air*: they see the same sunlight, radiate the same
+  infrared law, and trade heat with each other round the latitude circle at 8 W/m²/°C, which is a
+  fortnight's exchange for an air column of that capacity and is what the westerlies do. What
+  separates them is memory — 1.7 × 10⁷ J/m²/°C over land (three metres of soil, the seasonal
+  damping depth, plus the air) against 1.04 × 10⁷ at sea (the air alone, `c_p p / g`) — and what
+  lies beneath. Beneath the marine column is a fifty-metre mixed layer, 2.0 × 10⁸ J/m²/°C, coupled
+  to the air by a bulk surface flux of 25 W/m²/°C: sensible 11.6 plus latent 13.4 from the standard
+  bulk formulae at a typical marine wind of 8 m/s. That split is why a coast is not the sea. On
+  Earth's own land fraction, warmest month against coldest at 50–60°: land swings 38.7 °C against a
+  continental interior's observed 34–38 (Novosibirsk 34, Winnipeg 38), the marine air 13.0 against
+  Earth's 8–11, and the water 6.9 against the open ocean's 5–8. Nothing was fitted at any other
+  latitude, and at 30–40° the land reads 28.6 °C against Earth's 24–26.
+- **A cell takes a blend of the two air columns.** The two-dimensional field is the band's columns
+  mixed by how much of the air over a cell came off the sea, falling away from the coast with an
+  e-folding of 350 km. That figure is Earth's: at 50–56° north the annual range against distance to
+  the nearest coast runs 8 °C at Valentia, 19 at Berlin (190 km), 22 at Warsaw (330) and 28 at
+  Moscow (650), and fitting the exponential to the three inland stations gives 310, 377 and 363 km —
+  agreeing to a tenth, which is what says the shape is right and not merely that the curve has a
+  spare parameter. The water is not blended onto the land at all: it is read where the sea freezes
+  and where the moisture march evaporates, and nowhere else.
+- **Each column's year is kept twice, as months and as halves.** Every threshold the biome stage
+  reads is one of Köppen's and Köppen's are monthly means — the 10 °C tree line, the −3 °C
+  continental winter, the 18 °C tropical one — so a band's stored "summer" is the warmest
+  thirty-step window of its own year and its "winter" the coldest. For a sinusoidal year a half-year
+  mean is 0.64 of the month extreme, so handing halves to those gates asks each of them a question a
+  third short of the one it was written for. But the snow balance's degree-day sum and the moisture
+  march both *integrate across* a season, and those read the warm and cold half-years' means
+  instead. Neither reading serves both.
+- **The albedo is the model's own ice.** A band whose annual mean falls below −10 °C is white
+  (Budyko's and North's ice line, where snow cover becomes permanent enough to change what the
+  planet reflects), ramped over 4.5 °C either side. The ice-free albedo is a least-squares fit to
+  Earth's observed zonal planetary albedo — flat through the tropics, dipping under the subtropical
+  highs, climbing late and steeply toward the poles, with the ITCZ's cloud on top — because Earth's
+  albedo does not fall monotonically toward the equator and a model that assumes it does bakes the
+  subtropics and freezes the equator. So the cap is self-reinforcing: it can be held, and it can be
+  lost.
+- **`glacialMaximumC` is a forcing now.** The last glacial maximum's 6 °C of global-mean cooling is
+  applied by dimming the sun until the model's own global mean falls that far — 4.7 per cent — and
+  the model answers with 5.8 °C of cooling at 75° against 4.3 with the feedback switched off, and an
+  ice edge that walks from 60.4° to 52.1° instead of to 53.6°. The per-row cooling ramp that used to
+  write the amplification down is retired.
+
+On Earth's own land fraction the model reads a global mean of 15.5 °C against 14, an equator of
+26.1 against 27, 60° at 1.7 against 0, and a pole at −15.6 against the −20 that is the midpoint of
+two poles 34 degrees apart. Column by column, land against a lowland-station climatology and marine
+air against a reanalysis over ocean: 26.2/26.0 at the equator against 26.0/26.5, 23.4/23.3 at 20°
+against 25.0/24.5, 13.9/13.9 at 40° against 14.5/14.5, and 1.5/1.8 at 60° against −2.0/2.0. The
+warmest month over the sea lands at 26.7, 26.0, 19.2 and 7.9 against a reanalysis 27, 27, 19 and 7,
+and the water under it at 26.3, 24.8, 16.8 and 4.9 against 27, 27, 19 and 5.5 — inside a ±3 °C
+envelope, which is a real spread and not a hedge, because the Atlantic and the Pacific straddle
+every one of those figures. `EnergyBalanceTest` measures them all and shows each clause failing
+without its mechanism: a tenth of the heat transport bakes the equator to 41 °C and freezes 60° to
+−43; an all-ocean world's land column still swings 5.7 times its water, so the contrast is the
+capacities and not the geography; and an upright axis has no seasons at all, to a ten-thousandth of
+a degree.
+
+**Sea ice, and why the polar ocean is a desert.** Where a season's *water* — the band's mixed layer
+plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
+point of sea water at the ocean's mean salinity, that cell is under ice for that season. The
+freezing test reads the water and not the air above it, which in a polar winter is a dozen degrees
+colder than the sea it sits on. Two masks
+are saved, one per season: the cold season's is the winter pack and the warm season's is the
+perennial ice, which is what the map draws. The moisture march takes nothing at all from a frozen
+cell, because a metre of ice is a lid — and that is why polar deserts exist, and what keeps an ice
+sheet at the pole from feeding itself indefinitely.
+
+On Earth's own land fraction the model's cold-season edge lands at 60.4° N and 61.1° S against
+Earth's zonal-mean 60. On the map, measured over seeds 7, 42 and 1234 at 512: the cold season
+freezes 25–33% of the sea and reaches 55–58° of latitude, the warm season's perennial pack holds
+16–26% and reaches 62–64°, and every cell frozen in the warm season is frozen in the cold one by
+construction. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
+523 mm a year against 2,135 mm over the open water at the same latitudes, on seed 42 351 against
+2,508, on seed 1234 257 against 1,811. With `ClimateConfig.seaIce` off — the control — the same
+cells take 1,228, 1,592 and 1,305 mm, because then the polar ocean evaporates like any other.
+
 ## The year has two halves
 
 Temperature and rainfall are computed twice, for the local warm season and the local cold one, and
-biomes are read off all four numbers instead of two. The whole mechanism is one setting —
-`ClimateConfig.seasonalTilt`, the degrees the thermal equator migrates toward whichever hemisphere
-is in summer — and everything that reads a latitude reads the shifted one: the temperature curve,
-the wind belts, and the rain belts alike.
+biomes are read off all four numbers instead of two. Rainfall's seasons are one setting —
+`ClimateConfig.seasonalTiltDegrees`, the degrees the thermal equator migrates toward whichever
+hemisphere is in summer — carried by the wind belts and the rain belts alike; temperature's are the
+same number read as the planet's axial tilt, so switching seasons off stands the axis upright and
+there is no seasonal forcing for the energy balance to answer.
 
 - **"Summer" is local, not July.** Northern July and southern January are both stored as the warm
   season, so one classification rule serves both hemispheres and a dry-summer coast reads the same
   either side of the equator.
+- **The stored temperature of a season is its warmest or coldest month, and the rain's is its
+  half-year.** Two different questions get asked of the same year. Köppen's thresholds are monthly
+  means — the 10 °C tree line, the −3 °C continental winter — so what the biome stage reads and
+  what a save carries is the warmest and coldest month. Anything that *integrates* across a season
+  reads the half-year's mean instead: the snow balance's degree-day sum runs over 182 days and the
+  moisture march evaporates for half a year, and giving either of those a warmest month has it
+  melting at the peak of July for the whole of summer. W1's third pass made that mistake for one
+  build and it cost the world a third of its permanent ice, which is why both are kept.
 - **The annual fields are unchanged.** `temperature` is still the annual mean and `precipitation`
   is the mean of the two marches, so every stage downstream — rivers, realms, peoples, landmarks —
   sees exactly what it saw before. With `seasons = false` the seasonal fields collapse onto the
   annual ones bit for bit and the generator reproduces the pre-seasons world exactly.
-- **The sea barely swings.** Water's heat capacity is why a maritime climate has a small annual
-  range, so the seasonal departure is damped to a fifth over open water. Measured on seed 42 at
-  35°: land swings 13.1 °C through the year, the open sea 2.9 °C.
+- **The sea barely swings, and nobody told it to.** Water's heat capacity is why a maritime climate
+  has a small annual range, and since W1 that is a heat capacity in a model rather than a damping
+  factor. Measured on seed 42 at 35°, warmest month against coldest: land swings 20.6 °C through
+  the year and the marine air 10.8 °C. Earth's figures there are 8–26 over land, 7–11 for the air
+  over the ocean and 6–9 for the water beneath it. What the map stores over water is the air, which
+  is what a coast feels; the water is a degree or two steadier than that and is read where the sea
+  freezes and where the march evaporates.
 - **Two new classes come out of the seasonality rather than the total.** A Mediterranean coast is
   dry in the warm half of the year and wet in the cold one, which happens where the subtropical
   high sits over a west-facing coast all summer and the westerlies swing back over it in winter; a
@@ -767,6 +891,9 @@ interior*'s winter past Köppen's −3°C line at the same latitudes, so a dry r
 used to be taiga could reach `classify`'s desert check on nothing more than a fixed millimetre cut
 — measured, that alone dropped desert-in-band on seed 42 from 98–100% to 48%, because the two
 effective-latitude ranges overlap almost exactly and no choice of exponent or pole separates them.
+(The curve, its exponent and its two anchors are all gone now; W1's energy balance produces the
+same separation without an exponent, because a coast and an interior at one latitude are two
+different columns rather than two points on one curve. The Köppen gates below are unchanged.)
 
 A6 landed with that gated off by a provisional fix (an annual mean of at least 13°C added to the
 temperate branch's desert case) rather than solved, and said so: the gate abolished cold deserts —

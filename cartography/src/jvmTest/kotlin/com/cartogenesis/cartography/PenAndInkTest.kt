@@ -90,20 +90,25 @@ class PenAndInkTest {
          * A chunk that means to move them all re-records the lot and says so in its report; how
          * far a coastline actually moved is measured rather than hashed, in `LittoralCoastTest`
          * and in `GEOGRAPHY.md`. See REALISM_PLAN.md, F9, F13, F14 and F17, for which chunk moved
-         * what, and the 2.0.3 forward-merge row for the last re-recording.
+         * what, and the 2.0.3 forward-merge row for the re-recording before this one.
+         *
+         * Re-recorded again for W1, which is the plainest case there is of the world moving under
+         * all eleven rather than one style being redrawn: the temperature is solved by an energy
+         * balance now instead of drawn from a curve, so every biome the tints are read off comes
+         * from a different climate. All eleven moved, which is what this guard is for.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1747304240,
-            MapStyle.VELLUM to 785992259,
-            MapStyle.INK_WASH to 1293816481,
-            MapStyle.NAUTICAL to -508608642,
-            MapStyle.MIDNIGHT to -1973165674,
-            MapStyle.SCHOOLROOM to 1303909060,
-            MapStyle.VERDANT to -978225181,
-            MapStyle.SCROLL to -821638482,
-            MapStyle.PEN_AND_INK to 327011472,
-            MapStyle.MARS to -212243734,
-            MapStyle.CLEAR to 1275815509
+            MapStyle.ATLAS to 1263892093,
+            MapStyle.VELLUM to 688539628,
+            MapStyle.INK_WASH to 687077229,
+            MapStyle.NAUTICAL to 232021106,
+            MapStyle.MIDNIGHT to -709250048,
+            MapStyle.SCHOOLROOM to 1618684963,
+            MapStyle.VERDANT to 908692413,
+            MapStyle.SCROLL to -1466800791,
+            MapStyle.PEN_AND_INK to 446722196,
+            MapStyle.MARS to 539786463,
+            MapStyle.CLEAR to -1790745628
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

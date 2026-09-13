@@ -130,6 +130,42 @@
 
 ## Done
 
+- **The temperature was a curve, so it could not hold a cap or give a continent a winter**
+  (2026-09-13, W1) — the latitude curve with an exponent and two anchors is gone, and with it
+  `equatorTemperatureC`, `poleTemperatureC` and `continentality`. In its place is a one-dimensional
+  energy balance over 240 latitude bands, marched through 360 steps of the year for twenty years:
+  insolation from the planet's own tilt, `A + B·T` out with North's slope and an offset fixed by
+  Earth's 240 W/m² at 14 °C, a heat transport split between a Hadley cosine-squared and a
+  storm-track Gaussian at 50°, and an albedo fitted to Earth's observed zonal planetary albedo that
+  then follows the ice the model itself grows.
+  Each band carries **three** reservoirs: an air column over its land (1.7 × 10⁷ J/m²/°C, soil plus
+  air), an air column over its sea (1.04 × 10⁷, `c_p·p/g`), and a fifty-metre mixed layer under that
+  (2.0 × 10⁸) coupled to the air above it by a bulk surface flux of 25 W/m²/°C — sensible 11.6 plus
+  latent 13.4 from the standard bulk formulae at 8 m/s. The two air columns trade heat round the
+  latitude circle at 8 W/m²/°C, a fortnight's exchange, and carry the meridional transport; the
+  water carries none of it. A cell takes a blend of the two air columns, falling away from the coast
+  with the 350 km e-folding Earth's own stations give; the water is read only where the sea freezes
+  and where the march evaporates. Two readings of the year are kept per column, because Köppen's
+  thresholds are monthly means and a degree-day sum is a half-year integral.
+  On Earth's land fraction it reads 15.5 °C globally against 14, 26.1 at the equator against 27,
+  1.7 at 60° against 0, and −15.6 at the pole against −20; land and marine air at 0/20/40/60 sit at
+  26.2/26.0, 23.4/23.3, 13.9/13.9 and 1.5/1.8 against a lowland-station and a reanalysis
+  climatology's 26.0/26.5, 25.0/24.5, 14.5/14.5 and −2.0/2.0, and the warmest month over the sea at
+  26.7/26.0/19.2/7.9 against 27/27/19/7, inside a ±3 °C envelope. Warmest month against coldest at
+  50-60°: land 38.7 °C against Earth's continental 34-38, marine air 13.0 against 8-11, water 6.9
+  against 5-8. The poleward transport is 4.6/4.9/3.2 PW at 30/45/60 against Trenberth and Caron's
+  5.3/5.0/3.3, and the model's cold-season ice edge lands at 60.4° N against Earth's zonal-mean 60.
+  `glacialMaximumC` became a dimmer sun rather than a redrawn mask, so the poles cool 5.8 °C where
+  the same forcing with the feedback off cools them 4.3, and the cap walks to 52.1° instead of
+  53.6°. Sea ice is two saved masks at −1.8 °C on the *water*, the march takes nothing from a frozen
+  cell, and the biome draws the pack that survives the summer: over seeds 7/42/1234 at 512 the cold
+  season freezes 25–33% of the sea and reaches 55–58°, and the frozen sea takes 257–523 mm a year
+  against 1,811–2,508 over the open water beside it. On the map, A6's own guard reads 40/52/51% of
+  warm-current west-facing coast at 50–60° as temperate forest against its recorded 65/53/59, the
+  boreal belt holds 6.7% of ice-free land against Earth's 11%, permanent ice 8.7% against Earth's
+  10.1%, and `OceanCurrentTest`'s warm-against-cold coastal habitability reads +4.3/+5.5/+5.5%. The
+  two anchors' old complaint — the equator 5 °C warm and 60° 3 °C cold — is answered by
+  construction.
 - **One unit of land elevation was six kilometres in the climate and eight everywhere else**
   (2026-09-13, S1) — `WorldScale` is now the only place a physical unit is declared: the map's
   width in kilometres, the two ends of its vertical range in metres and the years a hydraulic round
@@ -539,10 +575,6 @@
   `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
   islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
   are. See GEOGRAPHY.md's "Known deviations".
-- **The latitude curve runs a few degrees off at its anchors.** Checked arithmetically after A6:
-  the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
-  anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
-  render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
 - **The colour-blind style draws a coastal desert dark olive.** Its ramp starts at #2B2E1C, whose
   green channel is three of 255 above its red, so a desert at the shoreline is the one place on any
   style where sand reads as vegetation — and it must, because that ramp is ordered by lightness and
@@ -586,3 +618,86 @@
   `Exporter.export` or the web's equivalent, because a PNG has no legend beside it. Nobody has asked
   for a way to turn it off; if someone wants a clean plate, it wants a switch beside the format
   chips rather than a Cartography mark, since it is a property of the export and not of the map.
+- **The energy balance costs the browser a second or two of every generation, whatever the grid.**
+  It solves 240 bands through 360 steps of twenty years, and a generation solves it eight or nine
+  times: once for the map's own climate, once for the ocean stage's sea-surface temperature, once
+  for the provisional field the glaciation stage freezes on, and five or six more inside the secant
+  search that finds the dimmed sun `glacialMaximumC` asks for. None of that shrinks with the map,
+  so on a 128-cell world in Wasm it is nearly the whole generation: `GenerationProgressTest` was
+  timing out against Mocha's two-second default until W1 hoisted the band albedo out of the step
+  loop, and the 2.0.3 stages pushed it back over. The timeout is sixty seconds now, which is what a
+  timeout should be for a case that generates a world.
+  Two repairs, both larger than the merge they were found in. Three of those solves are the *same*
+  computation with the same inputs and could be one, which needs the zonal climate threaded from
+  the engine through the ocean, glaciation and climate stages rather than each solving it again —
+  the comment on `ClimateStage.zonalClimate` explains why it is solved rather than cached, and that
+  reasoning is right about staleness and wrong about the cost in a browser. And the spin-up is
+  longer than it needs: twenty years leaves a residual of 0.0001 C where the coupled column's own
+  memory is about three years, so twelve would leave 0.002 and save two fifths of the time. Both
+  move every number in every world, so neither belongs in a merge. 2026-09-13, W1.
+- **Half the land is tundra, and it is the hypsometry rather than the climate.** Over seeds
+  7/42/1234/99 at 512, tundra takes 55/43/47/42% of the ice-free land, pooled 47%, against Earth's
+  6% (Olson et al. 2001: 8.1 of about 135 million km² ice-free). Boreal forest is 7.8% against
+  Earth's 11%, which is right, and the zonal temperatures the same worlds are built on sit within a
+  degree or two of the reanalysis at every latitude from the equator to 70° — so the belts are in
+  the right places and the tree line is not. What puts them there is the ground: M1 measured this
+  map's land standing 1200–1700 m above its own sea against Earth's 840, and a lapse rate of
+  6 °C/km takes three to five degrees off nearly every land cell. `ColdBiomeShareTest` prints both
+  shares per seed and pooled and asserts only the boreal one, because no factor a guard could state
+  would both accept 47% and mean anything. S2's hypsometry is where this is settled.
+  2026-09-13, W1.
+- **The ice makes almost no lakes any more, because it cuts almost no valleys.** `GlaciationTest`'s
+  two glacial-lake clauses are findings from W1 rather than assertions. Pooled over seeds 42, 7 and
+  718106 at 1024 — pooled because two lakes against one on one seed is not a density — the ice
+  raises cold-country lake density from 0.21 to 0.28 per 10k cells, where the clause asks for three
+  times, and the iced zone ratio reaches 1.70 against a bar of 2.5. The budget line says why:
+  `trunks=0 cirques=0 moraines=0` on seed 42 at 1024, with 31,453 cells channelled and *nothing
+  refused*, so no flow path is even proposed as a trough. The candidate test asks that a path carry
+  `minCatchment` of the whole frozen area's ice, and W1's energy balance replaced a few
+  concentrated mountain ice fields with one diffuse 41,000-cell sheet, under which no single valley
+  can clear that share. The climate itself is not the complaint — the pooled permanent-ice share is
+  8.7% of land against Earth's 10.1% — so the repair is `GlaciationStage`'s catchment thresholds
+  re-derived against a mask of that shape, with the comb and lattice clauses (which still pass)
+  protecting the D8 artefacts while it is done. 2026-09-13, W1.
+- **A drowned basin is over the Caspian cap again, and the cap is the thing to look at.**
+  `OutletResolutionTest`'s clause on basins below the sea-level cut was an assertion from H5b and is
+  a printed finding again from W1: seed 42's largest walled-off hollow at 2048 went from 3,453 cells
+  to 4,924 — 0.86 times the Caspian's share of its land to 1.23 — because the glacial mask is now
+  struck on a colder world's own rainfall and the ice carved somewhere slightly different. Nothing
+  about the outlet notch moved and the post-cut pass is not short of passes. The clause could only
+  ever discriminate while the two sample hollows sat under an Earth figure, and that figure's
+  meaning on a world a seventh of Earth's size is the open question two entries below this one:
+  1.23 times the Caspian's *share* of a world this size is a fifth of the Caspian's actual area.
+  Whoever settles the cap should settle this clause with it. The largest lake in the land is still
+  asserted against the same figure and is well under it, at 0.16%. The same case's "at least one
+  seed still forms a ratio" clause is a finding now too, and for a plainer reason: it was passing on
+  seed 59758 reading 0.501% standing water against a floor of 0.500%, and W1's climate moved it to
+  0.371% while moving seed 42's the other way, 0.120% to 0.210%. The spread that floor protected was
+  retired by S1 in favour of `ScaleFreeTest`, so what it guarded is already measured elsewhere.
+- **The marine air swings a third too far, and the mixed layer has one depth all year.** W1's third
+  pass gave each sea band an air column over a fifty-metre slab, coupled by a bulk surface flux of
+  25 W/m2/K, and the water's own year came right: 6.9 C from warmest month to coldest at 50-60
+  degrees against Earth's 5-8. The air over it did not quite. It swings 13.0 C where Earth's
+  zonal-mean marine air swings 8-11, and the reason is structural rather than a constant: with a
+  bulk coefficient of 25 against the slab's own inertia the air can only hand the water about half
+  its amplitude, so the excess has nowhere to go but the air. Earth's air-sea difference over the
+  open ocean is about a degree all year, which is a coupling nearer 100 W/m2/K than 25 — the surface
+  flux is mostly radiative and evaporative and only weakly proportional to the temperature
+  difference, which a bulk formula linearised about one wind speed cannot say. The other half of it
+  is the fixed depth: a mixed layer that shoals to 25 m in summer and deepens past 200 in winter
+  damps the winter far more than the summer, and a single depth cannot. Both belong to whoever next
+  opens the ocean's side of the energy balance; neither is worth a fitted fudge. 2026-09-13, W1.
+- **The mid-latitude ocean is a degree or two cold and the pole two or three warm.** W1's third pass
+  split the diffusivity into a Hadley cosine-squared and a storm-track Gaussian at 50 degrees, which
+  moved the 45-60 band from 3-4 C below the reanalysis to within 1-2 and put the pole at -15.6
+  against a nominal -20 and an ice edge at 60.4 N against Earth's 60. What is left is small and
+  consistent: 11.2 C at 45 against about 12.5, 8.3 at 50 against 10, 5.0 at 55 against 7.5, and
+  -13.1/-12.7 over land and sea at 80 against -15/-16. The shape between the storm track and the
+  pole is the part still being carried by one Gaussian and one floor, and a transport read off the
+  observed eddy flux rather than fitted to five latitudes would settle it. 2026-09-13, W1.
+- **A band has no internal geography.** `EnergyBalance` gives each latitude a land column and a sea
+  column but nothing tells it that a band's land is an island in its sea, so a band that is one per
+  cent island carries a fully continental land column. The map is saved from that by the marine
+  blend — an island is entirely within reach of water and takes the sea column's year — but a large
+  island in a wide ocean is a case where the two disagree, and a within-band exchange scaled by how
+  broken up the band's land is would close it.

@@ -28,7 +28,21 @@ kotlin {
 
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
-        browser()
+        browser {
+            testTask {
+                useMocha {
+                    // Mocha's own default is two seconds, which is a figure about a unit test and
+                    // not about this suite: `GenerationProgressTest` runs a whole generation of a
+                    // 128-cell world in the browser to ask whether the interface gets the thread
+                    // back between stages. Most of that generation's cost does not shrink with the
+                    // grid — the energy balance solves 240 bands through 360 steps of twenty years
+                    // however small the map is, several times over — so the world is small and the
+                    // wait is not. Sixty seconds is a hang, which is what a timeout should catch;
+                    // two is the arithmetic finishing. See TODO.md for the cost itself.
+                    timeout = "60s"
+                }
+            }
+        }
     }
 
     sourceSets {

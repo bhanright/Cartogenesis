@@ -116,7 +116,10 @@ val auditOnlyClasses = listOf(
     // F17's diagnosis: five seeds cut seven ways to find which rule roughens every coast, which
     // means fifteen runs of erosion for a printed table. Its guards run at 512 in
     // `LittoralCoastTest` and stay in the per-merge tier.
-    "com.cartogenesis.worldgen.CoastVarietyAuditTest"
+    "com.cartogenesis.worldgen.CoastVarietyAuditTest",
+    // W1's renders: the author's two worlds at 2048 in three views apiece, whole and cropped.
+    // A harness like `DebugMapDump`, and asserts nothing.
+    "com.cartogenesis.worldgen.W1RenderDump"
 )
 
 tasks.named<Test>("jvmTest") {

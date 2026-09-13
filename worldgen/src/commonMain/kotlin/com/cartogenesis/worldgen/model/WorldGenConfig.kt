@@ -818,8 +818,23 @@ data class SeaConfig(
 
 @Serializable
 data class ClimateConfig(
-    val equatorTemperatureC: Float = 32f,
-    val poleTemperatureC: Float = -28f,
+    /**
+     * How much warmer or colder than the model's own answer this world's global mean is, in
+     * degrees Celsius.
+     *
+     * The temperature is solved rather than declared — see
+     * [com.cartogenesis.worldgen.pipeline.EnergyBalance] — and with Earth's own sun, greenhouse and
+     * albedo the answer is 13.8 C, which is Earth's. This is the one knob on that: a shift of the
+     * greenhouse, applied as a change in the outgoing-longwave offset and solved so that the
+     * degrees asked for are the degrees delivered, feedback and all. Positive is a warmer world
+     * with less ice and a flatter pole-to-equator gradient; negative is a colder one.
+     *
+     * It replaced [equatorTemperatureC] and [poleTemperatureC], which were the two anchors of the
+     * curve the model retired. Their job — how warm the world is — survives here; their other job,
+     * how steep it is from equator to pole, does not, because that is now a consequence of heat
+     * transport and ice rather than something a reader states.
+     */
+    val globalMeanShiftC: Float = 0f,
     /** Temperature drop per kilometre of altitude, in C. */
     val lapseRateCPerKm: Float = 6.5f,
     /**
@@ -855,11 +870,14 @@ data class ClimateConfig(
     /**
      * How far the thermal equator migrates toward the summer hemisphere, in degrees of latitude.
      *
-     * Everything seasonal follows from this one number: it is what the latitude term of the
-     * temperature curve is offset by, and it is what carries the wind belts and the rain belts
-     * with it, so the horse latitudes and the ITCZ march up and down the map over the year the
-     * way they do on Earth. Ten degrees is the modest, oceanic figure; the great continents swing
-     * further than that, which is continentality's business rather than this one's.
+     * Everything seasonal follows from this one number. It carries the wind belts and the rain
+     * belts, so the horse latitudes and the ITCZ march up and down the map over the year the way
+     * they do on Earth; and it is what the planet's axial tilt is read off, so it decides the
+     * sunlight the energy balance receives in each half of the year as well
+     * ([com.cartogenesis.worldgen.pipeline.EnergyBalance.obliquityDegrees]). Ten degrees is the
+     * modest, oceanic figure and is Earth's own zonal-mean migration, which is why it corresponds
+     * to Earth's own 23.44-degree tilt; the great continents swing further than that, which is the
+     * coastline's business rather than this one's.
      */
     val seasonalTiltDegrees: Float = 10f,
     /**
@@ -887,25 +905,6 @@ data class ClimateConfig(
      */
     val meridionalWind: Float = 0.3f,
     /**
-     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
-     *
-     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
-     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
-     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
-     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
-     * applied to the seasonal departure from the annual mean is `1 + continentality *
-     * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
-     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReachCells] — a shoreline cell
-     * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
-     * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
-     * field here instead, on the theory that "exposed to water" and "close to water" were the same
-     * question; they were not at this radius — two box-blur passes read barely 0.3 exposure right
-     * at the edge of a single `coastalReachCells`, so a coast measured that way was already most of the
-     * way to fully continental. Zero reproduces the world from before this setting existed, bit
-     * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
-     */
-    val continentality: Float = 0.6f,
-    /**
      * How strongly a current's sea-surface temperature anomaly scales the moisture the march
      * picks up over that sea cell, per degree of anomaly.
      *
@@ -920,6 +919,20 @@ data class ClimateConfig(
      * from before this setting existed, bit for bit, whatever the anomaly.
      */
     val currentMoisture: Float = 0.07f,
+    /**
+     * Whether the sea freezes.
+     *
+     * On, a water cell whose sea surface sits at or below the freezing point of sea water in a
+     * season is under ice for that season
+     * ([com.cartogenesis.worldgen.pipeline.ClimateResult.summerSeaIce]), the moisture march takes
+     * nothing at all from it, and the warm season's mask is what the biome draws as pack ice.
+     *
+     * Off leaves the polar ocean evaporating as freely as the tropics do, which is the world before
+     * W1 and is the control its guard needs. It is not a plausible world: an ocean under a metre of
+     * ice is a lid, the polar sea is one of the driest places on the planet, and an ice sheet that
+     * can draw on it never stops growing.
+     */
+    val seaIce: Boolean = true,
     /**
      * Whether ice is decided by a snow mass balance rather than by a temperature.
      *
@@ -1408,16 +1421,18 @@ data class GlaciationConfig(
      *
      * 6 C, from the estimate of the last glacial maximum's *global mean* cooling: Tierney et al.,
      * *Glacial cooling and climate sensitivity revisited* (Nature 584, 2020), put it at 6.1 ± 0.4 C
-     * below pre-industrial, and earlier proxy syntheses at 4-7. It is not applied uniformly — the
-     * glacial cooling was strongly polar-amplified and applying its mean everywhere gets the
-     * geography of the ice wrong; see
-     * [com.cartogenesis.worldgen.pipeline.SnowBalance.glacialCoolingByRow], which turns this one
-     * figure into the latitude ramp the proxies actually describe.
+     * below pre-industrial, and earlier proxy syntheses at 4-7.
      *
-     * Rainfall is left as it is, although the glacial world was also drier, which makes the mask a
-     * little generous. Generous is the forgiving direction for a *bound* on carving — the stage's
-     * own catchment, relief, length and sinuosity tests decide what is actually cut inside it, and
-     * its run-out already reaches eight cells past the mask.
+     * It is a **forcing**, not a shift applied to a finished field:
+     * [com.cartogenesis.worldgen.pipeline.EnergyBalance.solarScaleForCooling] asks how far the sun
+     * must be dimmed for the global mean to fall this far — three per cent, as it turns out — and
+     * the model then answers with a colder world of its own. The cooling comes out polar-amplified,
+     * which is what the proxies describe (MARGO 2009 put the tropical oceans 1.5-3 C below present
+     * and the high northern latitudes 10-20 C below it), because the poles turn white and not
+     * because anyone wrote a latitude ramp; until W1 there was such a ramp, a third of the mean at
+     * the equator to twice it at the pole, and the model retired it. The colder world's rainfall is
+     * the march's answer to that world too, so the mask is no longer generous by leaving a glacial
+     * climate as wet as an interglacial one.
      *
      * Zero makes the carving mask today's ice, which was the first attempt and left one measured
      * world with 4,047 frozen cells, 92 of them in channelled country and not one glacier — so it

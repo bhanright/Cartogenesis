@@ -71,11 +71,20 @@ rate below is written in those units and converted to whatever grid the world is
 7. **Currents.** Wind stress on the sea has a curl, and the stream function that satisfies it inside
    a closed basin is a gyre, so the currents are solved for rather than drawn, giving warm poleward
    flow on western ocean margins and cold equatorward flow on eastern ones.
-8. **Climate.** Temperature follows latitude and altitude; rainfall comes from moist air marched
-   along wind belts that swing between two seasons, producing rain shadows and monsoons and
-   classifying biomes Köppen-style from the four seasonal numbers. A snow mass balance, not a bare
-   freezing line, decides where ice can hold, and the sea-surface temperature the currents carry
-   scales how much moisture a coast picks up.
+8. **Climate.** Temperature is solved rather than drawn: a one-dimensional energy balance over a
+   couple of hundred latitude bands, marched through the year, weighing the sunlight a latitude
+   receives against what it radiates to space and what its neighbours send it. Each band carries an
+   air column over land and another over sea with the world's own coastline as their areas, and a
+   fifty-metre slab of water under the marine one, so a continent gets a winter, the coast beside it
+   gets a cool spell, and the sea itself barely moves — three heat capacities and a coastline, with
+   no setting for any of it. The albedo follows the ice the
+   model itself grows, so a cap is self-reinforcing and a colder sun is answered with a cooling that
+   deepens toward the poles. Rainfall comes from moist air marched along wind belts that swing
+   between two seasons, producing rain shadows and monsoons and classifying biomes Köppen-style from
+   the four seasonal numbers. Where a season's water falls below the freezing point of sea
+   water it is under ice, and the march takes nothing from ice, so the polar ocean is a desert. A
+   snow mass balance, not a bare freezing line, decides where land ice can hold, and the
+   sea-surface temperature the currents carry scales how much moisture a coast picks up.
 9. **Glaciation.** Where the snow balance runs positive, valley glaciers widen and flatten existing
    river valleys into U-shaped troughs with cirques at their heads, and ice sheets scour flat ground
    into the irregular closed basins of shield lake country.

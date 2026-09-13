@@ -6,28 +6,25 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.Serializable
 
 /**
- * The terrain itself, stored in a version-2 save.
+ * An eroded height field, taken after the last stage a graphics card touches.
  *
- * **Legacy.** A version-3 save carries every stage of the world, so this has nothing left to do
- * for anything written today; it stays because the saves the author already has are read by it,
- * and one made on the graphics card would otherwise come back very slightly different. Nothing
- * writes one any more.
+ * **Unreachable, and kept deliberately.** A save has carried every stage of the world since the
+ * container format, so nothing writes one; the only files that ever held one are older than the
+ * format this build opens, so nothing can hand one back either. [WorldDocument.terrain], the only
+ * field of the shape, is permanently null and says why it is still on the wire. The interface's
+ * one use of [StoredTerrain] reads that field, so it is inert too.
  *
- * The reasoning, as it stood: a world was a seed and a config: every stage is deterministic, so
- * the file needed to record only what to generate and the terrain followed. That stops being true
- * when the erosion sweeps run on the graphics card, which rounds differently from the CPU and
- * differently again from another card. The difference is very small — measured at six parts in a million of the
- * elevation range, and on the machine it was measured on it changed no coastline cell, no river
- * and no border — but "very small" is not "none", and a saved world should not depend on the
- * hardware that happens to open it.
- *
- * So a world generated on the GPU carries its terrain. This is the whole cost of that: four bytes
- * per cell, which is 4MB at 1024 and 16MB at 2048, base64'd into the file. Worlds generated on the
- * CPU store nothing extra, because for them the seed really is enough.
+ * What it is *for*, when a caller has a snapshot to give: every stage is deterministic on the CPU,
+ * so a seed and a config would pin a world down — but the erosion sweeps round differently on a
+ * graphics card, and differently again on another card, and a world should not change under the
+ * reader because the hardware did. The difference is six parts in a million of the elevation
+ * range, which moved no coastline cell, no river and no border on the machine it was measured on;
+ * "very small" is still not "none". The cost of pinning it is four bytes a cell — 4MB at 1024,
+ * 16MB at 2048 — base64'd wherever it travels.
  *
  * The snapshot is taken after erosion, which is the last stage where hardware is involved.
- * Everything downstream — sea level, currents, climate, rivers, realms — is ordinary CPU work and
- * reproduces exactly from it.
+ * Everything downstream (sea level, currents, climate, rivers, realms) is ordinary CPU work and
+ * reproduces exactly from it, which is why one field is enough.
  */
 @Serializable
 data class TerrainSnapshot(
@@ -39,27 +36,30 @@ data class TerrainSnapshot(
 
     fun decode(): FloatArray {
         val bytes = decodeBase64(data)
-        return FloatArray(bytes.size / 4) { i ->
-            val o = i * 4
+        return FloatArray(bytes.size / BYTES_PER_HEIGHT) { cell ->
+            val at = cell * BYTES_PER_HEIGHT
             Float.fromBits(
-                (bytes[o].toInt() and 0xFF) or
-                    ((bytes[o + 1].toInt() and 0xFF) shl 8) or
-                    ((bytes[o + 2].toInt() and 0xFF) shl 16) or
-                    ((bytes[o + 3].toInt() and 0xFF) shl 24)
+                (bytes[at].toInt() and 0xFF) or
+                    ((bytes[at + 1].toInt() and 0xFF) shl 8) or
+                    ((bytes[at + 2].toInt() and 0xFF) shl 16) or
+                    ((bytes[at + 3].toInt() and 0xFF) shl 24)
             )
         }
     }
 
     companion object {
+        /** A float is four bytes, little-endian, and [data] is that many bytes a cell. */
+        private const val BYTES_PER_HEIGHT = 4
+
         fun of(width: Int, height: Int, heights: FloatArray): TerrainSnapshot {
-            val bytes = ByteArray(heights.size * 4)
-            for (i in heights.indices) {
-                val bits = heights[i].toRawBits()
-                val o = i * 4
-                bytes[o] = (bits and 0xFF).toByte()
-                bytes[o + 1] = ((bits shr 8) and 0xFF).toByte()
-                bytes[o + 2] = ((bits shr 16) and 0xFF).toByte()
-                bytes[o + 3] = ((bits shr 24) and 0xFF).toByte()
+            val bytes = ByteArray(heights.size * BYTES_PER_HEIGHT)
+            for (cell in heights.indices) {
+                val bits = heights[cell].toRawBits()
+                val at = cell * BYTES_PER_HEIGHT
+                bytes[at] = (bits and 0xFF).toByte()
+                bytes[at + 1] = ((bits shr 8) and 0xFF).toByte()
+                bytes[at + 2] = ((bits shr 16) and 0xFF).toByte()
+                bytes[at + 3] = ((bits shr 24) and 0xFF).toByte()
             }
             return TerrainSnapshot(width, height, encodeBase64(bytes))
         }
@@ -76,8 +76,9 @@ data class TerrainSnapshot(
  * Replays a stored terrain instead of computing one.
  *
  * It arrives through the same seam an accelerator does, which is exactly right: from the engine's
- * point of view "the graphics card produced this" and "the save file produced this" are the same
- * kind of answer, and both are reasons the CPU should not recompute it.
+ * point of view "the graphics card produced this" and "this was recorded earlier" are the same
+ * kind of answer, and both are reasons the CPU should not recompute it. See [TerrainSnapshot] for
+ * why nothing currently has one to replay.
  *
  * Returns null for any grid the snapshot was not taken at, so exporting at a larger size falls
  * through to generating properly rather than trying to stretch what was stored.

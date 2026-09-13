@@ -125,8 +125,8 @@ fun Landmark.resolve(override: LandmarkOverride): ResolvedLandmark = ResolvedLan
  * The text half of a save: the settings, the edits, the labels and the title.
  *
  * The world itself travels beside this as binary sections — see [WorldCodec] — so this is what a
- * library listing reads and what the app needs to know before it has a map to draw. It is also
- * the whole of a version-2 save, which is why one still opens: no world, so it is regenerated.
+ * library listing reads and what the app needs to know before it has a map to draw. A save may
+ * carry this and no sections at all, which opens by regenerating the world from the settings.
  *
  * [savedAt] is passed in rather than defaulted, because a wall clock is not something common
  * Kotlin has — each platform supplies its own.

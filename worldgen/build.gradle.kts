@@ -103,7 +103,11 @@ val auditOnlyClasses = listOf(
     // E7: whether a rift floor of sub-basins holds more water than E4's smooth wedge can only be
     // answered in the author's own trough at 2048 — `RiftDepthTest` measures the same question at
     // 512 and records that nothing there can. Two 2048 worlds for one comparison is an audit's job.
-    "com.cartogenesis.worldgen.RiftDepthAuditTest"
+    "com.cartogenesis.worldgen.RiftDepthAuditTest",
+    // F17's diagnosis: five seeds cut seven ways to find which rule roughens every coast, which
+    // means fifteen runs of erosion for a printed table. Its guards run at 512 in
+    // `LittoralCoastTest` and stay in the per-merge tier.
+    "com.cartogenesis.worldgen.CoastVarietyAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

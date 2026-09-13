@@ -223,8 +223,8 @@ internal object Engraving {
      * @return 0 for blank paper, 1 for solid ink.
      */
     fun hachure(
-        x: Int,
-        y: Int,
+        pixelX: Int,
+        pixelY: Int,
         gradientX: Float,
         gradientY: Float,
         plan: EngravingPlan,
@@ -235,33 +235,38 @@ internal object Engraving {
             ((slope - EngravingPlan.SLOPE_FLOOR) * inkGain).coerceIn(0f, 1f)
         if (steepness <= 0f) return 0f
 
-        val inverse = 1f / slope
-        val downhillX = gradientX * inverse
-        val downhillY = gradientY * inverse
+        val perSlope = 1f / slope
+        val downhillX = gradientX * perSlope
+        val downhillY = gradientY * perSlope
 
         val pitch = plan.hachureLatticeCells
-        val columns = plan.hachureLatticeColumns
+        val latticeColumns = plan.hachureLatticeColumns
         val halfLength = plan.strokeHalfLengthCells
         val halfWidth = plan.strokeHalfWidthCells * steepness
-        val soft = EngravingPlan.ANTIALIAS_CELLS
-        val cellX = x / pitch
-        val cellY = y / pitch
+        val softEdge = EngravingPlan.ANTIALIAS_CELLS
+        val hereColumn = pixelX / pitch
+        val hereRow = pixelY / pitch
 
         var strongest = 0f
-        for (offsetY in -1..1) {
-            for (offsetX in -1..1) {
-                val column = cellX + offsetX
-                val row = cellY + offsetY
-                val bits = hashBits(column.mod(columns), row)
-                val seedX = column * pitch + pitch * (0.25f + 0.5f * unitFrom(bits, 8))
-                val seedY = row * pitch + pitch * (0.25f + 0.5f * unitFrom(bits, 20))
-                val awayX = x - seedX
-                val awayY = y - seedY
-                val along = abs(awayX * downhillX + awayY * downhillY)
-                val across = abs(awayX * -downhillY + awayY * downhillX)
+        for (offsetRow in -1..1) {
+            for (offsetColumn in -1..1) {
+                val column = hereColumn + offsetColumn
+                val row = hereRow + offsetRow
+                val bits = hashBits(column.mod(latticeColumns), row)
+                val seedX = column * pitch +
+                    pitch * (NUDGE_FROM + NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_X))
+                val seedY = row * pitch +
+                    pitch * (NUDGE_FROM + NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_Y))
+                val fromSeedX = pixelX - seedX
+                val fromSeedY = pixelY - seedY
+                val alongStroke = abs(fromSeedX * downhillX + fromSeedY * downhillY)
+                val acrossStroke = abs(fromSeedX * -downhillY + fromSeedY * downhillX)
                 val coverage =
-                    (1f - smoothstep(halfLength - soft, halfLength + soft, along)) *
-                        (1f - smoothstep(halfWidth - soft, halfWidth + soft, across))
+                    (1f - smoothstep(
+                        halfLength - softEdge, halfLength + softEdge, alongStroke
+                    )) * (1f - smoothstep(
+                        halfWidth - softEdge, halfWidth + softEdge, acrossStroke
+                    ))
                 if (coverage > strongest) strongest = coverage
             }
         }
@@ -280,20 +285,23 @@ internal object Engraving {
     fun coastalWater(shoreCells: Float, plan: EngravingPlan): Float {
         if (shoreCells < plan.shoreInkCells) return 1f
 
-        // Line k sits at base * (k+1)(k+2)/2; this inverts that, so the whole number part of
-        // `band` names the nearest line and the fractional part says how far past it we are.
-        val band = floor(
+        // The nth line sits at base * (n+1)(n+2)/2; this inverts that triangular series, so the
+        // whole number part of `line` names the nearest line and the fraction says how far past
+        // it this pixel is. The quarter under the root completes the square of the inversion.
+        val line = floor(
             sqrt(2f * shoreCells / plan.vignetteBaseCells + 0.25f) - 1f
         )
-        if (band < 0f || band >= plan.vignetteLineCount) return 0f
+        if (line < 0f || line >= plan.vignetteLineCount) return 0f
 
-        val centre = plan.vignetteBaseCells * (band + 1f) * (band + 2f) * 0.5f
+        val centre = plan.vignetteBaseCells * (line + 1f) * (line + 2f) * 0.5f
         val coverage = 1f - smoothstep(
             plan.vignetteHalfWidthCells - EngravingPlan.ANTIALIAS_CELLS,
             plan.vignetteHalfWidthCells + EngravingPlan.ANTIALIAS_CELLS,
             abs(shoreCells - centre)
         )
-        return coverage * (1f - band / plan.vignetteLineCount)
+        // Each line further out is drawn fainter, so the vignette dies away into open paper
+        // rather than stopping at a fourth line as firm as the first.
+        return coverage * (1f - line / plan.vignetteLineCount)
     }
 
     /**
@@ -302,12 +310,14 @@ internal object Engraving {
      * The lake itself is left as paper — a grey blot is a colour decision and this style has no
      * colour to spend — so the water is described the way an engraver describes it, by ruling it.
      */
-    fun lakeWater(y: Int, shoreCells: Float, plan: EngravingPlan): Float {
+    fun lakeWater(pixelY: Int, shoreCells: Float, plan: EngravingPlan): Float {
         if (shoreCells < plan.lakeRimCells) return 1f
 
         val pitch = plan.lakeLinePitchCells
-        val phase = y / pitch
-        val fromLine = abs(phase - floor(phase) - 0.5f) * pitch
+        val linesDown = pixelY / pitch
+        // The rulings are centred half a pitch into each period, so the distance to the nearest
+        // one is how far this row's fraction of a period sits from the middle of it.
+        val fromLine = abs(linesDown - floor(linesDown) - 0.5f) * pitch
         val coverage = 1f - smoothstep(
             plan.lakeLineHalfWidthCells - EngravingPlan.ANTIALIAS_CELLS,
             plan.lakeLineHalfWidthCells + EngravingPlan.ANTIALIAS_CELLS,
@@ -326,16 +336,18 @@ internal object Engraving {
      * different dot even where they disagree about the cell. The offset is an exact fraction of a
      * power of two, so both place the centre on the same spot to the bit.
      */
-    fun stipple(x: Int, y: Int, plan: EngravingPlan): Float {
+    fun stipple(pixelX: Int, pixelY: Int, plan: EngravingPlan): Float {
         val pitch = plan.stipplePitchCells
-        val cellX = x / pitch
-        val cellY = y / pitch
-        val bits = hashBits(cellX, cellY)
-        val centreX = cellX * pitch + pitch * (0.3f + 0.4f * unitFrom(bits, 8))
-        val centreY = cellY * pitch + pitch * (0.3f + 0.4f * unitFrom(bits, 20))
-        val dx = x - centreX
-        val dy = y - centreY
-        val distance = sqrt(dx * dx + dy * dy)
+        val column = pixelX / pitch
+        val row = pixelY / pitch
+        val bits = hashBits(column, row)
+        val centreX = column * pitch +
+            pitch * (DOT_NUDGE_FROM + DOT_NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_X))
+        val centreY = row * pitch +
+            pitch * (DOT_NUDGE_FROM + DOT_NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_Y))
+        val fromCentreX = pixelX - centreX
+        val fromCentreY = pixelY - centreY
+        val distance = sqrt(fromCentreX * fromCentreX + fromCentreY * fromCentreY)
         return 1f - smoothstep(
             plan.stippleRadiusCells - EngravingPlan.ANTIALIAS_CELLS,
             plan.stippleRadiusCells + EngravingPlan.ANTIALIAS_CELLS,
@@ -350,10 +362,10 @@ internal object Engraving {
      * direction is broken at irregular intervals — which is what a boundary drawn by hand looks
      * like, and what a regular dash pattern cannot manage for a line that turns.
      */
-    fun borderDot(x: Int, y: Int, plan: EngravingPlan): Boolean {
+    fun borderDot(pixelX: Int, pixelY: Int, plan: EngravingPlan): Boolean {
         val block = plan.borderDashCells
-        val bits = hashBits(x / block, y / block)
-        return (bits ushr 8) % 100 < EngravingPlan.BORDER_DUTY_PERCENT
+        val bits = hashBits(pixelX / block, pixelY / block)
+        return (bits ushr HASH_SHIFT_X) % A_HUNDRED < EngravingPlan.BORDER_DUTY_PERCENT
     }
 
     /** The Hermite ramp GLSL's `smoothstep` is defined as, written out so both paths agree. */
@@ -366,15 +378,24 @@ internal object Engraving {
      * A 32-bit avalanche, in arithmetic Kotlin's `Int` and GLSL's `uint` perform identically:
      * wrapping multiplies, logical shifts and exclusive ors, and no division or sign anywhere.
      */
-    fun hashBits(a: Int, b: Int): Int {
-        var h = (a * 73856093) xor (b * 19349663)
-        h = h xor (h ushr 15)
-        h *= -2048144789 // 0x85EBCA6B
-        h = h xor (h ushr 13)
-        h *= -1028477387 // 0xC2B2AE35
-        h = h xor (h ushr 16)
-        return h
+    fun hashBits(column: Int, row: Int): Int {
+        var bits = (column * COLUMN_PRIME) xor (row * ROW_PRIME)
+        bits = bits xor (bits ushr 15)
+        bits *= -2048144789 // 0x85EBCA6B
+        bits = bits xor (bits ushr 13)
+        bits *= -1028477387 // 0xC2B2AE35
+        bits = bits xor (bits ushr 16)
+        return bits
     }
+
+    /**
+     * The two large primes a lattice cell's column and row are mixed with before the avalanche.
+     *
+     * Teschner and others' spatial hash. Two neighbouring cells differ by a whole prime rather
+     * than by one, which is what stops a lattice's marks falling into diagonal rows.
+     */
+    private const val COLUMN_PRIME = 73856093
+    private const val ROW_PRIME = 19349663
 
     /**
      * Twelve bits of a hash from [shift] upward, as a fraction in 0..1.
@@ -383,8 +404,45 @@ internal object Engraving {
      * the two paths place a stroke's seed on precisely the same spot.
      */
     fun unitFrom(bits: Int, shift: Int): Float =
-        ((bits ushr shift) and 0xFFF).toFloat() / 4096f
+        ((bits ushr shift) and TWELVE_BITS).toFloat() / TWELVE_BITS_PLUS_ONE
 
+    /**
+     * Where in a hash the x and the y nudge are read from.
+     *
+     * Twelve bits each, twelve apart, so the two never share a bit and one mark's two coordinates
+     * are independent. Eight rather than nought because the avalanche's last step is an exclusive
+     * or with a right shift of sixteen, which leaves the very lowest bits the least mixed.
+     */
+    private const val HASH_SHIFT_X = 8
+    private const val HASH_SHIFT_Y = 20
+
+    private const val TWELVE_BITS = 0xFFF
+    private const val TWELVE_BITS_PLUS_ONE = 4096f
+
+    /**
+     * How far off its lattice cell's corner a hachure's seed may sit, as a fraction of the pitch:
+     * from a quarter in, over the middle half.
+     *
+     * Enough to break the grid — the strokes have to look placed rather than ruled — and no more,
+     * because a seed that could reach its cell's edge could put a stroke wholly inside its
+     * neighbour, and the nine-cell neighbourhood [hachure] searches would then miss it.
+     */
+    private const val NUDGE_FROM = 0.25f
+    private const val NUDGE_SPAN = 0.5f
+
+    /**
+     * The same for a stipple dot: from three tenths in, over the middle two fifths.
+     *
+     * Tighter than a hachure's, and for a stronger reason than looks: a dot together with its soft
+     * edge has to stay clear of its cell's own boundary, so that a pixel one side of a boundary is
+     * outside every dot the other side of it and the processor and the graphics card cannot draw a
+     * different dot even where they disagree about which cell the pixel is in.
+     */
+    private const val DOT_NUDGE_FROM = 0.3f
+    private const val DOT_NUDGE_SPAN = 0.4f
+
+    /** The hundred [EngravingPlan.BORDER_DUTY_PERCENT] is a percentage of. */
+    private const val A_HUNDRED = 100
 }
 
 /**
@@ -416,88 +474,109 @@ internal object ShoreDistance {
     const val UNREACHED: Float = 1e18f
 
     /** @param source 1 where a cell is a source, 0 elsewhere. */
-    fun of(width: Int, height: Int, source: ByteArray): FloatArray {
-        val cells = width * height
-        val distance = FloatArray(cells)
-        if (cells == 0) return distance
+    fun of(cellsAcross: Int, cellsDown: Int, source: ByteArray): FloatArray {
+        val cellCount = cellsAcross * cellsDown
+        val distance = FloatArray(cellCount)
+        if (cellCount == 0) return distance
 
         // Larger than any squared distance a grid this size can hold, and finite, so the envelope
         // below can do arithmetic on it without meeting an infinity.
-        val unreachable = 4.0 * (width.toDouble() * width + height.toDouble() * height)
-        val noSource = Int.MAX_VALUE / 4
+        val unreachableSquared =
+            4.0 * (cellsAcross.toDouble() * cellsAcross + cellsDown.toDouble() * cellsDown)
+        // Small enough that adding one all the way down a column cannot overflow.
+        val noSourceInColumn = Int.MAX_VALUE / 4
 
-        val vertical = IntArray(cells)
-        for (x in 0 until width) {
-            var nearest = noSource
-            var i = x
-            for (y in 0 until height) {
-                nearest = when {
-                    source[i].toInt() != 0 -> 0
-                    nearest == noSource -> noSource
-                    else -> nearest + 1
+        // First pass: how far each cell is from the nearest source in its own column, by one scan
+        // down and one back up.
+        val downColumn = IntArray(cellCount)
+        for (column in 0 until cellsAcross) {
+            var nearestRows = noSourceInColumn
+            var cell = column
+            for (row in 0 until cellsDown) {
+                nearestRows = when {
+                    source[cell].toInt() != 0 -> 0
+                    nearestRows == noSourceInColumn -> noSourceInColumn
+                    else -> nearestRows + 1
                 }
-                vertical[i] = nearest
-                i += width
+                downColumn[cell] = nearestRows
+                cell += cellsAcross
             }
-            nearest = noSource
-            i = x + (height - 1) * width
-            for (y in height - 1 downTo 0) {
-                nearest = when {
-                    source[i].toInt() != 0 -> 0
-                    nearest == noSource -> noSource
-                    else -> nearest + 1
+            nearestRows = noSourceInColumn
+            cell = column + (cellsDown - 1) * cellsAcross
+            for (row in cellsDown - 1 downTo 0) {
+                nearestRows = when {
+                    source[cell].toInt() != 0 -> 0
+                    nearestRows == noSourceInColumn -> noSourceInColumn
+                    else -> nearestRows + 1
                 }
-                if (nearest < vertical[i]) vertical[i] = nearest
-                i -= width
+                if (nearestRows < downColumn[cell]) downColumn[cell] = nearestRows
+                cell -= cellsAcross
             }
         }
 
-        val span = width * 3
-        val cost = DoubleArray(span)
-        val vertex = IntArray(span)
-        val boundary = DoubleArray(span + 1)
-        for (y in 0 until height) {
-            val rowStart = y * width
-            for (j in 0 until span) {
-                val d = vertical[rowStart + j % width]
-                cost[j] = if (d >= noSource) unreachable else d.toDouble() * d
+        // Second pass, along each row: the lower envelope of one parabola per column, rooted at
+        // that column's vertical distance. Three copies of the row wide, so a cell near one edge
+        // can find a source near the other and the middle copy is the answer.
+        val scanWidth = cellsAcross * COPIES_OF_EACH_ROW
+        val rootedAt = DoubleArray(scanWidth)
+        val parabola = IntArray(scanWidth)
+        val envelopeEdge = DoubleArray(scanWidth + 1)
+        for (row in 0 until cellsDown) {
+            val rowStart = row * cellsAcross
+            for (sample in 0 until scanWidth) {
+                val rows = downColumn[rowStart + sample % cellsAcross]
+                rootedAt[sample] =
+                    if (rows >= noSourceInColumn) unreachableSquared
+                    else rows.toDouble() * rows
             }
 
-            var k = 0
-            vertex[0] = 0
-            boundary[0] = -FAR
-            boundary[1] = FAR
-            for (q in 1 until span) {
-                var meeting = intersection(cost, vertex[k], q)
-                while (meeting <= boundary[k]) {
-                    k--
-                    meeting = intersection(cost, vertex[k], q)
+            var top = 0
+            parabola[0] = 0
+            envelopeEdge[0] = -BEYOND_THE_SCAN
+            envelopeEdge[1] = BEYOND_THE_SCAN
+            for (sample in 1 until scanWidth) {
+                var meeting = intersection(rootedAt, parabola[top], sample)
+                while (meeting <= envelopeEdge[top]) {
+                    top--
+                    meeting = intersection(rootedAt, parabola[top], sample)
                 }
-                k++
-                vertex[k] = q
-                boundary[k] = meeting
-                boundary[k + 1] = FAR
+                top++
+                parabola[top] = sample
+                envelopeEdge[top] = meeting
+                envelopeEdge[top + 1] = BEYOND_THE_SCAN
             }
 
-            k = 0
-            for (x in 0 until width) {
-                val q = width + x
-                while (boundary[k + 1] < q) k++
-                val dx = (q - vertex[k]).toDouble()
-                val squared = dx * dx + cost[vertex[k]]
-                distance[rowStart + x] =
-                    if (squared >= unreachable) UNREACHED else sqrt(squared).toFloat()
+            top = 0
+            for (column in 0 until cellsAcross) {
+                val sample = cellsAcross + column
+                while (envelopeEdge[top + 1] < sample) top++
+                val acrossCells = (sample - parabola[top]).toDouble()
+                val squared = acrossCells * acrossCells + rootedAt[parabola[top]]
+                distance[rowStart + column] =
+                    if (squared >= unreachableSquared) UNREACHED else sqrt(squared).toFloat()
             }
         }
         return distance
     }
 
-    /** Where the parabolas rooted at [left] and [right] cross. */
-    private fun intersection(cost: DoubleArray, left: Int, right: Int): Double {
-        val l = left.toDouble()
-        val r = right.toDouble()
-        return ((cost[right] + r * r) - (cost[left] + l * l)) / (2.0 * r - 2.0 * l)
+    /** Where the parabolas rooted at columns [left] and [right] cross. */
+    private fun intersection(rootedAt: DoubleArray, left: Int, right: Int): Double {
+        val leftColumn = left.toDouble()
+        val rightColumn = right.toDouble()
+        return ((rootedAt[right] + rightColumn * rightColumn) -
+            (rootedAt[left] + leftColumn * leftColumn)) /
+            (2.0 * rightColumn - 2.0 * leftColumn)
     }
 
-    private const val FAR = 1e30
+    /**
+     * How many copies of a row the envelope is solved over, to let the east-west axis wrap.
+     *
+     * Three: the row itself with one copy either side of it, so a cell in the middle copy can
+     * reach a source anywhere in the row whichever way round it lies. It is the cheapest exact
+     * way to wrap a separable transform.
+     */
+    private const val COPIES_OF_EACH_ROW = 3
+
+    /** Further out than any sample of the scan, so the first and last envelope edges bound it. */
+    private const val BEYOND_THE_SCAN = 1e30
 }

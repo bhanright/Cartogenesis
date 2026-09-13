@@ -72,17 +72,42 @@ object MapPalette {
         0xFF3A8C8C.toInt(), 0xFF1F4E79.toInt()
     )
 
+    /**
+     * The two ends of the temperature ramp, in degrees Celsius.
+     *
+     * A generated world runs from about -28 at the poles to about 32 at the equator before the
+     * lapse rate takes anything off, so -30 to 40 holds every cell of every seed with a little
+     * room at each end and spends none of the ramp on temperatures nothing ever reaches.
+     */
+    private const val COLDEST_ON_THE_RAMP_C = -30f
+    private const val RAMP_SPAN_C = 70f
+
     fun temperature(celsius: Float): Int {
-        val t = ((celsius + 30f) / 70f).coerceIn(0f, 1f)
-        return ramp(TEMPERATURE_RAMP, t)
+        val alongTheRamp = ((celsius - COLDEST_ON_THE_RAMP_C) / RAMP_SPAN_C).coerceIn(0f, 1f)
+        return ramp(TEMPERATURE_RAMP, alongTheRamp)
     }
 
     fun precipitation(value: Float): Int = ramp(PRECIPITATION_RAMP, value.coerceIn(0f, 1f))
 
+    /**
+     * The golden angle, in degrees.
+     *
+     * Stepping a hue wheel by it is the standard way to hand out colours that stay well spaced
+     * however many are asked for: it is the step that comes back nearest its own starting point
+     * most slowly, so no two plates near each other in id land near each other in hue.
+     */
+    private const val GOLDEN_ANGLE_DEGREES = 137.508f
+
+    private const val DEGREES_ROUND_THE_HUE_WHEEL = 360f
+
+    /** Muted and light, so the boundary colours laid over them still read. */
+    private const val PLATE_SATURATION = 0.45f
+    private const val PLATE_VALUE = 0.85f
+
     /** Stable, well-spaced hues so neighbouring plates stay visually distinct. */
     fun plate(id: Int): Int {
-        val hue = (id * 137.508f) % 360f
-        return hsvToRgb(hue, 0.45f, 0.85f)
+        val hue = (id * GOLDEN_ANGLE_DEGREES) % DEGREES_ROUND_THE_HUE_WHEEL
+        return hsvToRgb(hue, PLATE_SATURATION, PLATE_VALUE)
     }
 
     /**
@@ -101,12 +126,32 @@ object MapPalette {
         else -> 0xFF404040.toInt()
     }
 
+    /**
+     * The realm wheel: how far one realm's hue is from the next, and where the first one starts.
+     *
+     * Not the golden angle, on purpose. A political map is read a handful of neighbours at a time
+     * rather than as a whole set, so what matters is that adjacent *ids* differ sharply, and 47.5
+     * degrees is a step that neither divides 360 nor comes near doing so — the first realm to
+     * repeat a hue is the eighth. The 15 degrees of offset keeps realm 0 off pure red, which reads
+     * as a warning rather than as a country.
+     */
+    private const val REALM_HUE_STEP_DEGREES = 47.5f
+    private const val FIRST_REALM_HUE_DEGREES = 15f
+
+    /** Enough colour to tell nine realms apart, short of enough to fight the relief beneath. */
+    private const val REALM_SATURATION = 0.52f
+
+    /** The two lightnesses realms alternate between. See [nation]. */
+    private const val EVEN_REALM_VALUE = 0.88f
+    private const val ODD_REALM_VALUE = 0.74f
+
     /** Realm colours. A different hue step from plates so the two views never look alike. */
     fun nation(id: Int): Int {
-        val hue = (id * 47.5f + 15f) % 360f
+        val hue = (id * REALM_HUE_STEP_DEGREES + FIRST_REALM_HUE_DEGREES) %
+            DEGREES_ROUND_THE_HUE_WHEEL
         // Alternating value keeps two realms with similar hues apart on the map.
-        val value = if (id % 2 == 0) 0.88f else 0.74f
-        return hsvToRgb(hue, 0.52f, value)
+        val value = if (id % 2 == 0) EVEN_REALM_VALUE else ODD_REALM_VALUE
+        return hsvToRgb(hue, REALM_SATURATION, value)
     }
 
     /**
@@ -117,10 +162,26 @@ object MapPalette {
      * of the same countries.
      */
     fun culture(id: Int): Int {
-        val hue = (id * 73.5f + 200f) % 360f
-        val value = if (id % 2 == 0) 0.82f else 0.68f
-        return hsvToRgb(hue, 0.38f, value)
+        val hue = (id * PEOPLE_HUE_STEP_DEGREES + FIRST_PEOPLE_HUE_DEGREES) %
+            DEGREES_ROUND_THE_HUE_WHEEL
+        val value = if (id % 2 == 0) EVEN_PEOPLE_VALUE else ODD_PEOPLE_VALUE
+        return hsvToRgb(hue, PEOPLE_SATURATION, value)
     }
+
+    /**
+     * The peoples' wheel: a wider step, and starting in the blues rather than the reds.
+     *
+     * Both differ from the realms' on purpose — see [culture]. Starting at 200 degrees means
+     * people 0 is a blue where realm 0 is a warm orange, which is the difference a reader sees
+     * first when the two layers are flipped between.
+     */
+    private const val PEOPLE_HUE_STEP_DEGREES = 73.5f
+    private const val FIRST_PEOPLE_HUE_DEGREES = 200f
+
+    /** Paler than a realm's, so the peoples layer reads as the softer of the two. */
+    private const val PEOPLE_SATURATION = 0.38f
+    private const val EVEN_PEOPLE_VALUE = 0.82f
+    private const val ODD_PEOPLE_VALUE = 0.68f
 
     /** Land no realm claims. Deliberately drab, so borders read as the thing with colour. */
     const val WILDERNESS = 0xFF6E6A5E.toInt()
@@ -131,10 +192,19 @@ object MapPalette {
      * Deliberately not the same ramp as absolute temperature, which is a different question.
      */
     fun temperatureAnomaly(degrees: Float): Int {
-        val t = (degrees / 7f).coerceIn(-1f, 1f)
-        return if (t >= 0f) blend(ANOMALY_MID, ANOMALY_WARM, t)
-        else blend(ANOMALY_MID, ANOMALY_COLD, -t)
+        val fromNormal = (degrees / STRONGEST_ANOMALY_C).coerceIn(-1f, 1f)
+        return if (fromNormal >= 0f) blend(ANOMALY_MID, ANOMALY_WARM, fromNormal)
+        else blend(ANOMALY_MID, ANOMALY_COLD, -fromNormal)
     }
+
+    /**
+     * The anomaly at which the ramp is fully warm or fully cold, in degrees Celsius.
+     *
+     * Seven, which is about what the Gulf Stream is worth off Norway — the strongest departure
+     * from a latitude's own mean that a current on Earth produces. A wider ramp would draw every
+     * gyre this generator makes as a faint tint.
+     */
+    private const val STRONGEST_ANOMALY_C = 7f
 
     /** Normal for the latitude, warmer than it, colder than it. */
     internal const val ANOMALY_MID = 0xFF20384C.toInt()
@@ -151,34 +221,38 @@ object MapPalette {
     internal val temperatureRamp: IntArray get() = TEMPERATURE_RAMP
     internal val precipitationRamp: IntArray get() = PRECIPITATION_RAMP
 
-    fun blend(a: Int, b: Int, t: Float): Int {
-        val f = t.coerceIn(0f, 1f)
-        val ar = (a shr 16) and 0xFF
-        val ag = (a shr 8) and 0xFF
-        val ab = a and 0xFF
-        val br = (b shr 16) and 0xFF
-        val bg = (b shr 8) and 0xFF
-        val bb = b and 0xFF
+    /** [from], moved [toward] of the way to [to]. Alpha is not blended: every colour here is opaque. */
+    fun blend(from: Int, to: Int, toward: Float): Int {
+        val share = toward.coerceIn(0f, 1f)
+        val fromRed = (from shr 16) and 0xFF
+        val fromGreen = (from shr 8) and 0xFF
+        val fromBlue = from and 0xFF
+        val toRed = (to shr 16) and 0xFF
+        val toGreen = (to shr 8) and 0xFF
+        val toBlue = to and 0xFF
         return argb(
-            (ar + (br - ar) * f).toInt(),
-            (ag + (bg - ag) * f).toInt(),
-            (ab + (bb - ab) * f).toInt()
+            (fromRed + (toRed - fromRed) * share).toInt(),
+            (fromGreen + (toGreen - fromGreen) * share).toInt(),
+            (fromBlue + (toBlue - fromBlue) * share).toInt()
         )
     }
 
     /** @param factor 1 leaves the colour untouched, below 1 darkens, above 1 lightens. */
     fun shade(color: Int, factor: Float): Int {
-        val r = ((color shr 16) and 0xFF) * factor
-        val g = ((color shr 8) and 0xFF) * factor
-        val b = (color and 0xFF) * factor
-        return argb(r.toInt(), g.toInt(), b.toInt())
+        val red = ((color shr 16) and 0xFF) * factor
+        val green = ((color shr 8) and 0xFF) * factor
+        val blue = (color and 0xFF) * factor
+        return argb(red.toInt(), green.toInt(), blue.toInt())
     }
 
-    internal fun ramp(colors: IntArray, t: Float): Int {
-        val clamped = t.coerceIn(0f, 1f)
-        val scaled = clamped * (colors.size - 1)
-        val index = scaled.toInt().coerceAtMost(colors.size - 2)
-        return blend(colors[index], colors[index + 1], scaled - index)
+    /** [colors] read at [along], 0 at the first stop and 1 at the last, blended between them. */
+    internal fun ramp(colors: IntArray, along: Float): Int {
+        val clamped = along.coerceIn(0f, 1f)
+        val atStop = clamped * (colors.size - 1)
+        // Never the last stop, so there is always a stop above to blend toward; a value of exactly
+        // 1 lands at the top of the interval below it instead, which is the same colour.
+        val stop = atStop.toInt().coerceAtMost(colors.size - 2)
+        return blend(colors[stop], colors[stop + 1], atStop - stop)
     }
 
     private fun argb(r: Int, g: Int, b: Int): Int =
@@ -187,19 +261,28 @@ object MapPalette {
             (g.coerceIn(0, 255) shl 8) or
             b.coerceIn(0, 255)
 
+    /** Sixty degrees: the hue wheel's six sectors, one per pair of primaries. */
+    private const val DEGREES_PER_SECTOR = 60f
+
     private fun hsvToRgb(hue: Float, saturation: Float, value: Float): Int {
-        val c = value * saturation
-        val h = hue / 60f
-        val x = c * (1f - kotlin.math.abs(h % 2f - 1f))
-        val (r, g, b) = when (h.toInt()) {
-            0 -> Triple(c, x, 0f)
-            1 -> Triple(x, c, 0f)
-            2 -> Triple(0f, c, x)
-            3 -> Triple(0f, x, c)
-            4 -> Triple(x, 0f, c)
-            else -> Triple(c, 0f, x)
+        val chroma = value * saturation
+        val sector = hue / DEGREES_PER_SECTOR
+        // The second-strongest channel: full at a sector's boundary, nothing at its middle.
+        val second = chroma * (1f - kotlin.math.abs(sector % 2f - 1f))
+        val (red, green, blue) = when (sector.toInt()) {
+            0 -> Triple(chroma, second, 0f)
+            1 -> Triple(second, chroma, 0f)
+            2 -> Triple(0f, chroma, second)
+            3 -> Triple(0f, second, chroma)
+            4 -> Triple(second, 0f, chroma)
+            else -> Triple(chroma, 0f, second)
         }
-        val m = value - c
-        return argb(((r + m) * 255).toInt(), ((g + m) * 255).toInt(), ((b + m) * 255).toInt())
+        // What is left of the value once the chroma is spent goes to all three channels alike.
+        val grey = value - chroma
+        return argb(
+            ((red + grey) * 255).toInt(),
+            ((green + grey) * 255).toInt(),
+            ((blue + grey) * 255).toInt()
+        )
     }
 }

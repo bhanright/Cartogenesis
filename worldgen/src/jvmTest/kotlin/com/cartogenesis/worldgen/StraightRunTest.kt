@@ -92,8 +92,8 @@ class StraightRunTest {
      *
      * The live control, and the reason the census above is worth reading. A run of seven steps on
      * one bearing is 40 to 160 km of watercourse without a bend at these grids; the plain rule
-     * leaves more of them than the facet rule on every seed measured — 73/27/39/17/30 against
-     * 64/22/33/13/21 on 298405 at 1024 and on 7/42/1234/99 at 512 — and one seed at 512 keeps
+     * leaves more of them than the facet rule on every seed measured — 76/28/38/22/31 against
+     * 66/21/32/15/20 on 298405 at 1024 and on 7/42/1234/99 at 512 — and one seed at 512 keeps
      * proving that per merge. The audit tier runs the whole table.
      */
     @Test

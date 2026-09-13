@@ -324,9 +324,9 @@ way toward the diagonal and not a tie. Census of standing water within 1.2 cells
 twenty cells long: 1/0/0/0/0 on 298405 at 1024 and 7/42/1234/99 at 512 before, 0/0/0/0/0 after. A
 ruled bar needs a lip to pond behind as well as a ruled course, so it is rare and the census is a
 poor way to compare two routing rules; the ruled *course* is on every map, and runs of seven steps
-on one bearing — 40 to 160 km of watercourse without a bend at these grids — fall from 77/27/39/21/31
-to 64/21/32/16/20 over the same five worlds. Hack's exponent moves at most 0.017 against a spread of
-0.027 across seeds and stays inside Earth's band; a third of the drawn river cells move, three
+on one bearing — 40 to 160 km of watercourse without a bend at these grids — fall from 76/28/38/22/31
+to 66/21/32/15/20 over the same five worlds. Hack's exponent moves at most 0.018 against a spread of
+0.032 across seeds and stays inside Earth's band; a third of the drawn river cells move, three
 quarters of them by a cell or two. See `StraightRunTest` and `StraightRunAuditTest`, and
 `REALISM_PLAN.md`, F18.
 

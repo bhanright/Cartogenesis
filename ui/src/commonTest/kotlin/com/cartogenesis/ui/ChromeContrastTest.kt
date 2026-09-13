@@ -650,8 +650,8 @@ class ChromeContrastTest {
             "CHROME lemon blueberry alarm: dE2000 ${fromAccent.rounded()} from the accent, " +
                 "${fromGround.rounded()} from the panel, ${fromInk.rounded()} from the ink"
         )
-        assertTrue(fromAccent >= ALARM_MARGIN, "the alarm is ${fromAccent.rounded()} from the accent")
-        assertTrue(fromGround >= ALARM_MARGIN, "the alarm is ${fromGround.rounded()} from the panel")
+        assertTrue(fromAccent >= ALARM_MARGIN, "the alarm is ${fromAccent.rounded()} from the zest")
+        assertTrue(fromGround >= ALARM_MARGIN, "the alarm is ${fromGround.rounded()} from a panel")
         assertTrue(fromInk >= ALARM_MARGIN, "the alarm is ${fromInk.rounded()} from the ink")
     }
 

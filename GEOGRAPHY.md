@@ -197,7 +197,7 @@ that wavelength grows many short rivers instead of a few long ones — and, as S
 ponds the water where it falls. At a tenth, which is what the second pass measured the bifurcation
 ratio against, lakes covered 3.55% of the land against Earth's 1.48% at this cell area and the
 sea-level cut landed on a platform flat enough to drown into an archipelago; at a sixth the lakes
-are 1.73%, the drainage density is 0.0029 km/km² against the pre-S2 generator's 0.0026, and every
+are 0.70%, the drainage density is 0.0032 km/km² against the pre-S2 generator's 0.0026, and every
 seed's coastline clears Mandelbrot's floor. Above a sixth the coast goes: a map-scale tilt moves a
 shoreline bodily. Since S2's fourth pass gave the crust a thickness that rises inland, the sixth is
 no longer what stops the ponding — at a tenth *and* a crust with no profile of its own the lakes
@@ -244,6 +244,17 @@ lowest outlet and the water balance decides whether it holds a lake (a lake belo
 Caspian, the Dead Sea, the Qattara) or dries to a playa. Measured at 512: 73/78/558 pockets holding
 358/430/2093 cells on seeds 7/42/1234 before, none after, and 37/41/60 river mouths ending in one
 before, none after. At 2048, 925 pockets on 718106 and 305 on 59758, none after.
+
+**Touching water is not the same as being able to drain into it.** The depression fill seeds its
+priority flood from the land that touches the sea, on the assumption that such a cell has somewhere
+to go. The rule above breaks that assumption: it turns sea the ocean cannot reach into land without
+raising it, so a converted cell keeps a level *below* the shoreline and can stand lower than the
+ocean floor beside it. Seeded as an outlet it is never filled, and the router then finds it nothing
+to drain into at all — nine such cells on seed 42 at 512 and seven on 298405 at 1024, which is what
+`PipelineTest`'s "every land cell drains downhill" and `StraightRunTest`'s forest check caught at
+S2's fourth pass. A land cell is an outlet only where the water it touches is *lower than it*.
+Every ordinary coast is unaffected, because land stands at or above the shoreline and water below
+it.
 
 **A drowned basin gets its outlet cut too.** What the rule above hands the river stage is a hollow
 whose floor lies below sea level and whose rim is ordinary land, and the depression fill then raises

@@ -24,9 +24,18 @@
   for the purpose and then removed because the metrics could not see it. What is wanted is not a
   swell of the surface but a variation in the crust's own thickness, which is the same thing the
   epicontinental-seas entry below wants. 2026-09-13, S2.
-- **There are three times as many lakes as there were, and they are the right area.** Measured over
-  the five standard worlds at 512 after S2's third pass: 1.73% of land under lakes against Earth's
-  1.48% at this cell area and the pre-S2 generator's 0.54%, in 39 lakes against its 13. So the map
+- ~~**There are three times as many lakes as there were, and they are the right area.**~~ Answered
+  at S2's fourth pass, by the crust rather than by anything the entry proposed: giving the
+  continental crust a thickness that rises inland gave a continent a slope of its own, and the
+  water that had been standing on it runs. The lake share of land is 0.70% against Earth's 1.48% at
+  this cell area, where the third pass measured 1.73% and the pre-S2 generator 0.54%. What the
+  entry said below is kept because the question it asks — which of the count and the area is the
+  defect — is still unanswered, and is now asked of a generator with too *few* lakes rather than too
+  many. The original reading follows.
+
+  Measured over the five standard worlds at 512 after S2's third pass: 1.73% of land under lakes
+  against Earth's 1.48% at this cell area and the pre-S2 generator's 0.54%, in 39 lakes against its
+  13. So the map
   now holds about Earth's share of its land in lakes where it used to hold half of it, and it does
   that with twice as many, each smaller. Which of the two figures is the defect is not settled:
   Earth's lake *count* at a 275 km² floor is not a number this project has looked up, and the
@@ -73,6 +82,35 @@
   epicontinental seas below: drown the continents as much as Earth drowns its own and the two
   figures reconcile. 2026-09-13, S2.
 
+- **A sixth of the map-scale relief may no longer be needed, and nothing has measured it since
+  the crust got a slope.** `TerrainConfig.regionalReliefShare` was raised from a tenth to a sixth
+  at S2's third pass because at a tenth the water ponded: lakes covered 3.55% of the land and whole
+  regions drowned into mazes of inlets. S2's fourth pass gave the continental crust a thickness
+  that rises inland, which is a long slope of the same kind and a better-founded one, and at a
+  tenth *and* a flat crust the lakes now read 0.96%. So the control `GroundTextureTest` used no
+  longer bites and the sixth is carrying an unknown share of its own weight. What it costs is
+  measured: TODO's first entry records that a sixth is bought against the coastline. Somebody
+  should sweep the share again on the new ground and take back whatever the crust is now paying
+  for. 2026-09-13, S2.
+- **The drainage density has no Earth figure, only a regression bar.** `GroundTextureTest` holds
+  the channel length per unit area within a third of what the pre-S2 tree measured, which is a bar
+  against a generator and not against a planet. It was a fifth until this pass and moved because
+  the ground now drains — the lake share fell from 1.73% of land to 0.70% against Earth's 1.48%
+  while the density rose from 0.00256 to 0.0032 km/km², which are the same fact twice. What is
+  missing is Earth's own channel length per unit area *at this instrument's support threshold* of
+  275 km², which M1 never looked up because its own drainage row is a shape claim (density peaks
+  on the dry side of the aridity index) and not a level. Until somebody does, the direction of a
+  change in this figure cannot be read. 2026-09-13, S2.
+- **A glacial trough has no bounded reach.** `GlaciationConfig.runOutKm` is 187.5 km and says how
+  far a trough may continue past the frozen mask onto ground an ice age's ablation would keep warm.
+  The trunk pass does not read it: it follows a flow path down from a cirque for as far as the path
+  descends, so a trough off a six-kilometre massif ends four kilometres warmer than its head and
+  three hundred kilometres away. `SnowBalanceTest`'s carving control had to gain a floor in cells
+  because of it — the warm tail is a fixed cost per trough and its *share* of the carved ground
+  grows as the ice shrinks, which is how a seed with 0.9% of its land under ice reads 10% of its
+  carved ground above freezing where a seed with 8.7% reads 0.5%. Either the trunk should stop at
+  the reach the setting names or the setting should be retired as a description of the cirque pass
+  alone. 2026-09-13, S2.
 - **The lowest ground on the map is the roughest, and on Earth it is the flattest.** Since S2's
   fourth pass the base relief's texture follows the local relief, and the relief itself follows the
   crust: `TectonicsConfig.marginReliefStandardDeviationMetres` at the crust's own edge falling to

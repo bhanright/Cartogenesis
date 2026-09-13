@@ -86,23 +86,25 @@ class PenAndInkTest {
          * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
          * that is supposed to have changed.
          *
-         * Recorded at v2.0.0 and re-recorded once at S1, which moved the world rather than the
-         * drawing of it: the sea's own stand gained a depth in metres and a ruler to read it
-         * against, so the terrain the hydraulic rounds cut is a little different and every style
-         * draws the difference. That the ten move *together* is what this still proves; a style
-         * redrawn on its own would show up as one entry out of step with the rest.
+         * Recorded at v2.0.0 and re-recorded twice since, each time because the world moved
+         * rather than the drawing of it. S1 gave the sea's own stand a depth in metres and a ruler
+         * to read it against, so the terrain the hydraulic rounds cut came out a little different.
+         * W1 replaced the temperature curve with an energy balance, so every biome the tints are
+         * read off is drawn from a different climate. That the ten move *together* is what this
+         * still proves; a style redrawn on its own would show up as one entry out of step with the
+         * rest, and both re-recordings had all ten move.
          */
         val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -1251658432,
-            MapStyle.VELLUM to -894858538,
-            MapStyle.INK_WASH to -2025451479,
-            MapStyle.NAUTICAL to 353681580,
-            MapStyle.MIDNIGHT to 1100943998,
-            MapStyle.SCHOOLROOM to 2113429675,
-            MapStyle.VERDANT to -102946448,
-            MapStyle.SCROLL to -1099453844,
-            MapStyle.MARS to -956322526,
-            MapStyle.CLEAR to -703349694
+            MapStyle.ATLAS to -711461593,
+            MapStyle.VELLUM to 938355978,
+            MapStyle.INK_WASH to 128683725,
+            MapStyle.NAUTICAL to 1609729604,
+            MapStyle.MIDNIGHT to -1381314506,
+            MapStyle.SCHOOLROOM to 1240191544,
+            MapStyle.VERDANT to 178954145,
+            MapStyle.SCROLL to 1729271156,
+            MapStyle.MARS to -1703074919,
+            MapStyle.CLEAR to 130470769
         )
 
         /** The gallery's world, at the size the guards measure on. */

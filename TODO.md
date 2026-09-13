@@ -79,6 +79,22 @@
 
 ## Done
 
+- **The temperature was a curve, so it could not hold a cap or give a continent a winter**
+  (2026-09-13, W1) — the latitude curve with an exponent and two anchors is gone, and with it
+  `equatorTemperatureC`, `poleTemperatureC` and `continentality`. In its place is a one-dimensional
+  energy balance over 240 latitude bands, marched through 360 steps of the year for twenty years:
+  insolation from the planet's own tilt, `A + B·T` out with North's slope and an offset fixed by
+  Earth's 240 W/m² at 14 °C, heat transport at 0.60 W/m²/°C, and an albedo that follows the ice the
+  model itself grows. Each band carries a land column and a sea column with the world's own
+  coastline as their areas, storing what they absorb in three metres of soil against fifty metres of
+  water; a cell takes a blend of the two, falling away from the coast with the 350 km e-folding
+  Earth's own stations give. On Earth's land fraction it reads 13.8 °C globally against 14, 26.4 at
+  the equator against 26, −2.2 at 60° against −2, a 35.6 °C annual range over continental land at
+  50-60° against 34-38 and 5.6 over the open ocean against 6-8. `glacialMaximumC` became a dimmer
+  sun rather than a redrawn mask, so the glacial cooling comes out polar-amplified (5.2 °C at 10°
+  against 8.5 at 75°) instead of being told to be. Sea ice is two saved masks at −1.8 °C, the march
+  takes nothing from a frozen cell, and the biome draws the pack that survives the summer. The two
+  anchors' old complaint — the equator 5 °C warm and 60° 3 °C cold — is answered by construction.
 - **One unit of land elevation was six kilometres in the climate and eight everywhere else**
   (2026-09-13, S1) — `WorldScale` is now the only place a physical unit is declared: the map's
   width in kilometres, the two ends of its vertical range in metres and the years a hydraulic round
@@ -469,7 +485,40 @@
   `GlaciationStage` grades its marine troughs down to the waterline instead: the depth and the
   islands are there, but high-latitude coasts get none of the long narrow inlets fjords actually
   are. See GEOGRAPHY.md's "Known deviations".
-- **The latitude curve runs a few degrees off at its anchors.** Checked arithmetically after A6:
-  the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
-  anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
-  render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
+- **A drowned basin is over the Caspian cap again, and the cap is the thing to look at.**
+  `OutletResolutionTest`'s clause on basins below the sea-level cut was an assertion from H5b and is
+  a printed finding again from W1: seed 42's largest walled-off hollow at 2048 went from 3,453 cells
+  to 4,924 — 0.86 times the Caspian's share of its land to 1.23 — because the glacial mask is now
+  struck on a colder world's own rainfall and the ice carved somewhere slightly different. Nothing
+  about the outlet notch moved and the post-cut pass is not short of passes. The clause could only
+  ever discriminate while the two sample hollows sat under an Earth figure, and that figure's
+  meaning on a world a seventh of Earth's size is the open question two entries below this one:
+  1.23 times the Caspian's *share* of a world this size is a fifth of the Caspian's actual area.
+  Whoever settles the cap should settle this clause with it. The largest lake in the land is still
+  asserted against the same figure and is well under it, at 0.16%. The same case's "at least one
+  seed still forms a ratio" clause is a finding now too, and for a plainer reason: it was passing on
+  seed 59758 reading 0.501% standing water against a floor of 0.500%, and W1's climate moved it to
+  0.371% while moving seed 42's the other way, 0.120% to 0.210%. The spread that floor protected was
+  retired by S1 in favour of `ScaleFreeTest`, so what it guarded is already measured elsewhere.
+- **The ocean's seasonal swing is short of Earth's.** W1's energy balance stores the sea's summer in
+  a fifty-metre slab with no seasonal deepening, so the open ocean's annual range comes out at
+  4.8 °C at 35° where Earth's is 6-9 and 5.6 °C at 50-60° where Earth's is 6-8. The land's range is
+  right (35.6 °C at 50-60° against 34-38), so this is the slab and not the model: a mixed layer that
+  shoals to 25 m in summer and deepens to 150 in winter absorbs its summer into less water and
+  releases it out of more, which a single depth cannot do. `SeasonsTest` states both figures with
+  Earth's beside them. A two-layer ocean would be W3's or later, and it would also give the coasts
+  their observed autumn lag.
+- **The model's poles are ten degrees warm and its mid-latitudes four degrees cold.** On Earth's own
+  land fraction W1's energy balance reads 26.4 °C at the equator (Earth 26), −2.2 at 60° (Earth −2),
+  and −13.3 at the pole against a nominal −20; at 45° it reads 7.7 against Earth's 12. The global
+  mean and the two ends are within a degree, so what is off is the shape between them — a constant
+  diffusivity carries too little heat across the mid-latitudes, where Earth's transport peaks, and
+  too much into the polar cap. A diffusivity that varies with latitude is the literature's own fix
+  (North, Cahalan and Coakley 1981 discuss it) and is a small change to `EnergyBalance`; it was left
+  out of W1 because every guard passes without it and one fitted profile is enough for one chunk.
+- **A band has no internal geography.** `EnergyBalance` gives each latitude a land column and a sea
+  column but nothing tells it that a band's land is an island in its sea, so a band that is one per
+  cent island carries a fully continental land column. The map is saved from that by the marine
+  blend — an island is entirely within reach of water and takes the sea column's year — but a large
+  island in a wide ocean is a case where the two disagree, and a within-band exchange scaled by how
+  broken up the band's land is would close it.

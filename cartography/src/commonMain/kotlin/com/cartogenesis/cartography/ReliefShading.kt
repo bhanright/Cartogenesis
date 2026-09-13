@@ -66,16 +66,17 @@ internal object ReliefShading {
      * floor as well would be most of the work for none of the picture.
      */
     fun of(elevation: FloatField, isLand: BooleanArray, singleLamp: Boolean): FloatArray {
-        val width = elevation.width
-        val height = elevation.height
-        val shade = FloatArray(width * height) { 1f }
-        val scale = slopeScale(width)
-        val step = opennessStep(width)
-        for (y in 0 until height) {
-            val row = y * width
-            for (x in 0 until width) {
-                if (!isLand[row + x]) continue
-                shade[row + x] = at(x, y, elevation, scale, step, singleLamp)
+        val cellsAcross = elevation.width
+        val cellsDown = elevation.height
+        val shade = FloatArray(cellsAcross * cellsDown) { 1f }
+        val scale = slopeScale(cellsAcross)
+        val step = opennessStep(cellsAcross)
+        for (row in 0 until cellsDown) {
+            val rowStart = row * cellsAcross
+            for (column in 0 until cellsAcross) {
+                if (!isLand[rowStart + column]) continue
+                shade[rowStart + column] =
+                    at(column, row, elevation, scale, step, singleLamp)
             }
         }
         return shade

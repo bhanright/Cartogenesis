@@ -45,6 +45,14 @@ class GeneralisationTest {
          */
         const val AT_FIT = 900f / 2048f
         const val AT_FOUR_TIMES = 4f * AT_FIT
+
+        /**
+         * How near a half-cell boundary a coordinate has to fall to count as being on one.
+         *
+         * A ten-thousandth of a cell. Every traced coordinate is a whole or a half exactly, so
+         * this is only against a float that arrived through arithmetic rather than a literal.
+         */
+        const val ON_A_CELL_CENTRE = 1e-4f
     }
 
     private fun world(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
@@ -100,19 +108,21 @@ class GeneralisationTest {
         Shoreline.trace(land, map.width, map.height).forEach { line ->
             var at = 0
             while (at < line.size) {
-                val x = line[at]
-                val y = line[at + 1]
+                val vertexX = line[at]
+                val vertexY = line[at + 1]
                 // A vertex is halfway along a cell edge: one coordinate lands on a cell centre and
                 // the other between two of them, and those two are the pair the coast divides.
                 val (first, second) =
-                    if (abs(x - x.toInt() - 0.5f) < 1e-4f) {
-                        cellAt(map, x, y - 0.5f) to cellAt(map, x, y + 0.5f)
+                    if (abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE) {
+                        cellAt(map, vertexX, vertexY - 0.5f) to
+                            cellAt(map, vertexX, vertexY + 0.5f)
                     } else {
-                        cellAt(map, x - 0.5f, y) to cellAt(map, x + 0.5f, y)
+                        cellAt(map, vertexX - 0.5f, vertexY) to
+                            cellAt(map, vertexX + 0.5f, vertexY)
                     }
                 assertTrue(
                     land[first] != land[second],
-                    "a coast vertex at $x, $y has the same ground on both sides of it"
+                    "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it"
                 )
                 checked++
                 at += 2

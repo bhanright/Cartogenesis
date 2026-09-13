@@ -296,19 +296,21 @@ class PenAndInkTest {
 
         var total = 0.0
         var windows = 0
-        var y = window + reach
-        while (y < height - window - reach) {
-            var x = window + reach
-            while (x < width - window - reach) {
+        var row = window + reach
+        while (row < height - window - reach) {
+            var column = window + reach
+            while (column < width - window - reach) {
                 val gradientX =
-                    (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) *
-                        plan.gradientScale
+                    (elevation.sample(column + reach, row) -
+                        elevation.sample(column - reach, row)) * plan.gradientScale
                 val gradientY =
-                    (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) *
-                        plan.gradientScale
+                    (elevation.sample(column, row + reach) -
+                        elevation.sample(column, row - reach)) * plan.gradientScale
                 val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
-                if (slope >= MEASURED_SLOPE_FLOOR && allLand(land, width, x, y, window)) {
-                    val tensor = structureTensor(pixels, width, x, y, window)
+                if (slope >= MEASURED_SLOPE_FLOOR &&
+                    allLand(land, width, column, row, window)
+                ) {
+                    val tensor = structureTensor(pixels, width, column, row, window)
                     if (tensor != null) {
                         // The picture's steepest change runs across the strokes; the strokes run a
                         // quarter turn from it, and the aspect is what they should be along.
@@ -319,9 +321,9 @@ class PenAndInkTest {
                         windows++
                     }
                 }
-                x += SAMPLE_STEP
+                column += SAMPLE_STEP
             }
-            y += SAMPLE_STEP
+            row += SAMPLE_STEP
         }
         return AspectError(
             if (windows == 0) 0.0 else Math.toDegrees(total / windows),
@@ -424,14 +426,14 @@ class PenAndInkTest {
         val reach = plan.gradientStencilCells
         var measured = 0
         var seams = 0
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
-                val i = y * width + x
-                if (!world.sea.isLand[i]) continue
-                val here = aspectOrNull(elevation, x, y, reach, plan) ?: continue
+        for (row in 1 until height - 1) {
+            for (column in 1 until width - 1) {
+                val cell = row * width + column
+                if (!world.sea.isLand[cell]) continue
+                val here = aspectOrNull(elevation, column, row, reach, plan) ?: continue
                 measured++
-                val east = aspectOrNull(elevation, x + 1, y, reach, plan)
-                val south = aspectOrNull(elevation, x, y + 1, reach, plan)
+                val east = aspectOrNull(elevation, column + 1, row, reach, plan)
+                val south = aspectOrNull(elevation, column, row + 1, reach, plan)
                 val turned = (east != null && foldedDifference(here, east) > SEAM_RADIANS) ||
                     (south != null && foldedDifference(here, south) > SEAM_RADIANS)
                 if (turned) seams++
@@ -467,14 +469,16 @@ class PenAndInkTest {
         val elevation = world.sea.relativeElevation
         val reach = plan.gradientStencilCells
         val slopes = ArrayList<Float>()
-        for (i in world.sea.isLand.indices) {
-            if (!world.sea.isLand[i]) continue
-            val x = i % width
-            val y = i / width
+        for (cell in world.sea.isLand.indices) {
+            if (!world.sea.isLand[cell]) continue
+            val column = cell % width
+            val row = cell / width
             val gradientX =
-                (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
+                (elevation.sample(column + reach, row) -
+                    elevation.sample(column - reach, row)) * plan.gradientScale
             val gradientY =
-                (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
+                (elevation.sample(column, row + reach) -
+                    elevation.sample(column, row - reach)) * plan.gradientScale
             slopes.add(sqrt(gradientX * gradientX + gradientY * gradientY))
         }
         slopes.sort()

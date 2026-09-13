@@ -39,11 +39,13 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
 
 /**
- * The atlas, laid out for a desktop window.
+ * The atlas, in whichever arrangement the window is.
  *
- * The phone build drills down from a list into a detail screen because there is no room for both.
- * Here the list sits beside the detail, so picking a realm keeps its neighbours in view — which is
- * most of the point of an atlas.
+ * Where there is room, the list sits beside the detail, so picking a realm keeps its neighbours in
+ * view — which is most of the point of an atlas. Where there is not, it drills down from the list
+ * into the realm and back, because 320 dp of list on a 390 dp screen leaves 70 dp for the realm's
+ * own page, and 70 dp is not a page. That sentence was written here when the phone was the retired
+ * Android build; F8 made it true of the web build, which is the phone now.
  */
 @Composable
 fun AtlasPane(
@@ -66,8 +68,20 @@ fun AtlasPane(
     Column(modifier.fillMaxSize()) {
         AtlasSettings(config, options, busy, labelMode, onConfig, onOptions, onToggleLabels)
         HorizontalDivider()
+        // The list beside the detail where there is room for both, and one or the other where
+        // there is not. A 320 dp column on a 390 dp screen leaves 70 dp for the realm's own page,
+        // which is where "Pick a realm." wrapped onto two lines and nothing else would have fitted
+        // at all; on a phone the list is the whole width until a realm is picked, and then the
+        // realm is, with the list one press away — which is what this file's own opening paragraph
+        // said a phone should do, written when the retired Android build was the phone.
+        val drillDown = LocalWindowShape.current == WindowShape.COMPACT
+        val chosen = nations.firstOrNull { it.id == selected }
         Row(Modifier.fillMaxSize()) {
-            Surface(Modifier.width(320.dp).fillMaxHeight(), tonalElevation = 1.dp) {
+            if (!drillDown || chosen == null) Surface(
+                if (drillDown) Modifier.weight(1f).fillMaxHeight()
+                else Modifier.width(320.dp).fillMaxHeight(),
+                tonalElevation = 1.dp
+            ) {
                 LazyColumn(contentPadding = PaddingValues(12.dp)) {
                     item {
                         Text(
@@ -137,9 +151,10 @@ fun AtlasPane(
                 }
             }
 
-            val nation = nations.firstOrNull { it.id == selected }
-            if (nation == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (chosen == null) {
+                // Nothing to show beside the list — and nothing beside it to show anything in,
+                // when the list is the whole width, so this is the wide window's half only.
+                if (!drillDown) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         if (nations.isEmpty()) "No realms — raise the realm count."
                         else "Pick a realm.",
@@ -147,7 +162,15 @@ fun AtlasPane(
                     )
                 }
             } else {
-                NationDetail(nation, onEditNation, onResetNation)
+                NationDetail(
+                    nation = chosen,
+                    // The way back to the list, and only where the list has gone away. On the
+                    // desktop it is still there on the left and a button saying so would be a
+                    // button that does nothing visible.
+                    onBack = if (drillDown) ({ onSelect(null) }) else null,
+                    onEdit = onEditNation,
+                    onReset = onResetNation
+                )
             }
         }
     }
@@ -198,6 +221,8 @@ private fun AtlasSettings(
 @Composable
 private fun NationDetail(
     nation: ResolvedNation,
+    /** Null where the list of realms is still on screen beside this. */
+    onBack: (() -> Unit)?,
     onEdit: (Int, (NationOverride) -> NationOverride) -> Unit,
     onReset: (Int) -> Unit
 ) {
@@ -205,6 +230,11 @@ private fun NationDetail(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        if (onBack != null) {
+            OutlinedButton(onClick = onBack, contentPadding = TIGHT) {
+                Text("← Realms", maxLines = 1)
+            }
+        }
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

@@ -2,15 +2,22 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class River(
     /** Cell indices from source to mouth. */
     val cells: IntArray,
-    /** Rendering width per point, in cells. */
-    val widths: FloatArray
+    /**
+     * How wide the channel runs at each point, as a fraction of the widest river on the map: 0 at
+     * the smallest channel drawn and 1 at the mouth of the biggest, on the square root of the flow.
+     * [RiverWidth] derives it and says why it is a ratio rather than a length.
+     *
+     * Empty only between tracing a course and sizing it, which cannot happen until every course is
+     * traced: the scale a reach is measured against is the whole network's. No river outside
+     * [RiverWidth.sizedByFlow] is ever handed on with this empty.
+     */
+    val widthRatio: FloatArray = FloatArray(0)
 ) {
     val length: Int get() = cells.size
 }
@@ -107,20 +114,6 @@ object RiverStage {
      * that leaves it disappears at its head.
      */
     private const val RUNOFF_FLOOR = 0.05f
-
-    /**
-     * How wide a channel is drawn at exactly the source threshold, in cells, and how fast that
-     * grows with the water it carries.
-     *
-     * Hydraulic geometry gives channel width as a power of discharge with an exponent near a half;
-     * this uses a gentler one so that a trunk carrying a thousand times a headwater's water is a
-     * few times wider rather than thirty times. The clamps keep the thinnest channel visible at
-     * one cell and the largest trunk from swamping the map.
-     */
-    private const val WIDTH_AT_THRESHOLD_CELLS = 0.55f
-    private const val WIDTH_EXPONENT = 0.28f
-    private const val MIN_WIDTH_CELLS = 0.5f
-    private const val MAX_WIDTH_CELLS = 2.8f
 
     /**
      * Every land cell's water and the channels it makes: the depression-filled surface, the D8
@@ -520,15 +513,12 @@ object RiverStage {
                 continue
             }
 
-            val cells = path.toIntArray()
-            val widths = FloatArray(cells.size) { step ->
-                val timesThreshold = accumulation.data[cells[step]] / sourceFlow
-                (WIDTH_AT_THRESHOLD_CELLS * timesThreshold.pow(WIDTH_EXPONENT))
-                    .coerceIn(MIN_WIDTH_CELLS, MAX_WIDTH_CELLS)
-            }
-            rivers.add(River(cells, widths))
+            rivers.add(River(path.toIntArray()))
         }
-        return rivers
+
+        // Sized last, because the scale a channel is measured against is the whole network's: what
+        // makes a trunk a trunk is that it carries more than anything else on this map.
+        return RiverWidth.sizedByFlow(rivers, accumulation.data)
     }
 
 }

@@ -68,7 +68,10 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
     downhill and traced to the coast, and every basin's outlet incises its own sill down over time.
     A basin the fill raised becomes a lake only as far as its water balance allows: where
     evaporation outpaces runoff it settles below its rim as endorheic, or as a dry playa if it
-    cannot hold water at all; otherwise it overflows at the brim.
+    cannot hold water at all; otherwise it overflows at the brim. A channel is drawn as wide as the
+    water it carries: Leopold and Maddock's downstream hydraulic geometry has width going as the
+    square root of discharge, so the map's smallest stream is a 0.8-pixel thread and its biggest
+    river a 5-pixel channel, with the same pen at every resolution and export size.
 11. **Realms.** Political borders are handed out by whole drainage catchment, never split, so a
     frontier falls on a watershed because that is the only place a catchment boundary can run;
     large catchments are cut along their trunk river, enclaves dissolve to whichever neighbour
@@ -207,7 +210,8 @@ rather than removed.
 
 Exports are PNG (lossless) or WebP (about a quarter the size, but lossy where a map can least
 afford it: the average pixel drifts about 4 of 255, invisible, but the worst 0.1%, the river lines
-and borders, drift by nearly 70; `ExportSmokeTest` measures both so the UI's description stays
+and borders, drift by about 75 — more since rivers were sized by their discharge, which draws every
+headwater as a sub-pixel thread; `ExportSmokeTest` measures both so the UI's description stays
 true).
 
 Drawing the map runs on the graphics card unconditionally, not behind the acceleration toggle below,

@@ -7,11 +7,17 @@ import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.jetbrains.skia.Bitmap
+import org.jetbrains.skia.Canvas
+import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.Rect
 
 /**
  * Every style, on one world, written out to be looked at.
@@ -106,5 +112,146 @@ class StyleGalleryTest {
         println(
             "STYLE wrote the Colour-blind fantasy and political views at 512 to ${dir.absolutePath}"
         )
+    }
+
+    /**
+     * F9's style, at the two sizes it has to be drawn by the same pen at.
+     *
+     * The engraving's claim is that a mark is a fixed number of pixels whatever the sheet, so the
+     * two details below are the review that matters: a square of a 512 render and a square four
+     * times the side of a 2048 render, each shown at its own pixels. What a reader should see is
+     * the *same nib* in both — hachures a hair wide and a dozen pixels long — with four times as
+     * many of them across the larger crop, the way a bigger plate carries more of the country
+     * rather than a bigger picture of less of it. `PenAndInkTest` measures the same thing; this is
+     * what it looks like.
+     *
+     * The 2048 world is the author's own probe — 62% ocean, fourteen plates, twelve realms — which
+     * is a rougher, more crowded world than the gallery's and therefore the harder case for a
+     * drawing that leaves flat ground blank.
+     */
+    @Test
+    fun `the engraved style, at 512 and at 2048`() {
+        val dir = File("build/styles").apply { mkdirs() }
+
+        val small = WorldGenerationEngine.generateBlocking(
+            WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        )
+        write(dir, "f9-engraved-512", small, RenderOptions(style = MapStyle.PEN_AND_INK))
+        write(
+            dir, "f9-engraved-political-512", small,
+            RenderOptions(view = MapView.POLITICAL, style = MapStyle.PEN_AND_INK)
+        )
+        val ink = RenderOptions(style = MapStyle.PEN_AND_INK)
+        writeDetail(dir, "f9-engraved-detail-512", small, ink, DETAIL_CELLS) {
+            small.sea.isLand[it]
+        }
+
+        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
+        val large = WorldGenerationEngine.generateBlocking(
+            base.copy(
+                tectonics = base.tectonics.copy(plateCount = 14),
+                nations = base.nations.copy(nationCount = 12)
+            ).atResolution(2048, 2048)
+        )
+        write(dir, "f9-engraved-2048", large, RenderOptions(style = MapStyle.PEN_AND_INK))
+        writeDetail(
+            dir, "f9-engraved-detail-2048", large, RenderOptions(style = MapStyle.PEN_AND_INK),
+            DETAIL_CELLS * 4
+        ) { large.sea.isLand[it] }
+        // The lakes, from the larger world and blown up: a lake is a small thing and the ruling
+        // inside it is a hairline, so at its own pixels there is nothing a reviewer can judge.
+        writeDetail(
+            dir, "f9-engraved-lakes-2048", large, RenderOptions(style = MapStyle.PEN_AND_INK),
+            LAKE_DETAIL_CELLS, magnify = 2
+        ) { large.rivers.lakes.isLake(it) }
+        println("STYLE wrote the engraved renders to ${dir.absolutePath}")
+    }
+
+    private fun write(dir: File, name: String, world: WorldMap, options: RenderOptions) {
+        val bitmap = MapImage.toBitmap(world, options)
+        val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!
+        File(dir, "$name.png").writeBytes(data.bytes)
+        bitmap.close()
+    }
+
+    /**
+     * A square of the map at its own pixels, so the strokes can be looked at rather than the
+     * continents.
+     *
+     * [side] is in this render's own cells, so a crop of 1024 from a 2048 render covers the same
+     * share of the sheet as one of 256 from a 512 render: those two files are the comparison.
+     */
+    private fun writeDetail(
+        dir: File,
+        name: String,
+        world: WorldMap,
+        options: RenderOptions,
+        side: Int,
+        magnify: Int = 1,
+        wanted: (Int) -> Boolean
+    ) {
+        val bitmap = MapImage.toBitmap(world, options)
+        val whole = Image.makeFromBitmap(bitmap)
+        val out = side * magnify
+        val crop = Bitmap().apply {
+            allocPixels(ImageInfo.makeS32(out, out, ColorAlphaType.PREMUL))
+        }
+        val corner = densestSquare(world, side, wanted)
+        Canvas(crop).drawImageRect(
+            whole,
+            Rect.makeXYWH(
+                corner.first.toFloat(), corner.second.toFloat(), side.toFloat(), side.toFloat()
+            ),
+            Rect.makeWH(out.toFloat(), out.toFloat())
+        )
+        val data = Image.makeFromBitmap(crop).encodeToData(EncodedImageFormat.PNG)!!
+        File(dir, "$name.png").writeBytes(data.bytes)
+        crop.close()
+        whole.close()
+        bitmap.close()
+    }
+
+    /**
+     * Where a square of this side holds the most of what [wanted] picks out.
+     *
+     * So a detail is of the thing it is meant to show — strokes rather than open sea, or a lake
+     * rather than the coast beside it — without anybody hand-picking a coordinate that stops being
+     * right the day the generator changes.
+     */
+    private fun densestSquare(world: WorldMap, side: Int, wanted: (Int) -> Boolean): Pair<Int, Int> {
+        val step = (side / 4).coerceAtLeast(1)
+        var best = Pair(0, 0)
+        var bestCount = -1
+        var top = 0
+        while (top + side <= world.height) {
+            var left = 0
+            while (left + side <= world.width) {
+                var count = 0
+                var y = top
+                while (y < top + side) {
+                    var x = left
+                    while (x < left + side) {
+                        if (wanted(y * world.width + x)) count++
+                        x += 4
+                    }
+                    y += 4
+                }
+                if (count > bestCount) {
+                    bestCount = count
+                    best = Pair(left, top)
+                }
+                left += step
+            }
+            top += step
+        }
+        return best
+    }
+
+    private companion object {
+        /** Side of the detail crop in 512-render cells: half the sheet each way. */
+        const val DETAIL_CELLS = 256
+
+        /** Side of the lake crop, in the 2048 render's cells: small enough to see the ruling. */
+        const val LAKE_DETAIL_CELLS = 320
     }
 }

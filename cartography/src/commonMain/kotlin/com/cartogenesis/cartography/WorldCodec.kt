@@ -128,14 +128,16 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
-     * 5 because the sweep for human-readable names moved serialised property names with no
-     * compatibility shim, so a header written before it no longer means what its keys say. 4 was
-     * that sweep's first pass over the shared model — the shoreline height and the terrain
-     * gradients among them — and 5 its second over the tectonics, sea, erosion and glaciation
-     * settings, where every cell-valued name took a `Cells` suffix. 3 was the container below with
-     * none of that, 2 the JSON text that preceded it; none of them opens.
+     * 6 because a river's drawn size stopped being a width in cells and became
+     * [com.cartogenesis.worldgen.pipeline.River.widthRatio], a fraction of the map's largest river:
+     * the old key would parse and be ignored, leaving every river at the hairline. 5 and 4 were the
+     * sweep for human-readable names, which moved serialised property names with no compatibility
+     * shim — 4 its first pass over the shared model, the shoreline height and the terrain gradients
+     * among them, and 5 its second over the tectonics, sea, erosion and glaciation settings, where
+     * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
+     * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 5
+    const val FORMAT_VERSION = 6
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

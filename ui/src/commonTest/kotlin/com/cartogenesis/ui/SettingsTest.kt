@@ -26,7 +26,7 @@ class SettingsTest {
         val chosen = AppSettings(
             theme = ThemeChoice.MARS,
             workingResolution = 2048,
-            graphicsCardAtLaunch = true,
+            graphicsAccelerationAtLaunch = true,
             exportFormat = ExportFormat.WEBP,
             exportSize = 4096,
             libraryFolder = "D:/atlas/worlds",
@@ -117,18 +117,18 @@ class SettingsTest {
     fun `the graphics-card preference arms the switch, but only where there is a card`() {
         val withCard = FakePlatform(accelerator = FakeAccelerator)
         val without = FakePlatform(accelerator = null)
-        val on = AppSettings(graphicsCardAtLaunch = true)
+        val on = AppSettings(graphicsAccelerationAtLaunch = true)
 
         assertTrue(
-            SettingsEffects.usesGraphicsCard(SettingsEffects.startingConfig(on, withCard, 1)),
+            SettingsEffects.usesGraphicsAcceleration(SettingsEffects.startingConfig(on, withCard, 1)),
             "the preference did not reach the erosion config"
         )
         assertFalse(
-            SettingsEffects.usesGraphicsCard(SettingsEffects.startingConfig(on, without, 1)),
+            SettingsEffects.usesGraphicsAcceleration(SettingsEffects.startingConfig(on, without, 1)),
             "a machine with no device claimed it would generate on one"
         )
         assertFalse(
-            SettingsEffects.usesGraphicsCard(
+            SettingsEffects.usesGraphicsAcceleration(
                 SettingsEffects.startingConfig(AppSettings(), withCard, 1)
             )
         )
@@ -179,7 +179,7 @@ class SettingsTest {
         assertEquals(ThemeChoice.SYSTEM, AppSettings().theme)
         assertEquals(1f, AppSettings().interfaceScale)
         assertEquals(AppSettings.FOLLOW_PLATFORM, AppSettings().workingResolution)
-        assertFalse(AppSettings().graphicsCardAtLaunch)
+        assertFalse(AppSettings().graphicsAccelerationAtLaunch)
         assertFalse(AppSettings().checkForUpdatesOnLaunch)
     }
 }

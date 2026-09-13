@@ -14,8 +14,8 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
  *
  * PNG is lossless. WebP is about a quarter the size but is *not* lossless: Skia exposes only the
  * lossy encoder, and even at maximum quality the loss falls where it is least welcome on a map.
- * Measured against the PNG of the same world, the average pixel drifts about 3 of 255 — invisible
- * — but the worst 0.1% drift by nearly 60, and those are the river lines, borders and coastlines,
+ * Measured against the PNG of the same world, the average pixel drifts about 4 of 255 — invisible
+ * — but the worst 0.1% drift by about 75, and those are the river lines, borders and coastlines,
  * because that is where the sharp edges are.
  */
 enum class ExportFormat(val label: String, val extension: String, val detail: String) {
@@ -97,6 +97,22 @@ interface Platform {
     val accelerator: ErosionAccelerator?
 
     val accelerationUnavailableBecause: String?
+
+    /**
+     * What the graphics device is actually doing here, for the line of small print under the
+     * switch. [device] is [accelerator]'s own name.
+     *
+     * The two front ends no longer do the same amount on it, and the panel was telling one of them
+     * a smaller truth than it was owed: since G2 the desktop draws the export raster on the device
+     * as well as running the erosion sweeps, while the browser's WGSL raster has not been written,
+     * so there it really is erosion alone. A sentence that says "erosion" everywhere understates
+     * the desktop; one that says "erosion and export rendering" everywhere is simply wrong in a
+     * browser. So the host answers, which is what this seam is for. The default is the desktop's,
+     * because a `Platform` that has not thought about the question is one with a real graphics API
+     * behind it.
+     */
+    fun acceleratedWork(device: String): String =
+        "Erosion and export rendering run on $device, many times faster."
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.

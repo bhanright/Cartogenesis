@@ -85,9 +85,17 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.SeaLevelHistoryAuditTest"
 )
 
+/**
+ * `SiteAssemblyTest` reads the tree `:web:assembleSite` writes, so it belongs to that task and not
+ * to the per-merge suite: run on its own it would either fail for want of a tree or, worse, pass
+ * against whatever an earlier run left in `web/build/site`. `siteTest` below builds the tree first.
+ */
+val siteAssemblyClass = "com.cartogenesis.desktop.SiteAssemblyTest"
+
 tasks.named<Test>("test") {
     filter {
         auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        excludeTestsMatching(siteAssemblyClass)
     }
 }
 
@@ -102,6 +110,24 @@ tasks.register<Test>("audit") {
         auditOnlyClasses.forEach { includeTestsMatching(it) }
         isFailOnNoMatchingTests = true
     }
+}
+
+tasks.register<Test>("siteTest") {
+    group = "verification"
+    description = "Assembles cartogenesis.com and checks the tree that would be uploaded."
+    dependsOn(":web:assembleSite")
+    val testTask = tasks.named<Test>("test").get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    filter {
+        includeTestsMatching(siteAssemblyClass)
+        isFailOnNoMatchingTests = true
+    }
+    // What this test reads is another project's build output. Declaring it as an input here is
+    // what Gradle would want, but it also makes Gradle refuse the build for using an output
+    // without a producing dependency it can see. Never being up to date costs a few seconds and
+    // is the whole point: the run has to look at the tree that was just assembled.
+    outputs.upToDateWhen { false }
 }
 
 compose.desktop {

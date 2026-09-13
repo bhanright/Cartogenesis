@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -239,9 +240,12 @@ internal fun MenuStrip(
  * [Menus.file], [Menus.themes], [Menus.sections] and [Menus.help], which is what `PanelKnobsTest`
  * compares when it asks whether the compact arrangement can still reach everything.
  *
- * It is drawn over the chart rather than on the chrome, so unlike the strip it takes [OverMap]'s
- * ink — the menu it opens is a sheet over the application and takes the theme's paper, exactly as
- * the view menu beside it does.
+ * Over the chart it is drawn in [OverMap]'s ink, which is what [tint] defaults to — the menu it
+ * opens is a sheet over the application and takes the theme's paper either way, exactly as the view
+ * menu beside it does. F8 gave the atlas and the library a bar of their own, which is ordinary
+ * chrome rather than an annotation on a chart, and the same glyph on that bar has to be the
+ * scheme's ink or it is parchment on paper. Hence the argument: one button, drawn in whatever
+ * colour the surface it lies on calls for.
  */
 @Composable
 internal fun CompactMenuButton(
@@ -251,7 +255,8 @@ internal fun CompactMenuButton(
     sections: SectionState,
     toolbarVisible: Boolean,
     onCommand: (MenuCommand) -> Unit,
-    onTheme: (ThemeChoice) -> Unit
+    onTheme: (ThemeChoice) -> Unit,
+    tint: Color = OverMap.Parchment
 ) {
     var open by remember { mutableStateOf(false) }
     val minimum = LocalTouchTargets.current.minTarget
@@ -266,7 +271,7 @@ internal fun CompactMenuButton(
             Icon(
                 Icons.Filled.Menu,
                 contentDescription = "Menu",
-                tint = OverMap.Parchment,
+                tint = tint,
                 modifier = Modifier.size(20.dp)
             )
         }

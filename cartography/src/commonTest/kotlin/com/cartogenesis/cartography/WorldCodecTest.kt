@@ -388,9 +388,9 @@ class WorldCodecTest {
         expected.rivers.rivers.forEachIndexed { i, river ->
             val other = actual.rivers.rivers[i]
             assertTrue(river.cells.contentEquals(other.cells), "river $i took a different course")
-            for (p in river.widths.indices) {
+            for (p in river.widthRatio.indices) {
                 assertEquals(
-                    river.widths[p].toRawBits(), other.widths[p].toRawBits(),
+                    river.widthRatio[p].toRawBits(), other.widthRatio[p].toRawBits(),
                     "river $i width $p differs"
                 )
             }

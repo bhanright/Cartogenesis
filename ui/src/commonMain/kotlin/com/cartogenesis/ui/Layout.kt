@@ -135,7 +135,7 @@ internal object Arrangements {
     }
 
     /**
-     * The knobs above the sections, which is the graphics-card switch and nothing else.
+     * The knobs above the sections, which is the graphics-acceleration switch and nothing else.
      *
      * Empty on a host with no graphics API at all — a phone browser without WebGPU, which is most
      * of them. Until now that switch was drawn disabled with a line of small print saying why, and

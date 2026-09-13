@@ -26,10 +26,12 @@ class ExportSmokeTest {
      * cannot be: the bound records what the encoder actually does today so that a change for the
      * worse is caught rather than shipped. It measured 58 on the August 2026 worlds; the September
      * realism work (crust-pair belts, deltas, Koppen biomes) put more sharp edges on the same seed
-     * and it now measures 67 with the encoder untouched, so the bound and the README moved with it.
+     * and it moved to 67; sizing rivers by their discharge made every headwater a sub-pixel thread,
+     * which is the hardest thing a lossy encoder is asked to keep, and it now measures 76. The
+     * picture without any river ink on it drifts 67 of 255 on this world, the pen this replaced 71.
      */
     private companion object {
-        const val MAX_CHANNEL_DRIFT = 72
+        const val MAX_CHANNEL_DRIFT = 80
     }
 
 

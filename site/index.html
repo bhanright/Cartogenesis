@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartogenesis — Procedural World-Map Generator</title>
+<meta name="description" content="A fantasy world-map generator. Give it a seed and it builds plates, mountains, rivers, climate, realms and peoples, then draws a map you can restyle, save and export.">
+<link rel="canonical" href="https://cartogenesis.com/">
+<!-- The point of the domain is that a link to it can be handed to someone, so a link to it has to
+     preview as something. Poster, title and description; nothing that needs maintaining. -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cartogenesis.com/">
+<meta property="og:title" content="Cartogenesis — Procedural World-Map Generator">
+<meta property="og:description" content="Give it a seed and it builds a world — plates and mountains, rivers and lakes, climate and biomes, realms and peoples — then draws a map you can pan, restyle, save and export.">
+<meta property="og:image" content="https://cartogenesis.com/poster.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2315110f'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15110f;
+    --ink-2:#1e1815;
+    --ink-3:#2a221e;
+    --hairline:#3a2f28;
+    --parchment:#f2e7cf;
+    --oxblood:#5d0000;
+    --oxblood-lit:#7e1414;
+    --brass:#c9a227;
+    --brass-dim:#8d7326;
+    --bone:#e8dfd0;
+    --bone-dim:#9c9187;
+    --sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+    --display:"Cinzel","Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--ink);color:var(--bone);
+    font-family:var(--sans);font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  :focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+    padding:14px 20px;border-bottom:1px solid var(--hairline);
+    background:linear-gradient(180deg,#221a16,#181310);
+  }
+  .wordmark{
+    font-family:var(--display);font-size:20px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--parchment);margin:0;
+  }
+  .wordmark span{color:var(--brass)}
+  .topline{color:var(--bone-dim);font-size:12.5px;margin-right:auto}
+
+  /* ---------- hero ---------- */
+  .hero{padding:52px 0 8px;text-align:center}
+  .eyebrow{
+    font-size:11.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--brass);
+    margin:0 0 14px;
+  }
+  h1{
+    font-family:var(--display);font-weight:700;
+    font-size:clamp(38px,8vw,68px);line-height:1;letter-spacing:.03em;
+    text-transform:uppercase;margin:0;color:var(--parchment);
+  }
+  h1 .em{
+    display:block;
+    background:linear-gradient(180deg,#f7e7c0 0%,#e0b455 46%,#a8571d 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .rule{width:88px;height:1px;background:var(--brass-dim);margin:24px auto 20px;position:relative}
+  .rule::before,.rule::after{
+    content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--brass);
+    transform:rotate(45deg);
+  }
+  .rule::before{left:-9px} .rule::after{right:-9px}
+  .lede{max-width:54ch;margin:0 auto;color:var(--bone-dim);font-size:17px}
+
+  /* ---------- the poster ---------- */
+  .stage{margin:34px 0 0;position:relative}
+  .frame{
+    border:1px solid var(--hairline);border-radius:3px;overflow:hidden;
+    background:#120e0c;line-height:0;
+    box-shadow:0 18px 50px rgba(0,0,0,.5);
+  }
+  .frame img{display:block;width:100%;height:auto}
+  .frame.empty{
+    line-height:1.6;padding:64px 24px;text-align:center;color:#6e645c;
+    font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  }
+
+  /* ---------- launch ---------- */
+  .launch{
+    display:flex;flex-direction:column;align-items:center;gap:12px;
+    margin:30px 0 0;
+  }
+  .go-btn{
+    display:inline-block;text-decoration:none;
+    font-family:var(--display);font-weight:700;
+    font-size:15px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--parchment);
+    background:linear-gradient(180deg,#7e1414,#5d0000);
+    border:1px solid var(--brass-dim);border-radius:3px;
+    padding:15px 34px;
+    transition:border-color .18s,transform .18s,box-shadow .18s;
+  }
+  .go-btn.secondary{
+    font-size:12px;letter-spacing:.14em;padding:10px 22px;
+    color:var(--brass);background:transparent;border-color:var(--brass-dim);
+  }
+  .go-btn.secondary:hover,.go-btn.secondary:focus-visible{
+    box-shadow:0 8px 20px rgba(201,162,39,.18);
+  }
+  .go-btn:hover,.go-btn:focus-visible{
+    border-color:var(--brass);transform:translateY(-2px);
+    box-shadow:0 10px 26px rgba(126,20,20,.36);
+  }
+  .weight{font-size:12.5px;color:#7d7269;margin:0;text-align:center}
+  .weight b{color:var(--bone-dim);font-weight:600}
+
+  /* ---------- notices ---------- */
+  .notice{
+    margin:22px 0 0;padding:14px 16px;border-radius:3px;
+    border:1px solid var(--hairline);border-left:3px solid var(--brass-dim);
+    background:var(--ink-2);font-size:13.5px;line-height:1.6;color:var(--bone-dim);
+  }
+  .notice b{color:var(--parchment);font-weight:600}
+  .notice[hidden]{display:none}
+  .notice.small-screen{border-left-color:var(--oxblood-lit)}
+  .notice a{color:var(--brass)}
+
+  /* ---------- sections ---------- */
+  section{padding:52px 0 0}
+  .section-head{display:flex;align-items:baseline;gap:14px;margin-bottom:22px}
+  .section-head h2{
+    font-family:var(--display);font-size:15px;letter-spacing:.2em;text-transform:uppercase;
+    font-weight:400;color:var(--parchment);margin:0;white-space:nowrap;
+  }
+  .section-head .fill{flex:1;height:1px;background:var(--hairline)}
+  .section-head .count{font-size:12px;letter-spacing:.14em;color:var(--bone-dim)}
+
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .step{
+    background:var(--ink-2);border:1px solid var(--hairline);border-left:3px solid var(--oxblood);
+    border-radius:3px;padding:18px 20px 16px;
+  }
+  .step h3{
+    font-family:var(--display);font-size:19px;line-height:1.2;font-weight:700;
+    margin:0 0 6px;color:var(--parchment);
+  }
+  .step p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.55}
+
+  .spec{
+    display:grid;gap:0;border:1px solid var(--hairline);border-radius:3px;
+    background:var(--ink-2);overflow:hidden;
+  }
+  .spec div{
+    display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;
+    padding:13px 18px;border-bottom:1px solid var(--hairline);
+  }
+  .spec div:last-child{border-bottom:0}
+  .spec dt{
+    flex:none;width:150px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--brass-dim);margin:0;
+  }
+  .spec dd{margin:0;flex:1;min-width:220px;color:var(--bone-dim);font-size:14.5px}
+
+  /* ---------- the download card ---------- */
+  .tool{
+    display:flex;flex-direction:column;gap:9px;
+    background:var(--ink-2);border:1px solid var(--hairline);border-left:3px solid var(--oxblood);
+    border-radius:3px;padding:20px 20px 18px;text-decoration:none;
+    transition:border-color .18s,transform .18s,background .18s;
+  }
+  a.tool:hover,a.tool:focus-visible{
+    border-color:var(--brass-dim);border-left-color:var(--brass);
+    background:#241d19;transform:translateY(-2px);
+  }
+  .tool h3{
+    font-family:var(--display);font-size:21px;line-height:1.2;font-weight:700;
+    margin:0;color:var(--parchment);
+  }
+  .tool p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.55}
+  .tool .go{
+    margin-top:auto;padding-top:4px;
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);
+  }
+  .tag{
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    border:1px solid var(--hairline);color:#8d8177;padding:2px 7px;border-radius:2px;
+    white-space:nowrap;margin-left:8px;
+  }
+
+  footer{
+    margin-top:56px;border-top:1px solid var(--hairline);padding:26px 0 40px;
+    color:#7d7269;font-size:12.5px;line-height:1.7;
+  }
+  footer p{margin:0 0 6px}
+  footer a{color:#9c9187}
+  footer a:hover{color:var(--brass)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 class="wordmark" style="font-size:20px">Carto<span>genesis</span></h1>
+  <span class="topline">Procedural world-map generator</span>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <p class="eyebrow">Open source, free to use</p>
+    <h1>Carto<span class="em">genesis</span></h1>
+    <div class="rule"></div>
+    <p class="lede">
+      Give it a seed and it builds a world — plates and mountains, rivers and lakes,
+      climate and biomes, realms and peoples — then draws a map you can pan, restyle,
+      save and export.
+    </p>
+  </div>
+
+  <div class="stage">
+    <div class="frame" id="poster-frame">
+      <img src="poster.webp" alt="A generated world map: coastlines, mountain ranges, rivers and realm borders"
+           id="poster" width="1600" height="800">
+    </div>
+  </div>
+
+  <div class="launch">
+    <a class="go-btn" href="/app/" id="launch">Open Cartogenesis</a>
+    <a class="go-btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Desktop version (recommended)</a>
+    <p class="weight">
+      Runs in your browser. Nothing is uploaded.<br>
+      The first visit downloads <b>about 4.5&nbsp;MB</b>; it is cached after that.
+    </p>
+  </div>
+
+  <div class="notice small-screen" id="small-screen" hidden>
+    <b>Works on phones.</b>
+    Worlds generate at 512 by default here, and 2048 works; exports are capped at 2048. The desktop app goes further.
+  </div>
+
+  <div class="notice">
+    <b>Needs a current browser</b> — recent Chrome, Edge, Firefox or Safari.
+    The optional graphics-card acceleration uses WebGPU where the browser offers it.
+  </div>
+
+  <div class="notice">
+    <b>The Atlas is a work in progress.</b>
+    Today it lists a world's realms and landmarks, lets you rename them and place labels,
+    and stops there. A full atlas is planned for a later release, targeting 4.0: named
+    continents, seas, bays, straits and ranges, with labels set out the way a printed map
+    sets them. Names you give now are kept with the world.
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>How a world is made</h2>
+      <span class="fill"></span>
+    </div>
+
+    <div class="grid">
+      <div class="step">
+        <h3>Plates and mountains</h3>
+        <p>Drifting plates collide, and what they build depends on what meets: coastal ranges with volcanoes behind them, broad plateaus, island arcs, rift valleys that flood into chains of gulfs.</p>
+      </div>
+      <div class="step">
+        <h3>Erosion</h3>
+        <p>Slopes collapse, rivers cut valleys and carry the debris down to floodplains, fans and deltas. Basins drain through the notches their overflow cuts.</p>
+      </div>
+      <div class="step">
+        <h3>Seas and ice</h3>
+        <p>Continental shelves along the coasts; glaciers in cold mountains and scoured lake country under old ice sheets.</p>
+      </div>
+      <div class="step">
+        <h3>Climate</h3>
+        <p>A warm season and a cold one, ocean currents, continental interiors, monsoons and rain shadows. Biomes follow the Köppen rules, so deserts sit where deserts sit.</p>
+      </div>
+      <div class="step">
+        <h3>Rivers and lakes</h3>
+        <p>Water runs downhill to the sea or into lakes. Dry basins hold only the water their catchment can keep against evaporation, so an inland sea shrinks to a salt lake.</p>
+      </div>
+      <div class="step">
+        <h3>Realms and peoples</h3>
+        <p>Borders follow watersheds, rivers and coasts. Peoples spread through country that resembles their homeland, so cultures cross borders the way real ones do.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>What you get</h2>
+      <span class="fill"></span>
+    </div>
+
+    <dl class="spec">
+      <div><dt>Map views</dt><dd>Fifteen: the fantasy map, political and peoples layers, elevation, biomes, temperature and rainfall by season, plates, ocean currents, winds, and more.</dd></div>
+      <div><dt>Styles</dt><dd>Eleven, from an atlas with hypsometric tints to vellum, ink wash, nautical chart, pen-and-ink, Mars and a colour-blind-safe palette.</dd></div>
+      <div><dt>Themes</dt><dd>Fifteen for the window itself: light, dark, high contrast, colour-blind, and styled sets from Nautical and Baroque to Matrix and Hitchcock.</dd></div>
+      <div><dt>Editing</dt><dd>Every generated name and border can be overridden, and the overrides are kept with the world.</dd></div>
+      <div><dt>Saving</dt><dd>A save holds the finished world, so it opens instantly and never changes under you. Save files move between the browser and the desktop app.</dd></div>
+      <div><dt>Export</dt><dd>PNG or WebP up to 4096 × 4096.</dd></div>
+      <div><dt>Resolution</dt><dd>512 to 4096 cells across. The browser starts at 512; the desktop app is faster and starts at 1024.</dd></div>
+      <div><dt>Graphics acceleration</dt><dd>Optional. Erosion, the slowest part, runs on the graphics processor where the browser offers WebGPU, phones included; the desktop app renders exports there too. On a 2026 phone a 1024 world takes about twenty seconds and 2048 about a minute and a half.</dd></div>
+    </dl>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Desktop version</h2>
+      <span class="fill"></span>
+    </div>
+
+    <div class="grid">
+      <a class="tool" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
+        <h3>Download<span class="tag">Windows</span></h3>
+        <p>Bigger worlds, more threads and no download before you start. Portable zip or installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time; choose "More info", then "Run anyway".</p>
+        <span class="go" id="release-line">Get the latest release ↗</span>
+      </a>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var narrow = window.matchMedia('(max-width: 820px)').matches;
+  var coarse = window.matchMedia('(pointer: coarse)').matches;
+  if (narrow && coarse) {
+    var n = document.getElementById('small-screen');
+    if (n) n.hidden = false;
+  }
+
+  var poster = document.getElementById('poster');
+  if (poster) {
+    var drop = function () {
+      var frame = document.getElementById('poster-frame');
+      if (!frame) return;
+      poster.remove();
+      frame.classList.add('empty');
+      frame.textContent = 'Poster image not yet added';
+    };
+    poster.addEventListener('error', drop);
+    if (poster.complete && poster.naturalWidth === 0) drop();
+  }
+
+  /* Latest release, read live so the page never carries a stale version. Silent on failure. */
+  var line = document.getElementById('release-line');
+  if (line && window.fetch) {
+    fetch('https://api.github.com/repos/bhanright/Cartogenesis/releases/latest', {headers: {'Accept': 'application/vnd.github+json'}})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.tag_name) line.textContent = 'Get the latest release (' + j.tag_name + ') ↗';
+      })
+      .catch(function () {});
+  }
+})();
+</script>
+
+</body>
+</html>

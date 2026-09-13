@@ -51,6 +51,16 @@ class WebPlatform(
     override val coarsePointer: Boolean = pointerIsCoarse()
 
     /**
+     * Erosion alone, and that is not a simplification.
+     *
+     * The desktop draws the export raster on its device as well, through OpenGL compute; the WGSL
+     * port of that raster has not been written, so in a browser the device runs the erosion sweeps
+     * and nothing else. Saying otherwise here would be promising a speed-up that does not exist.
+     */
+    override fun acceleratedWork(device: String): String =
+        "Erosion runs on $device, many times faster."
+
+    /**
      * 2048 on a phone, 4096 otherwise.
      *
      * An export re-runs the whole pipeline at the target size and then rasterises it, which at 4096
@@ -130,11 +140,9 @@ class WebPlatform(
         val exportConfig = config.atResolution(size, size)
         val world = WorldGenerationEngine.generate(exportConfig, accelerator = accelerator)
 
-        val scale = size.toFloat() / config.width
-        val bitmap = MapImage.toBitmap(
-            world,
-            options.copy(riverScale = options.riverScale * scale.coerceAtLeast(1f))
-        )
+        // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
+        // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
+        val bitmap = MapImage.toBitmap(world, options)
         val encoded = Image.makeFromBitmap(bitmap)
             .encodeToData(skiaFormat(format), quality = 100)
             ?: error("Could not encode the map as ${format.label}")

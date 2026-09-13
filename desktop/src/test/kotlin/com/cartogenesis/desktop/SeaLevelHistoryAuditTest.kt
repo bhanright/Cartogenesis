@@ -55,8 +55,7 @@ class SeaLevelHistoryAuditTest {
                     RenderOptions(
                         view = MapView.FANTASY,
                         style = MapStyle.ATLAS,
-                        showRivers = true,
-                        riverScale = 2f
+                        showRivers = true
                     )
                 )
                 val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!

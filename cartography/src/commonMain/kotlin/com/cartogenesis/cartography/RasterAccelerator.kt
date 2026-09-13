@@ -133,8 +133,8 @@ class RasterRecipe(
     /**
      * The water and the relief the political and peoples views read.
      *
-     * The plain ramps for every style but the one that declares its own realm set, which gets its
-     * own — see [MapStyle.realmRamp]. Carried as two more ramps rather than as a flag, so the
+     * The plain ramps for every style but the two that paint their own political ground — see
+     * [MapStyle.ownsPoliticalGround]. Carried as two more ramps rather than as a flag, so the
      * device is still only looking colours up and the shader has no idea which style it is drawing.
      */
     val politicalOceanRamp: IntArray = plainOceanRamp,
@@ -163,6 +163,28 @@ class RasterRecipe(
     val reliefStrength: Float,
     val lineArt: Boolean,
     val inkGain: Float,
+    /**
+     * How big each mark of the engraving is, in pixels, or null where the style does not engrave.
+     * Built once here so neither path can derive a different pitch from the same width.
+     */
+    val engraving: EngravingPlan? = null,
+    /**
+     * Euclidean distance in cells from every cell to the nearest dry land, or null where nothing
+     * reads it.
+     *
+     * The engraving's coastal vignette and its ruled lake water are both drawn from it. Computed on
+     * the processor and uploaded rather than recomputed on the device, for the same reason the
+     * colour tables are: a distance field solved twice would put the vignette's lines a pixel apart
+     * and the two pictures would no longer be the same picture.
+     */
+    val shoreDistance: FloatArray? = null,
+    /**
+     * Which entry of [biomeColors] is ice, so the engraving can stipple it, or -1 where the biome
+     * is not uploaded.
+     */
+    val iceBiome: Int = -1,
+    /** Whether the sea and the lakes are engraved. False on the views whose water carries data. */
+    val engraveWater: Boolean = false,
 
     // ---- the fixed colours the diagnostic views carry ----
     val rainfallSea: Int,
@@ -291,6 +313,11 @@ class RasterRecipe(
                 }
             }
 
+            // The engraving reads the ice, so the biome goes up on every view it draws on rather
+            // than only on the two that colour by it.
+            val engraveWater = style.lineArt && view.styled
+            if (engraveWater && biomes == null) biomes = biomeOrdinals(world)
+
             if (scalarA != null && scalarA.size != cells) return null
             if (scalarB != null && scalarB.size != cells) return null
             if (indexA != null && indexA.size != cells) return null
@@ -329,9 +356,9 @@ class RasterRecipe(
                 plainOceanRamp = MapPalette.plainOceanRamp,
                 plainLandRamp = MapPalette.plainLandRamp,
                 politicalOceanRamp =
-                    if (style.ownsRealms) style.oceanRamp else MapPalette.plainOceanRamp,
+                    if (style.ownsPoliticalGround) style.oceanRamp else MapPalette.plainOceanRamp,
                 politicalLandRamp =
-                    if (style.ownsRealms) style.landRamp else MapPalette.plainLandRamp,
+                    if (style.ownsPoliticalGround) style.landRamp else MapPalette.plainLandRamp,
                 realmSetSize = style.realmRamp?.size ?: 0,
                 temperatureRamp = MapPalette.temperatureRamp,
                 precipitationRamp = MapPalette.precipitationRamp,
@@ -348,6 +375,12 @@ class RasterRecipe(
                 reliefStrength = style.reliefStrength,
                 lineArt = style.lineArt,
                 inkGain = style.inkGain,
+                engraving = if (style.lineArt) EngravingPlan(w) else null,
+                shoreDistance = if (style.lineArt) {
+                    ShoreDistance.of(w, h, MapRasterizer.dryLandMask(world, showLakes))
+                } else null,
+                iceBiome = if (biomes != null) Biome.ICE_SHEET.ordinal else -1,
+                engraveWater = engraveWater,
                 rainfallSea = MapRasterizer.RAINFALL_SEA,
                 currentsLand = MapRasterizer.CURRENTS_LAND,
                 windLandLow = MapRasterizer.WIND_LAND_LOW,

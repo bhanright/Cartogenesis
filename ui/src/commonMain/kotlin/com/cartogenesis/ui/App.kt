@@ -34,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -62,6 +63,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.LibraryEntry
@@ -73,8 +75,6 @@ import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
-import com.cartogenesis.worldgen.GenerationStage
-import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.cartography.StoredTerrain
 import com.cartogenesis.cartography.TerrainSnapshot
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -381,10 +381,10 @@ private fun Application(
             // A version-2 GPU save's terrain takes precedence: it is the world as it was saved,
             // and recomputing it on this machine's hardware could only be a worse answer.
             val accelerator = storedTerrain?.let { StoredTerrain(it) } ?: accelerator
-            WorldGenerationEngine.generate(config, reusable, accelerator) {
-                s: GenerationStage, _: Int, _: Int ->
-                stage = s.label
-            }
+            // Through [Generation] rather than straight to the engine: in a browser the generator
+            // and the interface share one thread, so a stage name written here is invisible unless
+            // the thread is handed back to let a frame out. See that object for the whole of it.
+            Generation.run(config, reusable, accelerator) { stage = it.label }
         }
         val rendered = withContext(Dispatchers.Default) { MapImage.render(generated, options) }
         world = generated
@@ -506,8 +506,29 @@ private fun Application(
         if (screen == Screen.MAP) Color(options.style.backdrop)
         else MaterialTheme.colorScheme.background
 
+    /**
+     * The ink for anything the pane draws without naming a colour, which is most of its words.
+     *
+     * The panes are the one part of this application painted straight onto a background rather than
+     * laid inside a `Surface`, and a `Surface` is what otherwise says what ink its paper takes. So
+     * `LocalContentColor` here was Material's own default — plain black — and the library's two
+     * headings and every unstyled line of a realm's page were drawn in it. On paper that is very
+     * nearly right and nobody noticed for two rounds of review; on the fifteen chromes whose ground
+     * is not paper it ran from poor to invisible, and on High contrast it was black on pure black
+     * at exactly 1.0:1. The controls around them were never affected, because a text field, a
+     * button and a card each carry their own colour or their own `Surface`.
+     *
+     * Declared beside the ground it belongs to, and provided once for the whole pane, so this is a
+     * pairing rather than a colour written onto a heading — the fix has to hold for every word
+     * either pane draws, in all sixteen chromes, and for whatever a later one draws.
+     * `PhoneAtlasTest` measures it off the drawn pixels in each.
+     */
+    val paneInk =
+        if (screen == Screen.MAP) OverMap.Parchment
+        else MaterialTheme.colorScheme.onBackground
+
     /** Whichever of the three screens is up, drawn to fill whatever it is given. */
-    val pane: @Composable () -> Unit = {
+    val paneContents: @Composable () -> Unit = {
         val current = world
         if (screen == Screen.LIBRARY) {
             LibraryPane(
@@ -600,6 +621,11 @@ private fun Application(
         }
     }
 
+    /** The same, told what ink the ground it is being drawn on takes. See [paneInk]. */
+    val pane: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalContentColor provides paneInk, content = paneContents)
+    }
+
     /** The progress banner, between the toolbar and the map while a world is being made. */
     val banner: @Composable () -> Unit = {
         if (busy) {
@@ -644,6 +670,9 @@ private fun Application(
                 Cartouches.of(it, naming.title, generationMillis)
             },
             prompt = "Pick a seed and settings, then Generate.",
+            // Compact only: with the sheet up, the banner along the map's top edge is a long way
+            // from where the reader just pressed Generate. The same sentence, at the foot.
+            progress = if (compact && busy) "${stage ?: "Generating"}…" else null,
             camera = camera,
             parts = reach.legend
         )
@@ -772,19 +801,14 @@ private fun Application(
         // pulling it up shortens the map instead of hiding half of it, and the legend it carries
         // stays visible with the settings open.
         Column(frame) {
-            Box(Modifier.weight(1f).fillMaxWidth().background(backdrop)) {
-                pane()
-
-                Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
-                    CompactMapToolbar(
-                        options = options,
-                        styles = reach.styles,
-                        views = reach.views,
-                        // The style and view menus are about the picture, so they go when there is
-                        // no picture — but the menu button is how the application is reached at all
-                        // here, and it stays whatever is on screen.
-                        choices = screen == Screen.MAP && toolbarVisible,
-                        onOptions = { options = it }
+            // The pane and whatever belongs above it. A column rather than the map's own Box,
+            // because the bar over a reading surface takes its height out of the layout, while the
+            // strips over the map lie on top of the picture — see [PaneTopBar].
+            Column(Modifier.weight(1f).fillMaxWidth()) {
+                if (screen != Screen.MAP) {
+                    PaneTopBar(
+                        title = if (screen == Screen.LIBRARY) "Library" else naming.title,
+                        onMap = { screen = Screen.MAP }
                     ) {
                         CompactMenuButton(
                             platform = platform,
@@ -793,14 +817,52 @@ private fun Application(
                             sections = sections,
                             toolbarVisible = toolbarVisible,
                             onCommand = { perform(it) },
-                            onTheme = { onSettings(settings.copy(theme = it)) }
+                            onTheme = { onSettings(settings.copy(theme = it)) },
+                            // Ordinary chrome, so the scheme's ink rather than the chart's
+                            // parchment. The same glyph, in the colour of the paper it lies on.
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    banner()
                 }
 
-                if (screen == Screen.MAP) {
-                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) { legend() }
+                Box(Modifier.weight(1f).fillMaxWidth().background(backdrop)) {
+                    pane()
+
+                    Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                        // Only over the map. The strip is translucent ink laid on a chart, and on a
+                        // page of text it is a lid: it hid the top of the atlas on William's phone
+                        // and, since the header holding "Show map" is inside the sheet here, there
+                        // was then nothing on screen that went back. The wide arrangement has
+                        // always withheld it, and [PaneTopBar] is what the compact one shows
+                        // instead.
+                        if (screen == Screen.MAP) {
+                            CompactMapToolbar(
+                                options = options,
+                                styles = reach.styles,
+                                views = reach.views,
+                                // The style and view menus are about the picture, so they go when
+                                // View has put the toolbar away; the menu button is how the
+                                // application is reached at all here and stays.
+                                choices = toolbarVisible,
+                                onOptions = { options = it }
+                            ) {
+                                CompactMenuButton(
+                                    platform = platform,
+                                    hasWorld = world != null,
+                                    settings = settings,
+                                    sections = sections,
+                                    toolbarVisible = toolbarVisible,
+                                    onCommand = { perform(it) },
+                                    onTheme = { onSettings(settings.copy(theme = it)) }
+                                )
+                            }
+                        }
+                        banner()
+                    }
+
+                    if (screen == Screen.MAP) {
+                        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) { legend() }
+                    }
                 }
             }
 
@@ -907,6 +969,67 @@ private val PEEK_HEIGHT = 44.dp
 
 /** How far a finger has to travel before a drag counts as a pull rather than a wobble. */
 private const val DRAG_TO_SETTLE = 24f
+
+/**
+ * The bar over the atlas and the library in the compact arrangement: what this is, and the way out.
+ *
+ * On a phone the map's toolbar and legend are the only chrome there is — the menu strip folds into
+ * the toolbar's one glyph, and the panel's header, which carries Atlas and Show map, is inside the
+ * pull-up sheet. That is right while the map is on screen and wrong the moment it is not: the two
+ * strips belong to the picture, so over a page of text they are noise, and the one along the top
+ * edge is worse than noise. William found it on his phone against 2.0.0 — the atlas opened
+ * underneath a translucent band, and the only button that would have closed it was behind a sheet
+ * he had no reason to think held it.
+ *
+ * So the strips go, and a reading surface says its own name and offers its own way back. This is
+ * ordinary chrome rather than an annotation on a chart: the scheme's paper, the scheme's ink, and
+ * the chrome's own [SectionRule] under it — Hallowed's doubled gold, Roman's meander, Hitchcock's
+ * cut bar — which is how every other ruled edge in the application is drawn. It takes its height
+ * out of the layout rather than lying over the pane, which is the whole difference between a bar
+ * and a lid.
+ *
+ * The title is printed as written rather than through [ChromeDetail.heading]. A world's name is a
+ * proper noun, and the cartouche in the map's legend does not letter it either: a heading is
+ * uppercased, pointed and prompted, and a name is none of those.
+ *
+ * Nothing about the wide arrangement changes. There the header is always on screen beside the map,
+ * its Atlas button already reads "Show map", and the strips were already withheld from anything
+ * that is not the map.
+ */
+@Composable
+private fun PaneTopBar(title: String, onMap: () -> Unit, menu: @Composable () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().chromeWeave()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                menu()
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = onMap,
+                    contentPadding = TIGHT,
+                    // Material's button is 40 dp tall, which is a mouse's target. The theme knows
+                    // what a fingertip needs and says so in one place; a compact window driven by a
+                    // pointer — a desktop dragged narrow — asks for nothing and keeps the 40.
+                    modifier = Modifier.sizeIn(
+                        minHeight = LocalTouchTargets.current.minTarget
+                    )
+                ) {
+                    Text("Map", maxLines = 1)
+                }
+            }
+            SectionRule()
+        }
+    }
+}
 
 /** One of the boxes the interface is built from: a ruled patch of paper with room to breathe. */
 @Composable
@@ -1076,9 +1199,10 @@ private fun LabelChip(label: MapLabel) {
  * listing for worlds already saved - so a world you were looking at could not be named or returned
  * to without saving it first.
  *
- * Typed text is held locally and only applied on Enter or on losing focus, rather than on every
- * keystroke: regenerating is expensive, and applying as you type would kick off a generation for
- * each digit of a six-digit number.
+ * Typed text is held locally and applied only on Enter or on the Go button, never on every
+ * keystroke and never on losing focus: regenerating is expensive, applying as you type would
+ * kick off a generation for each digit of a six-digit number, and applying on focus loss started
+ * a world the moment the reader clicked elsewhere to change another setting (William, 2.0.1).
  */
 @Composable
 private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
@@ -1107,7 +1231,6 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
             textStyle = MaterialTheme.typography.bodySmall,
             modifier = Modifier
                 .weight(1f)
-                .onFocusChanged { if (!it.isFocused) apply() }
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                         apply()
@@ -1150,7 +1273,7 @@ private fun NameField(name: String, onName: (String) -> Unit) {
  * The slim header: which world, what it is called, at what size and on what hardware.
  *
  * Almost nothing here is a setting of the world — the seed is which world, the name is what it is
- * called, the resolution is how finely it is computed and the graphics-card switch is what does
+ * called, the resolution is how finely it is computed and the graphics-acceleration switch is what does
  * the computing — so it sits above the sections rather than inside one, and it is the only part of
  * the panel that never rolls up. The one knob it draws it draws through [KnobControl], the same
  * renderer the sections use, from the same declaration in [Knobs]: the header is a place a knob
@@ -1213,6 +1336,21 @@ private fun PanelHeader(
                 )
             }
         }
+    }
+
+    // What the two larger chips cost on the device this arrangement is drawn for, in seconds,
+    // measured on William's phone rather than guessed: 18-23 s at 1024 and 92.7 s at 2048, on a
+    // 2026 Qualcomm handset with WebGPU on. The last clause is the honest part — a browser has one
+    // thread, so a long stage is a page that stops answering, and a reader owed no explanation of
+    // that concludes the tab has died. Compact only: a desktop is not what this is about, and the
+    // numbers are not its numbers.
+    if (LocalWindowShape.current == WindowShape.COMPACT) {
+        Text(
+            "On a phone, 1024 takes about twenty seconds and 2048 about a minute and a half; " +
+                "the screen may pause while it works.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 
     // Where the work runs, directly under how finely it is done. The only knob the header draws,
@@ -1441,16 +1579,21 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** What a machine with a graphics device can offer, or why it cannot. */
+/**
+ * What a machine with a graphics device can offer, or why it cannot.
+ *
+ * What the device is used for is the host's answer rather than this composable's: the desktop runs
+ * the erosion sweeps and the export raster on it, a browser only the sweeps. See
+ * [Platform.acceleratedWork].
+ */
 @Composable
 private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
+    val device = platform.accelerator?.name
     val note = when {
-        platform.accelerator == null ->
+        device == null ->
             "Unavailable here: ${platform.accelerationUnavailableBecause}"
-        onGpu ->
-            "Erosion runs on ${platform.accelerator?.name}, which is many times faster at it."
-        else ->
-            "${platform.accelerator?.name} is available, and is many times faster at this."
+        onGpu -> platform.acceleratedWork(device)
+        else -> "$device is available, and is many times faster at this."
     }
     Text(
         note,
@@ -1463,7 +1606,7 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
 /**
  * Where a finished map goes.
  *
- * The graphics-card switch used to head this panel, under "Acceleration". It has moved to World:
+ * The graphics-acceleration switch used to head this panel, under "Acceleration". It has moved to World:
  * it decides how the world is *made*, and filing it beside the export buttons implied it was
  * something about the picture. F3 moved what was left of the panel into the header, so this is
  * three rows in a 320dp column rather than a 200dp column of its own — the heading and the two

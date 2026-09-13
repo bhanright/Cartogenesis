@@ -47,7 +47,7 @@ class PanelKnobsTest {
     }
 
     /**
-     * The graphics-card switch is in the header now, not in World.
+     * The graphics-acceleration switch is in the header now, not in World.
      *
      * It spent F2 under Ocean coverage, where it read as something about the sea. It is not a
      * setting of the world at all — the same seed makes the same world on either processor — so it
@@ -57,7 +57,7 @@ class PanelKnobsTest {
     fun `where the work runs is in the header, not in World`() {
         assertFalse(PanelSection.HEADER in PANEL_SECTIONS)
         assertEquals(
-            listOf("Generate on the graphics card"),
+            listOf("Graphics acceleration"),
             Knobs.inSection(PanelSection.HEADER).map { it.label }
         )
         assertEquals(listOf("Ocean coverage"), Knobs.inSection(PanelSection.WORLD).map { it.label })
@@ -88,7 +88,7 @@ class PanelKnobsTest {
     /**
      * No section of the panel is empty.
      *
-     * It was two knobs apiece until the graphics-card switch left World for the header, which is
+     * It was two knobs apiece until the graphics-acceleration switch left World for the header, which is
      * the one section that is now a single control — and correctly so: how much of the world is
      * sea is the only thing decided before the pipeline starts. An empty section, on the other
      * hand, is a heading that rolls up to show nothing, and is always a mistake.
@@ -189,7 +189,7 @@ class PanelKnobsTest {
         assertEquals(base.copy(seaLevel = 0.31f), Knobs.oceanCoverage.set(base, 0.31f))
         assertEquals(
             base.copy(erosion = base.erosion.copy(acceleration = Acceleration.GPU)),
-            Knobs.graphicsCard.set(base, true)
+            Knobs.graphicsAcceleration.set(base, true)
         )
         assertEquals(
             base.copy(tectonics = base.tectonics.copy(plateCount = 9)),
@@ -371,13 +371,13 @@ class PanelKnobsTest {
     /** Neither one regenerates: both are `RenderOptions`, so the world is untouched by both. */
     @Test
     fun `the toolbar's two choices leave the marks beside them alone`() {
-        val marked = view.copy(showBorders = true, showHillshade = false, riverScale = 2f)
+        val marked = view.copy(showBorders = true, showHillshade = false, showLakes = false)
         val restyled = MapChrome.withView(MapChrome.withStyle(marked, MapStyle.SCROLL), MapView.WIND)
         assertEquals(MapStyle.SCROLL, restyled.style)
         assertEquals(MapView.WIND, restyled.view)
         assertTrue(restyled.showBorders)
         assertFalse(restyled.showHillshade)
-        assertEquals(2f, restyled.riverScale)
+        assertFalse(restyled.showLakes)
     }
 
     /**
@@ -562,7 +562,7 @@ class PanelKnobsTest {
     }
 
     /**
-     * A device with no graphics API at all is offered no graphics-card switch.
+     * A device with no graphics API at all is offered no graphics-acceleration switch.
      *
      * Not the same as a device whose graphics card declined — that one keeps the switch, disabled,
      * with [Platform.accelerationUnavailableBecause] printed beside it, which is why this asks
@@ -571,7 +571,7 @@ class PanelKnobsTest {
      * is 60 dp of a 390 dp screen spent on nothing.
      */
     @Test
-    fun `a host with no graphics API is offered no graphics-card switch`() {
+    fun `a host with no graphics API is offered no graphics-acceleration switch`() {
         val none = FakePlatform(graphicsApiPresent = false)
         val present = FakePlatform(graphicsApiPresent = true, accelerator = FakeAccelerator)
         // Present but refused: the switch stays, because there is something to explain.
@@ -580,7 +580,7 @@ class PanelKnobsTest {
         listOf(WindowShape.WIDE, WindowShape.COMPACT).forEach { shape ->
             assertTrue(
                 Arrangements.of(shape, none).knobs.none { it.needsGraphicsDevice },
-                "$shape still draws the graphics-card switch with no graphics API"
+                "$shape still draws the graphics-acceleration switch with no graphics API"
             )
             assertTrue(Arrangements.of(shape, present).knobs.any { it.needsGraphicsDevice })
             assertTrue(Arrangements.of(shape, refused).knobs.any { it.needsGraphicsDevice })
@@ -592,7 +592,7 @@ class PanelKnobsTest {
                 .filterNot { it.needsGraphicsDevice }.map { it.label },
             Arrangements.of(WindowShape.WIDE, none).knobs.map { it.label }
         )
-        assertEquals(listOf(Knobs.graphicsCard), Knobs.all.filter { it.needsGraphicsDevice })
+        assertEquals(listOf(Knobs.graphicsAcceleration), Knobs.all.filter { it.needsGraphicsDevice })
     }
 
     /**

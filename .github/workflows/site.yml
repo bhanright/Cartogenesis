@@ -1,0 +1,127 @@
+name: Deploy cartogenesis.com
+
+# Builds the browser application, assembles it with site/ into web/build/site, and uploads that
+# to the Cloudflare Pages project `cartogenesis`, which serves cartogenesis.com.
+#
+# Tags rather than pushes to a branch: the site carries a download card pointing at the latest
+# GitHub release, so the moment worth publishing is the moment a release exists. workflow_dispatch
+# is there for everything else — a copy change, or a branch someone wants to look at.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag, branch or commit to deploy'
+        required: false
+        default: ''
+
+# One deploy at a time, and no cancelling: two tags cut in quick succession would otherwise race
+# to upload, and the loser could land second and serve the older build.
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and upload
+    runs-on: ubuntu-latest
+    steps:
+      # An empty `ref` checks out whatever triggered the run, which is what a tag push wants and
+      # is also the sensible default for a hand-run on a branch.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          # The loader's cache-buster is the short commit, read with `git rev-parse`, so the
+          # checkout needs to be a git repository — which it is — but not its history.
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Assembles web/build/site, then checks the tree that is about to be uploaded: two .wasm
+      # files and no third left over, the six bundled fonts, no source map, and a loader stamp
+      # that is a commit rather than the placeholder. A bad tree deploys perfectly happily and is
+      # only discovered by a visitor, so it is checked here rather than after.
+      - name: Assemble the site
+        run: ./gradlew :web:assembleSite :desktop:siteTest --no-daemon --console=plain
+
+      - name: Report what will be uploaded
+        run: |
+          find web/build/site -type f -printf '%10s  %P\n' | sort -k2
+          echo "Total: $(du -sh web/build/site | cut -f1)"
+
+      # The custom domain serves the project's *production* deployment, and a deployment is
+      # production only if its branch name matches the project's production branch. A Direct
+      # Upload project is created with whatever branch name it was created with, which is not
+      # necessarily `main`, and uploading under any other name produces a preview deployment
+      # that cartogenesis.com never shows. So ask the project what it calls its production
+      # branch rather than assuming. A project that does not exist yet is created below.
+      - name: Find the project's production branch
+        id: project
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must both be set as repository secrets."
+            exit 1
+          fi
+          # -s and no -v: the token is in a header, and a failed request must not print it.
+          status=$(curl -s -o response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/cartogenesis")
+
+          if [ "$status" = "200" ]; then
+            branch=$(jq -r '.result.production_branch // empty' response.json)
+            if [ -z "$branch" ]; then
+              echo "::error::The Pages API returned 200 but named no production branch."
+              exit 1
+            fi
+            echo "create=false" >> "$GITHUB_OUTPUT"
+            echo "The project exists; its production branch is '$branch'."
+          elif [ "$status" = "404" ]; then
+            branch=main
+            echo "create=true" >> "$GITHUB_OUTPUT"
+            echo "No project called 'cartogenesis'; it will be created with production branch 'main'."
+          else
+            # Anything else is a bad token, a bad account id or Cloudflare being down. Deploying
+            # blind after that would either fail anyway or publish a preview nobody looks at.
+            echo "::error::Cloudflare returned HTTP $status when asked about the project."
+            jq -r '.errors // empty' response.json || true
+            exit 1
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          rm -f response.json
+
+      - name: Create the Pages project
+        if: steps.project.outputs.create == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create cartogenesis --production-branch=main
+
+      - name: Upload to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # --commit-dirty because the tree being uploaded is a build directory rather than a
+          # checkout, and wrangler otherwise warns about it on every run.
+          command: pages deploy web/build/site --project-name=cartogenesis --branch=${{ steps.project.outputs.branch }} --commit-dirty=true
+
+      - name: Say where it went
+        run: |
+          echo "Deployed to the '${{ steps.project.outputs.branch }}' branch of the cartogenesis Pages project."
+          echo "That is the project's production branch, so it is the deployment any custom domain serves."
+          if [ "${{ steps.project.outputs.create }}" = "true" ]; then
+            echo "::notice::The project was created by this run. Attach cartogenesis.com to it in the Pages dashboard under Custom domains."
+          fi

@@ -19,6 +19,11 @@ import org.jetbrains.skia.Image
  * is real rather than interpolated, and there is enough heap to actually finish: 4096 wants roughly
  * 2GB.
  *
+ * Nothing about the drawing is scaled to the size. Every mark the renderer makes — the engraving's
+ * strokes, the river pen, a landmark's glyph — is either a fixed count of output pixels or a share
+ * of the sheet, decided where the mark is made, so an export is drawn by the same hand as the
+ * preview and simply has more room for it.
+ *
  * Where the machine has a graphics device the per-pixel half of the drawing runs on it. That is not
  * governed by the acceleration switch in the panel, which is about whether the *world* can be
  * reproduced from its seed: the raster changes no part of the world, only how quickly the same
@@ -46,10 +51,8 @@ object Exporter {
         val exportConfig = config.atResolution(size, size)
         val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
-        val scale = size.toFloat() / config.width
-        val exportOptions = options.copy(riverScale = options.riverScale * scale.coerceAtLeast(1f))
-        val pixels = MapRasterizer.rasterize(world, exportOptions, raster)
-        val bitmap = MapImage.toBitmap(world, exportOptions, pixels)
+        val pixels = MapRasterizer.rasterize(world, options, raster)
+        val bitmap = MapImage.toBitmap(world, options, pixels)
 
         // Quality 100 is lossless for WebP and ignored by the PNG encoder, so one call covers both.
         val data = Image.makeFromBitmap(bitmap).encodeToData(skiaFormat(format), quality = 100)

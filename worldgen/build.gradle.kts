@@ -112,7 +112,10 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.EarthLikenessAuditTest",
     // S1: the scale-free suite's third grid. `ScaleFreeTest` holds 512 against 1024 per
     // merge; four worlds at 2048 is four minutes of erosion for one more octave of lever.
-    "com.cartogenesis.worldgen.ScaleFreeAuditTest"
+    "com.cartogenesis.worldgen.ScaleFreeAuditTest",
+    // S2: what the flexure costs at 2048 and 4096, which is rule 8's question and needs a
+    // 4096-cell transform pair to answer. `IsostasyTest` holds every guard at 512 and 256.
+    "com.cartogenesis.worldgen.IsostasyAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

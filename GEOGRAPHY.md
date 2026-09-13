@@ -38,6 +38,37 @@ Divergence under continental crust builds a rift, and the rift is segmented into
 alternating polarity, so a drowned one is a string of gulfs and lakes rather than a canal. See
 "Three kinds of collision" below.
 
+**The crust floats, so the world has two levels and the sea has a floor.** Every cell carries a
+mixture of continental and oceanic crust, blurred across the plate boundary so the band between the
+two is a margin rather than a step, and Airy isostasy turns the mixture into an altitude: a
+standard continental column floats at Earth's mean land elevation of 840 m and a standard oceanic
+one at Earth's mean ocean depth of 3,682. Everything follows from those two numbers. The
+hypsometric curve has two modes with a trough between them where the continental slope is, which
+is what Earth's has and what this generator did not have before S2 — its curve was one peak
+straddling the shoreline, because the height field was renormalised to its own extremes after every
+generation and the sea's mode sat 390 m down. The ocean-coverage slider now chooses how much of the
+world is drawn as continental crust rather than where to cut a histogram, and the percentile cut is
+the check: measured on five worlds it lands within 600 m of the level isostasy puts the shoreline
+at.
+
+**A range that is being pushed up holds its height, and one that has stopped does not.** An uplift
+rate in millimetres a year runs under the belts of the present epoch — 0.6 in a continental
+collision, 0.24 on an Andean margin, less on an island arc and a rift's shoulders, nothing at all
+on a craton — and is spent every hydraulic round over the years a round stands for. So the rivers
+are cutting a belt that is still rising, and the height it settles at is the balance between the
+two, which is Whipple and Tucker's steady state rather than a stamped profile. An old belt is low
+because its uplift stopped and erosion went on, and the epochs say when: the ageing is
+`exp(-time / decay time)` from two figures of Earth's rather than a factor per orogeny.
+
+**The plate bends under what is put on it.** Flexure is a low-pass filter on the load,
+`w(k) = L(k) / (dRho g + D k^4)`, solved by the same FFT the terrain stage uses. A range that is
+being stripped loses mass and rebounds; the ground in front of it takes that mass as sediment and
+sinks, which is a foreland basin; a delta subsides under its own load; and an ice sheet holds its
+bed down, which is why the ground under one stands lower than the ground beside it and why a
+formerly glaciated shield stands where it does. The elastic thickness is 30 km, the middle of the
+20-40 km Watts measures for mature continents, which puts the flexural parameter at 68 km — three
+cells of the default grid, so a load's own basin reaches some 160 km in front of it.
+
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
 bands follow Earth: trades easterly below 30°, westerlies 30–60°, polar easterlies above — and those
@@ -318,10 +349,12 @@ Writing the units down made four things visible that were invisible while they w
   than as a glacier. Every other figure in that section is the province's rather than the ice's:
   a 375 km reach between basins, a 70 km cirque, a 190 km run-out past the freezing line.
 - **The continental shelf stands at 1,000 m.** Against a sea 10 km deep the shelf plateau's outer
-  edge is a tenth of the way down, where Earth's shelf break is at 130 m. A plateau at 130 m would
-  be one part in seventy-seven of this model's sea, far below what its ocean floor's own relief can
-  hold apart, and the reason is that the two-density crust that makes Earth's shelf a shelf is not
-  modelled. S2's isostasy is where that is repaired.
+  edge is a tenth of the way down, where Earth's shelf break is at 130 m. The reason S1 gave was
+  that the two-density crust which makes Earth's shelf a shelf was not modelled, and S2 has now
+  modelled it: a continental margin is a band of crust thinned on its way out to the ocean floor,
+  and the ground it makes shelves rather than dropping. What has not changed is the plateau the
+  remap lays over it, which is still 1,000 m. That is now a separable question rather than a
+  consequence, and it is in `TODO.md`.
 - **A knickpoint was cutting nine tenths as hard as an ordinary reach, not three times.**
   `ErosionConfig.outletIncisionRatio` was three, but the two rates were written in different units:
   the outlet's in the land's relief and the ordinary incision's on the height field. Converted to
@@ -334,15 +367,24 @@ cap is 52,600 km² where the Caspian is 371,000, and the ice's largest basin is 
 Superior is 82,100. Which of the two a world this size should use is a real question and is written
 up in `TODO.md`; changing it would move coastlines that nothing else in S1 touches.
 
-One limit is worth stating plainly. The three parts of the ruler are consistent only if the
-shoreline sits where `WorldScale` implies it does — at `deepestOceanMetres / reliefSpanMetres`, or
-0.625 of the height field. It does not, because the shoreline is a percentile of the *cells* and
-where that lands in the *range* is an output: measured on the standard seeds at 512 it sits at
-0.395, 0.437, 0.477 and 0.554, so the metres one unit of the field is worth read off the land come
-to 10,228, 10,869, 17,370 and 15,377 against the 16,000 declared. `UnitsTest` measures that and
-holds it inside a stated factor; it is a regression guard on the disagreement rather than a claim
-that there is none. Closing it needs the height field to have an absolute vertical scale that does
-not move with the sea level, which is what S2's uplift and isostasy give it.
+~~One limit is worth stating plainly. The three parts of the ruler are consistent only if the
+shoreline sits where `WorldScale` implies it does.~~ **Closed by S2.** The three parts of the ruler
+agree, because the height field is now an absolute altitude rather than a normalisation: the plate
+stage builds it out of the levels the two crusts float at, so a cell's value converts to metres and
+back exactly and the waterline stands at `deepestOceanMetres / reliefSpanMetres`, 0.625 of the
+field. What is left is a residual, and it is the coarseness of the crust the aim can draw with
+rather than a disagreement about the ruler: the ocean-coverage slider is met by choosing whole
+plates, so the finest adjustment available is a fourteenth of the surface. Measured on the standard
+seeds at 512 the cut lands +464, +216, +191 and -603 m from the isostatic datum, against +1,354,
++1,062, +1,013 and +1,187 before the aim existed. `UnitsTest` holds that inside 1,000 m and
+`IsostasyTest` shows it opening up again when the crust is drawn to Earth's own submerged share
+instead of this generator's.
+
+The same closure fixes the shelf. Its plateau is still 1,000 m at the break against Earth's 130,
+which is the deviation above, but the ocean it stands over is now a real ocean — the sea's
+hypsometric mode is at -3,200 to -4,200 m where before S2 it was at -390 — so the shelf is a
+margin on a deep sea rather than a step on a shallow one. Bringing the break itself to Earth's
+figure is a separate question and is in `TODO.md`.
 
 ## Known deviations
 

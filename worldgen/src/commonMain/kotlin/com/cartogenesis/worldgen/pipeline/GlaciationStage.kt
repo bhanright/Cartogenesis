@@ -313,10 +313,15 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         stopIfAsked()
-        val landRange = landRange(isLand, relative)
         val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt().coerceIn(2, 64)
         val relief = localRelief(cellsAcross, cellsDown, relative, reliefRadius)
-        val channelThreshold = carving.valleyRelief * landRange
+        // Straight, with nothing between the share and the field. `relative` is a cell's altitude
+        // over `WorldScale.highestLandMetres` since S2, and `valleyRelief` is a depth in metres
+        // over the same figure, so the two are already in one another's units. Before S2 the field
+        // was renormalised to whatever range the world's own land occupied and this had to be
+        // multiplied by that range, which was near 1 by construction and is why nobody noticed it
+        // was a measurement.
+        val channelThreshold = carving.valleyRelief
         var channelledCells = 0
         val channelled = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -578,7 +583,7 @@ object GlaciationStage {
         val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
         if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
-                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, landRange, carved,
+                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, carved,
                 minBasinCells, maxBasinCells, sheetBudget
             )
             scourCells = tally.cells
@@ -1521,18 +1526,6 @@ object GlaciationStage {
      * computed rather than assumed, because a config that never reaches the highest ground would
      * otherwise silently rescale every cut this stage makes.
      */
-    private fun landRange(isLand: BooleanArray, relative: FloatArray): Float {
-        var lowest = Float.MAX_VALUE
-        var highest = -Float.MAX_VALUE
-        for (cell in relative.indices) {
-            if (!isLand[cell]) continue
-            val value = relative[cell]
-            if (value < lowest) lowest = value
-            if (value > highest) highest = value
-        }
-        return if (highest <= lowest) 1f else highest - lowest
-    }
-
     /**
      * The elevation range inside a square window of [radius] cells around every cell: relief, as
      * the one measurement that separates ground a glacier is channelled by from ground it is not.
@@ -1649,7 +1642,6 @@ object GlaciationStage {
         sheetCells: Int,
         isLand: BooleanArray,
         relative: FloatArray,
-        landRange: Float,
         carved: FloatArray,
         minCells: Int,
         maxCells: Int,
@@ -1665,7 +1657,7 @@ object GlaciationStage {
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
-        val lowering = carving.sheetLowering * landRange
+        val lowering = carving.sheetLowering
         if (lowering > 0f) {
             for (cell in 0 until cellCount) {
                 if (!sheet[cell]) continue
@@ -1679,7 +1671,7 @@ object GlaciationStage {
             }
         }
 
-        val depth = carving.sheetBasinDepth * landRange
+        val depth = carving.sheetBasinDepth
         if (depth <= 0f || budget < minCells) return ScourTally(0, 0)
 
         // How hollow each cell is against the ground around it, and the scale of that hollowness

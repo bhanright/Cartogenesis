@@ -155,6 +155,18 @@ internal object HydraulicErosion {
          * construction; taking the count instead would make the coefficient wobble a percent from
          * round to round as the lowstand moved the shoreline, which is a property of the sea's
          * history and not of the rock.
+         *
+         * One term of that arithmetic is now known to be the wrong one, and it is written up in
+         * `TODO.md` rather than changed here. The slope's rise is read as `highestLandMetres` per
+         * unit of the height field, which is what S1 could say while the field's own unit was
+         * ambiguous; S2 gave the field an absolute scale and its unit is the whole
+         * [WorldScale.reliefSpanMetres], so the two cancel and what is left is `K * years *
+         * sqrt(landArea) / worldWidth`. The cut this stage actually spends is therefore 2.67 times
+         * weaker than `K` and the time step together say. Which of the two should move — the
+         * coefficient up or the round's length down — is a question about
+         * [WorldScale.yearsPerHydraulicRound], which S1 derived from this very expression, and
+         * answering it moves every erosion figure the project has recorded. It is left as it
+         * stands so that S2 changes the world only where it says it does.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
@@ -1046,10 +1058,18 @@ internal object HydraulicErosion {
                 val surface = working.data
                 val uplifted = upliftedMetres
                 for (cell in surface.indices) {
+                    // Everything the round has done to the column, in metres of rock: what the
+                    // rivers cut away, less what the tectonics stacked on (which arrives
+                    // compensated), plus the spoil the walk is still holding off the terrain. That
+                    // last term matters more than it looks — the sediment is not laid on the rock
+                    // until the final round, so without it the plate would not feel a grain of the
+                    // debris a range sheds into its foreland until the world was finished, and a
+                    // foreland basin is that debris.
                     val columnChangeMetres =
                         (surface[cell] - reference[cell]) * metresPerFieldUnit +
                             deflectionMetres[cell] -
-                            (if (uplifted.isEmpty()) 0f else uplifted[cell])
+                            (if (uplifted.isEmpty()) 0f else uplifted[cell]) +
+                            (if (sediment.isEmpty()) 0f else sediment[cell] * metresPerFieldUnit)
                     loadPascals[cell] = columnChangeMetres * loadDensity * gravity
                 }
                 flexure.deflectionMetres(loadPascals, loadPascals)

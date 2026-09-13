@@ -348,10 +348,12 @@ object PlateStage {
             continentalShare.data[cell] =
                 if (plates[plateId[cell]].type == PlateType.CONTINENTAL) 1f else 0f
         }
+        // Half the margin's width, because a box blur of radius r spreads a step over 2r.
         BoxBlur.apply(
             continentalShare,
-            radius = (tectonics.boundaryFalloffCells / 3f).roundToInt().coerceAtLeast(1)
+            radius = config.wholeCellsFor(tectonics.crustMarginKm / 2.0)
         )
+        roughenMargins(config, continentalShare)
 
         stampHotspotChains(config, plates, plateId, uplift)
 
@@ -417,6 +419,54 @@ object PlateStage {
             upliftRateMmPerYear = upliftRate,
             crustAge = crustAge
         )
+    }
+
+    /**
+     * Breaks the crust boundary up, in place, so that a coastline standing on it is a coastline.
+     *
+     * The blurred share is a smooth ramp from one crust to the other, and a coastline is a contour
+     * of it. A contour of a smooth ramp is a smooth curve — box-counted over three octaves it comes
+     * out at dimension 1.04 to 1.10, which is Richardson's *smoothest* coast and not Britain's
+     * 1.25. That was the first thing S2 broke and the first thing it had to put back: before
+     * isostasy the coastline was a percentile of the terrain noise and inherited the noise's
+     * fractal shape, and once the crust decides where the water stands the crust has to carry that
+     * shape instead.
+     *
+     * Which it should. A rifted margin is not a smooth curve on Earth either: it is offset by
+     * transform faults every few hundred kilometres, embayed where the rift arms failed, and
+     * cut into banks and troughs by the sediment that has poured off it since. So the share gets a
+     * few octaves of noise, and the noise is windowed by `4 s (1 - s)` — nothing at all where the
+     * crust is one thing or the other, everything in the band between — which keeps a continental
+     * interior at exactly the level its column floats at and lets the margin wander.
+     *
+     * The cycles are counted across the map rather than in cells, as every other noise in this file
+     * is, so a margin has the same shape at 512 and at 2048 with more of its octaves resolved.
+     */
+    private fun roughenMargins(config: WorldGenConfig, continentalShare: FloatField) {
+        val roughness = config.tectonics.marginRoughness
+        if (roughness <= 0f) return
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val noise = PerlinNoise(config.seed * 104729 + 6199)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val share = continentalShare.data[cell]
+                    val inTheBand = 4f * share * (1f - share)
+                    if (inTheBand <= 0f) continue
+                    val wander = noise.fbm(
+                        column * MARGIN_CYCLES / cellsAcross,
+                        row * MARGIN_CYCLES / cellsDown,
+                        MARGIN_OCTAVES,
+                        MARGIN_CYCLES.toInt(),
+                        MARGIN_CYCLES.toInt()
+                    )
+                    continentalShare.data[cell] =
+                        (share + roughness * inTheBand * wander).coerceIn(0f, 1f)
+                }
+            }
+        }
     }
 
     /**
@@ -1299,11 +1349,52 @@ object PlateStage {
         val dryShareOfContinent = (1f - tectonics.continentalCrustSubmergedShare).coerceIn(0.05f, 1f)
         val targetContinentalShare = (landShare / dryShareOfContinent).coerceIn(0f, 1f)
 
+        // Which plates touch which, so the continents can be kept apart.
+        val touches = Array(plateCount) { BooleanArray(plateCount) }
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val here = plateId[row * width + column]
+                val rightColumn = (column + 1) % width
+                val right = plateId[row * width + rightColumn]
+                if (right != here) {
+                    touches[here][right] = true
+                    touches[right][here] = true
+                }
+                if (row + 1 >= height) continue
+                val below = plateId[(row + 1) * width + column]
+                if (below != here) {
+                    touches[here][below] = true
+                    touches[below][here] = true
+                }
+            }
+        }
+
         val cellCount = plateId.size.toFloat()
+        val target = targetContinentalShare * cellCount
         val continental = BooleanArray(plateCount)
         var claimed = 0f
+
+        // Continents are rafts, not a slab. Taken straight down the shuffled order, a random
+        // 45% of fourteen Voronoi plates is almost always one connected mass — measured, every
+        // standard seed came out with a single landmass holding 99.8% of its land, no
+        // archipelago, a coastline of box dimension 1.05 where every chunk before S2 held 1.20,
+        // and a flooded rift with no land bridge left in it. Earth is not like that: its
+        // continental plates are separated by oceanic ones, which is what an ocean basin *is*.
+        //
+        // So the order is walked twice. The first pass takes only plates that touch nothing
+        // already continental, which scatters the seeds of the continents across the map; the
+        // second fills up to the target from what is left, which is what grows them. The result
+        // is several separate landmasses with ocean between them, and their margins break into
+        // islands the way a margin does.
         for (plate in order) {
-            if (claimed >= targetContinentalShare * cellCount) break
+            if (claimed >= target) break
+            if ((0 until plateCount).any { continental[it] && touches[plate][it] }) continue
+            continental[plate] = true
+            claimed += cellsPerPlate[plate]
+        }
+        for (plate in order) {
+            if (claimed >= target) break
+            if (continental[plate]) continue
             continental[plate] = true
             claimed += cellsPerPlate[plate]
         }
@@ -1312,7 +1403,7 @@ object PlateStage {
         // first one past the post.
         val lastTaken = order.lastOrNull { continental[it] }
         if (lastTaken != null) {
-            val over = claimed - targetContinentalShare * cellCount
+            val over = claimed - target
             if (over > cellsPerPlate[lastTaken] / 2f) continental[lastTaken] = false
         }
 
@@ -1785,6 +1876,17 @@ object PlateStage {
         )
         return alongStrike.coerceIn(0f, 1f).pow(ARC_CHAIN_EXPONENT) * ARC_CHAIN_PEAK
     }
+
+    /**
+     * How many times the margin noise repeats across the map, and over how many octaves.
+     *
+     * Twenty-four cycles is a base wavelength of twenty-one cells at 512 and eighty-five at 2048 —
+     * the scale of a coastal embayment — and six octaves carry it down to a third of a cell at 512.
+     * The coastline's box count is taken over four, eight and sixteen cells, all of which sit
+     * inside that range with power in them, which is the point. See [roughenMargins].
+     */
+    private const val MARGIN_CYCLES = 24f
+    private const val MARGIN_OCTAVES = 6
 
     /**
      * The along-strike swell of a belt's width, as a factor on its nominal half-width: the noise

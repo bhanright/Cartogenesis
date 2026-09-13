@@ -1167,7 +1167,13 @@ internal object EarthLikeness {
             coastlineComplaint(label, metrics.coastline),
             hackComplaint(label, metrics.hack),
             bifurcationComplaint(label, metrics.horton[0]),
-            drainagePeakComplaint(label, metrics.drainage)
+            drainagePeakComplaint(label, metrics.drainage),
+            // Asserted since S2 gave the height field an absolute vertical scale. Before that the
+            // curve was a single peak straddling the shoreline on every seed and both clauses were
+            // findings; the world they were findings about is what `IsostasyTest` runs as its
+            // control.
+            bimodalityComplaint(label, metrics.hypsometry),
+            seaModeComplaint(label, metrics.hypsometry)
         ).toMutableList()
         // Pooled only: one world at 512 carries a couple of dozen lakes, and a Pareto exponent
         // measured on a couple of dozen bodies has a sampling error a third of its own size.
@@ -1267,16 +1273,48 @@ internal object EarthLikeness {
     /**
      * Whether the hypsometric curve is Earth's two modes with a trough between them.
      *
-     * Kept out of [complaints] because this generator does not meet it and rule 5 will not have a
-     * bar moved to fit: the clause is exercised against Earth's own band table and against a
-     * featureless world by `EarthLikenessControlTest`, so it is known to discriminate, and what it
-     * says about a generated world is a finding.
+     * Asserted since S2. Until then this generator did not meet it — the busiest land band and the
+     * busiest sea band were adjacent on every seed at every grid, so the curve had no trough at
+     * all — and rule 5 will not have a bar moved to fit, so it was a finding. What changed is not
+     * the bar but the world: two crusts floating at their own isostatic levels put four and a half
+     * kilometres between the continental platform and the sea floor, which is what a trough is.
+     * Measured on the four standard seeds at 512 after S2: 0.090, 0.104, 0.086 and 0.158, against
+     * 0.52 to 0.71 with isostasy switched off, which is what `IsostasyTest` runs as its control.
+     *
+     * The clause is exercised against Earth's own band table and against a featureless world by
+     * `EarthLikenessControlTest`, so it is known to discriminate.
      *
      * Earth's trough — the continental slope — holds 0.17 of its smaller mode. The bar is 0.5,
      * three times that, because the generator's relief span and therefore its band width are its
      * own, and a bar this loose still refuses everything that is not two separate modes.
      */
     const val HYPSOMETRIC_TROUGH_BAR = 0.5
+
+    /**
+     * How far the sea's mode may sit from Earth's, in metres.
+     *
+     * Fifteen hundred, and the derivation is the histogram's own resolution against the thing being
+     * located. A mode is a band, and the bands are a twentieth of the world's relief span — about
+     * 600 m on these worlds and 1,000 m on Earth's own table — so a mode is only placed to within
+     * half a band either way whatever the world is doing. One and a half bands admits that with
+     * room for the real spread between seeds, and refuses by a wide margin the thing this clause
+     * exists to catch: a sea floor at a few hundred metres, which is what a world with no isostasy
+     * in it has. Measured after S2 on the four standard seeds, -4,229, -3,775, -3,919 and -3,233
+     * against Earth's -3,700, the worst 529 m out; with isostasy off, -445 to -605, which is 3,100
+     * m out and fails.
+     */
+    const val SEA_MODE_TOLERANCE_METRES = 1500.0
+
+    /** The sea's busiest band against Earth's, which is the deep floor at -3,700 m. */
+    fun seaModeComplaint(label: String, hypsometry: Hypsometry): String? {
+        val mode = hypsometry.seaModeMetres
+            ?: return "$label: the hypsometric curve has no band below the shoreline at all"
+        if (abs(mode - EARTH_SEA_MODE_METRES) <= SEA_MODE_TOLERANCE_METRES) return null
+        return "$label: the sea's hypsometric mode is at ${"%.0f".format(mode)} m, more than" +
+            " ${"%.0f".format(SEA_MODE_TOLERANCE_METRES)} m from Earth's" +
+            " ${"%.0f".format(EARTH_SEA_MODE_METRES)} (Cawood et al. 2022) — the ocean floor is" +
+            " not where two crusts floating on a mantle would put it"
+    }
 
     fun bimodalityComplaint(label: String, hypsometry: Hypsometry): String? {
         val trough = hypsometry.troughShareOfSmallerMode
@@ -1295,10 +1333,20 @@ internal object EarthLikeness {
      */
     fun findings(metrics: Metrics): List<String> {
         val findings = ArrayList<Pair<Double, String>>()
-        // A curve that is the wrong shape is not a ratio that is off by a factor, so it is not
-        // ranked against them: it goes first, ahead of everything a number can express.
-        bimodalityComplaint(metrics.label, metrics.hypsometry)
-            ?.let { findings.add(Double.NEGATIVE_INFINITY to it) }
+        // The land's mode is reported rather than asserted, and deliberately: measured after S2 it
+        // runs 301 to 1,470 m against Earth's 800, which is inside any bar wide enough to admit the
+        // histogram's own 600 m band — and a bar that cannot fail is not a guard (rule 2). The
+        // clause that does bite on a world with no isostasy in it is the sea's mode, and that one
+        // is asserted in [complaints].
+        metrics.hypsometry.landModeMetres?.let { landMode ->
+            val span = EARTH_RELIEF_SPAN_METRES
+            findings.add(
+                (landMode + span) / (EARTH_LAND_MODE_METRES + span) to
+                    "the land's hypsometric mode is at ${"%.0f".format(landMode)} m against" +
+                        " Earth's ${"%.0f".format(EARTH_LAND_MODE_METRES)} (Cawood et al. 2022)," +
+                        " a difference of ${"%.0f".format(landMode - EARTH_LAND_MODE_METRES)} m"
+            )
+        }
         val twoMode = metrics.hypsometry.twoModeShareOfSurface
         findings.add(
             twoMode / EARTH_TWO_MODE_SHARE_OF_SURFACE to

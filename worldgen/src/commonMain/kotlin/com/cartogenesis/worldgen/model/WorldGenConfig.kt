@@ -256,18 +256,26 @@ data class TectonicsConfig(
      * *area* until the target is met, so a world of fourteen plates of unequal size lands on the
      * share asked for rather than on the nearest whole plate.
      *
-     * The figure is fifteen per cent and not Earth's twenty-nine, and the gap is a finding rather
-     * than a fudge. Measured on the five standard worlds at 512, this generator drowns 8.8, 9.2,
-     * 8.8, 16.6 and 15.6 per cent of its continental crust — a middle of about 0.12 and a spread
-     * that is mostly which plates a seed happens to make coastal. It drowns less than Earth for two
-     * reasons the model can name. Its continental surface has about a fifth of Earth's spread about
-     * its own mean, so far less of it dips below the waterline: `continentalReliefMetres` carries 2
-     * km peak to peak where Earth's land elevations have a standard deviation near 0.9 km. And it
-     * has no epicontinental seas — no Hudson Bay, no Baltic, no North Sea, no Sunda shelf — because
-     * nothing in the model floods a continent's interior. Both are written up in `TODO.md`. See
-     * REALISM_PLAN.md, S2.
+     * Earth's own figure, and it is load-bearing in a way that took measuring to see. Taken lower
+     * — at the 0.12 this generator's own margins actually drown, which looks like the honest
+     * number — the crust yields nearly the coverage the slider asks for and the sea-level cut lands
+     * almost on the isostatic datum, which is a tidy ruler and a ruined map: the shoreline then
+     * sits on the margin's own slope, where the ground falls hundreds of metres a cell, and
+     * nothing near it is marginal. Measured that way the four standard seeds carried **1, 1, 2 and
+     * 4** islands between them against sixty-two before S2, and the coastline's box-counting
+     * dimension fell to **1.05** against Mandelbrot's 1.25 and this generator's own 1.20.
+     *
+     * At Earth's 29% the shoreline sits *inside* the continental platform instead, where the
+     * ground is the platform's own topography and a coast can be ragged: the same seeds read
+     * **1.11 to 1.17** and carry 2 to 7 islands. What it costs is the aim — the crust puts 46 to
+     * 55% of the world above the datum where the slider asks for 38 — so the sea-level cut has to
+     * come up to meet it, by 428 to 796 m. That is the residual `UnitsTest` holds and
+     * `IsostasyTest` measures, and it is a real statement about this generator rather than a
+     * slack tolerance: its continents drown 9 to 13% of their own crust where Earth's drown 29,
+     * because its continental surface has about a fifth of Earth's spread about its own mean and
+     * it has no epicontinental seas at all. Both are in `TODO.md`.
      */
-    val continentalCrustSubmergedShare: Float = 0.15f,
+    val continentalCrustSubmergedShare: Float = 0.291f,
     /**
      * What one unit of every belt height below is worth, in metres.
      *
@@ -301,6 +309,45 @@ data class TectonicsConfig(
     val trenchDepth: Float = 0.3f,
     /** How far, in cells, boundary effects reach inland. */
     val boundaryFalloffCells: Float = 26f,
+    /**
+     * How wide the band is over which one crust becomes the other, in kilometres — a continental
+     * margin, measured from where the crust starts to thin to where it is ocean floor.
+     *
+     * Implicit before it was a setting: the plate base was blurred by a third of
+     * [boundaryFalloffCells], which comes to about 200 km on the default grid and was never a
+     * length anybody had chosen. Since isostasy puts 4,500 m between the two crusts, the width of
+     * this band *is* the gradient the continental slope stands at — 200 km is 260 m in every cell
+     * of a 512 grid, 600 km is 90 — so it wanted a figure of its own and a reason for it.
+     *
+     * Earth's is 200 to 500 km on a rifted margin, measuring the shelf and the slope together over
+     * which continental crust thins from about 40 km to about 10 (Watts 2001), and past 1,000 km
+     * on the Arctic and Patagonian shelves. Six hundred is the broad end of that, chosen because
+     * the wide shelf it makes is where a margin's islands and inlets are: Indonesia, the Baltic,
+     * Maine, British Columbia, the Aegean all sit on the shallow half of one. Measured across 200,
+     * 400, 700 and 900 km the coastline's own fractal dimension is not very sensitive to it — the
+     * shoreline sits inside the continental platform rather than on the slope, for the reason
+     * [continentalCrustSubmergedShare] sets out — so this is Earth's figure rather than a fitted
+     * one, and what it buys is a shelf broad enough for `ContinentalShelfTest` to find shallow
+     * water on.
+     */
+    val crustMarginKm: Double = 600.0,
+    /**
+     * How far the boundary between the two crusts wanders inside its own margin, as a share of
+     * that margin's width.
+     *
+     * Zero draws it where the blur puts it, which is a smooth ramp, and a coastline standing on
+     * a smooth ramp is a smooth curve. Earth's margins are not smooth either: they are offset by
+     * transform faults every few hundred kilometres, embayed where a rift arm failed, and cut into
+     * banks and troughs by everything that has poured off them since — Georges Bank, the Blake
+     * Plateau, the Niger and Amazon fans, the Agulhas and Falkland plateaus. A third of the
+     * margin's width is the order of those.
+     *
+     * Measured, it is worth about +0.02 on the coastline's box-counting dimension and a little
+     * more drowned margin, which is honest rather than impressive: what decides that measurement
+     * is where the shoreline sits relative to the crust, not how the crust's own edge wanders.
+     * See [continentalCrustSubmergedShare].
+     */
+    val marginRoughness: Float = 0.35f,
     /**
      * The relief the base noise carries on continental crust and on oceanic, peak to peak in
      * metres — the ground the belts and the isostatic levels are laid on.

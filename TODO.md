@@ -1,5 +1,76 @@
 # To do
 
+- **Every piece of ocean floor is of the same age.** S2 gives oceanic crust one thermal buoyancy,
+  1,544 m, solved so a standard oceanic column floats at Earth's mean ocean depth of 3,682 m. On
+  Earth that buoyancy runs from about 3,900 m at a spreading ridge to about 700 on the oldest
+  floor, because the lithosphere cools and contracts as it moves away — Parsons and Sclater's
+  square root of age. Distance to the nearest divergent boundary is a stand-in for age that this
+  generator already has the machinery for (one jump-flood field over the ridge cells, one spreading
+  rate), and it would turn the ocean's hypsometric spike into a distribution, put ridges 1.2 km
+  above the abyssal plains and give the deep sea structure it has none of today. 2026-09-13, S2.
+- **This generator's continents barely drown.** Earth's continental crust covers 41.2% of the
+  surface and its land 29.2%, so 29% of the continents are under water; measured on the five
+  standard worlds this generator drowns 8.8 to 16.6%, and
+  `TectonicsConfig.continentalCrustSubmergedShare` carries 0.15 rather than Earth's 0.291 for that
+  reason. Two causes and both are nameable. Its continental surface has about a fifth of Earth's
+  spread about its own mean — `continentalReliefMetres` is 2 km peak to peak against a standard
+  deviation near 0.9 km in Earth's land elevations — so far less of it dips below the waterline.
+  And it has no epicontinental seas at all: no Hudson Bay, no Baltic, no North Sea, no Sunda shelf,
+  because nothing in the model floods a continent's interior. The second is the larger of the two
+  and is a question about how the crust's own thickness varies inside a plate, which the model does
+  not represent. 2026-09-13, S2.
+- **There is half again too much high ground.** With the field on an absolute ruler the land's
+  elevation distribution can be read against Earth's for the first time, and the top of it is fat:
+  over the five standard worlds at 512, 4.0-13.0% of land stands above 3 km against Earth's 5% and
+  3.2-7.6% above 4 km against Earth's 2%, while the bands below 2 km are close (25.8-79.3% above
+  1 km against 31%, the spread being how far each seed's sea-level cut sits from the datum). Two
+  candidates and neither was measured apart at S2. The belts' along-strike swell puts a strong
+  pair's crest eight times above a typical one's, which is a much wider spread than Earth's ranges
+  have; and the gravitational limit compresses everything above 3 km toward 6 km rather than
+  removing it, so what the limit refuses to raise it piles up instead. Lowering
+  `TectonicsConfig.beltReliefMetres` from 13,000 to 10,000 moved the figures by less than a tenth,
+  which says it is the limit and the swell rather than the scale. 2026-09-13, S2.
+- **A rift trough does not subside while it opens.** S2's uplift field is positive only: it takes
+  the part of a belt's stamped profile that stands *up*, so a rift's shoulders rise every round and
+  its floor does nothing. On Earth the floor is the half that moves — a half-graben subsides as its
+  master fault slips, which is why the Gulf of California and the Red Sea are drowned across their
+  whole width and this generator's coastal rifts show a dry hinge shelf. The mechanism is one sign:
+  give `CONTINENTAL_RIFT` a negative rate on the trough as well as a positive one on the shoulders,
+  scaled by how far the rift has opened. It was left out of S2 deliberately, because the E-track's
+  rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
+  round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
+  takes it should read E7 and E8's notes below first. 2026-09-13, S2.
+- **The incision coefficient reads the slope on the wrong half of the ruler.** `E = K A^0.5 S`
+  needs the slope as a true gradient, and `HydraulicErosion.Rates.incisionCoefficient` converts the
+  stage's rise-per-map-width into one by multiplying by `highestLandMetres / reliefSpanMetres`.
+  That was the honest reading while the height field was renormalised to its own extremes and its
+  unit was whatever a particular world made it; since S2 the field is an absolute altitude whose
+  unit *is* `reliefSpanMetres`, so the factor cancels and the whole coefficient is
+  `K * years * sqrt(landArea) / worldWidth`. As it stands the stage cuts 2.67 times less per round
+  than `K` and the time step together say. Nothing about the *world* is wrong — the cut in metres
+  is the cut S1 calibrated — but one of the two figures underneath it has to move: either the
+  coefficient goes up by 2.67, which is 2.67 times the erosion, or `yearsPerHydraulicRound` comes
+  down from 336,476 to 126,179 and twelve rounds stand for 1.5 Myr rather than 4.0. The second
+  keeps every world exactly where it is and costs only the label, but it is S1's own derivation
+  and it re-dates every erosion figure the project has recorded, including S2's own measurement of
+  what a belt loses in a round. Left alone deliberately so that S2 changed the world only where it
+  said it did. 2026-09-13, S2.
+- **The tectonics' belt widths are still counts of cells.** S1 left the widths and the heights
+  together because neither could carry a unit while the field was normalised; S2 gave the heights
+  one — every belt height is a share of `TectonicsConfig.beltReliefMetres` — and left the widths
+  where they were, because `WorldGenConfig.atResolution` already carries them across a change of
+  grid and writing them in kilometres would do the same arithmetic in a different place. It would
+  read better all the same, and it would empty `atResolution` of everything but the moisture
+  march's own knob. A rename with no physics under it. 2026-09-13, S2.
+- **The shelf plateau still stands at 1,000 m against Earth's 130.** S1 recorded this as a
+  consequence of having no two-density crust; S2 has the crust, and the plateau is still 1,000 m,
+  because it is a remap `SeaLevelStage` lays over the sea floor after the cut rather than anything
+  the crust decides. What has changed is that the sea under it is now a real sea — its hypsometric
+  mode is at -3,200 to -4,200 m where before S2 it was at -390 — so a 130 m plateau is no longer
+  one part in seventy-seven of a shallow ocean and the figure can simply be brought to Earth's. It
+  will move coastlines: the plateau is what `ClimateStage` reads as shallow water and what
+  `NationsConfig.navigableDepthMetres` reads for a sea a fleet can cross. 2026-09-13, S2.
+
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm
@@ -56,12 +127,6 @@
   density off the terrain's channel network rather than the drawn one for exactly this reason, and
   says so. The cure is a cap that is an area or a share rather than a count, and it belongs with
   R2's rivers-drawn-as-rivers. 2026-09-13, S1.
-- **The generator's ocean is nearly all shallow.** With the sea's own depth declared, the
-  Earth-likeness suite reads the oceanic mode at about -390 m against Earth's -3,700: the height
-  field is roughly normal and the shoreline is its 62nd percentile, so most water cells sit just
-  below the waterline with a long tail down to a few trenches. Earth's floor is bimodal because two
-  crusts of different density float at two levels, which is an isostatic fact and is S2's. The same
-  cause puts the continental shelf at 1,000 m against Earth's 130. 2026-09-13, S1.
 - **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
   sorts channel heads by the flow each already carries and traces the largest first, so the course a
   `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
@@ -78,6 +143,16 @@
   than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
 
 ## Done
+
+- **The generator's ocean was nearly all shallow** (2026-09-13, S2) — the oceanic hypsometric mode
+  sat at about -390 m against Earth's -3,700, because the height field was renormalised to its own
+  extremes and the shoreline was its 62nd percentile, so most water cells sat just below the
+  waterline with a long tail to a few trenches. Two crusts of different density floating at two
+  levels is what makes Earth's floor bimodal, and S2 models it: the mode is now at -3,233 to -4,229
+  m over the five standard worlds, the curve has a trough between its two modes holding 0.086 to
+  0.158 of the smaller one against Earth's 0.17, and both clauses are asserted in
+  `EarthLikenessTest` where they were findings. What the same change did *not* fix is the shelf
+  plateau, which is still 1,000 m and is now its own entry above.
 
 - **One unit of land elevation was six kilometres in the climate and eight everywhere else**
   (2026-09-13, S1) — `WorldScale` is now the only place a physical unit is declared: the map's

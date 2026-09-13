@@ -1,0 +1,665 @@
+package com.cartogenesis.worldgen
+
+import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.BoundaryClass
+import com.cartogenesis.worldgen.pipeline.Isostasy
+import com.cartogenesis.worldgen.pipeline.TerrainStage
+import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.test.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+
+/**
+ * The solid earth floats and it bends, and both show on the map.
+ *
+ * S2's guards. Each clause is measured against a stated figure of Earth's and each is shown to
+ * fail against the world without the mechanism it is about — which for most of them is
+ * `IsostasyConfig.enabled` off, the generator as it stood before this chunk: one level for every
+ * crust and a shoreline that was a percentile through a field renormalised to its own extremes.
+ *
+ * What each clause is for:
+ *
+ *  - the two crusts float at Earth's two levels, so the hypsometry has two modes and a trough
+ *    between them where the continental slope is;
+ *  - the ocean-coverage slider still means the share of the world under water, now by choosing how
+ *    much of the world is continental crust rather than by choosing where to cut a histogram, and
+ *    the cut is the check;
+ *  - relief in a belt that is being pushed up while it is being cut down settles where Whipple and
+ *    Tucker say it does, going as uplift over erodibility;
+ *  - the plate bends under what the water moves, so a range rebounds as it is stripped and the
+ *    ground in front of it sinks under the sediment;
+ *  - and ice holds its bed down.
+ *
+ * See REALISM_PLAN.md, S2, and [Isostasy].
+ */
+class IsostasyTest {
+
+    // ------------------------------------------------------------------ the columns
+
+    /**
+     * Airy's equation against the two figures it is solved from, and against the one it predicts.
+     *
+     * Arithmetic rather than a world, so it is exact and instant. What it holds is that the
+     * constants in `IsostasyConfig` are the ones the section says they are: a standard continental
+     * column floats at Earth's mean land elevation, a standard oceanic column at Earth's mean ocean
+     * depth, and the difference between the second and what a *cold* oceanic column would do is the
+     * thermal buoyancy the field's own note quotes.
+     */
+    @Test
+    fun `the two crusts float where Earth's do`() {
+        val isostasy = WorldGenConfig().isostasy
+        val columns = Isostasy.Columns(isostasy)
+
+        println(
+            ("ISOSTASY columns continental %.0f m, oceanic %.0f m, a cold oceanic column %.0f m," +
+                " thermal buoyancy %.0f m").format(
+                columns.altitudeMetres(1f), columns.altitudeMetres(0f),
+                columns.coldOceanicFloorMetres, columns.oceanicThermalBuoyancyMetres
+            )
+        )
+        assertEquals(
+            "a standard continental column does not float at Earth's mean land elevation",
+            isostasy.continentalFreeboardMetres.toDouble(),
+            columns.altitudeMetres(1f).toDouble(), 1.0
+        )
+        assertEquals(
+            "a standard oceanic column does not float at Earth's mean ocean depth",
+            isostasy.oceanicFloorMetres.toDouble(),
+            columns.altitudeMetres(0f).toDouble(), 1.0
+        )
+        // Parsons & Sclater put a ridge at 2,500 m and 80-Myr floor at 5,700 against a cold
+        // asymptote near 6,400, so the mean sea floor is buoyed by something between one and four
+        // kilometres. A model whose figure fell outside that would be saying the ocean is deep for
+        // some reason other than the age of its crust.
+        val buoyancy = columns.oceanicThermalBuoyancyMetres
+        assertTrue(
+            "the thermal buoyancy the two Earth figures imply is ${"%.0f".format(buoyancy)} m," +
+                " outside the 1,000-4,000 m Parsons & Sclater's subsidence curve allows",
+            buoyancy in 1_000f..4_000f
+        )
+        // A margin is a mixture, so its level has to be between the two and to move one way only.
+        var previous = columns.altitudeMetres(0f)
+        for (step in 1..20) {
+            val here = columns.altitudeMetres(step / 20f)
+            assertTrue("the margin's level is not monotone in the crust it is made of", here > previous)
+            previous = here
+        }
+    }
+
+    // ------------------------------------------------------------------ the flexure
+
+    /**
+     * The flexure against its own two limits: a load much broader than the plate's flexural
+     * parameter sinks until it floats, and one much narrower than it barely moves.
+     *
+     * Those are the two ends of `w(k) = L(k) / (dRho g + D k^4)`, and between them is everything the
+     * filter is for. The broad limit is Airy's answer, `w = q / (dRho g)`, which for a kilometre of
+     * rock at 2,835 kg/m3 against a mantle at 3,300 is 860 m; the narrow limit is nothing at all.
+     * Also held: the bend carries no mean, because the filter drops the zero-frequency term and the
+     * datum is [Isostasy.Columns]' business, not the plate's.
+     */
+    @Test
+    fun `the flexure sinks a broad load and holds a narrow one up`() {
+        val config = WorldGenConfig(seed = 1L, width = 256, height = 256)
+        val flexure = Isostasy.Flexure(config)
+        val isostasy = config.isostasy
+        val alphaKm = flexure.flexuralParameterMetres / 1_000.0
+        println(
+            "ISOSTASY flexure rigidity %.3e N m, flexural parameter %.0f km, %.1f cells at %d"
+                .format(flexure.rigidity, alphaKm, alphaKm / config.cellWidthKm, config.width)
+        )
+        // Watts (2001) puts a continent's flexural parameter between about 50 and 200 km for the
+        // 20-40 km of elastic thickness it carries; outside that the plate is not a continent's.
+        assertTrue(
+            "a flexural parameter of ${"%.0f".format(alphaKm)} km is not a continent's",
+            alphaKm in 50.0..200.0
+        )
+
+        val loadMetres = 1_000f
+        val airy = loadMetres * isostasy.continentalCrustDensity /
+            (isostasy.mantleDensity - isostasy.deflectionFillDensity)
+
+        fun deflectionUnder(halfWidthCells: Int): Float {
+            val load = FloatArray(config.width * config.height)
+            for (row in 0 until config.height) {
+                for (column in 0 until config.width) {
+                    val insideAcross = abs(column - config.width / 2) <= halfWidthCells
+                    val insideDown = abs(row - config.height / 2) <= halfWidthCells
+                    if (insideAcross && insideDown) {
+                        load[row * config.width + column] = Isostasy.loadPascals(
+                            loadMetres, isostasy.continentalCrustDensity, isostasy.gravity
+                        )
+                    }
+                }
+            }
+            var mean = 0.0
+            flexure.deflectionMetres(load, load)
+            load.forEach { mean += it.toDouble() }
+            assertEquals(
+                "the bend carries a mean, so the filter is moving the world's datum",
+                0.0, mean / load.size, 1e-6
+            )
+            return load[config.height / 2 * config.width + config.width / 2]
+        }
+
+        // Thirty-three cells at 256 is 1,550 km across, twenty-three flexural parameters, and still
+        // under two per cent of the map — which matters, because the filter carries no
+        // zero-frequency term and a load covering a quarter of the world would be measured against
+        // its own mean. One cell is 47 km, two thirds of a flexural parameter.
+        val broad = deflectionUnder(16)
+        val narrow = deflectionUnder(0)
+        println(
+            ("ISOSTASY flexure a %.0f m load bends the plate %.0f m under a 1,550 km slab and" +
+                " %.0f m under a 47 km one; Airy's answer is %.0f m").format(
+                loadMetres, broad, narrow, airy
+            )
+        )
+        assertEquals(
+            "a load twenty flexural parameters across does not reach Airy's answer",
+            airy.toDouble(), broad.toDouble(), airy * 0.05
+        )
+        assertTrue(
+            "a load one flexural parameter across bends the plate ${"%.0f".format(narrow)} m," +
+                " which is not the ${"%.0f".format(airy)} m of Airy's answer held back by a plate" +
+                " with strength in it",
+            narrow < airy * 0.5
+        )
+    }
+
+    // ------------------------------------------------------------------ the ocean as a consequence
+
+    /**
+     * The ocean-coverage slider still means the share of the world under water, and the crust is
+     * what delivers it.
+     *
+     * Two readings, and the gap between them is the measurement. The plate stage draws
+     * `(1 - seaLevel) / (1 - continentalCrustSubmergedShare)` of the world as continental crust, so
+     * the share of the map standing above the *isostatic datum* — zero metres, which is
+     * `WorldScale.shorelineFieldLevel` of the height field — is a consequence of what the crust is.
+     * The sea-level percentile then cuts where the slider asks, which is a statement about how much
+     * water the planet has and is the one thing isostasy cannot supply. How far the two answers sit
+     * apart is what this measures, in metres of sea level, and it is the same residual `UnitsTest`
+     * reads off the declared ruler.
+     *
+     * The control is Earth's own submerged share, 29%, which is the wrong conversion for this
+     * generator — its continents are drier than Earth's, for the two reasons
+     * `TectonicsConfig.continentalCrustSubmergedShare` sets out — and misses by twice the bar.
+     */
+    @Test
+    fun `the crust draws the ocean the slider asked for`() {
+        val worst = ArrayList<Pair<Long, Double>>()
+        SEEDS.forEach { seed ->
+            val world = worldAt(seed)
+            val residual = shorelineResidualMetres(world)
+            val isostatic = isostaticLandShare(world)
+            worst.add(seed to residual)
+            println(
+                ("ISOSTASY coverage seed %-6d crust puts %.3f of the world above the datum, the" +
+                    " slider asks %.3f, the cut lands %+.0f m from it").format(
+                    seed, isostatic, 1f - world.config.seaLevel, residual
+                )
+            )
+        }
+        val furthest = worst.maxByOrNull { abs(it.second) }!!
+        assertTrue(
+            "seed ${furthest.first}: the sea-level cut lands ${"%.0f".format(furthest.second)} m" +
+                " from the level isostasy puts the shoreline at, outside the stated" +
+                " $SHORELINE_RESIDUAL_BAR_METRES m — the crust the plate stage drew is not the" +
+                " crust the ocean-coverage slider asked for",
+            abs(furthest.second) <= SHORELINE_RESIDUAL_BAR_METRES
+        )
+
+        // The control: the aim told to draw far more continental crust than the slider's coverage
+        // needs. Nothing else changes — the same seeds, the same plates, the same erosion — so what
+        // it isolates is the conversion itself, and the shoreline has to climb a long way to find
+        // 38% of a world that is nearly all continent.
+        val control = SEEDS.map { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            shorelineResidualMetres(
+                WorldGenerationEngine.generateBlocking(
+                    base.copy(
+                        tectonics = base.tectonics.copy(
+                            continentalCrustSubmergedShare = CONTROL_SUBMERGED_SHARE
+                        )
+                    )
+                )
+            )
+        }
+        println(
+            "ISOSTASY coverage control at $CONTROL_SUBMERGED_SHARE submerged: " +
+                control.joinToString(", ") { "%+.0f m".format(it) }
+        )
+        assertTrue(
+            "the control passes, so the crust fraction the plate stage draws is not what is" +
+                " landing the sea-level cut near the datum",
+            control.any { abs(it) > SHORELINE_RESIDUAL_BAR_METRES }
+        )
+    }
+
+    /**
+     * The hypsometry has two modes with a trough between them, and does not without isostasy.
+     *
+     * `EarthLikenessTest` asserts the same two clauses on every standard seed; this is where they
+     * are shown to bite, against the world S2 replaced. The figures either way are printed.
+     */
+    @Test
+    fun `the hypsometry is bimodal, and is one mode without the two crusts`() {
+        SEEDS.take(3).forEach { seed ->
+            val world = worldAt(seed)
+            val flat = WorldGenerationEngine.generateBlocking(
+                world.config.copy(isostasy = world.config.isostasy.copy(enabled = false))
+            )
+            listOf("isostatic" to world, "control" to flat).forEach { (label, measured) ->
+                val hypsometry = EarthLikeness.hypsometryOf(measured)
+                println(
+                    ("ISOSTASY hypsometry seed %-6d %-9s land mode %s, sea mode %s, trough %s of" +
+                        " the smaller mode").format(
+                        seed, label,
+                        hypsometry.landModeMetres?.let { "%.0f m".format(it) } ?: "none",
+                        hypsometry.seaModeMetres?.let { "%.0f m".format(it) } ?: "none",
+                        hypsometry.troughShareOfSmallerMode?.let { "%.3f".format(it) } ?: "none"
+                    )
+                )
+            }
+            val here = EarthLikeness.hypsometryOf(world)
+            val there = EarthLikeness.hypsometryOf(flat)
+            assertTrue(
+                "seed $seed: " + (EarthLikeness.bimodalityComplaint("$seed", here) ?: ""),
+                EarthLikeness.bimodalityComplaint("$seed", here) == null
+            )
+            assertTrue(
+                "seed $seed: " + (EarthLikeness.seaModeComplaint("$seed", here) ?: ""),
+                EarthLikeness.seaModeComplaint("$seed", here) == null
+            )
+            assertTrue(
+                "seed $seed: the curve is still two modes with a trough with isostasy switched" +
+                    " off, so neither clause is measuring the two crusts",
+                EarthLikeness.bimodalityComplaint("$seed", there) != null ||
+                    EarthLikeness.seaModeComplaint("$seed", there) != null
+            )
+        }
+    }
+
+    // ------------------------------------------------------------------ uplift against erosion
+
+    /**
+     * Steady-state relief in a belt goes as uplift over erodibility, which is Whipple and Tucker's
+     * result and the reason the two have to run together.
+     *
+     * `E = K A^m S^n` balanced against an uplift `U` gives `S = (U / (K A^m))^(1/n)`, so a channel's
+     * whole relief scales as `(U / K)^(1/n)` — with this model's `n` of 1, in proportion. Measured
+     * on a synthetic belt: a strip of ground pushed up at a fixed rate across a flat world, run
+     * long enough for the rivers to catch it, its relief read at four uplift rates and four
+     * erodibilities.
+     *
+     * Both sweeps are run because either alone can be passed by accident. Relief that is simply
+     * uplift piling up untouched also goes as `U` to the first power, and would pass the first
+     * sweep while telling us nothing; what it cannot do is *fall* when the rock is made softer,
+     * which is what the second sweep asks. So the erodibility exponent is the guard and the uplift
+     * exponent is its corroboration, and the share of the uplift the rivers have taken away by the
+     * end is printed beside them.
+     */
+    @Test
+    fun `steady-state relief goes as uplift over erodibility`() {
+        val upliftRates = listOf(0.05f, 0.1f, 0.2f, 0.4f)
+        val erodibilities = listOf(0.5e-6f, 1e-6f, 2e-6f, 4e-6f)
+
+        val byUplift = upliftRates.map { rate -> syntheticBelt(rate, 1e-6f) }
+        val byErodibility = erodibilities.map { erodibility -> syntheticBelt(0.1f, erodibility) }
+
+        upliftRates.zip(byUplift).forEach { (rate, belt) ->
+            println(
+                "ISOSTASY steady state U=%.2f mm/yr K=1.0e-6: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                    .format(rate, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
+            )
+        }
+        erodibilities.zip(byErodibility).forEach { (erodibility, belt) ->
+            println(
+                "ISOSTASY steady state U=0.10 mm/yr K=%.1e: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                    .format(erodibility, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
+            )
+        }
+
+        val upliftExponent = EarthLikeness.fitLine(
+            upliftRates.map { ln(it.toDouble()) },
+            byUplift.map { ln(it.reliefMetres) }
+        ).slope
+        val erodibilityExponent = EarthLikeness.fitLine(
+            erodibilities.map { ln(it.toDouble()) },
+            byErodibility.map { ln(it.reliefMetres) }
+        ).slope
+        println(
+            "ISOSTASY steady state relief goes as U^%.2f and as K^%.2f, against Whipple & Tucker's"
+                .format(upliftExponent, erodibilityExponent) + " 1/n = 1.00 and -1/n = -1.00"
+        )
+
+        assertTrue(
+            "the belts never reached a state the rivers were working on: the least eroded of them" +
+                " kept ${"%.2f".format(1.0 - byUplift.minOf { it.removedShare })} of everything" +
+                " pushed into it, so the sweeps below measure uplift piling up and not a balance",
+            byUplift.all { it.removedShare > 0.3 } && byErodibility.all { it.removedShare > 0.3 }
+        )
+        assertTrue(
+            "relief goes as K^${"%.2f".format(erodibilityExponent)} where Whipple & Tucker's" +
+                " steady state with n = 1 makes it K^-1: outside -1 +/-" +
+                " $STREAM_POWER_EXPONENT_TOLERANCE, the belts are not balancing uplift against" +
+                " erosion at all",
+            abs(erodibilityExponent + 1.0) <= STREAM_POWER_EXPONENT_TOLERANCE
+        )
+        assertTrue(
+            "relief goes as U^${"%.2f".format(upliftExponent)}, outside 1 +/-" +
+                " $STREAM_POWER_EXPONENT_TOLERANCE",
+            abs(upliftExponent - 1.0) <= STREAM_POWER_EXPONENT_TOLERANCE
+        )
+    }
+
+    /** What one synthetic belt came out at. */
+    private class Belt(
+        val reliefMetres: Double,
+        val upliftedMetres: Double,
+        /** Of everything pushed up, the share the rivers and the hillslopes took away again. */
+        val removedShare: Double
+    )
+
+    /**
+     * A strip of ground pushed up at [upliftMmPerYear] across an otherwise flat world, run until
+     * the rivers have caught it, and the relief it settles at.
+     *
+     * Deliberately not a generated world. What Whipple and Tucker's relation is about is one belt
+     * with one uplift rate and one erodibility, and a map's belts have neither: their profiles vary
+     * along strike, their catchments differ by an order of magnitude, and their crust pairs push at
+     * four different rates. So this is the experiment rather than the world — a flat plain at the
+     * waterline with a band raised through it — and the world's own belts are what the render is
+     * for.
+     *
+     * Flexure off and deposition off, because neither is in the relation being tested: the
+     * stream-power law is detachment-limited and says nothing about a plate with strength.
+     */
+    private fun syntheticBelt(upliftMmPerYear: Float, erodibilityPerYear: Float): Belt {
+        val rounds = 300
+        val base = WorldGenConfig(seed = 4242L, width = 128, height = 128)
+        val config = base.copy(
+            seaLevel = 0.5f,
+            // A small world and a short round, because the relation being tested is about one
+            // channel and this map's own are the wrong size for it. Steady-state relief is
+            // `(U / K) / sqrt(A)` along a channel, and on a 12,000 km world a mid-belt catchment
+            // is 10^12 m² — so the relief a millimetre a year would hold up is a few centimetres,
+            // and every round's cut runs into the half-the-drop cap long before the rock has any
+            // say in it. Two hundred kilometres across puts the catchments where a real orogen's
+            // are and the relief in hundreds of metres; a forty-thousand-year round keeps each
+            // round's bite well inside the cap, so what limits the cut is the stream power and
+            // not the arithmetic that guards it.
+            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = 40_000.0),
+            isostasy = base.isostasy.copy(flexure = false),
+            erosion = base.erosion.copy(
+                hydraulicRounds = rounds,
+                bedrockErodibilityPerYear = erodibilityPerYear,
+                deposition = false,
+                // Neither belongs in the relation. The stream-power law is detachment-limited and
+                // says nothing about a hillslope failing at an angle, and the outlet notch is a
+                // second rate with a multiplier of its own.
+                criticalFallMetresPerKm = 100_000f,
+                debrisTravelKm = 0.0,
+                outletIncision = false
+            ),
+            sea = base.sea.copy(lowstandMetres = 0f)
+        )
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val scale = config.scale
+
+        // The plain: the terrain noise alone, a couple of hundred metres of it, half of it under
+        // water once the percentile cuts. Nothing tectonic, so the only relief that appears is the
+        // relief the band's own uplift and the rivers make between them.
+        val noise = TerrainStage.generate(config).height
+        val ground = FloatField(cellsAcross, cellsDown)
+        for (cell in ground.data.indices) {
+            ground.data[cell] = scale.fieldAtAltitude((noise.data[cell] - 0.5f) * PLAIN_RELIEF_METRES)
+        }
+
+        // The belt: a band a quarter of the map deep, pushed up at one rate over its whole width.
+        val uplift = FloatField(cellsAcross, cellsDown)
+        val beltFirstRow = cellsDown * 3 / 8
+        val beltLastRow = cellsDown * 5 / 8
+        for (row in beltFirstRow until beltLastRow) {
+            for (column in 0 until cellsAcross) uplift.data[row * cellsAcross + column] = upliftMmPerYear
+        }
+
+        val eroded = erodeBlocking(config, ground, upliftRateMmPerYear = uplift)
+        val upliftedMetres =
+            upliftMmPerYear.toDouble() * scale.yearsPerHydraulicRound * rounds / 1_000.0
+
+        var beltSum = 0.0
+        var beltCells = 0
+        var plainSum = 0.0
+        var plainCells = 0
+        for (row in 0 until cellsDown) {
+            val inBelt = row in beltFirstRow until beltLastRow
+            for (column in 0 until cellsAcross) {
+                val altitude = scale.altitudeAtField(eroded.height.data[row * cellsAcross + column])
+                if (inBelt) {
+                    beltSum += altitude
+                    beltCells++
+                } else {
+                    plainSum += altitude
+                    plainCells++
+                }
+            }
+        }
+        val relief = beltSum / beltCells - plainSum / plainCells
+        return Belt(relief, upliftedMetres, 1.0 - relief / upliftedMetres)
+    }
+
+    // ------------------------------------------------------------------ the loads
+
+    /**
+     * The plate bends under what the water moves: a range that is being stripped rebounds, and the
+     * ground in front of it goes down under the sediment.
+     *
+     * One pair of worlds, the same seed with the flexure on and off, read as the altitude
+     * difference between them binned by distance from the nearest continental collision. Over the
+     * belt itself the difference is positive — the range has lost mass and the plate has answered —
+     * and out in the foreland it is negative, which is a foreland basin: DeCelles and Giles' (1996)
+     * flexural moat, filled by the orogen's own debris.
+     *
+     * Earth's are deeper than this, and the reason is worth stating rather than glossing. The
+     * Ganges basin holds 5 km of sediment over 300 km and the Alpine molasse 4 km over 100, but
+     * those are *thrust* loads: an orogen emplaces its own crust on the undeformed plate beside it,
+     * and the plate bends under the weight. This model's orogens do not do that. A belt's height
+     * arrives already compensated — the stamp is the surface a thickened column supports, and the
+     * uplift the rounds add is more of the same thickening — so the only load the plate ever feels
+     * is what the water moves, and the moat that makes is the debris the range sheds rather than
+     * the range itself. Measured on seed 42 the belt comes up by 233 to 791 m over its own width
+     * and the ground beyond 32 cells goes down by 12 to 71, which is a real basin and a shallow
+     * one. Giving the orogen a thrust load of its own means building a belt out of crustal
+     * thickness rather than out of a stamped profile, and it is in `TODO.md`.
+     */
+    @Test
+    fun `a stripped range rebounds and its foreland sinks`() {
+        val seed = 42L
+        val world = worldAt(seed)
+        val without = WorldGenerationEngine.generateBlocking(
+            world.config.copy(isostasy = world.config.isostasy.copy(flexure = false))
+        )
+        val scale = world.config.scale
+        val cellCount = world.config.width * world.config.height
+        val distance = world.plates.boundaryDistance.data
+        val boundaryClass = world.plates.nearestBoundaryClass
+
+        val bins = DoubleArray(FLEXURE_BINS)
+        val counts = IntArray(FLEXURE_BINS)
+        for (cell in 0 until cellCount) {
+            if (boundaryClass[cell] != BoundaryClass.COLLISION_PLATEAU.ordinal) continue
+            val bin = (distance[cell] / FLEXURE_BIN_CELLS).toInt()
+            if (bin >= FLEXURE_BINS) continue
+            bins[bin] += (
+                scale.altitudeAtField(world.erosion.height.data[cell]) -
+                    scale.altitudeAtField(without.erosion.height.data[cell])
+                ).toDouble()
+            counts[bin]++
+        }
+        val profile = DoubleArray(FLEXURE_BINS) {
+            if (counts[it] == 0) 0.0 else bins[it] / counts[it]
+        }
+        println(
+            "ISOSTASY foreland seed $seed, metres the flexure moved the ground, by distance from" +
+                " the collision: " + profile.mapIndexed { bin, metres ->
+                "%d-%d cells %+.0f".format(
+                    bin * FLEXURE_BIN_CELLS, (bin + 1) * FLEXURE_BIN_CELLS, metres
+                )
+            }.joinToString(", ")
+        )
+
+        val overTheBelt = profile.take(2).average()
+        val inTheForeland = profile.drop(3).minOrNull() ?: 0.0
+        val moatBin = profile.indices.first { profile[it] == inTheForeland }
+        println(
+            ("ISOSTASY foreland seed %d: the belt stands %+.0f m higher and the deepest moat is" +
+                " %+.0f m at %d-%d cells (%.0f-%.0f km) from the suture").format(
+                seed, overTheBelt, inTheForeland, moatBin * FLEXURE_BIN_CELLS,
+                (moatBin + 1) * FLEXURE_BIN_CELLS,
+                moatBin * FLEXURE_BIN_CELLS * world.config.cellWidthKm,
+                (moatBin + 1) * FLEXURE_BIN_CELLS * world.config.cellWidthKm
+            )
+        )
+        assertTrue(
+            "the belt is ${"%.0f".format(overTheBelt)} m higher with the flexure on, not the" +
+                " $MIN_REBOUND_METRES m a range that has lost this much rock should rebound by",
+            overTheBelt >= MIN_REBOUND_METRES
+        )
+        assertTrue(
+            "the deepest thing in front of the belt is ${"%.0f".format(inTheForeland)} m, not the" +
+                " $MIN_FORELAND_METRES m of moat a flexed plate carries there",
+            inTheForeland <= -MIN_FORELAND_METRES
+        )
+        assertTrue(
+            "the ground in front of the belt is not below the belt's own rebound, so the plate is" +
+                " not bending — it is moving up and down together, which no filter with a fourth" +
+                " power in it can do",
+            overTheBelt > inTheForeland
+        )
+    }
+
+    /**
+     * Ice holds its bed down, which is why Greenland's lies below sea level.
+     *
+     * The same world with the ice load on and off. Under a sheet at its full thickness the bed
+     * should be down by `iceDensity / mantleDensity` of that thickness once the plate has flattened
+     * out — 28% of it, or 556 m at the stock two kilometres — and less at the margin, where the
+     * sheet is thinner and the plate is holding it up from both sides.
+     */
+    @Test
+    fun `ice holds its bed down`() {
+        val seed = 7L
+        val world = worldAt(seed)
+        val without = WorldGenerationEngine.generateBlocking(
+            world.config.copy(isostasy = world.config.isostasy.copy(iceLoad = false))
+        )
+        val scale = world.config.scale
+        var deepest = 0.0
+        var moved = 0
+        for (cell in world.sea.relativeElevation.data.indices) {
+            if (!world.sea.isLand[cell] || !without.sea.isLand[cell]) continue
+            val here = scale.metresAboveShoreline(world.sea.relativeElevation.data[cell])
+            val there = scale.metresAboveShoreline(without.sea.relativeElevation.data[cell])
+            val down = (there - here).toDouble()
+            if (down > 1.0) moved++
+            if (down > deepest) deepest = down
+        }
+        val isostasy = world.config.isostasy
+        val airy = isostasy.iceSheetThicknessMetres * isostasy.iceDensity / isostasy.mantleDensity
+        println(
+            "ISOSTASY ice seed %d: %d cells pressed down, the deepest by %.0f m, against the %.0f m"
+                .format(seed, moved, deepest, airy) + " a sheet of this thickness floats out at"
+        )
+        assertTrue("seed $seed carries no ice, so there is no load to weigh", moved > 0)
+        assertTrue(
+            "the deepest the ice presses its bed is ${"%.0f".format(deepest)} m, which is not" +
+                " within half and one and a half of the ${"%.0f".format(airy)} m" +
+                " `iceDensity / mantleDensity` of the sheet's own thickness comes to",
+            deepest in (airy * 0.5)..(airy * 1.5)
+        )
+    }
+
+    private fun worldAt(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
+        WorldGenConfig(seed = seed, width = 512, height = 512)
+    )
+
+    /** Where the sea-level cut landed, in metres above or below the isostatic datum. */
+    private fun shorelineResidualMetres(world: WorldMap): Double =
+        world.config.scale.altitudeAtField(world.sea.shorelineHeight).toDouble()
+
+    /** The share of the map the crust alone puts above zero metres, before any water is poured. */
+    private fun isostaticLandShare(world: WorldMap): Double {
+        val datum = world.config.scale.shorelineFieldLevel
+        var above = 0
+        world.erosion.height.data.forEach { if (it >= datum) above++ }
+        return above.toDouble() / world.erosion.height.data.size
+    }
+
+    private companion object {
+        /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
+        val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
+
+        /**
+         * How far the sea-level cut may land from the level isostasy puts the shoreline at, in
+         * metres.
+         *
+         * A thousand, and what it admits is a statement about this generator rather than slack.
+         * The crust puts 45.5 to 55.0% of the world above the isostatic datum where the slider asks
+         * for 38, so the sea-level cut has to come up to meet it — by 428, 796, 455, 428 and 455 m
+         * on the five seeds. The gap is that this generator's continents drown 9 to 13% of their
+         * own crust where Earth's drown 29, for the two reasons
+         * `TectonicsConfig.continentalCrustSubmergedShare` sets out, and closing it is a change to
+         * what a continental interior looks like rather than to the aim.
+         *
+         * A thousand metres covers that with room for the granularity underneath it — the aim is
+         * met by choosing whole plates, so its finest adjustment is a fourteenth of the surface —
+         * and refuses the control below, which misses by three times as much.
+         */
+        const val SHORELINE_RESIDUAL_BAR_METRES = 1_000.0
+
+        /**
+         * What the control tells the plate stage a continent drowns, against Earth's 29%.
+         *
+         * Seven tenths, which asks for `0.38 / 0.3` — the whole world — as continental crust. The
+         * clause being shown to bite is the conversion from the ocean-coverage slider to a share of
+         * crust, so the control is that conversion set wrong and nothing else.
+         */
+        const val CONTROL_SUBMERGED_SHARE = 0.7f
+
+        /** How much relief the plain under a synthetic belt carries, peak to peak, in metres. */
+        const val PLAIN_RELIEF_METRES = 100f
+
+        /**
+         * How far a measured stream-power exponent may sit from the one the law predicts.
+         *
+         * A quarter. The relation is exact only for a single channel at a single catchment area,
+         * and what is measured here is the mean relief of a band of ground carrying a whole
+         * drainage network whose catchments span three orders of magnitude, over sixty rounds
+         * rather than to convergence. A quarter admits that and still refuses everything the guard
+         * is for: an exponent near zero, which is relief that does not answer the rock at all, and
+         * an exponent near a half, which is a different `n`.
+         */
+        const val STREAM_POWER_EXPONENT_TOLERANCE = 0.25
+
+        /** Cells per bin, and how many bins, in the profile away from a collision suture. */
+        const val FLEXURE_BIN_CELLS = 8
+        const val FLEXURE_BINS = 10
+
+        /**
+         * The least the flexure must lift a stripped belt and sink its foreland, in metres.
+         *
+         * Both are floors rather than figures, and both are set well under what was measured so
+         * that a chaotic pipeline's run-to-run wander cannot carry them: the pair of worlds this
+         * compares differ in one setting, but a coastline that moves by one cell moves a realm, and
+         * the two runs are not otherwise pinned to each other.
+         */
+        const val MIN_REBOUND_METRES = 20.0
+        const val MIN_FORELAND_METRES = 20.0
+    }
+}

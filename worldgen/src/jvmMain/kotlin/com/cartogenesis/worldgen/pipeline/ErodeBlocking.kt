@@ -30,8 +30,9 @@ fun erodeBlocking(
 internal fun thermalSweepBlocking(
     config: WorldGenConfig,
     height: FloatField,
-    skipSettled: Boolean
-): ErosionResult = runBlocking { ErosionStage.thermalSweep(config, height, skipSettled) }
+    skipSettled: Boolean,
+    sweeps: Int = ErosionStage.sweepsFor(config)
+): ErosionResult = runBlocking { ErosionStage.thermalSweep(config, height, skipSettled, sweeps) }
 
 /** The whole stage, reporting each hydraulic round's mass budget to the deposition guard. */
 internal fun erodeBlockingReportingRounds(

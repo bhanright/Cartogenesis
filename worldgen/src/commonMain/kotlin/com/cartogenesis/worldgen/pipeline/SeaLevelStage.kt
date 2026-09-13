@@ -12,13 +12,25 @@ data class SeaLevelResult(
      * The height the shoreline sits at, in the height field's own 0..1 units — the same units
      * `ErosionResult.height` is in, not [relativeElevation]'s. A cell at or above it is land; a
      * cell below it is water.
+     *
+     * Since S2 that field is an absolute altitude, so this converts to metres through
+     * `WorldScale.altitudeAtField` and comes back near zero: how far it sits from zero is how far
+     * the world's water volume is from the one the crust's own levels imply, which `UnitsTest`
+     * measures.
      */
     val shorelineHeight: Float,
     /** One entry per cell, row-major, true where that cell is land. */
     val isLand: BooleanArray,
     /**
-     * Elevation relative to the shoreline: 0..1 above sea level for land, -1..0 for water.
-     * This is what climate, rivers and rendering all work from.
+     * Elevation relative to the shoreline, on the land's half of the world's ruler above it and
+     * the sea's half below: 1 is `WorldScale.highestLandMetres` up and -1 is `deepestOceanMetres`
+     * down. This is what climate, rivers and rendering all work from.
+     *
+     * A declaration rather than a normalisation since S2. Before it, each half was divided by the
+     * range that particular world happened to occupy, so +1 meant "as high as this world goes" and
+     * a constant read through `WorldScale.metresAboveShoreline` was only approximately the depth it
+     * said. Now no cell need reach either end — a world whose tallest mountain is four kilometres
+     * tops out at 0.67 — and every constant means the same metres on every seed.
      */
     val relativeElevation: FloatField,
     /** How many entries of [isLand] are true. */

@@ -38,17 +38,27 @@ rate below is written in those units and converted to whatever grid the world is
 
 1. **Terrain.** Seeded Perlin noise generates a random gradient field, integrated into a height map
    by Frankot-Chellappa least-squares integration (a 2D FFT).
-2. **Plates.** The world splits into drifting Voronoi plates; boundaries are classified by relative
-   motion and by which crusts meet, raising coastal ranges, collision plateaus, island arcs, rifts
-   or ridges accordingly. Three past epochs of the same history are stamped first and aged
-   (lowered, widened, rounded) before the present one, so a range can stand old and worn far from
-   any boundary, the way the Appalachians do.
+2. **Plates.** The world splits into drifting Voronoi plates, each made of continental or oceanic
+   crust; boundaries are classified by relative motion and by which crusts meet, raising coastal
+   ranges, collision plateaus, island arcs, rifts or ridges accordingly. Three past epochs of the
+   same history are stamped first and aged before the present one, so a range can stand old and
+   worn far from any boundary, the way the Appalachians do — and the ageing is the time since its
+   uplift stopped rather than a factor per epoch. Isostasy then turns the crust into an altitude:
+   a continental column floats at Earth's mean land elevation of 840 m and an oceanic one at
+   Earth's mean ocean depth of 3,682, so the world's hypsometry has two modes with a trough
+   between them and the height field is a real altitude rather than a normalisation. The
+   ocean-coverage setting chooses how much of the world is drawn as continental crust; the
+   sea-level cut is the check that it did.
 3. **Erosion.** Thermal erosion slides material off slopes steeper than a critical gradient of
    12 m per km while stream-power incision (`E = K A^0.5 S`, with K at Whipple and Tucker's 10^-6
    for bedrock) cuts channels in proportion to the water draining through them,
    interleaved round by round. Every cell is clamped to never end a round below the neighbour it
    drains to (the receiver clamp), which keeps a channel grading smoothly instead of filling with a
-   stitch of ponds.
+   stitch of ponds. The solid earth answers in the same rounds: the rock under an active belt goes
+   on rising at millimetres a year, so a range holds its height against the rivers cutting it and
+   settles where uplift and erosion balance, and the plate bends under what the water moves — a
+   stripped range rebounds, a foreland sinks under the sediment shed into it, and an ice sheet
+   holds its own bed down.
 4. **Deposition.** What erosion cuts, the same water carries: wherever a cell's sediment load
    exceeds what its slope can hold, the surplus settles as graded floodplains along the lower
    trunks, fan-shaped deltas where rivers reach the sea, and fans at range fronts and lake inflows,

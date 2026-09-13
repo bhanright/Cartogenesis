@@ -29,7 +29,7 @@ class OutletResolutionTest {
     /**
      * The Caspian's share of Earth's *land*: the bar for "too big to be a lake".
      *
-     * Against the land and not against the whole surface, which is the correction H1 made to
+     * Against the land and not against the whole surface, which is the correction made to
      * `OutletIncisionTest` and did not make here — the two are the same guard on two grids and they
      * have to count the same way. A share of the whole map silently depends on `seaLevel`: a world
      * set to 38% land rather than Earth's 29% gives its lakes a third more ground to sit on and no
@@ -54,7 +54,7 @@ class OutletResolutionTest {
                     WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
                 )
                 // Which lakes stand on ground below the sea-level cut, and so are none of the
-                // notch's business. H5 marks water the ocean cannot reach as land at the height it
+                // notch's business. Water the ocean cannot reach is marked land at the height it
                 // already stands at, up to the size of the largest lake Earth has, and the river
                 // stage fills the deeper of those hollows: a piece of the sea walled off from the
                 // rest of it comes out as a lake. The notch cannot be held to account for one. It
@@ -96,8 +96,8 @@ class OutletResolutionTest {
                 if (largest.toDouble() / world.sea.landCellCount >= caspianShare) {
                     overLarge.add("$seed at $size")
                 }
-                // H5b: the drowned basins are held to the same bar as the rest, where H5 could
-                // only print them. `SeaConfig.postCutOutlet` runs E1's breach once more after the
+                // The drowned basins are held to the same bar as the rest, rather than merely
+                // printed. `SeaConfig.postCutOutlet` runs the outlet breach once more after the
                 // cut, so a converted basin that overflows now cuts its own sill and a notch that
                 // reaches the waterline hands the basin back to the sea. Before that pass, seed 42
                 // read 79, 521 and 4499 cells at the three grids — 0.2820% of its land at 2048,
@@ -105,7 +105,7 @@ class OutletResolutionTest {
                 // basins the notch owned held their share.
                 if (drownedShare >= caspianShare) overLargeDrowned.add("$seed at $size")
                 // The world's standing water rather than its single largest lake, which is the
-                // correction H1 made to `OutletIncisionTest`'s own halving clause and for the same
+                // same correction `OutletIncisionTest`'s own halving clause carries, and for the same
                 // reason: which basin ends up largest changes with every terrain change, so its own
                 // hypsometry rather than the notch decides what it holds, and comparing it across
                 // three grids compares three different basins. Measured after this chunk, the
@@ -115,7 +115,7 @@ class OutletResolutionTest {
                 //
                 // And over the basins standing clear of the sea-level cut, not the drowned ones.
                 // A drowned basin is a piece of the sea that the ocean cannot reach, walled off by
-                // the percentile cut and marked land by H5; how much of one a grid resolves is a
+                // the percentile cut and marked land afterwards; how much of one a grid resolves is a
                 // question about the terrain's fine structure and not about the notch, and it is
                 // the term that misbehaves here — seed 42's largest drowned basin runs 79, 521 and
                 // 4499 cells at the three grids where the basins the notch owns hold their share.
@@ -157,16 +157,16 @@ class OutletResolutionTest {
             "these worlds keep a basin below the sea-level cut at or over the Caspian's share of " +
                 "their land: $overLargeDrowned"
         )
-        // Reported and no longer asserted, because after S1 there is no longer a ratio here for it
+        // Reported and no longer asserted, because there is no longer a ratio here for it
         // to protect. This clause existed to stop the spread bar below being met by two small
-        // numbers; S1 retired that bar and handed the cross-grid question to `ScaleFreeTest`, which
+        // numbers; that bar is retired and the cross-grid question belongs to `ScaleFreeTest`, which
         // asks it in kilometres over four seeds, and left this behind. Merging the 2.0.x line onto
-        // S1's units is what made it bite: F17's drowned-valley fill hands marginal drowned water
+        // the physical units is what made it bite: the drowned-valley fill hands marginal water
         // back to the land, and seed 59758's standing water at 512 came to 0.497% of its land
         // against the 0.5% floor — three thousandths of a percent under a threshold that is
         // guarding nothing. The floor is not lowered to fit; the clause is retired to where the
         // measurement went.
-        // The spread across grids used to be asserted here at 1.4x, and S1 retired it: measuring
+        // The spread across grids used to be asserted here at 1.4x, and is retired: measuring
         // whether the world is the same world at two grids is `ScaleFreeTest`'s job now, it does it
         // in kilometres and square kilometres over four seeds rather than in shares of the map over
         // two, and it reports the largest lake as a finding rather than a bar because the audit's

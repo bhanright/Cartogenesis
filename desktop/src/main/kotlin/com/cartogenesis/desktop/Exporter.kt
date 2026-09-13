@@ -70,7 +70,8 @@ object Exporter {
         } else {
             // Quality 100 is lossless for WebP and ignored by the PNG encoder, so one call does
             // for both of those.
-            Image.makeFromBitmap(bitmap).encodeToData(skiaFormat(format), quality = 100)?.bytes
+            Image.makeFromBitmap(bitmap)
+                .encodeToData(skiaFormat(format), quality = LOSSLESS_QUALITY)?.bytes
         } ?: error("Could not encode the map as ${format.label}")
         destination.writeBytes(encoded)
 
@@ -151,6 +152,7 @@ object Exporter {
             compressionMode = ImageWriteParam.MODE_EXPLICIT
             compressionQuality = quality / 100f
         }
+        // A megabyte to start with, which is about what a 2048 JPEG comes to; the stream grows.
         val bytes = java.io.ByteArrayOutputStream(1 shl 20)
         ImageIO.createImageOutputStream(bytes).use { stream ->
             writer.output = stream
@@ -183,6 +185,9 @@ object Exporter {
         return image
     }
 }
+
+/** Lossless for WebP and ignored by the PNG encoder, so one figure does for both. */
+private const val LOSSLESS_QUALITY = 100
 
 /** Skia's name for a format. Kept here so the shared enum needs no knowledge of Skia. */
 private fun skiaFormat(format: ExportFormat): EncodedImageFormat =

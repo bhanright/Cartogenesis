@@ -29,13 +29,12 @@ import java.io.File
  * page out of it, and the release that changes what a coastline looks like changes the coastline
  * the page shows.
  *
- * Since 2026-09-12 the page shows one picture, the hero; it showed seven for a day, and the
- * machinery here is written for a list because William may ask for more again. Generating [SEED]
- * at [SIZE] is a minute of arithmetic and a figure is a window onto that map, cropped at the
- * render's own pixels. Cropping rather than scaling is the point: every mark the renderer makes
- * is sized in *output pixels* (F9's lesson, and F10's river pen), so a 1:1 window shows the pen
- * the renderer actually draws with, while a downscaled whole map shows a thinner one that exists
- * nowhere.
+ * The page shows one picture, the hero, and the machinery here is written for a list because it
+ * has shown more and may again. Generating [SEED] at [RENDER_PIXELS] is a minute of arithmetic and
+ * a figure is a window onto that map, cropped at the render's own pixels. Cropping rather than
+ * scaling is the point: every mark the renderer makes is sized in *output pixels*, so a 1:1 window
+ * shows the pen the renderer actually draws with, while a downscaled whole map shows a thinner one
+ * that exists nowhere.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
@@ -54,12 +53,12 @@ object SiteImagery {
     const val REALMS = 12
 
     /**
-     * The world is generated at 2048 and the figures are cut out of it at 1:1.
+     * The world is generated at 2048 pixels square and the figures are cut out of it at 1:1.
      *
      * 2048 is the size the desktop build exports at by default and the resolution the page's claims
      * are about. It is also what makes a 1600-wide crop possible without inventing pixels.
      */
-    const val SIZE = 2048
+    const val RENDER_PIXELS = 2048
 
     /**
      * How hard the WebP encoder is asked to work, where nothing says otherwise.
@@ -70,7 +69,7 @@ object SiteImagery {
      * rather than whether to lose any. (A Pen and ink figure would resist it: hachures and a
      * stippled sea are high-frequency noise, and measured 317 KB at this quality, 255 at 40.)
      */
-    const val QUALITY = 72
+    const val WEBP_QUALITY = 72
 
     /**
      * A window onto the map, in the 2048 render's own pixels.
@@ -107,20 +106,34 @@ object SiteImagery {
         val view: MapView,
         val style: MapStyle,
         val window: Window,
-        val quality: Int = QUALITY,
+        val quality: Int = WEBP_QUALITY,
         val options: RenderOptions = RenderOptions(view = view, style = style)
     )
 
     /**
-     * Every figure the page shows, in the order it shows them: today, the hero alone.
+     * Every figure the page shows, in the order it shows them: the hero alone.
      *
-     * The page also carried four readings of the same band and three annotated details for one
-     * day (2026-09-12); William judged that captions describing a map only work when a person
-     * wrote them, and took the six plain cards back in their place.
+     * A list of one rather than a single value, because the page has carried several before and
+     * the assembly, the naming and the contract test are all written for however many there are.
      */
     val FIGURES: List<Figure> = listOf(
         Figure("atlas.webp", MapView.FANTASY, MapStyle.ATLAS, BAND)
     )
+
+    /** The contact sheet's fine grid, in the render's own pixels. */
+    private const val GRID_MINOR_PIXELS = 128
+
+    /** Every fourth line, so a coordinate can be counted off without counting to sixteen. */
+    private const val GRID_MAJOR_PIXELS = 512
+
+    /** A third of white: visible over land and over deep ocean, and over neither in the way. */
+    private val GRID_MINOR_INK = 0x55FFFFFF.toInt()
+
+    /** Two thirds of a red the map's own palettes never use, so the count line cannot be lost. */
+    private val GRID_MAJOR_INK = 0xAAFF3355.toInt()
+
+    /** Brass, for the windows the page actually shows. */
+    private val WINDOW_OUTLINE_INK = 0xFFC9A227.toInt()
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -166,13 +179,13 @@ object SiteImagery {
         )
     }
 
-    /** [SEED] at [SIZE], with the settings the page names. */
+    /** [SEED] at [RENDER_PIXELS], with the settings the page names. */
     fun generate(): WorldMap {
         val base = WorldGenConfig(seed = SEED, width = 512, height = 512, seaLevel = SEA_LEVEL)
         val config = base.copy(
             tectonics = base.tectonics.copy(plateCount = PLATES),
             nations = base.nations.copy(nationCount = REALMS)
-        ).atResolution(SIZE, SIZE)
+        ).atResolution(RENDER_PIXELS, RENDER_PIXELS)
         return WorldGenerationEngine.generateBlocking(config)
     }
 
@@ -250,35 +263,38 @@ object SiteImagery {
                 "contact-${view.name.lowercase()}-${style.name.lowercase()}" to
                     RenderOptions(view = view, style = style)
             }
-        val half = SIZE / 2
+        val sheetPixels = RENDER_PIXELS / 2
         for ((name, options) in sheets) {
             val bitmap = MapImage.toBitmap(world, options)
             val image = Image.makeFromBitmap(bitmap)
             val sheet = Bitmap().apply {
-                allocPixels(ImageInfo.makeS32(half, half, ColorAlphaType.PREMUL))
+                allocPixels(ImageInfo.makeS32(sheetPixels, sheetPixels, ColorAlphaType.PREMUL))
             }
             val canvas = Canvas(sheet)
             canvas.drawImageRect(
                 image,
-                Rect.makeWH(SIZE.toFloat(), SIZE.toFloat()),
-                Rect.makeWH(half.toFloat(), half.toFloat())
+                Rect.makeWH(RENDER_PIXELS.toFloat(), RENDER_PIXELS.toFloat()),
+                Rect.makeWH(sheetPixels.toFloat(), sheetPixels.toFloat())
             )
-            val thin = Paint().apply { color = 0x55FFFFFF.toInt(); strokeWidth = 1f }
-            val thick = Paint().apply { color = 0xAAFF3355.toInt(); strokeWidth = 1.5f }
+            val minorLine = Paint().apply { color = GRID_MINOR_INK; strokeWidth = 1f }
+            val majorLine = Paint().apply { color = GRID_MAJOR_INK; strokeWidth = 1.5f }
             var mapPixel = 0
-            while (mapPixel <= SIZE) {
-                val at = mapPixel / 2f
-                val paint = if (mapPixel % 512 == 0) thick else thin
-                canvas.drawLine(at, 0f, at, half.toFloat(), paint)
-                canvas.drawLine(0f, at, half.toFloat(), at, paint)
-                mapPixel += 128
+            while (mapPixel <= RENDER_PIXELS) {
+                val onSheet = mapPixel / 2f
+                val paint = if (mapPixel % GRID_MAJOR_PIXELS == 0) majorLine else minorLine
+                canvas.drawLine(onSheet, 0f, onSheet, sheetPixels.toFloat(), paint)
+                canvas.drawLine(0f, onSheet, sheetPixels.toFloat(), onSheet, paint)
+                mapPixel += GRID_MINOR_PIXELS
             }
             val outline = Paint().apply {
-                color = 0xFFC9A227.toInt(); strokeWidth = 3f; mode = PaintMode.STROKE
+                color = WINDOW_OUTLINE_INK; strokeWidth = 3f; mode = PaintMode.STROKE
             }
-            FIGURES.map { it.window }.distinct().forEach { w ->
+            FIGURES.map { it.window }.distinct().forEach { window ->
                 canvas.drawRect(
-                    Rect.makeXYWH(w.x / 2f, w.y / 2f, w.width / 2f, w.height / 2f), outline
+                    Rect.makeXYWH(
+                        window.x / 2f, window.y / 2f, window.width / 2f, window.height / 2f
+                    ),
+                    outline
                 )
             }
             val png = Image.makeFromBitmap(sheet).encodeToData(EncodedImageFormat.PNG)!!
@@ -286,7 +302,10 @@ object SiteImagery {
             sheet.close()
             image.close()
             bitmap.close()
-            println("  contact sheet $name.png (grid: light 128, heavy 512, map pixels)")
+            println(
+                "  contact sheet $name.png (grid: light $GRID_MINOR_PIXELS, " +
+                    "heavy $GRID_MAJOR_PIXELS, map pixels)"
+            )
         }
     }
 }

@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * The three dialogs F4 adds: Settings, About, and the answer to "check for updates".
+ * The three dialogs: Settings, About, and the answer to "check for updates".
  *
  * None of them draws a control of its own. Every switch, chip and button here comes from
  * [Controls], which is what keeps the dialogs looking like the rest of the application rather than
@@ -72,7 +72,7 @@ internal fun SettingsDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp, bottom = 3.dp)
                         )
-                        ChipRow(
+                        ChoiceChips(
                             options = chromes,
                             selected = settings.theme,
                             label = { it.label },
@@ -130,7 +130,7 @@ internal fun SettingsDialog(
                     "What the export buttons start as. " +
                         "Nothing above $ceiling can be finished by this build."
                 ) {
-                    ChipRow(
+                    ChoiceChips(
                         options = ExportFormat.entries,
                         selected = settings.exportFormat,
                         label = { it.label },
@@ -196,7 +196,7 @@ internal fun SettingsDialog(
                 }
 
                 SettingRow("Interface scale", "Applies at once, to everything but the map.") {
-                    ChipRow(
+                    ChoiceChips(
                         options = AppSettings.SCALES,
                         selected = settings.interfaceScale,
                         label = { "${(it * 100).toInt()}%" },
@@ -247,7 +247,7 @@ private fun SettingRow(title: String, note: String, content: @Composable () -> U
 
 /** One choice from a short list, as a row of chips that wraps if the dialog is narrow. */
 @Composable
-private fun <T> ChipRow(
+private fun <T> ChoiceChips(
     options: List<T>,
     selected: T,
     label: (T) -> String,
@@ -430,7 +430,7 @@ internal fun SaveAsDialog(initial: String, onDismiss: () -> Unit, onConfirm: (St
         text = {
             OutlinedTextField(
                 value = typed,
-                onValueChange = { typed = it.take(60) },
+                onValueChange = { typed = it.take(MAX_WORLD_NAME_LENGTH) },
                 label = { Text("Name") },
                 singleLine = true
             )

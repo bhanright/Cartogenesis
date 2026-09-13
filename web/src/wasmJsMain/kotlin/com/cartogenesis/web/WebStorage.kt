@@ -222,10 +222,10 @@ internal class IndexedDbLibrary(
     }
 
     /**
-     * A one-time move from the local-storage library D1 shipped with, base64 and all: read every
-     * entry, write it into IndexedDB under the same name, and remove the local-storage copy. Runs
-     * at most once per page load, from [list] — the first thing anything does with the library —
-     * and costs nothing on every load after the first, once local storage is empty of them.
+     * A one-time move from the local-storage library that came before this one, base64 and all:
+     * read every entry, write it into IndexedDB under the same name, and remove the local-storage
+     * copy. Runs at most once per page load, from [list] — the first thing anything does with the
+     * library — and costs nothing on every load after the first, once local storage is empty.
      */
     private var migrated = false
 
@@ -237,11 +237,10 @@ internal class IndexedDbLibrary(
     private suspend fun migrateFromLocalStorageOnce() {
         if (migrated) return
         migrated = true
-        val prefix = "cartogenesis/"
         val keys = (0 until storageLength()).mapNotNull { storageKeyAt(it) }
-            .filter { it.startsWith(prefix) }
+            .filter { it.startsWith(LEGACY_KEY_PREFIX) }
         for (key in keys) {
-            val name = key.removePrefix(prefix)
+            val name = key.removePrefix(LEGACY_KEY_PREFIX)
             val bytes = storageGet(key)?.let(::decodeLegacyStorageValue) ?: continue
             write(name, bytes)
             storageRemove(key)
@@ -251,6 +250,9 @@ internal class IndexedDbLibrary(
     companion object {
         private const val STORE_HEADERS = "headers"
         private const val STORE_PAYLOADS = "payloads"
+
+        /** What the local-storage library keyed its saves under, before IndexedDB. */
+        private const val LEGACY_KEY_PREFIX = "cartogenesis/"
     }
 }
 
@@ -261,13 +263,19 @@ internal class IndexedDbLibrary(
  */
 private fun headerPrefixOf(bytes: ByteArray): ByteArray {
     if (!WorldCodec.isContainer(bytes)) return bytes
-    val headerLength = (bytes[8].toInt() and 0xFF) or
-        ((bytes[9].toInt() and 0xFF) shl 8) or
-        ((bytes[10].toInt() and 0xFF) shl 16) or
-        ((bytes[11].toInt() and 0xFF) shl 24)
+    // The header length is a little-endian int at [HEADER_LENGTH_AT], behind the magic and the
+    // format version. Read by hand rather than through the codec because this runs on the listing
+    // path, where the point is not to have read the payload at all.
+    val headerLength = (bytes[HEADER_LENGTH_AT].toInt() and 0xFF) or
+        ((bytes[HEADER_LENGTH_AT + 1].toInt() and 0xFF) shl 8) or
+        ((bytes[HEADER_LENGTH_AT + 2].toInt() and 0xFF) shl 16) or
+        ((bytes[HEADER_LENGTH_AT + 3].toInt() and 0xFF) shl 24)
     val end = (WorldCodec.PREFIX_BYTES + headerLength).coerceAtMost(bytes.size)
     return bytes.copyOfRange(0, end)
 }
+
+/** Where the header length sits in a container: after four bytes of magic and a four-byte version. */
+private const val HEADER_LENGTH_AT = 8
 
 /** What a `LocalStorageLibrary` entry from before this build used to look like. */
 @OptIn(ExperimentalEncodingApi::class)

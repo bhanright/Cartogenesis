@@ -2,8 +2,6 @@ package com.cartogenesis.ui
 
 import kotlin.random.Random
 
-private external interface JsDate
-
 @JsFun("() => Date.now()")
 private external fun jsNow(): Double
 

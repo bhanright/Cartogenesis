@@ -47,23 +47,28 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
     private val uniforms = HashMap<String, Int>()
 
     override suspend fun rasterize(recipe: RasterRecipe): IntArray? = GlContext.run("The export raster") {
-        val w = recipe.width
-        val h = recipe.height
-        val cells = w * h
+        val widthPixels = recipe.width
+        val heightPixels = recipe.height
+        val cells = widthPixels * heightPixels
         if (program == 0) return@run null
 
         // Bands of a few million pixels: one dispatch for anything up to 2048, sixteen at 8192.
-        val rowsPerTile = (TILE_PIXELS / w).coerceIn(1, h)
+        val rowsPerTile = (TILE_PIXELS / widthPixels).coerceIn(1, heightPixels)
         val buffers = ArrayList<Int>()
 
         try {
             GL43C.glUseProgram(program)
 
-            val dummy = buffer(buffers)
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, dummy)
-            GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, 16L, GL43C.GL_STATIC_DRAW)
+            // Every binding the shader declares must have something bound to it, whether or not
+            // this recipe fills it: an unbound storage buffer is undefined behaviour, and the
+            // optional fields below bind only the ones they have. So they all start here.
+            val placeholder = newBuffer(buffers)
+            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, placeholder)
+            GL43C.glBufferData(
+                GL43C.GL_SHADER_STORAGE_BUFFER, PLACEHOLDER_BYTES, GL43C.GL_STATIC_DRAW
+            )
             for (binding in 0..BINDING_OUTPUT) {
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, dummy)
+                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, placeholder)
             }
 
             bindFloats(buffers, BINDING_ELEVATION, recipe.elevation)
@@ -95,11 +100,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             bindRamps(buffers, recipe)
 
-            val output = buffer(buffers)
+            val output = newBuffer(buffers)
             GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, output)
             GL43C.glBufferData(
                 GL43C.GL_SHADER_STORAGE_BUFFER,
-                (rowsPerTile.toLong() * w * 4), GL43C.GL_DYNAMIC_COPY
+                rowsPerTile.toLong() * widthPixels * BYTES_PER_PIXEL,
+                GL43C.GL_DYNAMIC_COPY
             )
             GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, BINDING_OUTPUT, output)
 
@@ -109,8 +115,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             val uploadError = GL43C.glGetError()
             if (uploadError != GL43C.GL_NO_ERROR) {
                 System.err.println(
-                    "The export raster could not fit ${w}x$h on the device (GL error $uploadError); " +
-                        "drawing it on the processor instead"
+                    "The export raster could not fit ${widthPixels}x$heightPixels on the device " +
+                        "(GL error $uploadError); drawing it on the processor instead"
                 )
                 return@run null
             }
@@ -118,18 +124,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             setUniforms(recipe)
 
             val pixels = IntArray(cells)
-            val tile = IntArray(rowsPerTile * w)
+            val tile = IntArray(rowsPerTile * widthPixels)
             var rowStart = 0
-            while (rowStart < h) {
-                val rows = minOf(rowsPerTile, h - rowStart)
+            while (rowStart < heightPixels) {
+                val rows = minOf(rowsPerTile, heightPixels - rowStart)
                 GL43C.glUniform1i(uniform("uRowStart"), rowStart)
                 GL43C.glUniform1i(uniform("uRows"), rows)
-                GL43C.glDispatchCompute((w + GROUP - 1) / GROUP, (rows + GROUP - 1) / GROUP, 1)
+                GL43C.glDispatchCompute(
+                    (widthPixels + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE,
+                    (rows + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE,
+                    1
+                )
                 GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
 
                 GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, output)
                 GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, tile)
-                tile.copyInto(pixels, rowStart * w, 0, rows * w)
+                tile.copyInto(pixels, rowStart * widthPixels, 0, rows * widthPixels)
                 rowStart += rows
             }
             pixels
@@ -138,26 +148,27 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         }
     }
 
-    private fun buffer(buffers: MutableList<Int>): Int {
-        val id = GL43C.glGenBuffers()
-        buffers.add(id)
-        return id
+    /** A fresh buffer, remembered in [buffers] so the `finally` can hand every one of them back. */
+    private fun newBuffer(buffers: MutableList<Int>): Int {
+        val buffer = GL43C.glGenBuffers()
+        buffers.add(buffer)
+        return buffer
     }
 
     private fun bindFloats(buffers: MutableList<Int>, binding: Int, data: FloatArray): Int {
-        val id = buffer(buffers)
-        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+        val buffer = newBuffer(buffers)
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
         GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, GL43C.GL_STATIC_DRAW)
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
-        return id
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+        return buffer
     }
 
     private fun bindInts(buffers: MutableList<Int>, binding: Int, data: IntArray): Int {
-        val id = buffer(buffers)
-        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+        val buffer = newBuffer(buffers)
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
         GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, GL43C.GL_STATIC_DRAW)
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
-        return id
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+        return buffer
     }
 
     /**
@@ -165,19 +176,19 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
      * of an odd-sized grid do not send the shader reading past the end of the buffer.
      */
     private fun bindBytes(buffers: MutableList<Int>, binding: Int, data: ByteArray) {
-        val id = buffer(buffers)
-        val padded = ((data.size + 3) / 4) * 4
-        val staging = MemoryUtil.memAlloc(padded)
+        val buffer = newBuffer(buffers)
+        val paddedBytes = ((data.size + BYTES_PER_WORD - 1) / BYTES_PER_WORD) * BYTES_PER_WORD
+        val staging = MemoryUtil.memAlloc(paddedBytes)
         try {
             staging.put(data)
             while (staging.hasRemaining()) staging.put(0.toByte())
             staging.flip()
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
             GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, staging, GL43C.GL_STATIC_DRAW)
         } finally {
             MemoryUtil.memFree(staging)
         }
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
     }
 
     /** Every ramp end to end in one buffer, with an offset and a length per ramp as uniforms. */
@@ -297,8 +308,27 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
     companion object {
 
-        /** 16x16 is 256 invocations, which every device with compute shaders must allow. */
-        private const val GROUP = 16
+        /**
+         * The side of a work group, in invocations. 16x16 is 256, which every device with compute
+         * shaders must allow. Written into `layout(local_size_x...)` in [SOURCE] as well, because
+         * a shader's declaration cannot read a Kotlin constant.
+         */
+        private const val WORK_GROUP_SIDE = 16
+
+        /** One ARGB word a pixel, which is what comes back from the output buffer. */
+        private const val BYTES_PER_PIXEL = 4L
+
+        /** A `uint` on the device, which is how a byte-a-cell field is read four at a time. */
+        private const val BYTES_PER_WORD = 4
+
+        /**
+         * The size of the buffer bound to every binding this recipe does not fill: one word of
+         * padding either way, and never read, since the shader tests before it reads.
+         */
+        private const val PLACEHOLDER_BYTES = 16L
+
+        /** How long a driver may take over one large compute shader before it is given up on. */
+        private const val COMPILE_TIMEOUT_SECONDS = 30L
 
         /**
          * Pixels a tile: four million, which is 16MB coming back over the bus. Small enough that
@@ -344,7 +374,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 ?: return Result(null, context.unavailableBecause ?: "unknown failure")
 
             val raster = GpuRaster(device)
-            raster.program = GlContext.run("Compiling the export raster", seconds = 30) {
+            raster.program = GlContext.run(
+                "Compiling the export raster",
+                timeoutSeconds = COMPILE_TIMEOUT_SECONDS
+            ) {
                 GlContext.compileCompute(SOURCE)
             } ?: return Result(null, "the raster shader would not compile")
             return Result(raster, null)

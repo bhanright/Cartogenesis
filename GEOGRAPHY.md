@@ -176,6 +176,55 @@ so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shall
 the remap off, 0–2.5% of far sea shallow, and zero land cells changed on any seed. Island arcs
 inherit the same platform, which is what makes an archipelago read as one drowned ridge.
 
+**A valley narrower than the cell is not a bay.** The lowstand above cuts a channel down to the low
+stand at every shore, and the transgression floods every one of them, so the cut used to come back
+with a notch at every stream mouth. On the grid a channel is a whole cell wide whatever it carries.
+Measured with a ruler — the coastline's length at one cell against two, which is Richardson's own
+method and, unlike a box count, has no ceiling to run into — the coast of 2.0.2 gives a dimension of
+1.582 over its finest octave against 1.260 from four cells to sixteen, and a real coast gives much
+the same figure at every scale. A disc drawn on the same grid reads 1.006 against 1.000, so the
+excess is the coast and not the ruler. Earth's coasts at six to twelve kilometres are indented by the
+Chesapeake, the Severn and the Gironde and by nothing smaller; the Rias Baixas are two to seven
+kilometres across and a 1024 map cannot hold one. So `SeaConfig.drownedValleyFill` keeps a drowned
+cell as water only where the valley behind it crosses at least half the cell, by Leopold and
+Maddock's square root of the catchment — the constant is 0.08 km per root square kilometre, measured
+off the Chesapeake, the Delaware, the Severn, the Thames and the Gironde — and where it does not, the
+cell takes the height it would have if the channel occupied the share of it that it really does.
+Because the width goes as the root of the area and the bar goes as the cell, the catchment a valley
+needs comes out as a fixed number of cells — about 39 — at every grid. New ground may never stand above the
+ground beside it, nor fail to fall towards the sea, so a valley whose walls are no higher than the
+water at its mouth is left as water. Measured on the five seeds at 512, the excess of the finest
+octave over the coarsest falls from 0.322 to 0.270 with the littoral grading alone and to 0.198 with
+both passes. What is left is not channels — filling *every* drowned notch reaches the same 0.199,
+because the two rules above and not the width bar are what stop the fill — it is the percentile cut
+running through the erosion's own texture at the cell, and it survives with the lowstand switched off
+entirely (0.288 there).
+
+**Not every coast is a ria.** The lowstand above drops the base level everywhere for nine of the
+twelve rounds, so running water works every cell within about 120 m of the shoreline and the
+transgression floods all of it. Measured at 512 pooled over the four standard seeds and 298405, that
+took the shoreline from 43,967 cells to 60,755 and the box dimension over the finest octave from
+1.22 to 1.26, on every coast alike — while the shelf remap moved the coastline not at all, the
+enclosure rule by 7% and the plate detail noise by under 1%. Earth had the same fringe six thousand
+years ago and has spent the time since filling it in where the coast is low: Texas, Holland and
+Bengal are graded arcs of beach and marsh, while Galicia, Maine and western Norway kept the outline
+the drowning gave them, and Luijendijk et al. (2018) find 31% of the ice-free shoreline sandy.
+`SeaConfig.littoralGrading` runs that six thousand years, after the cut and before the shelf. It
+ranks the shoreline by the height of the land within 187 km of it, takes Earth's third — a share
+rather than a height, because no height derivable from Earth lands on it — scales how far the fill
+reaches by the fetch in front (`H ∝ U√F`, so the square root of the open water within 500 km), and
+fills the re-entrants of that third with sweeps of a three-by-three majority. It only fills: waves
+take a cliff back 0.6 to 6 km in six thousand years, under a tenth of a cell at 2048, while the
+Mississippi's plain advanced a hundred kilometres in the same time. It never dams a channel, so the
+rias H5 cut stay open. Measured on the same five seeds at 512, with the drowned-valley
+rule above running too: the share of coast reading smooth by Australia's 1.13 rises from 0.086 to
+0.188 over 750 km stretches and from 0.141 to 0.224 over 375 km ones, against Earth's third; the
+shoreline falls 8 to 10%, the land gains 0.2 to 0.4% of the map, and no body of land or water is
+gained or lost on any seed. The world's coastline over four to sixteen cells reads 1.255 by the
+coarsened ruler against 1.260 before, which is Mandelbrot's Britain; by M1's box count the same coast
+reads 1.167 against 1.207, because a box is mixed by a
+single cell of the other kind and so that instrument counts the teeth as well as the coast.
+
 **Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
 network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
 floodplains along lower trunks, alluvial fans at range fronts, fans at lake inflows, and deltas
@@ -429,15 +478,23 @@ E8 and reverted: it cannot reach the scene it was built for (see the rift deviat
 broke three guards with no Earth figure behind them to buy 1517 cells of 4.19 million on the
 author's world at 2048. The figures are in that test and in E8's ledger row.
 
-**The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
-everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the
-shoreline is cut, and what the rise then floods is a fringe of small bays all round a continent as
-well as the rias at the river mouths. The renders at 2048 show both: seed 718106's middle island
-goes from a smooth outline to a crenulated one along its whole perimeter, and the shoreline
-development index rises 1.7 times where the estuary count rises tenfold. Earth's own drowned coasts
-are more selective than that — the Atlantic seaboard is indented where the rivers are and straight
-where they are not — and the likely repair is to scale the stand by the local drainage rather than
-applying it flat.
+**A graded coast is smoothed rather than built.** The littoral pass above fills a re-entrant; it
+does not throw a barrier across the mouth of one and leave a lagoon behind it, which is what Earth's
+depositional coasts actually look like — Padre Island and the Laguna Madre, the Frisian chain and
+the Wadden Sea, the Curonian Spit. Two consequences are measured. The share of coast reading smooth
+by Australia's 1.13 reaches 0.123 over 750 km stretches and 0.200 over 375 km ones, against Earth's
+third: a graded shore that is a plain arc has less of a stretch to itself than one with a lagoon
+system on it. And the world's pooled box dimension falls from 1.207 to 1.176, because a filled bay
+is one shoreline where a barred one is two. The barrier islands, the spits and the tidal inlets are
+the audit's K1, and this is the deviation that chunk closes.
+
+**A flat coast on hard rock is graded like a coastal plain.** What separates Earth's graded coasts
+from its ragged ones is not the height of the land behind them alone: Finland, the Canadian Shield
+and western Scotland are all flat, all ragged, and all rock. This generator has no lithology (the
+plan's H3), so the littoral criterion ranks coasts by the height of the land within 187 km and takes
+Earth's third of them. Measured against a fixed height instead, the postglacial rise calls 59% of
+the shoreline depositional and a coastal plain's own gradient calls 1.9% of it depositional; Earth's
+31% sits between and no height derivable from Earth lands on it.
 
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut

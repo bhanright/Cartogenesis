@@ -88,20 +88,30 @@ class PenAndInkTest {
          * entries and pen and ink deliberately absent, because that chunk changed exactly one
          * style; F13 changed every one of them — the climate reaches the land ramp, the sky
          * replaces the lamp and the sea carries depth contours — so all eleven were recorded again
-         * against that chunk's renders.
+         * against that chunk's renders. F17 changed every one of them again, from the other end: it
+         * fills the drowned valleys the grid cannot hold and grades Earth's third of the shoreline
+         * after the sea-level cut, so the land mask under all eleven is a different mask. Recorded
+         * twice for that chunk, once for each of its two passes; how far the coastline actually
+         * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
+         *
+         * F14 and F17 were merged after both were written and all eleven were checked again: not
+         * one moved. That is worth a line, because it is the answer to the question the two chunks
+         * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
+         * this size and this zoom it draws the same pixels the raster did. Its generalisation is an
+         * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1359403302,
-            MapStyle.VELLUM to 1582483938,
-            MapStyle.INK_WASH to 1749555980,
-            MapStyle.NAUTICAL to -5657209,
-            MapStyle.MIDNIGHT to 1248066434,
-            MapStyle.SCHOOLROOM to 1099874040,
-            MapStyle.VERDANT to -1750189930,
-            MapStyle.SCROLL to 1269027523,
-            MapStyle.PEN_AND_INK to 2027689450,
-            MapStyle.MARS to -1857840696,
-            MapStyle.CLEAR to 1540381349
+            MapStyle.ATLAS to -173307292,
+            MapStyle.VELLUM to -23465626,
+            MapStyle.INK_WASH to 323555479,
+            MapStyle.NAUTICAL to -965577701,
+            MapStyle.MIDNIGHT to 580634097,
+            MapStyle.SCHOOLROOM to 328982709,
+            MapStyle.VERDANT to -2116422614,
+            MapStyle.SCROLL to -1448446961,
+            MapStyle.PEN_AND_INK to 1950662391,
+            MapStyle.MARS to -1005799490,
+            MapStyle.CLEAR to -361190112
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

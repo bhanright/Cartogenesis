@@ -104,13 +104,20 @@ class GlaciationTest {
         // So the control is stated against the quantity it is actually about: how much of the cold
         // country's water the ice put there. Measured, the ice multiplies it by four and a half
         // (0.69 -> 3.11 lakes per 10k cold cells) and the two zones' ratio goes 6.87 -> 9.26.
+        //
+        // Cross-multiplied on the counts rather than compared as two densities, because the two are
+        // not always far apart and floating point should not be what decides. On seed 42 the ice
+        // takes one lake to three, which is exactly the factor this asks for, and whether
+        // `3f * (1 / n)` came out at or a hair under `3 / n` then depended on the land count under
+        // both — F17 moved that count by a few hundred cells and turned the same three lakes from a
+        // pass into a failure. Longs cannot do that.
         assertTrue(
             "without glaciation the cold country already holds" +
                 " ${"%.2f".format(without.coldDensity)} lakes per 10k cells against the iced" +
                 " world's ${"%.2f".format(with.coldDensity)} — if the ice is not what put them" +
                 " there the ratio below is measuring something else (control zone ratio" +
                 " ${"%.2f".format(without.ratio)}, iced ${"%.2f".format(with.ratio)})",
-            with.coldDensity >= 3f * without.coldDensity
+            with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
         )
         assertTrue(
             "glaciated country holds only ${"%.2f".format(with.ratio)}x the lake density of" +

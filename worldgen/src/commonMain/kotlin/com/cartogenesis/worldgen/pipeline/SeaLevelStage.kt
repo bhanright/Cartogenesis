@@ -90,6 +90,16 @@ object SeaLevelStage {
     }
 
     /**
+     * The whole cut: the percentile, the two rules that decide which water is sea, the two that
+     * decide what shape the shoreline is, and the continental shelf under all of it.
+     *
+     * In that order, and the order is the argument. The percentile decides where the coastline is;
+     * [enclose] and [drainDrownedBasins] decide which of the water below it the ocean can actually
+     * reach; [DrownedValleys] and [LittoralGrading] move the shoreline itself, so they have to run
+     * before anything is measured from it, and the valleys go first because the grading should be
+     * asked about a coast the grid can hold rather than about the channels through it; and the shelf
+     * remap is measured from the finished shoreline and touches only water, so it runs last.
+     *
      * The continental shelf, remapped onto the ocean floor *after* the percentile cut above has
      * already decided the coastline.
      *
@@ -112,7 +122,18 @@ object SeaLevelStage {
      *    clear of the coast (see `ContinentalShelfTest`'s `shelfWidth = 0` control); this only
      *    needed to fix the margin, not the abyss.
      */
-    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult {
+    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult =
+        applyWithValleyBar(height, config, DrownedValleys.RESOLVED_SHARE_OF_A_CELL)
+
+    /**
+     * The same cut with [DrownedValleys]' bar moved, which only the diagnosis that asks what the
+     * coast would measure with every drowned notch filled ever does. See that constant.
+     */
+    internal fun applyWithValleyBar(
+        height: FloatField,
+        config: WorldGenConfig,
+        resolvedShareOfCell: Float
+    ): SeaLevelResult {
         val sea = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this
         // is cutting, not to the map that is drawn.
@@ -120,12 +141,33 @@ object SeaLevelStage {
         val enclosed = if (sea.enclosedSeaIsLand) enclose(cut, height, sea) else cut
         // H5b: and the basins the line above just turned into land get their outlets cut, once,
         // now that there is a shoreline for them to be measured against. See [drainDrownedBasins].
-        val base =
+        val drained =
             if (sea.enclosedSeaIsLand && sea.postCutOutlet) {
                 drainDrownedBasins(enclosed, height, config)
             } else {
                 enclosed
             }
+        // And then the six thousand years since the sea stopped rising, in which the waves grade
+        // the coasts that are low enough to be graded and leave the rest alone. See
+        // [LittoralGrading]; it runs here because everything downstream reads the mask, and before
+        // the shelf below because the shelf is measured from the coastline this leaves.
+        // Then the two passes that decide what the coastline the map draws actually is. First the
+        // drowned valleys the grid cannot hold: the lowstand cut a channel to every shore and the
+        // transgression flooded all of them, and a channel a kilometre wide has no business filling
+        // a cell twelve kilometres wide. Then the six thousand years since, in which the waves grade
+        // the coasts that are low enough to be graded and leave the rest alone.
+        //
+        // The enclosure rule is not run again over what either of them leaves: both only ever turn
+        // water into land, and neither will touch a cell whose filling would cut the water around it
+        // in two, so no body of water can be enclosed by them. See [WaterTopology], and
+        // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
+        val resolved = DrownedValleys.apply(drained, height, sea, resolvedShareOfCell)
+        val base = LittoralGrading.apply(
+            resolved,
+            sea,
+            landRelief = height.max() - resolved.threshold,
+            seaRelief = resolved.threshold - height.min()
+        )
         if (sea.shelfWidth <= 0f) return base
 
         val w = base.relativeElevation.width

@@ -104,9 +104,13 @@ val auditOnlyClasses = listOf(
     // answered in the author's own trough at 2048 — `RiftDepthTest` measures the same question at
     // 512 and records that nothing there can. Two 2048 worlds for one comparison is an audit's job.
     "com.cartogenesis.worldgen.RiftDepthAuditTest",
-    // F18: the network statistics and the moved-cell tally need every world generated twice, once
-    // under each routing rule — ten worlds, a pair of them at 1024. The census that guards the
-    // chunk is in `StraightRunTest` and runs per merge.
+    // F17's diagnosis: five seeds cut seven ways to find which rule roughens every coast, which
+    // means fifteen runs of erosion for a printed table. Its guards run at 512 in
+    // `LittoralCoastTest` and stay in the per-merge tier.
+    "com.cartogenesis.worldgen.CoastVarietyAuditTest",
+    // F18: the network statistics, the moved-cell tally and the routing's own cost need every world
+    // generated twice, once under each routing rule — ten worlds, a pair of them at 1024, and one
+    // more at 2048 to be timed. The census that guards the chunk is in `StraightRunTest`.
     "com.cartogenesis.worldgen.StraightRunAuditTest"
 )
 

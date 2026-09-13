@@ -321,8 +321,14 @@ nowhere else. Measured on the apron the trench crossed, before erosion touched i
 running one bearing with the drop to the winning diagonal 1.9489e-02 and to the runner-up
 1.5050e-02, the same two figures to four digits at every cell, which is a plane facing 83% of the
 way toward the diagonal and not a tie. Census of standing water within 1.2 cells of one line and
-twenty cells long: 1/0/0/0/0 on 298405 at 1024 and 7/42/1234/99 at 512 before, 0/0/0/0/0 after. See
-`StraightRunTest`, and `REALISM_PLAN.md`, F18, for the figures.
+twenty cells long: 1/0/0/0/0 on 298405 at 1024 and 7/42/1234/99 at 512 before, 0/0/0/0/0 after. A
+ruled bar needs a lip to pond behind as well as a ruled course, so it is rare and the census is a
+poor way to compare two routing rules; the ruled *course* is on every map, and runs of seven steps
+on one bearing — 40 to 160 km of watercourse without a bend at these grids — fall from 77/27/39/21/31
+to 64/21/32/16/20 over the same five worlds. Hack's exponent moves at most 0.017 against a spread of
+0.027 across seeds and stays inside Earth's band; a third of the drawn river cells move, three
+quarters of them by a cell or two. See `StraightRunTest` and `StraightRunAuditTest`, and
+`REALISM_PLAN.md`, F18.
 
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as

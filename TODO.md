@@ -51,6 +51,25 @@
   draws the one receiver across it at the bearing's own share (Rho8), so the course follows the same
   slope without being ruled. Census of straight bars 1/0/0/0/0 before, 0/0/0/0/0 after. See
   `StraightRunTest` and `GEOGRAPHY.md`.
+- **A sill that runs level to the shore reads as having no gradient, so it never cuts.** The outlet
+  notch measures its channel's fall by walking `directions` from the spill and taking
+  `level - relative[c]` at the last *land* cell, which stops one cell short of the water the
+  outflow empties into. Where the sill runs level all the way to that water — the case
+  `SeaConfig.postCutOutlet` exists for — the whole of its fall is in the step off the end, and what
+  is measured instead is the 1e-6 the depression fill nudges a flat by: a gradient of nothing, a
+  stream power of nothing, and a sill that stands for the life of the world however big the
+  catchment behind it. Seed 99 at 512 keeps a 668-cell drowned basin that way, 2.64x the Caspian's
+  share of its land, its outflow's measured fall 1.0e-6 against the 2.5e-2 it actually descends and
+  unmoved over all eight passes; seed 42 has a round in which the notch cuts nothing anywhere for
+  the same reason, which is `OutletIncisionTest`'s other failure. Counting the step into the water —
+  only where the walk found no fall beyond the fill's own epsilon, so it touches nothing that was
+  cutting — takes seed 99's basin to 0.12% of its land and clears both assertions. Not landed at
+  F18: unsticking those sills drains basins that had been stuck, which took seed 718106 at 512 from
+  44 lakes to 30 and tipped `GlaciationTest`'s resolution-scaling case instead. And 718106's own
+  drowned basin needs something else again — its outlet cuts properly, at slope 2.28 with real
+  power, and simply runs out of H5b's eight passes, 1849 cells down to 632 and still falling by a
+  hundred a pass. Both belong to a chunk that can re-derive `POST_CUT_PASSES` from H5b's own
+  criterion and restate the glaciation figures. Found by F18, 2026-09-13.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm

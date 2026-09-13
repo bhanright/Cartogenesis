@@ -66,7 +66,14 @@ data class RenderOptions(
     /** Draws realm borders over whichever view is active, not just the political one. */
     val showBorders: Boolean = false,
     val showLandmarks: Boolean = false,
-    val showLakes: Boolean = true
+    val showLakes: Boolean = true,
+    /**
+     * Lines of latitude and longitude every [Graticule.DEGREES], with the edges figured.
+     *
+     * Off by default: a graticule is what turns a picture of a world into a chart of one, and most
+     * readers want the picture first. See [Graticule].
+     */
+    val showGraticule: Boolean = false
 ) {
     /** The political view is realm colour — borders are implied by it and always drawn. */
     val bordersVisible: Boolean get() = showBorders || view == MapView.POLITICAL
@@ -116,19 +123,45 @@ class LandmarkGlyph(
  *
  * Keeping this as geometry means Android and desktop make the same decisions about which segments
  * to skip, how wide a river runs and which glyph a landmark gets — and differ only in which
- * drawing API executes it.
+ * drawing API executes it. Since F14 it is also where generalisation happens: what is in here is
+ * what survives at the scale the map is being seen at, so the front end draws all of it and decides
+ * none of it.
  */
 class MapOverlay(
     val rivers: List<RiverSegment>,
+    /** How many separate rivers those segments belong to, after [MapSheet.featuresKept]. */
+    val riversDrawn: Int,
+    /**
+     * The coast as polylines in cell coordinates, generalised for the sheet. Each is `x, y, x, y, …`
+     * and a closed ring repeats its first point; see [Shoreline].
+     */
+    val coastline: List<FloatArray>,
     val landmarks: List<LandmarkGlyph>,
     /** Ocean or wind arrows, on the views that show them. */
     val flow: List<FlowArrow>,
     /** Spacing of the arrow lattice in cells, so a platform can size arrows to fit between them. */
     val flowScale: Float,
+    /** The graticule, when the reader asked for one. */
+    val graticule: Graticule?,
+    /** The scale bar, on a sheet that carries its own. See [MapSheet.carriesScaleBar]. */
+    val scaleBar: PlacedScaleBar?,
     val riverColor: Int,
+    /** The coast's ink, its alpha already carrying [MapStyle.coastlineStrength]. */
+    val coastColor: Int,
+    val coastWidth: Float,
+    val graticuleColor: Int,
+    val graticuleWidth: Float,
+    /** The style's own ink and paper, for the marks that are writing rather than geography. */
+    val marginInk: Int,
+    val marginPaper: Int,
     val glyphOutline: Int,
     val glyphOutlineWidth: Float
-)
+) {
+    /** True when there is nothing to draw, so a front end can leave the raster alone. */
+    val isEmpty: Boolean
+        get() = rivers.isEmpty() && coastline.isEmpty() && landmarks.isEmpty() &&
+            flow.isEmpty() && graticule == null && scaleBar == null
+}
 
 /**
  * Renders a world to a pixel buffer.
@@ -291,63 +324,79 @@ object MapRasterizer {
         }
     }
 
-    /** The rivers and landmarks to lay over the raster, as geometry. */
-    fun overlay(world: WorldMap, options: RenderOptions = RenderOptions()): MapOverlay {
+    /**
+     * The coast, the rivers, the graticule and the landmarks to lay over the raster, as geometry.
+     *
+     * [sheet] is what the drawing is for, and is the whole of the generalisation: at one pixel to
+     * the cell — an export, or any offline render — every river is drawn and the coast keeps every
+     * bend it has; shown smaller than that, the smallest rivers go and the coast is simplified to
+     * the tolerance the sheet can actually show. See [MapSheet].
+     */
+    fun overlay(
+        world: WorldMap,
+        options: RenderOptions = RenderOptions(),
+        sheet: MapSheet = MapSheet.SHEET
+    ): MapOverlay {
         val w = world.width
         val rivers = ArrayList<RiverSegment>()
         val skipInLakes = options.showLakes && options.view.showsTerrain
         val water = world.rivers.lakes
 
-        if (options.showRivers && !options.view.showsFlow) {
-            world.rivers.rivers.forEach { river ->
-                val course = trimmedAtTheShore(world, river, w)
-                for (k in 0 until course.vertexCount - 1) {
-                    val from = river.cells[k]
-                    val to = river.cells[k + 1]
-                    val x0 = from % w
-                    val x1 = to % w
-                    val y0 = (from / w) + 0.5f
-                    val y1 = (to / w) + 0.5f
-                    val width = RiverPen.widthPixels(river.widthRatio[k], w)
-                    // The last drawn segment stops short of the water, so the round cap's outer
-                    // edge lands on the shoreline; [trimmedAtTheShore] says why.
-                    val reach = if (k == course.vertexCount - 2) course.lastFraction else 1f
+        val drawnRivers =
+            if (options.showRivers && !options.view.showsFlow) {
+                riversAtThisScale(world.rivers.rivers, sheet)
+            } else {
+                emptyList()
+            }
 
-                    // Inside open water the river *is* the lake. Drawing it would put a channel
-                    // across the surface — and these are exactly the segments that run uphill on
-                    // raw terrain, because the basin was raised to let the water out. A strip of
-                    // lake one cell wide is not open water and is drawn; see `LakeResult.openWater`.
-                    if (skipInLakes && water.isOpenWater(from) && water.isOpenWater(to)) continue
+        drawnRivers.forEach { river ->
+            val course = trimmedAtTheShore(world, river, w)
+            for (k in 0 until course.vertexCount - 1) {
+                val from = river.cells[k]
+                val to = river.cells[k + 1]
+                val x0 = from % w
+                val x1 = to % w
+                val y0 = (from / w) + 0.5f
+                val y1 = (to / w) + 0.5f
+                val width = RiverPen.widthPixels(river.widthRatio[k], w)
+                // The last drawn segment stops short of the water, so the round cap's outer
+                // edge lands on the shoreline; [trimmedAtTheShore] says why.
+                val reach = if (k == course.vertexCount - 2) course.lastFraction else 1f
 
-                    if (abs(x1 - x0) > w / 2) {
-                        // The river crosses the east-west seam. Drawing it as-is would streak a
-                        // line back across the whole map, but dropping it leaves the river visibly
-                        // stopping dead at the edge. Draw it twice instead, shifted a map-width
-                        // each way, so it runs off one side and arrives on the other.
-                        val shifted = if (x1 > x0) x1 - w else x1 + w
-                        rivers.add(
-                            RiverSegment(
-                                x0 + 0.5f, y0,
-                                x0 + 0.5f + reach * (shifted - x0), y0 + reach * (y1 - y0), width
-                            )
-                        )
-                        val back = if (x1 > x0) x0 + w else x0 - w
-                        rivers.add(
-                            RiverSegment(
-                                back + 0.5f, y0,
-                                back + 0.5f + reach * (x1 - back), y0 + reach * (y1 - y0), width
-                            )
-                        )
-                        continue
-                    }
+                // Inside open water the river *is* the lake. Drawing it would put a channel
+                // across the surface — and these are exactly the segments that run uphill on
+                // raw terrain, because the basin was raised to let the water out. A strip of
+                // lake one cell wide is not open water and is drawn; see `LakeResult.openWater`.
+                if (skipInLakes && water.isOpenWater(from) && water.isOpenWater(to)) continue
 
+                if (abs(x1 - x0) > w / 2) {
+                    // The river crosses the east-west seam. Drawing it as-is would streak a
+                    // line back across the whole map, but dropping it leaves the river visibly
+                    // stopping dead at the edge. Draw it twice instead, shifted a map-width
+                    // each way, so it runs off one side and arrives on the other.
+                    val shifted = if (x1 > x0) x1 - w else x1 + w
                     rivers.add(
                         RiverSegment(
                             x0 + 0.5f, y0,
-                            x0 + 0.5f + reach * (x1 - x0), y0 + reach * (y1 - y0), width
+                            x0 + 0.5f + reach * (shifted - x0), y0 + reach * (y1 - y0), width
                         )
                     )
+                    val back = if (x1 > x0) x0 + w else x0 - w
+                    rivers.add(
+                        RiverSegment(
+                            back + 0.5f, y0,
+                            back + 0.5f + reach * (x1 - back), y0 + reach * (y1 - y0), width
+                        )
+                    )
+                    continue
                 }
+
+                rivers.add(
+                    RiverSegment(
+                        x0 + 0.5f, y0,
+                        x0 + 0.5f + reach * (x1 - x0), y0 + reach * (y1 - y0), width
+                    )
+                )
             }
         }
 
@@ -402,29 +451,145 @@ object MapRasterizer {
         }
 
         val glyphs = ArrayList<LandmarkGlyph>()
+        // Purely a fraction of the map, so a glyph covers the same share of the picture at every
+        // size — unlike the river pen beside it, which is a share of the sheet with a floor.
+        val glyphRadius = (w / 190f).coerceAtLeast(2f)
         if (options.showLandmarks && !options.view.showsFlow) {
-            // Purely a fraction of the map, so a glyph covers the same share of the picture at
-            // every size — unlike the river pen beside it, which is a fixed count of output pixels
-            // and grows with nothing.
-            val radius = (w / 190f).coerceAtLeast(2f)
             world.landmarks.landmarks.forEach { landmark ->
                 glyphs.add(
                     LandmarkGlyph(
                         x = (landmark.cell % w) + 0.5f,
                         y = (landmark.cell / w) + 0.5f,
-                        radius = radius,
+                        radius = glyphRadius,
                         shape = shapeFor(landmark.kind),
                         fill = options.style.glyph(colorFor(landmark.kind))
                     )
                 )
             }
-            return MapOverlay(
-                rivers, glyphs, flow, flowScale,
-                options.style.river, options.style.coastline, (radius * 0.28f).coerceAtLeast(1f)
-            )
         }
-        return MapOverlay(rivers, glyphs, flow, flowScale,
-            options.style.river, 0xFF241C14.toInt(), 1f)
+
+        val coast =
+            if (options.showCoastline) {
+                Shoreline.of(world.sea.isLand, w, world.height, sheet)
+            } else {
+                emptyList()
+            }
+
+        return MapOverlay(
+            rivers = rivers,
+            riversDrawn = drawnRivers.size,
+            coastline = coast,
+            landmarks = glyphs,
+            flow = flow,
+            flowScale = flowScale,
+            graticule = if (options.showGraticule) Graticule.of(w, world.height) else null,
+            scaleBar = if (sheet.carriesScaleBar) placedScaleBar(world) else null,
+            riverColor = options.style.river,
+            coastColor = withAlpha(options.style.coastline, options.style.coastlineStrength),
+            coastWidth = coastPenPixels(w),
+            graticuleColor = withAlpha(options.style.coastline, GRATICULE_INK_STRENGTH),
+            graticuleWidth = RiverPen.HAIRLINE_PIXELS,
+            marginInk = options.style.coastline,
+            marginPaper = options.style.paper,
+            glyphOutline = if (glyphs.isEmpty()) UNSTYLED_GLYPH_OUTLINE else options.style.coastline,
+            glyphOutlineWidth =
+                if (glyphs.isEmpty()) 1f else (glyphRadius * 0.28f).coerceAtLeast(1f)
+        )
+    }
+
+    /**
+     * The rivers big enough to be worth drawing at this scale, in their own order.
+     *
+     * A cut on the peak [River.widthRatio] is a cut on discharge: the ratio is the square root of
+     * the flow accumulation normalised across the whole network (see `RiverWidth` in `:worldgen`),
+     * so it rises with discharge and with nothing else, and the rivers above the cut are exactly
+     * the rivers carrying the most water. How many survive is [MapSheet.featuresKept], which is
+     * Töpfer's radical law.
+     *
+     * Ranking by the *peak* is also what keeps the network whole. A tributary's peak is its
+     * discharge where it joins its trunk, and the trunk carries at least that much from the
+     * junction down to its own mouth, so a trunk's peak is never below its tributaries'. Keeping
+     * the largest can therefore never leave a tributary hanging off a river that is not drawn.
+     *
+     * A world saved before rivers were sized this way has no ratios to rank by and every peak comes
+     * out zero; the cut is then at zero and every river is drawn, which is the right answer for a
+     * map that cannot tell its rivers apart.
+     */
+    private fun riversAtThisScale(rivers: List<River>, sheet: MapSheet): List<River> {
+        val kept = sheet.featuresKept(rivers.size)
+        if (kept >= rivers.size) return rivers
+        val cut = rivers.map(::peakWidthRatio).sortedDescending()[kept - 1]
+        return rivers.filter { peakWidthRatio(it) >= cut }
+    }
+
+    /** The widest point of a river, which for a course traced source to mouth is its mouth. */
+    private fun peakWidthRatio(river: River): Float {
+        var peak = 0f
+        river.widthRatio.forEach { if (it > peak) peak = it }
+        return peak
+    }
+
+    /**
+     * The scale bar, tucked into the sheet's bottom-left corner clear of the margin figures.
+     *
+     * Above the row a graticule puts its longitude figures on and to the right of the column it
+     * puts its latitudes in, so a sheet drawn with the graticule on and one drawn with it off put
+     * the bar in the same place and neither writes anything over anything else.
+     */
+    private fun placedScaleBar(world: WorldMap): PlacedScaleBar {
+        val figure = Graticule.labelHeightPixels(
+            world.width.toFloat() * Graticule.DEGREES / DEGREES_OF_LONGITUDE
+        )
+        return PlacedScaleBar(
+            bar = MapScale.bar(
+                MapScale.kilometresPerPixel(world.config.nations, world.width, 1f),
+                world.width.toFloat()
+            ),
+            x = figure * MARGIN_FIGURES_CLEARED,
+            y = world.height - figure * MARGIN_FIGURES_CLEARED,
+            figureHeightPixels = figure
+        )
+    }
+
+    /**
+     * How heavily the traced coast is stroked, in output pixels, on a sheet [cellsAcross] wide.
+     *
+     * The raster inks one cell of coast, which on the sheet is one pixel, and the stroke matches
+     * that at 2048 so that turning it on sharpens the coast rather than doubling it. Held as a
+     * share of the sheet from there — the reasoning [RiverPen] gives for the river pen — so a plate
+     * twice as large carries a coast twice as heavy, with a floor of one whole pixel because below
+     * that a line is a grey suggestion rather than a coast.
+     */
+    internal fun coastPenPixels(cellsAcross: Int): Float =
+        (cellsAcross * COAST_SHARE_OF_MAP_WIDTH).coerceAtLeast(1f)
+
+    private const val COAST_SHARE_OF_MAP_WIDTH = 0.0005f
+
+    /**
+     * How firmly the graticule is inked, against the coast's own strength.
+     *
+     * A graticule is a reference grid and not a feature: it has to be findable and must never be
+     * mistaken for a coast or a border, so it is drawn in the same ink at a third of the weight.
+     */
+    private const val GRATICULE_INK_STRENGTH = 0.34f
+
+    /** How many figure-heights in from the corner the scale bar sits. See [placedScaleBar]. */
+    private const val MARGIN_FIGURES_CLEARED = 3.2f
+
+    private const val DEGREES_OF_LONGITUDE = 360
+
+    /**
+     * The glyph outline on a map with no glyphs on it.
+     *
+     * Kept because [MapOverlay.glyphOutline] has always carried a value whether or not there were
+     * landmarks to outline, and a front end may read it either way.
+     */
+    private const val UNSTYLED_GLYPH_OUTLINE = 0xFF241C14.toInt()
+
+    /** [color] at [strength] of its opacity, for ink laid over a finished raster. */
+    private fun withAlpha(color: Int, strength: Float): Int {
+        val alpha = (255f * strength.coerceIn(0f, 1f)).toInt()
+        return (color and 0x00FFFFFF) or (alpha shl 24)
     }
 
     /**

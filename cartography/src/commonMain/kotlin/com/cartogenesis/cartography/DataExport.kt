@@ -301,8 +301,8 @@ object DataExports {
         json.number("widthPixels", world.width)
         json.number("heightPixels", world.height)
         json.number("worldWidthKm", nations.worldWidthKm)
-        json.number("cellWidthKm", nations.worldWidthKm / world.width)
-        json.number("cellHeightKm", nations.worldWidthKm / 2.0 / world.height)
+        json.number("cellWidthKm", nations.kilometresPerCellWidth(world.width))
+        json.number("cellHeightKm", nations.kilometresPerCellHeight(world.height))
         json.number(
             "squareKilometresPerCell",
             nations.squareKilometresPerCell(world.width, world.height)

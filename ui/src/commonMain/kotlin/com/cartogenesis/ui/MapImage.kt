@@ -143,9 +143,9 @@ object MapImage {
                 mode = PaintMode.STROKE
                 strokeCap = PaintStrokeCap.ROUND
             }
-            overlay.rivers.forEach { s ->
-                paint.strokeWidth = s.width
-                canvas.drawLine(s.x0, s.y0, s.x1, s.y1, paint)
+            overlay.rivers.forEach { segment ->
+                paint.strokeWidth = segment.widthPixels
+                canvas.drawLine(segment.fromX, segment.fromY, segment.toX, segment.toY, paint)
             }
         }
 
@@ -160,13 +160,13 @@ object MapImage {
                 val alpha = (70 + 150 * arrow.strength).toInt().coerceIn(0, 255)
                 paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
                 paint.strokeWidth = (overlay.flowScale * 0.15f).coerceAtLeast(1f)
-                val tipX = arrow.x + arrow.dx * length
-                val tipY = arrow.y + arrow.dy * length
+                val tipX = arrow.x + arrow.directionX * length
+                val tipY = arrow.y + arrow.directionY * length
                 canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)
-                val backX = tipX - arrow.dx * length * 0.42f
-                val backY = tipY - arrow.dy * length * 0.42f
-                val barbX = arrow.dy * length * 0.26f
-                val barbY = arrow.dx * length * 0.26f
+                val backX = tipX - arrow.directionX * length * 0.42f
+                val backY = tipY - arrow.directionY * length * 0.42f
+                val barbX = arrow.directionY * length * 0.26f
+                val barbY = arrow.directionX * length * 0.26f
                 canvas.drawLine(tipX, tipY, backX + barbX, backY - barbY, paint)
                 canvas.drawLine(tipX, tipY, backX - barbX, backY + barbY, paint)
             }

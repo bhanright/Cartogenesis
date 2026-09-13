@@ -229,8 +229,8 @@ class GeneralisationRenderTest {
             var left = 0
             while (left <= SIZE - CROP) {
                 val inside = rivers.count { segment ->
-                    segment.x0 >= left && segment.x0 < left + CROP &&
-                        segment.y0 >= top && segment.y0 < top + CROP
+                    segment.fromX >= left && segment.fromX < left + CROP &&
+                        segment.fromY >= top && segment.fromY < top + CROP
                 }
                 if (inside > best) {
                     best = inside

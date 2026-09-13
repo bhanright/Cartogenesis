@@ -373,7 +373,7 @@ class RiverWidthTest {
     fun `the pen is the same share of the sheet at every size`() {
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
         val spans = listOf(512, 1024).map { side ->
-            val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.width }
+            val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.widthPixels }
             val span = widths.min() to widths.max()
             println(
                 "RIVERWIDTH ${side}x$side draws %.2f-%.2f px, full is %.3f%% of the width"
@@ -441,9 +441,9 @@ class RiverWidthTest {
             // of half its own width out there with it, which is the blob this trims away.
             var endsOverWater = 0
             MapRasterizer.overlay(world, options).rivers.forEach { segment ->
-                var x = floor(segment.x1).toInt() % w
+                var x = floor(segment.toX).toInt() % w
                 if (x < 0) x += w
-                val y = floor(segment.y1).toInt().coerceIn(0, h - 1)
+                val y = floor(segment.toY).toInt().coerceIn(0, h - 1)
                 val cell = y * w + x
                 if (!world.sea.isLand[cell] || water.isOpenWater(cell)) endsOverWater++
             }

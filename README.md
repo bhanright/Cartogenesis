@@ -104,6 +104,44 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    ink against the same country whatever size the sheet is. The stroke stops at the shoreline
    rather than running on into the sea.
 
+## What a map says about itself
+
+Three things a chart carries that a picture does not, all of them drawn on top of the raster and
+none of them touching the world underneath.
+
+**Generalisation.** A map is not the same map at every size, so the drawing is done for the scale it
+will be seen at. Rivers below a discharge threshold are dropped as the reader zooms out and come
+back as they zoom in, the count kept by Töpfer and Pillewizer's radical law (1966): the number of
+features that survive a reduction in scale goes as the square root of the change in scale. A 2048
+world fitted into a laptop's pane is shown at about 0.44 pixels to the cell, so about 70% of its
+rivers are drawn — 198 of 718106's 279 — and at four times zoom every one of them is back. An
+export is drawn cell for pixel and never loses anything. The coast is traced off the land mask as
+polylines and simplified by Douglas–Peucker at half a drawn pixel, then stroked over the raster, so
+it reads as a *line* rather than as a staircase of cell edges; the fill stays the raster's.
+
+**A graticule**, as a Cartography toggle beside Relief shading and Coastline, drawn on screen and on
+exports. Lines of latitude and longitude every ten degrees, which on an equirectangular map of a
+whole globe is exactly a thirty-sixth of the width and an eighteenth of the height — the spacing is
+not rounded to whole cells, because that would put the equator off the middle row. The edges are
+figured (`40°N`, `170°W`), at ten degrees on a 2048 sheet and at twenty or thirty on smaller ones,
+where the figures would otherwise run into one another.
+
+**A scale bar and a scale.** The legend along the map's foot carries a bar in kilometres, its length
+the longest round distance from the 1–2–5 series that fits a quarter of the frame; it restates
+itself as the reader zooms, so at fit it reads 2000 km and at 32 pixels to the cell it reads 20 km.
+An exported sheet carries the same bar drawn in its bottom-left corner, since there is no legend
+beside a PNG. The cartouche gains a line giving the scale at the sheet's own size — `5.9 km per
+pixel · about 1:22 000 000 at the equator` for 2048 — the fraction quoted at the CSS reference
+pixel's 96 to the inch, to two figures, and *at the equator* because on an equirectangular map
+east-west distances shrink with the cosine of the latitude and no scale bar can pretend otherwise.
+
+All of it comes off one number the world already carries, `NationsConfig.worldWidthKm`: twelve
+thousand kilometres east to west, which is also where realm areas and the heightmap sidecar's cell
+size come from. The two words a chart prints — a graticule figure and the bar's distance — are
+drawn as stroked geometry rather than set as type, because they have to appear on an exported PNG
+as surely as on the screen and a typeface that resolves on the desktop but not in a browser would
+make one map into two.
+
 ## Styles
 
 Eleven ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged

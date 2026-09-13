@@ -109,7 +109,7 @@ internal class TouchTargets(
 internal val LocalTouchTargets = staticCompositionLocalOf { TouchTargets.POINTER }
 
 /** A part of the chart legend along the map's bottom edge. */
-internal enum class LegendPart { CARTOUCHE, ZOOM_OUT, ZOOM_IN, FIT }
+internal enum class LegendPart { CARTOUCHE, SCALE, ZOOM_OUT, ZOOM_IN, FIT }
 
 /**
  * Everything an arrangement puts within reach, named.
@@ -172,6 +172,7 @@ internal object Arrangements {
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,
         legend = listOf(
             LegendPart.CARTOUCHE,
+            LegendPart.SCALE,
             LegendPart.ZOOM_OUT,
             LegendPart.ZOOM_IN,
             LegendPart.FIT
@@ -186,7 +187,9 @@ internal object Arrangements {
      * the whole point of the guard is that these two can disagree — and the one place they do is
      * the legend. The two zoom steps go: pinch is the gesture a phone already has for this, the
      * strip is 390 dp wide and has a world's name to print on it, and Fit stays because there is no
-     * gesture for "show me all of it" that anyone would guess. Nothing else is lost: the ten styles
+     * gesture for "show me all of it" that anyone would guess. The scale bar stays too, and is the
+     * reason the readout could go: a bar that restates itself as the reader pinches says more about
+     * how far in they are than a percentage does. Nothing else is lost: the ten styles
      * move from a segmented row into a menu, the three menus into one button, and every knob is in
      * the sheet. The export chips are not lost either — both the picture formats and the data
      * layers are in the sheet's header, at the sizes [Platform.exportCeiling] allows a phone.
@@ -199,6 +202,6 @@ internal object Arrangements {
         pictureFormats = Exports.PICTURES,
         dataLayers = Exports.LAYERS,
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,
-        legend = listOf(LegendPart.CARTOUCHE, LegendPart.FIT)
+        legend = listOf(LegendPart.CARTOUCHE, LegendPart.SCALE, LegendPart.FIT)
     )
 }

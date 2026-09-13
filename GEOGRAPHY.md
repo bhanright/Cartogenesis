@@ -153,6 +153,30 @@ so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shall
 the remap off, 0–2.5% of far sea shallow, and zero land cells changed on any seed. Island arcs
 inherit the same platform, which is what makes an archipelago read as one drowned ridge.
 
+**A valley narrower than the cell is not a bay.** The lowstand above cuts a channel down to the low
+stand at every shore, and the transgression floods every one of them, so the cut used to come back
+with a notch at every stream mouth. On the grid a channel is a whole cell wide whatever it carries.
+Measured with a ruler — the coastline's length at one cell against two, which is Richardson's own
+method and, unlike a box count, has no ceiling to run into — the coast of 2.0.2 gives a dimension of
+1.582 over its finest octave against 1.260 from four cells to sixteen, and a real coast gives much
+the same figure at every scale. A disc drawn on the same grid reads 1.006 against 1.000, so the
+excess is the coast and not the ruler. Earth's coasts at six to twelve kilometres are indented by the
+Chesapeake, the Severn and the Gironde and by nothing smaller; the Rias Baixas are two to seven
+kilometres across and a 1024 map cannot hold one. So `SeaConfig.drownedValleyFill` keeps a drowned
+cell as water only where the valley behind it crosses at least half the cell, by Leopold and
+Maddock's square root of the catchment — the constant is 0.08 km per root square kilometre, measured
+off the Chesapeake, the Delaware, the Severn, the Thames and the Gironde — and where it does not, the
+cell takes the height it would have if the channel occupied the share of it that it really does.
+Because the width goes as the root of the area and the bar goes as the cell, the catchment a valley
+needs comes out as a fixed number of cells — about 39 — at every grid. New ground may never stand above the
+ground beside it, nor fail to fall towards the sea, so a valley whose walls are no higher than the
+water at its mouth is left as water. Measured on the five seeds at 512, the excess of the finest
+octave over the coarsest falls from 0.322 to 0.270 with the littoral grading alone and to 0.198 with
+both passes. What is left is not channels — filling *every* drowned notch reaches the same 0.199,
+because the two rules above and not the width bar are what stop the fill — it is the percentile cut
+running through the erosion's own texture at the cell, and it survives with the lowstand switched off
+entirely (0.288 there).
+
 **Not every coast is a ria.** The lowstand above drops the base level everywhere for nine of the
 twelve rounds, so running water works every cell within about 120 m of the shoreline and the
 transgression floods all of it. Measured at 512 pooled over the four standard seeds and 298405, that
@@ -169,11 +193,14 @@ reaches by the fetch in front (`H ∝ U√F`, so the square root of the open wat
 fills the re-entrants of that third with sweeps of a three-by-three majority. It only fills: waves
 take a cliff back 0.6 to 6 km in six thousand years, under a tenth of a cell at 2048, while the
 Mississippi's plain advanced a hundred kilometres in the same time. It never dams a channel, so the
-rias H5 cut stay open. Measured on the same five seeds at 512: the shoreline falls 7 to 9%, the
-share of coast reading smooth by Australia's 1.13 rises from 0.086 to 0.123 over 750 km stretches
-and from 0.141 to 0.200 over 375 km ones, the spread of the per-stretch dimension rises 0.105 to
-0.108, the land gains 0.15 to 0.3% of the map, and the world's pooled dimension goes 1.207 to 1.176
-against Mandelbrot's 1.25 ± 0.15.
+rias H5 cut stay open. Measured on the same five seeds at 512, with the drowned-valley
+rule above running too: the share of coast reading smooth by Australia's 1.13 rises from 0.086 to
+0.188 over 750 km stretches and from 0.141 to 0.224 over 375 km ones, against Earth's third; the
+shoreline falls 8 to 10%, the land gains 0.2 to 0.4% of the map, and no body of land or water is
+gained or lost on any seed. The world's coastline over four to sixteen cells reads 1.255 by the
+coarsened ruler against 1.260 before, which is Mandelbrot's Britain; by M1's box count the same coast
+reads 1.167 against 1.207, because a box is mixed by a
+single cell of the other kind and so that instrument counts the teeth as well as the coast.
 
 **Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
 network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:

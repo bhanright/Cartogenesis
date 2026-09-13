@@ -244,6 +244,78 @@ internal object CoastRoughness {
     }
 
     /**
+     * The coastline's length measured with a ruler of [rulerCells] cells, in cells.
+     *
+     * Richardson's own method rather than a box count, and the reason is that a box count saturates
+     * where this question is asked. [boundaryBoxCount] at one cell can return at most one box per
+     * position, so on a coast with a tooth in every cell the count runs into its own ceiling and the
+     * octave reads *smoother* than the one above it — which is what the shipped world does, 1.236
+     * over the first octave against 1.32 over the second, and it is an artefact of the instrument
+     * rather than a fact about the coast. A length has no ceiling: a cell can contribute up to four
+     * edges.
+     *
+     * The ruler is applied by coarsening: the mask is reduced to blocks [rulerCells] on a side, each
+     * taking the class of its majority, and the shoreline of the coarse mask is counted in edges and
+     * multiplied back up. That is a divider walked at that step, and Richardson's law says the
+     * length grows as `r^(1-D)` as the ruler shortens, so a straight coast measures the same at
+     * every ruler and a crinkled one measures longer at the short ones.
+     */
+    fun richardsonLength(
+        isLand: BooleanArray,
+        cellsAcross: Int,
+        cellsDown: Int,
+        rulerCells: Int
+    ): Double {
+        if (rulerCells <= 1) {
+            return shorelineEdges(isLand, cellsAcross, cellsDown).toDouble()
+        }
+        val coarseAcross = cellsAcross / rulerCells
+        val coarseDown = cellsDown / rulerCells
+        if (coarseAcross < 2 || coarseDown < 2) return 0.0
+        val coarse = BooleanArray(coarseAcross * coarseDown)
+        val half = rulerCells * rulerCells / 2
+        for (blockRow in 0 until coarseDown) {
+            for (blockColumn in 0 until coarseAcross) {
+                var land = 0
+                for (row in 0 until rulerCells) {
+                    val sourceRow = blockRow * rulerCells + row
+                    for (column in 0 until rulerCells) {
+                        val sourceColumn = blockColumn * rulerCells + column
+                        if (isLand[sourceRow * cellsAcross + sourceColumn]) land++
+                    }
+                }
+                coarse[blockRow * coarseAcross + blockColumn] = land > half
+            }
+        }
+        return shorelineEdges(coarse, coarseAcross, coarseDown).toDouble() * rulerCells
+    }
+
+    /**
+     * The dimension Richardson's law implies between two rulers: `L` grows as `r^(1-D)`, so
+     * doubling the ruler and watching the length fall by a factor `f` gives `D = 1 + log2(f)`.
+     *
+     * One means a line that measures the same however it is walked. Two means a line that fills the
+     * plane.
+     */
+    fun richardsonDimension(shorterLength: Double, longerLength: Double): Double {
+        if (shorterLength <= 0.0 || longerLength <= 0.0) return 0.0
+        return 1.0 + ln(shorterLength / longerLength) / ln(2.0)
+    }
+
+    /**
+     * The dimension over a span of rulers, fitted rather than taken two at a time: minus the slope
+     * of log length against log ruler, plus one.
+     */
+    fun richardsonDimensionOver(lengths: List<Double>, rulers: List<Int>): Double {
+        val used = lengths.indices.filter { lengths[it] > 0.0 }
+        if (used.size < 2) return 0.0
+        return 1.0 - slopeOf(
+            used.map { ln(rulers[it].toDouble()) },
+            used.map { ln(lengths[it]) }
+        )
+    }
+
+    /**
      * One stretch of coast: a square window of the map, the coast inside it, and how crinkled that
      * coast is.
      */
@@ -379,8 +451,11 @@ internal object CoastRoughness {
      * `EarthLikeness.coastlineComplaint` on `main` has, so a run reports every seed that is out
      * rather than stopping at the first.
      */
-    fun dimensionComplaint(label: String, coastline: BoxCount): String? {
-        val dimension = coastline.dimension
+    fun dimensionComplaint(label: String, coastline: BoxCount): String? =
+        dimensionComplaint(label, coastline.dimension)
+
+    /** The same, for a dimension measured any other way. */
+    fun dimensionComplaint(label: String, dimension: Double): String? {
         if (dimension >= EARTH_COASTLINE_DIMENSION - COASTLINE_DIMENSION_TOLERANCE &&
             dimension <= EARTH_COASTLINE_DIMENSION + COASTLINE_DIMENSION_TOLERANCE
         ) {

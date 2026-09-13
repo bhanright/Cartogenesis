@@ -606,7 +606,28 @@ data class SeaConfig(
      * low-lying *rocky* coast — Finland, the Canadian Shield, western Scotland, flat and ragged
      * both — which needs the lithology the plan's H3 has not built yet. See `LittoralGrading`.
      */
-    val littoralDepositionalShare: Float = 0.31f
+    val littoralDepositionalShare: Float = 0.31f,
+    /**
+     * Whether a drowned valley too narrow for its cell is filled back to the ground either side of
+     * it.
+     *
+     * [lowstand] cuts a channel down to the low stand at every shore, and the transgression floods
+     * every one of them, so the cut comes back with a notch at every stream mouth: measured on the
+     * four standard seeds and 298405 at 512, the coastline's Richardson dimension over its first
+     * octave is 1.398 against 1.115 over its last, where a real coast measures much the same at
+     * every scale. On the grid a channel is a whole cell wide whatever it carries. Earth's coasts at
+     * six to twelve kilometres are indented by the Chesapeake, the Severn and the Gironde and by
+     * nothing smaller — the Rias Baixas are two to seven kilometres across and a 1024 map cannot
+     * hold one.
+     *
+     * So a drowned cell keeps its water only where the valley behind it is at least half the cell
+     * wide, by Leopold and Maddock's square root of the catchment; below that the cell takes the
+     * height it would have if the channel had the share of it that it really has, which is above the
+     * waterline. See `DrownedValleys` for the five estuaries the constant is measured from.
+     *
+     * Off is the control its guard needs, and is the coast release 2.0.2 drew.
+     */
+    val drownedValleyFill: Boolean = true
 )
 
 @Serializable

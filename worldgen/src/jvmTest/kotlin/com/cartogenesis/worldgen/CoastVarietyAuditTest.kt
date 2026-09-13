@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.DrownedValleys
 import com.cartogenesis.worldgen.pipeline.LittoralGrading
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
@@ -109,8 +110,8 @@ class CoastVarietyAuditTest {
      * Plan ground rule 8: a per-cell pass is written against the accelerator seam's shape and
      * measured at 2048, and under fifty milliseconds it stays where it is, as H2's snow balance did.
      *
-     * Timed on the pass itself rather than as the difference between two whole cuts. That was tried
-     * and it does not work: the whole cut at 2048 is four and a half seconds of priority floods and
+     * Both passes, timed on themselves rather than as the difference between two whole cuts. That
+     * was tried and it does not work: the whole cut at 2048 is four and a half seconds of priority floods and
      * jump flooding, and its run-to-run spread is several hundred milliseconds, so the difference
      * came out at -431 ms on one run and +81 on another. The pass allocates its own arrays and reads
      * nothing but the cut it is handed, so calling it directly measures all of it.
@@ -127,15 +128,120 @@ class CoastVarietyAuditTest {
         val landRelief = eroded.height.max() - cut.threshold
         val seaRelief = cut.threshold - eroded.height.min()
 
-        repeat(2) { LittoralGrading.apply(cut, config.sea, landRelief, seaRelief) }
-        var fastest = Long.MAX_VALUE
-        repeat(5) {
-            val elapsed = measureTime {
-                LittoralGrading.apply(cut, config.sea, landRelief, seaRelief)
-            }
-            fastest = minOf(fastest, elapsed.inWholeMilliseconds)
+        repeat(2) {
+            DrownedValleys.apply(cut, eroded.height, config.sea)
+            LittoralGrading.apply(cut, config.sea, landRelief, seaRelief)
         }
-        println("F17 cost at $cellsAcross on seed 718106: the littoral pass is $fastest ms")
+        var valleys = Long.MAX_VALUE
+        var littoral = Long.MAX_VALUE
+        repeat(5) {
+            valleys = minOf(
+                valleys,
+                measureTime { DrownedValleys.apply(cut, eroded.height, config.sea) }
+                    .inWholeMilliseconds
+            )
+            littoral = minOf(
+                littoral,
+                measureTime { LittoralGrading.apply(cut, config.sea, landRelief, seaRelief) }
+                    .inWholeMilliseconds
+            )
+        }
+        println(
+            "F17 cost at $cellsAcross on seed 718106: the drowned-valley fill is $valleys ms and " +
+                "the littoral pass is $littoral ms"
+        )
+    }
+
+    /**
+     * The coastline measured with a ruler of one, two, four, eight and sixteen cells, which is the
+     * measurement the octave table above cannot make.
+     *
+     * A box count at one cell has a ceiling of one box per position, so a coast with a tooth in
+     * every cell runs into it and the finest octave reads smoother than the next one up. A length
+     * has no ceiling. What this asks is whether the coast is the same shape at every scale the grid
+     * resolves, which is what Richardson's straight lines say a real coast is, and where it is not.
+     */
+    @Test
+    fun `report the coastline's length by ruler, and the excess at the cell`() {
+        val cellsAcross = 512
+        println("F17 Richardson lengths, $cellsAcross x $cellsAcross")
+        println("variant | seed | L1 | L2 | L4 | L8 | L16 | D(1-2) | D(2-4) | D(4-8) | D(8-16) | D(4-16) | excess")
+
+        seeds.forEach { seed ->
+            val shipped = baseConfig(seed, cellsAcross)
+            val terrain = TerrainStage.generate(shipped)
+            val plates = PlateStage.generate(shipped, terrain)
+            val eroded = erodeBlocking(shipped, plates.height)
+            val variants = listOf(
+                "shipped" to shipped,
+                "2.0.2 (no coast passes)" to shipped.copy(
+                    sea = shipped.sea.copy(littoralGrading = false, drownedValleyFill = false)
+                ),
+                "littoral only" to shipped.copy(sea = shipped.sea.copy(drownedValleyFill = false)),
+                "valley fill only" to shipped.copy(sea = shipped.sea.copy(littoralGrading = false))
+            )
+            variants.forEach { (name, config) ->
+                reportRulers(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, cellsAcross)
+            }
+
+            val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstand = 0f))
+            val lowstandOffField = erodeBlocking(lowstandOff, plates.height)
+            reportRulers(
+                "lowstand off", seed,
+                SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand, cellsAcross
+            )
+
+            // Every drowned notch filled, whatever it drains: the ceiling on what filling notches
+            // can do at all, and so the answer to how much of the excess at the cell is channels.
+            val everyNotch = SeaLevelStage.applyWithValleyBar(
+                eroded.height, shipped, resolvedShareOfCell = 1000f
+            )
+            reportRulers("every notch filled", seed, everyNotch.isLand, cellsAcross)
+
+            // The floor this instrument has on this grid. A percentile cut through the integrated
+            // noise with no erosion in it is the smoothest coast the generator can draw, and
+            // whatever excess *it* shows over its own coarse octaves is the digitisation and not the
+            // coast: a curve on a grid is a staircase, and a majority coarsening of a staircase is
+            // not the same curve at half the scale.
+            val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
+            val erosionOffField = erodeBlocking(erosionOff, plates.height)
+            reportRulers(
+                "erosion off (the floor)", seed,
+                SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand, cellsAcross
+            )
+        }
+
+        // And the same on a shape with no texture at all, so the floor is not itself a property of
+        // one seed's noise: a disc a quarter of the map across, which is analytically smooth.
+        val disc = BooleanArray(cellsAcross * cellsAcross)
+        val centre = cellsAcross / 2
+        val radius = cellsAcross / 4
+        for (row in 0 until cellsAcross) {
+            for (column in 0 until cellsAcross) {
+                val dy = (row - centre).toDouble()
+                val dx = (column - centre).toDouble()
+                disc[row * cellsAcross + column] = dx * dx + dy * dy <= radius.toDouble() * radius
+            }
+        }
+        reportRulers("a plain disc", 0L, disc, cellsAcross)
+    }
+
+    private fun reportRulers(name: String, seed: Long, isLand: BooleanArray, cellsAcross: Int) {
+        val rulers = listOf(1, 2, 4, 8, 16)
+        val lengths = rulers.map {
+            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it)
+        }
+        val octaves = (0 until 4).map {
+            CoastRoughness.richardsonDimension(lengths[it], lengths[it + 1])
+        }
+        val coarse = CoastRoughness.richardsonDimensionOver(
+            lengths.subList(2, 5), rulers.subList(2, 5)
+        )
+        println(
+            "$name | $seed | ${lengths.joinToString(" | ") { "%.0f".format(it) }} | " +
+                octaves.joinToString(" | ") { "%.3f".format(it) } +
+                " | %.3f | %.3f".format(coarse, octaves[0] - coarse)
+        )
     }
 
     private fun report(

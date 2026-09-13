@@ -133,8 +133,19 @@ class DepositionTest {
      * outflow can cut its sill to the waterline becomes an arm of the sea again. Measured at 128 on
      * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
      * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
+     *
+     * And a third time at F17, which moves the shoreline on purpose. A drowned valley narrower than
+     * the cell it is written into is filled back to the ground either side of it, and at 128 a cell
+     * is ninety-four kilometres across a twelve-thousand-kilometre world — wider than the mouth of
+     * any drowned valley on Earth bar the Rio de la Plata — so at this size almost every one of them
+     * goes — as far as each valley's own walls allow, since the new floor may never stand above
+     * them nor fail to fall towards the sea. That is the rule working rather than failing: 6327 to
+     * 6464, of which the littoral grading contributes nothing, because its reach is held as a
+     * distance and a distance of twenty-three kilometres is a quarter of a cell here. The cut is
+     * still exactly 62% of the cells. See `SeaConfig.drownedValleyFill`, and `LittoralCoastTest` for what the same rule does
+     * at the sizes anybody looks at.
      */
-    private val startingPointLand = 6327
+    private val startingPointLand = 6464
 
     @Test
     fun `every round conserves mass`() {

@@ -440,13 +440,10 @@ internal object LittoralGrading {
      * cut as well as filled and the cost was visible in the numbers as well as the physics: it took
      * 298405 at 512 from 36 separate bodies of land to 56, dissolving spits into chains of islets.
      *
-     * **And never closing anything off**, which [severs] enforces cell by cell. In row-major order
-     * rather than simultaneously, deliberately: [severs] asks whether filling *this* cell would cut
-     * the water around it in two, and the answer is only binding if the fill it is asked about
-     * actually happens before its neighbour is asked. Two cells across the mouth of a bay each look
-     * safe on the old mask and are fatal together. Taken in order, the first is filled and the
-     * second then sees the bay on one side and the sea on the other and is left alone. The order is
-     * fixed, so the world is still the same world every time it is generated.
+     * **And never closing anything off**, which [WaterTopology.severs] enforces cell by cell, in
+     * row-major order so that two cells across the mouth of a bay cannot both pass it. Without that
+     * rule the pass sealed them, and nothing downstream can reopen one: it took `GlaciationTest`'s
+     * resolution contract from 1.91 to 2.37 against a bar of 2.20.
      */
     private fun majoritySweep(
         isLand: BooleanArray,
@@ -470,67 +467,12 @@ internal object LittoralGrading {
                 }
             }
             if (land < 5) continue
-            if (severs(isLand, row, column, cellsAcross, cellsDown)) continue
+            if (WaterTopology.severs(isLand, row, column, cellsAcross, cellsDown)) continue
             isLand[cell] = true
             filled++
         }
         return filled
     }
-
-    /**
-     * Whether filling this water cell would cut the water around it in two.
-     *
-     * The water in the ring of eight neighbours, read round the cell, either forms one unbroken run
-     * or it does not. One run — or none, for a pocket of a single cell — and the cell is a notch in
-     * the shore: fill it and every drop of water that could reach another before can still reach it,
-     * going round the outside. Two runs or more and the cell is a neck between two pieces of water:
-     * a bay's mouth, a strait, the throat of a sound. This is the digital-topology test for a simple
-     * point, on the eight-connected water the rest of this generator uses, and what it buys is an
-     * invariant rather than a tendency: **the pass cannot enclose water**.
-     *
-     * That invariant is worth the eight comparisons. Nothing downstream can undo an enclosure made
-     * here — [SeaLevelStage.drainDrownedBasins] runs before this pass and only on the basins the
-     * percentile drowned, and `ErosionConfig.outletIncision` ran two stages earlier — so a bay this
-     * pass sealed would become a lake below sea level and stay one. Measured before the rule
-     * existed, on seed 718106 at sea 0.70 with the outlet notch off: standing water on cold flat
-     * ground grew 1.91 times between 512 and 1024 without the pass and 2.37 times with it, because
-     * a finer grid resolves more two-cell bay mouths to seal. `LittoralCoastTest` counts the bodies
-     * of water the ocean cannot reach, before and after, and they are the same bodies.
-     */
-    private fun severs(
-        isLand: BooleanArray,
-        row: Int,
-        column: Int,
-        cellsAcross: Int,
-        cellsDown: Int
-    ): Boolean {
-        var runs = 0
-        var previousWasWater =
-            !isLand[ringCell(isLand, row, column, cellsAcross, cellsDown, RING_STEPS.size - 1)]
-        for (step in RING_STEPS.indices) {
-            val water = !isLand[ringCell(isLand, row, column, cellsAcross, cellsDown, step)]
-            if (water && !previousWasWater) runs++
-            previousWasWater = water
-        }
-        return runs > 1
-    }
-
-    private fun ringCell(
-        isLand: BooleanArray,
-        row: Int,
-        column: Int,
-        cellsAcross: Int,
-        cellsDown: Int,
-        step: Int
-    ): Int {
-        val neighbourRow = (row + RING_STEPS[step]).coerceIn(0, cellsDown - 1)
-        val neighbourColumn = (column + RING_COLUMN_STEPS[step] + cellsAcross) % cellsAcross
-        return neighbourRow * cellsAcross + neighbourColumn
-    }
-
-    /** The eight neighbours in a circle, starting north and turning clockwise. */
-    private val RING_STEPS = intArrayOf(-1, -1, 0, 1, 1, 1, 0, -1)
-    private val RING_COLUMN_STEPS = intArrayOf(0, 1, 1, 1, 0, -1, -1, -1)
 
     /**
      * Gives the ground the pass built the height of a coastal plain: nothing at the water's edge,

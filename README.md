@@ -56,7 +56,10 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    Runs before sea level, since eroding the terrain changes which elevation the percentile lands
    on — and nothing cuts below that level, because it is the base level every river grades to.
 5. **Sea level** — everything below a chosen elevation percentile floods. The rivers cut to a stand
-   about 120 m lower, so the flooding drowns their lower valleys; then the waves get the six
+   about 120 m lower, so the flooding drowns their lower valleys — but only the trunk ones show,
+   because a valley narrower than half a cell is a channel through a cell of dry ground rather than
+   a bay, and at six to twelve kilometres Earth's coasts are indented by the Chesapeake and the
+   Severn and by nothing smaller. Then the waves get the six
    thousand years since the sea stopped rising. On the third of the shoreline with low ground behind
    it — Earth's own share of depositional coast — sediment fills the re-entrants the drowning left,
    never damming a channel and never cutting a headland back, because in six thousand years a cliff

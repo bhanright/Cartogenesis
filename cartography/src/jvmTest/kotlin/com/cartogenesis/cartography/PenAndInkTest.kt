@@ -89,22 +89,23 @@ class PenAndInkTest {
          * style; F13 changed every one of them — the climate reaches the land ramp, the sky
          * replaces the lamp and the sea carries depth contours — so all eleven were recorded again
          * against that chunk's renders. F17 changed every one of them again, from the other end: it
-         * grades Earth's third of the shoreline after the sea-level cut, so the land mask under all
-         * eleven is a different mask. How far the coastline actually moved is measured rather than
-         * hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
+         * fills the drowned valleys the grid cannot hold and grades Earth's third of the shoreline
+         * after the sea-level cut, so the land mask under all eleven is a different mask. Recorded
+         * twice for that chunk, once for each of its two passes; how far the coastline actually
+         * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 330747955,
-            MapStyle.VELLUM to 1193802075,
-            MapStyle.INK_WASH to 25773522,
-            MapStyle.NAUTICAL to 2116675863,
-            MapStyle.MIDNIGHT to 1903680558,
-            MapStyle.SCHOOLROOM to -788394411,
-            MapStyle.VERDANT to -843714597,
-            MapStyle.SCROLL to -439997126,
-            MapStyle.PEN_AND_INK to -1316319396,
-            MapStyle.MARS to -1775571570,
-            MapStyle.CLEAR to 913969141
+            MapStyle.ATLAS to -173307292,
+            MapStyle.VELLUM to -23465626,
+            MapStyle.INK_WASH to 323555479,
+            MapStyle.NAUTICAL to -965577701,
+            MapStyle.MIDNIGHT to 580634097,
+            MapStyle.SCHOOLROOM to 328982709,
+            MapStyle.VERDANT to -2116422614,
+            MapStyle.SCROLL to -1448446961,
+            MapStyle.PEN_AND_INK to 1950662391,
+            MapStyle.MARS to -1005799490,
+            MapStyle.CLEAR to -361190112
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

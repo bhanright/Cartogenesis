@@ -74,7 +74,10 @@ class LittoralCoastRenderTest {
         config: WorldGenConfig,
         cropCells: Int
     ): List<String> {
-        val control = config.copy(sea = config.sea.copy(littoralGrading = false))
+        // Both coast passes off, which is the shoreline release 2.0.2 drew.
+        val control = config.copy(
+            sea = config.sea.copy(littoralGrading = false, drownedValleyFill = false)
+        )
         val before = WorldGenerationEngine.generateBlocking(control)
         val after = WorldGenerationEngine.generateBlocking(config)
 

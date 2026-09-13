@@ -1,14 +1,39 @@
 # To do
 
-- **A graded coast has no barrier islands, so it reaches half of Earth's smooth share.** F17's
-  littoral pass fills the re-entrants of Earth's third of the shoreline and the outcome measures
-  half way: the share of coast reading smooth by Australia's 1.13 goes from 0.086 to 0.123 over
-  750 km stretches and 0.141 to 0.200 over 375 km ones, against Earth's 0.31. The missing half is
-  the shape of a real depositional coast, which is not a plain arc but a barrier and a lagoon
-  behind it — Padre Island and the Laguna Madre, the Frisian chain and the Wadden Sea. That also
-  costs the pooled box dimension, 1.207 to 1.176, because a filled bay is one shoreline where a
-  barred one is two. The audit's K1 (wave climate and longshore drift) is the chunk that owns it.
-  2026-09-12.
+- **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes
+  of four, eight and sixteen cells holding both land and water, and a box is mixed by a *single*
+  cell of the other kind — so a tooth one cell deep makes a four-cell box mixed and rarely makes a
+  sixteen-cell box mixed, and the slope over 4 to 16 is read partly off structure under four cells.
+  It is why 2.0.2 scored 1.207, inside Earth's band, with a tooth on every cell of every coast, and
+  why F17 removing the teeth takes it to 1.167 pooled and 1.116 on seed 7 — inside the bar M1 asserts,
+  but with a tenth of the room it had. The coast at those scales did not change: measured with a
+  ruler coarsened by majority, which cannot see under its own step, the same coast reads 1.255
+  pooled after against 1.260 before, and seed 7 reads 1.228 against 1.230. The repair belongs to the instrument — `CoastRoughness`'s
+  `richardsonLength` is the one F17 uses and M1 could take it, or its box sizes could start above
+  the scale it means to measure. 2026-09-13.
+- **A graded coast has no barrier islands.** F17's littoral pass fills the re-entrants of Earth's
+  third of the shoreline but does not throw a barrier across the mouth of one and leave a lagoon
+  behind it, which is what Earth's depositional coasts are — Padre Island and the Laguna Madre, the
+  Frisian chain and the Wadden Sea. A filled bay is one shoreline where a barred one is two, so the
+  coast is short of both the coastline it should have and the tidal country behind it. The audit's
+  K1 (wave climate and longshore drift) is the chunk that owns it. 2026-09-12.
+- **The coast is still rougher at the cell than four cells up, and the rest is not channels.** After
+  both of F17's passes the excess is 0.198 where 2.0.2's was 0.322, against Earth's zero —
+  Richardson's plots are straight lines. Filling *every* drowned notch, estuaries and all, reaches
+  the same 0.199, because what stops the fill is not the width bar but the two rules the fill is
+  bounded by: new ground may not stand above the ground beside it, nor fail to fall towards the sea.
+  So the residue is not the channels; it is the percentile cut running through the erosion's own
+  texture at the cell, and it is still 0.288 with the lowstand switched off entirely. Closing it
+  means the sub-grid correction F17 applies to drowned channels applied to the whole near-shore
+  height field, which moves every coastline rather than the drowned ones and wants its own chunk and
+  its own renders. 2026-09-13.
+- **`OutletResolutionTest`'s resolution contract has two hundredths of room left.** Seed 59758's
+  standing water spreads 1.39x across 512, 1024 and 2048 against a bar of 1.4; with F17's
+  drowned-valley fill off it reads 1.37x, and the test's own comment records 1.14x when the contract
+  was written, so the drift is mostly older than this chunk. A sub-grid correction necessarily does
+  more at a coarse grid — that is what sub-grid means — so anything else of this kind will push the
+  same figure. The term that actually misbehaves is a 755-cell drowned basin seed 59758 has at 1024
+  and not at 2048, which nothing in F17 touches. 2026-09-13.
 - **The littoral criterion cannot tell a coastal plain from a flat coast on hard rock.** It ranks
   the shoreline by the height of the land within 187 km and takes Earth's 31%, because no height
   derivable from Earth lands on that share: the postglacial rise calls 59% of the shoreline

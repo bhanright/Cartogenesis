@@ -1,6 +1,8 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import org.lwjgl.opengl.GL43C
 
 /**
@@ -37,66 +39,85 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         talus: Float,
         passes: Int,
         rate: Float
-    ): FloatArray? = GlContext.run("Erosion") {
-        val cells = width * height
-        val orthogonal = talus / width
-        val diagonal = orthogonal * kotlin.math.sqrt(2f)
-        val settled = orthogonal * 1e-3f
+    ): FloatArray? {
+        // Who is waiting for this batch, so the loop below can find out whether they still are.
+        //
+        // A batch of sweeps is one blocking call on the context's own thread: nothing inside it
+        // suspends, so a coroutine cancelled while it runs would otherwise be discovered only once
+        // the whole batch had finished — at export sizes, seconds of work for a world nobody wants.
+        // Between two dispatches the loop asks, and gives up if the answer is no. Giving up looks
+        // like a decline (a null result), which is the seam's own way of saying "not me"; the CPU
+        // then picks the job up and throws at its first sweep, which is where the stop is finally
+        // reported. What matters here is that the buffers this run allocated are gone either way —
+        // see the `finally` — so the next generation starts on a context holding nothing of this
+        // one's.
+        val stillWanted = currentCoroutineContext()[Job]
+        return GlContext.run("Erosion") {
+            val cells = width * height
+            val orthogonal = talus / width
+            val diagonal = orthogonal * kotlin.math.sqrt(2f)
+            val settled = orthogonal * 1e-3f
 
-        val compiled = programs ?: return@run null
-        val phaseA = compiled.first
-        val phaseB = compiled.second
+            val compiled = programs ?: return@run null
+            val phaseA = compiled.first
+            val phaseB = compiled.second
 
-        // Two height buffers to ping-pong between, and one for the transfer ratios.
-        val buffers = IntArray(3)
-        GL43C.glGenBuffers(buffers)
-        val (readBuffer, writeBuffer, rateBuffer) = Triple(buffers[0], buffers[1], buffers[2])
+            // Two height buffers to ping-pong between, and one for the transfer ratios.
+            val buffers = IntArray(3)
+            GL43C.glGenBuffers(buffers)
+            val (readBuffer, writeBuffer, rateBuffer) = Triple(buffers[0], buffers[1], buffers[2])
 
-        try {
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, readBuffer)
-            GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, heights, GL43C.GL_DYNAMIC_COPY)
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, writeBuffer)
-            GL43C.glBufferData(
-                GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
-            )
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, rateBuffer)
-            GL43C.glBufferData(
-                GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
-            )
+            try {
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, readBuffer)
+                GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, heights, GL43C.GL_DYNAMIC_COPY)
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, writeBuffer)
+                GL43C.glBufferData(
+                    GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
+                )
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, rateBuffer)
+                GL43C.glBufferData(
+                    GL43C.GL_SHADER_STORAGE_BUFFER, (cells * 4).toLong(), GL43C.GL_DYNAMIC_COPY
+                )
 
-            val groupsX = (width + GROUP - 1) / GROUP
-            val groupsY = (height + GROUP - 1) / GROUP
+                val groupsX = (width + GROUP - 1) / GROUP
+                val groupsY = (height + GROUP - 1) / GROUP
 
-            var source = readBuffer
-            var destination = writeBuffer
+                var source = readBuffer
+                var destination = writeBuffer
 
-            repeat(passes) {
-                GL43C.glUseProgram(phaseA)
-                setUniforms(phaseA, width, height, orthogonal, diagonal, rate, settled)
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
-                GL43C.glDispatchCompute(groupsX, groupsY, 1)
-                GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
+                repeat(passes) {
+                    if (stillWanted?.isActive == false) return@run null
 
-                GL43C.glUseProgram(phaseB)
-                setUniforms(phaseB, width, height, orthogonal, diagonal, rate, settled)
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 1, destination)
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
-                GL43C.glDispatchCompute(groupsX, groupsY, 1)
-                GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
+                    GL43C.glUseProgram(phaseA)
+                    setUniforms(phaseA, width, height, orthogonal, diagonal, rate, settled)
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
+                    GL43C.glDispatchCompute(groupsX, groupsY, 1)
+                    GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
 
-                val swap = source
-                source = destination
-                destination = swap
+                    GL43C.glUseProgram(phaseB)
+                    setUniforms(phaseB, width, height, orthogonal, diagonal, rate, settled)
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 1, destination)
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
+                    GL43C.glDispatchCompute(groupsX, groupsY, 1)
+                    GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
+
+                    val swap = source
+                    source = destination
+                    destination = swap
+                }
+
+                val result = FloatArray(cells)
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, source)
+                GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, result)
+                result
+            } finally {
+                // Whatever ended the run - a finished batch, a stop, or a driver fault - the three
+                // buffers go back. They are three grid-sized allocations, tens of megabytes each at
+                // export sizes, and the context outlives every generation that uses it.
+                GL43C.glDeleteBuffers(buffers)
             }
-
-            val result = FloatArray(cells)
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, source)
-            GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, result)
-            result
-        } finally {
-            GL43C.glDeleteBuffers(buffers)
         }
     }
 

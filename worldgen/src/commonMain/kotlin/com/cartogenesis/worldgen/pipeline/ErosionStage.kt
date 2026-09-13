@@ -5,6 +5,8 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 data class ErosionResult(
     /** Height after erosion, in the same 0..1 range the uplift produced. */
@@ -101,6 +103,12 @@ object ErosionStage {
         val cfg = config.erosion
         if (cfg.passes <= 0) return ErosionResult(height)
 
+        // Asked before the batch rather than only inside it. A batch handed to the graphics card is
+        // a single call that cannot be interrupted part-way, so the place to notice a stop is
+        // before one is started; the round the reader interrupted finishes and frees its buffers,
+        // and no further round begins.
+        currentCoroutineContext().ensureActive()
+
         if (cfg.acceleration == Acceleration.GPU && accelerator != null) {
             // A null result means the accelerator looked at the job and declined it, which is a
             // normal outcome rather than a failure, so the CPU simply picks it up.
@@ -118,7 +126,7 @@ object ErosionStage {
      * @param skipSettled leave the settled parts of the map alone instead of re-scanning them.
      *   Only ever false in the test that proves doing so changes nothing.
      */
-    internal fun apply(
+    internal suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
         skipSettled: Boolean
@@ -165,6 +173,12 @@ object ErosionStage {
         var canHoldExcess = BooleanArray(tilesX * tilesY) { true }
 
         repeat(cfg.passes) {
+            // One sweep is one walk of the grid, so this is the finest a stop can be answered at
+            // and it is finer than the spec asks for: eighty sweeps open the stage and six more
+            // run between each pair of hydraulic rounds, and a reader who presses Stop waits out
+            // at most one of them.
+            currentCoroutineContext().ensureActive()
+
             val current = read
             val scan = canHoldExcess
 

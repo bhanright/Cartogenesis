@@ -5,6 +5,8 @@ import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.sqrt
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * What one run of the ice moved, in the units the elevation field itself is kept in.
@@ -141,7 +143,7 @@ internal data class GlacialMass(
  */
 object GlaciationStage {
 
-    fun apply(
+    suspend fun apply(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         /**
@@ -156,12 +158,20 @@ object GlaciationStage {
      * @param onBudget handed this stage's mass tally on the way out. An observer, like erosion's:
      *   passing it changes nothing about the world.
      */
-    internal fun apply(
+    internal suspend fun apply(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         snowBalance: FloatField?,
         onBudget: ((GlacialMass) -> Unit)?
     ): SeaLevelResult {
+        /*
+         * Between the passes below, so a reader who presses Stop while the ice is being cut is
+         * answered within one walk of the grid rather than at the end of the stage. Each pass is a
+         * whole-map walk — at 2048 that is four million cells — and there is nothing finer inside
+         * one worth interrupting.
+         */
+        suspend fun stopIfAsked() = currentCoroutineContext().ensureActive()
+
         val cfg = config.glaciation
         // The same object back, so every `===` guard downstream sees an untouched sea stage and
         // the whole world is reproduced bit for bit. This is the control the guard needs.
@@ -201,6 +211,7 @@ object GlaciationStage {
             }
         }
         if (frozenCount == 0) return sea
+        stopIfAsked()
 
         // The ice follows the water's own network. A glacier occupies the valley a river cut before
         // the cold came, which is both what really happens and what makes the result legible: the
@@ -226,6 +237,7 @@ object GlaciationStage {
         // valley here?" asked of every cell at once. Water counts at the waterline rather than at
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
+        stopIfAsked()
         val landRange = landRange(isLand, relative)
         val reliefRadius = (cfg.reliefWindow * cfg.valleyWidth).toInt().coerceIn(2, 64)
         val relief = localRelief(w, h, relative, reliefRadius)
@@ -261,6 +273,7 @@ object GlaciationStage {
 
         // Everything that could carry a trough: enough ice, close enough to the frozen ground, and
         // standing in channelled country. Whether it actually does is the length test below.
+        stopIfAsked()
         val candidate = BooleanArray(size)
         for (k in order.indices) {
             val i = order[k]
@@ -292,6 +305,7 @@ object GlaciationStage {
         // and the ground distance walked between them. A path that runs dead straight at one of the
         // eight D8 bearings has walked exactly the straight-line distance, and that is the comb of
         // parallel gullies down a range front — see [GlaciationConfig.minSinuosity].
+        stopIfAsked()
         val upstream = IntArray(size)
         val upLength = FloatArray(size)
         val head = IntArray(size) { -1 }
@@ -347,6 +361,7 @@ object GlaciationStage {
 
         // No two glaciers of the same bearing within a trough of each other. Ice that close together
         // is one glacier, and a rank of them is the comb.
+        stopIfAsked()
         val suppressed = suppressParallel(cfg, w, h, glacier, directions, ice, strength, order)
         glacierCells -= suppressed.cells
 
@@ -387,6 +402,7 @@ object GlaciationStage {
         // whichever runs out first ends it — a long flat reach on a plain, a short one on a
         // mountainside. Measured from the head of the longest feeder rather than the nearest, so a
         // tributary joining halfway down does not restart the count.
+        stopIfAsked()
         val spacing = cfg.basinSpacing.coerceAtLeast(2f)
         val drop = cfg.basinDrop.coerceAtLeast(1e-4f)
         val progress = FloatArray(size)
@@ -412,6 +428,7 @@ object GlaciationStage {
         // Carving proper. Every stamp is computed from the *original* surface and combined with a
         // minimum, so overlapping glaciers compose in any order and the result does not depend on
         // which cell was visited first.
+        stopIfAsked()
         val carved = relative.copyOf()
 
         // The trough, and *only* the trough: a graded U following the ground down, cut by the
@@ -459,6 +476,7 @@ object GlaciationStage {
         }
 
         // The over-deepened basins, as regions rather than as cells along a line. See [cutBasins].
+        stopIfAsked()
         val basins = cutBasins(
             cfg, w, h, isLand, frozen, glacier, directions, order, reach, progress,
             strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget

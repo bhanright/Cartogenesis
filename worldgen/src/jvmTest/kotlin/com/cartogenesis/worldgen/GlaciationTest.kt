@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 /**
  * Whether the ice leaves the country it worked on looking like glaciated country.
@@ -698,7 +699,7 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
     val balance = if (config.climate.snowBalance) {
         ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))
     } else null
-    GlaciationStage.apply(config, sea, balance) { mass ->
+    runBlocking { GlaciationStage.apply(config, sea, balance) { mass ->
         println(
             "GLACIATION budget frozen=${mass.frozenCells}" +
                 " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +
@@ -713,7 +714,7 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
                 " deposited=${"%.2f".format(mass.deposited)}" +
                 " seafloor=${"%.2f".format(mass.submarine)}"
         )
-    }
+    } }
 }
 
 /**

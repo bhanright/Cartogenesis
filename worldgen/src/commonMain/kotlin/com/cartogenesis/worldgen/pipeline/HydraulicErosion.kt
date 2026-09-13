@@ -1,9 +1,12 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.concurrent.standAside
 import com.cartogenesis.worldgen.model.ErosionConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * What one hydraulic round moved, in the height units the field itself is kept in.
@@ -276,6 +279,14 @@ internal object HydraulicErosion {
         }
 
         repeat(cfg.hydraulicRounds) { round ->
+            // A round routes the water over the whole map and then cuts with it, and at export
+            // sizes that is seconds of work with nothing in the middle of it that could notice a
+            // reader pressing Stop. So the question is asked here, where a round has just closed
+            // and the field is a whole terrain rather than half of one, and the thread is handed
+            // back — on a browser, where that is the only way the press ever arrives at all.
+            currentCoroutineContext().ensureActive()
+            standAside()
+
             log?.round = round
             // The shoreline moves as the land wears down, so it is found again each round rather
             // than fixed once. This is the same percentile the sea level stage will use — taken,

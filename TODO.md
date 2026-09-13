@@ -1,5 +1,22 @@
 # To do
 
+- **A graded coast has no barrier islands, so it reaches half of Earth's smooth share.** F17's
+  littoral pass fills the re-entrants of Earth's third of the shoreline and the outcome measures
+  half way: the share of coast reading smooth by Australia's 1.13 goes from 0.086 to 0.123 over
+  750 km stretches and 0.141 to 0.200 over 375 km ones, against Earth's 0.31. The missing half is
+  the shape of a real depositional coast, which is not a plain arc but a barrier and a lagoon
+  behind it — Padre Island and the Laguna Madre, the Frisian chain and the Wadden Sea. That also
+  costs the pooled box dimension, 1.207 to 1.176, because a filled bay is one shoreline where a
+  barred one is two. The audit's K1 (wave climate and longshore drift) is the chunk that owns it.
+  2026-09-12.
+- **The littoral criterion cannot tell a coastal plain from a flat coast on hard rock.** It ranks
+  the shoreline by the height of the land within 187 km and takes Earth's 31%, because no height
+  derivable from Earth lands on that share: the postglacial rise calls 59% of the shoreline
+  depositional and a coastal plain's own gradient calls 1.9%. The quantity in the gap is lithology —
+  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which the plan's H3
+  would supply. Until then a world's depositional share is Earth's by construction rather than by
+  measurement, and a world that genuinely had less low coast than Earth would not show it.
+  2026-09-12.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm

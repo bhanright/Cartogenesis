@@ -55,7 +55,13 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
 
    Runs before sea level, since eroding the terrain changes which elevation the percentile lands
    on — and nothing cuts below that level, because it is the base level every river grades to.
-5. **Sea level** — everything below a chosen elevation percentile floods. The sea floor near a
+5. **Sea level** — everything below a chosen elevation percentile floods. The rivers cut to a stand
+   about 120 m lower, so the flooding drowns their lower valleys; then the waves get the six
+   thousand years since the sea stopped rising. On the third of the shoreline with low ground behind
+   it — Earth's own share of depositional coast — sediment fills the re-entrants the drowning left,
+   never damming a channel and never cutting a headland back, because in six thousand years a cliff
+   retreats a few kilometres and a delta plain advances a hundred. So a coast on a plain comes out a
+   graded arc and a coast under mountains keeps its rias. The sea floor near a
    coast is then remapped onto a shallow continental shelf that falls away to the abyss beyond it,
    so a coastline reads as bathymetry rather than a cliff underwater. In the same step, wherever
    the provisional annual temperature sits below freezing, ice takes over, in one of two ways

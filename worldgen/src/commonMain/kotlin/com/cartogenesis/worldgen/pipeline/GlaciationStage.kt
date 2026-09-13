@@ -742,10 +742,16 @@ object GlaciationStage {
 
         val rampCells = config.cellsFor(isostasy.iceSheetMarginRampKm).coerceAtLeast(1f)
         val load = FloatArray(cellCount)
+        // How much ice stands on each cell, as a share of a full sheet's thickness: nothing at the
+        // margin and all of it a ramp's width inside. Kept, because the same profile decides both
+        // how hard the ice presses and how much of the hollow it presses is filled by the ice
+        // itself. See [surfaceShareOfBend].
+        val iceShare = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
             if (!frozen[cell]) continue
-            val thickness = isostasy.iceSheetThicknessMetres *
-                (distanceToEdge[cell] / rampCells).coerceAtMost(1f)
+            val share = (distanceToEdge[cell] / rampCells).coerceAtMost(1f)
+            iceShare[cell] = share
+            val thickness = isostasy.iceSheetThicknessMetres * share
             load[cell] = Isostasy.loadPascals(thickness, isostasy.iceDensity, isostasy.gravity)
         }
 
@@ -794,20 +800,40 @@ object GlaciationStage {
         // The bend is a change in altitude, and the field this stage works in is piecewise: a land
         // cell is measured against the land's half of the ruler and a water cell against the sea's,
         // so each converts through its own.
+        //
+        // How much of it reaches the *surface* is the other half, and it is not all of it. This
+        // field is a surface — the climate reads its altitude for a temperature, the rivers run
+        // down it, the renderer shades it — and where a sheet stands the surface is the top of the
+        // ice, not the rock underneath. A sheet presses its own bed down and then fills the hollow
+        // with itself, so the ground the air touches over the middle of a cap has not moved at
+        // all; at the margin, where the ice thins to nothing, there is nothing to fill it and the
+        // whole bend shows. That is the moat — the Baltic, and Agassiz along the Laurentide's rim.
+        // The share is one minus the ice's own thickness profile, which makes the applied bend
+        // continuous across the ice edge rather than stepping by half a kilometre at it.
+        //
+        // Measured on the five standard worlds at 512: with the whole bend spent on the surface,
+        // the cap's own bed reads several hundred metres lower, the biome stage reads that as
+        // warmer ground and the ice share of land falls from 8.0% to 6.2% against main's 9.6%,
+        // while the hollow under the cap ponds and the lake share of land climbs from 2.6% to
+        // 3.6%. Both are the same error: a bed read as a surface.
         val scale = config.scale
         var deepest = 0f
         for (cell in 0 until cellCount) {
             val bend = load[cell]
             if (bend > deepest) deepest = bend
+            val surfaceBend = bend * (1f - iceShare[cell])
             // Sub-metre bends are dropped, and not for speed. A flexure is a filter over the whole
             // grid, so its answer is non-zero in every cell of the map however far from the ice it
             // is — and "this cell was touched by the glaciation stage" is a question three guards
             // ask by comparing the field before and after. A bend of a few centimetres a thousand
             // kilometres from the nearest sheet is not a landform and must not read as one: without
             // this floor `SnowBalanceTest` counts every land cell on the map as carved.
-            if (bend > -MIN_MEANINGFUL_BEND_METRES && bend < MIN_MEANINGFUL_BEND_METRES) continue
+            if (surfaceBend > -MIN_MEANINGFUL_BEND_METRES &&
+                surfaceBend < MIN_MEANINGFUL_BEND_METRES
+            ) continue
             carved[cell] -=
-                if (isLand[cell]) scale.reliefShareOfMetres(bend) else scale.depthShareOfMetres(bend)
+                if (isLand[cell]) scale.reliefShareOfMetres(surfaceBend)
+                else scale.depthShareOfMetres(surfaceBend)
         }
         return deepest
     }

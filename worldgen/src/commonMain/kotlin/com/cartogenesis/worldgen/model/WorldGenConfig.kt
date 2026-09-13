@@ -326,7 +326,7 @@ data class TerrainConfig(
      * long slopes drainage needs turn out to be the ones that run the whole way across a map, not
      * the ones that fit inside a continent.
      */
-    val regionalReliefShare: Double = 0.10
+    val regionalReliefShare: Double = 0.20
 )
 
 @Serializable
@@ -1550,7 +1550,7 @@ data class ErosionConfig(
      * are touched. Below about 6.7 m/km it starts erasing the terrain noise itself and the land
      * goes mushy.
      */
-    val criticalFallMetresPerKm: Float = 12f,
+    val criticalFallMetresPerKm: Float = 60f,
     /**
      * How far debris may travel from where it came off, in kilometres.
      *

@@ -80,24 +80,30 @@ class PenAndInkTest {
         const val MAX_DENSITY_DRIFT = 0.08
 
         /**
-         * Every style's 512 fantasy render, hashed, as it stood at v2.0.0 — before F9 touched
-         * anything.
+         * Every style's 512 fantasy render, hashed, as it stands now.
          *
          * F9 redraws one style, and the cheapest way to be sure it redrew only that one is to hold
          * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
          * that is supposed to have changed.
+         *
+         * Re-taken once at F17, which moves the coastline: the littoral pass grades Earth's third
+         * of the shoreline after the sea-level cut, so this world's land mask is not the mask v2.0.0
+         * rendered and every one of the ten hashes moves. What the pins are for is unaffected — they
+         * still say that a change to one style's drawing did not leak into the other ten — and the
+         * F17 figures for how far the coastline actually moved are in `GEOGRAPHY.md`, measured
+         * rather than hashed.
          */
         val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1505162113,
-            MapStyle.VELLUM to 1731718276,
-            MapStyle.INK_WASH to 940010414,
-            MapStyle.NAUTICAL to -615327928,
-            MapStyle.MIDNIGHT to -337638301,
-            MapStyle.SCHOOLROOM to 1860155522,
-            MapStyle.VERDANT to -206922609,
-            MapStyle.SCROLL to -1085895034,
-            MapStyle.MARS to 1710409417,
-            MapStyle.CLEAR to -958663001
+            MapStyle.ATLAS to -383423570,
+            MapStyle.VELLUM to -1231228383,
+            MapStyle.INK_WASH to -1122424114,
+            MapStyle.NAUTICAL to 565772122,
+            MapStyle.MIDNIGHT to -1389730733,
+            MapStyle.SCHOOLROOM to 587732852,
+            MapStyle.VERDANT to -454662521,
+            MapStyle.SCROLL to -1135510180,
+            MapStyle.MARS to 502310739,
+            MapStyle.CLEAR to -372736972
         )
 
         /** The gallery's world, at the size the guards measure on. */

@@ -1,12 +1,15 @@
 package com.cartogenesis.web
 
 import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.DataExports
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.cartography.WorldSave
+import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.MapImage
@@ -143,20 +146,66 @@ class WebPlatform(
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
         // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
         val bitmap = MapImage.toBitmap(world, options)
+        // Quality is ignored by the PNG encoder and lossless for WebP at 100; JPEG is the one
+        // format with a real quality to choose, and it is chosen once, in [ExportFormat].
+        val quality = if (format == ExportFormat.JPEG) ExportFormat.JPEG_QUALITY else 100
         val encoded = Image.makeFromBitmap(bitmap)
-            .encodeToData(skiaFormat(format), quality = 100)
+            .encodeToData(skiaFormat(format), quality = quality)
             ?: error("Could not encode the map as ${format.label}")
         val bytes = encoded.bytes
         bitmap.close()
 
         val name = "cartogenesis-${config.seed}-$size.${format.extension}"
-        downloadBytes(name, bytes, if (format == ExportFormat.PNG) "image/png" else "image/webp")
+        downloadBytes(name, bytes, mimeType(format))
 
         return ExportOutcome(name, epochMillisNow() - started, bytes.size.toLong())
     }
 
-    private fun skiaFormat(format: ExportFormat): EncodedImageFormat =
-        if (format == ExportFormat.PNG) EncodedImageFormat.PNG else EncodedImageFormat.WEBP
+    /**
+     * The world's own numbers, as one zip.
+     *
+     * A data export is always two files — the image and the sidecar that says what its numbers mean
+     * — and a browser gives a page one clean way to hand over two files, which is to hand over one.
+     * Two `downloadBytes` calls in a row work in Chrome only after the reader approves a "download
+     * multiple files" prompt that appears without explanation, and Safari has historically kept the
+     * first and dropped the second. A zip needs no permission, arrives as one thing, and keeps the
+     * heightmap and its metre scale together where a reader cannot separate them by accident. The
+     * archive stores rather than deflates: the PNG inside is already compressed, and the page has
+     * one thread. See [com.cartogenesis.cartography.DataFiles.asZip].
+     */
+    override suspend fun exportData(
+        config: WorldGenConfig,
+        size: Int,
+        layer: DataLayer
+    ): ExportOutcome? {
+        val started = epochMillisNow()
+
+        val exportConfig = config.atResolution(size, size)
+        val world = WorldGenerationEngine.generate(exportConfig, accelerator = accelerator)
+        val files = DataExports.write(world, layer, compressor, BuildInfo.VERSION)
+
+        val bytes = files.asZip()
+        val name = "${DataExports.baseName(config, size, layer)}.zip"
+        downloadBytes(name, bytes, "application/zip")
+
+        return ExportOutcome(
+            "$name (${files.imageName} and ${files.sidecarName})",
+            epochMillisNow() - started,
+            bytes.size.toLong()
+        )
+    }
+
+    private fun skiaFormat(format: ExportFormat): EncodedImageFormat = when (format) {
+        ExportFormat.PNG -> EncodedImageFormat.PNG
+        ExportFormat.WEBP -> EncodedImageFormat.WEBP
+        ExportFormat.JPEG -> EncodedImageFormat.JPEG
+    }
+
+    private fun mimeType(format: ExportFormat): String = when (format) {
+        ExportFormat.PNG -> "image/png"
+        ExportFormat.WEBP -> "image/webp"
+        ExportFormat.JPEG -> "image/jpeg"
+    }
 }
 
 /**

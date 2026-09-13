@@ -145,8 +145,12 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
                 appendLine(" * The version comes from `gradle.properties`, which is also where the")
                 appendLine(" * installer's version comes from, so the About dialog and the packaged")
                 appendLine(" * artefact cannot disagree about which release this is.")
+                appendLine(" *")
+                appendLine(" * Public rather than internal since F12: a data export's sidecar names")
+                appendLine(" * the build that wrote it, and the two front ends are the ones writing")
+                appendLine(" * the file, so they have to be able to read this.")
                 appendLine(" */")
-                appendLine("internal object BuildInfo {")
+                appendLine("object BuildInfo {")
                 appendLine("    const val VERSION: String = \"${version.get().escaped()}\"")
                 appendLine("    const val BUILD_DATE: String = \"${date.get().escaped()}\"")
                 appendLine(

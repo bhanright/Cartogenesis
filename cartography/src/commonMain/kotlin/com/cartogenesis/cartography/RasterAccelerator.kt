@@ -245,15 +245,15 @@ class RasterRecipe(
          * here rather than silently rendering as something else.
          */
         fun of(world: WorldMap, options: RenderOptions): RasterRecipe? {
-            val w = world.width
-            val h = world.height
-            val cells = w * h
+            val cellsAcross = world.width
+            val cellsDown = world.height
+            val cellCount = cellsAcross * cellsDown
             val style = options.style
             val view = options.view
 
-            val land = ByteArray(cells)
+            val land = ByteArray(cellCount)
             val isLand = world.sea.isLand
-            for (i in 0 until cells) if (isLand[i]) land[i] = 1
+            for (cell in 0 until cellCount) if (isLand[cell]) land[cell] = 1
 
             var biomes: ByteArray? = null
             var scalarA: FloatArray? = null
@@ -353,10 +353,10 @@ class RasterRecipe(
             val engraveWater = style.lineArt && view.styled
             if (engraveWater && biomes == null) biomes = biomeOrdinals(world)
 
-            if (scalarA != null && scalarA.size != cells) return null
-            if (scalarB != null && scalarB.size != cells) return null
-            if (indexA != null && indexA.size != cells) return null
-            if (indexB != null && indexB.size != cells) return null
+            if (scalarA != null && scalarA.size != cellCount) return null
+            if (scalarB != null && scalarB.size != cellCount) return null
+            if (indexA != null && indexA.size != cellCount) return null
+            if (indexB != null && indexB.size != cellCount) return null
 
             val showLakes = options.showLakes && view.showsTerrain
             val lakes = world.rivers.lakes
@@ -364,15 +364,15 @@ class RasterRecipe(
             val lakeSurface = if (showLakes) {
                 FloatArray(lakes.lakes.size) { lakes.lakes[it].surfaceElevation }
             } else null
-            if (lakeId != null && lakeId.size != cells) return null
+            if (lakeId != null && lakeId.size != cellCount) return null
 
             val borders = options.bordersVisible
             val nation = if (borders) world.nations.nationId else null
-            if (nation != null && nation.size != cells) return null
+            if (nation != null && nation.size != cellCount) return null
 
             return RasterRecipe(
-                width = w,
-                height = h,
+                width = cellsAcross,
+                height = cellsDown,
                 view = viewId,
                 elevation = world.sea.relativeElevation.data,
                 land = land,
@@ -405,8 +405,9 @@ class RasterRecipe(
                 climateTint = if (view == MapView.FANTASY) style.climateTint else 0f,
                 isobathInk = if (view == MapView.FANTASY) style.isobathInk else 0f,
                 isobathInterval = Isobaths.interval(world.config.scale),
-                isobathFlattestSlope = Isobaths.flattestSlope(world.config, w, h),
-                isobathSlopeStencil = Isobaths.slopeStencil(w),
+                isobathFlattestSlope =
+                    Isobaths.flattestSlope(world.config, cellsAcross, cellsDown),
+                isobathSlopeStencil = Isobaths.slopeStencil(cellsAcross),
                 lake = style.lake,
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,
@@ -416,9 +417,11 @@ class RasterRecipe(
                 reliefStrength = style.reliefStrength,
                 lineArt = style.lineArt,
                 inkGain = style.inkGain,
-                engraving = if (style.lineArt) EngravingPlan(w) else null,
+                engraving = if (style.lineArt) EngravingPlan(cellsAcross) else null,
                 shoreDistance = if (style.lineArt) {
-                    ShoreDistance.of(w, h, MapRasterizer.dryLandMask(world, showLakes))
+                    ShoreDistance.of(
+                        cellsAcross, cellsDown, MapRasterizer.dryLandMask(world, showLakes)
+                    )
                 } else null,
                 iceBiome = if (biomes != null) Biome.ICE_SHEET.ordinal else -1,
                 engraveWater = engraveWater,
@@ -432,8 +435,8 @@ class RasterRecipe(
                 anomalyCold = MapPalette.ANOMALY_COLD,
                 hillshade = options.showHillshade && view != MapView.NORMALS,
                 singleLamp = options.singleLamp,
-                slopeScale = ReliefShading.slopeScale(w),
-                opennessStep = ReliefShading.opennessStep(w),
+                slopeScale = ReliefShading.slopeScale(cellsAcross),
+                opennessStep = ReliefShading.opennessStep(cellsAcross),
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,
                 showBorders = borders
@@ -442,7 +445,7 @@ class RasterRecipe(
 
         private fun biomeOrdinals(world: WorldMap): ByteArray {
             val biome = world.climate.biome
-            return ByteArray(biome.size) { biome[it].ordinal.toByte() }
+            return ByteArray(biome.size) { cell -> biome[cell].ordinal.toByte() }
         }
 
         /**
@@ -454,9 +457,9 @@ class RasterRecipe(
          * where there is nothing to catch it.
          */
         private inline fun colourTable(ids: IntArray, colour: (Int) -> Int): IntArray {
-            var highest = 0
-            for (id in ids) if (id > highest) highest = id
-            return IntArray(highest + 1) { colour(it) }
+            var highestId = 0
+            for (id in ids) if (id > highestId) highestId = id
+            return IntArray(highestId + 1) { id -> colour(id) }
         }
     }
 }

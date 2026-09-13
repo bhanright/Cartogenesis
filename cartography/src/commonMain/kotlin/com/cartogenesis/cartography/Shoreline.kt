@@ -41,16 +41,20 @@ object Shoreline {
         val walked = ByteArray(blocksAcross * blocksDown)
         val lines = ArrayList<FloatArray>()
 
-        for (blockY in 0 until blocksDown) {
-            for (blockX in 0 until blocksAcross) {
-                val case = caseAt(isLand, cellsAcross, blockX, blockY)
-                val sides = SEGMENTS[case]
+        for (blockRow in 0 until blocksDown) {
+            for (blockColumn in 0 until blocksAcross) {
+                val corners = cornersAt(isLand, cellsAcross, blockColumn, blockRow)
+                val sides = SEGMENTS[corners]
                 var slot = 0
-                while (slot < sides.size / 2) {
-                    val block = blockY * blocksAcross + blockX
+                while (slot < sides.size / SIDES_PER_SEGMENT) {
+                    val block = blockRow * blocksAcross + blockColumn
                     if (walked[block].toInt() and (1 shl slot) == 0) {
-                        lines.add(chainFrom(isLand, cellsAcross, blocksAcross, blocksDown, walked,
-                            blockX, blockY, sides[slot * 2]))
+                        lines.add(
+                            chainFrom(
+                                isLand, cellsAcross, blocksAcross, blocksDown, walked,
+                                blockColumn, blockRow, sides[slot * SIDES_PER_SEGMENT]
+                            )
+                        )
                     }
                     slot++
                 }
@@ -177,12 +181,21 @@ object Shoreline {
         val lengthSquared = runX * runX + runY * runY
         // A segment whose ends coincide is a point, and the distance to it is the distance to it.
         val along =
-            if (lengthSquared < 1e-12f) 0f
+            if (lengthSquared < SHORTEST_REAL_SEGMENT_SQUARED) 0f
             else (((x - fromX) * runX + (y - fromY) * runY) / lengthSquared).coerceIn(0f, 1f)
-        val dx = x - (fromX + along * runX)
-        val dy = y - (fromY + along * runY)
-        return sqrt(dx * dx + dy * dy)
+        val awayX = x - (fromX + along * runX)
+        val awayY = y - (fromY + along * runY)
+        return sqrt(awayX * awayX + awayY * awayY)
     }
+
+    /**
+     * Below this squared length a segment is treated as a point, in cells squared.
+     *
+     * A millionth of a millionth: every real vertex here sits on a half-cell lattice, so the
+     * shortest segment the trace can produce is half a cell and nothing legitimate comes near
+     * this. It exists only so the projection below cannot divide by zero.
+     */
+    private const val SHORTEST_REAL_SEGMENT_SQUARED = 1e-12f
 
     /**
      * One contour, walked from a segment of one block to wherever it leads.
@@ -199,15 +212,15 @@ object Shoreline {
         blocksAcross: Int,
         blocksDown: Int,
         walked: ByteArray,
-        seedX: Int,
-        seedY: Int,
+        seedColumn: Int,
+        seedRow: Int,
         seedEntry: Int
     ): FloatArray {
         val forward = PointList()
-        forward.add(pointX(seedX, seedEntry), pointY(seedY, seedEntry))
+        forward.add(pointX(seedColumn, seedEntry), pointY(seedRow, seedEntry))
         val closed = walk(
             isLand, cellsAcross, blocksAcross, blocksDown, walked,
-            seedX, seedY, seedEntry, forward
+            seedColumn, seedRow, seedEntry, forward
         )
         if (closed) return forward.toFloatArray()
 
@@ -215,25 +228,28 @@ object Shoreline {
         // and the rest of it lies the other way: out of the seed block across the side the forward
         // walk came in by, into the block that shares that side.
         val backward = PointList()
-        var x = seedX
-        var y = seedY
+        var column = seedColumn
+        var row = seedRow
         var side = seedEntry
         when (side) {
-            TOP -> { y--; side = BOTTOM }
-            RIGHT -> { x++; side = LEFT }
-            BOTTOM -> { y++; side = TOP }
-            else -> { x--; side = RIGHT }
+            TOP -> { row--; side = BOTTOM }
+            RIGHT -> { column++; side = LEFT }
+            BOTTOM -> { row++; side = TOP }
+            else -> { column--; side = RIGHT }
         }
-        if (x in 0 until blocksAcross && y in 0 until blocksDown) {
-            walk(isLand, cellsAcross, blocksAcross, blocksDown, walked, x, y, side, backward)
+        if (column in 0 until blocksAcross && row in 0 until blocksDown) {
+            walk(
+                isLand, cellsAcross, blocksAcross, blocksDown, walked,
+                column, row, side, backward
+            )
         }
         return backward.reversedFollowedBy(forward)
     }
 
     /**
-     * Follows the contour out of block ([blockX], [blockY]) from [entry], appending each point it
-     * reaches to [into]. True when the walk came back to a segment it had already taken, which is
-     * how a closed ring ends; false when it left the grid.
+     * Follows the contour out of block ([blockColumn], [blockRow]) from [entry], appending each
+     * point it reaches to [into]. True when the walk came back to a segment it had already taken,
+     * which is how a closed ring ends; false when it left the grid.
      */
     private fun walk(
         isLand: BooleanArray,
@@ -241,78 +257,108 @@ object Shoreline {
         blocksAcross: Int,
         blocksDown: Int,
         walked: ByteArray,
-        blockX: Int,
-        blockY: Int,
+        blockColumn: Int,
+        blockRow: Int,
         entry: Int,
         into: PointList
     ): Boolean {
-        var x = blockX
-        var y = blockY
+        var column = blockColumn
+        var row = blockRow
         var side = entry
         while (true) {
-            val case = caseAt(isLand, cellsAcross, x, y)
-            val sides = SEGMENTS[case]
+            val corners = cornersAt(isLand, cellsAcross, column, row)
+            val sides = SEGMENTS[corners]
             val slot = slotContaining(sides, side)
             if (slot < 0) return false
 
-            val block = y * blocksAcross + x
+            val block = row * blocksAcross + column
             val mark = 1 shl slot
             if (walked[block].toInt() and mark != 0) return true
             walked[block] = (walked[block].toInt() or mark).toByte()
 
-            val exit = if (sides[slot * 2] == side) sides[slot * 2 + 1] else sides[slot * 2]
-            into.add(pointX(x, exit), pointY(y, exit))
+            val exit =
+                if (sides[slot * SIDES_PER_SEGMENT] == side) sides[slot * SIDES_PER_SEGMENT + 1]
+                else sides[slot * SIDES_PER_SEGMENT]
+            into.add(pointX(column, exit), pointY(row, exit))
 
             when (exit) {
-                TOP -> { y--; side = BOTTOM }
-                RIGHT -> { x++; side = LEFT }
-                BOTTOM -> { y++; side = TOP }
-                else -> { x--; side = RIGHT }
+                TOP -> { row--; side = BOTTOM }
+                RIGHT -> { column++; side = LEFT }
+                BOTTOM -> { row++; side = TOP }
+                else -> { column--; side = RIGHT }
             }
-            if (x < 0 || y < 0 || x >= blocksAcross || y >= blocksDown) return false
+            if (column < 0 || row < 0 || column >= blocksAcross || row >= blocksDown) return false
         }
     }
 
     /** Which of a case's segments touches [side], or -1 when none does. */
     private fun slotContaining(sides: IntArray, side: Int): Int {
         var slot = 0
-        while (slot < sides.size / 2) {
-            if (sides[slot * 2] == side || sides[slot * 2 + 1] == side) return slot
+        while (slot < sides.size / SIDES_PER_SEGMENT) {
+            if (sides[slot * SIDES_PER_SEGMENT] == side ||
+                sides[slot * SIDES_PER_SEGMENT + 1] == side
+            ) {
+                return slot
+            }
             slot++
         }
         return -1
     }
 
     /**
-     * The four cells around block ([blockX], [blockY]) as a bit per corner: 1 north-west, 2
-     * north-east, 4 south-east, 8 south-west, set where the cell is land.
+     * The four cells around block ([blockColumn], [blockRow]) as a bit per corner: 1 north-west,
+     * 2 north-east, 4 south-east, 8 south-west, set where the cell is land.
+     *
+     * The sixteen values this can take are the sixteen entries of [SEGMENTS], which is what makes
+     * that table a plain lookup rather than a decision.
      */
-    private fun caseAt(isLand: BooleanArray, cellsAcross: Int, blockX: Int, blockY: Int): Int {
-        val northWest = blockY * cellsAcross + blockX
-        var case = 0
-        if (isLand[northWest]) case = case or 1
-        if (isLand[northWest + 1]) case = case or 2
-        if (isLand[northWest + cellsAcross + 1]) case = case or 4
-        if (isLand[northWest + cellsAcross]) case = case or 8
-        return case
+    private fun cornersAt(
+        isLand: BooleanArray,
+        cellsAcross: Int,
+        blockColumn: Int,
+        blockRow: Int
+    ): Int {
+        val northWest = blockRow * cellsAcross + blockColumn
+        var corners = 0
+        if (isLand[northWest]) corners = corners or NORTH_WEST_IS_LAND
+        if (isLand[northWest + 1]) corners = corners or NORTH_EAST_IS_LAND
+        if (isLand[northWest + cellsAcross + 1]) corners = corners or SOUTH_EAST_IS_LAND
+        if (isLand[northWest + cellsAcross]) corners = corners or SOUTH_WEST_IS_LAND
+        return corners
     }
 
-    private fun pointX(blockX: Int, side: Int): Float = when (side) {
-        TOP, BOTTOM -> blockX + 1f
-        RIGHT -> blockX + 1.5f
-        else -> blockX + 0.5f
+    /**
+     * Where a crossing of one side of a block sits, in cell coordinates.
+     *
+     * A block spans the centres of the four cells at ([blockColumn], [blockRow]) and their east,
+     * south and south-east neighbours, so its north-west corner is at `blockColumn + 0.5`. A
+     * crossing is the midpoint of a side: half a cell along it, and on the side itself.
+     */
+    private fun pointX(blockColumn: Int, side: Int): Float = when (side) {
+        TOP, BOTTOM -> blockColumn + 1f
+        RIGHT -> blockColumn + 1.5f
+        else -> blockColumn + 0.5f
     }
 
-    private fun pointY(blockY: Int, side: Int): Float = when (side) {
-        LEFT, RIGHT -> blockY + 1f
-        BOTTOM -> blockY + 1.5f
-        else -> blockY + 0.5f
+    private fun pointY(blockRow: Int, side: Int): Float = when (side) {
+        LEFT, RIGHT -> blockRow + 1f
+        BOTTOM -> blockRow + 1.5f
+        else -> blockRow + 0.5f
     }
 
     private const val TOP = 0
     private const val RIGHT = 1
     private const val BOTTOM = 2
     private const val LEFT = 3
+
+    /** A segment is a pair of sides, so [SEGMENTS] holds two entries for each of them. */
+    private const val SIDES_PER_SEGMENT = 2
+
+    /** The bit each corner of a block sets in [cornersAt]'s answer, clockwise from the north-west. */
+    private const val NORTH_WEST_IS_LAND = 1
+    private const val NORTH_EAST_IS_LAND = 2
+    private const val SOUTH_EAST_IS_LAND = 4
+    private const val SOUTH_WEST_IS_LAND = 8
 
     /**
      * Which sides of a block the contour crosses, for each of the sixteen land patterns, as pairs.
@@ -344,6 +390,8 @@ object Shoreline {
 
     /** A growable list of points, kept as raw floats so a long coast is not a million boxes. */
     private class PointList {
+        // Enough for a small island's whole ring without a copy; a mainland coast doubles from
+        // here a dozen times, which is nothing against the trace itself.
         private var points = FloatArray(64)
         private var size = 0
 

@@ -61,11 +61,10 @@ class StraightRunTest {
      * *cells* here reproduces F15's seeds bar one, at 1/0/0/1/1.
      *
      * A ruled bar needs a ruled course *and* a lip for it to pond behind, and the second is chance:
-     * one of these five worlds had one. That makes the census a poor way to tell one routing rule
-     * from another — the sill fix committed beside this one moves the terrain enough that 298405
-     * stops ponding under the old rule as well, so running the old rule here now counts zero too.
-     * What separates the rules on every seed is the ruled *course*, which is the defect itself;
-     * see the case below.
+     * one of these five worlds had one, and whether it still would on a world moved by any other
+     * chunk is chance again. So the census records that the artefact is gone, but it is a poor
+     * instrument for telling one routing rule from another. What separates them on every seed is
+     * the ruled *course*, which is the defect itself and is on every map; see the case below.
      */
     @Test
     fun `no standing water is a ruled bar`() {

@@ -86,10 +86,11 @@ internal const val MAP_TOOLBAR: String = "Map toolbar"
  *
  * Why the two are drawn differently is a matter of arithmetic at the width this application is
  * designed for. With the right-hand column folded away (F3 moved Export into the header panel) the
- * map is about 1080 dp wide at a 1440 dp window. The eleven style names — Atlas, Vellum, Ink wash,
- * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars (F4) and Colour-blind (F6) —
- * measure some 740 dp set as cells, so they still fit on one row with room left for the small
- * print, which is the first thing to be elided as the row fills. The fifteen view names run past 1300
+ * map is about 1080 dp wide at a 1440 dp window. The twelve style names — Atlas, Vellum, Ink wash,
+ * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars (F4), Natural (F23) and
+ * Colour-blind (F6) — measure some 800 dp set as cells, so they still fit on one row with room left
+ * for the small print, which is the first thing to be elided as the row fills. The fifteen view
+ * names run past 1300
  * dp, largely because four of them are things like "Temperature, summer"; a second segmented row
  * would either wrap or be cut, and a wrapped segmented control is no longer a segmented control.
  * So the views are a menu, which also puts the current view in words at the right of the strip
@@ -141,10 +142,10 @@ internal fun MapToolbar(
 }
 
 /**
- * The same toolbar on a phone: three targets and one name, instead of eleven names and a menu.
+ * The same toolbar on a phone: three targets and one name, instead of twelve names and a menu.
  *
  * The segmented row above is a chart's key — every style named, the current one inked — and it
- * needs about 740 dp to be that. At 390 dp the same information has to be a menu, so the row
+ * needs about 800 dp to be that. At 390 dp the same information has to be a menu, so the row
  * becomes: the single menu button that replaces the whole menu strip, a palette glyph carrying the
  * current style's *name* (the one word worth its width, since it is the answer to "what am I
  * looking at"), and the view menu, which was already a menu and stays one. The small print goes: it
@@ -186,7 +187,7 @@ internal fun CompactMapToolbar(
  * `◑ Vellum ▾`, and the other ten behind it.
  *
  * The compact counterpart of the segmented row, and the only place in the application where a
- * choice of eleven is offered as a menu rather than as a key — which is a loss, and is why the current
+ * choice of twelve is offered as a menu rather than as a key — which is a loss, and is why the current
  * style's name is spelled out on the button rather than left to an icon.
  */
 @Composable

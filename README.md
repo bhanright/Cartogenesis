@@ -178,7 +178,15 @@ strokes laid where the ground is steep and left off where it is flat. It stops s
 imitates, in one honest respect: a hand-drawn map draws each range as a little picture shaded by
 eye, where this hatches by slope, so the texture is right and the pictograms are not there.
 
-A style changes appearance and nothing else — the same seed gives the same world in all ten — and
+Natural is the one whose palette was measured rather than chosen. Every colour in it is sampled
+off one photograph — a Blue Marble view of Earth centred on North America — region by region, and
+each constant in the source carries the pixel box its median came out of: the land ramp is that
+image's eastern woodland, Mississippi lowland, Pacific north-west, Great Plains olive, Great Basin
+umber, Chihuahua ochre, Colorado red rock and Greenland snow, in that order, which happens to be
+their order of lightness. Its climate lever is at full, because on a photograph the colour of a
+place is what grows there and the height only shows through where nothing does.
+
+A style changes appearance and nothing else — the same seed gives the same world in all twelve — and
 the diagnostic views ignore styles entirely, because their colours mean something and a prettier
 ramp would make them lie.
 

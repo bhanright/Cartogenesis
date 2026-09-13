@@ -829,7 +829,7 @@ enum class MapStyle(
     /**
      * Whether the political and peoples views take this style's own water and land as well.
      *
-     * Ordinarily they do not: a political map that changed colour with the style would make eleven
+     * Ordinarily they do not: a political map that changed colour with the style would make twelve
      * political maps out of one, and the shared ramps keep it one. Two styles have to be exceptions
      * and for the same reason — the ground they hand those views is *part of the style's claim*,
      * not decoration. [CLEAR] declares a realm set chosen so that no two realms can be confused,

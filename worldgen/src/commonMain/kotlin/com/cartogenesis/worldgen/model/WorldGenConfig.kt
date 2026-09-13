@@ -334,7 +334,7 @@ data class TerrainConfig(
      * long slopes drainage needs turn out to be the ones that run the whole way across a map, not
      * the ones that fit inside a continent.
      */
-    val regionalReliefShare: Double = 0.20
+    val regionalReliefShare: Double = 0.16
 )
 
 @Serializable

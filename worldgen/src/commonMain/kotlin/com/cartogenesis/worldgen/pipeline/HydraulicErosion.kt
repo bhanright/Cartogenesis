@@ -464,6 +464,54 @@ internal object HydraulicErosion {
                 }
             }
 
+            // And the plate answers — at the top of the round, to everything the rounds before it
+            // did, rather than at the bottom to what this one just did.
+            //
+            // The load is the same load either way and the arithmetic is the same arithmetic; what
+            // changes is what the world ends on. A flexure is a filter over the whole field, so its
+            // answer is a broad warp, and a broad warp laid on a landscape *after* the water has
+            // finished routing over it is a landscape whose rivers no longer run downhill: the
+            // shallow basins the bend makes have no outlet cut through them and the lake stage
+            // fills them. Measured on the five standard worlds at 512, the bend spent at the tail
+            // of the last round left 0.9 of a percentage point of extra land under lakes. Spent at
+            // the head instead, every bend the plate makes has a round of rivers after it to
+            // adjust to it, which is also the order the Earth does it in: a plate takes ten
+            // thousand years to answer a load and a river answers the plate as it moves.
+            //
+            // The first round's load is nothing, so its bend is nothing and no world is disturbed
+            // by having one.
+            var deflectedThisRound = 0.0
+            if (flexure != null) {
+                val surface = working.data
+                val uplifted = upliftedMetres
+                for (cell in surface.indices) {
+                    // Everything the rounds have done to the column, in metres of rock: what the
+                    // rivers cut away, less what the tectonics stacked on (which arrives
+                    // compensated), plus the spoil the walk is still holding off the terrain. That
+                    // last term matters more than it looks — the sediment is not laid on the rock
+                    // until the final round, so without it the plate would not feel a grain of the
+                    // debris a range sheds into its foreland until the world was finished, and a
+                    // foreland basin is that debris.
+                    val columnChangeMetres =
+                        (surface[cell] - reference[cell]) * metresPerFieldUnit +
+                            deflectionMetres[cell] -
+                            (if (uplifted.isEmpty()) 0f else uplifted[cell]) +
+                            (if (sediment.isEmpty()) 0f else sediment[cell] * metresPerFieldUnit)
+                    loadPascals[cell] = columnChangeMetres * loadDensity * gravity
+                }
+                flexure.deflectionMetres(loadPascals, loadPascals)
+                for (cell in surface.indices) {
+                    val bend = loadPascals[cell]
+                    surface[cell] += (deflectionMetres[cell] - bend) / metresPerFieldUnit
+                    deflectionMetres[cell] = bend
+                    // Summed as a magnitude, because the signed sum is zero by construction: the
+                    // filter drops the zero-frequency term, so a bend down somewhere is a bend up
+                    // somewhere else and the world's mean altitude does not move. That is also what
+                    // keeps the round's mass budget closing across this pass.
+                    deflectedThisRound += if (bend < 0f) -bend.toDouble() else bend.toDouble()
+                }
+            }
+
             log?.round = round
             // The shoreline moves as the land wears down, so it is found again each round rather
             // than fixed once. This is the same percentile the sea level stage will use — taken,
@@ -1051,42 +1099,6 @@ internal object HydraulicErosion {
             }
 
             working = relax(working)
-
-            // And the plate answers. The load is everything the round has done to the column
-            // measured against the state the plate was in equilibrium with — the uplift stacked on
-            // it, the rock the rivers took off it, the spoil they laid back down — and the bend
-            // that answers it replaces the bend already applied rather than adding to it.
-            var deflectedThisRound = 0.0
-            if (flexure != null) {
-                val surface = working.data
-                val uplifted = upliftedMetres
-                for (cell in surface.indices) {
-                    // Everything the round has done to the column, in metres of rock: what the
-                    // rivers cut away, less what the tectonics stacked on (which arrives
-                    // compensated), plus the spoil the walk is still holding off the terrain. That
-                    // last term matters more than it looks — the sediment is not laid on the rock
-                    // until the final round, so without it the plate would not feel a grain of the
-                    // debris a range sheds into its foreland until the world was finished, and a
-                    // foreland basin is that debris.
-                    val columnChangeMetres =
-                        (surface[cell] - reference[cell]) * metresPerFieldUnit +
-                            deflectionMetres[cell] -
-                            (if (uplifted.isEmpty()) 0f else uplifted[cell]) +
-                            (if (sediment.isEmpty()) 0f else sediment[cell] * metresPerFieldUnit)
-                    loadPascals[cell] = columnChangeMetres * loadDensity * gravity
-                }
-                flexure.deflectionMetres(loadPascals, loadPascals)
-                for (cell in surface.indices) {
-                    val bend = loadPascals[cell]
-                    surface[cell] += (deflectionMetres[cell] - bend) / metresPerFieldUnit
-                    deflectionMetres[cell] = bend
-                    // Summed as a magnitude, because the signed sum is zero by construction: the
-                    // filter drops the zero-frequency term, so a bend down somewhere is a bend up
-                    // somewhere else and the world's mean altitude does not move. That is also what
-                    // keeps the round's mass budget closing across this pass.
-                    deflectedThisRound += if (bend < 0f) -bend.toDouble() else bend.toDouble()
-                }
-            }
 
             if (onRound != null) {
                 // Against the same round's routing, on the field the relaxation left, which is the

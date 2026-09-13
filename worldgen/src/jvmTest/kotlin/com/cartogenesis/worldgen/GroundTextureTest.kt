@@ -245,10 +245,10 @@ class GroundTextureTest {
          * What `main` at 2eb0f0d measured, by this arithmetic, on these five seeds.
          *
          * Taken by running this measurement on that tree rather than remembered: the belt flank
-         * reads 138, 176, 201, 173 and 195 m, and the drainage density 0.0030, 0.0030, 0.0020,
-         * 0.0025 and 0.0023 km/km2.
+         * reads 77, 94, 133, 123 and 140 m, and the drainage density 0.0030, 0.0030, 0.0019,
+         * 0.0025 and 0.0024 km/km2.
          */
-        const val MAIN_BELT_FLANK_TEXTURE_METRES = 177.0
+        const val MAIN_BELT_FLANK_TEXTURE_METRES = 113.0
         const val MAIN_DRAINAGE_DENSITY_KM_PER_KM2 = 0.00256
 
         /** Half again Earth's own share, which is the slack M1's row is read with. */

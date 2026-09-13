@@ -103,7 +103,7 @@ class IncrementalReuseTest {
             ),
             "climate" to base.copy(
                 climate = base.climate.copy(
-                    equatorTemperatureC = base.climate.equatorTemperatureC + 4f
+                    globalMeanShiftC = base.climate.globalMeanShiftC + 4f
                 )
             ),
             // The seasonal knobs live in the same section as the rest of the climate, so the guard
@@ -121,9 +121,14 @@ class IncrementalReuseTest {
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
             ),
-            "continentality" to base.copy(
-                climate = base.climate.copy(continentality = base.climate.continentality + 0.4f)
+            "lapseRateCPerKm" to base.copy(
+                climate = base.climate.copy(
+                    lapseRateCPerKm = base.climate.lapseRateCPerKm + 2f
+                )
             ),
+            // W1: the sea-ice masks are climate sections, and the march reads them, so a change
+            // here has to invalidate everything downstream the way the rest of this section does.
+            "seaIce" to base.copy(climate = base.climate.copy(seaIce = false)),
             // H4: the march's over-sea moisture pickup now scales by the ocean stage's current
             // anomaly, so this knob has to invalidate the same way the others in this section do.
             "currentMoisture" to base.copy(
@@ -288,6 +293,8 @@ class IncrementalReuseTest {
                 precipitationMm = field(world.climate.precipitationMm),
                 windDirection = world.climate.windDirection.copyOf(),
                 windMeridional = field(world.climate.windMeridional),
+                summerSeaIce = world.climate.summerSeaIce.copyOf(),
+                winterSeaIce = world.climate.winterSeaIce.copyOf(),
                 biome = world.climate.biome.copyOf()
             ),
             rivers = RiverResult(

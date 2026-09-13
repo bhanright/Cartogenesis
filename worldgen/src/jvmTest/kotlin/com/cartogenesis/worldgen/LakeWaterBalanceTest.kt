@@ -78,8 +78,16 @@ class LakeWaterBalanceTest {
     /** The cells of the largest spill-level basin whose footprint averages less than [maxRain]. */
     private fun basinOf(world: WorldMap, minRain: Float, maxRain: Float): List<Int> {
         val lakes = world.rivers.lakes
-        return lakes.lakes
+        val byLake = lakes.lakes
             .map { lake -> lakes.lakeId.indices.filter { lakes.lakeId[it] == lake.id } }
+        byLake.sortedByDescending { it.size }.take(5).forEach { cells ->
+            println(
+                "BALANCE candidate basin of %d cells averaging %.0f mm".format(
+                    cells.size, cells.map { world.climate.precipitationMm.data[it] }.average()
+                )
+            )
+        }
+        return byLake
             .filter { cells ->
                 val rain = cells.map { world.climate.precipitationMm.data[it] }.average()
                 rain in minRain.toDouble()..maxRain.toDouble()
@@ -160,7 +168,14 @@ class LakeWaterBalanceTest {
         val off = world(wetSeed, waterBalance = false)
         val on = world(wetSeed, waterBalance = true)
 
-        val basin = basinOf(off, 700f, Float.MAX_VALUE)
+        // 650 mm, not the 700 this case was written with. The cut is how the case *finds* seed
+        // 99's wet basin, not what it measures, and W1's energy balance left that basin's
+        // footprint on 698 mm where it had been 730 — the same hollow at (356,247), 383 cells
+        // against 433, two millimetres the wrong side of the old line. The claim is unchanged and
+        // still carries: a catchment that can keep its basin wet leaves it at the brim, and the
+        // assertions below are the same ones. `basinOf` prints the five largest basins and their
+        // rainfall so the next chunk that moves the climate can re-read this in one run.
+        val basin = basinOf(off, 650f, Float.MAX_VALUE)
         assertTrue(basin.size >= 200, "seed $wetSeed has no large wet basin any more (${basin.size} cells)")
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()

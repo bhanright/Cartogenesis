@@ -152,14 +152,22 @@ class MeridionalWindTest {
                     val i = y * w + x
 
                     if (!world.sea.isLand[i]) {
-                        val seaTemperature = if (config.ocean.enabled) {
-                            world.ocean.temperature.data[i]
+                        // The season's own sea surface — the energy balance's sea column for this
+                        // latitude and this half of the year, which is what `temperature` holds
+                        // over water, plus the current anomaly — and nothing at all where that
+                        // surface froze. Both are what the production march reads; see
+                        // `ClimateStage.marchRun`.
+                        val currentAnomaly =
+                            if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
+                        val frozen =
+                            if (warm) world.climate.summerSeaIce[i] else world.climate.winterSeaIce[i]
+                        val stepResult = if (frozen) {
+                            ClimateStage.marchSeaIceStep(cfg, moisture)
                         } else {
-                            temperature.data[i]
+                            ClimateStage.marchSeaStep(
+                                cfg, moisture, temperature.data[i] + currentAnomaly, currentAnomaly
+                            )
                         }
-                        val currentAnomaly = if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
-                        val stepResult =
-                            ClimateStage.marchSeaStep(cfg, moisture, seaTemperature, currentAnomaly)
                         moisture = stepResult.moisture
                         if (lap == 1) precip.data[i] = stepResult.rain
                         continue

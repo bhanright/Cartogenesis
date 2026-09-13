@@ -112,7 +112,10 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.EarthLikenessAuditTest",
     // S1: the scale-free suite's third grid. `ScaleFreeTest` holds 512 against 1024 per
     // merge; four worlds at 2048 is four minutes of erosion for one more octave of lever.
-    "com.cartogenesis.worldgen.ScaleFreeAuditTest"
+    "com.cartogenesis.worldgen.ScaleFreeAuditTest",
+    // W1's renders: the author's two worlds at 2048 in three views apiece, whole and cropped.
+    // A harness like `DebugMapDump`, and asserts nothing.
+    "com.cartogenesis.worldgen.W1RenderDump"
 )
 
 tasks.named<Test>("jvmTest") {

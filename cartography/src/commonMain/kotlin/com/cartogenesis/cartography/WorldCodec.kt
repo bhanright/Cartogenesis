@@ -128,12 +128,18 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 8 because the climate gained two sea-ice masks, one per season, and lost the two anchors of
+     * the latitude curve the energy balance replaced: `climate.equatorTemperatureC` and
+     * `climate.poleTemperatureC` are gone and `climate.globalMeanShiftC` stands in their place,
+     * along with `climate.continentality`, which is now two heat capacities and a coastline rather
+     * than a setting. An older file would open with this build's defaults wherever one of those has
+     * moved, which is a world quietly unlike the one that was saved.
+     *
      * 7 because the world gained a `scale` section — its width in kilometres, the two ends of its
      * vertical range in metres and the years a hydraulic round stands for — and every physical
      * knob moved onto it: the sea's lowstand and the glacial depths became metres, every reach and
      * radius became kilometres, and `climate.maxAltitudeMetres` and `nations.worldWidthKm` left the
-     * sections they were lodged in. An older file's keys would parse and be ignored, leaving the
-     * world at this build's defaults wherever one has moved.
+     * sections they were lodged in.
      *
      * 6 because a river's drawn size stopped being a width in cells and became
      * [com.cartogenesis.worldgen.pipeline.River.widthRatio], a fraction of the map's largest river:
@@ -144,7 +150,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 7
+    const val FORMAT_VERSION = 8
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

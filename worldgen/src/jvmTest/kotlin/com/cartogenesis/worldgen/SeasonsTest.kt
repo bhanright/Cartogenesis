@@ -35,6 +35,28 @@ class SeasonsTest {
         const val SAMPLE_SPAN = 1.5f
 
         /**
+         * What the year is allowed to do at 35 degrees, in degrees Celsius, and the least the
+         * land may beat the open sea by.
+         *
+         * All three are Earth's, at 35 degrees, and all three moved in W1, when the seasonal
+         * amplitude stopped being a damping factor over water and became two heat capacities in an
+         * energy balance. The sea's ceiling was 4 C, which was the old model's own damped figure
+         * rather than a measurement: the open North Atlantic at 35 N runs 19 to 27 C over the year,
+         * the North Pacific 16 to 25, and the two southern oceans 6 C apiece, so the observed range
+         * there is 6 to 9 and the ceiling is 9. Land: a continental interior at that latitude swings
+         * about 26 C (Kabul 26, Tehran 25) and a west coast about 8 (Los Angeles), so a band mixing
+         * both keeps the floor at 8. The ratio of the extremes is 3.7, and the guard asks for 2,
+         * because the map's land band at this latitude is a mixture and not one interior station.
+         *
+         * The model measures land 15.0 C, sea 4.8 C, ratio 3.1. The sea's own figure is under
+         * Earth's 6-9, and that is a finding rather than a pass: a fifty-metre slab of water with
+         * no seasonal deepening stores more of its summer than the real thing does.
+         */
+        const val LAND_SWING_FLOOR_C = 8.0
+        const val SEA_SWING_CEILING_C = 9.0
+        const val LAND_TO_SEA_RATIO = 2.0
+
+        /**
          * How far inland of a west-facing shore a cell may sit and still be that coast's climate.
          *
          * At 512 wide this is a little over two degrees of longitude — a coastal strip, not a
@@ -90,12 +112,17 @@ class SeasonsTest {
         val sea = seaGap / seaCells
         println(
             "SEASONS seed 42 at ${SAMPLE_LATITUDE.toInt()} deg: " +
-                "land swing ${"%.1f".format(land)} C over $landCells cells, " +
-                "open sea ${"%.1f".format(sea)} C over $seaCells cells"
+                "land swing ${"%.1f".format(land)} C over $landCells cells (Earth 8-26), " +
+                "open sea ${"%.1f".format(sea)} C over $seaCells cells (Earth 6-9), " +
+                "ratio ${"%.1f".format(land / sea)} (Earth up to 3.7)"
         )
 
-        assertTrue(land > 8.0, "land at 35 degrees swings only ${"%.1f".format(land)} C")
-        assertTrue(sea < 4.0, "open sea at 35 degrees swings ${"%.1f".format(sea)} C")
+        assertTrue(land > LAND_SWING_FLOOR_C, "land at 35 degrees swings only ${"%.1f".format(land)} C")
+        assertTrue(sea < SEA_SWING_CEILING_C, "open sea at 35 degrees swings ${"%.1f".format(sea)} C")
+        assertTrue(
+            land / sea >= LAND_TO_SEA_RATIO,
+            "land swings only ${"%.1f".format(land / sea)} times as far as the open sea"
+        )
     }
 
     @Test

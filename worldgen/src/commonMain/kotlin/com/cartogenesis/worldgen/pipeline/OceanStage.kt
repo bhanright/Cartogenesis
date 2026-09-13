@@ -145,12 +145,16 @@ object OceanStage {
         val temperature = FloatField(cellsAcross, cellsDown)
         val anomaly = FloatField(cellsAcross, cellsDown)
 
-        fillBaseTemperature(config, sea, temperature)
+        // The same energy balance the climate stage reads, solved again here rather than passed
+        // in: this stage runs first, and a sea whose temperature came off a different curve from
+        // the land's would put back the two rulers S1 spent a chunk removing.
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        fillBaseTemperature(config, sea, zonal, temperature)
         if (!oceanConfig.enabled) return OceanResult(velocityX, velocityY, temperature, anomaly)
 
         val streamFunction = solveStreamFunction(config, sea)
         streamToVelocity(config, sea, streamFunction, velocityX, velocityY)
-        advectTemperature(config, sea, velocityX, velocityY, temperature)
+        advectTemperature(config, sea, zonal, velocityX, velocityY, temperature)
         buildAnomaly(config, sea, temperature, anomaly)
 
         return OceanResult(velocityX, velocityY, temperature, anomaly)
@@ -365,16 +369,14 @@ object OceanStage {
     private fun fillBaseTemperature(
         config: WorldGenConfig,
         sea: SeaLevelResult,
+        zonal: ZonalClimate,
         temperature: FloatField
     ) {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val climateConfig = config.climate
         for (row in 0 until cellsDown) {
-            val latitude = ClimateStage.latitudeOf(row, cellsDown)
-            val latitudeTemperatureC = zonalTemperature(
-                latitude, climateConfig.equatorTemperatureC, climateConfig.poleTemperatureC
-            )
+            val latitudeTemperatureC =
+                zonal.seaC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
             for (column in 0 until cellsAcross) {
                 if (!sea.isLand[row * cellsAcross + column]) {
                     temperature.data[row * cellsAcross + column] = latitudeTemperatureC
@@ -394,13 +396,19 @@ object OceanStage {
     private fun advectTemperature(
         config: WorldGenConfig,
         sea: SeaLevelResult,
+        zonal: ZonalClimate,
         velocityX: FloatField,
         velocityY: FloatField,
         temperature: FloatField
     ) {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val climateConfig = config.climate
+        // The temperature each row relaxes back toward. One lookup per row rather than one per
+        // cell per pass: two hundred passes over a four-million-cell grid is not the place for an
+        // interpolation that only ever depends on the latitude.
+        val relaxTowardC = FloatArray(cellsDown) { row ->
+            zonal.seaC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL)
+        }
 
         var current = temperature.data.copyOf()
         var next = current.copyOf()
@@ -422,18 +430,12 @@ object OceanStage {
                             column - velocityX.data[cell], row - velocityY.data[cell], read[cell]
                         )
 
-                        val latitude = ClimateStage.latitudeOf(row, cellsDown)
-                        val latitudeTemperatureC = zonalTemperature(
-                            latitude,
-                            climateConfig.equatorTemperatureC,
-                            climateConfig.poleTemperatureC
-                        )
                         // Relax back toward the latitude's own temperature, or a current would
                         // eventually carry tropical water all the way to the pole.
                         val carriedC = read[cell] +
                             (upstreamTemperatureC - read[cell]) * config.ocean.advectionRate
                         write[cell] = carriedC +
-                            (latitudeTemperatureC - carriedC) * config.ocean.relaxationRate
+                            (relaxTowardC[row] - carriedC) * config.ocean.relaxationRate
                     }
                 }
             }
@@ -494,13 +496,4 @@ object OceanStage {
         return if (sea.isLand[cell]) fallback else data[cell]
     }
 
-    /**
-     * The sea-surface temperature a latitude would have with no currents at all, in degrees
-     * Celsius: a cosine from [poleC] at the poles to [equatorC] at the equator, matching the
-     * profile land temperature is read off.
-     */
-    private fun zonalTemperature(latitude: Float, equatorC: Float, poleC: Float): Float {
-        val equatorward = cos(latitude * PI / 180.0).toFloat().coerceIn(0f, 1f)
-        return poleC + (equatorC - poleC) * equatorward
-    }
 }

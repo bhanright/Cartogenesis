@@ -300,8 +300,8 @@ internal object Knobs {
      * climate stage, and the one whose effect is unmistakable on the map, since it is what puts a
      * desert behind every range. Continentality would have been the other candidate, but it moves
      * the *seasonal swing*, which is what [seasonalTiltDegrees] beside it already governs; this
-     * moves the
-     * rain. Zero flattens every rain shadow; 5 lets a range take essentially all the rain.
+     * moves the rain. Zero flattens every rain shadow; 5 lets a range take essentially all the
+     * rain.
      */
     val rainShadow = Dial(
         section = PanelSection.CLIMATE,

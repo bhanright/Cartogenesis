@@ -1759,7 +1759,10 @@ desktop 17 classes; 23 min) and `:desktop:siteTest` green. Portable zip 97 MB, M
 zip 5.4 MB; the packaged exe passes `--gpu-check` (an RTX 3070 Ti for erosion and export
 rendering). Saves from 2.0.0 and 2.0.1 open, their rivers taking widths on load; the format on
 this line is still 3. The site deployed on the tag (run 34733080849). The forward merge into
-`main` was dispatched the same evening, and the "and more" tab (William, 2026-09-12: the Pen and
+`main` landed the same evening as 4176893 (Site 2 and F12; no rename needed against the C2
+sweep, no world moved, `FORMAT_VERSION` stays 6, README carries F12's export section in main's
+voice; worldgen 124, cartography 28, ui 97 JVM and 97 wasm, desktop 62, siteTest 9, all green)
+and 4ee9c62 (the six cards). The "and more" tab (William, 2026-09-12: the Pen and
 ink tab replaced by a four-view mosaic of the same crop labelled rainfall, temperature, trade
 winds and ocean currents, the section retitled "One world, many readings") follows as a
 site-only deploy from the branch.

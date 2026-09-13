@@ -103,7 +103,13 @@ val auditOnlyClasses = listOf(
     // E7: whether a rift floor of sub-basins holds more water than E4's smooth wedge can only be
     // answered in the author's own trough at 2048 — `RiftDepthTest` measures the same question at
     // 512 and records that nothing there can. Two 2048 worlds for one comparison is an audit's job.
-    "com.cartogenesis.worldgen.RiftDepthAuditTest"
+    "com.cartogenesis.worldgen.RiftDepthAuditTest",
+    // M1: the Earth-likeness suite at export resolution. Six worlds at 2048, for the decade more
+    // of lakes, islands and first-order streams a finer grid resolves and for the cell area the
+    // lake share of land is compared at. `EarthLikenessTest` holds the same metrics at 512 and
+    // `EarthLikenessControlTest` the synthetic worlds each bar is shown to bite on; both are
+    // per-merge and cost a few seconds between them.
+    "com.cartogenesis.worldgen.EarthLikenessAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

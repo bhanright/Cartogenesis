@@ -18,6 +18,33 @@
   largest lake was four times the Caspian. E7 refused deepening the stamp and hashing sub-basins
   onto the floor on the same bar. What is left is subsidence that scales with how far the rift has
   opened (S2 in REALISM_AUDIT.md). 2026-09-12.
+- **One unit of land elevation is six kilometres in the climate and eight everywhere else.**
+  `ClimateConfig.maxAltitudeMetres` is 6000 and the lapse rate reads a cell's altitude straight off
+  it, so the highest land on every map stands six kilometres up. `SeaConfig.lowstand` and
+  `HydraulicErosion.SHELF_BREAK` both derive their defaults from "the roughly 8 km of relief between
+  sea level and the highest land" — 120 m of glacial lowstand and a 130 m shelf break, each over
+  eight kilometres to give 0.015. Over six they would be 0.020 and 0.022. Both cannot be right, and
+  nothing reconciles them, because the sea has no depth setting at all: below the shoreline
+  `relativeElevation` is normalised against whatever the deepest cell happens to be, so no constant
+  in the pipeline says how deep an ocean is. Found by M1, whose hypsometry has to carry the land's
+  ruler down past the shoreline to draw a curve at all and reads the whole world's relief as
+  11,913 m pooled against Earth's 20,000. S1 in `REALISM_AUDIT.md` owns the repair; recorded here
+  because it is a live disagreement between constants that ship, not only a feature that is absent.
+  2026-09-12.
+- **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
+  sorts channel heads by the flow each already carries and traces the largest first, so the course a
+  `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
+  is drawn afterwards as a tributary stopping at the junction. The union of the drawn cells is the
+  right network and the picture is right; what is wrong is any consumer that reads one `River` as
+  one river. M1 measures how wrong, and it is half: over seeds 7/42/1234/99 at 512 the drawn courses
+  cover **0.484** of the watercourses they stand for by length (0.465/0.531/0.487/0.458), and over
+  the six audited seeds at 2048 **0.408** (0.367 to 0.451), where the share is 1.0 by definition — a
+  river is its own longest watercourse. Hack's exponent over the same basins does not settle in one
+  direction, 0.463 drawn against 0.507 on the terrain at 512 and 0.591 against 0.491 at 2048, so
+  what is wrong is not a consistent scaling but which branch the trace happened to take. It matters
+  for V3's labels, for anything quoting a river's length, and for what `RiverWidth` treats as a
+  trunk. The repair is in the tracing: rank the heads by the length of the path below them rather
+  than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
 
 ## Done
 

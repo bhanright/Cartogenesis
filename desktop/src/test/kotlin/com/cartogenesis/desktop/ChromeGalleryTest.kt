@@ -386,6 +386,57 @@ class ChromeGalleryTest {
     }
 
     /**
+     * F28's one, at 1440x900 and on a phone.
+     *
+     * The same shot as F24's and for the same reason — Blacklight is a chrome of two colours and
+     * no ornament, so what a picture has to answer is whether two colours are enough to tell a
+     * panel from the ground it is on, an accent from the ink and an alarm from either. It asks one
+     * thing F24's did not, though: this chrome's panel is a saturated violet at chroma 79 rather
+     * than a near-black, and a large field of saturated colour behind small type is the kind of
+     * thing that measures well and reads badly. The phone shot is where that would show worst,
+     * since at 390 dp the panels become a sheet pulled over the map and there is more of them than
+     * there is map.
+     *
+     * Recorded alongside the F6, F7 and F24 shots rather than added to any of them, so no existing
+     * capture moves.
+     */
+    @Test
+    fun `the Blacklight chrome is photographed at a desk and on a phone`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val choice = ThemeChoice.BLACKLIGHT
+
+        val wide = shoot(dark = false, choice = choice)
+        File(dir, "f28-blacklight.png").writeBytes(wide.png)
+        assertTrue(wide.distinctColours > 200, "the Blacklight shot is nearly blank")
+
+        val (down, up) = shootCompact(dark = false, width = 390, height = 844, choice = choice)
+        File(dir, "f28-blacklight-phone.png").writeBytes(down.png)
+        File(dir, "f28-blacklight-phone-sheet.png").writeBytes(up.png)
+        assertTrue(down.distinctColours > 200, "the Blacklight phone shot is nearly blank")
+        assertTrue(
+            down.fingerprint != up.fingerprint,
+            "pulling the sheet up in Blacklight changed nothing on screen"
+        )
+
+        // And that the chrome reached the composition at all, rather than the window having been
+        // drawn in whatever it opens in: the one thing a screenshot of a colour scheme can assert
+        // on its own. Lemon Blueberry is the comparison rather than Light, because these two are
+        // the closest pair in the list — both dark, both violet, both two-colour rooms — and a
+        // wiring mistake that handed one the other's scheme is the mistake that could happen here.
+        val neighbour = shoot(dark = false, choice = ThemeChoice.LEMON_BLUEBERRY)
+        assertTrue(
+            wide.fingerprint != neighbour.fingerprint,
+            "Blacklight rendered the same window as Lemon Blueberry: the scheme never arrived"
+        )
+
+        println(
+            "CHROME wrote the ${WIDTH}x$HEIGHT and 390x844 F28 shots to ${dir.absolutePath}; " +
+                "fingerprints wide ${wide.fingerprint}, phone ${down.fingerprint}, " +
+                "sheet ${up.fingerprint}"
+        )
+    }
+
+    /**
      * The settings dialog in the two F7 chromes whose lettering only shows there.
      *
      * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own

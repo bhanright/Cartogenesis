@@ -477,7 +477,8 @@ class PhoneAtlasTest {
             ThemeChoice.MIDNIGHT,
             ThemeChoice.MATRIX,
             ThemeChoice.HITCHCOCK,
-            ThemeChoice.LEMON_BLUEBERRY
+            ThemeChoice.LEMON_BLUEBERRY,
+            ThemeChoice.BLACKLIGHT
         )
 
         /**

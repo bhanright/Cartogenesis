@@ -37,16 +37,21 @@ default grid is 23 km across, and no cell that size holds a summit — and every
 rate below is written in those units and converted to whatever grid the world is generated at.
 
 1. **Terrain.** Seeded Perlin noise generates a random gradient field, integrated into a height map
-   by Frankot-Chellappa least-squares integration (a 2D FFT).
+   by Frankot-Chellappa least-squares integration (a 2D FFT). The same transform shapes the result's
+   spectrum, leaving its relief loudest at 400 km — the scale Earth's continental topography away
+   from its mountains sits at — because the broad shape of the ground is the crust's business and
+   not the noise's.
 2. **Plates.** The world splits into drifting Voronoi plates, each made of continental or oceanic
    crust; boundaries are classified by relative motion and by which crusts meet, raising coastal
    ranges, collision plateaus, island arcs, rifts or ridges accordingly. Three past epochs of the
    same history are stamped first and aged before the present one, so a range can stand old and
    worn far from any boundary, the way the Appalachians do — and the ageing is the time since its
    uplift stopped rather than a factor per epoch. Isostasy then turns the crust into an altitude:
-   a continental column floats at Earth's mean land elevation of 840 m and an oceanic one at
-   Earth's mean ocean depth of 3,682, so the world's hypsometry has two modes with a trough
-   between them and the height field is a real altitude rather than a normalisation. The
+   a continental column floats at Earth's mean land elevation of 840 m, and the sea floor at the
+   depth its own age puts it — distance to the nearest spreading ridge over the spreading rate,
+   through Parsons and Sclater's depth-age curve, so a ridge stands at 2.5 km and the old floor
+   sinks away from it along a smooth curve. The world's hypsometry comes out with two modes and a
+   trough between them, and the height field is a real altitude rather than a normalisation. The
    ocean-coverage setting chooses how much of the world is drawn as continental crust; the
    sea-level cut is the check that it did.
 3. **Erosion.** Thermal erosion slides material off slopes steeper than a critical gradient of

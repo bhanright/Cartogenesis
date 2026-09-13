@@ -637,15 +637,29 @@ class IsostasyTest {
         )
 
         val overTheBelt = profile.take(2).average()
-        val inTheForeland = profile.drop(3).minOrNull() ?: 0.0
-        val moatBin = profile.indices.first { profile[it] == inTheForeland }
+        // The moat is a *trough* in the profile and not a negative number in it, and the difference
+        // is the whole continent. Erosion strips the land everywhere, so the plate under it rebounds
+        // everywhere and the compensating downward bend is out under the ocean where the filter's
+        // missing mean has to go; measured against the same world with the flexure off, every bin
+        // in front of a belt can be positive and the ground still be bent. What a load does that no
+        // uniform rise can is put a *local minimum* between the range it is under and the swell
+        // beyond it, which is a moat and a forebulge. So that is what is measured: the lowest bin
+        // clear of the belt, and the requirement that the ground comes back up past it.
+        val forelandBins = FIRST_FORELAND_BIN until FLEXURE_BINS
+        val moatBin = forelandBins.filter { counts[it] > 0 }.minByOrNull { profile[it] }
+            ?: FIRST_FORELAND_BIN
+        val inTheForeland = profile[moatBin]
+        val beyondTheMoat = (moatBin + 1 until FLEXURE_BINS)
+            .filter { counts[it] > 0 }.maxOfOrNull { profile[it] } ?: inTheForeland
         println(
-            ("ISOSTASY foreland seed %d: the belt stands %+.0f m higher and the deepest moat is" +
-                " %+.0f m at %d-%d cells (%.0f-%.0f km) from the suture").format(
-                seed, overTheBelt, inTheForeland, moatBin * FLEXURE_BIN_CELLS,
+            ("ISOSTASY foreland seed %d: the belt stands %+.0f m higher, the moat is %.0f m below" +
+                " it at %d-%d cells (%.0f-%.0f km) from the suture, and the ground rises %.0f m" +
+                " again beyond it").format(
+                seed, overTheBelt, overTheBelt - inTheForeland, moatBin * FLEXURE_BIN_CELLS,
                 (moatBin + 1) * FLEXURE_BIN_CELLS,
                 moatBin * FLEXURE_BIN_CELLS * world.config.cellWidthKm,
-                (moatBin + 1) * FLEXURE_BIN_CELLS * world.config.cellWidthKm
+                (moatBin + 1) * FLEXURE_BIN_CELLS * world.config.cellWidthKm,
+                beyondTheMoat - inTheForeland
             )
         )
         assertTrue(
@@ -654,15 +668,16 @@ class IsostasyTest {
             overTheBelt >= MIN_REBOUND_METRES
         )
         assertTrue(
-            "the deepest thing in front of the belt is ${"%.0f".format(inTheForeland)} m, not the" +
-                " $MIN_FORELAND_METRES m of moat a flexed plate carries there",
-            inTheForeland <= -MIN_FORELAND_METRES
+            "the moat in front of the belt lies ${"%.0f".format(overTheBelt - inTheForeland)} m" +
+                " below the belt's own rebound, not the $MIN_FORELAND_METRES m a flexed plate" +
+                " carries there",
+            overTheBelt - inTheForeland >= MIN_FORELAND_METRES
         )
         assertTrue(
-            "the ground in front of the belt is not below the belt's own rebound, so the plate is" +
-                " not bending — it is moving up and down together, which no filter with a fourth" +
-                " power in it can do",
-            overTheBelt > inTheForeland
+            "the ground beyond the moat does not come back up, so what was measured is a slope" +
+                " away from the belt and not a trough — and a trough with a rise beyond it is the" +
+                " one thing no uniform bend can make",
+            beyondTheMoat - inTheForeland >= MIN_FOREBULGE_METRES
         )
     }
 
@@ -809,5 +824,19 @@ class IsostasyTest {
          */
         const val MIN_REBOUND_METRES = 20.0
         const val MIN_FORELAND_METRES = 20.0
+
+        /**
+         * The first bin clear of the belt itself, and the least the ground must rise again beyond
+         * the moat for the trough to be a trough.
+         *
+         * The belt's own half-width is `boundaryFalloffCells`, 26 at 512, so three bins of eight
+         * cells is the first ground that is foreland rather than range. The forebulge floor is a
+         * tenth of the moat's, because a forebulge is a tenth of a moat: Turcotte and Schubert's
+         * solution puts the peripheral swell at about four per cent of the deflection under the
+         * load, and Earth's - the Deccan swell in front of the Himalaya, the Ozark dome in front of
+         * the Ouachitas - is a few tens of metres against a moat of kilometres.
+         */
+        const val FIRST_FORELAND_BIN = 3
+        const val MIN_FOREBULGE_METRES = 2.0
     }
 }

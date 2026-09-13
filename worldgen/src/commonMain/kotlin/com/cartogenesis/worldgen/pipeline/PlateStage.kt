@@ -446,7 +446,11 @@ object PlateStage {
                     val noiseMetres = standardisedNoise[cell] * reliefMetres
                     val stampedMetres = (uplift.data[cell] + detail) * beltReliefMetres
                     height.data[cell] =
-                        scale.fieldAtAltitude(elevationLimit.applyTo(baseMetres + noiseMetres + stampedMetres))
+                        scale.fieldAtAltitude(
+                            elevationLimit.applyTo(
+                                baseMetres + noiseMetres + stampedMetres
+                            )
+                        )
                 }
             }
         }

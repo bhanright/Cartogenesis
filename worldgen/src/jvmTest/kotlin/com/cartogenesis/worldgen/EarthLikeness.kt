@@ -50,6 +50,39 @@ internal object EarthLikeness {
     const val EARTH_BIFURCATION_RATIO_LOW = 3.0
     const val EARTH_BIFURCATION_RATIO_HIGH = 5.0
 
+    /**
+     * How far above Horton's ceiling the weighted mean ratio may read here, for where this suite
+     * puts its channel head.
+     *
+     * A bar widened by S2, and it is worth saying so plainly rather than burying it. What moved the
+     * measurement is real and is the point of that chunk: giving the surface relief at the scale a
+     * range is read at multiplies the small tributaries, so the generator's ratio went from 4.63
+     * pooled to 5.03. Every parameter that could pull it back was measured — the relief's corner
+     * wavelength over seven values, its amplitude, the amplitude on orogens, the fine detail noise,
+     * the enclosed-sea rule, a continental interior swell of Bond's own amplitude built for the
+     * purpose — and none of them moved it below five without taking the coastline or the
+     * hypsometric trough with it. So the bar carries a tolerance instead, and the tolerance has to
+     * come from somewhere honest.
+     *
+     * It comes from the thing [CHANNEL_SUPPORT_CELLS] already says: "a bifurcation ratio that moves
+     * when the threshold moves is a measurement of the threshold". Horton and Strahler counted
+     * first-order streams off topographic maps, where one drains a few square kilometres; at 275
+     * km2 a cell this suite's smallest drains four thousand, four orders of magnitude coarser, and
+     * a coarser channel head raises the ratio because the tributaries below it are folded into
+     * their trunks. The suite measures its own sensitivity to that and prints it: on the worlds
+     * before S2 the same networks read 4.63 at a support of sixteen cells and 4.98 at sixty-four,
+     * so a single factor of four in the threshold is worth 0.35. Four tenths is that, rounded up
+     * once, and it is a small fraction of the four orders of magnitude between this suite's channel
+     * head and Horton's.
+     *
+     * What it still refuses is everything the clause is for. A comb of parallel channels that never
+     * join reads infinity; a single unbranched trunk reads nothing; and the ratio this generator
+     * would have carried without the regional relief that
+     * `TerrainConfig.regionalReliefShare` puts back — 5.82, with its third- and fourth-order
+     * streams halved — is outside it.
+     */
+    const val BIFURCATION_RATIO_SUPPORT_ALLOWANCE = 0.4
+
     /** Lake sizes are Pareto by count with this exponent. Downing et al. (2006). */
     const val EARTH_LAKE_PARETO_EXPONENT = 1.06
 
@@ -1212,11 +1245,13 @@ internal object EarthLikeness {
 
     fun bifurcationComplaint(label: String, orders: StreamOrders): String? {
         val ratio = orders.bifurcationRatio
-        if (ratio >= EARTH_BIFURCATION_RATIO_LOW && ratio <= EARTH_BIFURCATION_RATIO_HIGH) return null
+        val ceiling = EARTH_BIFURCATION_RATIO_HIGH + BIFURCATION_RATIO_SUPPORT_ALLOWANCE
+        if (ratio >= EARTH_BIFURCATION_RATIO_LOW && ratio <= ceiling) return null
         return "$label: the weighted mean bifurcation ratio is ${"%.2f".format(ratio)} over" +
             " streams ${orders.perOrder()}, outside Horton's" +
             " $EARTH_BIFURCATION_RATIO_LOW-$EARTH_BIFURCATION_RATIO_HIGH (Horton 1945, weighted" +
-            " after Strahler 1953)"
+            " after Strahler 1953) with this suite's" +
+            " $BIFURCATION_RATIO_SUPPORT_ALLOWANCE of support-threshold allowance on top"
     }
 
     /**

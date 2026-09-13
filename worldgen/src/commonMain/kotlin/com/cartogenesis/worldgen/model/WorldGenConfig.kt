@@ -79,29 +79,41 @@ data class WorldScale(
      * what a round removes today: see [ErosionConfig.bedrockErodibilityPerYear] for the arithmetic.
      *
      * Twelve rounds of it is 1.51 million years, which is the right order for the time a mountain
-     * belt takes to reach a steady state between uplift and erosion (Whipple & Tucker put the
-     * response time of an orogen at 10^5 to 10^6 years for the erodibilities above), and a
+     * belt takes to reach a steady state between uplift and erosion — Whipple and Tucker put the
+     * response time of an orogen at 10^5 to 10^6 years for erodibilities in this band — and a
      * reassuring answer to a question the generator could not previously be asked.
      *
-     * S1 solved this from an expression with a term too many in it and reached 336,476.4 years.
-     * The term was `highestLandMetres / reliefSpanMetres`, which S1 needed while the height field
-     * was renormalised to its own extremes and cancels now that S2 has made the field an absolute
+     * S1 reached 336,476.4 years by solving an expression with a term too many in it. The term was
+     * `highestLandMetres / reliefSpanMetres`, which S1 needed while the height field was
+     * renormalised to its own extremes and which cancels now that S2 has made the field an absolute
      * altitude — see
-     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.Rates.incisionCoefficient]. Solving the
-     * corrected expression is the same derivation with the same `K` and the same cut per round,
-     * and it gives exactly 0.375 of S1's figure. So every world is bit-for-bit the world it was:
-     * what a round *does* has not changed, only how long the round is said to take, and twelve of
-     * them now stand for 1.5 Myr rather than 4.0.
+     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.Rates.incisionCoefficient] — and it was
+     * worth a factor of 2.67. So one of the two figures S1 fixed had to give: either this one comes
+     * down to 0.375 of what S1 wrote and every world stays exactly where it is, or the coefficient
+     * goes up by 2.67 and the rounds do 2.67 times the geomorphic work in the four million years
+     * S1 declared.
+     *
+     * This one, and the other was built and measured before it was refused. Twelve rounds at 2.67
+     * times the cut do not dissect this landscape more; they wear it away. Measured on the four
+     * standard worlds, the valleys came out *shallower* against their own terrain — 0.019 against
+     * `ValleyIncisionTest`'s bar of 0.059, where holding the cut gives 0.047 — the coastline's
+     * box-counting dimension fell to 1.01-1.10 on every seed, under Mandelbrot's floor, because a
+     * coast worn for four million years is a smooth coast, and the largest lake and the count of
+     * undrained cells both went up rather than down. A cut spent faster than the uplift feeding it
+     * does not sharpen a landscape, and this one already removes 0.36 mm/yr, which is Earth's own
+     * order for an orogen.
+     *
+     * So the world is exactly the world it was and what changed is the label on the clock: a round
+     * is 126,179 years rather than 336,476. It re-dates every erosion figure the project has
+     * recorded, and the one that had to move with it is
+     * `TectonicsConfig.collisionUpliftMmPerYear` — a rate per year against a denudation per year,
+     * both of them now measured over a span two and two-thirds shorter.
      *
      * Written to a hundredth of a year, which is not precision anybody could defend about a
      * landscape: it is the figure at which the coefficient the stage computes lands on the same
      * float it has always held. A round of erosion is chaotic in its own last bit —
      * `ErosionConfig.outletIncisionRatio` records the largest lake on a seed jumping by a factor of
      * two between neighbouring rates — so a rate that is a millionth off is a different world.
-     *
-     * It re-dates every erosion figure the project has recorded, and the one that had to move with
-     * it is `TectonicsConfig.collisionUpliftMmPerYear`: a rate per year against a denudation per
-     * year, both of them now measured over a span two and two-thirds shorter.
      */
     val yearsPerHydraulicRound: Double = 126_178.65
 ) {
@@ -284,7 +296,37 @@ data class TerrainConfig(
      * See [TerrainStage.ReliefBand] for the filter and
      * [TectonicsConfig.continentalReliefStandardDeviationMetres] for how loud the band is.
      */
-    val reliefCornerKm: Double = 400.0
+    val reliefCornerKm: Double = 400.0,
+    /**
+     * How much of the map-scale relief survives the filter above, as a share of what it would have
+     * carried unfiltered.
+     *
+     * A floor on [reliefCornerKm]'s response, and it exists because a continent needs a *little*
+     * regional slope even after the crust has taken over the broad shape. Drainage is organised by
+     * the ground's longest wavelengths: what makes the Mississippi, the Ob and the Parana is a
+     * continental interior that tilts one way for two thousand kilometres, and a surface with no
+     * component at that scale grows a great many short rivers instead of a few long ones. Measured,
+     * a hard first-order high pass took the weighted mean bifurcation ratio from 4.63 to 5.82,
+     * outside Horton's 3 to 5, by halving the count of third- and fourth-order streams: the
+     * catchments stopped merging.
+     *
+     * A tenth, and the floor is small because the unfiltered amplitude at that scale is enormous:
+     * integration makes it grow as the wavelength, so the map's own width carries fifteen times
+     * what the corner does, and a tenth of that is still one and a half times the corner's own
+     * amplitude. Measured over 0, 0.02, 0.05, 0.10, 0.15, 0.20 and 0.30 on the four standard
+     * worlds, a tenth is where the bifurcation ratio stops falling and the coastline has not yet
+     * begun to: it takes the ratio from 5.82 to 5.03 and the third- and fourth-order streams from
+     * 185 and 10 back to 259 and 32, while the coastline holds at 1.13 and the island count goes
+     * from 31 to 57. Above it the coastline goes — a map-scale tilt moves the shoreline bodily, and
+     * by 0.15 two of the four seeds are under Mandelbrot's floor.
+     *
+     * A continental interior swell of Bond's own amplitude and wavelength, windowed onto the crust,
+     * was built and measured as the physically better answer and removed again: over 400, 800 and
+     * 1,200 m it moved the bifurcation ratio by less than the seeds differ from each other. The
+     * long slopes drainage needs turn out to be the ones that run the whole way across a map, not
+     * the ones that fit inside a continent.
+     */
+    val regionalReliefShare: Double = 0.10
 )
 
 @Serializable
@@ -782,32 +824,31 @@ data class TectonicsConfig(
      * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
      * at five millimetres a year and gain about half of one, because the rest comes off as
      * sediment — so a rate is only meaningful beside the erosion it is racing. This generator's
-     * rivers and hillslopes take **0.42 mm/yr** off an active belt, measured over the belts of the
-     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off
-     * (0.427, 0.454, 0.406, 0.398 and 0.422), which `IsostasyTest` re-measures and holds this
-     * constant against.
+     * rivers and hillslopes take **0.36 mm/yr** off an active belt, measured over the belts of the
+     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off, which
+     * `IsostasyTest` re-measures and holds this constant against.
      *
      * So the collision rate is the surface uplift Earth's own collisions manage — half a
-     * millimetre a year — plus what this model's rivers will take back off it, which is 0.92 mm/yr
-     * of rock uplift, and the other three follow the ratios above. That figure sits just below
-     * England and Molnar's own band for an active collision, 1 to 10 mm/yr, which is a good deal
-     * closer than the 0.6 S2's first pass reached and is worth saying why. The first pass measured
-     * the denudation at 0.101 mm/yr because it divided the metres a round removes by a round four
-     * times longer than the one S1's own derivation gives (see
-     * [WorldScale.yearsPerHydraulicRound]) and because its terrain had a quarter of the mid-band
-     * relief for the water to cut into. Both were corrected in the second pass, the erosion rate
-     * came out at Earth's order, and the uplift that has to race it came with it.
+     * millimetre a year — plus what this model's rivers will take back off it, which is 0.86 mm/yr
+     * of rock uplift, and the other three follow the ratios above. That is close to England and
+     * Molnar's own band for an active collision, 1 to 10 mm/yr, where S2's first pass reached 0.6,
+     * and the reason is worth saying. The first pass measured the denudation at 0.101 mm/yr on a
+     * surface with a quarter of the mid-band relief for the water to cut into, and divided the
+     * metres a round removes by a round two and two-thirds longer than S1's own derivation gives
+     * (see [WorldScale.yearsPerHydraulicRound]). Both were corrected in the second pass, the
+     * erosion rate came out at Earth's own order for an orogen, and the uplift that has to race it
+     * came with it.
      *
-     * Over the 1.5 million years twelve rounds stand for that is 1.4 km of rock into a collision
-     * belt and 0.6 km out of it, against a dead belt of the same age that only loses. The
-     * difference between the two is what S2 exists to show.
+     * Over the one and a half million years twelve rounds stand for that is 1.3 km of rock into a
+     * collision belt and 0.5 km out of it, against a dead belt of the same age that only loses.
+     * The difference between the two is what S2 exists to show.
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.92f,
-    val andeanUpliftMmPerYear: Float = 0.37f,
-    val islandArcUpliftMmPerYear: Float = 0.13f,
-    val riftShoulderUpliftMmPerYear: Float = 0.055f,
+    val collisionUpliftMmPerYear: Float = 0.86f,
+    val andeanUpliftMmPerYear: Float = 0.344f,
+    val islandArcUpliftMmPerYear: Float = 0.120f,
+    val riftShoulderUpliftMmPerYear: Float = 0.052f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *

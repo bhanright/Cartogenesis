@@ -164,12 +164,12 @@ internal object HydraulicErosion {
          * [WorldScale.reliefSpanMetres], and the two terms then cancel. Left in, the factor made
          * the stage cut 2.67 times less per round than `K` and the time step together said.
          *
-         * What moved is the time step and not the coefficient, because that is S1's own
-         * derivation: it fixed `K` at the literature's value and solved the length of a round from
-         * the cut a round makes. Solving the corrected expression gives 0.375 of the figure S1
-         * reached — see [WorldScale.yearsPerHydraulicRound] — so the coefficient is the same float
-         * it has always been, every world is unmoved to the last bit, and what changed is the
-         * label on the clock.
+         * What moved is the time step and not the coefficient, and
+         * [WorldScale.yearsPerHydraulicRound] sets out why it was the better of the two: raising
+         * the cut instead was built and measured, and twelve rounds at 2.67 times the incision wear
+         * this landscape away rather than sharpening it. So the coefficient is the same float it
+         * has always been, every world is unmoved to the last bit, and what changed is the label
+         * on the clock.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2

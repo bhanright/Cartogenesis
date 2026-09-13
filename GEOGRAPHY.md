@@ -39,21 +39,34 @@ alternating polarity, so a drowned one is a string of gulfs and lakes rather tha
 "Three kinds of collision" below.
 
 **The crust floats, so the world has two levels and the sea has a floor.** Every cell carries a
-mixture of continental and oceanic crust, blurred across the plate boundary so the band between the
-two is a margin rather than a step, and Airy isostasy turns the mixture into an altitude: a
-standard continental column floats at Earth's mean land elevation of 840 m and a standard oceanic
-one at Earth's mean ocean depth of 3,682. Everything follows from those two numbers. The
+mixture of continental and oceanic crust, blurred across a 300 km margin so the band between the
+two is a shelf, a slope and a rise rather than a step, and Airy isostasy turns the mixture into an
+altitude: a standard continental column floats at Earth's mean land elevation of 840 m and the sea
+floor at the depth its own age puts it. Everything follows from those two numbers. The
 hypsometric curve has two modes with a trough between them where the continental slope is, which
 is what Earth's has and what this generator did not have before S2 — its curve was one peak
 straddling the shoreline, because the height field was renormalised to its own extremes after every
 generation and the sea's mode sat 390 m down. The ocean-coverage slider now chooses how much of the
 world is drawn as continental crust rather than where to cut a histogram, and the percentile cut is
-the check: measured on five worlds it lands within 600 m of the level isostasy puts the shoreline
-at.
+the check: measured on five worlds it lands within 200 m of the level isostasy puts the
+shoreline at.
+
+**The sea floor is as deep as it is old.** Ocean floor is made at a spreading ridge and sinks as it
+cools, as the square root of its age — Parsons and Sclater's `2,500 + 350*sqrt(t)` metres,
+flattening onto their 6,400 m asymptote past about seventy million years. So the depth of every
+cell of sea floor is the distance to the nearest of the present epoch's spreading boundaries,
+divided by the rate the plate carries it away at, put through that curve, and read back through
+Airy as the thermal buoyancy a column of that age must carry. A ridge stands at 2,500 m and the
+oldest floor on a map lies two to three kilometres below it along a smooth curve, where before S2's
+second pass every piece of sea floor was of one age and the deep ocean was one level per plate with
+the Voronoi partition showing straight through it. The spreading rate is solved rather than
+declared: floor is destroyed as fast as it is made, so a world with less ridge for its ocean must
+spread faster, and what a map can be held to is not the rate but Earth's mean ocean depth of
+3,682 m, which is what the rate is solved from.
 
 **A range that is being pushed up holds its height, and one that has stopped does not.** An uplift
-rate in millimetres a year runs under the belts of the present epoch — 0.6 in a continental
-collision, 0.24 on an Andean margin, less on an island arc and a rift's shoulders, nothing at all
+rate in millimetres a year runs under the belts of the present epoch — 0.92 in a continental
+collision, 0.37 on an Andean margin, less on an island arc and a rift's shoulders, nothing at all
 on a craton — and is spent every hydraulic round over the years a round stands for. So the rivers
 are cutting a belt that is still rising, and the height it settles at is the balance between the
 two, which is Whipple and Tucker's steady state rather than a stamped profile. An old belt is low
@@ -68,6 +81,20 @@ bed down, which is why the ground under one stands lower than the ground beside 
 formerly glaciated shield stands where it does. The elastic thickness is 30 km, the middle of the
 20-40 km Watts measures for mature continents, which puts the flexural parameter at 68 km — three
 cells of the default grid, so a load's own basin reaches some 160 km in front of it.
+
+**The ground's own relief has a scale, and it is the one a range is read at.** The base terrain is
+an integrated noise field, and integration divides each component's amplitude by its wavenumber, so
+left alone it comes out as a map-wide tilt with the detail riding on it as a ripple. That was the
+right shape while the noise was all the terrain there was and the wrong one once the crust decides
+where a continent stands: the tilt fought the crust and smeared the two hypsometric modes together.
+So the spectrum is shaped rather than scaled — a first-order high pass in the same transform that
+integrates it, leaving the relief loudest at 400 km, which is the scale Earth's non-orogenic
+continental relief sits at and the scale a range is read at on a map. Its amplitude is a standard
+deviation in metres: 700 m on continental crust, which is Earth's own spread away from its orogens,
+250 on the sea floor, which is Goff and Jordan's abyssal hills, and 700 m more inside an active
+orogen, which is the relief between the cordilleras of one. A tenth of the map-scale component is
+kept, because drainage is organised by a continent's longest slopes and a surface with nothing at
+that wavelength grows many short rivers instead of a few long ones.
 
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
@@ -314,8 +341,13 @@ how deep an ocean is.
 
 The world is **12,000 km wide** and half that tall, being an equirectangular projection of a whole
 planet. Its highest land stands **6,000 m** above the waterline and its deepest floor **10,000 m**
-below it. One hydraulic round stands for about **340,000 years**, so the twelve of them are four
-million — the right order for a mountain belt to reach a steady state between uplift and erosion.
+below it. One hydraulic round stands for about **126,000 years**, so the twelve of them are one and
+a half million — the right order for a mountain belt to reach a steady state between uplift and
+erosion. (S1 said 340,000 and four million: it solved the round's length from an expression carrying
+a `highestLandMetres / reliefSpanMetres` that was the honest reading while the height field was a
+normalisation and cancels now that it is an altitude. Solving the corrected expression is the same
+derivation with the same `K` and the same cut per round, and gives exactly 0.375 of S1's figure, so
+no world moved — only the label on the clock.)
 
 Both ends of the vertical range are **cell means, not points**, and that is the thing to hold on to
 when a figure below looks too large. A cell of the default 512 grid is 23 km by 12 km. No cell that
@@ -348,13 +380,17 @@ Writing the units down made four things visible that were invisible while they w
   cell, and what the stage carves is better read as a glaciated *province* the shape of a valley
   than as a glacier. Every other figure in that section is the province's rather than the ice's:
   a 375 km reach between basins, a 70 km cirque, a 190 km run-out past the freezing line.
-- **The continental shelf stands at 1,000 m.** Against a sea 10 km deep the shelf plateau's outer
-  edge is a tenth of the way down, where Earth's shelf break is at 130 m. The reason S1 gave was
-  that the two-density crust which makes Earth's shelf a shelf was not modelled, and S2 has now
-  modelled it: a continental margin is a band of crust thinned on its way out to the ocean floor,
-  and the ground it makes shelves rather than dropping. What has not changed is the plateau the
-  remap lays over it, which is still 1,000 m. That is now a separable question rather than a
-  consequence, and it is in `TODO.md`.
+- ~~**The continental shelf stands at 1,000 m.**~~ **Closed by S2's second pass.** Against a sea
+  10 km deep the shelf plateau's outer edge stood a tenth of the way down, where Earth's shelf break
+  is at 130 m, and S1's reason was that the two-density crust which makes Earth's shelf a shelf was
+  not modelled. S2 modelled it — a continental margin is a band of crust thinned on its way out to
+  the ocean floor, and the ground it makes shelves rather than dropping — so the sediment wedge laid
+  over that margin no longer has to stand in for it, and its break is Earth's own 130 m over Earth's
+  own mean shelf width of 75 km. It fills rather than replaces, too, so a bank the crust put inside
+  the band shows through instead of being planed into a concentric distance band. What the old
+  figures were doing was covering the whole ocean: a 20-cell plateau and a 20-cell slope around
+  every coast of a world whose coastline runs seven thousand cells put 44% of the water shallower
+  than 1,650 m against Earth's 15%, and smeared the hypsometric trough shut.
 - **A knickpoint was cutting nine tenths as hard as an ordinary reach, not three times.**
   `ErosionConfig.outletIncisionRatio` was three, but the two rates were written in different units:
   the outlet's in the land's relief and the ordinary incision's on the height field. Converted to

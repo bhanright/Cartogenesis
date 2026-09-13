@@ -125,7 +125,16 @@ object WorldGenerationEngine {
         }
 
         report(GenerationStage.TERRAIN)
-        val terrain = reusable?.takeIf { it.config.terrain == config.terrain }?.terrain
+        val terrain = reusable
+            ?.takeIf {
+                it.config.terrain == config.terrain &&
+                    // Since S2's second pass the integration shapes the surface's spectrum, and
+                    // the wavelength it is shaped around is a length in kilometres — so how wide
+                    // the world is decides which components of the noise survive. See
+                    // [TerrainStage.ReliefBand].
+                    it.config.scale == config.scale
+            }
+            ?.terrain
             ?: TerrainStage.generate(config)
 
         report(GenerationStage.TECTONICS)

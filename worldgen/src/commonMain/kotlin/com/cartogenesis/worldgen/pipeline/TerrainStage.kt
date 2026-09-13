@@ -95,6 +95,7 @@ object TerrainStage {
      */
     class ReliefBand(
         cornerWavelengthKm: Double,
+        private val regionalShare: Double,
         private val cellWidthKm: Double,
         private val cellHeightKm: Double
     ) {
@@ -107,7 +108,8 @@ object TerrainStage {
             val acrossPerKm = radiansPerCellAcross / cellWidthKm
             val downPerKm = radiansPerCellDown / cellHeightKm
             val wavenumberSquared = acrossPerKm * acrossPerKm + downPerKm * downPerKm
-            return wavenumberSquared / (wavenumberSquared + cornerWavenumberSquared)
+            val response = wavenumberSquared / (wavenumberSquared + cornerWavenumberSquared)
+            return if (response > regionalShare) response else regionalShare
         }
 
         companion object {
@@ -115,7 +117,10 @@ object TerrainStage {
             fun of(config: WorldGenConfig): ReliefBand? {
                 val cornerKm = config.terrain.reliefCornerKm
                 if (cornerKm <= 0.0) return null
-                return ReliefBand(cornerKm, config.cellWidthKm, config.cellHeightKm)
+                return ReliefBand(
+                    cornerKm, config.terrain.regionalReliefShare,
+                    config.cellWidthKm, config.cellHeightKm
+                )
             }
         }
     }

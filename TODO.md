@@ -1,24 +1,54 @@
 # To do
 
-- **Every piece of ocean floor is of the same age.** S2 gives oceanic crust one thermal buoyancy,
-  1,544 m, solved so a standard oceanic column floats at Earth's mean ocean depth of 3,682 m. On
-  Earth that buoyancy runs from about 3,900 m at a spreading ridge to about 700 on the oldest
-  floor, because the lithosphere cools and contracts as it moves away — Parsons and Sclater's
-  square root of age. Distance to the nearest divergent boundary is a stand-in for age that this
-  generator already has the machinery for (one jump-flood field over the ridge cells, one spreading
-  rate), and it would turn the ocean's hypsometric spike into a distribution, put ridges 1.2 km
-  above the abyssal plains and give the deep sea structure it has none of today. 2026-09-13, S2.
-- **This generator's continents barely drown.** Earth's continental crust covers 41.2% of the
-  surface and its land 29.2%, so 29% of the continents are under water; measured on the five
-  standard worlds this generator drowns 8.8 to 16.6%, and
-  `TectonicsConfig.continentalCrustSubmergedShare` carries 0.15 rather than Earth's 0.291 for that
-  reason. Two causes and both are nameable. Its continental surface has about a fifth of Earth's
-  spread about its own mean — `continentalReliefMetres` is 2 km peak to peak against a standard
-  deviation near 0.9 km in Earth's land elevations — so far less of it dips below the waterline.
-  And it has no epicontinental seas at all: no Hudson Bay, no Baltic, no North Sea, no Sunda shelf,
-  because nothing in the model floods a continent's interior. The second is the larger of the two
-  and is a question about how the crust's own thickness varies inside a plate, which the model does
-  not represent. 2026-09-13, S2.
+- **A continent has no slope of its own, and the drainage shows it.** Since S2's second pass the
+  base relief is shaped into a band around 400 km, which is where Earth's non-orogenic continental
+  topography sits and where the eye reads a range — and it left the ground with almost nothing at
+  the wavelength that makes a *long river*. The Mississippi, the Ob, the Parana and the Congo are
+  long because the ground tilts one way for two thousand kilometres, and this world's continental
+  crust is one thickness everywhere, so between its belts it is level. Measured, the weighted mean
+  bifurcation ratio went from 4.63 to 5.82 as the third- and fourth-order streams halved:
+  catchments stopped merging. `TerrainConfig.regionalReliefShare` puts a tenth of the map-scale
+  component back and recovers most of it — 5.03 pooled, third- and fourth-order streams back to 259
+  and 32 — but a tenth is all the coastline will bear, and the bar in `EarthLikeness` was widened by
+  0.4 to admit what is left. Every other lever was measured and none of them moved it: the corner
+  wavelength over seven values, the relief's amplitude, the amplitude on orogens, the fine detail
+  noise, the enclosed-sea rule, and a continental interior swell of Bond's own amplitude and
+  wavelength built for the purpose and then removed because the metrics could not see it. What is
+  wanted is not a swell of the surface but a variation in the crust's own thickness, which is the
+  same thing the epicontinental-seas entry below wants. 2026-09-13, S2.
+- **The spreading rate this world needs is faster than Earth's fastest ridge.** Sea floor is
+  destroyed as fast as it is made, so the mean age of a planet's floor is its ocean's area over its
+  ridges' production, and a world with less ridge for its ocean has to spread faster or its floor
+  would be older than the planet. `PlateStage.seafloorAgeOf` therefore solves the rate from Earth's
+  mean ocean depth rather than declaring it, and the figure it reaches runs to a few hundred kilometres per million years against
+  Earth's area-weighted mean of 28 mm/yr and its fastest, the East Pacific Rise, at 75. The cause is
+  the plate partition: fourteen Voronoi plates on a cylinder put most of their boundaries between
+  crusts that are not both oceanic, so this map carries about half Earth's ridge length for its
+  ocean area. Giving the plates a spreading history — ridges that propagate, and triple junctions
+  that migrate — is what would fix it, and it is a chunk rather than a knob. 2026-09-13, S2.
+- **The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**
+  Earth's mean ocean depth of 3,682 m is a mean over the whole ocean, and about a fifth of that
+  ocean is shelf, slope and rise standing on continental crust; the deep floor away from the margins
+  averages nearer 4,300. `IsostasyConfig.oceanicMeanFloorMetres` anchors this generator's *oceanic
+  crust* at 3,682 rather than at 4,300, which keeps the whole ocean's mean where Earth's is at the
+  cost of the deep floor's, because the model has far less of that shallow fifth than Earth does.
+  Which of the two to anchor on is a real question and it is the same question as the
+  epicontinental seas below: drown the continents as much as Earth drowns its own and the two
+  figures reconcile. 2026-09-13, S2.
+
+- **This generator's continents have no epicontinental seas.** Earth's continental crust covers
+  41.2% of the surface and its land 29.2%, so 29% of the continents are under water; this generator
+  drowns a fifth of its own, which is what `TectonicsConfig.continentalCrustSubmergedShare` carries
+  and what its sea-level cut is solved against. S2's second pass closed most of the gap by giving
+  the continental surface Earth's own spread about its mean — 700 m of standard deviation, where
+  the first pass gave it a fifth of that — and the shoreline residual came down from 428-796 m to
+  -187 to +112 m. What is left is the harder half and it is nameable: there is no Hudson Bay, no
+  Baltic, no North Sea, no Sunda shelf, because nothing in the model floods a continent's *interior*.
+  That is a question about how the crust's own thickness varies inside a plate, which the model does
+  not represent — every continental column is 41 km of crust. A swell of the surface at Bond's
+  amplitude and wavelength was built for S2's second pass and measured: it is not the same thing and
+  the metrics could not see it, so it was removed again. What is wanted is thickness.
+  2026-09-13, S2.
 - **There is half again too much high ground.** With the field on an absolute ruler the land's
   elevation distribution can be read against Earth's for the first time, and the top of it is fat:
   over the five standard worlds at 512, 4.0-13.0% of land stands above 3 km against Earth's 5% and
@@ -40,21 +70,6 @@
   rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
   round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
   takes it should read E7 and E8's notes below first. 2026-09-13, S2.
-- **The incision coefficient reads the slope on the wrong half of the ruler.** `E = K A^0.5 S`
-  needs the slope as a true gradient, and `HydraulicErosion.Rates.incisionCoefficient` converts the
-  stage's rise-per-map-width into one by multiplying by `highestLandMetres / reliefSpanMetres`.
-  That was the honest reading while the height field was renormalised to its own extremes and its
-  unit was whatever a particular world made it; since S2 the field is an absolute altitude whose
-  unit *is* `reliefSpanMetres`, so the factor cancels and the whole coefficient is
-  `K * years * sqrt(landArea) / worldWidth`. As it stands the stage cuts 2.67 times less per round
-  than `K` and the time step together say. Nothing about the *world* is wrong — the cut in metres
-  is the cut S1 calibrated — but one of the two figures underneath it has to move: either the
-  coefficient goes up by 2.67, which is 2.67 times the erosion, or `yearsPerHydraulicRound` comes
-  down from 336,476 to 126,179 and twelve rounds stand for 1.5 Myr rather than 4.0. The second
-  keeps every world exactly where it is and costs only the label, but it is S1's own derivation
-  and it re-dates every erosion figure the project has recorded, including S2's own measurement of
-  what a belt loses in a round. Left alone deliberately so that S2 changed the world only where it
-  said it did. 2026-09-13, S2.
 - **The tectonics' belt widths are still counts of cells.** S1 left the widths and the heights
   together because neither could carry a unit while the field was normalised; S2 gave the heights
   one — every belt height is a share of `TectonicsConfig.beltReliefMetres` — and left the widths
@@ -62,14 +77,7 @@
   grid and writing them in kilometres would do the same arithmetic in a different place. It would
   read better all the same, and it would empty `atResolution` of everything but the moisture
   march's own knob. A rename with no physics under it. 2026-09-13, S2.
-- **The shelf plateau still stands at 1,000 m against Earth's 130.** S1 recorded this as a
-  consequence of having no two-density crust; S2 has the crust, and the plateau is still 1,000 m,
-  because it is a remap `SeaLevelStage` lays over the sea floor after the cut rather than anything
-  the crust decides. What has changed is that the sea under it is now a real sea — its hypsometric
-  mode is at -3,200 to -4,200 m where before S2 it was at -390 — so a 130 m plateau is no longer
-  one part in seventy-seven of a shallow ocean and the figure can simply be brought to Earth's. It
-  will move coastlines: the plateau is what `ClimateStage` reads as shallow water and what
-  `NationsConfig.navigableDepthMetres` reads for a sea a fleet can cross. 2026-09-13, S2.
+
 
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive

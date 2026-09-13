@@ -30,4 +30,7 @@ keystore.properties
 # Subagent worktrees. Each parallel chunk of REALISM_PLAN.md works in its own checkout here;
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
-desktop/src/test/kotlin/com/cartogenesis/desktop/SeedProbe*.kt
+# Throwaway probes. A chunk writes one to measure something or to regenerate a fixture, and it
+# is not part of the suite: every module, not just the desktop one, so a probe cannot be committed
+# from wherever it happened to be written.
+**/SeedProbe*.kt

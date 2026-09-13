@@ -1661,6 +1661,26 @@ no-cache, `[cartogenesis] ready in 0.7s`. The older mirror on the author's site 
 notes say so. Not yet merged forward into `main` (waits for F10, then the cartography and interface
 sweeps start against it).
 
+### Release 2.0.2 (2026-09-12)
+
+Cut from `release/2.0` at 0b2da4c, tagged `v2.0.2`: F10 (rivers widen with their discharge), F11
+(Stop, cooperative cancellation at every stage and round, the seed field applies on Enter or Go
+only), F12 (JPEG, heightmap and layer exports), Site 2 (the page in the app's own identity) and
+the site copy William chose after seeing it live — the headline "Build a world from the ground
+up." with its subhead, the hero caption cut to the seed line, the details' lead cut at "scaled
+down to fit", a hero a size class above the sections below it (headline 54px, lede 20px) and the
+earlier page's two-tone spaced-capitals wordmark with "Procedural world-map generator" beside it,
+set in Spectral rather than Cinzel so the page still fetches nothing from a font host. Per-merge
+tier green on the branch after the F12 merge (worldgen 38, cartography 6, ui 18 with wasm,
+desktop 17 classes; 23 min) and `:desktop:siteTest` green. Portable zip 97 MB, MSI 98 MB, web
+zip 5.4 MB; the packaged exe passes `--gpu-check` (an RTX 3070 Ti for erosion and export
+rendering). Saves from 2.0.0 and 2.0.1 open, their rivers taking widths on load; the format on
+this line is still 3. The site deployed on the tag (run 34733080849). The forward merge into
+`main` was dispatched the same evening, and the "and more" tab (William, 2026-09-12: the Pen and
+ink tab replaced by a four-view mosaic of the same crop labelled rainfall, temperature, trade
+winds and ocean currents, the section retitled "One world, many readings") follows as a
+site-only deploy from the branch.
+
 ## Track M — the Earth-likeness yardstick (3.0)
 
 ### M1. Earth-likeness metric suite — Opus

@@ -299,21 +299,58 @@ class GeneralisationTest {
 
     @Test
     fun `the graticule figures name the lines they sit on`() {
-        val graticule = Graticule.of(1024, 1024)
+        val graticule = Graticule.of(2048, 2048)
         val texts = graticule.labels.map { it.text }.distinct()
         assertTrue("0°" in texts, "the equator and the prime meridian are unlabelled")
         assertTrue("90°E" in texts && "90°W" in texts)
         assertTrue("60°N" in texts && "60°S" in texts)
         assertTrue("180°" !in texts, "the antimeridian is labelled half off the paper")
-        // Every figure is inside the sheet, which is what the width arithmetic in Graticule is for.
-        graticule.labels.forEach { label ->
-            val right = label.leftX + Numerals.widthOf(label.text, label.heightPixels)
-            assertTrue(
-                label.leftX >= 0f && right <= 1024f,
-                "\"${label.text}\" runs from ${label.leftX} to $right, off a 1024 sheet"
+        println("F14 graticule figures at 2048: ${graticule.labels.size} of them, ${texts.size} distinct")
+    }
+
+    /**
+     * No figure is written over its neighbour, and none runs off the paper.
+     *
+     * The control is the first draft of this, which sized the figures at a little over a quarter of
+     * the spacing and labelled every line: at 2048 the top edge came out as
+     * `170°W160°W150°W140°W…`, one unbroken row of digits. So the sizing is derived from the widest
+     * figure there is and the sheets that still cannot fit them all label fewer of their lines.
+     */
+    @Test
+    fun `no two graticule figures collide, at any size`() {
+        listOf(512, 1024, 2048, 4096).forEach { side ->
+            val graticule = Graticule.of(side, side)
+            val figured = graticule.labels.size
+            graticule.labels.forEach { label ->
+                val right = label.leftX + Numerals.widthOf(label.text, label.heightPixels)
+                assertTrue(
+                    label.leftX >= 0f && right <= side.toFloat(),
+                    "\"${label.text}\" runs from ${label.leftX} to $right, off a $side sheet"
+                )
+            }
+            // The top edge is where they are tightest: those figures are set side by side, and
+            // they are the only ones sharing the sheet's highest baseline.
+            val topBaseline = graticule.labels.minOf { it.baselineY }
+            val alongTheTop = graticule.labels
+                .filter { it.baselineY == topBaseline }
+                .sortedBy { it.leftX }
+            alongTheTop.zipWithNext { left, next ->
+                val end = left.leftX + Numerals.widthOf(left.text, left.heightPixels)
+                assertTrue(
+                    end <= next.leftX,
+                    "at $side, \"${left.text}\" ends at $end and \"${next.text}\" starts at " +
+                        "${next.leftX}: the margin is a row of digits, not a set of figures"
+                )
+            }
+            println(
+                "F14 at $side: $figured figures, set every " +
+                    "${Graticule.figuresEveryNthLine(
+                        graticule.meridianSpacingCells,
+                        Graticule.labelHeightPixels(graticule.meridianSpacingCells)
+                    ) * Graticule.DEGREES} degrees at " +
+                    "${Graticule.labelHeightPixels(graticule.meridianSpacingCells)} px"
             )
         }
-        println("F14 graticule figures at 1024: ${graticule.labels.size} of them, ${texts.size} distinct")
     }
 
     @Test

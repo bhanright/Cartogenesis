@@ -45,6 +45,16 @@ class GeneralisationRenderTest {
         const val CROP = 640
 
         /**
+         * The pane the sheet is scaled into for the "as seen" pair, in pixels.
+         *
+         * A whole divisor of [SIZE], so the box filter that shrinks it averages whole blocks and
+         * the two pictures differ by what was drawn rather than by how it was resampled. 512 into
+         * 2048 is four cells to the pixel, which is a hair coarser than the 0.44 a laptop's pane
+         * gives and is the same story told slightly louder.
+         */
+        const val PANE = 512
+
+        /**
          * The zooms the crops are drawn for, in screen pixels to the cell.
          *
          * A 2048 sheet fitted into a 900-pixel pane is at 0.44; four times zoom is 1.76.
@@ -92,6 +102,11 @@ class GeneralisationRenderTest {
             val ground = MapRasterizer.rasterize(map, plain)
             val groundFigured = MapRasterizer.rasterize(map, figured)
 
+            // The same window for all four sheets, chosen where there is most to look at: the
+            // middle of a 2048 world is as likely to be open ocean as anything, and a crop of open
+            // ocean says nothing about either the coast or the rivers.
+            val window = busiestWindow(map, plain)
+
             listOf(
                 "fit" to MapSheet.onScreen(AT_FIT),
                 "4x" to MapSheet.onScreen(AT_FOUR_TIMES)
@@ -104,10 +119,22 @@ class GeneralisationRenderTest {
                         written += write(
                             dir,
                             "$name-$zoom-$grid-crop.png",
-                            crop(bitmap, SIZE / 2 - CROP / 2, SIZE / 2 - CROP / 2)
+                            crop(bitmap, window.first, window.second)
                         )
                         bitmap.close()
                     }
+            }
+
+            // What the reader actually sees at fit, which is the whole point of generalising:
+            // the sheet scaled down into the pane, drawn once for that scale and once with every
+            // river and every bend of coast the world has, which is what the renderer did before.
+            listOf(
+                "generalised" to MapSheet.onScreen(AT_FIT),
+                "ungeneralised" to MapSheet.SHEET
+            ).forEach { (how, sheet) ->
+                val bitmap = MapImage.toBitmap(map, plain, ground, sheet)
+                written += write(dir, "$name-asseen-$how.png", shrunkToThePane(bitmap))
+                bitmap.close()
             }
 
             // The corner an export puts its scale bar in, at 1:1, with the graticule's figures
@@ -186,11 +213,78 @@ class GeneralisationRenderTest {
         )
     }
 
+    /**
+     * The top-left corner of the [CROP]-square window with the most river in it.
+     *
+     * River segments rather than land, because the two things F14 changes about the picture — how
+     * many rivers are drawn and how the coast is stroked — both live where the drainage is, and a
+     * window full of drainage is a window full of coast as well.
+     */
+    private fun busiestWindow(map: WorldMap, options: RenderOptions): Pair<Int, Int> {
+        val rivers = MapRasterizer.overlay(map, options, MapSheet.SHEET).rivers
+        var best = 0
+        var at = (SIZE - CROP) / 2 to (SIZE - CROP) / 2
+        var top = 0
+        while (top <= SIZE - CROP) {
+            var left = 0
+            while (left <= SIZE - CROP) {
+                val inside = rivers.count { segment ->
+                    segment.x0 >= left && segment.x0 < left + CROP &&
+                        segment.y0 >= top && segment.y0 < top + CROP
+                }
+                if (inside > best) {
+                    best = inside
+                    at = left to top
+                }
+                left += CROP / 4
+            }
+            top += CROP / 4
+        }
+        println("F14 crop window at ${at.first}, ${at.second} with $best river segments in it")
+        return at
+    }
+
     private fun write(dir: File, name: String, bitmap: Bitmap): String {
         val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!
         val file = File(dir, name)
         file.writeBytes(data.bytes)
         return file.absolutePath
+    }
+
+    /**
+     * The whole sheet scaled down to the pane it would be fitted into, by averaging the block of
+     * source pixels each destination pixel covers.
+     *
+     * A box filter, which is what a viewer's own downscale amounts to, and the right one here: the
+     * question these two pictures answer is what a hairline river and a stair-stepped coast turn
+     * into when the sheet is shrunk, and any sharpening filter would answer a different one.
+     */
+    private fun shrunkToThePane(bitmap: Bitmap): Bitmap {
+        val source = bitmap.readPixels() ?: error("could not read the rendered map back")
+        val block = SIZE / PANE
+        val shrunk = ByteArray(PANE * PANE * 4)
+        for (row in 0 until PANE) {
+            for (column in 0 until PANE) {
+                val channels = IntArray(4)
+                for (withinRow in 0 until block) {
+                    var at = ((row * block + withinRow) * SIZE + column * block) * 4
+                    repeat(block) {
+                        for (channel in 0 until 4) {
+                            channels[channel] += source[at + channel].toInt() and 0xFF
+                        }
+                        at += 4
+                    }
+                }
+                val to = (row * PANE + column) * 4
+                for (channel in 0 until 4) {
+                    shrunk[to + channel] = (channels[channel] / (block * block)).toByte()
+                }
+            }
+        }
+        val pane = Bitmap()
+        pane.allocPixels(ImageInfo.makeS32(PANE, PANE, ColorAlphaType.PREMUL))
+        pane.installPixels(shrunk)
+        return pane
     }
 
     /** A [CROP]-square window out of [bitmap] at 1:1, its top-left corner at [left], [top]. */

@@ -426,3 +426,27 @@
   the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
   anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
   render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
+- **The graticule's figures are ink on the sheet, so at fit they shrink with it.** Found by F14.
+  Everything an export needs is on the sheet — the grid, the figures, the scale bar — which is the
+  right answer for a printed chart and means that on screen at whole-world scale a 2048 sheet's
+  eleven-pixel figures come down to five. That is what a printed map does too, and the reader zooms;
+  but a live view could draw the figures in screen space at a constant size instead. It would need
+  the graticule's geometry projected into the pane by the front end and a second drawing site for
+  the numerals, which is exactly the divergence `MapImage`'s one Skia path exists to avoid, so it
+  waits for a reason better than tidiness.
+- **The overlay is baked into the sheet, so zooming past 1:1 magnifies the ink with the raster.**
+  Also F14. The traced coast is a line rather than a staircase at every zoom, which is the win; but
+  it is a line drawn at the sheet's resolution, so at four times zoom it is a soft two-pixel line
+  rather than a crisp one. Drawing the overlay in screen space over the scaled raster would fix it
+  and is the same second-drawing-site problem as above. A cheaper half-measure, if it is ever worth
+  it: re-raster at the zoomed resolution over the visible window only.
+- **The traced coast does not wrap the east-west seam.** F14 traces on the grid as a sheet, so a
+  landmass crossing longitude 180 has its outline stopped at the two edge columns rather than
+  carried round. The raster's own coastline pass does wrap, so the difference is one column of
+  pixels at each edge and nothing has been seen of it; a wrapping tracer would have to split every
+  ring that crosses the seam for drawing anyway. `RiverSegment` already carries the split-at-the-seam
+  trick if someone wants to copy it.
+- **The scale bar is drawn on every picture export.** F14 puts it on anything that goes through
+  `Exporter.export` or the web's equivalent, because a PNG has no legend beside it. Nobody has asked
+  for a way to turn it off; if someone wants a clean plate, it wants a switch beside the format
+  chips rather than a Cartography mark, since it is a property of the export and not of the map.

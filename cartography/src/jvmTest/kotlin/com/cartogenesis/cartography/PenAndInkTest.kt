@@ -115,7 +115,7 @@ class PenAndInkTest {
             MapStyle.SCROLL to -1448446961,
             MapStyle.PEN_AND_INK to 1950662391,
             MapStyle.MARS to -1005799490,
-            MapStyle.NATURAL to -1079641503,
+            MapStyle.NATURAL to 402057573,
             MapStyle.CLEAR to -361190112
         )
 

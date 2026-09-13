@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -52,9 +53,20 @@ class NaturalGalleryTest {
 
         WORLDS.forEach { (name, config) ->
             val world = WorldGenerationEngine.generateBlocking(config)
+            println("F23 $name ${fieldSpread(world)}")
+
+            // The same world in Atlas, as the control a reviewer needs: Atlas is the style everyone
+            // knows, and the question "is this a photograph or a prettier plate" is only answerable
+            // with the plate beside it. The world is already generated, so it costs one raster.
+            write(
+                File(dir, "$name-atlas-2048.png"),
+                Image.makeFromBitmap(MapImage.toBitmap(world, options.copy(style = MapStyle.ATLAS)))
+            )
+
             val bitmap = MapImage.toBitmap(world, options)
             val whole = Image.makeFromBitmap(bitmap)
             write(File(dir, "$name-natural-2048.png"), whole)
+            perBiomeColour(world, name)
 
             DETAILS.forEach { detail ->
                 val (left, top) = densestWindow(world, detail)
@@ -72,6 +84,75 @@ class NaturalGalleryTest {
 
     private fun write(file: File, image: Image) {
         file.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
+    }
+
+    /**
+     * What each vegetation actually comes out as, beside the height and climate that made it.
+     *
+     * The whole-map statistics are confounded: this generator's mix of biomes is not Earth's, so a
+     * median taken over all the land compares two different worlds rather than two palettes. Per
+     * biome the comparison is like for like — the reference's own forest, plains and desert are
+     * sampled colours, and these are the colours this style gives the same three things. The
+     * height and climate beside each are what put it there, so a colour that looks wrong can be
+     * traced to the ramp, to the drought's lift or to the cold's paling without another render.
+     */
+    private fun perBiomeColour(world: WorldMap, name: String) {
+        val cells = world.width * world.height
+        val drawn = MapRasterizer.rasterize(world, RenderOptions(style = MapStyle.NATURAL))
+        val red = LongArray(Biome.entries.size)
+        val green = LongArray(Biome.entries.size)
+        val blue = LongArray(Biome.entries.size)
+        val height = DoubleArray(Biome.entries.size)
+        val warmth = DoubleArray(Biome.entries.size)
+        val rain = DoubleArray(Biome.entries.size)
+        val count = IntArray(Biome.entries.size)
+        for (cell in 0 until cells) {
+            if (!world.sea.isLand[cell] || world.rivers.lakes.isLake(cell)) continue
+            val biome = world.climate.biome[cell].ordinal
+            red[biome] += (drawn[cell] shr 16) and 0xFF
+            green[biome] += (drawn[cell] shr 8) and 0xFF
+            blue[biome] += drawn[cell] and 0xFF
+            height[biome] += world.sea.relativeElevation.data[cell].toDouble()
+            warmth[biome] += world.climate.temperature.data[cell].toDouble()
+            rain[biome] += world.climate.precipitationMm.data[cell].toDouble()
+            count[biome]++
+        }
+        Biome.entries.forEach { biome ->
+            val n = count[biome.ordinal]
+            if (n < MIN_BIOME_CELLS) return@forEach
+            println(
+                ("F23 %s %-26s #%02X%02X%02X over %6d cells, mean height %.2f, " +
+                    "%.1f C, %.0f mm").format(
+                    name, biome.name,
+                    red[biome.ordinal] / n, green[biome.ordinal] / n, blue[biome.ordinal] / n,
+                    n, height[biome.ordinal] / n, warmth[biome.ordinal] / n, rain[biome.ordinal] / n
+                )
+            )
+        }
+    }
+
+    /**
+     * Where along each ramp this world actually asks to be painted.
+     *
+     * A ramp is a promise about a *distribution* as much as about a set of colours: a sea ramp
+     * whose turquoise sits in the top tenth paints a turquoise ocean on a world that keeps most of
+     * its sea floor in that tenth. The deciles below are what the palette was calibrated against,
+     * and they belong in the report beside the pictures.
+     */
+    private fun fieldSpread(world: WorldMap): String {
+        val sea = ArrayList<Float>()
+        val land = ArrayList<Float>()
+        for (cell in 0 until world.width * world.height) {
+            val relative = world.sea.relativeElevation.data[cell]
+            if (world.sea.isLand[cell]) land += relative else sea += 1f + relative
+        }
+        sea.sort()
+        land.sort()
+        fun deciles(values: List<Float>) = (0..10).joinToString(" ") {
+            "%.2f".format(values[(values.size - 1) * it / 10])
+        }
+        return "sea reads the ocean ramp at ${deciles(sea)}; land reads the land ramp at " +
+            deciles(land)
     }
 
     /** The detail at [left], [top], at the render's own pixels — no scaling anywhere. */
@@ -134,6 +215,9 @@ class NaturalGalleryTest {
         /** About 800 by 600, which is a detail a person can take in at once. */
         const val DETAIL_WIDTH = 800
         const val DETAIL_HEIGHT = 600
+
+        /** Below this a biome is too rare on a world for its mean colour to say anything. */
+        const val MIN_BIOME_CELLS = 200
 
         /** How far the window slides between tries. */
         const val SEARCH_STEP = 100

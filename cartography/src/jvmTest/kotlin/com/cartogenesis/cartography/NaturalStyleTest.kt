@@ -48,10 +48,20 @@ class NaturalStyleTest {
          * The Pacific north-west at (232,250)-(246,264) — #668042, saturation 0.484 — which is the
          * palest thing in the reference that is still plainly a colour. Below this a stop is a
          * pastel, and the whole point of the style is that a photograph of a planet has no pastels
-         * in it. Measured on every stop but the summit, because snow has no hue at all: the
-         * reference's own reads 0.019.
+         * in it.
          */
         const val LEAST_SATURATED = 0.48
+
+        /**
+         * Where the ramp stops carrying a colour at all, as an index into the land ramp.
+         *
+         * The top two stops are the bare rock below a snow line and the snow itself, and neither is
+         * a colour: the reference's own high ground reads 0.251 saturated where it is scree and
+         * 0.019 where it is ice — its Arctic tundra at (268,178)-(286,194) measures 0.141. A
+         * saturation floor applied up there would forbid the photograph, so it stops here, and the
+         * vividness ceiling alone carries the top of the ramp.
+         */
+        const val COLOURED_STOPS = 6
 
         /** Steps the ground sweep takes along each of its axes. */
         const val HEIGHT_STEPS = 20
@@ -270,21 +280,20 @@ class NaturalStyleTest {
      * "Saturated but earthy", measured against the photograph the phrase was said about.
      *
      * Two bars, one at each end, and both of them figures the reference itself produced. Nothing
-     * may be more vivid than its most vivid ground, which rules out a neon; nothing that carries a
-     * hue at all may be less saturated than its palest coloured ground, which rules out a pastel.
-     * The summit is exempt from the second because snow is not a colour — the reference's own
-     * reads 0.019 saturated.
+     * may be more vivid than its most vivid ground, which rules out a neon; nothing in the ramp's
+     * coloured band may be less saturated than its palest coloured ground, which rules out a
+     * pastel. See [COLOURED_STOPS] for where that band ends and why.
      */
     @Test
     fun `every stop of the land ramp is saturated but earthy`() {
         val stops = STYLE.landRamp
         stops.forEachIndexed { index, stop ->
             val (saturation, value) = saturationAndValue(stop)
-            val summit = index == stops.lastIndex
+            val coloured = index < COLOURED_STOPS
             println(
                 "NATURAL land stop %d #%06X saturation %.3f, value %.3f, vividness %.3f%s".format(
                     index, stop and 0xFFFFFF, saturation, value, saturation * value,
-                    if (summit) " (the snow line, exempt from the saturation floor)" else ""
+                    if (coloured) "" else " (above the colour, exempt from the saturation floor)"
                 )
             )
             assertTrue(
@@ -292,7 +301,7 @@ class NaturalStyleTest {
                 "land stop $index is ${(saturation * value).rounded(3)} vivid, past the " +
                     "reference's own $MOST_VIVID: that is a neon, not an earth"
             )
-            if (!summit) {
+            if (coloured) {
                 assertTrue(
                     saturation >= LEAST_SATURATED,
                     "land stop $index is only ${saturation.rounded(3)} saturated, under the " +

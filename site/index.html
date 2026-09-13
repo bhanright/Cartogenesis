@@ -94,11 +94,17 @@
 
   /* ---------- topbar: the wordmark, and nothing that belongs to anyone else -- */
   .topbar{border-bottom:1px solid var(--hairline)}
-  .topbar .wrap{display:flex;align-items:baseline;padding-top:16px;padding-bottom:14px}
+  .topbar .wrap{display:flex;align-items:baseline;gap:22px;padding-top:16px;padding-bottom:14px}
+  /* The wordmark William chose (2026-09-12): the name in spaced capitals with its second half in
+     brass, and the one-line description beside it — the treatment the earlier page had, set in
+     the page's own Spectral rather than that page's Cinzel. */
   .wordmark{
-    font-family:var(--serif);font-weight:600;font-size:19px;line-height:1;
-    letter-spacing:.02em;color:var(--parchment);margin:0;
+    font-family:var(--serif);font-weight:600;font-size:18px;line-height:1;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--parchment);margin:0;
   }
+  .wordmark span{color:var(--brass)}
+  .topline{font-family:var(--sans);font-size:14px;color:var(--bone-dim);white-space:nowrap}
+  @media (max-width:520px){.topline{display:none}}
 
   /* ---------- hero ---------------------------------------------------------- */
   .hero{
@@ -110,7 +116,7 @@
     /* The text column is the wider of the two because the headline sets on two lines and the
        break is chosen, not left to the browser: at this width line one is "Build a world".
        The crop is 2:1, so half the row is already more height than it needs. */
-    .hero{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);padding:88px 0 40px}
+    .hero{grid-template-columns:minmax(0,1fr) minmax(0,.9fr);padding:88px 0 40px}
   }
   .eyebrow{
     font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
@@ -138,7 +144,7 @@
   .actions{display:flex;flex-wrap:wrap;gap:14px;margin:34px 0 0}
   .btn{
     display:inline-block;text-decoration:none;font-family:var(--sans);font-weight:500;
-    font-size:16px;line-height:1.2;padding:15px 26px;border-radius:2px;
+    font-size:15.5px;line-height:1.2;padding:14px 24px;border-radius:2px;
     border:1px solid transparent;transition:background-color .15s,border-color .15s,color .15s;
   }
   .btn.primary{background:var(--oxblood);color:var(--parchment);border-color:var(--oxblood)}
@@ -277,7 +283,10 @@
 <body>
 
 <header class="topbar">
-  <div class="wrap"><p class="wordmark">Cartogenesis</p></div>
+  <div class="wrap">
+    <p class="wordmark">Carto<span>genesis</span></p>
+    <span class="topline">Procedural world-map generator</span>
+  </div>
 </header>
 
 <main class="wrap">

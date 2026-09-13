@@ -1,6 +1,8 @@
 package com.cartogenesis.desktop
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,11 +27,14 @@ import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.ThemeChoice
+import java.io.File
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
 
 /**
  * F8: that the atlas on a phone can be got out of again.
@@ -307,6 +313,97 @@ class PhoneAtlasTest {
         }
         return ratio
     }
+
+    /**
+     * F14 on a phone: the graticule can be turned on from the sheet, and it reaches the map.
+     *
+     * The toggle is in the Cartography section, which rolls up like every other, so the route is
+     * the reader's own: pull the sheet up, generate, unroll Cartography, flip Graticule, put the
+     * sheet away and look. Two claims a capture can make and a declaration cannot — that the switch
+     * is reachable at 390 dp, and that flipping it changes the picture rather than only the state —
+     * plus the third, that the legend prints the scale the sheet is at.
+     *
+     * The shot is written out because the graticule is the one thing in F14 whose worth is a matter
+     * of looking: whether ten degrees is fine enough to place a coast by and coarse enough not to
+     * bury one, at the size a phone shows a whole world.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `a phone can turn the graticule on and see it`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = PhonePlatform()
+            setContent {
+                CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Generate").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            val plain = captureRoot()
+            File(dir, "f14-phone-plain.png").writeBytes(plain.png)
+
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Cartography").performScrollTo().performClick()
+            waitForIdle()
+            val toggle = onNodeWithContentDescription("Graticule")
+            toggle.performScrollTo()
+            toggle.assertIsEnabled()
+            toggle.performClick()
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            // The redraw runs off the composition on a background dispatcher, so the frame the
+            // switch was flipped on is not yet the frame that carries the graticule.
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                captureRoot().fingerprint != plain.fingerprint
+            }
+            val figured = captureRoot()
+            File(dir, "f14-phone-graticule.png").writeBytes(figured.png)
+
+            println(
+                "F14 phone at ${PHONE_WIDTH}x$PHONE_HEIGHT: plain ${plain.fingerprint}, " +
+                    "with the graticule ${figured.fingerprint}, written to ${dir.absolutePath}"
+            )
+            assertTrue(
+                figured.fingerprint != plain.fingerprint,
+                "turning the graticule on changed nothing on the phone's screen"
+            )
+            // And the legend says what scale the sheet is at, which is the other half of F14.
+            assertTrue(
+                onAllNodesWithText("km per pixel", substring = true).fetchSemanticsNodes()
+                    .isNotEmpty(),
+                "the cartouche does not print the map's scale"
+            )
+        }
+    }
+
+    /** The whole window as a PNG and a fingerprint of it, for the two shots above. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.captureRoot(): PhoneShot {
+        val image = onRoot().captureToImage()
+        val pixels = image.toPixelMap()
+        var fingerprint = 17
+        for (y in 0 until pixels.height step 3) {
+            for (x in 0 until pixels.width step 3) {
+                fingerprint = fingerprint * 31 + pixels[x, y].toArgb()
+            }
+        }
+        val bytes = Image.makeFromBitmap(image.asSkiaBitmap())
+            .encodeToData(EncodedImageFormat.PNG)!!.bytes
+        return PhoneShot(bytes, fingerprint)
+    }
+
+    private class PhoneShot(val png: ByteArray, val fingerprint: Int)
 
     /**
      * The contrast between the lightest and the darkest pixel of one piece of text.

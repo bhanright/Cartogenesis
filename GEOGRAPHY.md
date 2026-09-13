@@ -66,6 +66,28 @@ worth stating: with the hairline fixed, the range a sheet can show shrinks with 
 6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
 are nearly the same line, because the headwater is already the finest mark there is.
 
+**The coast is a line, not a staircase of cells.** The raster inks the landward cell of every
+land–water pair, which is right at one pixel to the cell and wrong at any other size: shrink it and
+the line thins to nothing, enlarge it and the reader is looking at the grid. So the same boundary is
+also traced off the land mask by marching squares — every vertex halfway between one land cell and
+one water cell, so it runs exactly where the raster inks — and stroked over the fill at 0.05% of the
+sheet's width, one pixel at 2048. Where four cells meet in a checkerboard the contour is closed so
+that land touching corner to corner stays one coast, which is the same assumption the flow routing
+makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
+is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
+
+**A map drawn smaller carries fewer features.** Töpfer and Pillewizer measured what cartographers
+actually kept when they derived one map from another (*The principles of selection*, The
+Cartographic Journal 3(1), 1966) and found the count went as the square root of the change in
+scale. So the number of rivers drawn is the traced count times the square root of the pixels one
+cell covers on the surface the reader is looking at: at 2048 in a laptop's pane that is about 0.44,
+and 198 of 718106's 279 rivers are drawn; at four times zoom all 279 are back; an export is drawn
+cell for pixel and never loses one. The cut is on the peak width ratio, which is the square root of
+discharge normalised over the network, so it is a cut on discharge — and because a trunk's peak is
+never below its tributaries', it can never leave a tributary hanging off a river that is not there.
+The coast is generalised the same way, by Douglas–Peucker at half a drawn pixel: 19,634 vertices at
+fit against 51,749 at four times on the same world.
+
 **Mountains come from plate tectonics, in ranges.** Uplift is applied along classified plate
 boundaries — convergent belts, subduction trenches, divergent ridges — rather than scattered. Belts
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole

@@ -243,6 +243,7 @@ class PanelKnobsTest {
         assertEquals(view.copy(showHillshade = false), Knobs.hillshade.set(view, false))
         assertEquals(view.copy(showCoastline = false), Knobs.coastline.set(view, false))
         assertEquals(view.copy(showLandmarks = true), Knobs.landmarks.set(view, true))
+        assertEquals(view.copy(showGraticule = true), Knobs.graticule.set(view, true))
     }
 
     /**
@@ -340,9 +341,10 @@ class PanelKnobsTest {
             }
         )
         // Cartography keeps its own marks, so the section is not left empty: whether the relief is
-        // drawn at all, which light it is drawn by, and whether the coast is inked.
+        // drawn at all, which light it is drawn by, whether the coast is inked, and whether the
+        // sheet carries a graticule.
         assertEquals(
-            listOf("Relief shading", "Single-lamp relief", "Coastline"),
+            listOf("Relief shading", "Single-lamp relief", "Coastline", "Graticule"),
             Knobs.inSection(PanelSection.CARTOGRAPHY).map { it.label }
         )
     }
@@ -632,16 +634,21 @@ class PanelKnobsTest {
      *
      * Pinch is what a phone already does for zoom and a double tap now fits, so a readout and two
      * step buttons on a 390 dp strip are three targets spent on a gesture the device has. Fit
-     * stays: there is no gesture anybody would guess for "show me all of it".
+     * stays: there is no gesture anybody would guess for "show me all of it". The scale bar stays
+     * too, and is not a target at all — it is the answer to how far in the reader has pinched,
+     * which is the question the readout used to answer.
      */
     @Test
-    fun `the phone's legend keeps the cartouche and Fit and loses the zoom steps`() {
+    fun `the phone's legend keeps the cartouche, the scale and Fit and loses the zoom steps`() {
         val platform = FakePlatform()
         val wide = Arrangements.of(WindowShape.WIDE, platform).legend
         val compact = Arrangements.of(WindowShape.COMPACT, platform).legend
 
         assertEquals(LegendPart.entries.toList(), wide)
-        assertEquals(listOf(LegendPart.CARTOUCHE, LegendPart.FIT), compact)
+        assertEquals(
+            listOf(LegendPart.CARTOUCHE, LegendPart.SCALE, LegendPart.FIT),
+            compact
+        )
         assertTrue(LegendPart.ZOOM_IN !in compact)
         assertTrue(LegendPart.ZOOM_OUT !in compact)
     }

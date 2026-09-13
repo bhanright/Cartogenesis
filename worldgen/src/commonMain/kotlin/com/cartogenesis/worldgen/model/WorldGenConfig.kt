@@ -1612,11 +1612,27 @@ data class NationsConfig(
     /** How wide the world is taken to be, which is what turns cells into an area. */
     val worldWidthKm: Double = 12_000.0
 ) {
-    fun squareKilometresPerCell(width: Int, height: Int): Double {
-        val cellWidth = worldWidthKm / width
-        val cellHeight = (worldWidthKm / 2.0) / height
-        return cellWidth * cellHeight
-    }
+    /**
+     * How wide one cell is on the ground, in kilometres, on a map [width] cells across.
+     *
+     * The map spans the whole globe east to west, so the width in cells covers [worldWidthKm]
+     * exactly. This is the number every other length on the map is derived from — the scale bar,
+     * the heightmap sidecar's cell size, a realm's area — so it lives here rather than being
+     * written out again wherever a kilometre is needed.
+     */
+    fun kilometresPerCellWidth(width: Int): Double = worldWidthKm / width
+
+    /**
+     * How tall one cell is on the ground, in kilometres, on a map [height] cells down.
+     *
+     * Pole to pole is half the way round, so the height in cells covers half [worldWidthKm]. On a
+     * square map that makes a cell twice as tall as it is wide, which is the equirectangular
+     * projection's own distortion and not an error.
+     */
+    fun kilometresPerCellHeight(height: Int): Double = (worldWidthKm / 2.0) / height
+
+    fun squareKilometresPerCell(width: Int, height: Int): Double =
+        kilometresPerCellWidth(width) * kilometresPerCellHeight(height)
 }
 
 /** Monster lairs, ruins, hazards and the like, scattered through the wild places. */

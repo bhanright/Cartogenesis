@@ -420,6 +420,20 @@ internal object Knobs {
         write = { options, on -> options.copy(showCoastline = on) }
     )
 
+    /**
+     * Lines of latitude and longitude every ten degrees, with the edges figured.
+     *
+     * Off by default and a toggle rather than a permanent fixture: the graticule is what makes the
+     * picture a chart, and a reader who wants a picture of a world should not have to turn a grid
+     * off to get one. Drawn on exports as well as on screen — see `Graticule`.
+     */
+    val graticule = Mark(
+        section = PanelSection.CARTOGRAPHY,
+        label = "Graticule",
+        read = { it.showGraticule },
+        write = { options, on -> options.copy(showGraticule = on) }
+    )
+
     /** The atlas's own two, drawn in the Atlas pane rather than here. */
     val landmarkCount = Dial(
         section = PanelSection.ATLAS,
@@ -447,7 +461,7 @@ internal object Knobs {
         seasonalTilt, rainShadow, ice,
         rivers, lakes, dryBasins,
         realms, wilderness, borders,
-        hillshade, singleLamp, coastline,
+        hillshade, singleLamp, coastline, graticule,
         landmarkCount, landmarks
     )
 

@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,6 +71,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldSave
@@ -186,6 +191,15 @@ private fun Application(
     var options by remember { mutableStateOf(RenderOptions()) }
     var world by remember { mutableStateOf<WorldMap?>(null) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
+    /**
+     * The ground under the overlay, kept so that a change of zoom redraws the ink and not the world.
+     *
+     * Zooming generalises the overlay differently — fewer rivers at whole-world scale, a coast
+     * simplified to what the screen can show — so the picture has to be drawn again; but the raster
+     * beneath it has not changed at all, and at 2048 that raster is most of a second of arithmetic.
+     * Holding it costs four bytes a cell, which beside a whole world's fields is nothing.
+     */
+    var raster by remember { mutableStateOf<RasterSheet?>(null) }
     var stage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     /**
@@ -428,9 +442,15 @@ private fun Application(
                 // for the whole of it.
                 Generation.run(config, reusable, accelerator) { reached = it; stage = it.label }
             }
-            val rendered = withContext(Dispatchers.Default) { MapImage.render(generated, options) }
+            val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+            val drawn = withContext(Dispatchers.Default) {
+                val pixels = MapRasterizer.rasterize(generated, options)
+                RasterSheet(generated, options, pixels) to
+                    MapImage.render(generated, options, pixels, sheet)
+            }
             world = generated
-            image = rendered
+            raster = drawn.first
+            image = drawn.second
             generationMillis = epochMillis() - started
             // A world nobody has named yet, or a world at a seed this name was not given to, takes
             // the name its largest people would give it. A settings edit at the same seed keeps
@@ -457,7 +477,29 @@ private fun Application(
 
     LaunchedEffect(options) {
         val current = world ?: return@LaunchedEffect
-        image = withContext(Dispatchers.Default) { MapImage.render(current, options) }
+        val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+        val pixels = withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
+        raster = RasterSheet(current, options, pixels)
+        image = withContext(Dispatchers.Default) {
+            MapImage.render(current, options, pixels, sheet)
+        }
+    }
+
+    /**
+     * How much of a cell one screen pixel covers, in half-octave steps. See [MapSheet.onScreen].
+     *
+     * Read as a derived state so the effect below wakes only when the *band* moves, not on every
+     * notch of the wheel: a scroll from fit to four times crosses four bands and redraws the ink
+     * four times, rather than redrawing it on each of the twenty notches it takes to get there.
+     */
+    val sheet by remember { derivedStateOf { MapSheet.onScreen(camera.pixelsPerCell) } }
+
+    // Only the band: whoever replaced the raster has already drawn the picture that goes with it.
+    LaunchedEffect(sheet) {
+        val drawn = raster ?: return@LaunchedEffect
+        image = withContext(Dispatchers.Default) {
+            MapImage.render(drawn.world, drawn.options, drawn.pixels, sheet)
+        }
     }
 
     LaunchedEffect(pendingExport) {
@@ -1123,6 +1165,19 @@ private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScop
 
 
 /**
+ * A finished raster and the world and options it was drawn from.
+ *
+ * Held by the application so that a change of zoom can redraw the vector overlay over the same
+ * ground rather than rasterising a whole world again; see the `raster` state and [MapSheet].
+ */
+private class RasterSheet(
+    val world: WorldMap,
+    val options: RenderOptions,
+    /** ARGB, row-major, `world.width * world.height` long, as [MapRasterizer.rasterize] returns. */
+    val pixels: IntArray
+)
+
+/**
  * Pan and zoom over the rendered map, with labels drawn on top.
  *
  * Labels are drawn in screen space rather than map space, so they stay readable at any zoom
@@ -1153,81 +1208,95 @@ private fun MapView(
     val fitOnDoubleTap: ((Offset) -> Unit)? =
         if (doubleTapToFit) ({ _: Offset -> camera.fit() }) else null
 
-    Canvas(
-        Modifier.fillMaxSize()
-            .pointerInput(Unit) {
-                // Drag to pan and pinch to zoom, in one handler: a single pointer reports a pan
-                // and a zoom of 1, two pointers report both, and the centroid is the point the
-                // zoom is taken about — which is what keeps whatever is between the fingers
-                // between the fingers.
-                detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                    camera.about(centroid, zoomChange, panChange)
+    // The pane measures itself so that the camera can say how far a screen pixel reaches, which is
+    // what the legend's scale bar and the overlay's generalisation are both read off. Measured in
+    // the layout rather than in the draw, because writing state from a draw is how a composition
+    // ends up redrawing itself for ever.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val paneWidth = constraints.maxWidth.toFloat()
+        val paneHeight = constraints.maxHeight.toFloat()
+        val measured = image
+        val fitScale =
+            if (measured == null || measured.width == 0 || measured.height == 0) 1f
+            else min(paneWidth / measured.width, paneHeight / measured.height)
+        LaunchedEffect(fitScale) { camera.fitScale = fitScale }
+
+        Canvas(
+            Modifier.fillMaxSize()
+                .pointerInput(Unit) {
+                    // Drag to pan and pinch to zoom, in one handler: a single pointer reports a pan
+                    // and a zoom of 1, two pointers report both, and the centroid is the point the
+                    // zoom is taken about — which is what keeps whatever is between the fingers
+                    // between the fingers.
+                    detectTransformGestures { centroid, panChange, zoomChange, _ ->
+                        camera.about(centroid, zoomChange, panChange)
+                    }
                 }
-            }
-            .pointerInput(Unit) {
-                // A wheel is not a gesture, so detectTransformGestures never sees it, and a mouse
-                // is how most of this will be driven.
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val change = event.changes.firstOrNull() ?: continue
-                        val scrolled = change.scrollDelta.y
-                        if (scrolled == 0f) continue
-                        // Scrolling down is positive, and should zoom out.
-                        camera.about(
-                            change.position,
-                            if (scrolled < 0f) MapCamera.STEP else 1f / MapCamera.STEP
+                .pointerInput(Unit) {
+                    // A wheel is not a gesture, so detectTransformGestures never sees it, and a mouse
+                    // is how most of this will be driven.
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type != PointerEventType.Scroll) continue
+                            val change = event.changes.firstOrNull() ?: continue
+                            val scrolled = change.scrollDelta.y
+                            if (scrolled == 0f) continue
+                            // Scrolling down is positive, and should zoom out.
+                            camera.about(
+                                change.position,
+                                if (scrolled < 0f) MapCamera.STEP else 1f / MapCamera.STEP
+                            )
+                            change.consume()
+                        }
+                    }
+                }
+                .pointerInput(labelMode, labels, image, doubleTapToFit) {
+                    detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
+                        val img = image ?: return@detectTapGestures
+                        val fit = min(size.width.toFloat() / img.width, size.height.toFloat() / img.height)
+                        val offsetX = (size.width - img.width * fit) / 2f
+                        val offsetY = (size.height - img.height * fit) / 2f
+
+                        fun toScreen(label: MapLabel) = Offset(
+                            (label.x * img.width * fit + offsetX) * zoom + pan.x,
+                            (label.y * img.height * fit + offsetY) * zoom + pan.y
                         )
-                        change.consume()
+
+                        val hit = labels.firstOrNull { (toScreen(it) - tap).getDistance() < 24f }
+                        if (hit != null) {
+                            onLabelClick(hit)
+                            return@detectTapGestures
+                        }
+                        if (!labelMode) return@detectTapGestures
+
+                        val unpanned = (tap - pan) / zoom
+                        val nx = (unpanned.x - offsetX) / fit / img.width
+                        val ny = (unpanned.y - offsetY) / fit / img.height
+                        if (nx in 0f..1f && ny in 0f..1f) onPlace(nx, ny)
                     }
                 }
+        ) {
+            val img = image ?: return@Canvas
+            val fit = min(size.width / img.width, size.height / img.height)
+            val offsetX = (size.width - img.width * fit) / 2f
+            val offsetY = (size.height - img.height * fit) / 2f
+
+            withTransform({
+                translate(pan.x, pan.y)
+                scale(zoom, zoom, pivot = Offset.Zero)
+                translate(offsetX, offsetY)
+                scale(fit, fit, pivot = Offset.Zero)
+            }) {
+                drawImage(img)
             }
-            .pointerInput(labelMode, labels, image, doubleTapToFit) {
-                detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
-                    val img = image ?: return@detectTapGestures
-                    val fit = min(size.width.toFloat() / img.width, size.height.toFloat() / img.height)
-                    val offsetX = (size.width - img.width * fit) / 2f
-                    val offsetY = (size.height - img.height * fit) / 2f
 
-                    fun toScreen(label: MapLabel) = Offset(
-                        (label.x * img.width * fit + offsetX) * zoom + pan.x,
-                        (label.y * img.height * fit + offsetY) * zoom + pan.y
-                    )
-
-                    val hit = labels.firstOrNull { (toScreen(it) - tap).getDistance() < 24f }
-                    if (hit != null) {
-                        onLabelClick(hit)
-                        return@detectTapGestures
-                    }
-                    if (!labelMode) return@detectTapGestures
-
-                    val unpanned = (tap - pan) / zoom
-                    val nx = (unpanned.x - offsetX) / fit / img.width
-                    val ny = (unpanned.y - offsetY) / fit / img.height
-                    if (nx in 0f..1f && ny in 0f..1f) onPlace(nx, ny)
-                }
+            labels.forEach { label ->
+                val x = (label.x * img.width * fit + offsetX) * zoom + pan.x
+                val y = (label.y * img.height * fit + offsetY) * zoom + pan.y
+                drawCircle(OverMap.Ink, radius = 4f, center = Offset(x, y))
+                drawCircle(OverMap.Parchment, radius = 2f, center = Offset(x, y))
             }
-    ) {
-        val img = image ?: return@Canvas
-        val fit = min(size.width / img.width, size.height / img.height)
-        val offsetX = (size.width - img.width * fit) / 2f
-        val offsetY = (size.height - img.height * fit) / 2f
-
-        withTransform({
-            translate(pan.x, pan.y)
-            scale(zoom, zoom, pivot = Offset.Zero)
-            translate(offsetX, offsetY)
-            scale(fit, fit, pivot = Offset.Zero)
-        }) {
-            drawImage(img)
-        }
-
-        labels.forEach { label ->
-            val x = (label.x * img.width * fit + offsetX) * zoom + pan.x
-            val y = (label.y * img.height * fit + offsetY) * zoom + pan.y
-            drawCircle(OverMap.Ink, radius = 4f, center = Offset(x, y))
-            drawCircle(OverMap.Parchment, radius = 2f, center = Offset(x, y))
         }
     }
 
@@ -1829,7 +1898,16 @@ internal fun Toggle(
             color = if (enabled) MaterialTheme.colorScheme.onSurface
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        // The switch carries the label too. A bare Material switch announces only "on" or "off" —
+        // the word beside it is a separate node with no relation to it — so a reader on a screen
+        // reader hears a list of switches for nothing in particular, and a test cannot say which
+        // of eight switches it means either.
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = label }
+        )
     }
 }
 

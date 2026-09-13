@@ -93,6 +93,12 @@ class PenAndInkTest {
          * after the sea-level cut, so the land mask under all eleven is a different mask. Recorded
          * twice for that chunk, once for each of its two passes; how far the coastline actually
          * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
+         *
+         * F14 and F17 were merged after both were written and all eleven were checked again: not
+         * one moved. That is worth a line, because it is the answer to the question the two chunks
+         * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
+         * this size and this zoom it draws the same pixels the raster did. Its generalisation is an
+         * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
             MapStyle.ATLAS to -173307292,

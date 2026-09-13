@@ -1,9 +1,9 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.model.Biome
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import com.cartogenesis.worldgen.pipeline.Isostasy
 import com.cartogenesis.worldgen.pipeline.TerrainStage

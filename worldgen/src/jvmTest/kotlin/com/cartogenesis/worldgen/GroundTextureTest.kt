@@ -2,10 +2,11 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * What the ground looks like, as two numbers rather than as an opinion.

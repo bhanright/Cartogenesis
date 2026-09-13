@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Renders at a size the desktop build offers, in both formats it offers.
+ * Renders at a size the desktop build offers, in every format it offers.
  *
  * This records how big each format comes out and what WebP costs in fidelity — the UI makes a
  * claim about that, and a claim about an image format is exactly the sort that should not be
@@ -50,7 +50,7 @@ class ExportSmokeTest {
     }
 
     @Test
-    fun `WebP is smaller than PNG, and how much it costs in fidelity`() {
+    fun `the three picture formats, their sizes, and what WebP costs in fidelity`() {
         val outputDir = File("build/exports").apply { mkdirs() }
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
 
@@ -61,17 +61,32 @@ class ExportSmokeTest {
 
         val png = results.getValue(ExportFormat.PNG)
         val webp = results.getValue(ExportFormat.WEBP)
+        val jpeg = results.getValue(ExportFormat.JPEG)
         println(
-            "EXPORT PNG %.2f MB vs WebP %.2f MB (%.0f%% of the PNG)".format(
+            "EXPORT PNG %.2f MB vs WebP %.2f MB (%.0f%% of the PNG) vs JPEG %.2f MB (%.0f%%)".format(
                 png.bytes / 1024.0 / 1024.0,
                 webp.bytes / 1024.0 / 1024.0,
-                webp.bytes * 100.0 / png.bytes
+                webp.bytes * 100.0 / png.bytes,
+                jpeg.bytes / 1024.0 / 1024.0,
+                jpeg.bytes * 100.0 / png.bytes
             )
         )
         assertTrue(
             webp.bytes < png.bytes,
             "WebP (${webp.bytes}) was not smaller than PNG (${png.bytes})"
         )
+        // The size claim the JPEG chip makes, at the qualities the application actually ships: the
+        // JPEG is the smaller file of the two, and it is worse. `DataExportTest` measures how much
+        // worse and holds it to a bound; here the point is only that the wording matches the bytes.
+        // If this ever fails, the chip's wording is what has to change.
+        assertTrue(
+            jpeg.bytes < webp.bytes,
+            "JPEG (${jpeg.bytes}) was not smaller than WebP (${webp.bytes}), which the UI claims"
+        )
+        // And a JPEG that decodes at the size that was asked for, which is the whole of what the
+        // format has to do here.
+        val decodedJpeg = decode(jpeg.file)
+        assertEquals(1024 * 1024, decodedJpeg.size, "the JPEG did not decode at 1024x1024")
 
         // Decode both through Skia and compare every pixel. ImageIO has no WebP reader, and
         // "it is smaller" is not evidence of anything on its own — the encoder could be discarding

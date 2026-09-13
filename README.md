@@ -273,12 +273,76 @@ Koppen biomes since, and none of that is free.
 The app requests `-Xmx12g`, which is what makes those sizes reachable at all — and is not enough for
 8192, as the Resolution section below records.
 
-Exports are written as PNG or WebP. PNG is lossless. WebP comes out around a quarter of the size,
-but Skia exposes no lossless WebP encoder, and the loss lands where a map can least afford it: the
-average pixel drifts about 4 of 255, while the worst 0.1% drift by about 75, and those are the
-river lines and borders, because that is where the sharp edges are — and more so since rivers were
-sized by their discharge, which draws every headwater as a sub-pixel thread. `ExportSmokeTest`
-measures both numbers so the description in the UI stays true.
+A finished world can leave in two kinds of file: a picture of the map, or the world's own numbers.
+
+**Pictures** are written as PNG, WebP or JPEG. PNG is lossless. WebP comes out around a quarter of
+the size, but Skia exposes no lossless WebP encoder, and the loss lands where a map can least
+afford it: the average pixel drifts about 4 of 255, while the worst 0.1% drift by about 75, and
+those are the river lines and borders, because that is where the sharp edges are — and more so
+since rivers were sized by their discharge, which draws every headwater as a sub-pixel thread.
+JPEG, at quality 90 through the JDK's own encoder on the desktop and Skia's in the browser, is
+there for the programs that still will not open a WebP and for no other reason. It is not the
+better format, but it is not the larger one either, and the two facts are worth stating together
+because the expectation runs the other way: on seed 42 at 512 the same picture is 78 KB as a JPEG
+at 90 and 108 KB as a WebP at Skia's maximum, and the WebP is the more faithful of the two at every
+percentile (mean drift 5.53 against 6.99, 99th 53 against 55). Ask the JPEG encoder for 100 and it
+produces 214 KB — twice the WebP — for the WebP's own fidelity. So the choice is a smaller, softer
+file or a larger, sharper one, and the chip's small print says so. `ExportSmokeTest` and
+`DataExportTest` measure every one of those figures, so the description in the UI stays true.
+
+**Data** exports write what the picture is a picture of, for Blender, Unity, Unreal and QGIS.
+
+| Data export | Image | Sidecar carries |
+|---|---|---|
+| Heightmap | 16-bit greyscale PNG, one cell per pixel | the metre scale, the sea-level grey value, the cell size |
+| Biomes | 8-bit palette PNG, one biome ordinal per pixel | index → biome name, colour and cell count |
+| Realms | 8-bit palette PNG, sea 0, unclaimed land 1, realms from 2 | index → realm name, colour and cell count |
+
+What each costs, measured 2026-09-12 by `ExportAuditTest` on one world per size, seed 42:
+
+| Export | 2048 | 4096 |
+|---|---|---|
+| Generation (once, whatever comes out of it) | 39.8 s | 173.8 s |
+| Raster (once, for the three pictures) | 0.4 s | 1.0 s |
+| PNG | 4.6 MB, 3.7 s | 16.3 MB, 12.1 s |
+| WebP | 1.3 MB, 0.4 s | 4.4 MB, 1.9 s |
+| JPEG | 0.9 MB, 0.2 s | 3.0 MB, 0.5 s |
+| Heightmap | 5.0 MB + 606 B, 0.9 s | 18.1 MB + 605 B, 3.0 s |
+| Biomes | 0.1 MB + 1.7 KB, 0.1 s | 0.2 MB + 1.7 KB, 0.2 s |
+| Realms | 0.1 MB + 1.7 KB, 0.1 s | 0.1 MB + 2.0 KB, 0.3 s |
+| Peak heap | 1.2 GB | 4.1 GB |
+
+Generation is the whole of the wait, as it is for the pictures: at 4096 a heightmap is three seconds
+of encoding behind three minutes of world. The 16-bit PNG is the largest file the application
+writes after the lossless picture — 18.1 MB from 33.5 MB of raw samples, so the filtering earns
+about half — and the two index maps are almost free, because a biome map is large flat regions and
+that is what deflate is for.
+
+Each is a pair of files: the PNG and a JSON sidecar of the same name. The sidecar always carries the
+seed, the pixel dimensions, the world's width in kilometres (12,000), the cell size in kilometres at
+that export size, the square kilometres per cell, the save format version and the build that wrote
+it; the heightmap's adds the metre scale. **Sea level is grey level 32768, on every world** — a
+fixed number rather than one derived per world, because its job is to be typed into somebody else's
+program, and there is one metres-per-grey-level for the whole image rather than one for the land and
+another for the sea: 32767 levels each side of the waterline, so at the default 6,000 m of relief a
+grey level is 0.1831 m and white and black are +6,000 m and -6,000 m. Land below the waterline is
+written as it is rather than clamped — a basin the sea cannot reach is drained out into a salt flat
+below sea level, which is the Qattara, and on seed 42 at 512 that is 497 cells.
+
+Both PNGs are written by a small encoder in `:cartography` rather than by either host's imaging
+library, because neither will write what these need: Skia is eight bits a channel everywhere and a
+browser canvas is eight-bit RGBA by construction, and neither writes an indexed image at all. The
+image data is a zlib stream, which common Kotlin cannot build, so the deflate comes out of the gzip
+each host already has behind `Compressor` — the same stream in a different envelope — with a
+stored-deflate fallback for a host that has neither. The fallback is about a third larger and every
+reader still opens it; `DataExportTest` checks that both paths produce identical samples.
+
+The desktop writes the two files side by side from one save dialog. The browser sends a single zip
+holding both, and that is a deliberate choice rather than a limitation: two downloads from one click
+raises Chrome's unexplained "download multiple files" prompt and has historically lost the second
+file in Safari, while a heightmap that arrives without its metre scale is a grey rectangle. The
+archive stores rather than deflates — the PNG inside is already compressed and the page has one
+thread.
 
 Where the time goes, at 2048 (see `StageProfileTest`): erosion 82%, realms 6%, ocean currents 4%,
 tectonics 2%, landmarks 2%, terrain 2%, rivers and climate 1% each. A 2048 world takes about 36
@@ -606,6 +670,8 @@ the map needs adding there, or exports will drift in character from what the pre
 
 Export offers 2048, 4096 and 8192. 4096 takes a little under four minutes on this machine, nearly
 all of it erosion, and its high-water heap is around 7.5GB of the 12 that the launcher asks for.
+The size chips cap the data exports exactly as they cap the pictures — the ceiling is about how big
+a world this build can finish, and knows nothing about what kind of file comes out of it.
 
 8192 does not work, and now there is a measurement rather than a suspicion: it exhausts a 10GB heap
 after about nineteen minutes, inside the generator, before a single pixel is drawn (`-Pbenchmark=true`
@@ -651,8 +717,10 @@ harness `DebugMapDump`, `StageProfileTest`, `GenerationSpeedTest`, `DesertCauseT
 or assert something CI's small runners cannot, such as `ErosionConvergenceTest`'s thread-splitting
 case), the 2048-scale cases of `GlaciationTest` and `RealmIdRangeTest` (split into
 `GlaciationAuditTest` and `RealmIdRangeAuditTest`; their 512/1024 siblings stay in the per-merge
-classes), and `ExportSmokeTest`'s 2048/4096 exports (split into `ExportAuditTest`; a 1024 export
-stays in `ExportSmokeTest` as a per-merge smoke check). `.github/workflows/nightly.yml` runs it
+classes), and `ExportSmokeTest`'s 2048/4096 exports (split into `ExportAuditTest`, which since F12
+covers all three picture formats and all three data exports from one world per size; a 1024 export
+stays in `ExportSmokeTest` as a per-merge smoke check, and `DataExportTest` holds the data exports
+at 512). `.github/workflows/nightly.yml` runs it
 once a day, on a cron schedule, so a regression in the parts the per-merge tier no longer covers is
 still caught within a day.
 

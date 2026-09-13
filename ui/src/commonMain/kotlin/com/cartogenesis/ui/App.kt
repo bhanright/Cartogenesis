@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,6 +66,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
@@ -203,8 +205,11 @@ private fun Application(
     var generationMillis by remember { mutableStateOf(0L) }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
     // The preference is the *starting* format, not a live binding: changing the default in the
-    // dialog must not change the format of an export the reader has already set up.
-    var exportFormat by remember { mutableStateOf(settings.exportFormat) }
+    // dialog must not change the format of an export the reader has already set up. Since F12 the
+    // selection can also be a data layer, which no preference carries — see [ExportChoice].
+    var exportChoice by remember {
+        mutableStateOf<ExportChoice>(ExportChoice.Picture(settings.exportFormat))
+    }
 
     // ---- F4: what the menu strip opens, and what it opens onto. ----
     var showSettings by remember { mutableStateOf(false) }
@@ -457,11 +462,21 @@ private fun Application(
 
     LaunchedEffect(pendingExport) {
         val size = pendingExport ?: return@LaunchedEffect
+        val choice = exportChoice
         busy = true
-        stage = "Rendering ${size}x$size"
+        // A data export renders no picture, so the progress line says what it is actually doing.
+        stage = when (choice) {
+            is ExportChoice.Picture -> "Rendering ${size}x$size"
+            is ExportChoice.Layer -> "Writing the ${choice.layer.label.lowercase()} at ${size}x$size"
+        }
         // Where a finished map goes is the one thing a browser tab and a desktop window
         // genuinely disagree about, so the platform is asked rather than told.
-        status = runCatching { platform.export(config, options, size, exportFormat) }.fold(
+        status = runCatching {
+            when (choice) {
+                is ExportChoice.Picture -> platform.export(config, options, size, choice.format)
+                is ExportChoice.Layer -> platform.exportData(config, size, choice.layer)
+            }
+        }.fold(
             onSuccess = {
                 if (it == null) "Export cancelled"
                 else "Saved ${it.description} - ${it.bytes / 1024 / 1024} MB in ${it.millis / 1000}s"
@@ -736,9 +751,11 @@ private fun Application(
             generating = generating != null,
             status = status,
             hasWorld = world != null,
-            exportFormat = exportFormat,
+            exportChoice = exportChoice,
             exportCeiling = exportCeiling,
             exportSizes = reach.exportSizes,
+            pictureFormats = reach.pictureFormats,
+            dataLayers = reach.dataLayers,
             headerKnobs = Arrangements.headerKnobs(platform),
             worldName = naming.name,
             platform = platform,
@@ -754,10 +771,11 @@ private fun Application(
             },
             onGenerate = { gate.request() },
             onStop = { stopGenerating() },
-            onExportFormat = { exportFormat = it },
+            onExportChoice = { exportChoice = it },
             // Clamped here as well as at the button. The disabled chip is a courtesy; this
             // is the guarantee, and it is what a size restored from an older build's
-            // preference — which could still say 8192 — passes through.
+            // preference — which could still say 8192 — passes through. It applies to a data
+            // layer exactly as it does to a picture: both re-run the pipeline at that size.
             onExport = { pendingExport = Exports.clamp(it, exportCeiling) },
             onToggleAtlas = {
                 screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
@@ -1339,9 +1357,11 @@ private fun PanelHeader(
     generating: Boolean,
     status: String,
     hasWorld: Boolean,
-    exportFormat: ExportFormat,
+    exportChoice: ExportChoice,
     exportCeiling: Int,
     exportSizes: List<Int>,
+    pictureFormats: List<ExportFormat>,
+    dataLayers: List<DataLayer>,
     headerKnobs: List<Knob>,
     worldName: String,
     platform: Platform,
@@ -1354,7 +1374,7 @@ private fun PanelHeader(
     onNewWorld: () -> Unit,
     onGenerate: () -> Unit,
     onStop: () -> Unit,
-    onExportFormat: (ExportFormat) -> Unit,
+    onExportChoice: (ExportChoice) -> Unit,
     onExport: (Int) -> Unit,
     onToggleAtlas: () -> Unit,
     onToggleLibrary: () -> Unit
@@ -1426,7 +1446,10 @@ private fun PanelHeader(
     }
 
     // Export, which had a 200dp column of its own on the far side of the map until F3.
-    OutputOptions(busy, hasWorld, exportFormat, exportCeiling, exportSizes, onExportFormat, onExport)
+    OutputOptions(
+        busy, hasWorld, exportChoice, exportCeiling, exportSizes,
+        pictureFormats, dataLayers, onExportChoice, onExport
+    )
 
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -1673,42 +1696,54 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
  * something about the picture. F3 moved what was left of the panel into the header, so this is
  * three rows in a 320dp column rather than a 200dp column of its own — the heading and the two
  * format chips share a line, which is the row the narrower home cost it.
+ *
+ * F12 gave it a second line of chips. "Export" is the picture of the map and "Data" is the world
+ * underneath it, and the two are labelled rather than run together because they are answers to
+ * different questions: one is what you put in a document, the other is what you load into Blender
+ * or QGIS. Exactly one chip across both lines is selected — see [ExportChoice] for why there is one
+ * selection and not two — so the size buttons below stay a single row that means one thing.
  */
 @Composable
 private fun OutputOptions(
     busy: Boolean,
     hasWorld: Boolean,
-    exportFormat: ExportFormat,
+    exportChoice: ExportChoice,
     exportCeiling: Int,
     sizes: List<Int>,
-    onExportFormat: (ExportFormat) -> Unit,
+    pictureFormats: List<ExportFormat>,
+    dataLayers: List<DataLayer>,
+    onExportChoice: (ExportChoice) -> Unit,
     onExport: (Int) -> Unit
 ) {
     // Which size the pointer is over, if it is over one that cannot be run. Only that case needs
-    // remembering: the small print for a size that works is the format's own line.
+    // remembering: the small print for a size that works is the selected chip's own line.
     var reachingFor by remember { mutableStateOf<Int?>(null) }
 
-    Row(
-        Modifier.fillMaxWidth().padding(top = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Export", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ExportFormat.entries.forEach { format ->
-                FilterChip(
-                    selected = exportFormat == format,
-                    onClick = { onExportFormat(format) },
-                    label = { Text(format.label, maxLines = 1) }
-                )
-            }
+    ChipRow("Export") {
+        pictureFormats.forEach { format ->
+            val choice = ExportChoice.Picture(format)
+            FilterChip(
+                selected = exportChoice == choice,
+                onClick = { onExportChoice(choice) },
+                label = { Text(format.label, maxLines = 1) }
+            )
+        }
+    }
+    ChipRow("Data") {
+        dataLayers.forEach { layer ->
+            val choice = ExportChoice.Layer(layer)
+            FilterChip(
+                selected = exportChoice == choice,
+                onClick = { onExportChoice(choice) },
+                label = { Text(layer.label, maxLines = 1) }
+            )
         }
     }
     // One line of small print, which the unreachable size borrows while the pointer is on it. In
     // the same slot rather than under the row, so nothing moves when it changes.
     val unreachable = reachingFor
     Text(
-        if (unreachable != null) Exports.unreachableNote(unreachable) else exportFormat.detail,
+        if (unreachable != null) Exports.unreachableNote(unreachable) else exportChoice.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -1739,6 +1774,25 @@ private fun OutputOptions(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+/**
+ * A heading on the left, its chips on the right: the shape both of the export row's lines take.
+ *
+ * A helper rather than the row written twice, so the picture chips and the data chips cannot drift
+ * apart in spacing or alignment — they are read as one control with two lines, and the moment they
+ * look like two controls the single selection across them stops making sense.
+ */
+@Composable
+private fun ChipRow(heading: String, chips: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(heading, style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), content = chips)
     }
 }
 

@@ -2,6 +2,7 @@ package com.cartogenesis.ui
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -535,11 +536,94 @@ class PanelKnobsTest {
         assertEquals(wide.views, compact.views)
         // Three export sizes, whichever of them this build can finish.
         assertEquals(wide.exportSizes, compact.exportSizes)
+        // Three picture formats and three data layers, both rows in the sheet as well as in the
+        // column. F12 added JPEG to the first row and the second row entirely, and a phone gets
+        // both: the ceiling decides how large an export may be, not what kinds there are.
+        assertEquals(wide.pictureFormats, compact.pictureFormats)
+        assertEquals(wide.dataLayers, compact.dataLayers)
         // Three menus folded into one button, with nothing dropped on the way.
         assertEquals(wide.commands, compact.commands)
         assertTrue(MenuCommand.SETTINGS in compact.commands)
         assertTrue(MenuCommand.ABOUT in compact.commands)
         assertTrue(MenuCommand.QUIT in compact.commands)
+    }
+
+    // ---- F12: the second kind of export --------------------------------------------------------
+
+    /**
+     * The export row's two lines of chips, against the enums rather than against each other.
+     *
+     * Written out here for the reason the arrangement lists are written out twice: a row that draws
+     * `ExportFormat.entries` and a test that asserts it draws `ExportFormat.entries` agree with each
+     * other whatever either of them has lost. The chips are named.
+     */
+    @Test
+    fun `the export row offers three picture formats and three data layers`() {
+        assertEquals(listOf("PNG", "WebP", "JPEG"), Exports.PICTURES.map { it.label })
+        assertEquals(listOf("Heightmap", "Biomes", "Realms"), Exports.LAYERS.map { it.label })
+        assertEquals(ExportFormat.entries.toList(), Exports.PICTURES)
+        assertEquals(DataLayer.entries.toList(), Exports.LAYERS)
+
+        // Every chip has its own line of small print, and no two chips share a word.
+        val labels = Exports.PICTURES.map { it.label } + Exports.LAYERS.map { it.label }
+        assertEquals(labels.size, labels.toSet().size, "two export chips are called the same thing")
+        Exports.PICTURES.forEach { assertTrue(it.detail.isNotBlank(), it.label) }
+        Exports.LAYERS.forEach { assertTrue(it.detail.isNotBlank(), it.label) }
+    }
+
+    /**
+     * The JPEG chip says what it is for, because on the merits nobody should choose it.
+     *
+     * The reason it is offered is a program that will not open a WebP, and the chip has to name
+     * WebP for that sentence to mean anything; a chip that reads as a third equally good option is
+     * a chip that misleads. What it costs — softer thin lines than WebP for a smaller file — is
+     * measured by `DataExportTest` and `ExportSmokeTest`, and the wording follows those numbers.
+     */
+    @Test
+    fun `the JPEG chip says it is for compatibility, not for quality`() {
+        val note = ExportFormat.JPEG.detail
+        assertTrue("WebP" in note, note)
+        assertTrue("lines" in note, note)
+        assertEquals("jpg", ExportFormat.JPEG.extension)
+        assertEquals(90, ExportFormat.JPEG_QUALITY)
+    }
+
+    /**
+     * One selection across both rows, and pressing a size acts on whichever it is.
+     *
+     * The invariant [ExportChoice] exists for: a picture and a layer are never both chosen, so the
+     * size buttons below always mean one thing.
+     */
+    @Test
+    fun `choosing a data layer unchooses the picture format, and the other way round`() {
+        val png = ExportChoice.Picture(ExportFormat.PNG)
+        val heightmap = ExportChoice.Layer(DataLayer.HEIGHTMAP)
+
+        assertEquals(png, ExportChoice.Picture(ExportFormat.PNG))
+        assertTrue(png != heightmap)
+        assertTrue(png != ExportChoice.Picture(ExportFormat.JPEG))
+        assertTrue(heightmap != ExportChoice.Layer(DataLayer.BIOMES))
+
+        // The chip's own word and its own small print, whichever kind it is: the row draws one
+        // note, and it comes from the selection rather than from a branch in the composable.
+        assertEquals("PNG", png.label)
+        assertEquals(ExportFormat.PNG.detail, png.detail)
+        assertEquals("Heightmap", heightmap.label)
+        assertEquals(DataLayer.HEIGHTMAP.detail, heightmap.detail)
+    }
+
+    /** The ceiling is about size and knows nothing about kind, so it applies to both alike. */
+    @Test
+    fun `the phone's export ceiling applies to the data layers too`() {
+        val phone = FakePlatform(ceiling = 2048, coarsePointer = true)
+        val ceiling = phone.exportCeiling(compact = true)
+        assertEquals(2048, ceiling)
+        assertEquals(2048, Exports.clamp(4096, ceiling))
+        assertEquals(2048, Exports.clamp(8192, ceiling))
+        // Both rows are still offered at that ceiling: it caps the size, not the kind.
+        val compact = Arrangements.of(WindowShape.COMPACT, phone)
+        assertEquals(DataLayer.entries.toList(), compact.dataLayers)
+        assertEquals(ExportFormat.entries.toList(), compact.pictureFormats)
     }
 
     /**

@@ -29,12 +29,13 @@ import java.io.File
  * page out of it, and the release that changes what a coastline looks like changes the coastline
  * the page shows.
  *
- * One world, cut many ways. Generating [SEED] at [SIZE] is a minute of arithmetic and every figure
- * is a window onto the same map, so the world is built once and each figure is a rasterisation of
- * it — seconds by comparison — cropped at the render's own pixels. Cropping rather than scaling is
- * the point: every mark the renderer makes is sized in *output pixels* (F9's lesson, and F10's
- * river pen), so a 1:1 window shows the pen the renderer actually draws with, while a downscaled
- * whole map shows a thinner one that exists nowhere.
+ * Since 2026-09-12 the page shows one picture, the hero; it showed seven for a day, and the
+ * machinery here is written for a list because William may ask for more again. Generating [SEED]
+ * at [SIZE] is a minute of arithmetic and a figure is a window onto that map, cropped at the
+ * render's own pixels. Cropping rather than scaling is the point: every mark the renderer makes
+ * is sized in *output pixels* (F9's lesson, and F10's river pen), so a 1:1 window shows the pen
+ * the renderer actually draws with, while a downscaled whole map shows a thinner one that exists
+ * nowhere.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
@@ -66,13 +67,8 @@ object SiteImagery {
      * The poster this replaces was 1600x800 in 153 KB, which is the quality a reader of this page
      * has already accepted, and 72 lands the Atlas band at 134 KB — the same picture, slightly
      * lighter. Skia exposes no lossless WebP path, so this is a choice about how much to keep
-     * rather than whether to lose any.
-     *
-     * Pen and ink is the one figure that resists it, and it is left alone rather than squeezed:
-     * its hachures and its stippled sea are high-frequency noise, which is exactly what a lossy
-     * encoder cannot discard, so it measures 317 KB here, 311 at quality 68 and still 255 at 40.
-     * Sixty kilobytes is not worth softening every hairline on the page's most delicate picture,
-     * and the reader only fetches it on opening its tab.
+     * rather than whether to lose any. (A Pen and ink figure would resist it: hachures and a
+     * stippled sea are high-frequency noise, and measured 317 KB at this quality, 255 at 40.)
      */
     const val QUALITY = 72
 
@@ -85,13 +81,13 @@ object SiteImagery {
      * better. These were chosen by rendering the whole map and looking at it (`-Pcontact`).
      *
      * [x] may run past the right-hand edge. The map is a cylinder — column 2047 and column 0 are
-     * neighbours — so a window that crosses the seam is an ordinary window, and the widest river on
-     * this world happens to live on it.
+     * neighbours — so a window that crosses the seam is an ordinary window. (The widest river on
+     * this world lives on the seam, at a mouth near cell (104, 1094), and was a figure for a day.)
      */
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
-     * The band across the page: the hero, and the frame all four readings share.
+     * The band across the top of the page: the hero.
      *
      * A 2:1 window on the northern continent, which carries in one frame everything the page
      * claims — a cordillera along its spine, a river system that gathers the whole northern half,
@@ -99,27 +95,6 @@ object SiteImagery {
      * of the next continent with its own lake and snowfield at the right-hand edge.
      */
     val BAND = Window(448, 64, 1600, 800)
-
-    /**
-     * A rain shadow, on the rainfall view: the cordillera across the frame from south-west to
-     * north-east, the wet windward coast on its seaward flank, and the palest ground in the whole
-     * world in its lee.
-     */
-    val RAIN_SHADOW = Window(660, 290, 1000, 600)
-
-    /**
-     * The widest river on this world — and it crosses the seam.
-     *
-     * Found rather than picked. `River.widthRatio` reaches 1.0, the widest channel drawn anywhere
-     * on the map, on the river whose mouth is at cell (104, 1094), while its own headwaters are
-     * threads the same width as every other headwater; the next widest are 0.94. Its course runs
-     * over the map's left-hand edge, which is why [drawWindow] wraps: refusing to cross the seam
-     * would have meant illustrating F10 with a lesser river to keep the arithmetic simple.
-     */
-    val TRUNK_RIVER = Window(1900, 800, 1000, 600)
-
-    /** The rift, broken along strike into a chain of gulfs behind their sills. */
-    val RIFT = Window(1048, 900, 1000, 600)
 
     /**
      * What the page asks for.
@@ -137,37 +112,30 @@ object SiteImagery {
     )
 
     /**
-     * Every figure the page shows, in the order it shows them.
+     * Every figure the page shows, in the order it shows them: today, the hero alone.
      *
-     * `atlas.webp` is both the hero and the first of the four readings — the same crop in the same
-     * style — so it is one file fetched once rather than two identical ones.
-     *
-     * The second reading is **biomes** rather than rainfall, which the design left open. On this
-     * world the rainfall view reads as a pale interior with a narrow green fringe at every coast:
-     * true, and the right picture for the rain-shadow detail where a label can point at it, but
-     * beside the Atlas band it looks like the Atlas band with a wash over it. Biomes separates sea
-     * ice, tundra, steppe, desert and forest into colours a reader can tell apart at a glance, so
-     * it is the one that reads as a genuinely *different reading* of the same country.
+     * The page also carried four readings of the same band and three annotated details for one
+     * day (2026-09-12); William judged that captions describing a map only work when a person
+     * wrote them, and took the six plain cards back in their place.
      */
     val FIGURES: List<Figure> = listOf(
-        Figure("atlas.webp", MapView.FANTASY, MapStyle.ATLAS, BAND),
-        Figure("biomes.webp", MapView.BIOMES, MapStyle.ATLAS, BAND),
-        Figure("political.webp", MapView.POLITICAL, MapStyle.ATLAS, BAND),
-        Figure("pen-and-ink.webp", MapView.FANTASY, MapStyle.PEN_AND_INK, BAND),
-        Figure("rain-shadow.webp", MapView.RAINFALL, MapStyle.ATLAS, RAIN_SHADOW),
-        Figure("trunk-river.webp", MapView.FANTASY, MapStyle.ATLAS, TRUNK_RIVER),
-        Figure("rift.webp", MapView.FANTASY, MapStyle.ATLAS, RIFT)
+        Figure("atlas.webp", MapView.FANTASY, MapStyle.ATLAS, BAND)
     )
 
     @JvmStatic
     fun main(args: Array<String>) {
         val outputDir = File(args.firstOrNull() ?: "build/site-imagery").absoluteFile
         outputDir.mkdirs()
+        // Whatever an earlier run left here would be published as though the page still asked
+        // for it: assembleSite copies every WebP in this directory. So the directory starts empty,
+        // and a figure the page has stopped showing stops being rendered and stops being shipped.
+        // SiteAssemblyTest caught exactly that the first time the figure list shrank.
+        outputDir.listFiles()?.forEach { it.delete() }
 
         // A contact sheet is the whole map at half size with a coordinate grid over it and the
         // page's windows outlined, written beside the figures so that whoever next moves a window
-        // can read coordinates off a picture instead of guessing. Off by default: it is five more
-        // rasterisations and 3 MB of PNG, and a deploy has no use for it.
+        // can read coordinates off a picture instead of guessing. Off by default: it is another
+        // rasterisation and a megabyte of PNG per sheet, and a deploy has no use for it.
         val contact = System.getProperty("cartogenesis.siteImagery.contact") == "true"
 
         val started = System.currentTimeMillis()
@@ -239,9 +207,9 @@ object SiteImagery {
      * Copies [window] out of [image] at 1:1, in one piece or two.
      *
      * The map wraps in longitude, so a window may begin near the right-hand edge and finish past
-     * it. That is not an edge case to be avoided: it is where the widest river on this world runs,
-     * and refusing to cross the seam would mean choosing a lesser river to keep the arithmetic
-     * simple. Two draws, and the reader cannot tell.
+     * it. That is not an edge case to be avoided: the widest river on this world runs over the
+     * seam, and a window chosen by eye should be free to follow it. Two draws, and the reader
+     * cannot tell.
      */
     private fun drawWindow(canvas: Canvas, image: Image, window: Window, mapWidth: Int) {
         val left = ((window.x % mapWidth) + mapWidth) % mapWidth
@@ -267,7 +235,7 @@ object SiteImagery {
     }
 
     /**
-     * The whole map at half size with a grid, one sheet per view the page uses.
+     * The whole map at half size with a grid, one sheet per view and style the page uses.
      *
      * The grid is in the *render's* coordinates rather than the sheet's: a light line every 128 map
      * pixels and a heavier one every 512, so a window can be read off the picture and typed
@@ -275,14 +243,13 @@ object SiteImagery {
      * on every sheet, so a proposed change can be judged against the map before it is rendered.
      */
     private fun writeContactSheets(world: WorldMap, outputDir: File) {
-        val sheets = listOf(
-            "contact-atlas" to RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS),
-            "contact-rainfall" to RenderOptions(view = MapView.RAINFALL, style = MapStyle.ATLAS),
-            "contact-biomes" to RenderOptions(view = MapView.BIOMES, style = MapStyle.ATLAS),
-            "contact-political" to RenderOptions(view = MapView.POLITICAL, style = MapStyle.ATLAS),
-            "contact-pen-and-ink" to
-                RenderOptions(view = MapView.FANTASY, style = MapStyle.PEN_AND_INK)
-        )
+        val sheets = FIGURES
+            .map { it.view to it.style }
+            .distinct()
+            .map { (view, style) ->
+                "contact-${view.name.lowercase()}-${style.name.lowercase()}" to
+                    RenderOptions(view = view, style = style)
+            }
         val half = SIZE / 2
         for ((name, options) in sheets) {
             val bitmap = MapImage.toBitmap(world, options)

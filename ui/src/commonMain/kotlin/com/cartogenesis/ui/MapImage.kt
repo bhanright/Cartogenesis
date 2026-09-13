@@ -3,7 +3,11 @@ package com.cartogenesis.ui
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.cartogenesis.cartography.GlyphShape
+import com.cartogenesis.cartography.MapOverlay
 import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSheet
+import com.cartogenesis.cartography.Numerals
+import com.cartogenesis.cartography.PlacedScaleBar
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.model.WorldMap
 import org.jetbrains.skia.Bitmap
@@ -14,6 +18,7 @@ import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.PaintMode
 import org.jetbrains.skia.PaintStrokeCap
+import org.jetbrains.skia.PaintStrokeJoin
 import org.jetbrains.skia.Path
 import org.jetbrains.skia.Rect
 
@@ -29,8 +34,28 @@ import org.jetbrains.skia.Rect
  */
 object MapImage {
 
-    fun render(world: WorldMap, options: RenderOptions): ImageBitmap {
-        val bitmap = toBitmap(world, options)
+    fun render(
+        world: WorldMap,
+        options: RenderOptions,
+        sheet: MapSheet = MapSheet.SHEET
+    ): ImageBitmap = finish(toBitmap(world, options, sheet))
+
+    /**
+     * The same, with the raster already done.
+     *
+     * A change of zoom generalises the overlay differently but leaves the ground underneath exactly
+     * as it was, so the interface keeps the raster and hands it back here rather than paying for a
+     * whole world of pixels again every time the reader turns the wheel.
+     */
+    fun render(
+        world: WorldMap,
+        options: RenderOptions,
+        pixels: IntArray,
+        sheet: MapSheet
+    ): ImageBitmap = finish(toBitmap(world, options, pixels, sheet))
+
+    /** A finished Skia bitmap as something Compose can draw, releasing the bitmap. */
+    private fun finish(bitmap: Bitmap): ImageBitmap {
         // Compose only converts from a Skia Image, not a Bitmap; the Image takes its own copy,
         // so both can be released straight away rather than holding width*height*4 bytes twice.
         // Closed by hand rather than with `use`, which in common code would resolve to the JVM
@@ -43,8 +68,11 @@ object MapImage {
     }
 
     /** Kept separate from [render] so export can encode without going through Compose. */
-    fun toBitmap(world: WorldMap, options: RenderOptions): Bitmap =
-        toBitmap(world, options, MapRasterizer.rasterize(world, options))
+    fun toBitmap(
+        world: WorldMap,
+        options: RenderOptions,
+        sheet: MapSheet = MapSheet.SHEET
+    ): Bitmap = toBitmap(world, options, MapRasterizer.rasterize(world, options), sheet)
 
     /**
      * The same, with the raster already done.
@@ -53,7 +81,12 @@ object MapImage {
      * [com.cartogenesis.cartography.RasterAccelerator]) and hands them here, so the overlays and the
      * bitmap do not care which processor drew what is underneath them.
      */
-    fun toBitmap(world: WorldMap, options: RenderOptions, pixels: IntArray): Bitmap {
+    fun toBitmap(
+        world: WorldMap,
+        options: RenderOptions,
+        pixels: IntArray,
+        sheet: MapSheet = MapSheet.SHEET
+    ): Bitmap {
         val w = world.width
         val h = world.height
         require(pixels.size == w * h) { "raster is ${pixels.size} pixels, not ${w * h}" }
@@ -72,15 +105,36 @@ object MapImage {
         bitmap.allocPixels(ImageInfo.makeS32(w, h, ColorAlphaType.PREMUL))
         bitmap.installPixels(bytes)
 
-        drawOverlay(world, bitmap, options)
+        drawOverlay(world, bitmap, options, sheet)
         return bitmap
     }
 
-    private fun drawOverlay(world: WorldMap, bitmap: Bitmap, options: RenderOptions) {
-        val overlay = MapRasterizer.overlay(world, options)
-        if (overlay.rivers.isEmpty() && overlay.landmarks.isEmpty() && overlay.flow.isEmpty()) return
+    private fun drawOverlay(
+        world: WorldMap,
+        bitmap: Bitmap,
+        options: RenderOptions,
+        sheet: MapSheet
+    ) {
+        val overlay = MapRasterizer.overlay(world, options, sheet)
+        if (overlay.isEmpty) return
 
         val canvas = Canvas(bitmap)
+
+        // The graticule first, because it is the sheet's reference grid and everything the world
+        // itself puts on the paper is drawn over it.
+        drawGraticule(canvas, overlay)
+
+        if (overlay.coastline.isNotEmpty()) {
+            val paint = Paint().apply {
+                isAntiAlias = true
+                color = overlay.coastColor
+                mode = PaintMode.STROKE
+                strokeWidth = overlay.coastWidth
+                strokeCap = PaintStrokeCap.ROUND
+                strokeJoin = PaintStrokeJoin.ROUND
+            }
+            overlay.coastline.forEach { canvas.drawPath(polyline(it), paint) }
+        }
 
         if (overlay.rivers.isNotEmpty()) {
             val paint = Paint().apply {
@@ -117,6 +171,8 @@ object MapImage {
                 canvas.drawLine(tipX, tipY, backX - barbX, backY + barbY, paint)
             }
         }
+
+        overlay.scaleBar?.let { drawScaleBar(canvas, overlay, it) }
 
         if (overlay.landmarks.isEmpty()) return
 
@@ -168,4 +224,85 @@ object MapImage {
             }
         }
     }
+
+    /** Meridians, parallels and the figures in the margin, all in the graticule's one hairline. */
+    private fun drawGraticule(canvas: Canvas, overlay: MapOverlay) {
+        val graticule = overlay.graticule ?: return
+        val paint = Paint().apply {
+            isAntiAlias = true
+            color = overlay.graticuleColor
+            mode = PaintMode.STROKE
+            strokeWidth = overlay.graticuleWidth
+            strokeCap = PaintStrokeCap.ROUND
+            strokeJoin = PaintStrokeJoin.ROUND
+        }
+        graticule.lines.forEach { canvas.drawLine(it.fromX, it.fromY, it.toX, it.toY, paint) }
+
+        // The figures are drawn firmly rather than at the lines' weight: a reader looks for a
+        // number and only glances at the grid it belongs to.
+        paint.color = overlay.marginInk
+        graticule.labels.forEach { label ->
+            Numerals.strokes(label.text, label.leftX, label.baselineY, label.heightPixels)
+                .forEach { canvas.drawPath(polyline(it), paint) }
+        }
+    }
+
+    /**
+     * The scale bar in the corner of a printed sheet: a plate of the style's paper, the bar with a
+     * tick at each end, and the distance written above its far end.
+     *
+     * On its own plate because the corner of a world map is as likely to be deep ocean as coast,
+     * and a bar inked straight onto that would be a dark line on a dark ground.
+     */
+    private fun drawScaleBar(canvas: Canvas, overlay: MapOverlay, placed: PlacedScaleBar) {
+        val figure = placed.figureHeightPixels
+        val labelWidth = Numerals.widthOf(placed.bar.label, figure)
+        val padding = figure * 0.6f
+        val plate = Rect(
+            placed.x - padding,
+            placed.y - figure * 2f - padding,
+            placed.x + maxOf(placed.bar.lengthPixels, labelWidth) + padding,
+            placed.y + figure * 0.6f + padding
+        )
+        canvas.drawRect(
+            plate,
+            Paint().apply {
+                isAntiAlias = true
+                mode = PaintMode.FILL
+                color = (overlay.marginPaper and 0x00FFFFFF) or (PLATE_ALPHA shl 24)
+            }
+        )
+
+        val paint = Paint().apply {
+            isAntiAlias = true
+            color = overlay.marginInk
+            mode = PaintMode.STROKE
+            strokeWidth = overlay.coastWidth
+            strokeCap = PaintStrokeCap.BUTT
+        }
+        val right = placed.x + placed.bar.lengthPixels
+        canvas.drawLine(placed.x, placed.y, right, placed.y, paint)
+        val tick = figure * 0.45f
+        canvas.drawLine(placed.x, placed.y - tick, placed.x, placed.y + tick, paint)
+        canvas.drawLine(right, placed.y - tick, right, placed.y + tick, paint)
+
+        paint.strokeWidth = overlay.graticuleWidth
+        Numerals.strokes(placed.bar.label, placed.x, placed.y - figure * 0.9f, figure)
+            .forEach { canvas.drawPath(polyline(it), paint) }
+    }
+
+    /** A run of `x, y` floats as a Skia path. Nothing is closed: a ring already repeats its end. */
+    private fun polyline(points: FloatArray): Path {
+        val path = Path()
+        path.moveTo(points[0], points[1])
+        var at = 2
+        while (at < points.size) {
+            path.lineTo(points[at], points[at + 1])
+            at += 2
+        }
+        return path
+    }
+
+    /** How opaque the scale bar's plate is: enough to read against, not enough to be a hole. */
+    private const val PLATE_ALPHA = 0xD0
 }

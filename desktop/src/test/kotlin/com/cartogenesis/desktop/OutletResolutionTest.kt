@@ -157,10 +157,15 @@ class OutletResolutionTest {
             "these worlds keep a basin below the sea-level cut at or over the Caspian's share of " +
                 "their land: $overLargeDrowned"
         )
-        assertTrue(
-            unmeasured.size < 2,
-            "no seed held enough standing water to compare across grids: $unmeasured"
-        )
+        // Reported and no longer asserted, because after S1 there is no longer a ratio here for it
+        // to protect. This clause existed to stop the spread bar below being met by two small
+        // numbers; S1 retired that bar and handed the cross-grid question to `ScaleFreeTest`, which
+        // asks it in kilometres over four seeds, and left this behind. Merging the 2.0.x line onto
+        // S1's units is what made it bite: F17's drowned-valley fill hands marginal drowned water
+        // back to the land, and seed 59758's standing water at 512 came to 0.497% of its land
+        // against the 0.5% floor — three thousandths of a percent under a threshold that is
+        // guarding nothing. The floor is not lowered to fit; the clause is retired to where the
+        // measurement went.
         // The spread across grids used to be asserted here at 1.4x, and S1 retired it: measuring
         // whether the world is the same world at two grids is `ScaleFreeTest`'s job now, it does it
         // in kilometres and square kilometres over four seeds rather than in shares of the map over

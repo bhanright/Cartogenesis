@@ -80,37 +80,49 @@ class PenAndInkTest {
         const val MAX_DENSITY_DRIFT = 0.08
 
         /**
-         * Every style's 512 fantasy render, hashed.
+         * Every style's 512 fantasy render, hashed, as it stands today.
          *
-         * F9 redraws one style, and the cheapest way to be sure it redrew only that one is to hold
-         * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
-         * that is supposed to have changed.
+         * A change detector rather than a claim about any particular colour: a chunk that means to
+         * redraw one style can check here that it redrew only that one, and a chunk that means to
+         * redraw them all re-records the lot and says so in its report. F9 wrote it with ten
+         * entries and pen and ink deliberately absent, because that chunk changed exactly one
+         * style; F13 changed every one of them — the climate reaches the land ramp, the sky
+         * replaces the lamp and the sea carries depth contours — so all eleven were recorded again
+         * against that chunk's renders. F17 changed every one of them again, from the other end: it
+         * fills the drowned valleys the grid cannot hold and grades Earth's third of the shoreline
+         * after the sea-level cut, so the land mask under all eleven is a different mask. Recorded
+         * twice for that chunk, once for each of its two passes; how far the coastline actually
+         * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
          *
-         * Recorded at v2.0.0 and re-recorded once at S1, which moved the world rather than the
-         * drawing of it: the sea's own stand gained a depth in metres and a ruler to read it
-         * against, so the terrain the hydraulic rounds cut is a little different and every style
-         * draws the difference. That the ten move *together* is what this still proves; a style
-         * redrawn on its own would show up as one entry out of step with the rest.
+         * F14 and F17 were merged after both were written and all eleven were checked again: not
+         * one moved. That is worth a line, because it is the answer to the question the two chunks
+         * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
+         * this size and this zoom it draws the same pixels the raster did. Its generalisation is an
+         * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
+         *
+         * Recorded once more when the 2.0.3 line was merged onto the 3.0 line, which moved the
+         * world rather than the drawing of it: S1's units give the postglacial rise F17 spends its
+         * 120 m against the height field's own ruler instead of each world's measured land relief,
+         * so the drowned valleys and the graded coasts come out on a slightly different mask and
+         * every style draws the difference. That the eleven move *together* is what this still
+         * proves; a style redrawn on its own would show up as one entry out of step with the rest.
          */
-        val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -1251658432,
-            MapStyle.VELLUM to -894858538,
-            MapStyle.INK_WASH to -2025451479,
-            MapStyle.NAUTICAL to 353681580,
-            MapStyle.MIDNIGHT to 1100943998,
-            MapStyle.SCHOOLROOM to 2113429675,
-            MapStyle.VERDANT to -102946448,
-            MapStyle.SCROLL to -1099453844,
-            MapStyle.MARS to -956322526,
-            MapStyle.CLEAR to -703349694
+        val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
+            MapStyle.ATLAS to 1747304240,
+            MapStyle.VELLUM to 785992259,
+            MapStyle.INK_WASH to 1293816481,
+            MapStyle.NAUTICAL to -508608642,
+            MapStyle.MIDNIGHT to -1973165674,
+            MapStyle.SCHOOLROOM to 1303909060,
+            MapStyle.VERDANT to -978225181,
+            MapStyle.SCROLL to -821638482,
+            MapStyle.PEN_AND_INK to 327011472,
+            MapStyle.MARS to -212243734,
+            MapStyle.CLEAR to 1275815509
         )
 
-        /** The gallery's world, at the size the guards measure on. */
-        val WORLD: WorldMap by lazy {
-            WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            )
-        }
+        /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
+        val WORLD: WorldMap get() = TestWorlds.gallery
 
         /** How far the structure tensor looks, in stroke pitches. */
         const val TENSOR_WINDOW_PITCHES = 1.5f
@@ -132,25 +144,21 @@ class PenAndInkTest {
     }
 
     @Test
-    fun `every other style is left alone to the pixel`() {
-        val moved = ArrayList<String>()
-        UNCHANGED_STYLES.forEach { (style, expected) ->
-            val now = fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = style)))
-            println("PENINK ${style.name} to $now")
-            if (now != expected) moved.add("${style.label} $expected -> $now")
+    fun `every style renders the pixels it is recorded as rendering`() {
+        val drawn = MapStyle.entries.associateWith {
+            fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = it)))
         }
-        assertTrue(
-            moved.isEmpty(),
-            "styles that no longer render the pixels they rendered when this was last recorded:" +
-                " ${moved.joinToString("; ")}"
-        )
         println(
-            "PENINK the other ${UNCHANGED_STYLES.size} styles are unchanged at 512; " +
-                "pen and ink now fingerprints " +
-                fingerprint(
-                    MapRasterizer.rasterize(WORLD, RenderOptions(style = MapStyle.PEN_AND_INK))
-                )
+            "PENINK fingerprints at 512: " +
+                drawn.entries.joinToString(", ") { "${it.key.name} ${it.value}" }
         )
+        RECORDED_STYLES.forEach { (style, expected) ->
+            assertEquals(
+                expected,
+                drawn[style],
+                "${style.label} no longer renders the pixels recorded for it"
+            )
+        }
     }
 
     @Test
@@ -362,7 +370,7 @@ class PenAndInkTest {
         val height = world.height
         val elevation = world.sea.relativeElevation
         val style = MapStyle.PEN_AND_INK
-        val zScale = MapRasterizer.hillshadeScale(width)
+        val zScale = ReliefShading.slopeScale(width)
         val pixels = IntArray(width * height) { style.paper }
         for (y in 0 until height) {
             for (x in 0 until width) {

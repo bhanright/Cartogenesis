@@ -1,5 +1,62 @@
 # To do
 
+- **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes
+  of four, eight and sixteen cells holding both land and water, and a box is mixed by a *single*
+  cell of the other kind — so a tooth one cell deep makes a four-cell box mixed and rarely makes a
+  sixteen-cell box mixed, and the slope over 4 to 16 is read partly off structure under four cells.
+  It is why 2.0.2 scored 1.207, inside Earth's band, with a tooth on every cell of every coast, and
+  why F17 removing the teeth takes it to 1.167 pooled and 1.116 on seed 7 — inside the bar M1 asserts,
+  but with a tenth of the room it had. The coast at those scales did not change: measured with a
+  ruler coarsened by majority, which cannot see under its own step, the same coast reads 1.255
+  pooled after against 1.260 before, and seed 7 reads 1.228 against 1.230. The repair belongs to the instrument — `CoastRoughness`'s
+  `richardsonLength` is the one F17 uses and M1 could take it, or its box sizes could start above
+  the scale it means to measure. 2026-09-13.
+- **A graded coast has no barrier islands.** F17's littoral pass fills the re-entrants of Earth's
+  third of the shoreline but does not throw a barrier across the mouth of one and leave a lagoon
+  behind it, which is what Earth's depositional coasts are — Padre Island and the Laguna Madre, the
+  Frisian chain and the Wadden Sea. A filled bay is one shoreline where a barred one is two, so the
+  coast is short of both the coastline it should have and the tidal country behind it. The audit's
+  K1 (wave climate and longshore drift) is the chunk that owns it. 2026-09-12.
+- **The coast is still rougher at the cell than four cells up, and the rest is not channels.** After
+  both of F17's passes the excess is 0.198 where 2.0.2's was 0.322, against Earth's zero —
+  Richardson's plots are straight lines. Filling *every* drowned notch, estuaries and all, reaches
+  the same 0.199, because what stops the fill is not the width bar but the two rules the fill is
+  bounded by: new ground may not stand above the ground beside it, nor fail to fall towards the sea.
+  So the residue is not the channels; it is the percentile cut running through the erosion's own
+  texture at the cell, and it is still 0.288 with the lowstand switched off entirely. Closing it
+  means the sub-grid correction F17 applies to drowned channels applied to the whole near-shore
+  height field, which moves every coastline rather than the drowned ones and wants its own chunk and
+  its own renders. 2026-09-13.
+- **`OutletResolutionTest`'s resolution contract has two hundredths of room left.** Seed 59758's
+  standing water spreads 1.39x across 512, 1024 and 2048 against a bar of 1.4; with F17's
+  drowned-valley fill off it reads 1.37x, and the test's own comment records 1.14x when the contract
+  was written, so the drift is mostly older than this chunk. A sub-grid correction necessarily does
+  more at a coarse grid — that is what sub-grid means — so anything else of this kind will push the
+  same figure. The term that actually misbehaves is a 755-cell drowned basin seed 59758 has at 1024
+  and not at 2048, which nothing in F17 touches. 2026-09-13.
+- **The littoral criterion cannot tell a coastal plain from a flat coast on hard rock.** It ranks
+  the shoreline by the height of the land within 187 km and takes Earth's 31%, because no height
+  derivable from Earth lands on that share: the postglacial rise calls 59% of the shoreline
+  depositional and a coastal plain's own gradient calls 1.9%. The quantity in the gap is lithology —
+  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which the plan's H3
+  would supply. Until then a world's depositional share is Earth's by construction rather than by
+  measurement, and a world that genuinely had less low coast than Earth would not show it.
+  2026-09-12.
+- **A lake can be a dead-straight diagonal bar.** On seed 298405 at 1024 one of the eight lakes —
+  53 cells at (509,860), every one of them within 1.2 cells of a single straight line — is drawn as
+  a rectangle laid on the diagonal with square ends, in a straight-walled trench beside it. It is
+  the artefact William called "this diagonal rectangle section of river" (F15). Diagnosed and not
+  fixed: it survives with the outlet incision off, with deposition off and with the post-cut outlet
+  off, at the same place and the same size each time, and disappears only with erosion switched off
+  altogether — so what cuts the trench is the ordinary stream-power incision, and what makes it
+  straight is D8 itself, which on ground smooth at the cell scale (here the apron below a range)
+  takes the same neighbour twenty cells running. The reach then ponds behind its own lip, the fill
+  raises it, and `findLakes` calls it standing water. Rare: a census of straight bars of 20 cells or
+  more finds 1 on 298405 at 1024, 0 on seeds 7 and 42 at 512, 1 on 1234 and 2 on 99. The repair is
+  to break D8's straight-line bias on smooth ground — `LakeWaterBalance.jitter` already does exactly
+  this inside an endorheic basin's re-routing, and the same idea in `FlowRouting.flowDirections`
+  would do it everywhere — but `FlowRouting` is shared with erosion, so it moves every world's
+  terrain and belongs in a chunk that can render and review the lot. 2026-09-12.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm
@@ -62,20 +119,14 @@
   below the waterline with a long tail down to a few trenches. Earth's floor is bimodal because two
   crusts of different density float at two levels, which is an isostatic fact and is S2's. The same
   cause puts the continental shelf at 1,000 m against Earth's 130. 2026-09-13, S1.
-- **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
-  sorts channel heads by the flow each already carries and traces the largest first, so the course a
-  `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
-  is drawn afterwards as a tributary stopping at the junction. The union of the drawn cells is the
-  right network and the picture is right; what is wrong is any consumer that reads one `River` as
-  one river. M1 measures how wrong, and it is half: over seeds 7/42/1234/99 at 512 the drawn courses
-  cover **0.484** of the watercourses they stand for by length (0.465/0.531/0.487/0.458), and over
-  the six audited seeds at 2048 **0.408** (0.367 to 0.451), where the share is 1.0 by definition — a
-  river is its own longest watercourse. Hack's exponent over the same basins does not settle in one
-  direction, 0.463 drawn against 0.507 on the terrain at 512 and 0.591 against 0.491 at 2048, so
-  what is wrong is not a consistent scaling but which branch the trace happened to take. It matters
-  for V3's labels, for anything quoting a river's length, and for what `RiverWidth` treats as a
-  trunk. The repair is in the tracing: rank the heads by the length of the path below them rather
-  than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
+- **A drowned valley's catchment is measured with square cells on a 2:1 world.**
+  `DrownedValleys` turns a cell count into square kilometres as the cell's *width* squared, and a
+  cell of a square grid on a world twice as wide as it is tall is half that. The bar it feeds —
+  `RESOLVED_SHARE_OF_A_CELL`, half a cell's width — is calibrated against that figure and comes out
+  at about 39 cells of catchment at every grid, so correcting the area would double what a valley
+  must drain and move every coast. Found while merging F17 onto S1's units, and left alone there
+  rather than changed inside a merge: it wants its own measurement of what the coast does either
+  way. 2026-09-13.
 
 ## Done
 
@@ -91,6 +142,25 @@
   had been 0.015 of a *measured* land relief, which was 0.0037 of the field on one seed and 0.0088
   on another; the world moved by that much, once, with the pins re-recorded in the same commit. The
   relief the Earth-likeness suite reads went from 11,913 m pooled to about 15,600.
+
+- **A drawn river begins at its biggest headwater, not at its farthest** (2026-09-12, F15) — M1's
+  finding, fixed in the tracing as it suggested: `RiverStage.traceRivers` now ranks channel heads by
+  the length of the watercourse below them rather than by the flow at them, so the first course
+  traced out of a catchment is that catchment's longest and every other branch is a tributary of it.
+  Coverage of the watercourse each course stands for, over seeds 7/42/1234/99 at 512: **1.000**
+  (worst 1.000 per seed) against 0.780 for the biggest-headwater order measured on the same worlds.
+  M1's open entry, written on `main`, was struck when this merged there.
+
+- **A trunk crossing a lake's narrow arm was drawn as a thread** (2026-09-12, F15) — the "strange
+  thin squiggly connection between two thicker rivers" on seed 298405 at 1024 is lake 3: 61 cells of
+  water, one cell wide, strung diagonally along the trunk of the map's biggest river system, painted
+  as a dotted line of single water pixels with no river over it because the tracer stopped at every
+  lake cell and the renderer refused to draw inside one. The lake's outlet was never the problem —
+  measured, the accumulation below every lake on that world is 1.00 to 1.70 times the largest
+  accumulation inside it, so the outlet has always carried its lake. `LakeResult.openWater` now
+  distinguishes water two cells across from water one cell across, and the line runs through the
+  latter. 237 channel cells over the four seeds at 512 stand under water one cell wide; 170 of them
+  are now drawn, none before, and no drawn line has a break or a gap at one.
 
 - **The rift-mouth valley: pocket, moats and terrace** (2026-09-12, E6) — the three things in the
   author's crop of 718106's southern rift turned out to be three different causes, found with the
@@ -473,3 +543,46 @@
   the equator anchor sits about 5°C warm (32°C modelled against a real ~27°C, a pre-existing
   anchor) and 60° about 3°C cold even with a warm current. Neither has been shown to matter to a
   render; worth revisiting if a future chunk touches `buildTemperature` for another reason.
+- **The colour-blind style draws a coastal desert dark olive.** Its ramp starts at #2B2E1C, whose
+  green channel is three of 255 above its red, so a desert at the shoreline is the one place on any
+  style where sand reads as vegetation — and it must, because that ramp is ordered by lightness and
+  cannot spend any of it on climate without breaking the promise it exists for. Measured at F13:
+  45% of the desert cells of seed 234475, which is the same 45% it was before the chunk. Fixing it
+  properly means a second ordered ramp for arid ground whose stops are also 8.00 CIEDE2000 apart
+  from each other under both deficiencies, which is a palette exercise rather than a rendering one.
+- **The sky model doubles the processor's raster.** Twenty-four horizon samples a land pixel against
+  the single lamp's four central differences: about 0.44 s against 0.21 s at 2048 and 1.65 s against
+  0.81 s at 4096, measured on seed 42 at F13. The desktop draws exports on the graphics card, where
+  it costs nothing measurable, but the browser has no raster device and pays it in full. If it ever
+  matters, the horizon is separable — one sweep along each of the eight bearings with a running
+  maximum is O(1) a pixel instead of three samples — at the cost of the two paths no longer being
+  the same arithmetic per pixel.
+- **Aerial perspective was written for F13 and taken out again.** The plan asked for the low ground
+  to be veiled slightly toward the paper; it was built, rendered and reviewed, and it cost the
+  relief more contrast than the haze it stood for was worth — aerial perspective is a painter's
+  device for an oblique view, and a map is a plan. If it ever comes back it should be a style's own
+  decision, declared like the biome wash, rather than a physical claim about the air.
+- **The graticule's figures are ink on the sheet, so at fit they shrink with it.** Found by F14.
+  Everything an export needs is on the sheet — the grid, the figures, the scale bar — which is the
+  right answer for a printed chart and means that on screen at whole-world scale a 2048 sheet's
+  eleven-pixel figures come down to five. That is what a printed map does too, and the reader zooms;
+  but a live view could draw the figures in screen space at a constant size instead. It would need
+  the graticule's geometry projected into the pane by the front end and a second drawing site for
+  the numerals, which is exactly the divergence `MapImage`'s one Skia path exists to avoid, so it
+  waits for a reason better than tidiness.
+- **The overlay is baked into the sheet, so zooming past 1:1 magnifies the ink with the raster.**
+  Also F14. The traced coast is a line rather than a staircase at every zoom, which is the win; but
+  it is a line drawn at the sheet's resolution, so at four times zoom it is a soft two-pixel line
+  rather than a crisp one. Drawing the overlay in screen space over the scaled raster would fix it
+  and is the same second-drawing-site problem as above. A cheaper half-measure, if it is ever worth
+  it: re-raster at the zoomed resolution over the visible window only.
+- **The traced coast does not wrap the east-west seam.** F14 traces on the grid as a sheet, so a
+  landmass crossing longitude 180 has its outline stopped at the two edge columns rather than
+  carried round. The raster's own coastline pass does wrap, so the difference is one column of
+  pixels at each edge and nothing has been seen of it; a wrapping tracer would have to split every
+  ring that crosses the seam for drawing anyway. `RiverSegment` already carries the split-at-the-seam
+  trick if someone wants to copy it.
+- **The scale bar is drawn on every picture export.** F14 puts it on anything that goes through
+  `Exporter.export` or the web's equivalent, because a PNG has no legend beside it. Nobody has asked
+  for a way to turn it off; if someone wants a clean plate, it wants a switch beside the format
+  chips rather than a Cartography mark, since it is a property of the export and not of the map.

@@ -60,9 +60,42 @@ data class LakeResult(
      * where the inflow has been evaporating for long enough. Eyre in a dry year, Etosha, Bonneville.
      * Recorded per cell so a later chunk can draw the flats; nothing renders them yet.
      */
-    val playa: BooleanArray = BooleanArray(lakeId.size)
+    val playa: BooleanArray = BooleanArray(lakeId.size),
+    /** Cells across the grid, so a lake's own shape can be read off [lakeId]. */
+    val cellsAcross: Int
 ) {
+    /**
+     * Where a lake is at least two cells across, and so is water rather than the river filling it.
+     *
+     * A lake reaches its spill level over every cell of its basin, and at the far ends of a basin
+     * that includes the channel that feeds it: a reach of river standing an inch under its own
+     * flood is, to the flood-filling, indistinguishable from the middle of the lake. Physically
+     * that is right, and cartographically it is not. A strip of water one cell wide has no open
+     * water between its banks at all — the cell *is* the channel — and at the grids this generator
+     * draws, a cell is a twelve-thousand-kilometre world over 512 to 2048, which is 23 down to 6
+     * kilometres: a water body one cell wide is a great river's width (the Amazon's mouth is about
+     * ten), not a lake's.
+     *
+     * Drawn as a lake, such a strip is worse than useless. It is painted in the lake's flat water
+     * and no river is drawn over it, so a trunk carrying a whole catchment arrives as the widest
+     * channel on the map, crosses as a one-pixel thread of standing water — a dotted line, where
+     * the strip runs diagonally and the cells touch only at their corners — and leaves as the
+     * widest channel on the map again. That thread is what William saw between two thick rivers on
+     * seed 298405 at 1024 (F15); the lake it belongs to is 61 cells sprawled over 27 by 18.
+     *
+     * So the tracer and the renderer stop at *open* water and run through the rest, which puts the
+     * river back where the map needs it and leaves the lake itself exactly where the physics put
+     * it: the strip is still water, still painted, and now has its own river drawn along it.
+     *
+     * Two cells across is the whole of the test — a cell belonging to some 2x2 square of its own
+     * lake — because two cells is the least that can have water between two facing shores.
+     */
+    val openWater: BooleanArray = openWaterMask(lakeId, cellsAcross)
+
     fun isLake(cell: Int): Boolean = lakeId[cell] != NO_LAKE
+
+    /** True where [cell] is lake wide enough to be drawn as water; see [openWater]. */
+    fun isOpenWater(cell: Int): Boolean = openWater[cell]
 
     fun isPlaya(cell: Int): Boolean = playa[cell]
 
@@ -75,6 +108,37 @@ data class LakeResult(
     companion object {
         const val NO_LAKE = -1
     }
+}
+
+/**
+ * Every lake cell that belongs to some 2x2 square of its own lake, and both of that square's
+ * neighbours with it. See [LakeResult.openWater] for what the test means and why it is this one.
+ *
+ * One pass over the grid, reading each cell and the three to its east and south, so a lake's
+ * shape is decided once for the whole map rather than looked up per river or per drawn segment.
+ * The east neighbour wraps, because the world is a cylinder; the south does not.
+ */
+private fun openWaterMask(lakeId: IntArray, cellsAcross: Int): BooleanArray {
+    val open = BooleanArray(lakeId.size)
+    if (cellsAcross <= 0) return open
+    val rowCount = lakeId.size / cellsAcross
+    for (y in 0 until rowCount - 1) {
+        for (x in 0 until cellsAcross) {
+            val here = y * cellsAcross + x
+            val id = lakeId[here]
+            if (id == LakeResult.NO_LAKE) continue
+            val eastX = if (x + 1 == cellsAcross) 0 else x + 1
+            val east = y * cellsAcross + eastX
+            val south = here + cellsAcross
+            val southEast = south - x + eastX
+            if (lakeId[east] != id || lakeId[south] != id || lakeId[southEast] != id) continue
+            open[here] = true
+            open[east] = true
+            open[south] = true
+            open[southEast] = true
+        }
+    }
+    return open
 }
 
 data class RiverResult(
@@ -188,7 +252,7 @@ object RiverStage {
             (lakesConfig.minLakeAreaKm2 / config.squareKilometresPerCell).toInt().coerceAtLeast(1)
         val lakeId = IntArray(cellCount) { LakeResult.NO_LAKE }
         val playa = BooleanArray(cellCount)
-        if (!lakesConfig.enabled) return LakeResult(lakeId, emptyList(), playa)
+        if (!lakesConfig.enabled) return LakeResult(lakeId, emptyList(), playa, cellsAcross)
 
         val ground = sea.relativeElevation
         val submerged = BooleanArray(cellCount) { cell ->
@@ -344,7 +408,7 @@ object RiverStage {
             )
         }
 
-        return LakeResult(lakeId, lakes, playa)
+        return LakeResult(lakeId, lakes, playa, cellsAcross)
     }
 
     /** The right answer wherever the basin overflows: water to the brim over every basin cell. */
@@ -416,7 +480,7 @@ object RiverStage {
     }
 
     /**
-     * Draws the channels, and stops each one at the water.
+     * Draws the channels, and stops each one at open water.
      *
      * A lake is not a reach of river and must not be drawn as one. What is under a lake is the
      * depression-filled surface, which inside the basin is flat to within the hair the fill nudges
@@ -431,8 +495,22 @@ object RiverStage {
      * None of that is a fact about the terrain — it is the fill's bookkeeping showing through — so
      * a river ends at the shore. The cell it enters the water at is kept, so the line touches the
      * lake rather than stopping a step short of it, and the outflow below the lake becomes a channel
-     * of its own: lake cells are struck out of the channel mask above, which leaves the first cell
-     * below the outlet with nothing upstream of it and so makes it a source in its own right.
+     * of its own: open-water cells are struck out of the channel mask above, which leaves the first
+     * cell below the outlet with nothing upstream of it and so makes it a source in its own right.
+     *
+     * *Open* water, not every lake cell, and [LakeResult.openWater] says why: a lake at its spill
+     * level covers the channel that feeds it as well as its own bed, and where that strip is one
+     * cell wide it is the river, has no room for the parallel scan lines above, and has to be drawn
+     * as the river or it appears as a thread joining two thick channels (F15).
+     *
+     * Courses are traced from the head with the longest way down to the water, not from the head
+     * carrying the most water. Both orders draw the same network — every channel cell is claimed by
+     * somebody, and what the order decides is only which course claims which reach — but only this
+     * one makes a `River` the thing it is named after. A catchment's longest watercourse is its
+     * river, and the biggest headwater is very often a short fat one joining it partway down; rank
+     * by flow and the trunk is split between a course that starts in the wrong place and a
+     * "tributary" that is really the river's own upper half. M1 measured the drawn courses at 0.484
+     * of the watercourses they stand for at 512 and 0.408 at 2048, where 1.0 is the definition.
      */
     private fun traceRivers(
         config: WorldGenConfig,
@@ -453,10 +531,10 @@ object RiverStage {
         val sourceFlow =
             (flow.totalRunoff * riverConfig.sourceFlowShare).coerceAtLeast(MIN_SOURCE_FLOW)
 
-        // Standing water is not channel. A playa is: it is dry ground most of the year and the
-        // river across it is a real one.
+        // Open water is not channel. A playa is: it is dry ground most of the year and the river
+        // across it is a real one.
         val isChannel = BooleanArray(cellCount) { cell ->
-            sea.isLand[cell] && !lakes.isLake(cell) && accumulation.data[cell] >= sourceFlow
+            sea.isLand[cell] && !lakes.isOpenWater(cell) && accumulation.data[cell] >= sourceFlow
         }
 
         val hasUpstream = BooleanArray(cellCount)
@@ -466,31 +544,34 @@ object RiverStage {
             if (target >= 0 && isChannel[target]) hasUpstream[target] = true
         }
 
-        // Headwaters, largest first, so trunk rivers claim their course before tributaries do.
+        val courseBelow = lengthsToTheWater(cellCount, isChannel, flowTarget)
+
+        // Headwaters, the farthest from the water first, so a river claims its own longest
+        // watercourse before any tributary can take part of it.
         var sourceCount = 0
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) sourceCount++
         }
-        // Flow in the high half of the key and the cell index in the low half, so one sort puts
-        // the biggest headwater last and ties fall to the lower cell index on every platform.
-        // Accumulation is never negative here, so its raw bits sort in the same order as its
-        // values and no bias is needed — unlike FlowRouting.encode, which carries elevations.
-        val sourcesByFlow = LongArray(sourceCount)
+        // The length of the course below a head in the high half of the key and the cell index in
+        // the low half, so one sort puts the farthest head last and ties fall to the lower cell
+        // index on every platform. A count of cells is never negative, so it sorts in the same
+        // order as its values — unlike FlowRouting.encode, which carries elevations.
+        val sourcesByCourseLength = LongArray(sourceCount)
         var written = 0
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) {
-                sourcesByFlow[written++] =
-                    (accumulation.data[cell].toRawBits().toLong() shl 32) or cell.toLong()
+                sourcesByCourseLength[written++] =
+                    (courseBelow[cell].toLong() shl 32) or cell.toLong()
             }
         }
-        sourcesByFlow.sort()
+        sourcesByCourseLength.sort()
 
         val claimed = BooleanArray(cellCount)
         val rivers = ArrayList<River>()
 
-        for (rank in sourcesByFlow.indices.reversed()) {
+        for (rank in sourcesByCourseLength.indices.reversed()) {
             if (rivers.size >= riverConfig.maxRivers) break
-            val source = FlowRouting.decodeIndex(sourcesByFlow[rank])
+            val source = FlowRouting.decodeIndex(sourcesByCourseLength[rank])
 
             val path = ArrayList<Int>()
             var claimedByThisRiver = 0
@@ -506,7 +587,7 @@ object RiverStage {
 
                 val next = flowTarget[current]
                 if (next < 0) break
-                if (!sea.isLand[next] || lakes.isLake(next)) {
+                if (!sea.isLand[next] || lakes.isOpenWater(next)) {
                     path.add(next) // the river mouth, on the sea or on a lake shore
                     break
                 }
@@ -525,6 +606,40 @@ object RiverStage {
         // Sized last, because the scale a channel is measured against is the whole network's: what
         // makes a trunk a trunk is that it carries more than anything else on this map.
         return RiverWidth.sizedByFlow(rivers, accumulation.data)
+    }
+
+    /**
+     * How many channel cells lie between each channel cell and the water it ends at, itself
+     * included: the length of the watercourse below it.
+     *
+     * The flow targets are a forest — every cell has one receiver, strictly lower on the filled
+     * surface — so the answer for a cell is one more than the answer for its receiver, and the
+     * whole field falls out of one memoised walk per unvisited cell. The walk is bounded by the
+     * grid for the same reason the trace below is: a routing bug that made a ring would otherwise
+     * hang the generator rather than draw something odd.
+     */
+    private fun lengthsToTheWater(
+        cellCount: Int,
+        isChannel: BooleanArray,
+        flowTarget: IntArray
+    ): IntArray {
+        val below = IntArray(cellCount)
+        val walked = ArrayList<Int>()
+        for (start in 0 until cellCount) {
+            if (!isChannel[start] || below[start] != 0) continue
+            walked.clear()
+            var cell = start
+            while (cell >= 0 && isChannel[cell] && below[cell] == 0 && walked.size < cellCount) {
+                walked.add(cell)
+                cell = flowTarget[cell]
+            }
+            var length = if (cell >= 0 && isChannel[cell]) below[cell] else 0
+            for (k in walked.indices.reversed()) {
+                length++
+                below[walked[k]] = length
+            }
+        }
+        return below
     }
 
 }

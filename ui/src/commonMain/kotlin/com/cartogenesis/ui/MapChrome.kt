@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -43,7 +44,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.MapScale
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -380,92 +384,160 @@ internal fun ChartLegend(
     parts: List<LegendPart>
 ) {
     Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            // Dressed where the chrome asks — Allied's map-margin box, Hessian's sewn label,
-            // Roman's double rule, Hitchcock's spiral. Every one of them is drawn in [OverMap]'s
-            // ink, because this lies on a chart whose paper belongs to the style.
-            val shape = LocalChromeDetail.current.cartouche
-            Column(Modifier.weight(1f).cartoucheFrame(shape)) {
-                if (progress != null) {
-                    Text(
-                        progress,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OverMap.Parchment,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                } else if (cartouche == null) {
-                    Text(
-                        prompt,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OverMap.ParchmentDim
-                    )
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (shape == CartoucheStyle.SPIRAL) Spiral()
+        // Measured rather than assumed: the scale bar's length is a share of the frame, and the
+        // legend spans the map's own width, so this box is the frame the bar is a share of.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val frameWidth = maxWidth
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                // Dressed where the chrome asks — Allied's map-margin box, Hessian's sewn label,
+                // Roman's double rule, Hitchcock's spiral. Every one of them is drawn in [OverMap]'s
+                // ink, because this lies on a chart whose paper belongs to the style.
+                val shape = LocalChromeDetail.current.cartouche
+                Column(Modifier.weight(1f).cartoucheFrame(shape)) {
+                    if (progress != null) {
                         Text(
-                            cartouche.worldName,
-                            style = MaterialTheme.typography.titleMedium,
+                            progress,
+                            style = MaterialTheme.typography.bodySmall,
                             color = OverMap.Parchment,
-                            maxLines = 1
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            cartouche.facts,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = OverMap.ParchmentDim,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (cartouche.footnote.isNotEmpty()) {
+                    } else if (cartouche == null) {
+                        Text(
+                            prompt,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OverMap.ParchmentDim
+                        )
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (shape == CartoucheStyle.SPIRAL) Spiral()
                             Text(
-                                "· ${cartouche.footnote}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = OverMap.ParchmentFaint,
+                                cartouche.worldName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = OverMap.Parchment,
                                 maxLines = 1
                             )
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                cartouche.facts,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = OverMap.ParchmentDim,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (cartouche.footnote.isNotEmpty()) {
+                                Text(
+                                    "· ${cartouche.footnote}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = OverMap.ParchmentFaint,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        // The scale, under the facts it is a fact about: it is quoted for the size the
+                        // line above states, which is the size an export of this world comes out at.
+                        Text(
+                            cartouche.scale,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OverMap.ParchmentFaint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-            }
 
-            // The wheel and the pinch are both invisible, so the same thing is offered where it
-            // can be seen. These sat loose over the bottom-right corner of the map before F3;
-            // they are the right-hand half of the legend now.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 12.dp)
-            ) {
-                if (LegendPart.ZOOM_OUT in parts || LegendPart.ZOOM_IN in parts) {
-                    Text(
-                        "${camera.percent}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = OverMap.ParchmentDim,
-                        modifier = Modifier.widthIn(min = 34.dp)
-                    )
+                if (LegendPart.SCALE in parts && cartouche != null && progress == null) {
+                    ScaleBarStrip(cartouche.kilometresPerCellWidth, camera, frameWidth)
                 }
-                if (LegendPart.ZOOM_OUT in parts) {
-                    ZoomButton("−") { camera.step(1f / MapCamera.STEP) }
-                }
-                if (LegendPart.ZOOM_IN in parts) {
-                    ZoomButton("+") { camera.step(MapCamera.STEP) }
-                }
-                if (LegendPart.FIT in parts) {
-                    ZoomButton("Fit") { camera.fit() }
+
+                // The wheel and the pinch are both invisible, so the same thing is offered where it
+                // can be seen. These sat loose over the bottom-right corner of the map before F3;
+                // they are the right-hand half of the legend now.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
+                    if (LegendPart.ZOOM_OUT in parts || LegendPart.ZOOM_IN in parts) {
+                        Text(
+                            "${camera.percent}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OverMap.ParchmentDim,
+                            modifier = Modifier.widthIn(min = 34.dp)
+                        )
+                    }
+                    if (LegendPart.ZOOM_OUT in parts) {
+                        ZoomButton("−") { camera.step(1f / MapCamera.STEP) }
+                    }
+                    if (LegendPart.ZOOM_IN in parts) {
+                        ZoomButton("+") { camera.step(MapCamera.STEP) }
+                    }
+                    if (LegendPart.FIT in parts) {
+                        ZoomButton("Fit") { camera.fit() }
+                    }
                 }
             }
         }
     }
 }
+
+/**
+ * The scale bar in the legend: a round distance, and how far it reaches on the screen right now.
+ *
+ * The bar on an exported sheet is drawn onto the paper and is fixed once and for all; this one is
+ * the same arithmetic taken at the zoom the reader is at, so it restates itself as they zoom in and
+ * the distance it names comes down. [MapScale] chooses the number, from the 1-2-5 series and a
+ * quarter of [frameWidth]; nothing here decides anything but where to put the ink.
+ *
+ * Nothing at all until the map pane has measured itself, because until then there is no honest
+ * answer to how far a screen pixel reaches.
+ */
+@Composable
+private fun ScaleBarStrip(kilometresPerCellWidth: Double, camera: MapCamera, frameWidth: Dp) {
+    val pixelsPerCell = camera.pixelsPerCell
+    if (pixelsPerCell <= 0f) return
+    val density = LocalDensity.current
+    val bar = MapScale.bar(
+        kilometresPerCellWidth / pixelsPerCell,
+        with(density) { frameWidth.toPx() }
+    )
+    if (bar.lengthPixels <= 0f || !bar.lengthPixels.isFinite()) return
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(start = 12.dp)
+    ) {
+        Text(
+            bar.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = OverMap.ParchmentDim,
+            maxLines = 1
+        )
+        Canvas(
+            Modifier
+                .width(with(density) { bar.lengthPixels.toDp() })
+                .height(SCALE_BAR_TICK.dp)
+        ) {
+            val rule = 1.dp.toPx()
+            // The bar itself along the bottom, with a tick standing up at each end: two ends and a
+            // length is the whole of what a scale bar has to show.
+            drawRect(OverMap.Parchment, Offset(0f, size.height - rule), Size(size.width, rule))
+            drawRect(OverMap.Parchment, Offset(0f, 0f), Size(rule, size.height))
+            drawRect(OverMap.Parchment, Offset(size.width - rule, 0f), Size(rule, size.height))
+        }
+    }
+}
+
+/** How tall the legend's scale bar stands, in dp: a cap height, so it reads as a bracket. */
+private const val SCALE_BAR_TICK = 7
 
 /**
  * The frame round the title block, as this chrome frames one.
@@ -563,6 +635,20 @@ private fun ZoomButton(label: String, onClick: () -> Unit) {
 internal class MapCamera {
     var zoom by mutableStateOf(1f)
     var pan by mutableStateOf(Offset.Zero)
+
+    /**
+     * Screen pixels one cell of the world covers when the whole sheet is fitted into the pane.
+     *
+     * Written by the map pane as it measures, because the pane is the only thing that knows how big
+     * it is; one for a sheet no larger than the pane, and a fraction for the usual case of a 2048
+     * world in a window. Everything that has to say how far a distance on the screen reaches —
+     * [pixelsPerCell], the legend's scale bar, the generalisation the overlay is drawn at — comes
+     * off this and the zoom.
+     */
+    var fitScale by mutableStateOf(1f)
+
+    /** Screen pixels one cell covers right now. See [fitScale]. */
+    val pixelsPerCell: Float get() = fitScale * zoom
 
     val percent: Int get() = (zoom * 100).roundToInt()
 

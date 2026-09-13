@@ -3,6 +3,7 @@ package com.cartogenesis.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.cartogenesis.cartography.MapScale
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.pipeline.Culture
@@ -25,6 +26,10 @@ import kotlin.random.Random
  *    filed under.
  *  - the **facts**: the seed and the working resolution, and nothing else. The largest realm and
  *    its share were here for a draft and read as a statistic rather than as a caption.
+ *  - the **scale**: how far one pixel of the sheet reaches on the ground, and the representative
+ *    fraction that follows from it. A printed chart puts this under the title, and F14 does the
+ *    same — see [com.cartogenesis.cartography.MapScale] for why the fraction is quoted the way it
+ *    is and why it says *at the equator*.
  *  - the **footnote**: how long the world took to make, in the muted colour, because it is a fact
  *    about this machine rather than about the world.
  *
@@ -34,6 +39,15 @@ import kotlin.random.Random
 internal data class Cartouche(
     val worldName: String,
     val facts: String,
+    /** `5.9 km per pixel · about 1:22 000 000 at the equator`, for the size [facts] quotes. */
+    val scale: String,
+    /**
+     * How wide one cell of this world is on the ground.
+     *
+     * The legend's scale bar is the same arithmetic as [scale] taken at the zoom the reader is at
+     * rather than at the sheet's own size, and this is what it needs to do it with.
+     */
+    val kilometresPerCellWidth: Double,
     /** Empty until a world has actually been generated in this session (an opened save has not). */
     val footnote: String
 )
@@ -94,6 +108,8 @@ internal object Cartouches {
     fun of(world: WorldMap, name: String, millis: Long): Cartouche = Cartouche(
         worldName = name,
         facts = facts(world.config.seed, world.config.width, world.config.height),
+        scale = MapScale.cartoucheLine(world.config.scale, world.width),
+        kilometresPerCellWidth = world.config.scale.cellWidthKm(world.width),
         footnote = footnote(millis)
     )
 }

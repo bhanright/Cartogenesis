@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.BuildInfo
@@ -60,7 +61,9 @@ object Exporter {
         val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
         val pixels = MapRasterizer.rasterize(world, options, raster)
-        val bitmap = MapImage.toBitmap(world, options, pixels)
+        // A printed sheet: drawn cell for pixel, so nothing is generalised away, and carrying its
+        // own scale bar because there is no legend beside a PNG. See [MapSheet].
+        val bitmap = MapImage.toBitmap(world, options, pixels, MapSheet.PRINTED)
 
         val encoded = if (format == ExportFormat.JPEG) {
             encodeJpeg(bitmap, ExportFormat.JPEG_QUALITY)

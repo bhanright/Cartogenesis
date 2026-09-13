@@ -714,7 +714,106 @@ data class SeaConfig(
      *
      * Off is the control the guard needs: the drowned basins keep whatever sill they were left.
      */
-    val postCutOutlet: Boolean = true
+    val postCutOutlet: Boolean = true,
+    /**
+     * Whether the waves are allowed to put the coast back in order after the sea has finished
+     * rising.
+     *
+     * [lowstandMetres] drops the base level for nine of the twelve hydraulic rounds, so running
+     * water works every cell within 120 m of the shoreline, and the transgression floods all of it.
+     * That is the right half of the story and it is the only half the generator told: measured at
+     * 512 over five seeds, the lowstand takes the shoreline from 43,967 cells to 60,755 and puts a
+     * saw-tooth one to four cells deep on *every* coast, mountainous or flat, sheltered or exposed.
+     * Earth's coasts are not alike in that way. The sea reached its present level about six
+     * thousand years ago and the shore has been worked ever since, so a coast on low ground is a
+     * graded arc of beach, barrier and marsh — Texas, Holland, Bengal — while a coast on high
+     * ground keeps the outline the drowning gave it, which is Galicia, Maine and western Norway.
+     *
+     * See `LittoralGrading`, which holds the criterion and the Earth figures behind it. Off is the
+     * control its guard needs, and is the coast the 2.0.2 release drew.
+     */
+    val littoralGrading: Boolean = true,
+    /**
+     * How far along the shore the littoral system carries sediment, in kilometres.
+     *
+     * Twenty-three, which is Earth's spacing of the inlets through a barrier coast — the length of
+     * shore a drift system holds unbroken: 10 to 30 km between the Frisian islands, 20 to 60
+     * through the Outer Banks, 180 for Padre Island in one piece. It sets how many sweeps of the
+     * grading a fully depositional coast gets, so a re-entrant narrower than twice this is what
+     * fills.
+     *
+     * A length on the ground, converted to cells where the stage reads it, like every other reach
+     * in this file. It comes out as one cell at 512, two at 1024 and four at 2048, and rounds to
+     * nothing at 128 or 256 — correctly, since the whole six thousand years of it is well under a
+     * cell there and the pass switches itself off.
+     */
+    val littoralReachKm: Double = 23.4375,
+    /**
+     * How large a window the land behind a coast is judged over, in kilometres.
+     *
+     * 187 km, eight cells at 512. A coastal plain's own scale: the United States' Atlantic plain
+     * runs 50 to 200 km inland, the Gulf plain 150 to 500, the North European plain 200 to 400. The
+     * window is square, so the same figure is also how far *along* the shore the judgement is
+     * averaged, and that is the half of it that turned out to matter. At 47 km — the width of the
+     * narrowest of those plains, which was the first figure tried — the classification flickered
+     * from cell to cell along a single coast and the coasts came out uniformly a little smoother
+     * instead of some smooth and some not: the spread of the per-stretch dimension went from 0.105
+     * ungraded to 0.102 graded, the wrong way. At 187 km a coast keeps one character for a stretch,
+     * which is how Earth's coasts come, and the spread goes to 0.108.
+     */
+    val littoralBackshoreKm: Double = 187.5,
+    /**
+     * How far out to sea the exposure of a coast is measured, in kilometres.
+     *
+     * 492 km, twenty-one cells at 512. Wave height grows as the square root of the fetch until the
+     * sea is fully arisen, and for an ordinary wind that takes a few hundred kilometres of open
+     * water; five hundred is the round figure. Beyond it the waves stop growing, so measuring
+     * further would only average in coasts on the other side of an ocean.
+     */
+    val littoralFetchKm: Double = 492.1875,
+    /**
+     * The share of a world's shoreline that is a depositional coast, and so the share the littoral
+     * pass grades.
+     *
+     * Earth's own figure, put into the model directly rather than reached through a threshold on
+     * the height of the land — the way [enclosedSeaMaxKm2] carries the Caspian's share of Earth's
+     * surface and `GlaciationConfig.maxLakeShareOfMap` carries Superior's. Luijendijk et al. (2018),
+     * *Scientific Reports* 8:6641, classify 31% of the world's ice-free shoreline as sandy from
+     * three decades of satellite imagery; Bird (2000), *Coastal Geomorphology: An Introduction*,
+     * puts the depositional share at about a third; Young and Carilli (2019) put the rocky share at
+     * 52%, leaving 48% for everything softer. Thirty-one per cent is the tightest of those and the
+     * one with a measurement behind it.
+     *
+     * It is a share rather than a height because no height can be derived. The postglacial rise —
+     * did the sea flood a flat, or run up a valley — calls 59% of this generator's shoreline
+     * depositional; a coastal plain's own one-metre-per-kilometre gradient calls 1.9% of it
+     * depositional; and picking a figure in between so that the answer came out at Earth's third
+     * would be tuning a threshold to a target. The gap between the two is real and it is the
+     * low-lying *rocky* coast — Finland, the Canadian Shield, western Scotland, flat and ragged
+     * both — which needs the lithology the plan's H3 has not built yet. See `LittoralGrading`.
+     */
+    val littoralDepositionalShare: Float = 0.31f,
+    /**
+     * Whether a drowned valley too narrow for its cell is filled back to the ground either side of
+     * it.
+     *
+     * [lowstandMetres] cuts a channel down to the low stand at every shore, and the transgression floods
+     * every one of them, so the cut comes back with a notch at every stream mouth: measured on the
+     * four standard seeds and 298405 at 512, the coastline's Richardson dimension over its first
+     * octave is 1.398 against 1.115 over its last, where a real coast measures much the same at
+     * every scale. On the grid a channel is a whole cell wide whatever it carries. Earth's coasts at
+     * six to twelve kilometres are indented by the Chesapeake, the Severn and the Gironde and by
+     * nothing smaller — the Rias Baixas are two to seven kilometres across and a 1024 map cannot
+     * hold one.
+     *
+     * So a drowned cell keeps its water only where the valley behind it is at least half the cell
+     * wide, by Leopold and Maddock's square root of the catchment; below that the cell takes the
+     * height it would have if the channel had the share of it that it really has, which is above the
+     * waterline. See `DrownedValleys` for the five estuaries the constant is measured from.
+     *
+     * Off is the control its guard needs, and is the coast release 2.0.2 drew.
+     */
+    val drownedValleyFill: Boolean = true
 )
 
 @Serializable

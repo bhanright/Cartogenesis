@@ -95,6 +95,10 @@ class IncrementalReuseTest {
             // `relativeElevation`, and where the notch reaches the waterline it moves `isLand` too
             // — so a stale sea stage would carry an undrained basin through every stage below it.
             "postCutOutlet" to base.copy(sea = base.sea.copy(postCutOutlet = false)),
+            // F17's littoral grading moves the shoreline itself, which is the loudest thing a
+            // setting in this section can do: a stale sea stage would hand every stage below it a
+            // land mask from the other arm.
+            "littoralGrading" to base.copy(sea = base.sea.copy(littoralGrading = false)),
             // Glaciation carves the sea stage's own field, in the same step, so its guard is the
             // sea stage's guard. Turning it off rather than nudging a number, because off is the
             // largest change the section can make and so the loudest failure if it went stale.
@@ -298,7 +302,8 @@ class IncrementalReuseTest {
                 lakes = LakeResult(
                     world.rivers.lakes.lakeId.copyOf(),
                     world.rivers.lakes.lakes.toList(),
-                    world.rivers.lakes.playa.copyOf()
+                    world.rivers.lakes.playa.copyOf(),
+                    world.rivers.lakes.cellsAcross
                 )
             ),
             nations = NationResult(

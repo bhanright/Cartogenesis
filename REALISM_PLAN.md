@@ -1892,6 +1892,13 @@ parallel bars on seed 42 at 1024 (49 -> 124 cells; short bars in ranks, not F18'
 and without a guard of its own), and which basin is the largest drowned one is unstable between
 seeds.
 
+### Release 2.0.5 (2026-09-13)
+
+Cut from `release/2.0` at 2e66619, tagged `v2.0.5`: F28, the Blacklight chrome from William's two
+colours, and its guard that reads the site's theme sentence back against the enum. Interface
+gates and `siteTest` green on the branch; worldgen untouched since 2.0.4's full tier. Portable zip
+97 MB, MSI 98 MB, web zip 5.4 MB; the packaged exe passes `--gpu-check`. Saves open unchanged.
+
 ## Track M — the Earth-likeness yardstick (3.0)
 
 ### M1. Earth-likeness metric suite — Opus

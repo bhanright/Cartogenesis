@@ -143,8 +143,12 @@ class DepositionTest {
      * outflow can cut its sill to the waterline becomes an arm of the sea again. Measured at 128 on
      * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
      * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
+     *
+     * And a thirteenth time at S2, which gave the height field an absolute vertical scale: the two
+     * crusts float at their own levels, so the percentile falls through different ground and seed
+     * 42's land at 128 goes from 6290 cells to 6232. The cut itself has not moved.
      */
-    private val startingPointLand = 6290
+    private val startingPointLand = 6232
 
     @Test
     fun `every round conserves mass`() {

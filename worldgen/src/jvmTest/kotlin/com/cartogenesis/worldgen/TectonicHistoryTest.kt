@@ -47,18 +47,24 @@ class TectonicHistoryTest {
     private val seeds = listOf(7L, 42L, 1234L)
 
     /**
-     * Checksums of `PlateResult.height` taken from the build immediately before H1, on the
+     * Checksums of `PlateResult.height` for a world with only the present epoch in it, on the
      * default config at 512.
      *
-     * The chunk's contract is that a one-epoch history is not "close to" the old generator but
-     * *is* it: every ageing factor is exactly 1 on the present epoch, a multiply by 1f is the
-     * identity in IEEE-754, and the widened config copy is never taken. These numbers are how that
-     * is proved rather than asserted — they were printed by the pre-change code and pasted here.
+     * The contract they hold is H1's and is unchanged: a one-epoch history is not "close to" a
+     * world with no history, it *is* one — every ageing factor is exactly 1 on the present epoch,
+     * a multiply by 1f is the identity in IEEE-754, and the widened config copy is never taken. So
+     * `historyEpochs = 0` and `historyEpochs = 1` must give the same bits.
+     *
+     * What the numbers no longer are is the pre-H1 build's own output. H1 pinned them against a
+     * build that predated it; S2 gave the height field an absolute vertical scale, which changes
+     * every value in it, so there is no longer a build outside this branch that produces them.
+     * They were re-taken here, once, and the property they pin is the one above rather than
+     * agreement with a generator that no longer exists.
      */
     private val presentOnlyChecksums = mapOf(
-        7L to 2044751848601263324L,
-        42L to 7853987138546465474L,
-        1234L to -3577903678715640491L
+        7L to -6157481513910583138L,
+        42L to 5782648589295029678L,
+        1234L to -7620405674804084178L
     )
 
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {
@@ -75,6 +81,10 @@ class TectonicHistoryTest {
 
     @Test
     fun `a single epoch reproduces the generator this chunk replaced, bit for bit`() {
+        // Measured for every seed before anything is asserted, so one run prints all six figures
+        // rather than stopping at the first that has moved. Re-pinning three checksums three
+        // builds running is how S2 found out how much that costs.
+        val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
             listOf(0, 1).forEach { epochs ->
                 val base = WorldGenConfig(seed = seed, width = 512, height = 512)
@@ -83,11 +93,7 @@ class TectonicHistoryTest {
                 var checksum = 0L
                 plates.height.data.forEach { checksum = checksum * 31 + it.toRawBits() }
                 println("HISTORY seed $seed epochs=$epochs height checksum $checksum")
-                assertEquals(
-                    presentOnlyChecksums.getValue(seed),
-                    checksum,
-                    "seed $seed with historyEpochs=$epochs is no longer the pre-H1 world"
-                )
+                measured[seed to epochs] = checksum
                 // With nothing but the present epoch there is no old crust: every cell a belt
                 // touched is in the youngest band and everything else is untouched.
                 assertTrue(
@@ -95,6 +101,14 @@ class TectonicHistoryTest {
                     "seed $seed: crust age left its range"
                 )
             }
+        }
+        measured.forEach { (key, checksum) ->
+            assertEquals(
+                presentOnlyChecksums.getValue(key.first),
+                checksum,
+                "seed ${key.first} with historyEpochs=${key.second} is no longer the" +
+                    " present-epoch-only world"
+            )
         }
     }
 
@@ -379,7 +393,17 @@ class TectonicHistoryTest {
         /** Smaller than this and it is a speck of noise, not a range. */
         const val MIN_BELT_CELLS = 200
 
-        /** Lower than this and it is a swell, not a range. */
-        const val MIN_BELT_PEAK = 0.04f
+        /**
+         * Lower than this and it is a swell, not a range — as a share of the height field, which
+         * since S2 is an absolute altitude, so it is a figure in metres.
+         *
+         * Five hundred metres of `WorldScale.reliefSpanMetres`. Earth's worn orogens are the
+         * derivation: the Urals stand 500 to 1,000 m above the plains either side of them and the
+         * Appalachian province 500 to 1,500, and below that a Palaeozoic collision has stopped
+         * being high ground at all. It was 0.04 of a field that had been renormalised, which came
+         * to nothing in particular; the same 0.04 is 640 m on the declared ruler and would refuse
+         * the Urals.
+         */
+        const val MIN_BELT_PEAK = 500f / 16_000f
     }
 }

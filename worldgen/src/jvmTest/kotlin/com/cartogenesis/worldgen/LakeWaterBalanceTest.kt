@@ -26,8 +26,20 @@ import kotlin.test.assertTrue
  */
 class LakeWaterBalanceTest {
 
-    private val drySeed = 43L
-    private val wetSeed = 99L
+    // Both are samples, re-picked at S2 by the same scan that chose their predecessors: isostasy
+    // rewrote the relief the depression fill runs over, so it reshaped every hollow on every seed.
+    // Seed 43's dry basin survived at 627 cells but its catchment now keeps every cell of it wet,
+    // and seed 99's wet basin vanished entirely.
+    //
+    // The dry sample is seed 7, which is one of the four `GeographyAuditTest` already watches: it
+    // carries 2,774 cells at 26 mm of rain and the balance leaves 28% of them wet. Size alone is
+    // not the criterion and the scan makes that plain — seed 34's basin is half again as large at
+    // the same rainfall and stays 100% full, because what decides a lake is the catchment feeding
+    // it and not the rain falling on its own footprint. Of the fifteen basins scanned, six empty
+    // to between 9% and 49% and nine stay full. The wet sample is seed 14, the largest basin in wet
+    // country of the forty-five scanned: 1,004 cells at 783 mm.
+    private val drySeed = 7L
+    private val wetSeed = 14L
 
     /**
      * Both worlds are generated with the outlet notch off, and that is not a convenience.

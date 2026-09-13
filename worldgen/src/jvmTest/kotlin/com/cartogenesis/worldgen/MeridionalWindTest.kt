@@ -49,7 +49,9 @@ class MeridionalWindTest {
          * the same signature seed 26 used to give (1.96% against 2.93%) with more room above the
          * line. Seven of the seventy clear 2.5% with the slant.
          */
-        const val MONSOON_SEED = 28L
+        // Re-picked at S2, which moved every coastline: the 1..30 scan reads seed 28 at 0.20% of
+        // land where it read 1.70, and seed 29 at 4.28% — the best of the thirty and twice the bar.
+        const val MONSOON_SEED = 29L
 
         /** How lopsided the year has to be to count, and how much rain the wet half must bring. */
         const val RATIO = 3f

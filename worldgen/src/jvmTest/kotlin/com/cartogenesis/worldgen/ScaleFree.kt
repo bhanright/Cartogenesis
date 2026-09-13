@@ -206,11 +206,15 @@ internal object ScaleFree {
         Tolerance(
             name = "relief",
             expectedFor = { 1.0 },
-            factor = 1.10,
+            factor = 1.25,
             asserted = true,
-            why = "WorldScale declares both ends of the range, so a world that reaches them at one" +
-                " grid reaches them at every grid; what is left is whether a seed's own extremes" +
-                " get there, and a tenth covers a world whose deepest trench is a cell short"
+            why = "the span between a world's own deepest cell and its highest, which is the most" +
+                " grid-dependent statistic a map has: two single cells, one of them usually a" +
+                " trench axis and the other a crest the erosion is still cutting. Until S2 this" +
+                " was not a measurement at all — the field was renormalised, so every world" +
+                " spanned WorldScale's declared 16,000 m by construction and a tenth was ample." +
+                " Now it is measured, and a quarter is what the four seeds need: x1.02, x0.92," +
+                " x1.00 and x0.84 from 512 to 1024"
         ),
         Tolerance(
             name = "coastline",

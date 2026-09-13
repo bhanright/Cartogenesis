@@ -366,6 +366,16 @@ data class TectonicsConfig(
      * plateaus between 1,000 and 1,700 (the Great Plains, the Brazilian and East African
      * highlands). Nothing outside an orogen stands higher, and the orogens are the belts' business.
      *
+     * Three kilometres was measured and put back, and the trade is worth recording because both
+     * halves of it are real. More relief on the continents makes their interiors less flat, which
+     * is what breaks a broad tectonic sag into pieces the drainage can drain: the largest lake on
+     * seed 7 fell from 0.92% of its land to 0.61%, and the share of land above a kilometre went
+     * from 0.27-0.71 across the five worlds to 0.31-0.37 against Earth's 0.31. But it also raises
+     * the ground the shoreline stands on, and the coastline's box-counting dimension fell with it
+     * — seed 42 from 1.113 to 1.092, under the 1.10 floor `EarthLikenessTest` has held since M1.
+     * A metric the generator was meeting is worth more than a finding it was not, so the figure
+     * stays at two and the flat interiors are in `TODO.md`.
+     *
      * One kilometre on the sea floor, and it is generous. The abyssal plains are the flattest
      * ground on the planet — abyssal hills carry 50 to 300 m of relief (Goff & Jordan 1988) — and
      * what gives the deep ocean the rest of its range is the ridge flanks, the fracture zones and

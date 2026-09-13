@@ -48,7 +48,11 @@ class BoundaryPairTest {
     private val pairSeeds = listOf(1L, 3L, 11L, 17L, 22L, 23L)
 
     /** A seed carrying island arcs and continental rifts, for the reported profiles. */
-    private val arcSeed = 3L
+    // Re-picked at S2: the crusts are now chosen by area rather than by count, so which plates are
+    // oceanic changed on every seed and seed 3 no longer makes an island arc at all. The scan below
+    // reads seed 17 with 31,175 arc cells and 98,394 rift cells, the largest pairing of the two in
+    // seeds 1..24.
+    private val arcSeed = 17L
 
     /**
      * The world with the plate-base step flattened, which is what makes the belts measurable.

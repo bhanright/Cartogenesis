@@ -211,6 +211,18 @@ class SnowBalanceTest {
             )
 
             // ---- (b) the carving mask, reconstructed from the pre-glaciation terrain
+            //
+            // Weighed without the ice load, since S2. An ice sheet presses its bed down and bends
+            // the plate for a couple of hundred kilometres around itself, so with the load on, the
+            // set of cells that "moved from the pre-glaciation terrain" is the carving *and* the
+            // flexure — 44,474 cells on seed 7 against the 4,000 the ice actually stands on, and
+            // a tenth of them warm, because a moat reaches past a margin by construction. This
+            // clause is about where the ice *cut*, so the load is switched off for it and asserted
+            // on its own in `IsostasyTest`.
+            val carving = WorldGenerationEngine.generateBlocking(
+                config(seed).withoutBalance()
+                    .let { it.copy(isostasy = it.isostasy.copy(iceLoad = false)) }
+            )
             val uncarved = uncarvedTerrain(seed)
             val freezing = uncarved.config.glaciation.freezingC
             val provisional = ClimateStage.buildTemperature(uncarved.config, uncarved.sea)
@@ -218,9 +230,9 @@ class SnowBalanceTest {
             var aboveFreezing = 0
             var maxExceedanceC = 0f
             for (i in 0 until uncarved.config.width * uncarved.config.height) {
-                if (!off.sea.isLand[i]) continue
+                if (!carving.sea.isLand[i]) continue
                 val moved = kotlin.math.abs(
-                    off.sea.relativeElevation.data[i] - uncarved.sea.relativeElevation.data[i]
+                    carving.sea.relativeElevation.data[i] - uncarved.sea.relativeElevation.data[i]
                 ) > 1e-5f
                 if (!moved) continue
                 carvedCells++

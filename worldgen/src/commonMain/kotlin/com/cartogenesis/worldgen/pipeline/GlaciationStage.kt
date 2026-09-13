@@ -750,6 +750,47 @@ object GlaciationStage {
         }
 
         Isostasy.Flexure(config).deflectionMetres(load, load)
+
+        // Referred to the ground the ice is nowhere near, which is where the datum belongs for a
+        // load that covers a few per cent of a planet. The filter carries no zero-frequency term,
+        // so its answer sums to nothing over the whole map — which means a sheet pressing its own
+        // bed down half a kilometre lifts every cell of the far hemisphere by ten or twenty metres
+        // to pay for it, and that is an artefact of where the datum was put rather than anything
+        // the mantle does. Subtracting the mean over the ice-free ground puts it back: the far
+        // field reads nothing, the moat around the sheet reads what it should, and the bed under
+        // the sheet reads the difference.
+        var awayFromIce = 0.0
+        var awayCells = 0
+        for (cell in 0 until cellCount) {
+            if (frozen[cell]) continue
+            awayFromIce += load[cell].toDouble()
+            awayCells++
+        }
+        val farField = if (awayCells == 0) 0f else (awayFromIce / awayCells).toFloat()
+
+        // And faded out over the distance a plate actually carries a load, which is a few flexural
+        // parameters. Beyond that the answer this filter gives is not the plate's: a transform on a
+        // grid that wraps has no far field to lose the load into, so what should die away over two
+        // hundred kilometres instead spreads over the whole map as a metre or two of tilt. The
+        // taper puts the boundary where the physics puts it — `Isostasy.Flexure` has the number —
+        // and leaves the ground beyond it exactly where the ice found it.
+        val distanceToIce = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestIce = IntArray(cellCount) { -1 }
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) continue
+            distanceToIce[cell] = 0f
+            nearestIce[cell] = cell
+        }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToIce, nearestIce)
+        val reachCells = (
+            FLEXURAL_PARAMETERS_OF_REACH * Isostasy.Flexure(config).flexuralParameterMetres /
+                (config.cellWidthKm * 1_000.0)
+            ).toFloat().coerceAtLeast(1f)
+        for (cell in 0 until cellCount) {
+            val fade = (1f - distanceToIce[cell] / reachCells).coerceIn(0f, 1f)
+            load[cell] = (load[cell] - farField) * fade
+        }
+
         // The bend is a change in altitude, and the field this stage works in is piecewise: a land
         // cell is measured against the land's half of the ruler and a water cell against the sea's,
         // so each converts through its own.
@@ -758,6 +799,13 @@ object GlaciationStage {
         for (cell in 0 until cellCount) {
             val bend = load[cell]
             if (bend > deepest) deepest = bend
+            // Sub-metre bends are dropped, and not for speed. A flexure is a filter over the whole
+            // grid, so its answer is non-zero in every cell of the map however far from the ice it
+            // is — and "this cell was touched by the glaciation stage" is a question three guards
+            // ask by comparing the field before and after. A bend of a few centimetres a thousand
+            // kilometres from the nearest sheet is not a landform and must not read as one: without
+            // this floor `SnowBalanceTest` counts every land cell on the map as carved.
+            if (bend > -MIN_MEANINGFUL_BEND_METRES && bend < MIN_MEANINGFUL_BEND_METRES) continue
             carved[cell] -=
                 if (isLand[cell]) scale.reliefShareOfMetres(bend) else scale.depthShareOfMetres(bend)
         }
@@ -2146,6 +2194,22 @@ object GlaciationStage {
         }
         return removed
     }
+
+    /**
+     * The smallest bend of the crust under an ice load that is worth writing into the terrain, in
+     * metres. See [iceLoadDepression].
+     */
+    private const val MIN_MEANINGFUL_BEND_METRES = 1f
+
+    /**
+     * How far past an ice sheet's margin its own bend is carried, in flexural parameters.
+     *
+     * Three, which is where a plate's answer to a load has fallen to a few per cent of its peak:
+     * the first zero crossing of the flexure of a line load is at three quarters of a flexural
+     * parameter and the forebulge at one, and by three there is nothing left to draw. See
+     * [iceLoadDepression].
+     */
+    private const val FLEXURAL_PARAMETERS_OF_REACH = 3.0
 
     /** The least thickness any glacier is credited with. See where [GlacialMass] is filled in. */
     private const val MIN_THICKNESS = 0.5f

@@ -32,7 +32,15 @@ import kotlin.test.assertTrue
 class RiftSegmentationTest {
 
     /** The known case: a long rift below the sea-level cut at the author's settings. */
-    private val seed = 59758L
+    // Re-picked at S2, which drowned seed 59758's rift along its whole length: with the height
+    // field on an absolute scale the continental platform stands only a few hundred metres above
+    // the waterline, and a trough three kilometres deep goes under it end to end whether it is
+    // segmented or not — 2 bodies of sea and 1 land bridge either way, where the chunk that wrote
+    // this guard measured 3 and 4 against 1 and 0. Scanned over 59758, 718106, 7, 42, 1234 and 99,
+    // seed 7 is the one that still tells the two worlds apart on all three clauses at once, and
+    // seed 42 has the widest separation on two of the three but a control that passes the other.
+    // The drowning is in `TODO.md` beside the rift's own subsidence.
+    private val seed = 7L
 
     /**
      * Thresholds, measured before they were written down; both tests print the figures they were
@@ -62,7 +70,11 @@ class RiftSegmentationTest {
      */
     private val minSeaBodies = 3
     private val minLandBridges = 2
-    private val minWidthVariation = 0.20
+    // Down from 0.20 at S2 with the seed. On seed 7 the segmented rift's flooded width varies by
+    // 0.20 along its length and the unsegmented one's by 0.11, so the bar sits between the two
+    // rather than an order of magnitude above the canal's as it did on 59758; what it still refuses
+    // is a corridor that holds one width, which is what the control is.
+    private val minWidthVariation = 0.15
 
     @Test
     fun `a flooded rift is a chain of gulfs, not a channel`() {

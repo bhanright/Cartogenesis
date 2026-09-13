@@ -13,12 +13,13 @@ import kotlin.test.assertTrue
 /**
  * What the chromes that made a promise in numbers actually measure.
  *
- * Most of the fifteen are claims about appearance and are reviewed by looking at a screenshot. Six
- * are not. "High contrast" and "colour-blind" are claims with published thresholds behind them, and
- * a chrome that made either claim and missed it would be worse than no chrome at all — a reader
- * would choose it *because* of the promise. F7's four make a quieter promise and the same kind: a
- * chrome is a room somebody works in for an hour, and one whose secondary text or whose armed
- * button sat under WCAG AA would be a room nobody could work in, however good it looked.
+ * Most of the sixteen are claims about appearance and are reviewed by looking at a screenshot.
+ * Seven are not. "High contrast" and "colour-blind" are claims with published thresholds behind
+ * them, and a chrome that made either claim and missed it would be worse than no chrome at all — a
+ * reader would choose it *because* of the promise. F7's four and F24's one make a quieter promise
+ * and the same kind: a chrome is a room somebody works in for an hour, and one whose secondary text
+ * or whose armed button sat under WCAG AA would be a room nobody could work in, however good it
+ * looked.
  *
  * So each is measured with [ColorVision], which is also what `ClearStyleTest` measures the map style
  * with, so the two guards cannot come to mean different things by the same number.
@@ -83,6 +84,18 @@ class ChromeContrastTest {
          * short of AAA's 7.0:1".
          */
         const val ACCENT_MARGIN = 10.0
+
+        /**
+         * How far the alarm has to sit from the two colours a two-colour chrome is made of.
+         *
+         * The same currency as [ACCENT_MARGIN] and a different question, so a different figure: not
+         * "can a reader with a colour deficiency tell these two states apart", but "is this a third
+         * colour at all, or a shade of one of the two". 20 is well past the point where anybody
+         * would call it two colours, and it is what a chrome built from a pair has to clear before
+         * its alarm means anything — Lemon Blueberry's pink measures 51.1 from the lemon accent,
+         * 59.0 from the panel it is read on and 43.2 from the ink beside it.
+         */
+        const val ALARM_MARGIN = 20.0
 
         /**
          * The eleven chromes as they were on `main` at 27fd260, role by role.
@@ -551,6 +564,95 @@ class ChromeContrastTest {
                 "darkened at ${bronzeWord.rounded()}:1; hessian twine block ${twine.rounded()}:1 " +
                 "against woven linen"
         )
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // F24's one.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `every text pair in the Lemon Blueberry chrome clears WCAG AA`() {
+        assertAA(ThemeChoice.LEMON_BLUEBERRY)
+    }
+
+    /**
+     * The decision F24 was asked to make by measuring, re-measured here rather than remembered.
+     *
+     * The chunk left which of the two colours is the ground open, on the condition that the
+     * arrangement clearing WCAG AA with the higher-contrast Stop button won. Both were built to the
+     * same rules and both cleared AA, so the Stop button decided it — and a figure that only ever
+     * lived in a report is a figure nobody can check a year from now. So the arrangement that lost
+     * is written down as the four colours that decided it and measured again on every run: the
+     * lemon-ground chrome's accent, the wash its armed button would have been stained with, and the
+     * two the same button ships in.
+     *
+     * The 7.38 the losing arrangement's worst pair measured is not re-derived here — that would
+     * mean carrying a second whole scheme in a test file — but the shipped chrome's own worst is
+     * printed by [assertAA] above, and it is 7.76.
+     */
+    @Test
+    fun `Lemon Blueberry puts the blueberry underneath, which is the arrangement that measured`() {
+        val scheme = ThemeChoice.LEMON_BLUEBERRY.scheme(systemDark = false)
+        val detail = ThemeChoice.LEMON_BLUEBERRY.detail()
+
+        // The blueberry is the room and the lemon is the writing, not the other way round.
+        assertTrue(
+            ColorVision.luminance(scheme.onSurface.toArgb()) >
+                ColorVision.luminance(scheme.surface.toArgb()),
+            "the lemon is no longer the ink: the chrome has been turned over"
+        )
+        assertEquals(
+            scheme.background,
+            detail.ground(scheme),
+            "the window is no longer the darkest of the fruit"
+        )
+
+        // The armed button, which is Stop while a world is being built. Neither chrome inverts it,
+        // so in both it is the accent read against a wash of the ground.
+        val shipped = ColorVision.contrast(
+            detail.label(scheme).toArgb(),
+            scheme.primaryContainer.toArgb()
+        )
+        // The arrangement that lost: a lemon ground (#FAF2D2 panels) wants an accent dark enough to
+        // be read against a near-white yellow (#3B2F78), and the deepest stain it can put under a
+        // button without the button becoming a block is #E4D7A2.
+        val rejected = ColorVision.contrast(0xFF3B2F78.toInt(), 0xFFE4D7A2.toInt())
+
+        println(
+            "CHROME lemon blueberry: Stop ${shipped.rounded()}:1 with the blueberry underneath, " +
+                "against ${rejected.rounded()}:1 with the lemon underneath"
+        )
+        assertTrue(
+            shipped > rejected,
+            "the arrangement shipped has the worse Stop button: ${shipped.rounded()}:1 against " +
+                "${rejected.rounded()}:1, so F24 chose the wrong way round"
+        )
+        assertTrue(shipped >= AA, "Stop measures ${shipped.rounded()}:1, short of AA")
+    }
+
+    /**
+     * That the alarm is a third colour and not a shade of either.
+     *
+     * A chrome built from two colours has nowhere obvious to put "something has gone wrong", and
+     * the tempting answer — a deeper blueberry, or a hotter lemon — is one a reader cannot tell
+     * from the accent at a glance. Lemon Blueberry's answer is chemical: blueberry pigment is an
+     * anthocyanin, so acid turns it pink, and this asserts that the resulting colour really is far
+     * enough from both to carry the meaning on its own. 20 CIEDE2000 is the margin `ClearStyleTest`
+     * holds the colour-blind map style's realm fills to, and this is the same question.
+     */
+    @Test
+    fun `the Lemon Blueberry alarm is neither the lemon nor the blueberry`() {
+        val scheme = ThemeChoice.LEMON_BLUEBERRY.scheme(systemDark = false)
+        val fromAccent = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.primary.toArgb())
+        val fromGround = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.surface.toArgb())
+        val fromInk = ColorVision.deltaE2000(scheme.error.toArgb(), scheme.onSurface.toArgb())
+        println(
+            "CHROME lemon blueberry alarm: dE2000 ${fromAccent.rounded()} from the accent, " +
+                "${fromGround.rounded()} from the panel, ${fromInk.rounded()} from the ink"
+        )
+        assertTrue(fromAccent >= ALARM_MARGIN, "the alarm is ${fromAccent.rounded()} from the accent")
+        assertTrue(fromGround >= ALARM_MARGIN, "the alarm is ${fromGround.rounded()} from the panel")
+        assertTrue(fromInk >= ALARM_MARGIN, "the alarm is ${fromInk.rounded()} from the ink")
     }
 
     /**

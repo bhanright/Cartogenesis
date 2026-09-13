@@ -542,7 +542,7 @@ private const val SCALE_BAR_TICK = 7
 /**
  * The frame round the title block, as this chrome frames one.
  *
- * Four of the fifteen chromes ask for something and eleven ask for nothing, and the eleven get the
+ * Four of the sixteen chromes ask for something and twelve ask for nothing, and the twelve get the
  * modifier back untouched — no border, no padding, no draw node — which is what keeps their legends
  * pixel-identical. The stitched and doubled forms are drawn rather than bordered because
  * `Modifier.border` takes one stroke and neither of those is one stroke.

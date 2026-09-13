@@ -620,7 +620,7 @@ private fun Application(
      * laid inside a `Surface`, and a `Surface` is what otherwise says what ink its paper takes. So
      * `LocalContentColor` here was Material's own default — plain black — and the library's two
      * headings and every unstyled line of a realm's page were drawn in it. On paper that is very
-     * nearly right and nobody noticed for two rounds of review; on the fifteen chromes whose ground
+     * nearly right and nobody noticed for two rounds of review; on the sixteen chromes whose ground
      * is not paper it ran from poor to invisible, and on High contrast it was black on pure black
      * at exactly 1.0:1. The controls around them were never affected, because a text field, a
      * button and a card each carry their own colour or their own `Surface`.
@@ -843,7 +843,7 @@ private fun Application(
 
     /** The keystrokes, previewed above everything, in whichever arrangement is drawn. */
     val frame = Modifier.fillMaxSize()
-        // The paper the panels are laid on, which for eleven of the fifteen chromes is the same
+        // The paper the panels are laid on, which for eleven of the sixteen chromes is the same
         // paper the panels are — see [ChromeDetail.windowGround].
         .background(LocalChromeDetail.current.ground(MaterialTheme.colorScheme))
         // So the cloth runs behind the gutter between the panels and the map as well as inside
@@ -1459,7 +1459,7 @@ private fun PanelHeader(
         // the reader who wants out of a generation is looking at the button they started it with,
         // and a Generate greyed out beside a Stop elsewhere would be two controls for one decision.
         // The label is the whole of the difference - no colour of its own, because the danger roles
-        // are not part of what the fifteen chromes were measured against and a hand-styled button
+        // are not part of what the sixteen chromes were measured against and a hand-styled button
         // is what F1 took out of this file.
         Button(
             onClick = if (generating) onStop else onGenerate,

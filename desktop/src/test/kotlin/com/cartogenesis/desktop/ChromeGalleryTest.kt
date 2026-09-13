@@ -336,6 +336,53 @@ class ChromeGalleryTest {
     }
 
     /**
+     * F24's one, at 1440x900 and on a phone.
+     *
+     * Lemon Blueberry is a chrome of two colours and nothing else — no weave, no meander, no
+     * prompt — so what a shot of it has to answer is whether two colours are enough to tell a panel
+     * from the ground it is on, an accent from the ink, and an alarm from either. The phone shot is
+     * the second half of that question and the one the numbers cannot reach: at 390 dp the panels
+     * become a sheet pulled over the map, and a chrome whose ground and whose panel are two shades
+     * of the same violet is a chrome that reads as one flat block at that size.
+     *
+     * Recorded alongside the F6 and F7 shots rather than added to either, so no existing capture
+     * moves.
+     */
+    @Test
+    fun `the Lemon Blueberry chrome is photographed at a desk and on a phone`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val choice = ThemeChoice.LEMON_BLUEBERRY
+
+        val wide = shoot(dark = false, choice = choice)
+        File(dir, "f24-lemonblueberry.png").writeBytes(wide.png)
+        assertTrue(wide.distinctColours > 200, "the Lemon Blueberry shot is nearly blank")
+
+        val (down, up) = shootCompact(dark = false, width = 390, height = 844, choice = choice)
+        File(dir, "f24-lemonblueberry-phone.png").writeBytes(down.png)
+        File(dir, "f24-lemonblueberry-phone-sheet.png").writeBytes(up.png)
+        assertTrue(down.distinctColours > 200, "the Lemon Blueberry phone shot is nearly blank")
+        assertTrue(
+            down.fingerprint != up.fingerprint,
+            "pulling the sheet up in Lemon Blueberry changed nothing on screen"
+        )
+
+        // And that the chrome reached the composition at all: the same window in the chrome the
+        // application opens in is a different picture, which is the one thing a screenshot of a
+        // colour scheme can assert on its own.
+        val plain = shoot(dark = false, choice = ThemeChoice.LIGHT)
+        assertTrue(
+            wide.fingerprint != plain.fingerprint,
+            "Lemon Blueberry rendered the same window as Light: the scheme never arrived"
+        )
+
+        println(
+            "CHROME wrote the ${WIDTH}x$HEIGHT and 390x844 F24 shots to ${dir.absolutePath}; " +
+                "fingerprints wide ${wide.fingerprint}, phone ${down.fingerprint}, " +
+                "sheet ${up.fingerprint}"
+        )
+    }
+
+    /**
      * The settings dialog in the two F7 chromes whose lettering only shows there.
      *
      * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own
@@ -463,17 +510,27 @@ class ChromeGalleryTest {
      * where Generate lives now, so the sheet goes up first and the map-only shot is taken after it
      * comes back down — which is also the only assertion available that the handle works in both
      * directions.
+     *
+     * [choice] defaults to the chrome the application opens in, which is what every caller before
+     * F24 passed by leaving it out, so their captures are the captures they were.
      */
     @OptIn(ExperimentalTestApi::class)
-    private fun shootCompact(dark: Boolean, width: Int, height: Int): Pair<Shot, Shot> {
+    private fun shootCompact(
+        dark: Boolean,
+        width: Int,
+        height: Int,
+        choice: ThemeChoice = ThemeChoice.SYSTEM
+    ): Pair<Shot, Shot> {
         var down: Shot? = null
         var up: Shot? = null
         runDesktopComposeUiTest(width = width, height = height) {
             val platform = TouchPlatform()
             setContent {
-                CartogenesisTheme(dark = dark, coarsePointer = platform.coarsePointer) {
-                    CartogenesisApp(platform)
-                }
+                CartogenesisTheme(
+                    dark = dark,
+                    choice = choice,
+                    coarsePointer = platform.coarsePointer
+                ) { CartogenesisApp(platform) }
             }
             waitForIdle()
             // The sheet's own handle. "Settings…" on the File menu is a different string and that

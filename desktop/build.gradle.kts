@@ -82,7 +82,10 @@ tasks.withType<Test>().configureEach {
 val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.ExportAuditTest",
     // H5's own 2048 pair, four worlds and four renders: the same tier for the same reason.
-    "com.cartogenesis.desktop.SeaLevelHistoryAuditTest"
+    "com.cartogenesis.desktop.SeaLevelHistoryAuditTest",
+    // F13's render review: the same two worlds at 2048, drawn in three styles with four details of
+    // each. Ninety seconds of generation for thirty pictures nothing but a person can judge.
+    "com.cartogenesis.desktop.ClimateReliefGalleryTest"
 )
 
 /**

@@ -78,13 +78,13 @@ class EngravingPlan(width: Int) {
     /**
      * What the central difference is multiplied by to become a slope.
      *
-     * `MapRasterizer.hillshadeScale` over the stencil's reach. This is the one figure that has to
+     * `ReliefShading.slopeScale` over the stencil's reach. This is the one figure that has to
      * scale with the width, and for the opposite reason to everything else here: eight pixels of a
      * 2048 grid cover a quarter of the ground eight pixels of a 512 grid cover, so without the scale
      * the same hillside would read four times flatter on the larger plate and take four times less
      * ink.
      */
-    val gradientScale: Float = MapRasterizer.hillshadeScale(width) / gradientStencilCells
+    val gradientScale: Float = ReliefShading.slopeScale(width) / gradientStencilCells
 
     /**
      * Where the first coastal line sits, in pixels from the shore.

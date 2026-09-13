@@ -29,9 +29,9 @@ import kotlin.test.assertTrue
  *    plate: an engraver handed a larger one draws the same hachure with the same nib and fits more
  *    of them on it. So the pitch below is measured in pixels and asserted identical at 512, 1024,
  *    2048 and 4096, and the stroke *count* over the same ground is asserted to grow as the square
- *    of the grid ratio. The control is the drawing enlarged with the sheet, which is what F9
- *    shipped first and what the review sent back: at 2048 its hachures are dashes thirty pixels
- *    long and its stipple is polka dots.
+ *    of the grid ratio. The control is the drawing enlarged with the sheet, which is what shipped
+ *    first and what the review sent back: at 2048 its hachures are dashes thirty pixels long and
+ *    its stipple is polka dots.
  */
 class PenAndInkTest {
 
@@ -59,9 +59,8 @@ class PenAndInkTest {
          * Nought, near enough, and that is the point: every mark is a fixed count of pixels, so the
          * only thing that can move this is how the cone's own geometry falls across the grid.
          * Measured at 0.7% across 512, 1024, 2048 and 4096 — 8.96, 9.02, 9.02 and 9.03 pixels —
-         * and the bar is 5%. The control, the same drawing enlarged with the sheet, which is what
-         * F9 shipped first and what the review sent back, goes 8.96, 17.69, 35.18, 70.13: out by
-         * a factor of nearly eight over the same range.
+         * and the bar is 5%. The control, the same drawing enlarged with the sheet, goes 8.96,
+         * 17.69, 35.18, 70.13: out by a factor of nearly eight over the same range.
          */
         const val MAX_PITCH_DRIFT = 0.05
 
@@ -80,37 +79,54 @@ class PenAndInkTest {
         const val MAX_DENSITY_DRIFT = 0.08
 
         /**
-         * Every style's 512 fantasy render, hashed.
+         * Every style's 512 fantasy render, hashed, as it stands today.
          *
-         * F9 redraws one style, and the cheapest way to be sure it redrew only that one is to hold
-         * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
-         * that is supposed to have changed.
+         * A change detector rather than a claim about any particular colour. What it is good for
+         * is the *shape* of a change: a chunk meaning to redraw one style can check here that it
+         * redrew only that one, and a chunk that moves the land under all eleven — a new sky, a
+         * climate that reaches the land ramp, a shoreline cut a different way — shows up as all
+         * eleven moving together. One entry out of step with the rest is the thing to look at.
          *
-         * Recorded at v2.0.0 and re-recorded once at S1, which moved the world rather than the
-         * drawing of it: the sea's own stand gained a depth in metres and a ruler to read it
-         * against, so the terrain the hydraulic rounds cut is a little different and every style
-         * draws the difference. That the ten move *together* is what this still proves; a style
-         * redrawn on its own would show up as one entry out of step with the rest.
+         * A chunk that means to move them all re-records the lot and says so in its report; how
+         * far a coastline actually moved is measured rather than hashed, in `LittoralCoastTest`
+         * and in `GEOGRAPHY.md`. See REALISM_PLAN.md, F9, F13, F14 and F17, for which chunk moved
+         * what, and the 2.0.3 forward-merge row for the re-recording before this one.
+         *
+         * Re-recorded again for W1, which is the plainest case there is of the world moving under
+         * all eleven rather than one style being redrawn: the temperature is solved by an energy
+         * balance now instead of drawn from a curve, so every biome the tints are read off comes
+         * from a different climate. All eleven moved, which is what this guard is for.
          */
-        val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -1251658432,
-            MapStyle.VELLUM to -894858538,
-            MapStyle.INK_WASH to -2025451479,
-            MapStyle.NAUTICAL to 353681580,
-            MapStyle.MIDNIGHT to 1100943998,
-            MapStyle.SCHOOLROOM to 2113429675,
-            MapStyle.VERDANT to -102946448,
-            MapStyle.SCROLL to -1099453844,
-            MapStyle.MARS to -956322526,
-            MapStyle.CLEAR to -703349694
+        val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
+            MapStyle.ATLAS to 1263892093,
+            MapStyle.VELLUM to 688539628,
+            MapStyle.INK_WASH to 687077229,
+            MapStyle.NAUTICAL to 232021106,
+            MapStyle.MIDNIGHT to -709250048,
+            MapStyle.SCHOOLROOM to 1618684963,
+            MapStyle.VERDANT to 908692413,
+            MapStyle.SCROLL to -1466800791,
+            MapStyle.PEN_AND_INK to 446722196,
+            MapStyle.MARS to 539786463,
+            MapStyle.CLEAR to -1790745628
         )
 
-        /** The gallery's world, at the size the guards measure on. */
-        val WORLD: WorldMap by lazy {
-            WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            )
-        }
+        /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
+        val WORLD: WorldMap get() = TestWorlds.gallery
+
+        /**
+         * The grid the plan is built at, the pen's own reference size, and the band of the cone
+         * the stroke scan measures over.
+         *
+         * The band avoids the summit, where every bearing meets and the strokes cross, and the
+         * foot, where the flank runs out below the slope floor and there is no ink to count.
+         */
+        const val REFERENCE_SIDE = 512
+        const val SCANNED_BAND_FROM = 0.12f
+        const val SCANNED_BAND_TO = 0.45f
+
+        /** Where a pixel counts as inked, on the 0-to-1 scale [Engraving.hachure] returns. */
+        const val INKED = 0.5f
 
         /** How far the structure tensor looks, in stroke pitches. */
         const val TENSOR_WINDOW_PITCHES = 1.5f
@@ -127,30 +143,39 @@ class PenAndInkTest {
         /** Where two neighbouring strokes stop reading as one stroke and start reading as a break. */
         val SEAM_RADIANS = Math.toRadians(60.0)
 
-        /** The ink gain the fixed-bearing hatch used, so the control is the control that shipped. */
+        /**
+         * The fixed-bearing hatch exactly as it shipped, so the control is the control that
+         * shipped: the north-west lamp at 32 degrees, its ambient and swing, its clamp, and a
+         * diagonal comb of five cells stepped in sixths. See [fixedBearingHatch].
+         */
         const val OLD_INK_GAIN = 1.15f
+        const val OLD_LAMP_EAST = -0.6f
+        const val OLD_LAMP_SOUTH = -0.6f
+        const val OLD_LAMP_HEIGHT = 0.53f
+        const val OLD_LAMP_AMBIENT = 0.72f
+        const val OLD_LAMP_SWING = 0.55f
+        const val OLD_DARKEST = 0.45f
+        const val OLD_BRIGHTEST = 1.35f
+        const val OLD_COMB_PITCH = 5
+        const val OLD_COMB_STEPS = 6f
     }
 
     @Test
-    fun `every other style is left alone to the pixel`() {
-        val moved = ArrayList<String>()
-        UNCHANGED_STYLES.forEach { (style, expected) ->
-            val now = fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = style)))
-            println("PENINK ${style.name} to $now")
-            if (now != expected) moved.add("${style.label} $expected -> $now")
+    fun `every style renders the pixels it is recorded as rendering`() {
+        val drawn = MapStyle.entries.associateWith {
+            fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = it)))
         }
-        assertTrue(
-            moved.isEmpty(),
-            "styles that no longer render the pixels they rendered when this was last recorded:" +
-                " ${moved.joinToString("; ")}"
-        )
         println(
-            "PENINK the other ${UNCHANGED_STYLES.size} styles are unchanged at 512; " +
-                "pen and ink now fingerprints " +
-                fingerprint(
-                    MapRasterizer.rasterize(WORLD, RenderOptions(style = MapStyle.PEN_AND_INK))
-                )
+            "PENINK fingerprints at 512: " +
+                drawn.entries.joinToString(", ") { "${it.key.name} ${it.value}" }
         )
+        RECORDED_STYLES.forEach { (style, expected) ->
+            assertEquals(
+                expected,
+                drawn[style],
+                "${style.label} no longer renders the pixels recorded for it"
+            )
+        }
     }
 
     @Test
@@ -192,7 +217,7 @@ class PenAndInkTest {
 
     @Test
     fun `the pen is the same size at every resolution, and lays more strokes on a bigger plate`() {
-        val sizes = listOf(512, 1024, 2048, 4096)
+        val sizes = listOf(REFERENCE_SIDE, 1024, 2048, 4096)
         val pen = sizes.associateWith { strokeScan(it, enlarged = false) }
         val enlarged = sizes.associateWith { strokeScan(it, enlarged = true) }
 
@@ -218,9 +243,10 @@ class PenAndInkTest {
 
         // The other half of the same property, and the one a reader sees: a fixed pitch in pixels
         // over a grid n times finer means n squared times as many strokes on the same ground.
-        sizes.filter { it != 512 }.forEach { side ->
-            val ratio = pen[side]!!.runs.toDouble() / pen[512]!!.runs
-            val expected = (side.toDouble() / 512) * (side.toDouble() / 512)
+        sizes.filter { it != REFERENCE_SIDE }.forEach { side ->
+            val ratio = pen[side]!!.runs.toDouble() / pen[REFERENCE_SIDE]!!.runs
+            val expected =
+                (side.toDouble() / REFERENCE_SIDE) * (side.toDouble() / REFERENCE_SIDE)
             println(
                 "PENINK $side lays %.2f times as many strokes as 512 over the same ground, against %.0f"
                     .format(ratio, expected)
@@ -242,9 +268,10 @@ class PenAndInkTest {
 
     // ---- measurements ----
 
+    /** The ordinary 17-and-31 hash over every pixel. Order matters, which is the point. */
     private fun fingerprint(pixels: IntArray): Int {
         var hash = 17
-        for (p in pixels) hash = hash * 31 + p
+        for (pixel in pixels) hash = hash * 31 + pixel
         return hash
     }
 
@@ -274,19 +301,21 @@ class PenAndInkTest {
 
         var total = 0.0
         var windows = 0
-        var y = window + reach
-        while (y < height - window - reach) {
-            var x = window + reach
-            while (x < width - window - reach) {
+        var row = window + reach
+        while (row < height - window - reach) {
+            var column = window + reach
+            while (column < width - window - reach) {
                 val gradientX =
-                    (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) *
-                        plan.gradientScale
+                    (elevation.sample(column + reach, row) -
+                        elevation.sample(column - reach, row)) * plan.gradientScale
                 val gradientY =
-                    (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) *
-                        plan.gradientScale
+                    (elevation.sample(column, row + reach) -
+                        elevation.sample(column, row - reach)) * plan.gradientScale
                 val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
-                if (slope >= MEASURED_SLOPE_FLOOR && allLand(land, width, x, y, window)) {
-                    val tensor = structureTensor(pixels, width, x, y, window)
+                if (slope >= MEASURED_SLOPE_FLOOR &&
+                    allLand(land, width, column, row, window)
+                ) {
+                    val tensor = structureTensor(pixels, width, column, row, window)
                     if (tensor != null) {
                         // The picture's steepest change runs across the strokes; the strokes run a
                         // quarter turn from it, and the aspect is what they should be along.
@@ -297,9 +326,9 @@ class PenAndInkTest {
                         windows++
                     }
                 }
-                x += SAMPLE_STEP
+                column += SAMPLE_STEP
             }
-            y += SAMPLE_STEP
+            row += SAMPLE_STEP
         }
         return AspectError(
             if (windows == 0) 0.0 else Math.toDegrees(total / windows),
@@ -308,9 +337,11 @@ class PenAndInkTest {
     }
 
     private fun allLand(land: BooleanArray, width: Int, x: Int, y: Int, window: Int): Boolean {
-        for (dy in -window..window) {
-            val row = (y + dy) * width
-            for (dx in -window..window) if (!land[row + x + dx]) return false
+        for (offsetRow in -window..window) {
+            val rowStart = (y + offsetRow) * width
+            for (offsetColumn in -window..window) {
+                if (!land[rowStart + x + offsetColumn]) return false
+            }
         }
         return true
     }
@@ -323,21 +354,23 @@ class PenAndInkTest {
         y: Int,
         window: Int
     ): Double? {
-        var xx = 0.0
-        var yy = 0.0
-        var xy = 0.0
-        for (dy in -window..window) {
-            for (dx in -window..window) {
-                val i = (y + dy) * width + x + dx
-                val ix = (luminance(pixels[i + 1]) - luminance(pixels[i - 1])).toDouble()
-                val iy = (luminance(pixels[i + width]) - luminance(pixels[i - width])).toDouble()
-                xx += ix * ix
-                yy += iy * iy
-                xy += ix * iy
+        var eastEast = 0.0
+        var southSouth = 0.0
+        var eastSouth = 0.0
+        for (offsetRow in -window..window) {
+            for (offsetColumn in -window..window) {
+                val cell = (y + offsetRow) * width + x + offsetColumn
+                val eastward = (luminance(pixels[cell + 1]) - luminance(pixels[cell - 1])).toDouble()
+                val southward =
+                    (luminance(pixels[cell + width]) - luminance(pixels[cell - width])).toDouble()
+                eastEast += eastward * eastward
+                southSouth += southward * southward
+                eastSouth += eastward * southward
             }
         }
-        if (xx + yy < 1.0) return null
-        return 0.5 * atan2(2.0 * xy, xx - yy)
+        // Flat ink: no gradient anywhere in the window, so there is no direction to report.
+        if (eastEast + southSouth < 1.0) return null
+        return 0.5 * atan2(2.0 * eastSouth, eastEast - southSouth)
     }
 
     private fun luminance(argb: Int): Int =
@@ -355,27 +388,36 @@ class PenAndInkTest {
      * The hatch this style used to draw, reproduced so the guards have something to fail against.
      *
      * A diagonal comb at one bearing with a five-cell period, thresholded against the hillshade —
-     * `MapStyle.inked` and the line-art branch of `MapRasterizer` as they stood at 2.0.0.
+     * `MapStyle.inked` and the line-art branch of `MapRasterizer` as they stood at 2.0.0. The
+     * lamp and the ramp are written out rather than called, so that what this test fails against
+     * is a control it owns and cannot lose to a change in [ReliefShading].
      */
     private fun fixedBearingHatch(world: WorldMap): IntArray {
         val width = world.width
         val height = world.height
         val elevation = world.sea.relativeElevation
         val style = MapStyle.PEN_AND_INK
-        val zScale = MapRasterizer.hillshadeScale(width)
+        val slopeScale = ReliefShading.slopeScale(width)
         val pixels = IntArray(width * height) { style.paper }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!world.sea.isLand[i]) continue
-                val dzdx = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * zScale
-                val dzdy = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * zScale
-                val length = sqrt(dzdx * dzdx + dzdy * dzdy + 1f)
-                val lambert = (-dzdx * -0.6f - dzdy * -0.6f + 0.53f) / length
-                val shade = (0.72f + 0.55f * lambert).coerceIn(0.45f, 1.35f)
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val cell = row * width + column
+                if (!world.sea.isLand[cell]) continue
+                val eastward =
+                    (elevation.sample(column + 1, row) -
+                        elevation.sample(column - 1, row)) * slopeScale
+                val southward =
+                    (elevation.sample(column, row + 1) -
+                        elevation.sample(column, row - 1)) * slopeScale
+                val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
+                val lambert =
+                    (-eastward * OLD_LAMP_EAST - southward * OLD_LAMP_SOUTH + OLD_LAMP_HEIGHT) /
+                        normalLength
+                val shade = (OLD_LAMP_AMBIENT + OLD_LAMP_SWING * lambert)
+                    .coerceIn(OLD_DARKEST, OLD_BRIGHTEST)
                 val steepness = (1f - shade).coerceAtLeast(0f)
-                val hatch = (((x + y) % 5) + 1) / 6f
-                if (steepness * OLD_INK_GAIN > hatch) pixels[i] = style.coastline
+                val comb = (((column + row) % OLD_COMB_PITCH) + 1) / OLD_COMB_STEPS
+                if (steepness * OLD_INK_GAIN > comb) pixels[cell] = style.coastline
             }
         }
         return pixels
@@ -389,14 +431,14 @@ class PenAndInkTest {
         val reach = plan.gradientStencilCells
         var measured = 0
         var seams = 0
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
-                val i = y * width + x
-                if (!world.sea.isLand[i]) continue
-                val here = aspectOrNull(elevation, x, y, reach, plan) ?: continue
+        for (row in 1 until height - 1) {
+            for (column in 1 until width - 1) {
+                val cell = row * width + column
+                if (!world.sea.isLand[cell]) continue
+                val here = aspectOrNull(elevation, column, row, reach, plan) ?: continue
                 measured++
-                val east = aspectOrNull(elevation, x + 1, y, reach, plan)
-                val south = aspectOrNull(elevation, x, y + 1, reach, plan)
+                val east = aspectOrNull(elevation, column + 1, row, reach, plan)
+                val south = aspectOrNull(elevation, column, row + 1, reach, plan)
                 val turned = (east != null && foldedDifference(here, east) > SEAM_RADIANS) ||
                     (south != null && foldedDifference(here, south) > SEAM_RADIANS)
                 if (turned) seams++
@@ -432,14 +474,16 @@ class PenAndInkTest {
         val elevation = world.sea.relativeElevation
         val reach = plan.gradientStencilCells
         val slopes = ArrayList<Float>()
-        for (i in world.sea.isLand.indices) {
-            if (!world.sea.isLand[i]) continue
-            val x = i % width
-            val y = i / width
+        for (cell in world.sea.isLand.indices) {
+            if (!world.sea.isLand[cell]) continue
+            val column = cell % width
+            val row = cell / width
             val gradientX =
-                (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
+                (elevation.sample(column + reach, row) -
+                    elevation.sample(column - reach, row)) * plan.gradientScale
             val gradientY =
-                (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
+                (elevation.sample(column, row + reach) -
+                    elevation.sample(column, row - reach)) * plan.gradientScale
             slopes.add(sqrt(gradientX * gradientX + gradientY * gradientY))
         }
         slopes.sort()
@@ -449,7 +493,7 @@ class PenAndInkTest {
             "(blank below %.2f, fully black at %.2f, widest stroke at %.2f)").format(
             slopes.size, at(0.10), at(0.50), at(0.75), at(0.90), at(0.99),
             EngravingPlan.SLOPE_FLOOR,
-            EngravingPlan.SLOPE_FLOOR + EngravingPlan.FULL_INK_AT / gain,
+            EngravingPlan.SLOPE_FLOOR + EngravingPlan.FULL_INK_AT_STEEPNESS / gain,
             EngravingPlan.SLOPE_FLOOR + 1f / gain
         )
     }
@@ -467,35 +511,36 @@ class PenAndInkTest {
      * at every angle and what it counts is how often ink starts.
      *
      * [enlarged] is the control: the same drawing blown up with the sheet, which is what sizing a
-     * mark as a share of the width does and what F9 shipped first. It is the 512 plan's ink read at
-     * map coordinates, so a stroke that is twelve pixels long at 512 is forty-eight at 2048 — which
-     * is exactly the woodcut the review sent back.
+     * mark as a share of the width does and what shipped first. It is the [REFERENCE_SIDE] plan's
+     * ink read at map coordinates, so a stroke that is twelve pixels long at that size is
+     * forty-eight at four times it — which is exactly the woodcut the review sent back.
      */
     private fun strokeScan(width: Int, enlarged: Boolean): StrokeScan {
-        val plan = if (enlarged) EngravingPlan(512) else EngravingPlan(width)
+        val plan = if (enlarged) EngravingPlan(REFERENCE_SIDE) else EngravingPlan(width)
         val gain = MapStyle.PEN_AND_INK.inkGain
         // Half way up the ink ramp, so the strokes are neither hairlines nor a solid mass.
         val slope = EngravingPlan.SLOPE_FLOOR + 0.5f / gain
         val centre = width / 2f
-        val inner = width * 0.12f
-        val outer = width * 0.45f
+        val innerRadius = width * SCANNED_BAND_FROM
+        val outerRadius = width * SCANNED_BAND_TO
 
         var runs = 0L
         var scanned = 0L
-        for (y in 0 until width) {
+        for (row in 0 until width) {
             var wasInk = false
-            for (x in 0 until width) {
-                val dx = x - centre
-                val dy = y - centre
-                val radius = sqrt(dx * dx + dy * dy)
-                if (radius in inner..outer) {
-                    // Under the control the same map position is read at the 512 grid's coordinates,
-                    // so the whole picture arrives magnified by the grid ratio.
-                    val readX = if (enlarged) x * 512 / width else x
-                    val readY = if (enlarged) y * 512 / width else y
+            for (column in 0 until width) {
+                val fromCentreX = column - centre
+                val fromCentreY = row - centre
+                val radius = sqrt(fromCentreX * fromCentreX + fromCentreY * fromCentreY)
+                if (radius in innerRadius..outerRadius) {
+                    // Under the control the same map position is read at the reference grid's
+                    // coordinates, so the whole picture arrives magnified by the grid ratio.
+                    val readX = if (enlarged) column * REFERENCE_SIDE / width else column
+                    val readY = if (enlarged) row * REFERENCE_SIDE / width else row
                     val ink = Engraving.hachure(
-                        readX, readY, dx / radius * slope, dy / radius * slope, plan, gain
-                    ) > 0.5f
+                        readX, readY,
+                        fromCentreX / radius * slope, fromCentreY / radius * slope, plan, gain
+                    ) > INKED
                     scanned++
                     if (ink && !wasInk) runs++
                     wasInk = ink

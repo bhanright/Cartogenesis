@@ -1318,13 +1318,127 @@ data class SeaConfig(
      *
      * Off is the control the guard needs: the drowned basins keep whatever sill they were left.
      */
-    val postCutOutlet: Boolean = true
+    val postCutOutlet: Boolean = true,
+    /**
+     * Whether the waves are allowed to put the coast back in order after the sea has finished
+     * rising.
+     *
+     * [lowstandMetres] drops the base level for nine of the twelve hydraulic rounds, so running
+     * water works every cell within 120 m of the shoreline, and the transgression floods all of it.
+     * That is the right half of the story and it is the only half the generator told: measured at
+     * 512 over five seeds, the lowstand takes the shoreline from 43,967 cells to 60,755 and puts a
+     * saw-tooth one to four cells deep on *every* coast, mountainous or flat, sheltered or exposed.
+     * Earth's coasts are not alike in that way. The sea reached its present level about six
+     * thousand years ago and the shore has been worked ever since, so a coast on low ground is a
+     * graded arc of beach, barrier and marsh — Texas, Holland, Bengal — while a coast on high
+     * ground keeps the outline the drowning gave it, which is Galicia, Maine and western Norway.
+     *
+     * See `LittoralGrading`, which holds the criterion and the Earth figures behind it. Off is the
+     * control its guard needs, and is the coast the 2.0.2 release drew.
+     */
+    val littoralGrading: Boolean = true,
+    /**
+     * How far along the shore the littoral system carries sediment, in kilometres.
+     *
+     * Twenty-three, which is Earth's spacing of the inlets through a barrier coast — the length of
+     * shore a drift system holds unbroken: 10 to 30 km between the Frisian islands, 20 to 60
+     * through the Outer Banks, 180 for Padre Island in one piece. It sets how many sweeps of the
+     * grading a fully depositional coast gets, so a re-entrant narrower than twice this is what
+     * fills.
+     *
+     * A length on the ground, converted to cells where the stage reads it, like every other reach
+     * in this file. It comes out as one cell at 512, two at 1024 and four at 2048, and rounds to
+     * nothing at 128 or 256 — correctly, since the whole six thousand years of it is well under a
+     * cell there and the pass switches itself off.
+     */
+    val littoralReachKm: Double = 23.4375,
+    /**
+     * How large a window the land behind a coast is judged over, in kilometres.
+     *
+     * 187 km, eight cells at 512. A coastal plain's own scale: the United States' Atlantic plain
+     * runs 50 to 200 km inland, the Gulf plain 150 to 500, the North European plain 200 to 400. The
+     * window is square, so the same figure is also how far *along* the shore the judgement is
+     * averaged, and that is the half of it that turned out to matter. At 47 km — the width of the
+     * narrowest of those plains, which was the first figure tried — the classification flickered
+     * from cell to cell along a single coast and the coasts came out uniformly a little smoother
+     * instead of some smooth and some not: the spread of the per-stretch dimension went from 0.105
+     * ungraded to 0.102 graded, the wrong way. At 187 km a coast keeps one character for a stretch,
+     * which is how Earth's coasts come, and the spread goes to 0.108.
+     */
+    val littoralBackshoreKm: Double = 187.5,
+    /**
+     * How far out to sea the exposure of a coast is measured, in kilometres.
+     *
+     * 492 km, twenty-one cells at 512. Wave height grows as the square root of the fetch until the
+     * sea is fully arisen, and for an ordinary wind that takes a few hundred kilometres of open
+     * water; five hundred is the round figure. Beyond it the waves stop growing, so measuring
+     * further would only average in coasts on the other side of an ocean.
+     */
+    val littoralFetchKm: Double = 492.1875,
+    /**
+     * The share of a world's shoreline that is a depositional coast, and so the share the littoral
+     * pass grades.
+     *
+     * Earth's own figure, put into the model directly rather than reached through a threshold on
+     * the height of the land — the way [enclosedSeaMaxKm2] carries the Caspian's share of Earth's
+     * surface and `GlaciationConfig.maxLakeShareOfMap` carries Superior's. Luijendijk et al. (2018),
+     * *Scientific Reports* 8:6641, classify 31% of the world's ice-free shoreline as sandy from
+     * three decades of satellite imagery; Bird (2000), *Coastal Geomorphology: An Introduction*,
+     * puts the depositional share at about a third; Young and Carilli (2019) put the rocky share at
+     * 52%, leaving 48% for everything softer. Thirty-one per cent is the tightest of those and the
+     * one with a measurement behind it.
+     *
+     * It is a share rather than a height because no height can be derived. The postglacial rise —
+     * did the sea flood a flat, or run up a valley — calls 59% of this generator's shoreline
+     * depositional; a coastal plain's own one-metre-per-kilometre gradient calls 1.9% of it
+     * depositional; and picking a figure in between so that the answer came out at Earth's third
+     * would be tuning a threshold to a target. The gap between the two is real and it is the
+     * low-lying *rocky* coast — Finland, the Canadian Shield, western Scotland, flat and ragged
+     * both — which needs the lithology the plan's H3 has not built yet. See `LittoralGrading`.
+     */
+    val littoralDepositionalShare: Float = 0.31f,
+    /**
+     * Whether a drowned valley too narrow for its cell is filled back to the ground either side of
+     * it.
+     *
+     * [lowstandMetres] cuts a channel down to the low stand at every shore, and the transgression floods
+     * every one of them, so the cut comes back with a notch at every stream mouth: measured on the
+     * four standard seeds and 298405 at 512, the coastline's Richardson dimension over its first
+     * octave is 1.398 against 1.115 over its last, where a real coast measures much the same at
+     * every scale. On the grid a channel is a whole cell wide whatever it carries. Earth's coasts at
+     * six to twelve kilometres are indented by the Chesapeake, the Severn and the Gironde and by
+     * nothing smaller — the Rias Baixas are two to seven kilometres across and a 1024 map cannot
+     * hold one.
+     *
+     * So a drowned cell keeps its water only where the valley behind it is at least half the cell
+     * wide, by Leopold and Maddock's square root of the catchment; below that the cell takes the
+     * height it would have if the channel had the share of it that it really has, which is above the
+     * waterline. See `DrownedValleys` for the five estuaries the constant is measured from.
+     *
+     * Off is the control its guard needs, and is the coast release 2.0.2 drew.
+     */
+    val drownedValleyFill: Boolean = true
 )
 
 @Serializable
 data class ClimateConfig(
-    val equatorTemperatureC: Float = 32f,
-    val poleTemperatureC: Float = -28f,
+    /**
+     * How much warmer or colder than the model's own answer this world's global mean is, in
+     * degrees Celsius.
+     *
+     * The temperature is solved rather than declared — see
+     * [com.cartogenesis.worldgen.pipeline.EnergyBalance] — and with Earth's own sun, greenhouse and
+     * albedo the answer is 13.8 C, which is Earth's. This is the one knob on that: a shift of the
+     * greenhouse, applied as a change in the outgoing-longwave offset and solved so that the
+     * degrees asked for are the degrees delivered, feedback and all. Positive is a warmer world
+     * with less ice and a flatter pole-to-equator gradient; negative is a colder one.
+     *
+     * It replaced [equatorTemperatureC] and [poleTemperatureC], which were the two anchors of the
+     * curve the model retired. Their job — how warm the world is — survives here; their other job,
+     * how steep it is from equator to pole, does not, because that is now a consequence of heat
+     * transport and ice rather than something a reader states.
+     */
+    val globalMeanShiftC: Float = 0f,
     /** Temperature drop per kilometre of altitude, in C. */
     val lapseRateCPerKm: Float = 6.5f,
     /**
@@ -1360,11 +1474,14 @@ data class ClimateConfig(
     /**
      * How far the thermal equator migrates toward the summer hemisphere, in degrees of latitude.
      *
-     * Everything seasonal follows from this one number: it is what the latitude term of the
-     * temperature curve is offset by, and it is what carries the wind belts and the rain belts
-     * with it, so the horse latitudes and the ITCZ march up and down the map over the year the
-     * way they do on Earth. Ten degrees is the modest, oceanic figure; the great continents swing
-     * further than that, which is continentality's business rather than this one's.
+     * Everything seasonal follows from this one number. It carries the wind belts and the rain
+     * belts, so the horse latitudes and the ITCZ march up and down the map over the year the way
+     * they do on Earth; and it is what the planet's axial tilt is read off, so it decides the
+     * sunlight the energy balance receives in each half of the year as well
+     * ([com.cartogenesis.worldgen.pipeline.EnergyBalance.obliquityDegrees]). Ten degrees is the
+     * modest, oceanic figure and is Earth's own zonal-mean migration, which is why it corresponds
+     * to Earth's own 23.44-degree tilt; the great continents swing further than that, which is the
+     * coastline's business rather than this one's.
      */
     val seasonalTiltDegrees: Float = 10f,
     /**
@@ -1392,25 +1509,6 @@ data class ClimateConfig(
      */
     val meridionalWind: Float = 0.3f,
     /**
-     * How much further inland a cell's seasonal swing grows once it can no longer feel the sea.
-     *
-     * Water's heat capacity is what damps a coast's year down from what its latitude alone would
-     * predict — that is [ClimateStage]'s maritime-influence term. Continentality is the same fact
-     * seen from the other side of the coastline: a cell with no nearby water to borrow the damping
-     * from swings the full, undamped amount, and one at `continentality` above that. The amplitude
-     * applied to the seasonal departure from the annual mean is `1 + continentality *
-     * continentalityFactor`, where `continentalityFactor` is [ClimateStage]'s actual cell distance
-     * to the nearest sea, clamped to 0..1 over three [OceanConfig.coastalReachCells] — a shoreline cell
-     * (factor 0) keeps the amplitude at 1 and a cell three reaches inland or further (factor 1)
-     * reaches the full `1 + continentality`. An earlier version read the blurred water-exposure
-     * field here instead, on the theory that "exposed to water" and "close to water" were the same
-     * question; they were not at this radius — two box-blur passes read barely 0.3 exposure right
-     * at the edge of a single `coastalReachCells`, so a coast measured that way was already most of the
-     * way to fully continental. Zero reproduces the world from before this setting existed, bit
-     * for bit — Siberia and Ireland at the same latitude, swinging by the same amount.
-     */
-    val continentality: Float = 0.6f,
-    /**
      * How strongly a current's sea-surface temperature anomaly scales the moisture the march
      * picks up over that sea cell, per degree of anomaly.
      *
@@ -1425,6 +1523,20 @@ data class ClimateConfig(
      * from before this setting existed, bit for bit, whatever the anomaly.
      */
     val currentMoisture: Float = 0.07f,
+    /**
+     * Whether the sea freezes.
+     *
+     * On, a water cell whose sea surface sits at or below the freezing point of sea water in a
+     * season is under ice for that season
+     * ([com.cartogenesis.worldgen.pipeline.ClimateResult.summerSeaIce]), the moisture march takes
+     * nothing at all from it, and the warm season's mask is what the biome draws as pack ice.
+     *
+     * Off leaves the polar ocean evaporating as freely as the tropics do, which is the world before
+     * W1 and is the control its guard needs. It is not a plausible world: an ocean under a metre of
+     * ice is a lid, the polar sea is one of the driest places on the planet, and an ice sheet that
+     * can draw on it never stops growing.
+     */
+    val seaIce: Boolean = true,
     /**
      * Whether ice is decided by a snow mass balance rather than by a temperature.
      *
@@ -1928,16 +2040,18 @@ data class GlaciationConfig(
      *
      * 6 C, from the estimate of the last glacial maximum's *global mean* cooling: Tierney et al.,
      * *Glacial cooling and climate sensitivity revisited* (Nature 584, 2020), put it at 6.1 ± 0.4 C
-     * below pre-industrial, and earlier proxy syntheses at 4-7. It is not applied uniformly — the
-     * glacial cooling was strongly polar-amplified and applying its mean everywhere gets the
-     * geography of the ice wrong; see
-     * [com.cartogenesis.worldgen.pipeline.SnowBalance.glacialCoolingByRow], which turns this one
-     * figure into the latitude ramp the proxies actually describe.
+     * below pre-industrial, and earlier proxy syntheses at 4-7.
      *
-     * Rainfall is left as it is, although the glacial world was also drier, which makes the mask a
-     * little generous. Generous is the forgiving direction for a *bound* on carving — the stage's
-     * own catchment, relief, length and sinuosity tests decide what is actually cut inside it, and
-     * its run-out already reaches eight cells past the mask.
+     * It is a **forcing**, not a shift applied to a finished field:
+     * [com.cartogenesis.worldgen.pipeline.EnergyBalance.solarScaleForCooling] asks how far the sun
+     * must be dimmed for the global mean to fall this far — three per cent, as it turns out — and
+     * the model then answers with a colder world of its own. The cooling comes out polar-amplified,
+     * which is what the proxies describe (MARGO 2009 put the tropical oceans 1.5-3 C below present
+     * and the high northern latitudes 10-20 C below it), because the poles turn white and not
+     * because anyone wrote a latitude ramp; until W1 there was such a ramp, a third of the mean at
+     * the equator to twice it at the pole, and the model retired it. The colder world's rainfall is
+     * the march's answer to that world too, so the mask is no longer generous by leaving a glacial
+     * climate as wet as an interglacial one.
      *
      * Zero makes the carving mask today's ice, which was the first attempt and left one measured
      * world with 4,047 frozen cells, 92 of them in channelled country and not one glacier — so it

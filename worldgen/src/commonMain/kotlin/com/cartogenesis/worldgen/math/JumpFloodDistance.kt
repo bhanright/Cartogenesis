@@ -8,7 +8,7 @@ import kotlin.math.sqrt
  * flooding. The X axis wraps; the Y axis does not, exactly as [DistanceTransform] behaves.
  *
  * This is the drop-in replacement for the chamfer transform wherever the *distance itself* is
- * read — continentality's distance from water, the shelf's distance from land, the boundary
+ * read — the marine blend's distance from water, the shelf's distance from land, the boundary
  * profiles' distance from a plate edge. A chamfer transform can only step along the eight
  * directions a square grid offers, so what it measures is an octagonal metric: it agrees with
  * Euclid along the axes and along the diagonals and overstates it by up to 8.2% at the bearings

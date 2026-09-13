@@ -74,12 +74,17 @@ object RasterView {
  * tables) are copies because the pipeline holds them as types no graphics API can read: a
  * `BooleanArray`, an array of enum objects, and a function of an id.
  *
+ * The A and B of [scalarA], [indexA] and [colorsA] are the shader's own buffer names
+ * (`ScalarA`, `IndexA`, `ColorsA` in `GpuRaster.SOURCE`) and stay as they are, so the two sides of
+ * the upload can be read against each other line for line. What each slot carries depends on the
+ * view rather than on its name, which is what the table below is for.
+ *
  * The seasonal temperature and rainfall views collapse into one [RasterView] each, because they
  * differ only in which field lands in [scalarA]. Which fields are populated depends on the view:
  *
  * | view      | scalarA            | scalarB | indexA  | indexB         | biome |
  * |-----------|--------------------|---------|---------|----------------|-------|
- * | fantasy   | -                  | -       | -       | -              | yes   |
+ * | fantasy   | ground dryness     | ground coldness | - | -            | yes   |
  * | political | -                  | -       | realm   | -              | -     |
  * | peoples   | -                  | -       | people  | -              | -     |
  * | elevation | -                  | -       | -       | -              | -     |
@@ -151,9 +156,30 @@ class RasterRecipe(
     val temperatureRamp: IntArray,
     val precipitationRamp: IntArray,
     val biomeColors: IntArray,
+    /**
+     * How much of each biome's ground is under a closed canopy, in [Biome] order.
+     *
+     * The one thing about a cell's climate that is a property of its vegetation rather than of its
+     * weather, so it travels as a table indexed by the biome the device already has rather than as
+     * a third field the size of the map. See [ClimateTint].
+     */
+    val biomeCanopy: FloatArray,
     val paper: Int,
     val biomeWash: Float,
     val biomeMuting: Float,
+    /** How far the land ramp follows the climate. See [MapStyle.climateTint]. */
+    val climateTint: Float,
+    /**
+     * How black the depth contours run, and how far apart they are as a fraction of the elevation
+     * field's own range. See [Isobaths]. The interval depends on the world's metre scale, which is
+     * why it travels rather than being a constant on the device, and so does the gradient below
+     * which the floor is a plain and carries no contour at all.
+     */
+    val isobathInk: Float,
+    val isobathInterval: Float,
+    val isobathFlattestSlope: Float,
+    /** How far the central difference that measures the floor's fall reaches, in cells. */
+    val isobathSlopeStencil: Int,
     val lake: Int,
     val lakeDeep: Int,
     val coastline: Int,
@@ -198,11 +224,18 @@ class RasterRecipe(
 
     // ---- which passes run ----
     val hillshade: Boolean,
+    /** Light the relief from one lamp rather than from the sky. See [RenderOptions.singleLamp]. */
+    val singleLamp: Boolean,
     /**
-     * How far the hillshade's central differences are exaggerated. Scales with resolution, because
+     * How far the relief's central differences are exaggerated. Scales with resolution, because
      * at four times the grid a step covers a quarter of the ground.
      */
-    val hillshadeScale: Float,
+    val slopeScale: Float,
+    /**
+     * How far the openness stencil's shortest step reaches, in cells. Scales with resolution too,
+     * and for the opposite reason: it measures the country rather than the sheet.
+     */
+    val opennessStep: Int,
     val showLakes: Boolean,
     val showCoastline: Boolean,
     val showBorders: Boolean
@@ -217,15 +250,15 @@ class RasterRecipe(
          * here rather than silently rendering as something else.
          */
         fun of(world: WorldMap, options: RenderOptions): RasterRecipe? {
-            val w = world.width
-            val h = world.height
-            val cells = w * h
+            val cellsAcross = world.width
+            val cellsDown = world.height
+            val cellCount = cellsAcross * cellsDown
             val style = options.style
             val view = options.view
 
-            val land = ByteArray(cells)
+            val land = ByteArray(cellCount)
             val isLand = world.sea.isLand
-            for (i in 0 until cells) if (isLand[i]) land[i] = 1
+            for (cell in 0 until cellCount) if (isLand[cell]) land[cell] = 1
 
             var biomes: ByteArray? = null
             var scalarA: FloatArray? = null
@@ -238,6 +271,13 @@ class RasterRecipe(
             val viewId = when (view) {
                 MapView.FANTASY -> {
                     biomes = biomeOrdinals(world)
+                    // The climate's two per-cell numbers, computed here rather than on the device
+                    // for the reason the colour tables are: an aridity index solved twice would be
+                    // two slightly different deserts.
+                    if (style.climateTint > 0f) {
+                        scalarA = ClimateTint.drynessField(world)
+                        scalarB = ClimateTint.coldnessField(world)
+                    }
                     RasterView.FANTASY
                 }
 
@@ -318,10 +358,10 @@ class RasterRecipe(
             val engraveWater = style.lineArt && view.styled
             if (engraveWater && biomes == null) biomes = biomeOrdinals(world)
 
-            if (scalarA != null && scalarA.size != cells) return null
-            if (scalarB != null && scalarB.size != cells) return null
-            if (indexA != null && indexA.size != cells) return null
-            if (indexB != null && indexB.size != cells) return null
+            if (scalarA != null && scalarA.size != cellCount) return null
+            if (scalarB != null && scalarB.size != cellCount) return null
+            if (indexA != null && indexA.size != cellCount) return null
+            if (indexB != null && indexB.size != cellCount) return null
 
             val showLakes = options.showLakes && view.showsTerrain
             val lakes = world.rivers.lakes
@@ -329,15 +369,15 @@ class RasterRecipe(
             val lakeSurface = if (showLakes) {
                 FloatArray(lakes.lakes.size) { lakes.lakes[it].surfaceElevation }
             } else null
-            if (lakeId != null && lakeId.size != cells) return null
+            if (lakeId != null && lakeId.size != cellCount) return null
 
             val borders = options.bordersVisible
             val nation = if (borders) world.nations.nationId else null
-            if (nation != null && nation.size != cells) return null
+            if (nation != null && nation.size != cellCount) return null
 
             return RasterRecipe(
-                width = w,
-                height = h,
+                width = cellsAcross,
+                height = cellsDown,
                 view = viewId,
                 elevation = world.sea.relativeElevation.data,
                 land = land,
@@ -363,9 +403,16 @@ class RasterRecipe(
                 temperatureRamp = MapPalette.temperatureRamp,
                 precipitationRamp = MapPalette.precipitationRamp,
                 biomeColors = IntArray(Biome.entries.size) { MapPalette.biome(Biome.entries[it]) },
+                biomeCanopy = ClimateTint.canopyTable(),
                 paper = style.paper,
                 biomeWash = style.biomeWash,
                 biomeMuting = style.biomeMuting,
+                climateTint = if (view == MapView.FANTASY) style.climateTint else 0f,
+                isobathInk = if (view == MapView.FANTASY) style.isobathInk else 0f,
+                isobathInterval = Isobaths.interval(world.config.scale),
+                isobathFlattestSlope =
+                    Isobaths.flattestSlope(world.config, cellsAcross, cellsDown),
+                isobathSlopeStencil = Isobaths.slopeStencil(cellsAcross),
                 lake = style.lake,
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,
@@ -375,9 +422,11 @@ class RasterRecipe(
                 reliefStrength = style.reliefStrength,
                 lineArt = style.lineArt,
                 inkGain = style.inkGain,
-                engraving = if (style.lineArt) EngravingPlan(w) else null,
+                engraving = if (style.lineArt) EngravingPlan(cellsAcross) else null,
                 shoreDistance = if (style.lineArt) {
-                    ShoreDistance.of(w, h, MapRasterizer.dryLandMask(world, showLakes))
+                    ShoreDistance.of(
+                        cellsAcross, cellsDown, MapRasterizer.dryLandMask(world, showLakes)
+                    )
                 } else null,
                 iceBiome = if (biomes != null) Biome.ICE_SHEET.ordinal else -1,
                 engraveWater = engraveWater,
@@ -390,7 +439,9 @@ class RasterRecipe(
                 anomalyWarm = MapPalette.ANOMALY_WARM,
                 anomalyCold = MapPalette.ANOMALY_COLD,
                 hillshade = options.showHillshade && view != MapView.NORMALS,
-                hillshadeScale = MapRasterizer.hillshadeScale(w),
+                singleLamp = options.singleLamp,
+                slopeScale = ReliefShading.slopeScale(cellsAcross),
+                opennessStep = ReliefShading.opennessStep(cellsAcross),
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,
                 showBorders = borders
@@ -399,7 +450,7 @@ class RasterRecipe(
 
         private fun biomeOrdinals(world: WorldMap): ByteArray {
             val biome = world.climate.biome
-            return ByteArray(biome.size) { biome[it].ordinal.toByte() }
+            return ByteArray(biome.size) { cell -> biome[cell].ordinal.toByte() }
         }
 
         /**
@@ -411,9 +462,9 @@ class RasterRecipe(
          * where there is nothing to catch it.
          */
         private inline fun colourTable(ids: IntArray, colour: (Int) -> Int): IntArray {
-            var highest = 0
-            for (id in ids) if (id > highest) highest = id
-            return IntArray(highest + 1) { colour(it) }
+            var highestId = 0
+            for (id in ids) if (id > highestId) highestId = id
+            return IntArray(highestId + 1) { id -> colour(id) }
         }
     }
 }

@@ -144,11 +144,24 @@ class DepositionTest {
      * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
      * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
      *
+     * And a third time at F17, which moves the shoreline on purpose. A drowned valley narrower than
+     * the cell it is written into is filled back to the ground either side of it, and at 128 a cell
+     * is ninety-four kilometres across a twelve-thousand-kilometre world — wider than the mouth of
+     * any drowned valley on Earth bar the Rio de la Plata — so at this size almost every one of them
+     * goes — as far as each valley's own walls allow, since the new floor may never stand above
+     * them nor fail to fall towards the sea. That is the rule working rather than failing, and the
+     * littoral grading contributes nothing to it, because its reach is a distance and
+     * twenty-three kilometres is a quarter of a cell here. The cut is still exactly 62% of the
+     * cells. See `SeaConfig.drownedValleyFill`, and `LittoralCoastTest` for what the same rule does
+     * at the sizes anybody looks at.
+     *
      * And a thirteenth time at S2, which gave the height field an absolute vertical scale: the two
-     * crusts float at their own levels, so the percentile falls through different ground and seed
-     * 42's land at 128 goes from 6290 cells to 6232. The cut itself has not moved.
+     * crusts float at their own levels, so the percentile falls through different ground. S2's own
+     * branch read 6232 where the pre-S2 tree read 6290; F17's branch read 6426 where it read 6290;
+     * the figure below is the two together, taken on the merged tree. The cut itself has not moved
+     * in any of them: exactly 62% of the cells still lie below it.
      */
-    private val startingPointLand = 6232
+    private val startingPointLand = 6426
 
     @Test
     fun `every round conserves mass`() {

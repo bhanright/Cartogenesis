@@ -11,6 +11,7 @@ import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.system.measureTimeMillis
@@ -39,6 +40,18 @@ class RiverWidthTest {
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
 
+        /** The seeds for the mouth: William's own, and the four the audit standardised on. */
+        val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
+
+        /**
+         * The full pen as a constant, in output pixels, whatever the size of the sheet.
+         *
+         * Kept as the control the pen guard is run against, for the reason [supersededPen] is
+         * kept: a rule that has been replaced is the cheapest proof that its replacement can be
+         * told apart from it.
+         */
+        const val SUPERSEDED_FULL_PIXELS: Float = 5f
+
         /**
          * How closely the drawn pen must track the square root of the discharge, as a Pearson
          * correlation over every drawn point of every river on a seed.
@@ -50,16 +63,6 @@ class RiverWidthTest {
          * some other power of the discharge cannot reach it, however nearly straight it looks.
          */
         const val MIN_CORRELATION = 0.999
-
-        /**
-         * How many times the widest drawn river must beat the narrowest, in pixels, on every seed.
-         *
-         * Four is the figure that separates "these vary" from "these are alike": below it the two
-         * ends of a map's drainage read as the same line with a different weight of ink. Earth is
-         * far past it — the Amazon at Óbidos is some ten kilometres of channel against a
-         * two-metre headwater — and no map can span that, which is what the hairline is for.
-         */
-        const val MIN_SPREAD = 4.0
 
         /**
          * What share of confluences must show the trunk *strictly* wider than either branch.
@@ -128,7 +131,8 @@ class RiverWidthTest {
     private fun supersededPen(discharge: Float, smallest: Float): Float =
         (0.55f * (discharge / smallest).pow(0.28f)).coerceIn(0.5f, 2.8f).coerceAtLeast(0.9f)
 
-    private fun pen(ratio: Float): Float = RiverPen.widthPixels(ratio)
+    private fun pen(ratio: Float, cellsAcross: Int = SIDE): Float =
+        RiverPen.widthPixels(ratio, cellsAcross)
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         WorldGenerationEngine.generateBlocking(
@@ -177,8 +181,23 @@ class RiverWidthTest {
         )
     }
 
+    /**
+     * How many times the widest drawn river beats the narrowest is a property of the *sheet* now,
+     * not a bar of its own.
+     *
+     * That ratio was held at four, which separated "these vary" from "these are alike" while the
+     * pen was five pixels wide whatever the size of the map. The full pen is now 0.24% of the
+     * width and the hairline is still 0.8 px, so the nib spans 1.5x at 512, 3.1x at 1024, 6.1x at
+     * 2048 and 12.3x at 4096: a small sheet cannot show a trunk six times a headwater, because the
+     * headwater is already the finest mark a nib leaves. What is still worth asserting is that a
+     * map uses the *whole* of the nib it has — the biggest river drawn at the full pen and the
+     * smallest at the hairline, which is also what says `RiverWidth` normalised against the
+     * network and not against something else. The superseded rule's two ends are its own clamps,
+     * 0.9 and 2.8 px, and belong to no sheet at all.
+     */
     @Test
-    fun `the widest river on a map is several times the narrowest`() {
+    fun `the rivers on a map use the whole of the pen the sheet allows`() {
+        val nib = RiverPen.fullPixels(SIDE) / RiverPen.HAIRLINE_PIXELS
         var worstNow = Double.MAX_VALUE
         var bestBefore = 0.0
         SEEDS.forEach { seed ->
@@ -203,21 +222,34 @@ class RiverWidthTest {
             worstNow = minOf(worstNow, spreadNow)
             bestBefore = maxOf(bestBefore, spreadBefore)
             println(
-                ("RIVERWIDTH seed=$seed pen %.2f-%.2f px, spread %.2fx; " +
+                ("RIVERWIDTH seed=$seed pen %.2f-%.2f px, spread %.2fx against the nib's %.2fx; " +
                     "superseded %.2f-%.2f px, spread %.2fx").format(
-                    narrowNow, wideNow, spreadNow, narrowBefore, wideBefore, spreadBefore
+                    narrowNow, wideNow, spreadNow, nib, narrowBefore, wideBefore, spreadBefore
                 )
             )
             assertTrue(
-                spreadNow >= MIN_SPREAD,
-                "seed $seed: widest %.2f px against narrowest %.2f px is only %.2fx, under $MIN_SPREAD"
-                    .format(wideNow, narrowNow, spreadNow)
+                abs(narrowNow - RiverPen.HAIRLINE_PIXELS) < 0.01f,
+                "seed $seed: the finest river is drawn %.2f px, not the hairline".format(narrowNow)
+            )
+            assertTrue(
+                abs(wideNow - RiverPen.fullPixels(SIDE)) < 0.01f,
+                "seed $seed: the biggest river is drawn %.2f px, not the full pen %.2f px"
+                    .format(wideNow, RiverPen.fullPixels(SIDE))
             )
         }
+        // The superseded rule's ends are its own clamps, 0.9 and 2.8 px, and have nothing to do
+        // with the sheet: on a 512 sheet it draws a trunk wider than the whole nib, on a 4096 one
+        // less than a third of it.
         assertTrue(
-            bestBefore < MIN_SPREAD,
-            "the superseded rule now spreads %.2fx, so the guard has stopped discriminating"
-                .format(bestBefore)
+            abs(bestBefore - nib) > 0.1,
+            "the superseded rule now spans the nib exactly, so the guard has stopped discriminating"
+        )
+        println(
+            ("RIVERWIDTH the nib spans %.2fx at 512, %.2fx at 1024 and %.2fx at 2048; the drawn " +
+                "spread is %.2fx at 512, %.2fx under the superseded rule").format(
+                nib, RiverPen.fullPixels(1024) / RiverPen.HAIRLINE_PIXELS,
+                RiverPen.fullPixels(2048) / RiverPen.HAIRLINE_PIXELS, worstNow, bestBefore
+            )
         )
     }
 
@@ -235,10 +267,10 @@ class RiverWidthTest {
             //
             // It can still fall where the water does, and on rare occasions the water does: the
             // routing hands a handful of cells a downstream neighbour that carries less than they
-            // do, five of the 100224 land cells of seed 1234 among them. That is the flow graph's
+            // do, six of the 101415 land cells of seed 1234 among them. That is the flow graph's
             // own inconsistency and not the pen's — the superseded rule, monotone in the same
-            // quantity, narrows at exactly the same points — so it is counted and held to a
-            // thousandth of the drawn course rather than treated as a width failure.
+            // quantity, narrows at exactly the same points — so it is counted against the land it
+            // is a property of rather than treated as a width failure.
             var narrowings = 0
             var againstTheWater = 0
             var steps = 0
@@ -257,19 +289,29 @@ class RiverWidthTest {
                 "seed $seed: a drawn river narrowed at $againstTheWater points " +
                     "where it carried no less water"
             )
+            val landCells = network.world.sea.isLand.count { it }
             println(
-                "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water"
+                "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water, " +
+                    "on $landCells land cells"
             )
-            // One in five hundred, and the figure is about the flow graph rather than the pen.
-            // A thousandth was written when seed 1234's drawn network ran to more steps than it
-            // does; S1's terrain leaves it 2517, so a thousandth is two steps and the graph's own
-            // inconsistent cells are three. Measured over the three seeds the counts are 0, 0 and
-            // 3, which is the handful the paragraph above describes and not a rate at all — what
-            // holds the pen to account is `againstTheWater`, which is zero on every seed.
+            // Against the **land**, not against the drawn course, and W1 is why. What is being
+            // counted is cells where the routing hands a cell a downstream neighbour carrying less
+            // water than it does — a property of the flow graph over the whole world, a handful per
+            // map, and nothing to do with how much of that graph the pen happens to draw.
+            //
+            // Stating it as a share of the drawn steps made it move whenever the drawn network did,
+            // and it moved twice. It was a thousandth until the terrain shortened seed 1234's
+            // course to 2517 steps, which made a thousandth two steps against the graph's own three
+            // inconsistent cells, so it became a five-hundredth; then W1's rainfall moved both the
+            // course and the count again. One in ten thousand land cells is the same claim stated
+            // about the thing it is a property of, and it does not move when the pen draws more or
+            // less of the world. What holds the *pen* to account is `againstTheWater`, which is
+            // zero on every seed.
             assertTrue(
-                narrowings * 500 <= steps,
-                "seed $seed: $narrowings of $steps drawn steps run into less water than the " +
-                    "step above, past one in five hundred"
+                narrowings * 10_000 <= landCells,
+                "seed $seed: $narrowings drawn steps run into less water than the step above, " +
+                    "on $landCells land cells — past one in ten thousand, so the routing is " +
+                    "inconsistent more often than a handful of cells"
             )
 
             // Only the confluences the flow graph agrees are confluences: the same handful of cells
@@ -329,32 +371,167 @@ class RiverWidthTest {
     }
 
     /**
-     * The pen is a count of output pixels, so a bigger sheet must not draw a fatter line.
+     * The pen is a share of the sheet, so a map drawn twice as large has rivers twice as wide.
      *
      * The world is regenerated at the export's size rather than upscaled, so the two renders share
      * no cell and cannot be compared pixel for pixel; what has to agree is the nib, which is the
-     * span of stroke widths the overlay asks for. The old renderer multiplied the width by the
-     * resolution ratio, so this same measurement at 1024 gave twice the pen it gave at 512.
+     * span of stroke widths the overlay asks for. A constant pen holds that span fixed in output
+     * pixels, which
+     * is the rule this replaces: the same country at 1024 got the same five-pixel trunk it got at
+     * 2048, twice the weight of ink against half as much map.
      */
     @Test
-    fun `an export is drawn with the same pen as the preview`() {
+    fun `the pen is the same share of the sheet at every size`() {
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
         val spans = listOf(512, 1024).map { side ->
-            val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.width }
+            val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.widthPixels }
             val span = widths.min() to widths.max()
-            println("RIVERWIDTH ${side}x$side draws %.2f-%.2f px".format(span.first, span.second))
+            println(
+                "RIVERWIDTH ${side}x$side draws %.2f-%.2f px, full is %.3f%% of the width"
+                    .format(span.first, span.second, span.second * 100f / side)
+            )
             span
         }
+
+        // The widest drawn stroke is a hair under the full pen, and has to be: the mouth's own
+        // cell is trimmed away at the shoreline, so the last stroke carries the width of the cell
+        // above it. A hundredth of a pixel is the room that needs.
+        listOf(512, 1024).forEachIndexed { k, side ->
+            assertTrue(
+                abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
+                    abs(spans[k].second - RiverPen.fullPixels(side)) < 0.01f,
+                "at $side the drawn pen ${spans[k]} is not the pen RiverPen declares"
+            )
+        }
+        // Twice the sheet, twice the stroke. The hairline is a nib, not a width, and stays put.
         assertTrue(
-            abs(spans[0].first - spans[1].first) < 1e-4f &&
-                abs(spans[0].second - spans[1].second) < 1e-4f,
-            "the pen changed with the resolution: ${spans[0]} at 512, ${spans[1]} at 1024"
+            abs(spans[1].second - 2f * spans[0].second) < 0.02f,
+            "the pen did not double with the sheet: %.3f px at 512, %.3f px at 1024"
+                .format(spans[0].second, spans[1].second)
         )
         assertTrue(
-            abs(spans[0].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
-                abs(spans[0].second - RiverPen.FULL_PIXELS) < 1e-4f,
-            "the drawn pen ${spans[0]} is not the pen RiverPen declares"
+            abs(spans[1].first - spans[0].first) < 1e-4f,
+            "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"
         )
+        // A constant pen is the same stroke on both sheets, so it fails the line above.
+        val supersededAt512 = SUPERSEDED_FULL_PIXELS
+        val supersededAt1024 = SUPERSEDED_FULL_PIXELS
+        assertTrue(
+            abs(supersededAt1024 - 2f * supersededAt512) > 1e-3f,
+            "the superseded pen now doubles with the sheet, so this guard has stopped discriminating"
+        )
+        println(
+            "RIVERWIDTH full pen %.2f px at 512, %.2f px at 1024, against a constant %.2f px"
+                .format(spans[0].second, spans[1].second, SUPERSEDED_FULL_PIXELS)
+        )
+    }
+
+    /**
+     * The ink stops at the shoreline: nothing pools on the open sea beyond a river's mouth.
+     *
+     * Two measurements of the same thing. The geometry is exact and is what the drawing decides:
+     * no stroke may *end* over water, because the round cap that blends one cell-long segment into
+     * the next carries half the stroke's width past wherever it ends. The untrimmed course this
+     * replaces ended every mouth at the centre of the water cell itself, so it fails by
+     * construction, and how far its ink then reached past the coast is measured beside it. The
+     * pixels are what a reader sees: rendered with the rivers on and with them off, no differing
+     * pixel may lie on water with no land anywhere around it.
+     */
+    @Test
+    fun `a river's ink stops at the shoreline`() {
+        val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
+        var worstUntrimmed = 0f
+        var untrimmedEndsOverWater = 0
+        MOUTH_SEEDS.forEach { seed ->
+            val world = world(seed)
+            val w = world.width
+            val h = world.height
+            val water = world.rivers.lakes
+
+            // Where every drawn stroke finishes. A stroke that ends over water carries a round cap
+            // of half its own width out there with it, which is the blob this trims away.
+            var endsOverWater = 0
+            MapRasterizer.overlay(world, options).rivers.forEach { segment ->
+                var x = floor(segment.toX).toInt() % w
+                if (x < 0) x += w
+                val y = floor(segment.toY).toInt().coerceIn(0, h - 1)
+                val cell = y * w + x
+                if (!world.sea.isLand[cell] || water.isOpenWater(cell)) endsOverWater++
+            }
+
+            // The control: the untrimmed course ended at the centre of the water cell itself, so
+            // every mouth on the map put a stroke's end and a round cap out on the water.
+            var mouths = 0
+            var untrimmed = 0f
+            world.rivers.rivers.forEach { river ->
+                val cells = river.cells
+                val mouth = cells.last()
+                if (world.sea.isLand[mouth] && !water.isOpenWater(mouth)) return@forEach
+                mouths++
+                val lastOnLand = cells[cells.size - 2]
+                val half = pen(river.widthRatio[cells.size - 2], w) / 2f
+                untrimmed = maxOf(untrimmed, stepLength(lastOnLand, mouth, w) / 2f + half)
+            }
+            worstUntrimmed = maxOf(worstUntrimmed, untrimmed)
+            untrimmedEndsOverWater += mouths
+
+            val withRivers = pixelsOf(world, options)
+            val without = pixelsOf(world, options.copy(showRivers = false))
+            var onWater = 0
+            var offshore = 0
+            for (i in withRivers.indices) {
+                if (withRivers[i] == without[i] || world.sea.isLand[i]) continue
+                onWater++
+                if (!touchesLand(world, i)) offshore++
+            }
+            println(
+                ("RIVERMOUTH seed=$seed $mouths mouths at water, $endsOverWater strokes ending " +
+                    "over it, untrimmed ink would reach %.2f px past the shore; $onWater sea " +
+                    "pixels inked, $offshore of them offshore").format(untrimmed)
+            )
+            assertTrue(
+                endsOverWater == 0,
+                "seed $seed: $endsOverWater river strokes end over open water"
+            )
+            assertTrue(
+                offshore == 0,
+                "seed $seed: $offshore river pixels lie on water with no land beside them"
+            )
+        }
+        assertTrue(
+            untrimmedEndsOverWater > 0 && worstUntrimmed > 1f,
+            "the untrimmed course no longer ends over water, so this guard has stopped discriminating"
+        )
+        println(
+            "RIVERMOUTH $untrimmedEndsOverWater mouths would have ended over water, the worst " +
+                "%.2f px past the shore; none do".format(worstUntrimmed)
+        )
+    }
+
+    /** Distance between two cells' centres, in cells, across the east-west seam if need be. */
+    private fun stepLength(from: Int, to: Int, cellsAcross: Int): Float {
+        var dx = to % cellsAcross - from % cellsAcross
+        if (dx > cellsAcross / 2) dx -= cellsAcross
+        if (dx < -cellsAcross / 2) dx += cellsAcross
+        val dy = to / cellsAcross - from / cellsAcross
+        return sqrt((dx * dx + dy * dy).toFloat())
+    }
+
+    /** Whether any of a cell's eight neighbours is land. */
+    private fun touchesLand(world: WorldMap, cell: Int): Boolean {
+        val w = world.width
+        val cx = cell % w
+        val cy = cell / w
+        for (dy in -1..1) {
+            val y = cy + dy
+            if (y < 0 || y >= world.height) continue
+            for (dx in -1..1) {
+                var x = (cx + dx) % w
+                if (x < 0) x += w
+                if (world.sea.isLand[y * w + x]) return true
+            }
+        }
+        return false
     }
 
     /**
@@ -368,7 +545,7 @@ class RiverWidthTest {
     @Test
     fun `the river pen touches nothing but the rivers`() {
         val world = world(42L)
-        val reach = (RiverPen.FULL_PIXELS / 2f).toInt() + 2
+        val reach = (RiverPen.fullPixels(world.width) / 2f).toInt() + 2
         val nearRiver = dilatedRiverMask(world, reach)
 
         MapStyle.entries.forEach { style ->

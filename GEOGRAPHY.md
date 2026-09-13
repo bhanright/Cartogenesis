@@ -25,6 +25,69 @@ headwaters — channel cells with no upstream channel — which by definition si
 `RiverEndingsTest` follows the whole drainage and finds no breaks. Depression filling guarantees
 every land cell has a downhill path out.
 
+**A river runs from its farthest source.** A course is traced from the headwater with the longest
+way down to the water rather than from the one already carrying the most, so what the map calls a
+river holds the whole of the longest watercourse in its catchment and every other branch is drawn
+as a tributary of it. Ranking by flow instead picks a short fat tributary surprisingly often, and
+then the river's own upper half is drawn afterwards as a tributary stopping at the junction — the
+union of drawn cells is the same either way, but nothing that reads one `River` as one river is
+right. Measured on seeds 7/42/1234/99 at 512, the drawn courses cover **1.000** of the watercourses
+they stand for by cell count, against 0.780 under the biggest-headwater order (M1's own measure of
+the same defect: 0.484 at 512 and 0.408 at 2048).
+
+**A river is drawn through water narrower than itself.** A lake stands at its basin's spill level,
+which at the ends of the basin covers the channel that feeds it. Where that strip is one cell wide
+it is a river and not a lake — a cell here is 23 km at 512 down to 6 km at 2048, and the Amazon's
+mouth is about 10 — so the tracer and the renderer stop only at *open* water, meaning a lake cell
+belonging to some 2×2 square of its own lake, and run the line through the rest. Left as lake, such
+a strip was painted in flat water with no river over it, and a whole catchment's trunk crossed it as
+a one-pixel thread between two thick channels (a dotted one where the strip ran diagonally and the
+cells met only at their corners). Over seeds 7/42/1234/99 at 512, 237 channel cells stand under
+water one cell wide; before, none of them was drawn and every line that reached one stopped dead.
+
+**A river's ink stops at the shoreline.** A traced course ends *in* the water, so that the line
+reaches it rather than stopping a step short; drawn literally that put the stroke's centre a whole
+cell past the coast and the round cap that blends one cell-long segment into the next half a stroke
+beyond that again — 3.0 to 3.2 pixels of river ink lying on the open sea under F10's pen. The last
+stroke is now cut back along its own course by half its width, so the cap is tangent to the coast
+and the last pixel of the river is the shoreline pixel. Measured on 298405 and seeds 7/42/1234/99 at
+512: no stroke ends over water, and no river pixel falls on water with no land beside it (3 to 16
+before).
+
+**How wide a river is drawn is a share of the sheet.** A drawn river is a cartographic
+exaggeration, not a width to scale: the Amazon's ten-kilometre mouth is 0.08% of a
+twelve-thousand-kilometre world and would be invisible, and a printed map exaggerates a river of
+that class about threefold. So the widest stroke on a map is **0.24% of its width** — 1.2 px at
+512, 2.5 at 1024, 4.9 at 2048, 9.8 at 4096 — and the finest is a 0.8-pixel hairline, which is a
+nib rather than a width and does not grow. Between them the stroke follows Leopold and Maddock's
+square root of discharge. F10 held the full pen at five pixels whatever the size of the sheet,
+which at 2048 was right and at 1024 was twice the ink against the same country. One consequence is
+worth stating: with the hairline fixed, the range a sheet can show shrinks with it — the nib spans
+6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
+are nearly the same line, because the headwater is already the finest mark there is.
+
+**The coast is a line, not a staircase of cells.** The raster inks the landward cell of every
+land–water pair, which is right at one pixel to the cell and wrong at any other size: shrink it and
+the line thins to nothing, enlarge it and the reader is looking at the grid. So the same boundary is
+also traced off the land mask by marching squares — every vertex halfway between one land cell and
+one water cell, so it runs exactly where the raster inks — and stroked over the fill at 0.05% of the
+sheet's width, one pixel at 2048. Where four cells meet in a checkerboard the contour is closed so
+that land touching corner to corner stays one coast, which is the same assumption the flow routing
+makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
+is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
+
+**A map drawn smaller carries fewer features.** Töpfer and Pillewizer measured what cartographers
+actually kept when they derived one map from another (*The principles of selection*, The
+Cartographic Journal 3(1), 1966) and found the count went as the square root of the change in
+scale. So the number of rivers drawn is the traced count times the square root of the pixels one
+cell covers on the surface the reader is looking at: at 2048 in a laptop's pane that is about 0.44,
+and 198 of 718106's 279 rivers are drawn; at four times zoom all 279 are back; an export is drawn
+cell for pixel and never loses one. The cut is on the peak width ratio, which is the square root of
+discharge normalised over the network, so it is a cut on discharge — and because a trunk's peak is
+never below its tributaries', it can never leave a tributary hanging off a river that is not there.
+The coast is generalised the same way, by Douglas–Peucker at half a drawn pixel: 19,634 vertices at
+fit against 51,749 at four times on the same world.
+
 **Mountains come from plate tectonics, in ranges.** Uplift is applied along classified plate
 boundaries — convergent belts, subduction trenches, divergent ridges — rather than scattered. Belts
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole
@@ -116,20 +179,19 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 **Deserts sit near the horse latitudes.** Desert mean latitude 31–33° against a land mean of 41–53°,
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
-**An interior swings more than a coast.** The seasonal departure is scaled by distance from
-water — a jump-flooded Euclidean distance transform from every sea and lake cell, saturating at
-three times the coastal reach — so a shore and an interior at the same latitude no longer swing
-alike. On seed 42 at 50° the interior-versus-coast gap in the seasonal swing is 0.6 °C with
-`continentality` at zero and 8.5 °C at the default 0.6 (measured again at G4; A2 first recorded
-0.2 and 7.5, and the chunks between have moved the coastline under it), and the annual mean is
-bit-identical either way, because the scaling applies to the departure and never to the mean.
+**An interior swings more than a coast.** How much of the sea's year a cell takes falls away from
+the coast with an e-folding of 350 km, measured on a jump-flooded Euclidean distance transform from
+every sea and lake cell, so a shore and an interior at the same latitude do not swing alike. Since
+W1 there is no setting for it: the gap is the difference between the band's two air columns — one
+with a fifty-metre mixed layer under it and one with three metres of soil — and the world's own
+coastline deciding how much of each a place gets. See "Temperature is solved, not drawn".
 
 **The sea has not always been where it is.** The hydraulic rounds grade every channel to the sea
 they can see, so with the sea fixed at today's level no valley may continue below it and every
 coastline is a clean percentile cut. Earth's rivers cut to a stand about 120 m lower and the sea
 came back up their valleys when the ice melted, which is the Chesapeake, the Severn, Galicia's rias
-and the sounds of the Atlantic seaboard. `SeaConfig.lowstand` puts the base level 1.5% of the land's
-relief down — Earth's 120 m against eight kilometres of relief — for the first nine of the twelve
+and the sounds of the Atlantic seaboard. `SeaConfig.lowstandMetres` puts the base level 120 m down,
+read off the height field's own 16,000 m of relief, for the first nine of the twelve
 rounds and walks it up to today over the last three, so the drowned valleys collect some of the
 sediment coming down them as a real estuary does, and the deltas are built at the level the map is
 drawn at. Measured at 512 on seeds 7, 42 and 1234: river mouths lying more than three cells inside a
@@ -175,12 +237,61 @@ the largest such basin covers 1.13% of seed 718106's land with the pass off and 
 Eight passes at most, the loop stopping when a pass finds nothing left to cut: 718106's takes seven
 to stop retreating, seed 99's one.
 
-**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidthCells` of a
-coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
-`shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
+**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidthKm` of a
+coast (468.75 km, which is twenty cells at 512) is remapped onto a shallow platform at
+`shelfDepthMetres` below the shoreline, falling away to the abyss beyond. The remap touches only water,
 so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shallow against 60% with
 the remap off, 0–2.5% of far sea shallow, and zero land cells changed on any seed. Island arcs
 inherit the same platform, which is what makes an archipelago read as one drowned ridge.
+
+**A valley narrower than the cell is not a bay.** The lowstand above cuts a channel down to the low
+stand at every shore, and the transgression floods every one of them, so the cut used to come back
+with a notch at every stream mouth. On the grid a channel is a whole cell wide whatever it carries.
+Measured with a ruler — the coastline's length at one cell against two, which is Richardson's own
+method and, unlike a box count, has no ceiling to run into — the coast of 2.0.2 gives a dimension of
+1.582 over its finest octave against 1.260 from four cells to sixteen, and a real coast gives much
+the same figure at every scale. A disc drawn on the same grid reads 1.006 against 1.000, so the
+excess is the coast and not the ruler. Earth's coasts at six to twelve kilometres are indented by the
+Chesapeake, the Severn and the Gironde and by nothing smaller; the Rias Baixas are two to seven
+kilometres across and a 1024 map cannot hold one. So `SeaConfig.drownedValleyFill` keeps a drowned
+cell as water only where the valley behind it crosses at least half the cell, by Leopold and
+Maddock's square root of the catchment — the constant is 0.08 km per root square kilometre, measured
+off the Chesapeake, the Delaware, the Severn, the Thames and the Gironde — and where it does not, the
+cell takes the height it would have if the channel occupied the share of it that it really does.
+Because the width goes as the root of the area and the bar goes as the cell, the catchment a valley
+needs comes out as a fixed number of cells — about 39 — at every grid. New ground may never stand above the
+ground beside it, nor fail to fall towards the sea, so a valley whose walls are no higher than the
+water at its mouth is left as water. Measured on the five seeds at 512, the excess of the finest
+octave over the coarsest falls from 0.322 to 0.270 with the littoral grading alone and to 0.198 with
+both passes. What is left is not channels — filling *every* drowned notch reaches the same 0.199,
+because the two rules above and not the width bar are what stop the fill — it is the percentile cut
+running through the erosion's own texture at the cell, and it survives with the lowstand switched off
+entirely (0.288 there).
+
+**Not every coast is a ria.** The lowstand above drops the base level everywhere for nine of the
+twelve rounds, so running water works every cell within about 120 m of the shoreline and the
+transgression floods all of it. Measured at 512 pooled over the four standard seeds and 298405, that
+took the shoreline from 43,967 cells to 60,755 and the box dimension over the finest octave from
+1.22 to 1.26, on every coast alike — while the shelf remap moved the coastline not at all, the
+enclosure rule by 7% and the plate detail noise by under 1%. Earth had the same fringe six thousand
+years ago and has spent the time since filling it in where the coast is low: Texas, Holland and
+Bengal are graded arcs of beach and marsh, while Galicia, Maine and western Norway kept the outline
+the drowning gave them, and Luijendijk et al. (2018) find 31% of the ice-free shoreline sandy.
+`SeaConfig.littoralGrading` runs that six thousand years, after the cut and before the shelf. It
+ranks the shoreline by the height of the land within 187 km of it, takes Earth's third — a share
+rather than a height, because no height derivable from Earth lands on it — scales how far the fill
+reaches by the fetch in front (`H ∝ U√F`, so the square root of the open water within 500 km), and
+fills the re-entrants of that third with sweeps of a three-by-three majority. It only fills: waves
+take a cliff back 0.6 to 6 km in six thousand years, under a tenth of a cell at 2048, while the
+Mississippi's plain advanced a hundred kilometres in the same time. It never dams a channel, so the
+rias H5 cut stay open. Measured on the same five seeds at 512, with the drowned-valley
+rule above running too: the share of coast reading smooth by Australia's 1.13 rises from 0.086 to
+0.188 over 750 km stretches and from 0.141 to 0.224 over 375 km ones, against Earth's third; the
+shoreline falls 8 to 10%, the land gains 0.2 to 0.4% of the map, and no body of land or water is
+gained or lost on any seed. The world's coastline over four to sixteen cells reads 1.255 by the
+coarsened ruler against 1.260 before, which is Mandelbrot's Britain; by M1's box count the same coast
+reads 1.167 against 1.207, because a box is mixed by a
+single cell of the other kind and so that instrument counts the teeth as well as the coast.
 
 **Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
 network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
@@ -226,10 +337,10 @@ sides of it differ by at least 10% of its mean radius where every shape a compas
 axis gives under 4%.
 
 **A delta reaches further over a shelf than into deep water.** The cost of advancing into a cell is
-one, plus one for every 1.5% of the land's relief of water standing over it — 130 m against eight
-kilometres, which is Earth's shelf break, and Earth's shelf break is where it is because that is
-roughly where the shoreline stood at the last glacial maximum, the same figure `SeaConfig.lowstand`
-uses. So a lobe spends its budget on shallow ground and progrades across a shelf the way the Nile
+one, plus one for every 130 m of water standing over it, read off the height field's own range.
+That is Earth's shelf break, and Earth's shelf break is where it is because that is roughly where
+the shoreline stood at the last glacial maximum — which is why it lands within a few metres of
+`SeaConfig.lowstandMetres`. So a lobe spends its budget on shallow ground and progrades across a shelf the way the Nile
 has, and stubs into a trench the way a delta at the head of a fjord does. On a synthetic coast with
 a shelf on one side of the mouth and water thirty times deeper on the other, the lobe reaches 3.1
 times further over the shelf; with the depth term off, 1.02 times. A lobe of more than four cells'
@@ -297,8 +408,9 @@ reach and a terminal moraine at the snout. But the ground that shows those landf
 Finland, the Canadian Shield, the Lake District, the Finger Lakes — carries no glacier now and has
 not for ten thousand years. So the mask the carving works from is the snow balance of a *colder*
 world, `GlaciationConfig.glacialMaximumC`: the last glacial maximum's 6.1 C of global mean cooling
-(Tierney et al. 2020), applied as the latitude ramp the proxies describe rather than as a uniform
-shift, since the tropics cooled 1.5-3 C and the high latitudes 10-20. That puts 26% of seed 42's
+(Tierney et al. 2020), applied since W1 as a dimmer sun that the energy balance answers with a
+colder world of its own — so the tropics cool 1.5-3 C and the high latitudes far more because the
+poles turn white, rather than because a latitude ramp said so. That puts 26% of seed 42's
 land under ice at the maximum against Earth's roughly 25%, while the map still draws today's 4%.
 The signature is the standing water the ice leaves behind, because a river network cannot leave a
 hollow in its own bed and ice does nothing else: on seed 42 at 1024 `GlaciationTest` measures 9
@@ -436,6 +548,15 @@ figure is a separate question and is in `TODO.md`.
 
 ## Known deviations
 
+**Half the land is tundra.** Over seeds 7/42/1234/99 at 512, tundra takes 40–58% of the ice-free
+land, pooled 47%, against Earth's 6% (Olson et al. 2001). The boreal forest beside it is 6.7%
+against Earth's 11%, which is the right order, and the zonal temperatures these worlds are built on
+sit within a degree or two of the reanalysis at every latitude from the equator to 70° — so the
+belts are where they should be and the tree line is not. What puts them there is the ground: this
+map's land stands 1200–1700 m above its own sea against Earth's 840, and a lapse rate of 6 °C/km
+takes three to five degrees off nearly every land cell. `ColdBiomeShareTest` prints both shares per
+seed and pooled and asserts only the boreal one; the hypsometry is `TODO.md`'s.
+
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
 0.073% of the surface: a body of unreachable water larger than that is a piece of the sea walled off
 by a sliver of ground, and calling it land invents a landform Earth has no example of — it would
@@ -444,8 +565,12 @@ five such inland seas survive on each of the standard seeds, holding 767 to 8386
 they are drawn as ocean rather than as the Caspians they might be. The bodies below the cap are
 converted, and since H5b their outlets are cut like everyone else's, so a converted saucer no longer
 floods far wider than itself: `OutletIncisionTest` and `OutletResolutionTest` still measure the
-drowned basins apart from the ones the in-round notch owns, but both figures are now held to the
-same bar. The cap is an area in square kilometres now rather than a share of the map, which was
+drowned basins apart from the ones the in-round notch owns. H5b held both to the same bar; W1 put
+the drowned half back over it and it is a reported figure again, because the glacial mask is now
+struck on a colder world's own rainfall and the ice carved somewhere slightly different, so seed
+42's largest walled-off hollow at 2048 went from 0.86 times the Caspian's share of its land to 1.23.
+The largest lake standing *in the land* is still held to the bar and is well inside it. The cap is
+an area in square kilometres now rather than a share of the map, which was
 S1's business, and writing it down is what made the question underneath it visible: 52,600 km² is
 0.073% — the Caspian's share of *Earth's* surface — carried onto a world a seventh of Earth's size,
 so it is a seventh of the Caspian. Whether a world this size should cap at the share or at the lake
@@ -521,15 +646,23 @@ E8 and reverted: it cannot reach the scene it was built for (see the rift deviat
 broke three guards with no Earth figure behind them to buy 1517 cells of 4.19 million on the
 author's world at 2048. The figures are in that test and in E8's ledger row.
 
-**The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
-everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the
-shoreline is cut, and what the rise then floods is a fringe of small bays all round a continent as
-well as the rias at the river mouths. The renders at 2048 show both: seed 718106's middle island
-goes from a smooth outline to a crenulated one along its whole perimeter, and the shoreline
-development index rises 1.7 times where the estuary count rises tenfold. Earth's own drowned coasts
-are more selective than that — the Atlantic seaboard is indented where the rivers are and straight
-where they are not — and the likely repair is to scale the stand by the local drainage rather than
-applying it flat.
+**A graded coast is smoothed rather than built.** The littoral pass above fills a re-entrant; it
+does not throw a barrier across the mouth of one and leave a lagoon behind it, which is what Earth's
+depositional coasts actually look like — Padre Island and the Laguna Madre, the Frisian chain and
+the Wadden Sea, the Curonian Spit. Two consequences are measured. The share of coast reading smooth
+by Australia's 1.13 reaches 0.123 over 750 km stretches and 0.200 over 375 km ones, against Earth's
+third: a graded shore that is a plain arc has less of a stretch to itself than one with a lagoon
+system on it. And the world's pooled box dimension falls from 1.207 to 1.176, because a filled bay
+is one shoreline where a barred one is two. The barrier islands, the spits and the tidal inlets are
+the audit's K1, and this is the deviation that chunk closes.
+
+**A flat coast on hard rock is graded like a coastal plain.** What separates Earth's graded coasts
+from its ragged ones is not the height of the land behind them alone: Finland, the Canadian Shield
+and western Scotland are all flat, all ragged, and all rock. This generator has no lithology (the
+plan's H3), so the littoral criterion ranks coasts by the height of the land within 187 km and takes
+Earth's third of them. Measured against a fixed height instead, the postglacial rise calls 59% of
+the shoreline depositional and a coastal plain's own gradient calls 1.9% of it depositional; Earth's
+31% sits between and no height derivable from Earth lands on it.
 
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut
@@ -554,7 +687,8 @@ shaped, or a second erosion pass after the climate.
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
 run into it, and one river leaves at the outlet. River segments *inside* a lake are no longer drawn,
 since the river there is the lake — and those were precisely the segments that appeared to flow
-uphill. Depth is shaded from how far the water surface stands above the ground beneath it. (The
+uphill. (Inside *open* water, since F15; see "A river is drawn through water narrower than itself"
+above.) Depth is shaded from how far the water surface stands above the ground beneath it. (The
 spill level is now only where a lake sits when it overflows; see "A dry basin is not a full one"
 above for the basins that stand below their rims.)
 
@@ -606,24 +740,135 @@ halves" below for why, and for the third mechanism seasons made necessary.
 `DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,
 its upwind climb, and how far its air travelled over land.
 
+## Temperature is solved, not drawn
+
+Until W1 the temperature was a curve: an exponent and two anchors, with the seasonal swing over
+water damped by a constant and the swing inland scaled by a `continentality` setting. It could be
+made to pass through Earth's equator and Earth's pole and it still could not do the two things that
+decide where the interesting climates are, because a curve has no physics in it.
+
+What stands in its place is a one-dimensional energy-balance model — Budyko (1969), Sellers (1969),
+North (1975) — over 240 latitude bands, marched through 360 steps of the year for twenty years to a
+periodic steady state. Each band balances three terms: the sunlight it absorbs (the astronomical
+daily mean for its latitude and the day, at an obliquity read off `seasonalTiltDegrees` — Earth's
+zonal-mean thermal equator swings about ten degrees, which is that setting's default, and Earth's
+tilt is 23.44); the infrared it radiates, `A + B·T` with North, Cahalan and Coakley's slope of
+2.09 W/m² per degree and an offset of 210.7 fixed by Earth's own budget of 240 W/m² at 14 °C; and
+the heat its neighbours send it, a diffusion that is 0.90 W/m²/°C at the equator for the Hadley
+cell, falls to 0.30 at the pole, and carries a Gaussian bulge of 0.30 more centred on 50° and
+fifteen degrees wide for the mid-latitude storm track — two machines in two places, which is how
+Trenberth and Stepaniak (2003) separate the observed transport, and a single monotonic shape cannot
+be both. The poleward transport that comes out is 4.6, 4.9 and 3.2 PW at 30°, 45° and 60° against
+Trenberth and Caron's observed 5.3, 5.0 and 3.3.
+
+- **Three reservoirs per band, and that is the whole land–sea contrast.** Each band carries a land
+  column and a marine column with the world's own coastline as their areas, and under the marine
+  column a slab of sea water. Both columns are *air*: they see the same sunlight, radiate the same
+  infrared law, and trade heat with each other round the latitude circle at 8 W/m²/°C, which is a
+  fortnight's exchange for an air column of that capacity and is what the westerlies do. What
+  separates them is memory — 1.7 × 10⁷ J/m²/°C over land (three metres of soil, the seasonal
+  damping depth, plus the air) against 1.04 × 10⁷ at sea (the air alone, `c_p p / g`) — and what
+  lies beneath. Beneath the marine column is a fifty-metre mixed layer, 2.0 × 10⁸ J/m²/°C, coupled
+  to the air by a bulk surface flux of 25 W/m²/°C: sensible 11.6 plus latent 13.4 from the standard
+  bulk formulae at a typical marine wind of 8 m/s. That split is why a coast is not the sea. On
+  Earth's own land fraction, warmest month against coldest at 50–60°: land swings 38.7 °C against a
+  continental interior's observed 34–38 (Novosibirsk 34, Winnipeg 38), the marine air 13.0 against
+  Earth's 8–11, and the water 6.9 against the open ocean's 5–8. Nothing was fitted at any other
+  latitude, and at 30–40° the land reads 28.6 °C against Earth's 24–26.
+- **A cell takes a blend of the two air columns.** The two-dimensional field is the band's columns
+  mixed by how much of the air over a cell came off the sea, falling away from the coast with an
+  e-folding of 350 km. That figure is Earth's: at 50–56° north the annual range against distance to
+  the nearest coast runs 8 °C at Valentia, 19 at Berlin (190 km), 22 at Warsaw (330) and 28 at
+  Moscow (650), and fitting the exponential to the three inland stations gives 310, 377 and 363 km —
+  agreeing to a tenth, which is what says the shape is right and not merely that the curve has a
+  spare parameter. The water is not blended onto the land at all: it is read where the sea freezes
+  and where the moisture march evaporates, and nowhere else.
+- **Each column's year is kept twice, as months and as halves.** Every threshold the biome stage
+  reads is one of Köppen's and Köppen's are monthly means — the 10 °C tree line, the −3 °C
+  continental winter, the 18 °C tropical one — so a band's stored "summer" is the warmest
+  thirty-step window of its own year and its "winter" the coldest. For a sinusoidal year a half-year
+  mean is 0.64 of the month extreme, so handing halves to those gates asks each of them a question a
+  third short of the one it was written for. But the snow balance's degree-day sum and the moisture
+  march both *integrate across* a season, and those read the warm and cold half-years' means
+  instead. Neither reading serves both.
+- **The albedo is the model's own ice.** A band whose annual mean falls below −10 °C is white
+  (Budyko's and North's ice line, where snow cover becomes permanent enough to change what the
+  planet reflects), ramped over 4.5 °C either side. The ice-free albedo is a least-squares fit to
+  Earth's observed zonal planetary albedo — flat through the tropics, dipping under the subtropical
+  highs, climbing late and steeply toward the poles, with the ITCZ's cloud on top — because Earth's
+  albedo does not fall monotonically toward the equator and a model that assumes it does bakes the
+  subtropics and freezes the equator. So the cap is self-reinforcing: it can be held, and it can be
+  lost.
+- **`glacialMaximumC` is a forcing now.** The last glacial maximum's 6 °C of global-mean cooling is
+  applied by dimming the sun until the model's own global mean falls that far — 4.7 per cent — and
+  the model answers with 5.8 °C of cooling at 75° against 4.3 with the feedback switched off, and an
+  ice edge that walks from 60.4° to 52.1° instead of to 53.6°. The per-row cooling ramp that used to
+  write the amplification down is retired.
+
+On Earth's own land fraction the model reads a global mean of 15.5 °C against 14, an equator of
+26.1 against 27, 60° at 1.7 against 0, and a pole at −15.6 against the −20 that is the midpoint of
+two poles 34 degrees apart. Column by column, land against a lowland-station climatology and marine
+air against a reanalysis over ocean: 26.2/26.0 at the equator against 26.0/26.5, 23.4/23.3 at 20°
+against 25.0/24.5, 13.9/13.9 at 40° against 14.5/14.5, and 1.5/1.8 at 60° against −2.0/2.0. The
+warmest month over the sea lands at 26.7, 26.0, 19.2 and 7.9 against a reanalysis 27, 27, 19 and 7,
+and the water under it at 26.3, 24.8, 16.8 and 4.9 against 27, 27, 19 and 5.5 — inside a ±3 °C
+envelope, which is a real spread and not a hedge, because the Atlantic and the Pacific straddle
+every one of those figures. `EnergyBalanceTest` measures them all and shows each clause failing
+without its mechanism: a tenth of the heat transport bakes the equator to 41 °C and freezes 60° to
+−43; an all-ocean world's land column still swings 5.7 times its water, so the contrast is the
+capacities and not the geography; and an upright axis has no seasons at all, to a ten-thousandth of
+a degree.
+
+**Sea ice, and why the polar ocean is a desert.** Where a season's *water* — the band's mixed layer
+plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
+point of sea water at the ocean's mean salinity, that cell is under ice for that season. The
+freezing test reads the water and not the air above it, which in a polar winter is a dozen degrees
+colder than the sea it sits on. Two masks
+are saved, one per season: the cold season's is the winter pack and the warm season's is the
+perennial ice, which is what the map draws. The moisture march takes nothing at all from a frozen
+cell, because a metre of ice is a lid — and that is why polar deserts exist, and what keeps an ice
+sheet at the pole from feeding itself indefinitely.
+
+On Earth's own land fraction the model's cold-season edge lands at 60.4° N and 61.1° S against
+Earth's zonal-mean 60. On the map, measured over seeds 7, 42 and 1234 at 512: the cold season
+freezes 25–33% of the sea and reaches 55–58° of latitude, the warm season's perennial pack holds
+16–26% and reaches 62–64°, and every cell frozen in the warm season is frozen in the cold one by
+construction. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
+523 mm a year against 2,135 mm over the open water at the same latitudes, on seed 42 351 against
+2,508, on seed 1234 257 against 1,811. With `ClimateConfig.seaIce` off — the control — the same
+cells take 1,228, 1,592 and 1,305 mm, because then the polar ocean evaporates like any other.
+
 ## The year has two halves
 
 Temperature and rainfall are computed twice, for the local warm season and the local cold one, and
-biomes are read off all four numbers instead of two. The whole mechanism is one setting —
-`ClimateConfig.seasonalTilt`, the degrees the thermal equator migrates toward whichever hemisphere
-is in summer — and everything that reads a latitude reads the shifted one: the temperature curve,
-the wind belts, and the rain belts alike.
+biomes are read off all four numbers instead of two. Rainfall's seasons are one setting —
+`ClimateConfig.seasonalTiltDegrees`, the degrees the thermal equator migrates toward whichever
+hemisphere is in summer — carried by the wind belts and the rain belts alike; temperature's are the
+same number read as the planet's axial tilt, so switching seasons off stands the axis upright and
+there is no seasonal forcing for the energy balance to answer.
 
 - **"Summer" is local, not July.** Northern July and southern January are both stored as the warm
   season, so one classification rule serves both hemispheres and a dry-summer coast reads the same
   either side of the equator.
+- **The stored temperature of a season is its warmest or coldest month, and the rain's is its
+  half-year.** Two different questions get asked of the same year. Köppen's thresholds are monthly
+  means — the 10 °C tree line, the −3 °C continental winter — so what the biome stage reads and
+  what a save carries is the warmest and coldest month. Anything that *integrates* across a season
+  reads the half-year's mean instead: the snow balance's degree-day sum runs over 182 days and the
+  moisture march evaporates for half a year, and giving either of those a warmest month has it
+  melting at the peak of July for the whole of summer. W1's third pass made that mistake for one
+  build and it cost the world a third of its permanent ice, which is why both are kept.
 - **The annual fields are unchanged.** `temperature` is still the annual mean and `precipitation`
   is the mean of the two marches, so every stage downstream — rivers, realms, peoples, landmarks —
   sees exactly what it saw before. With `seasons = false` the seasonal fields collapse onto the
   annual ones bit for bit and the generator reproduces the pre-seasons world exactly.
-- **The sea barely swings.** Water's heat capacity is why a maritime climate has a small annual
-  range, so the seasonal departure is damped to a fifth over open water. Measured on seed 42 at
-  35°: land swings 13.1 °C through the year, the open sea 2.9 °C.
+- **The sea barely swings, and nobody told it to.** Water's heat capacity is why a maritime climate
+  has a small annual range, and since W1 that is a heat capacity in a model rather than a damping
+  factor. Measured on seed 42 at 35°, warmest month against coldest: land swings 20.6 °C through
+  the year and the marine air 10.8 °C. Earth's figures there are 8–26 over land, 7–11 for the air
+  over the ocean and 6–9 for the water beneath it. What the map stores over water is the air, which
+  is what a coast feels; the water is a degree or two steadier than that and is read where the sea
+  freezes and where the march evaporates.
 - **Two new classes come out of the seasonality rather than the total.** A Mediterranean coast is
   dry in the warm half of the year and wet in the cold one, which happens where the subtropical
   high sits over a west-facing coast all summer and the westerlies swing back over it in winter; a
@@ -736,6 +981,9 @@ interior*'s winter past Köppen's −3°C line at the same latitudes, so a dry r
 used to be taiga could reach `classify`'s desert check on nothing more than a fixed millimetre cut
 — measured, that alone dropped desert-in-band on seed 42 from 98–100% to 48%, because the two
 effective-latitude ranges overlap almost exactly and no choice of exponent or pole separates them.
+(The curve, its exponent and its two anchors are all gone now; W1's energy balance produces the
+same separation without an exponent, because a coast and an interior at one latitude are two
+different columns rather than two points on one curve. The Köppen gates below are unchanged.)
 
 A6 landed with that gated off by a provisional fix (an annual mean of at least 13°C added to the
 temperate branch's desert case) rather than solved, and said so: the gate abolished cold deserts —

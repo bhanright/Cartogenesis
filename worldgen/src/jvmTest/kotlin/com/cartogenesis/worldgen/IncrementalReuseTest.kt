@@ -104,6 +104,10 @@ class IncrementalReuseTest {
             // `relativeElevation`, and where the notch reaches the waterline it moves `isLand` too
             // — so a stale sea stage would carry an undrained basin through every stage below it.
             "postCutOutlet" to base.copy(sea = base.sea.copy(postCutOutlet = false)),
+            // F17's littoral grading moves the shoreline itself, which is the loudest thing a
+            // setting in this section can do: a stale sea stage would hand every stage below it a
+            // land mask from the other arm.
+            "littoralGrading" to base.copy(sea = base.sea.copy(littoralGrading = false)),
             // Glaciation carves the sea stage's own field, in the same step, so its guard is the
             // sea stage's guard. Turning it off rather than nudging a number, because off is the
             // largest change the section can make and so the loudest failure if it went stale.
@@ -112,7 +116,7 @@ class IncrementalReuseTest {
             ),
             "climate" to base.copy(
                 climate = base.climate.copy(
-                    equatorTemperatureC = base.climate.equatorTemperatureC + 4f
+                    globalMeanShiftC = base.climate.globalMeanShiftC + 4f
                 )
             ),
             // The seasonal knobs live in the same section as the rest of the climate, so the guard
@@ -130,9 +134,14 @@ class IncrementalReuseTest {
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
             ),
-            "continentality" to base.copy(
-                climate = base.climate.copy(continentality = base.climate.continentality + 0.4f)
+            "lapseRateCPerKm" to base.copy(
+                climate = base.climate.copy(
+                    lapseRateCPerKm = base.climate.lapseRateCPerKm + 2f
+                )
             ),
+            // W1: the sea-ice masks are climate sections, and the march reads them, so a change
+            // here has to invalidate everything downstream the way the rest of this section does.
+            "seaIce" to base.copy(climate = base.climate.copy(seaIce = false)),
             // H4: the march's over-sea moisture pickup now scales by the ocean stage's current
             // anomaly, so this knob has to invalidate the same way the others in this section do.
             "currentMoisture" to base.copy(
@@ -302,6 +311,8 @@ class IncrementalReuseTest {
                 precipitationMm = field(world.climate.precipitationMm),
                 windDirection = world.climate.windDirection.copyOf(),
                 windMeridional = field(world.climate.windMeridional),
+                summerSeaIce = world.climate.summerSeaIce.copyOf(),
+                winterSeaIce = world.climate.winterSeaIce.copyOf(),
                 biome = world.climate.biome.copyOf()
             ),
             rivers = RiverResult(
@@ -312,7 +323,8 @@ class IncrementalReuseTest {
                 lakes = LakeResult(
                     world.rivers.lakes.lakeId.copyOf(),
                     world.rivers.lakes.lakes.toList(),
-                    world.rivers.lakes.playa.copyOf()
+                    world.rivers.lakes.playa.copyOf(),
+                    world.rivers.lakes.cellsAcross
                 )
             ),
             nations = NationResult(

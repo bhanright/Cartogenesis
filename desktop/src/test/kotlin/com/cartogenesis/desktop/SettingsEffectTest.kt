@@ -40,7 +40,7 @@ import kotlin.test.assertTrue
  * is drawn *and* nothing is fetched. Every case here starts from a settings document in a fake
  * store, which is the same path the desktop's real JSON file takes.
  *
- * Nothing generates a world: F0 leaves the canvas blank until Generate, so every one of these
+ * Nothing generates a world: the canvas stays blank until Generate, so every one of these
  * composes in a moment.
  */
 class SettingsEffectTest {

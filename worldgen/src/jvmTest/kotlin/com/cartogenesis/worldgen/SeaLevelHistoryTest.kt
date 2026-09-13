@@ -49,19 +49,21 @@ class SeaLevelHistoryTest {
      * 40/50/73 mouths — 1.54, 2.08 and 4.87 times — and 5.99/8.64/12.06 — 1.11, 1.23 and 1.55.
      *
      * The bars sit under the worst of each, and the control bar above the best of the three worlds
-     * without the lowstand, so both halves of ground rule 2 are asserted rather than described. The
-     * indentation bar has the smaller margin because it is an average over a whole map's worth of
-     * coast, where the estuary count is a tally of the places that changed.
+     * without the lowstand, so both halves of ground rule 2 are asserted rather than described.
+     *
+     * Only the estuary count is asserted now. The indentation was the weaker of the two from the
+     * start — an average over a whole map's worth of coast, where the estuary count is a tally of
+     * the places that changed — and F17 took the average away: almost all of the extra length was a
+     * notch in every coastal cell, one per channel, and a channel a kilometre wide does not fill a
+     * cell twenty-three kilometres wide. See the note where it is printed.
      */
     private val estuaryGain = 1.5
-    private val indentationGain = 1.05
     private val controlEstuaryCeiling = 30
 
     @Test
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {
         var controlFailures = 0
         val pooledEstuaries = ArrayList<Double>()
-        val pooledIndentation = ArrayList<Double>()
         seeds.forEach { seed ->
             // H5b's post-cut outlet pass held off in *both* arms, so this pair varies the lowstand
             // and nothing else.
@@ -108,20 +110,25 @@ class SeaLevelHistoryTest {
                     "every round — the lowstand drowned no valleys at all"
             )
             pooledEstuaries.add(lowered.estuaries.toDouble() / today.estuaries.coerceAtLeast(1))
-            // Direction per seed, size pooled — the same restatement the estuary count above
-            // carries, and forced by the same kind of change. S1 gave the stand its true depth:
-            // 120 m of the height field's own range where the setting used to be a share of each
-            // world's *land* relief, which on seed 7 was 15% deeper than 120 m and on seed 718106
-            // half of it. Seed 7's whole-coast indentation gain came down to 1.02 with the
-            // shallower stand while its estuary mouths still rose, so the 1.05 that was written on
-            // one seed's arithmetic is now a pooled figure and the per-seed claim is the direction.
-            assertTrue(
-                lowered.indentation > today.indentation,
-                "seed $seed: the ocean's shoreline is ${lowered.indentation} times a compact one " +
-                    "of the same area, against ${today.indentation} with the sea held at today's " +
-                    "level — the lowstand made the coast no more indented at all"
+            // The indentation is reported and no longer asserted, and F17 is why. It used to read
+            // 1.11, 1.23 and 1.55 times the control on these three seeds, and the bar was 1.05.
+            // Almost all of that was the lowstand cutting a channel to the shore in every coastal
+            // cell and the transgression flooding all of them: a notch per cell, which lengthens a
+            // whole map's worth of shoreline. `SeaConfig.drownedValleyFill` takes those back out,
+            // because a channel a kilometre wide has no business filling a cell twenty-three
+            // kilometres wide, and what the lowstand still contributes is the drowned valleys wide
+            // enough to be bays — which is a tally of places rather than a length.
+            //
+            // S1's units moved it again and in the same direction: the stand is now 120 m of the
+            // height field's own range where it used to be a share of each world's land relief,
+            // which was deeper than 120 m on one of these seeds and half of it on another. There is
+            // nothing left here to assert, so the figure is printed and the claim that survives is
+            // the one the clause above makes.
+            println(
+                ("SEA HISTORY seed %d: indentation %.4f with the lowstand against %.4f without, " +
+                    "reported rather than asserted since F17")
+                    .format(seed, lowered.indentation, today.indentation)
             )
-            pooledIndentation.add(lowered.indentation / today.indentation)
         }
 
         // The size of it, pooled. The three seeds measure 1.28, 2.53 and 4.31 times as many estuary
@@ -134,17 +141,6 @@ class SeaLevelHistoryTest {
         println(
             "SEA HISTORY pooled: %.2fx estuary mouths with the lowstand (%s)"
                 .format(meanGain, pooledEstuaries.joinToString { "%.2f".format(it) })
-        )
-        val meanIndentation = pooledIndentation.average()
-        println(
-            "SEA HISTORY pooled: %.3fx coastline indentation with the lowstand (%s)"
-                .format(meanIndentation, pooledIndentation.joinToString { "%.3f".format(it) })
-        )
-        assertTrue(
-            meanIndentation >= indentationGain,
-            "pooled over ${pooledIndentation.size} seeds the lowstand leaves the coast " +
-                "${meanIndentation}x as indented as a compact one, under the $indentationGain a " +
-                "drowned coast owes"
         )
         assertTrue(
             pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,

@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -138,7 +139,17 @@ class MeridionalWindTest {
         val config = world.config
         val cfg = config.climate
         val tilt = if (cfg.seasons) cfg.seasonalTiltDegrees else 0f
-        val temperature = if (warm) world.climate.summerTemperature else world.climate.winterTemperature
+        // The half-year's mean rather than the warmest month: the march evaporates across a
+        // season, so it reads the season's own mean, and `ClimateResult` stores the months because
+        // those are what Koppen's gates want. Both are rebuilt here the same way
+        // `ClimateStage.seasonalFields` builds them, from the saved annual field.
+        val season = if (warm) Season.WARM_HALF else Season.COLD_HALF
+        val temperature = ClimateStage.halfYearTemperature(
+            config, world.sea, world.climate.temperature, season
+        )
+        val seaSurface = ClimateStage.seaSurfaceTemperature(
+            config, world.sea, ClimateStage.zonalClimate(config, world.sea), temperature, season
+        )
         val precip = FloatField(w, h)
 
         for (y in 0 until h) {
@@ -154,14 +165,21 @@ class MeridionalWindTest {
                     val i = y * w + x
 
                     if (!world.sea.isLand[i]) {
-                        val seaTemperature = if (config.ocean.enabled) {
-                            world.ocean.temperature.data[i]
+                        // The season's own sea surface — the energy balance's *water* column for
+                        // this latitude and this half of the year, plus the current anomaly — and
+                        // nothing at all where that surface froze. Both are what the production
+                        // march reads; see `ClimateStage.marchRun`.
+                        val currentAnomaly =
+                            if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
+                        val frozen =
+                            if (warm) world.climate.summerSeaIce[i] else world.climate.winterSeaIce[i]
+                        val stepResult = if (frozen) {
+                            ClimateStage.marchSeaIceStep(cfg, moisture)
                         } else {
-                            temperature.data[i]
+                            ClimateStage.marchSeaStep(
+                                cfg, moisture, seaSurface.data[i] + currentAnomaly, currentAnomaly
+                            )
                         }
-                        val currentAnomaly = if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
-                        val stepResult =
-                            ClimateStage.marchSeaStep(cfg, moisture, seaTemperature, currentAnomaly)
                         moisture = stepResult.moisture
                         if (lap == 1) precip.data[i] = stepResult.rain
                         continue

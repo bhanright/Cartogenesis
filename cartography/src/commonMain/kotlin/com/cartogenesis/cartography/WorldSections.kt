@@ -227,6 +227,21 @@ internal object WorldSections {
             floats = world.climate.precipitationMm.data
         ),
         Section("climate.windDirection", SectionType.I32, ints = world.climate.windDirection),
+        // A byte per cell for each half of the year: what that season's sea surface froze, which
+        // the moisture march reads as a lid and the biome reads as pack ice. Saved rather than
+        // recomputed on open because it is a per-cell fact of the finished climate, as the biome is.
+        Section(
+            "climate.summerSeaIce", SectionType.U8,
+            bytes = ByteArray(world.climate.summerSeaIce.size) {
+                if (world.climate.summerSeaIce[it]) 1 else 0
+            }
+        ),
+        Section(
+            "climate.winterSeaIce", SectionType.U8,
+            bytes = ByteArray(world.climate.winterSeaIce.size) {
+                if (world.climate.winterSeaIce[it]) 1 else 0
+            }
+        ),
         Section(
             "climate.windMeridional", SectionType.F32,
             floats = world.climate.windMeridional.data
@@ -277,7 +292,8 @@ internal object WorldSections {
             "climate.temperature", "climate.summerTemperature", "climate.winterTemperature",
             "climate.precipitation", "climate.summerPrecipitation", "climate.winterPrecipitation",
             "climate.precipitationMm",
-            "climate.windDirection", "climate.windMeridional", "climate.biome"
+            "climate.windDirection", "climate.windMeridional",
+            "climate.summerSeaIce", "climate.winterSeaIce", "climate.biome"
         ),
         GenerationStage.RIVERS to listOf(
             "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget",
@@ -460,6 +476,8 @@ internal object WorldSections {
         val climate = if (GenerationStage.CLIMATE in present) {
             val biomes = Biome.entries
             val biomeBytes = bytes("climate.biome")
+            val summerSeaIceBytes = bytes("climate.summerSeaIce")
+            val winterSeaIceBytes = bytes("climate.winterSeaIce")
             ClimateResult(
                 temperature = field("climate.temperature"),
                 summerTemperature = field("climate.summerTemperature"),
@@ -470,6 +488,8 @@ internal object WorldSections {
                 precipitationMm = field("climate.precipitationMm"),
                 windDirection = ints("climate.windDirection"),
                 windMeridional = field("climate.windMeridional"),
+                summerSeaIce = BooleanArray(cells) { summerSeaIceBytes[it].toInt() != 0 },
+                winterSeaIce = BooleanArray(cells) { winterSeaIceBytes[it].toInt() != 0 },
                 biome = Array(cells) { i ->
                     val ordinal = biomeBytes[i].toInt() and 0xFF
                     if (ordinal !in biomes.indices) {
@@ -489,7 +509,8 @@ internal object WorldSections {
                 lakes = LakeResult(
                     lakeId = ints("rivers.lakeId"),
                     lakes = lists.lakes,
-                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } }
+                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } },
+                    cellsAcross = config.width
                 )
             )
         } else null

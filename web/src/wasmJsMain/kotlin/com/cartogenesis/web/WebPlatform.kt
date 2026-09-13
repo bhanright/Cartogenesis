@@ -3,6 +3,7 @@ package com.cartogenesis.web
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
@@ -145,10 +146,12 @@ class WebPlatform(
 
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
         // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
-        val bitmap = MapImage.toBitmap(world, options)
+        // A printed sheet, as on the desktop: nothing generalised away, and its own scale bar.
+        val bitmap = MapImage.toBitmap(world, options, MapSheet.PRINTED)
         // Quality is ignored by the PNG encoder and lossless for WebP at 100; JPEG is the one
         // format with a real quality to choose, and it is chosen once, in [ExportFormat].
-        val quality = if (format == ExportFormat.JPEG) ExportFormat.JPEG_QUALITY else 100
+        val quality =
+            if (format == ExportFormat.JPEG) ExportFormat.JPEG_QUALITY else LOSSLESS_QUALITY
         val encoded = Image.makeFromBitmap(bitmap)
             .encodeToData(skiaFormat(format), quality = quality)
             ?: error("Could not encode the map as ${format.label}")
@@ -205,6 +208,11 @@ class WebPlatform(
         ExportFormat.PNG -> "image/png"
         ExportFormat.WEBP -> "image/webp"
         ExportFormat.JPEG -> "image/jpeg"
+    }
+
+    private companion object {
+        /** Lossless for WebP and ignored by the PNG encoder, so one figure does for both. */
+        const val LOSSLESS_QUALITY = 100
     }
 }
 

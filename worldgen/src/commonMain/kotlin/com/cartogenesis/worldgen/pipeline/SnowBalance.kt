@@ -129,30 +129,30 @@ object SnowBalance {
     /**
      * The whole field at once. Every cell is independent; water is left at zero.
      *
-     * [coolingByRow], when given, lowers both seasonal temperatures by that many degrees before the
-     * balance is struck — one figure per row, because the only caller that passes it is asking a
-     * question about a colder world and the cooling of a colder world is a function of latitude.
-     * See [glacialCoolingByRow] and `GlaciationConfig.glacialMaximumC`.
+     * A colder world is asked for by handing in the temperature and rainfall fields of a colder
+     * world, not by shifting these ones: `ClimateStage.provisionalSnowBalance` puts the glacial
+     * cooling into the energy balance as a forcing and passes on what comes out. Until W1 there was
+     * a per-row cooling ramp here instead, a third of the global mean at the equator to twice it at
+     * the pole, written down from the proxies because a latitude curve could not produce polar
+     * amplification of its own. The model can, so the ramp is gone.
      */
     fun field(
         isLand: BooleanArray,
         summerTemperature: FloatField,
         winterTemperature: FloatField,
         summerPrecipitationMm: FloatField,
-        winterPrecipitationMm: FloatField,
-        coolingByRow: FloatArray? = null
+        winterPrecipitationMm: FloatField
     ): FloatField {
         val cellsAcross = summerTemperature.width
         val cellsDown = summerTemperature.height
         val balance = FloatField(cellsAcross, cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
-                val coolingC = coolingByRow?.get(row) ?: 0f
                 for (cell in row * cellsAcross until (row + 1) * cellsAcross) {
                     if (!isLand[cell]) continue
                     balance.data[cell] = balanceMm(
-                        summerTemperature.data[cell] - coolingC,
-                        winterTemperature.data[cell] - coolingC,
+                        summerTemperature.data[cell],
+                        winterTemperature.data[cell],
                         summerPrecipitationMm.data[cell],
                         winterPrecipitationMm.data[cell]
                     )
@@ -161,38 +161,6 @@ object SnowBalance {
         }
         return balance
     }
-
-    /**
-     * How much colder each row of the map was at the glacial maximum, given [globalMeanC] — the
-     * whole-planet mean cooling — as the one number a caller has to supply.
-     *
-     * Not a uniform shift, because the last glacial maximum was not one. The cooling was strongly
-     * polar-amplified: proxy reconstructions put the tropical oceans only 1.5-3 C below present
-     * (MARGO, Nature Geoscience 2, 2009) while the high northern latitudes were 10-20 C below it,
-     * and that contrast is the whole reason the ice grew where it did rather than everywhere at
-     * once. A uniform 6 C applied to this generator produces the same distortion in miniature: it
-     * chills the tropics, where nothing happens, and leaves the high latitudes short of the cooling
-     * that actually built the Laurentide.
-     *
-     * So the shift ramps linearly in latitude, from a third of [globalMeanC] at the equator to
-     * twice it at the pole — 2 C and 12 C for the default 6. Weighted by the area of each latitude
-     * (the mean of `|lat|` over a sphere is about 33 degrees) that ramp averages 5.6 C, near enough
-     * to the 6.1 ± 0.4 C Tierney et al. put the global mean at, so the knob keeps meaning what it
-     * says it means.
-     */
-    fun glacialCoolingByRow(rows: Int, globalMeanC: Float): FloatArray =
-        FloatArray(rows) { row ->
-            val towardsPole =
-                (abs(ClimateStage.latitudeOf(row, rows)) / POLE_DEGREES).coerceIn(0f, 1f)
-            globalMeanC * (EQUATOR_SHARE + (POLE_SHARE - EQUATOR_SHARE) * towardsPole)
-        }
-
-    /** The glacial cooling at the equator and at the pole, as multiples of the global mean. */
-    private const val EQUATOR_SHARE = 1f / 3f
-    private const val POLE_SHARE = 2f
-
-    /** Latitude of a pole in degrees, which is what turns a latitude into a 0..1 ramp. */
-    private const val POLE_DEGREES = 90f
 
     /**
      * The fraction of a season's precipitation that arrives as snow, ramped over

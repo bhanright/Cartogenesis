@@ -135,20 +135,27 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
-     * 8 because the crust became a thing the world carries. The plate stage now writes which crust
+     * 9 because the crust became a thing the world carries. The plate stage now writes which crust
      * each cell is made of and how fast the rock under it is still rising, the settings gained an
      * `isostasy` section for the densities and the elastic thickness, and the height field itself
      * changed meaning: it is an absolute altitude on the world's own ruler where it used to be
-     * renormalised to whatever the tallest cell of that particular world happened to be. A format-7
+     * renormalised to whatever the tallest cell of that particular world happened to be. A format-8
      * file's heights would parse and mean something else, which is exactly the kind of silence
-     * refusing by version exists to prevent.
+     * refusing by version exists to prevent. S2 and W1 each took 8 on their own branch, so the two
+     * had to be told apart when they met and the solid earth's is 9.
+     *
+     * 8 because the climate gained two sea-ice masks, one per season, and lost the two anchors of
+     * the latitude curve the energy balance replaced: `climate.equatorTemperatureC` and
+     * `climate.poleTemperatureC` are gone and `climate.globalMeanShiftC` stands in their place,
+     * along with `climate.continentality`, which is now two heat capacities and a coastline rather
+     * than a setting. An older file would open with this build's defaults wherever one of those has
+     * moved, which is a world quietly unlike the one that was saved.
      *
      * 7 because the world gained a `scale` section — its width in kilometres, the two ends of its
      * vertical range in metres and the years a hydraulic round stands for — and every physical
      * knob moved onto it: the sea's lowstand and the glacial depths became metres, every reach and
      * radius became kilometres, and `climate.maxAltitudeMetres` and `nations.worldWidthKm` left the
-     * sections they were lodged in. An older file's keys would parse and be ignored, leaving the
-     * world at this build's defaults wherever one has moved.
+     * sections they were lodged in.
      *
      * 6 because a river's drawn size stopped being a width in cells and became
      * [com.cartogenesis.worldgen.pipeline.River.widthRatio], a fraction of the map's largest river:
@@ -159,7 +166,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 8
+    const val FORMAT_VERSION = 9
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

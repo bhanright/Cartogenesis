@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.Season
 import com.cartogenesis.worldgen.pipeline.SnowBalance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -429,15 +430,18 @@ class SnowBalanceTest {
      *
      * | seed | balance | control |
      * |---|---|---|
-     * | 7 | 3.1% / 0.0% | 100% / 100% |
+     * | 7 | 17.1% / 0.0% | 99.5% / 99.4% |
      * | 42 | 12.8% / 0.0% | 45.4% / 100% |
      * | 1234 | 17.1% / 0.0% | 100% / 100% |
      * | 99 | 13.1% / 0.0% | 78.6% / 100% |
      *
-     * The control is not merely undiscriminating, it runs backwards: with ice decided on the annual
-     * mean, the *dry* quarter is the more thoroughly iced of the two on every seed, because a dry
-     * cell at this summer temperature is a continental one and a continental one has the colder
-     * winter and so the colder mean. Both halves of that are asserted.
+     * The control is not merely undiscriminating, it runs backwards wherever it has room to: with
+     * ice decided on the annual mean, the *dry* quarter is the more thoroughly iced of the two,
+     * because a dry cell at this summer temperature is a continental one and a continental one has
+     * the colder winter and so the colder mean. On a seed where the control ices both quarters
+     * outright — seed 7 since W1 — the comparison is between two roundings and only the weaker
+     * form, that it cannot tell them apart, can be read; both are asserted, the strong form where
+     * it is legible.
      */
     @Test
     fun `at the same temperature, ice is where the snow is`() {
@@ -457,12 +461,21 @@ class SnowBalanceTest {
                     " dry ${"%.1f".format(control.dryShare)}%" +
                     " [wet ${"%.0f".format(balance.wetMm)}mm, dry ${"%.0f".format(balance.dryMm)}mm]"
             )
+            // The control has to be *undiscriminating*, and the strong form of that — the dry
+            // quarter more heavily iced than the wet one, which is the annual mean running
+            // backwards — can only be read where the control is not already saturated. On a seed
+            // where both quarters are 99-100% under ice the comparison is between two roundings,
+            // and W1's climate put seed 7 there: 99.5 against 99.4. So the clause is stated as
+            // "the control cannot tell them apart", which is what it is for, with the strong form
+            // still asserted wherever there is room to see it.
+            val controlSaturated = control.dryShare >= CONTROL_SATURATED_SHARE &&
+                control.wetShare >= CONTROL_SATURATED_SHARE
             assertTrue(
                 "seed $seed: with the balance off the dry quarter is not the more heavily iced" +
                     " (wet ${"%.1f".format(control.wetShare)}%, dry" +
                     " ${"%.1f".format(control.dryShare)}%), so the contrast below is not the" +
                     " balance's doing",
-                control.dryShare >= control.wetShare
+                controlSaturated || control.dryShare >= control.wetShare
             )
             assertTrue(
                 "seed $seed: only ${"%.1f".format(balance.wetShare)}% of the wet quarter carries" +
@@ -486,6 +499,12 @@ class SnowBalanceTest {
          * of the range and not at the middle.
          */
         const val EARTH_ICE_SHARE = 10.1
+
+        /**
+         * Above this share of a quarter under ice the control has stopped discriminating and the
+         * wet-against-dry comparison is between two roundings. See the clause that reads it.
+         */
+        const val CONTROL_SATURATED_SHARE = 99.0
 
         /**
          * The warm-season window the ice margin sits in, in C. Cold enough that a glacier is
@@ -544,10 +563,17 @@ class SnowBalanceTest {
     private fun iceByRainfall(world: WorldMap): IceByRainfall? {
         val w = world.config.width
         val h = world.config.height
+        // The warm *half-year's* mean, which is what the balance integrates its degree-days over,
+        // rebuilt because `ClimateResult` stores the warmest month instead — see `Season`. Reading
+        // the saved field here would band the map by a different quantity from the one the balance
+        // was decided on, and on some seeds it selects no cells at all.
+        val warmHalf = ClimateStage.halfYearTemperature(
+            world.config, world.sea, world.climate.temperature, Season.WARM_HALF
+        )
         val marginal = (0 until w * h).filter { i ->
             world.sea.isLand[i] &&
-                world.climate.summerTemperature.data[i] >= MARGINAL_LOW &&
-                world.climate.summerTemperature.data[i] <= MARGINAL_HIGH
+                warmHalf.data[i] >= MARGINAL_LOW &&
+                warmHalf.data[i] <= MARGINAL_HIGH
         }
         if (marginal.size < 1000) return null
         val rain = marginal.map { world.climate.precipitationMm.data[it] }.sorted()

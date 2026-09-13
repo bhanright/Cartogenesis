@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  * The three type faces are named explicitly because their notices are a licence requirement rather
  * than a courtesy — the OFL asks that the licence travel with anything embedding the fonts, and
  * they are embedded in the desktop jar and the wasm bundle alike. IBM Plex Mono is the third, added
- * by F7 for the Matrix chrome: a face is embedded whether or not fourteen of the fifteen chromes
+ * for the Matrix chrome: a face is embedded whether or not fourteen of the fifteen chromes
  * ever draw a glyph of it, so the notice is owed the moment the file is in the module.
  */
 class NoticesTest {
@@ -63,7 +63,7 @@ class NoticesTest {
     fun `the build knows its own version, date and licence position`() {
         assertTrue(BuildInfo.VERSION.isNotBlank())
         assertTrue(
-            Updates.parse(BuildInfo.VERSION) != null,
+            Updates.parseVersion(BuildInfo.VERSION) != null,
             "the generated version ${BuildInfo.VERSION} is not a version the update check can read"
         )
         // yyyy-mm-dd, which is what `LocalDate.toString` gives and what the About dialog prints.

@@ -16,7 +16,8 @@ import kotlin.test.assertTrue
  * Most of the fifteen are claims about appearance and are reviewed by looking at a screenshot. Six
  * are not. "High contrast" and "colour-blind" are claims with published thresholds behind them, and
  * a chrome that made either claim and missed it would be worse than no chrome at all — a reader
- * would choose it *because* of the promise. F7's four make a quieter promise and the same kind: a
+ * would choose it *because* of the promise. The four typographic chromes — Matrix, Hessian,
+ * Roman and Hitchcock — make a quieter promise of the same kind: a
  * chrome is a room somebody works in for an hour, and one whose secondary text or whose armed
  * button sat under WCAG AA would be a room nobody could work in, however good it looked.
  *
@@ -38,7 +39,7 @@ class ChromeContrastTest {
         /**
          * WCAG 2.1 AA for body text (1.4.6 again, the lower of its two bars).
          *
-         * What F7's four are held to, and the spec's own figure for them. They are not accessibility
+         * What the four typographic chromes are held to. They are not accessibility
          * chromes and do not claim to be; this is the floor below which a chrome stops being usable
          * for an hour's work, which is the whole of what was asked of them.
          */
@@ -85,12 +86,13 @@ class ChromeContrastTest {
         const val ACCENT_MARGIN = 10.0
 
         /**
-         * The eleven chromes as they were on `main` at 27fd260, role by role.
+         * The eleven older chromes as they were on `main` at 27fd260, role by role.
          *
-         * Thirty-six ARGB values each, in the order [roles] writes them. See the test that
-         * reads them; they were produced by running exactly that function on that tree.
+         * Thirty-six ARGB values each, in the order [roles] writes them, recorded before the four
+         * typographic chromes were written. See the test that reads them; they were produced by
+         * running exactly that function on that tree.
          */
-        val BEFORE_F7: List<Pair<String, String>> = listOf(
+        val RECORDED_ROLES: List<Pair<String, String>> = listOf(
         "SYSTEM" to
             "ff6b3f2a,fff6eedb,ffe2d2a9,ff2b2117,ffc9a227,ff5b4a2f," +
             "fff6eedb,ffe2d2a9,ff2b2117,ff6e5b3c,fff6eedb,ffe2d2a9," +
@@ -229,8 +231,8 @@ class ChromeContrastTest {
      * The saturated blue, where it is a mark rather than a word.
      *
      * This is the other half of the decision the scheme's own note explains: #1A6EFF is the accent
-     * F6 names, it cannot reach 7:1 against anything, and so it is the border, the rail and the
-     * bead — never a word. The test asserts both halves, because either one alone could be
+     * this chrome is specified with, it cannot reach 7:1 against anything, and so it is the
+     * border, the rail and the bead — never a word. The test asserts both halves, because either one alone could be
      * satisfied by quietly abandoning the other.
      */
     @Test
@@ -238,7 +240,11 @@ class ChromeContrastTest {
         val detail = ThemeChoice.HIGH_CONTRAST.detail()
         val scheme = ThemeChoice.HIGH_CONTRAST.scheme(systemDark = true)
         val mark = detail.mark(scheme)
-        assertEquals(Color(0xFF1A6EFF), mark, "the mark accent is no longer the blue F6 names")
+        assertEquals(
+            Color(0xFF1A6EFF),
+            mark,
+            "the mark accent is no longer the blue this chrome is specified with"
+        )
 
         val onGround = ColorVision.contrast(mark.toArgb(), scheme.background.toArgb())
         assertTrue(
@@ -349,13 +355,14 @@ class ChromeContrastTest {
     }
 
     /**
-     * That F6 changed nothing about the eight chromes that came before it.
+     * That the six unornamented chromes carry no ornament.
      *
      * Every one of them takes the default [ChromeDetail], which is the whole of the reason their
-     * screenshots are pixel-identical: a hairline rule, one accent, no cues, no box.
+     * screenshots stay pixel-identical as ornaments are added elsewhere: a hairline rule, one
+     * accent, no cues, no box.
      */
     @Test
-    fun `the chromes before F6 carry no ornament`() {
+    fun `the unornamented chromes carry no ornament`() {
         val untouched = listOf(
             ThemeChoice.SYSTEM, ThemeChoice.LIGHT, ThemeChoice.DARK,
             ThemeChoice.NAUTICAL, ThemeChoice.MIDNIGHT, ThemeChoice.MARS
@@ -371,14 +378,14 @@ class ChromeContrastTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // F7's four.
+    // The four typographic chromes: Matrix, Hessian, Roman, Hitchcock.
     // ---------------------------------------------------------------------------------------
 
     /**
      * Every pair in a scheme that the application actually draws text with.
      *
-     * The High contrast list above, generalised, plus the two roles F7 added to the machinery: the
-     * armed button's label now comes from [ChromeDetail.label] rather than always from `primary`,
+     * The High contrast list above, generalised, plus the two roles the typographic chromes need:
+     * the armed button's label comes from [ChromeDetail.label] rather than always from `primary`,
      * because three of these chromes make that button a block instead of a stain, and measuring it
      * as `primary` on `primaryContainer` would measure a pair nobody draws.
      *
@@ -386,32 +393,34 @@ class ChromeContrastTest {
      * identity for three of the four; for Hessian it composites the weave in.
      */
     private fun textPairs(
-        s: ColorScheme,
+        scheme: ColorScheme,
         detail: ChromeDetail,
         ground: (Color) -> Color = { it }
-    ): List<Triple<String, Color, Color>> = listOf(
-        Triple("body text on the window", s.onBackground, ground(s.background)),
-        Triple("body text on a panel", s.onSurface, ground(s.surface)),
-        Triple("secondary text on a sunk panel", s.onSurfaceVariant, ground(s.surfaceVariant)),
-        Triple("secondary text on a panel", s.onSurfaceVariant, ground(s.surface)),
-        Triple("the menu strip", s.onSurface, ground(s.surfaceContainerHigh)),
-        Triple("a menu heading", s.onSurfaceVariant, ground(s.surfaceContainerHighest)),
-        Triple("an open menu", s.onSurface, ground(s.surfaceContainerHighest)),
-        Triple("a card", s.onSurface, ground(s.surfaceContainer)),
-        Triple("the accent as a word, on a panel", s.primary, ground(s.surface)),
-        Triple("the secondary as a word, on a panel", s.secondary, ground(s.surface)),
-        Triple("the armed button's label", detail.label(s), s.primaryContainer),
-        Triple("a label on the accent", s.onPrimary, s.primary),
-        Triple("a chosen chip", s.onSecondaryContainer, s.secondaryContainer),
-        Triple("a filled accent block", s.onPrimaryContainer, s.primaryContainer),
-        Triple("a tertiary block", s.onTertiaryContainer, s.tertiaryContainer),
-        Triple("an error, on a panel", s.error, ground(s.surface)),
-        Triple("a label on an error", s.onError, s.error),
-        Triple("an error block", s.onErrorContainer, s.errorContainer),
-        Triple("an inverted strip", s.inverseOnSurface, s.inverseSurface)
-    )
+    ): List<Triple<String, Color, Color>> = with(scheme) {
+        listOf(
+            Triple("body text on the window", onBackground, ground(background)),
+            Triple("body text on a panel", onSurface, ground(surface)),
+            Triple("secondary text on a sunk panel", onSurfaceVariant, ground(surfaceVariant)),
+            Triple("secondary text on a panel", onSurfaceVariant, ground(surface)),
+            Triple("the menu strip", onSurface, ground(surfaceContainerHigh)),
+            Triple("a menu heading", onSurfaceVariant, ground(surfaceContainerHighest)),
+            Triple("an open menu", onSurface, ground(surfaceContainerHighest)),
+            Triple("a card", onSurface, ground(surfaceContainer)),
+            Triple("the accent as a word, on a panel", primary, ground(surface)),
+            Triple("the secondary as a word, on a panel", secondary, ground(surface)),
+            Triple("the armed button's label", detail.label(scheme), primaryContainer),
+            Triple("a label on the accent", onPrimary, primary),
+            Triple("a chosen chip", onSecondaryContainer, secondaryContainer),
+            Triple("a filled accent block", onPrimaryContainer, primaryContainer),
+            Triple("a tertiary block", onTertiaryContainer, tertiaryContainer),
+            Triple("an error, on a panel", error, ground(surface)),
+            Triple("a label on an error", onError, error),
+            Triple("an error block", onErrorContainer, errorContainer),
+            Triple("an inverted strip", inverseOnSurface, inverseSurface)
+        )
+    }
 
-    /** Asserts every pair at AA and prints the worst, the way the two F6 guards do. */
+    /** Asserts every pair at AA and prints the worst, the way the two accessibility guards do. */
     private fun assertAA(
         choice: ThemeChoice,
         ground: (Color) -> Color = { it },
@@ -492,7 +501,7 @@ class ChromeContrastTest {
     /**
      * Hitchcock's vermilion, where it is a mark rather than a word.
      *
-     * The third instance of the decision F6 made for High contrast, and the spec predicted it:
+     * The third instance of the decision High contrast makes, and the spec predicted it:
      * "vermilion on black is about 5.5:1 as text, so check it". Checked, it is **4.38:1** on the
      * flat-black panel — the panel, not the charcoal ground, being the worse of the two and the one
      * a word is actually read on. So #E8491D is the block, the border, the rail and the bead, and
@@ -534,7 +543,11 @@ class ChromeContrastTest {
     fun `the Roman bronze and the Hessian twine are marks, and their words are darker`() {
         val roman = ThemeChoice.ROMAN.scheme(systemDark = false)
         val bronze = ThemeChoice.ROMAN.detail().mark(roman)
-        assertEquals(Color(0xFF9C7A3C), bronze, "the Roman mark is no longer the bronze F7 names")
+        assertEquals(
+            Color(0xFF9C7A3C),
+            bronze,
+            "the Roman mark is no longer the bronze the chrome is specified with"
+        )
         val bronzeWord = ColorVision.contrast(roman.primary.toArgb(), roman.surface.toArgb())
         val bronzeMark = ColorVision.contrast(bronze.toArgb(), roman.surface.toArgb())
         assertTrue(bronzeMark >= NON_TEXT, "the bronze is ${bronzeMark.rounded()}:1 on marble")
@@ -554,20 +567,20 @@ class ChromeContrastTest {
     }
 
     /**
-     * That F7's four are the only chromes carrying F7's ornament.
+     * That the four typographic chromes are the only ones carrying typographic ornament.
      *
-     * The counterpart of the guard above for F6, and the other half of the byte-identity claim: a
-     * cut bar, a meander, a running stitch, a prompt, an interpunct, a weave and a button label are
+     * The counterpart of the guard above, and the other half of the byte-identity claim: a cut
+     * bar, a meander, a running stitch, a prompt, an interpunct, a weave and a button label are
      * each asked for by exactly the chromes that asked for them, and by nobody else.
      */
     @Test
-    fun `only F7's four carry F7's ornament`() {
-        val f7 = setOf(
+    fun `only the typographic chromes carry typographic ornament`() {
+        val typographic = setOf(
             ThemeChoice.MATRIX, ThemeChoice.HESSIAN, ThemeChoice.ROMAN, ThemeChoice.HITCHCOCK
         )
         ThemeChoice.entries.forEach { choice ->
             val detail = choice.detail()
-            val mine = choice in f7
+            val mine = choice in typographic
             assertEquals(
                 mine,
                 detail.headings == HeadingCase.CAPITALS,
@@ -588,7 +601,7 @@ class ChromeContrastTest {
                         SectionRuleStyle.MEANDER,
                         SectionRuleStyle.CUT_BAR
                     ),
-                    "${choice.label} has taken one of F7's rules"
+                    "${choice.label} has taken one of the typographic rules"
                 )
                 assertTrue(
                     detail.cartouche !in setOf(
@@ -596,7 +609,7 @@ class ChromeContrastTest {
                         CartoucheStyle.DOUBLE_RULE,
                         CartoucheStyle.SPIRAL
                     ),
-                    "${choice.label} has taken one of F7's cartouches"
+                    "${choice.label} has taken one of the typographic cartouches"
                 )
             }
         }
@@ -628,13 +641,12 @@ class ChromeContrastTest {
     }
 
     /**
-     * That F7 did not move one colour of the eleven chromes that came before it.
+     * That adding a chrome moves no colour of any chrome already there.
      *
-     * The claim F7 has to make, and the strongest form it can be made in without a picture: every
-     * Material role of every earlier chrome, recorded from `main` at 27fd260 before a line of F7
-     * was written, and compared against what the enum answers now. Recorded rather than recomputed,
-     * because a comparison against something this run also produced would pass however wrong both
-     * halves were.
+     * The strongest form that claim can be made in without a picture: every Material role of every
+     * chrome that existed when [RECORDED_ROLES] was taken, compared against what the enum answers
+     * now. Recorded rather than recomputed, because a comparison against something this run also
+     * produced would pass however wrong both halves were.
      *
      * Thirty-six roles is the whole of a `ColorScheme` this application ever reads, in the order
      * the probe wrote them. `ChromeGalleryTest` makes the other half of the claim, in pixels: the
@@ -642,31 +654,34 @@ class ChromeContrastTest {
      * tree produced.
      */
     @Test
-    fun `the eleven chromes before F7 have not moved a colour`() {
-        BEFORE_F7.forEach { (name, expected) ->
+    fun `the recorded chromes have not moved a colour`() {
+        RECORDED_ROLES.forEach { (name, expected) ->
             val choice = ThemeChoice.entries.first { it.name == name }
             assertEquals(
                 expected,
                 roles(choice.scheme(systemDark = false)),
-                "$name is not the scheme it was before F7"
+                "$name is not the scheme it was recorded as"
             )
         }
-        println("CHROME F7 identity: ${BEFORE_F7.size} chromes x 36 roles unchanged")
+        println("CHROME identity: ${RECORDED_ROLES.size} chromes x 36 roles unchanged")
     }
 
-    /** Every role the application reads, in the order the pre-F7 probe wrote them. */
-    private fun roles(s: ColorScheme): String = listOf(
-        s.primary, s.onPrimary, s.primaryContainer, s.onPrimaryContainer, s.inversePrimary,
-        s.secondary, s.onSecondary, s.secondaryContainer, s.onSecondaryContainer,
-        s.tertiary, s.onTertiary, s.tertiaryContainer, s.onTertiaryContainer,
-        s.background, s.onBackground, s.surface, s.onSurface,
-        s.surfaceVariant, s.onSurfaceVariant, s.surfaceTint,
-        s.inverseSurface, s.inverseOnSurface,
-        s.error, s.onError, s.errorContainer, s.onErrorContainer,
-        s.outline, s.outlineVariant, s.scrim,
-        s.surfaceBright, s.surfaceDim,
-        s.surfaceContainerLowest, s.surfaceContainerLow, s.surfaceContainer,
-        s.surfaceContainerHigh, s.surfaceContainerHighest
+    /** Every role the application reads, in the order the probe wrote them. */
+    private fun roles(scheme: ColorScheme): String = listOf(
+        scheme.primary, scheme.onPrimary, scheme.primaryContainer, scheme.onPrimaryContainer,
+        scheme.inversePrimary,
+        scheme.secondary, scheme.onSecondary, scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+        scheme.tertiary, scheme.onTertiary, scheme.tertiaryContainer,
+        scheme.onTertiaryContainer,
+        scheme.background, scheme.onBackground, scheme.surface, scheme.onSurface,
+        scheme.surfaceVariant, scheme.onSurfaceVariant, scheme.surfaceTint,
+        scheme.inverseSurface, scheme.inverseOnSurface,
+        scheme.error, scheme.onError, scheme.errorContainer, scheme.onErrorContainer,
+        scheme.outline, scheme.outlineVariant, scheme.scrim,
+        scheme.surfaceBright, scheme.surfaceDim,
+        scheme.surfaceContainerLowest, scheme.surfaceContainerLow, scheme.surfaceContainer,
+        scheme.surfaceContainerHigh, scheme.surfaceContainerHighest
     ).joinToString(",") { it.toArgb().toUInt().toString(16).padStart(8, '0') }
 
     private fun Double.rounded(): String {

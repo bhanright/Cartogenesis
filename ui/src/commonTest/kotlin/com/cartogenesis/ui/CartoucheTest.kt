@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
- * The legend's left-hand half, which is the only new *text* F3 puts on screen.
+ * The legend's left-hand half: what the map says about itself, in words.
  *
  * The parts that can be wrong are all arithmetic and formatting, and none of them need a world or
  * a composition: whether the same seed always names the same world, whether two different peoples

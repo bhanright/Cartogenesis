@@ -110,10 +110,13 @@ object DataExports {
      * drawn from, so it is the field the heightmap carries — not the raw uplift, which the shelf,
      * the ice and the drowned-basin outlets have all since moved.
      */
+    /** The most a sixteen-bit sample can hold. */
+    const val HIGHEST_GREY_LEVEL = 65535
+
     fun greyLevelFor(relativeElevation: Float): Int =
         (SEA_LEVEL_GREY_LEVEL + relativeElevation.coerceIn(-1f, 1f) * LEVELS_PER_SIDE)
             .roundToInt()
-            .coerceIn(0, 65535)
+            .coerceIn(0, HIGHEST_GREY_LEVEL)
 
     /** The inverse, which is the arithmetic a reader of the file has to do. */
     fun relativeElevationFor(greyLevel: Int): Float =
@@ -216,9 +219,9 @@ object DataExports {
         val field = world.climate.biome
         val indices = ByteArray(field.size)
         val counts = IntArray(biomes.size)
-        for (i in field.indices) {
-            val ordinal = field[i].ordinal
-            indices[i] = ordinal.toByte()
+        for (cell in field.indices) {
+            val ordinal = field[cell].ordinal
+            indices[cell] = ordinal.toByte()
             counts[ordinal]++
         }
         return Painted(
@@ -242,30 +245,37 @@ object DataExports {
         val realms = world.nations.nations
         val nationId = world.nations.nationId
         val indices = ByteArray(nationId.size)
-        val counts = IntArray(realms.size + 2)
-        for (i in nationId.indices) {
-            val id = nationId[i]
+        val entryCount = realms.size + INDICES_BEFORE_THE_REALMS
+        val counts = IntArray(entryCount)
+        for (cell in nationId.indices) {
+            val id = nationId[cell]
             val index = when {
-                id != NationResult.UNCLAIMED && id < realms.size -> id + 2
-                world.sea.isLand[i] -> 1
-                else -> 0
+                id != NationResult.UNCLAIMED && id < realms.size ->
+                    id + INDICES_BEFORE_THE_REALMS
+                world.sea.isLand[cell] -> UNCLAIMED_LAND_INDEX
+                else -> SEA_INDEX
             }
-            indices[i] = index.toByte()
+            indices[cell] = index.toByte()
             counts[index]++
         }
         return Painted(
             indices = indices,
-            palette = IntArray(realms.size + 2) {
-                when (it) {
-                    0 -> MapPalette.biome(Biome.OCEAN)
-                    1 -> MapPalette.WILDERNESS
-                    else -> MapPalette.nation(realms[it - 2].id)
+            palette = IntArray(entryCount) { index ->
+                when (index) {
+                    SEA_INDEX -> MapPalette.biome(Biome.OCEAN)
+                    UNCLAIMED_LAND_INDEX -> MapPalette.WILDERNESS
+                    else -> MapPalette.nation(realms[index - INDICES_BEFORE_THE_REALMS].id)
                 }
             },
             names = listOf("Sea", "Unclaimed land") + realms.map { it.name },
             cellCounts = counts
         )
     }
+
+    /** The two entries every realm layer starts with, before a realm's own id is offset past them. */
+    private const val SEA_INDEX = 0
+    private const val UNCLAIMED_LAND_INDEX = 1
+    private const val INDICES_BEFORE_THE_REALMS = 2
 
     /** `TEMPERATE_RAINFOREST` as a person would write it. */
     private fun readable(enumName: String): String =
@@ -277,12 +287,15 @@ object DataExports {
         val metresPerLevelBelow = metresPerGreyLevelBelowSeaLevel(config)
         val json = JsonLines()
         common(json, world, DataLayer.HEIGHTMAP, appVersion)
-        json.number("bitsPerSample", 16)
+        json.number("bitsPerSample", GREYSCALE_BITS_PER_SAMPLE)
         json.number("seaLevelGreyLevel", SEA_LEVEL_GREY_LEVEL)
         json.number("greyLevelsPerSide", LEVELS_PER_SIDE)
         json.number("metresPerGreyLevel", metresPerLevel)
         json.number("metresPerGreyLevelBelowSeaLevel", metresPerLevelBelow)
-        json.number("metresAtGreyLevel65535", metresPerLevel * (65535 - SEA_LEVEL_GREY_LEVEL))
+        json.number(
+            "metresAtGreyLevel$HIGHEST_GREY_LEVEL",
+            metresPerLevel * (HIGHEST_GREY_LEVEL - SEA_LEVEL_GREY_LEVEL)
+        )
         json.number("metresAtGreyLevel0", metresPerLevelBelow * (0 - SEA_LEVEL_GREY_LEVEL))
         json.number("highestLandMetres", config.scale.highestLandMetres.toDouble())
         json.number("deepestOceanMetres", config.scale.deepestOceanMetres.toDouble())
@@ -302,11 +315,15 @@ object DataExports {
     ): String {
         val json = JsonLines()
         common(json, world, layer, appVersion)
-        json.number("bitsPerSample", 8)
+        json.number("bitsPerSample", INDEXED_BITS_PER_SAMPLE)
         json.number("paletteSize", painted.palette.size)
         json.legend(painted.names, painted.palette, painted.cellCounts)
         return json.finish()
     }
+
+    /** How many bits a sample of each of the two exports takes. See [PngWriter]. */
+    private const val GREYSCALE_BITS_PER_SAMPLE = 16
+    private const val INDEXED_BITS_PER_SAMPLE = 8
 
     private fun common(json: JsonLines, world: WorldMap, layer: DataLayer, appVersion: String) {
         val config = world.config
@@ -418,64 +435,88 @@ private class JsonLines {
  */
 private object Zip {
 
-    /** The 1980 epoch MS-DOS dates start at. Fixed, so the same export twice is the same bytes. */
+    /** The three record signatures of the format, as PKWARE's specification numbers them. */
+    private const val LOCAL_HEADER_SIGNATURE = 0x04034B50
+    private const val CENTRAL_ENTRY_SIGNATURE = 0x02014B50
+    private const val END_OF_DIRECTORY_SIGNATURE = 0x06054B50
+
+    /** Version 2.0 of the format, written as tenths: the one that first defined stored entries. */
+    private const val FORMAT_VERSION_IN_TENTHS = 20
+
+    /** The compression method field. Zero is "stored", which is the only one this writes. */
+    private const val METHOD_STORED = 0
+
+    /**
+     * The modification time and date every entry carries.
+     *
+     * Fixed rather than taken from a clock, so the same export twice is the same bytes: 0x21 is
+     * the first day of 1980, which is the epoch an MS-DOS date counts from and the earliest one it
+     * can express. A zero date is not legal.
+     */
     private const val DOS_TIME = 0
     private const val DOS_DATE = 0x21
 
+    /** Nothing this writes uses these fields: no flags, no extra data, one disk, no comment. */
+    private const val UNUSED_FIELD = 0
+
+    /** Room for the two headers and the directory of a two-entry archive. */
+    private const val HEADER_ALLOWANCE_BYTES = 512
+
     fun of(entries: List<Pair<String, ByteArray>>): ByteArray {
-        val out = ByteSink(entries.sumOf { it.second.size } + 512)
+        val out = ByteSink(entries.sumOf { it.second.size } + HEADER_ALLOWANCE_BYTES)
         val offsets = IntArray(entries.size)
         val checksums = IntArray(entries.size)
 
-        entries.forEachIndexed { i, (name, data) ->
-            offsets[i] = out.length
-            checksums[i] = Crc32.of(data)
-            out.littleInt(0x04034B50)
-            out.littleShort(20) // the version that first understood stored entries
-            out.littleShort(0)  // no flags: no encryption, no data descriptor
-            out.littleShort(0)  // stored
+        entries.forEachIndexed { index, (name, data) ->
+            offsets[index] = out.length
+            checksums[index] = Crc32.of(data)
+            out.littleInt(LOCAL_HEADER_SIGNATURE)
+            out.littleShort(FORMAT_VERSION_IN_TENTHS)
+            out.littleShort(UNUSED_FIELD) // flags: no encryption, no data descriptor
+            out.littleShort(METHOD_STORED)
             out.littleShort(DOS_TIME)
             out.littleShort(DOS_DATE)
-            out.littleInt(checksums[i])
+            out.littleInt(checksums[index])
+            // Compressed and uncompressed size, which are the same thing for a stored entry.
             out.littleInt(data.size)
             out.littleInt(data.size)
             out.littleShort(name.length)
-            out.littleShort(0)  // no extra field
+            out.littleShort(UNUSED_FIELD) // extra field
             out.ascii(name)
             out.bytes(data)
         }
 
         val directoryAt = out.length
-        entries.forEachIndexed { i, (name, data) ->
-            out.littleInt(0x02014B50)
-            out.littleShort(20) // made by
-            out.littleShort(20) // needed to extract
-            out.littleShort(0)
-            out.littleShort(0)
+        entries.forEachIndexed { index, (name, data) ->
+            out.littleInt(CENTRAL_ENTRY_SIGNATURE)
+            out.littleShort(FORMAT_VERSION_IN_TENTHS) // made by
+            out.littleShort(FORMAT_VERSION_IN_TENTHS) // needed to extract
+            out.littleShort(UNUSED_FIELD) // flags
+            out.littleShort(METHOD_STORED)
             out.littleShort(DOS_TIME)
             out.littleShort(DOS_DATE)
-            out.littleInt(checksums[i])
+            out.littleInt(checksums[index])
             out.littleInt(data.size)
             out.littleInt(data.size)
             out.littleShort(name.length)
-            out.littleShort(0) // extra
-            out.littleShort(0) // comment
-            out.littleShort(0) // disk
-            out.littleShort(0) // internal attributes
-            out.littleInt(0)   // external attributes
-            out.littleInt(offsets[i])
+            out.littleShort(UNUSED_FIELD) // extra
+            out.littleShort(UNUSED_FIELD) // comment
+            out.littleShort(UNUSED_FIELD) // disk
+            out.littleShort(UNUSED_FIELD) // internal attributes
+            out.littleInt(UNUSED_FIELD)   // external attributes
+            out.littleInt(offsets[index])
             out.ascii(name)
         }
         val directorySize = out.length - directoryAt
 
-        out.littleInt(0x06054B50)
-        out.littleShort(0)
-        out.littleShort(0)
+        out.littleInt(END_OF_DIRECTORY_SIGNATURE)
+        out.littleShort(UNUSED_FIELD) // this disk's number
+        out.littleShort(UNUSED_FIELD) // the disk the directory starts on
         out.littleShort(entries.size)
         out.littleShort(entries.size)
         out.littleInt(directorySize)
         out.littleInt(directoryAt)
-        out.littleShort(0) // no archive comment
+        out.littleShort(UNUSED_FIELD) // archive comment
         return out.toByteArray()
     }
 }

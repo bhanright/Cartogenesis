@@ -76,17 +76,33 @@ rate below is written in those units and converted to whatever grid the world is
    drowns lower valleys into estuaries and sounds. A pocket of sea the cut leaves enclosed by land
    is relabelled ground rather than left a landlocked sea, and a second pass afterwards lets a
    filled basin's overflow breach its own sill, so a basin ends up an inlet, a lake or dry ground by
-   its own drainage rather than by the cut alone.
+   its own drainage rather than by the cut alone. Two passes then decide what the coastline actually
+   is. A drowned valley narrower than half its cell goes back to being land, because at six to
+   twelve kilometres Earth's coasts are indented by the Chesapeake and the Severn and by nothing
+   smaller, and a channel a kilometre wide has no business filling a cell twelve kilometres across.
+   Then the waves get the six thousand years since the sea stopped rising: on the third of the
+   shoreline with low ground behind it — Earth's own share of depositional coast — sediment fills
+   the re-entrants the drowning left, never damming a channel and never cutting a headland back, so
+   a coast on a plain comes out a graded arc and a coast under mountains keeps its rias.
 6. **Shelves.** The sea floor near a coast is remapped onto a shallow continental shelf that falls
    away to the abyss beyond it, so a coastline reads as bathymetry rather than a cliff underwater.
 7. **Currents.** Wind stress on the sea has a curl, and the stream function that satisfies it inside
    a closed basin is a gyre, so the currents are solved for rather than drawn, giving warm poleward
    flow on western ocean margins and cold equatorward flow on eastern ones.
-8. **Climate.** Temperature follows latitude and altitude; rainfall comes from moist air marched
-   along wind belts that swing between two seasons, producing rain shadows and monsoons and
-   classifying biomes Köppen-style from the four seasonal numbers. A snow mass balance, not a bare
-   freezing line, decides where ice can hold, and the sea-surface temperature the currents carry
-   scales how much moisture a coast picks up.
+8. **Climate.** Temperature is solved rather than drawn: a one-dimensional energy balance over a
+   couple of hundred latitude bands, marched through the year, weighing the sunlight a latitude
+   receives against what it radiates to space and what its neighbours send it. Each band carries an
+   air column over land and another over sea with the world's own coastline as their areas, and a
+   fifty-metre slab of water under the marine one, so a continent gets a winter, the coast beside it
+   gets a cool spell, and the sea itself barely moves — three heat capacities and a coastline, with
+   no setting for any of it. The albedo follows the ice the
+   model itself grows, so a cap is self-reinforcing and a colder sun is answered with a cooling that
+   deepens toward the poles. Rainfall comes from moist air marched along wind belts that swing
+   between two seasons, producing rain shadows and monsoons and classifying biomes Köppen-style from
+   the four seasonal numbers. Where a season's water falls below the freezing point of sea
+   water it is under ice, and the march takes nothing from ice, so the polar ocean is a desert. A
+   snow mass balance, not a bare freezing line, decides where land ice can hold, and the
+   sea-surface temperature the currents carry scales how much moisture a coast picks up.
 9. **Glaciation.** Where the snow balance runs positive, valley glaciers widen and flatten existing
    river valleys into U-shaped troughs with cirques at their heads, and ice sheets scour flat ground
    into the irregular closed basins of shield lake country.
@@ -94,10 +110,15 @@ rate below is written in those units and converted to whatever grid the world is
     downhill and traced to the coast, and every basin's outlet incises its own sill down over time.
     A basin the fill raised becomes a lake only as far as its water balance allows: where
     evaporation outpaces runoff it settles below its rim as endorheic, or as a dry playa if it
-    cannot hold water at all; otherwise it overflows at the brim. A channel is drawn as wide as the
+    cannot hold water at all; otherwise it overflows at the brim. A course runs from its farthest
+    headwater rather than its biggest, so a river is the whole of the longest watercourse in its
+    catchment, and it runs on through water one cell wide — a lake's spill level covers the channel
+    that feeds it, and a strip of water that narrow is the river. A channel is drawn as wide as the
     water it carries: Leopold and Maddock's downstream hydraulic geometry has width going as the
-    square root of discharge, so the map's smallest stream is a 0.8-pixel thread and its biggest
-    river a 5-pixel channel, with the same pen at every resolution and export size.
+    square root of discharge, so the map's smallest stream is a 0.8-pixel hairline and its biggest
+    river a quarter of a percent of the map's width — 2.5 pixels at 1024, 4.9 at 2048, 9.8 at 4096 —
+    which is the same weight of ink against the same country whatever size the sheet is. The stroke
+    stops at the shoreline rather than running on into the sea.
 11. **Realms.** Political borders are handed out by whole drainage catchment, never split, so a
     frontier falls on a watershed because that is the only place a catchment boundary can run;
     large catchments are cut along their trunk river, enclaves dissolve to whichever neighbour
@@ -129,6 +150,84 @@ A style changes only appearance; the same seed gives the same world in all eleve
 diagnostic views (elevation, biomes, climate and the rest) ignore styles entirely, since their
 colours carry meaning a prettier ramp would obscure. `StyleGalleryTest` renders all eleven and
 asserts that they differ from one another.
+
+Most of the difference between them is four numbers rather than eleven separate repaints: how much
+vegetation colour is let through, how far each biome colour is dragged toward the paper first (old
+inks are earths, not dimmed greens), how far the height ramp follows the climate, and how hard the
+hillshade is exaggerated — which is why the ink style works at all, since with the colour gone
+relief is the only thing left describing the mountains.
+
+### Tints that follow the climate, and light from the sky
+
+A hypsometric ramp says that this height is that colour, and on a world with more than one climate
+that is a lie: the green a ramp gives a coastal plain is a wet plain's green, and drawn over a
+desert it puts a lawn on the Sahara. Imhof's answer, and every good atlas's, is a series modulated
+by what grows there. Each cell carries three numbers about its own ground — how bare it is, how
+frozen, and how closed the canopy over it — and each style says through one lever how much of that
+to let through: the full effect on Atlas and Schoolroom, a suggestion on the aged papers, nothing at
+all on Pen and ink, which has no tint, or on Colour-blind, whose ramp is a measured promise nothing
+may move. How bare the ground is comes from De Martonne's aridity index, the year's rain over the
+mean temperature plus ten, spent *inside* the band of bare ground the biome itself allows — barren
+land is over nine tenths bare whatever the weather does, a grassland between a twentieth and a half
+of it, a closed forest none — so a desert comes out sand at every height, a steppe comes out straw,
+and a forest darkens the lowland greens.
+
+The relief is lit by a sky rather than a lamp. One light in the north-west is the convention every
+shaded-relief map has used since the nineteenth century, and it has one failure no exaggeration
+fixes: a slope facing away from it receives nothing at all. After Kennelly and Stewart's sky models,
+the light comes from eight lamps round the whole compass, each as bright as its own eighth of the
+sky, plus an ambient term that falls with how much sky the ground can actually see. How hazy the day
+is — which sets both how much brighter the sky is around the light and how much of its light is
+diffuse — is derived rather than chosen: it is the haze at which the shaded relief has exactly the
+contrast of the lamp it replaces (0.169 against 0.171 over the land of the standard world). What
+changes is *where* the darkness falls. The single lamp is still there, as **Single-lamp relief** in
+the Cartography section of the panel, and under it the older picture comes back bit for bit.
+
+And **depth contours** in the sea, every 500 m, which is what GEBCO's small-scale sheets are drawn
+at. A line is held at a fixed width in pixels by dividing by how fast the floor falls, measured over
+a short distance of ground rather than between two neighbouring cells — between neighbours the
+answer is the floor's own roughness, and a line drawn to that width covers an abyssal plain in a
+nest of closed loops that mean nothing. They fade out where they would crowd closer than four
+pixels, and again where the floor is flatter than one in a thousand, which is the definition of an
+abyssal plain and the point below which a contour stops describing anything.
+
+## What a map says about itself
+
+Three things a chart carries that a picture does not, all drawn on top of the raster and none of
+them touching the world underneath.
+
+**Generalisation.** A map is not the same map at every size, so the drawing is done for the scale it
+will be seen at. Rivers below a discharge threshold are dropped as the reader zooms out and come
+back as they zoom in, the count kept by Töpfer and Pillewizer's radical law (1966): the number of
+features surviving a reduction in scale goes as the square root of the change in scale. A 2048 world
+fitted into a laptop's pane is shown at about 0.44 pixels to the cell, so about 70% of its rivers
+are drawn — 198 of 718106's 279 — and at four times zoom every one of them is back. An export is
+drawn cell for pixel and never loses anything. The coast is traced off the land mask as polylines,
+simplified by Douglas–Peucker at half a drawn pixel and stroked over the raster, so it reads as a
+*line* rather than a staircase of cell edges; the fill stays the raster's.
+
+**A graticule**, as a Cartography toggle beside Relief shading and Coastline, drawn on screen and on
+exports. Lines of latitude and longitude every ten degrees, which on an equirectangular map of a
+whole globe is exactly a thirty-sixth of the width and an eighteenth of the height — not rounded to
+whole cells, because that would put the equator off the middle row. The edges are figured (`40°N`,
+`170°W`), at ten degrees on a 2048 sheet and at twenty or thirty on smaller ones, where the figures
+would otherwise run into one another.
+
+**A scale bar and a scale.** The legend along the map's foot carries a bar in kilometres, its length
+the longest round distance from the 1–2–5 series that fits a quarter of the frame; it restates
+itself as the reader zooms, so at fit it reads 2000 km and at 32 pixels to the cell it reads 20 km.
+An exported sheet carries the same bar in its bottom-left corner, since there is no legend beside a
+PNG. The cartouche gains a line giving the scale at the sheet's own size — `5.9 km per pixel · about
+1:22 000 000 at the equator` for 2048 — quoted at the CSS reference pixel's 96 to the inch, to two
+figures, and *at the equator* because on an equirectangular map east-west distances shrink with the
+cosine of the latitude and no scale bar can pretend otherwise.
+
+All of it comes off one number the world already carries, `WorldScale.worldWidthKm`: twelve thousand
+kilometres east to west, which is also where realm areas and the heightmap sidecar's cell size come
+from. The two words a chart prints — a graticule figure and the bar's distance — are drawn as
+stroked geometry rather than set as type, because they have to appear on an exported PNG as surely
+as on the screen, and a typeface that resolves on the desktop but not in a browser would make one
+map into two.
 
 ## Modules
 
@@ -312,11 +411,16 @@ stores rather than deflates — the PNG inside is already compressed and the pag
 
 Drawing the map runs on the graphics card unconditionally, not behind the acceleration toggle below,
 since rasterising pixels makes no promise about reproducing the world from its seed the way erosion
-does. `MapRasterizer`'s per-pixel work (a ramp lookup, a biome wash, a relief shade, a coast and
-border test) runs as one GPU compute dispatch per export tile (`GpuRaster`, behind the
-`RasterAccelerator` seam in `:cartography`), rasterising 4096 in 0.37s against the processor's
-0.71s, and 8192, in sixteen tiles, in 1.4s; `GpuRasterTest` holds the two within one channel step of
-255 at the 99.9th percentile across all fifteen views and eleven styles. None of this is the
+does. `MapRasterizer`'s per-pixel work (a ramp lookup, a climate-modulated tint, the sky's light and the
+ground's horizon, a coast, a contour and a border test) runs as one GPU compute dispatch per export
+tile (`GpuRaster`, behind the `RasterAccelerator` seam in `:cartography`), rasterising 4096 in 0.43s
+against the processor's 1.65s, and 8192, in sixteen tiles, in 0.84s. The sky model is what widened
+that gap: it asks the terrain twenty-four more questions per land pixel than a single lamp does,
+which doubles the processor's raster (0.81s at 4096 under the lamp) and costs the device nothing it
+notices. The shader is handed a `RasterRecipe` — every colour already packed and the two per-cell
+numbers the climate has to say about the ground — so neither the palette nor the aridity index is
+written twice, and `GpuRasterTest` holds the two paths within one channel step of 255 at the 99.9th
+percentile across all fifteen views and eleven styles. None of this is the
 bottleneck it looks like: a 4096 export spends over three minutes generating the world and under a
 second drawing it.
 

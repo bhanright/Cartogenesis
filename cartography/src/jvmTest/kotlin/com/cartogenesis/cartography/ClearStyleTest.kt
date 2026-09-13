@@ -75,16 +75,16 @@ class ClearStyleTest {
         var worst = Double.MAX_VALUE
         var worstWhere = ""
         SIMULATIONS.forEach { (name, deficiency) ->
-            for (i in 0 until stops.size - 1) {
-                val d = difference(stops[i], stops[i + 1], deficiency)
-                if (d < worst) {
-                    worst = d
-                    worstWhere = "stops $i and ${i + 1} under $name"
+            for (stop in 0 until stops.size - 1) {
+                val apart = difference(stops[stop], stops[stop + 1], deficiency)
+                if (apart < worst) {
+                    worst = apart
+                    worstWhere = "stops $stop and ${stop + 1} under $name"
                 }
                 assertTrue(
-                    d >= MARGIN,
-                    "CLEAR: land stops $i and ${i + 1} are ${d.rounded()} apart under $name, " +
-                        "short of $MARGIN"
+                    apart >= MARGIN,
+                    "CLEAR: land stops $stop and ${stop + 1} are ${apart.rounded()} apart under " +
+                        "$name, short of $MARGIN"
                 )
             }
         }
@@ -106,10 +106,10 @@ class ClearStyleTest {
     fun `the land ramp climbs in lightness from shore to snow`() {
         val stops = LAND_STOPS
         val luminance = stops.map { ColorVision.luminance(it) }
-        for (i in 0 until stops.size - 1) {
+        for (stop in 0 until stops.size - 1) {
             assertTrue(
-                luminance[i + 1] > luminance[i],
-                "CLEAR: land stop ${i + 1} is darker than stop $i, so the ramp is not ordered"
+                luminance[stop + 1] > luminance[stop],
+                "CLEAR: land stop ${stop + 1} is darker than stop $stop, so the ramp is not ordered"
             )
         }
         println(
@@ -121,10 +121,11 @@ class ClearStyleTest {
     /**
      * The nine realm fills, as the political view actually draws them.
      *
-     * Not the nine colours as published. The rasterizer blends a realm 30% toward the land beneath
-     * it so that the political map still reads as a map of somewhere, and that blend drags all nine
-     * toward one colour — most at the snow line, where the land is nearly white. So the measurement
-     * is taken over every stop of the ramp, and the worst of those is what the bar is set against.
+     * Not the nine colours as published. The rasterizer blends a realm
+     * [MapRasterizer.REALM_RELIEF_BLEED] of the way toward the land beneath it so that the
+     * political map still reads as a map of somewhere, and that blend drags all nine toward one
+     * colour — most at the snow line, where the land is nearly white. So the measurement is taken
+     * over every stop of the ramp, and the worst of those is what the bar is set against.
      */
     @Test
     fun `every pair of realm fills stays apart under both deficiencies, over every ground`() {
@@ -133,17 +134,19 @@ class ClearStyleTest {
         var worstWhere = ""
         SIMULATIONS.forEach { (name, deficiency) ->
             LAND_STOPS.forEachIndexed { stop, land ->
-                val fills = realms.map { MapPalette.blend(it, land, 0.3f) }
-                for (i in fills.indices) for (j in i + 1 until fills.size) {
-                    val d = difference(fills[i], fills[j], deficiency)
-                    if (d < worst) {
-                        worst = d
-                        worstWhere = "realms $i and $j over stop $stop under $name"
+                val fills = realms.map {
+                    MapPalette.blend(it, land, MapRasterizer.REALM_RELIEF_BLEED)
+                }
+                for (first in fills.indices) for (second in first + 1 until fills.size) {
+                    val apart = difference(fills[first], fills[second], deficiency)
+                    if (apart < worst) {
+                        worst = apart
+                        worstWhere = "realms $first and $second over stop $stop under $name"
                     }
                     assertTrue(
-                        d >= MARGIN,
-                        "CLEAR: realms $i and $j are ${d.rounded()} apart over land stop $stop " +
-                            "under $name, short of $MARGIN"
+                        apart >= MARGIN,
+                        "CLEAR: realms $first and $second are ${apart.rounded()} apart over land " +
+                            "stop $stop under $name, short of $MARGIN"
                     )
                 }
             }
@@ -170,18 +173,19 @@ class ClearStyleTest {
         SIMULATIONS.forEach { (name, deficiency) ->
             LAND_STOPS.forEach { land ->
                 REALMS.indices.forEach { id ->
-                    val plain = MapPalette.blend(style.realm(id), land, 0.3f)
+                    val plain =
+                        MapPalette.blend(style.realm(id), land, MapRasterizer.REALM_RELIEF_BLEED)
                     val struck = MapPalette.blend(
                         MapPalette.blend(style.realm(id), style.coastline, MapStyle.HATCH_STRENGTH),
                         land,
-                        0.3f
+                        MapRasterizer.REALM_RELIEF_BLEED
                     )
-                    val d = difference(plain, struck, deficiency)
-                    worst = minOf(worst, d)
+                    val apart = difference(plain, struck, deficiency)
+                    worst = minOf(worst, apart)
                     assertTrue(
-                        d >= MARGIN,
-                        "CLEAR: the hatch over realm $id is only ${d.rounded()} from the fill " +
-                            "under $name"
+                        apart >= MARGIN,
+                        "CLEAR: the hatch over realm $id is only ${apart.rounded()} from the " +
+                            "fill under $name"
                     )
                 }
             }
@@ -193,18 +197,33 @@ class ClearStyleTest {
     @Test
     fun `the hatch begins at the tenth realm and changes direction at the nineteenth`() {
         val style = MapStyle.CLEAR
-        // Nothing in the first nine takes ink anywhere.
-        for (id in 0 until 9) {
-            for (y in 0 until 6) for (x in 0 until 6) {
-                assertTrue(!style.hatched(id, x, y), "realm $id is hatched at $x,$y")
+        val setSize = style.realmRamp!!.size
+        // One whole tile of the comb, which is where a two-in-six hatch repeats.
+        val tile = 6
+        val inkedPerTile = tile * 2
+
+        // Nothing in the first turn of the set takes ink anywhere.
+        for (id in 0 until setSize) {
+            for (row in 0 until tile) for (column in 0 until tile) {
+                assertTrue(
+                    !style.hatched(id, column, row), "realm $id is hatched at $column,$row"
+                )
             }
         }
-        // The second nine take two cells in six, on the leading diagonal.
-        val second = (0 until 6).flatMap { y -> (0 until 6).map { x -> style.hatched(9, x, y) } }
-        assertEquals(12, second.count { it }, "the second nine are not hatched two cells in six")
-        // The third nine take the other diagonal, so the two never coincide across a whole tile.
-        val third = (0 until 6).flatMap { y -> (0 until 6).map { x -> style.hatched(18, x, y) } }
-        assertEquals(12, third.count { it }, "the third nine are not hatched two cells in six")
+        // The second turn takes two cells in six, on the leading diagonal.
+        val second = (0 until tile).flatMap { row ->
+            (0 until tile).map { column -> style.hatched(setSize, column, row) }
+        }
+        assertEquals(
+            inkedPerTile, second.count { it }, "the second turn is not hatched two cells in six"
+        )
+        // The third takes the other diagonal, so the two never coincide across a whole tile.
+        val third = (0 until tile).flatMap { row ->
+            (0 until tile).map { column -> style.hatched(setSize * 2, column, row) }
+        }
+        assertEquals(
+            inkedPerTile, third.count { it }, "the third turn is not hatched two cells in six"
+        )
         assertTrue(second != third, "the two hatch directions are the same pattern")
     }
 
@@ -220,11 +239,11 @@ class ClearStyleTest {
         var worst = Double.MAX_VALUE
         SIMULATIONS.forEach { (name, deficiency) ->
             LAND_STOPS.forEach { land ->
-                val d = difference(sea, land, deficiency)
-                worst = minOf(worst, d)
+                val apart = difference(sea, land, deficiency)
+                worst = minOf(worst, apart)
                 assertTrue(
-                    d >= MARGIN,
-                    "CLEAR: the sea is only ${d.rounded()} from a land stop under $name"
+                    apart >= MARGIN,
+                    "CLEAR: the sea is only ${apart.rounded()} from a land stop under $name"
                 )
             }
         }
@@ -235,10 +254,10 @@ class ClearStyleTest {
      * That the whole mechanism is inert in every other style.
      *
      * The realm set and the hatch are both reached through [MapStyle.realmRamp] being non-null, so
-     * this is the single assertion that F6 could not have changed a pixel of the ten styles that
-     * came before it. The two political ramps are reached through
-     * [MapStyle.ownsPoliticalGround], which F9 widened to take in the line-art style as well —
-     * a pen has no blue to paint a political sea with — so that one is asserted separately below.
+     * this is the single assertion that adding a colour-blind style could not have changed a pixel
+     * of the ten that came before it. The two political ramps are reached through
+     * [MapStyle.ownsPoliticalGround], which takes in the line-art style as well — a pen has no
+     * blue to paint a political sea with — so that one is asserted separately below.
      */
     @Test
     fun `no other style declares a realm set, and none of them changed`() {

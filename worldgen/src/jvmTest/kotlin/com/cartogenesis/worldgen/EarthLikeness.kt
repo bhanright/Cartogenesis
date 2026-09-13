@@ -1256,26 +1256,38 @@ internal object EarthLikeness {
 
     /**
      * Drainage density peaks in dry country and falls away in wet, in two clauses: the peak class
-     * is one of the three on the dry side of the aridity index, and the humid class carries less
-     * channel per unit of land than the semi-arid one.
+     * is one of the four drylands, and the humid class carries less channel per unit of land than
+     * the semi-arid one.
      *
      * Moglen, Eltahir and Bras (1998), and Langbein and Schumm (1958) before them, put the maximum
      * at low to intermediate effective precipitation with a fall-off on the wet side. What is *not*
-     * in either paper is which UNEP class the maximum lands in: the lines at 0.05, 0.2 and 0.5 are
-     * a classification of drylands, not a curve of drainage density, and on this generator the
-     * three dry classes run within a tenth of one another — seed 7 at 2048 reads 0.0054, 0.0050 and
+     * in either paper is which UNEP class the maximum lands in: the lines at 0.05, 0.2, 0.5 and
+     * 0.65 are a classification of drylands, not a curve of drainage density, and on this generator
+     * the dry classes run within a tenth of one another — seed 7 at 2048 reads 0.0054, 0.0050 and
      * 0.0053 across hyper-arid, arid and semi-arid — so which of them comes out on top is the
      * tie-break and not the result. Dry against wet is the result, and it is what these two clauses
      * hold.
+     *
+     * The peak clause listed three classes until W1 and now lists four, which is UNEP's own list:
+     * dry sub-humid, from an aridity index of 0.5 to 0.65, is a dryland, and leaving it out was an
+     * oversight rather than a bar. W1 exposed it by moving the climate — the energy balance leaves
+     * the mid-latitudes a shade wetter than the latitude curve did, so ground that used to read
+     * semi-arid now reads dry sub-humid, and the peak crossed a line without the curve changing
+     * shape (pooled: hyper-arid 0.0027, arid 0.0040, semi-arid 0.0038, dry sub-humid 0.0049, humid
+     * 0.0026). The wet-side clause below is untouched, and it is the one that does the work:
+     * comparing humid against the *peak* instead was tried and is weaker, because a peak that has
+     * moved into dry sub-humid then satisfies it by being high rather than by the humid class being
+     * low — measured on the control, a world with 3,000 km of humid channel against 2,000 semi-arid
+     * and 10,000 arid stopped being caught at all.
      */
     fun drainagePeakComplaint(label: String, drainage: DrainageByAridity): String? {
         val densities = Aridity.entries.joinToString(", ") {
             "$it ${"%.4f".format(drainage.densityIn(it))}"
         }
         val peak = drainage.peak()
-        if (peak != Aridity.HYPER_ARID && peak != Aridity.ARID && peak != Aridity.SEMI_ARID) {
-            return "$label: drainage density peaks in $peak, not on the dry side of the aridity" +
-                " index where Moglen, Eltahir & Bras (1998) put it — $densities"
+        if (peak == null || peak == Aridity.FROZEN || peak == Aridity.HUMID) {
+            return "$label: drainage density peaks in $peak, not in one of the drylands where" +
+                " Moglen, Eltahir & Bras (1998) put it — $densities"
         }
         if (drainage.densityIn(Aridity.HUMID) >= drainage.densityIn(Aridity.SEMI_ARID)) {
             return "$label: humid country carries as much channel per unit of land as semi-arid" +

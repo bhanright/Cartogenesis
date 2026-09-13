@@ -21,9 +21,28 @@ internal object PngWriter {
         0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
     )
 
-    /** PNG colour types. Only the two that carry data are here. */
+    /** PNG colour types, as the specification numbers them. Only the two that carry data are here. */
     private const val GREYSCALE = 0
     private const val INDEXED = 3
+
+    /** Two bytes a sample at sixteen bits, one at eight. */
+    private const val BYTES_PER_GREYSCALE_SAMPLE = 2
+
+    /** The largest palette PNG allows, and the smallest. */
+    private const val LARGEST_PALETTE = 256
+
+    /**
+     * The five adaptive filters, in the order the specification numbers them: none, sub, up,
+     * average, Paeth. A row is written under whichever of them leaves the smallest residuals.
+     */
+    private const val FILTER_NONE = 0
+    private const val FILTER_SUB = 1
+    private const val FILTER_UP = 2
+    private const val FILTER_AVERAGE = 3
+    private const val FILTERS = 5
+
+    /** One byte in front of every row saying which filter it was written under. */
+    private const val FILTER_BYTE = 1
 
     /**
      * A sixteen-bit greyscale image, [samples] one entry per pixel in row-major order, each read
@@ -43,31 +62,37 @@ internal object PngWriter {
         }
 
         // Two bytes a pixel, big-endian, and one filter byte at the head of every row.
-        val stride = widthPixels * 2
-        val raw = ByteArray((stride + 1) * heightPixels)
+        val stride = widthPixels * BYTES_PER_GREYSCALE_SAMPLE
+        val raw = ByteArray((stride + FILTER_BYTE) * heightPixels)
         val row = ByteArray(stride)
         val previous = ByteArray(stride)
         // The five candidates, allocated once for the whole image rather than once a row: at 4096
         // that is five allocations instead of twenty thousand.
         val candidates = Array(FILTERS) { ByteArray(stride) }
         var written = 0
-        for (y in 0 until heightPixels) {
-            val base = y * widthPixels
-            for (x in 0 until widthPixels) {
-                val value = samples[base + x]
-                row[x * 2] = ((value shr 8) and 0xFF).toByte()
-                row[x * 2 + 1] = (value and 0xFF).toByte()
+        for (rowIndex in 0 until heightPixels) {
+            val rowStart = rowIndex * widthPixels
+            for (column in 0 until widthPixels) {
+                val value = samples[rowStart + column]
+                row[column * BYTES_PER_GREYSCALE_SAMPLE] = ((value shr 8) and 0xFF).toByte()
+                row[column * BYTES_PER_GREYSCALE_SAMPLE + 1] = (value and 0xFF).toByte()
             }
-            written = filterRow(row, previous, bytesPerPixel = 2, candidates, raw, written)
+            written = filterRow(
+                row, previous,
+                bytesPerPixel = BYTES_PER_GREYSCALE_SAMPLE, candidates, raw, written
+            )
             row.copyInto(previous)
         }
 
         return build(
             widthPixels, heightPixels,
-            bitDepth = 16, colourType = GREYSCALE, palette = null,
+            bitDepth = GREYSCALE_BITS, colourType = GREYSCALE, palette = null,
             imageData = raw, deflater = deflater
         )
     }
+
+    private const val GREYSCALE_BITS = 16
+    private const val INDEXED_BITS = 8
 
     /**
      * An eight-bit indexed image: [indices] one palette entry per pixel, [palette] as packed
@@ -83,22 +108,22 @@ internal object PngWriter {
         require(indices.size == widthPixels * heightPixels) {
             "${indices.size} indices for a ${widthPixels}x$heightPixels image"
         }
-        require(palette.isNotEmpty() && palette.size <= 256) {
-            "a PNG palette holds 1 to 256 colours, not ${palette.size}"
+        require(palette.isNotEmpty() && palette.size <= LARGEST_PALETTE) {
+            "a PNG palette holds 1 to $LARGEST_PALETTE colours, not ${palette.size}"
         }
 
         // Unfiltered, which the PNG specification recommends for palette images: a filter subtracts
         // neighbouring *indices*, and the difference between two indices means nothing.
-        val raw = ByteArray((widthPixels + 1) * heightPixels)
-        for (y in 0 until heightPixels) {
-            val from = y * widthPixels
-            val to = y * (widthPixels + 1) + 1
+        val raw = ByteArray((widthPixels + FILTER_BYTE) * heightPixels)
+        for (rowIndex in 0 until heightPixels) {
+            val from = rowIndex * widthPixels
+            val to = rowIndex * (widthPixels + FILTER_BYTE) + FILTER_BYTE
             indices.copyInto(raw, to, from, from + widthPixels)
         }
 
         return build(
             widthPixels, heightPixels,
-            bitDepth = 8, colourType = INDEXED, palette = palette,
+            bitDepth = INDEXED_BITS, colourType = INDEXED, palette = palette,
             imageData = raw, deflater = deflater
         )
     }
@@ -112,10 +137,12 @@ internal object PngWriter {
         imageData: ByteArray,
         deflater: ZlibDeflater
     ): ByteArray {
+        // Half the raw size is a rough guess at what deflate will do with terrain, and the
+        // kilobyte covers the signature, the header, a full palette and the two closing chunks.
         val out = ByteSink(imageData.size / 2 + 1024)
         out.bytes(SIGNATURE)
 
-        val header = ByteSink(13)
+        val header = ByteSink(IHDR_BYTES)
         header.int(widthPixels)
         header.int(heightPixels)
         header.byte(bitDepth)
@@ -126,7 +153,7 @@ internal object PngWriter {
         out.chunk("IHDR", header.toByteArray())
 
         if (palette != null) {
-            val table = ByteSink(palette.size * 3)
+            val table = ByteSink(palette.size * BYTES_PER_PALETTE_ENTRY)
             palette.forEach { colour ->
                 table.byte((colour shr 16) and 0xFF)
                 table.byte((colour shr 8) and 0xFF)
@@ -139,6 +166,10 @@ internal object PngWriter {
         out.chunk("IEND", ByteArray(0))
         return out.toByteArray()
     }
+
+    /** The image header's fixed thirteen bytes, and the three a palette entry takes. */
+    private const val IHDR_BYTES = 13
+    private const val BYTES_PER_PALETTE_ENTRY = 3
 
     /**
      * Writes the best of the five PNG filters for one row into [into] at [at], and returns where
@@ -158,7 +189,7 @@ internal object PngWriter {
         into: ByteArray,
         at: Int
     ): Int {
-        var bestType = 0
+        var bestType = FILTER_NONE
         var bestScore = Long.MAX_VALUE
 
         for (type in 0 until FILTERS) {
@@ -166,7 +197,9 @@ internal object PngWriter {
             var score = 0L
             // Residuals are read as signed bytes here, because a filter's output is a difference
             // and the heuristic is about how far from zero it is.
-            for (b in filtered) score += (if (b < 0) -b.toInt() else b.toInt()).toLong()
+            for (residual in filtered) {
+                score += (if (residual < 0) -residual.toInt() else residual.toInt()).toLong()
+            }
             if (score < bestScore) {
                 bestScore = score
                 bestType = type
@@ -174,12 +207,9 @@ internal object PngWriter {
         }
 
         into[at] = bestType.toByte()
-        candidates[bestType].copyInto(into, at + 1)
-        return at + 1 + row.size
+        candidates[bestType].copyInto(into, at + FILTER_BYTE)
+        return at + FILTER_BYTE + row.size
     }
-
-    /** The five PNG filters: none, sub, up, average and Paeth, in the order the format numbers them. */
-    private const val FILTERS = 5
 
     private fun applyFilter(
         type: Int,
@@ -188,23 +218,25 @@ internal object PngWriter {
         bytesPerPixel: Int,
         out: ByteArray
     ): ByteArray {
-        if (type == 0) {
+        if (type == FILTER_NONE) {
             row.copyInto(out)
             return out
         }
-        for (i in row.indices) {
-            val here = row[i].toInt() and 0xFF
-            val left = if (i >= bytesPerPixel) row[i - bytesPerPixel].toInt() and 0xFF else 0
-            val above = previous[i].toInt() and 0xFF
+        for (at in row.indices) {
+            val here = row[at].toInt() and 0xFF
+            // The neighbour a pixel to the left, and the one directly above: both zero along the
+            // edges, which is what the specification says an absent neighbour reads as.
+            val left = if (at >= bytesPerPixel) row[at - bytesPerPixel].toInt() and 0xFF else 0
+            val above = previous[at].toInt() and 0xFF
             val aboveLeft =
-                if (i >= bytesPerPixel) previous[i - bytesPerPixel].toInt() and 0xFF else 0
+                if (at >= bytesPerPixel) previous[at - bytesPerPixel].toInt() and 0xFF else 0
             val predicted = when (type) {
-                1 -> left
-                2 -> above
-                3 -> (left + above) / 2
+                FILTER_SUB -> left
+                FILTER_UP -> above
+                FILTER_AVERAGE -> (left + above) / 2
                 else -> paeth(left, above, aboveLeft)
             }
-            out[i] = ((here - predicted) and 0xFF).toByte()
+            out[at] = ((here - predicted) and 0xFF).toByte()
         }
         return out
     }
@@ -256,7 +288,8 @@ internal class GzipRewrappingDeflater(private val compressor: Compressor) : Zlib
     override suspend fun toZlibStream(raw: ByteArray): ByteArray {
         val gzip = runCatching { compressor.compress(raw) }.getOrNull()
         val payload = gzip?.let { deflatePayloadOf(it) } ?: return storedDeflate(raw)
-        val out = ByteSink(payload.size + 6)
+        // Two bytes of header and four of checksum on top of the deflate stream itself.
+        val out = ByteSink(payload.size + ZLIB_ENVELOPE_BYTES)
         // 0x78 0x9C: deflate, a 32 KB window, the default compression level. (0x789C) % 31 == 0,
         // which is the check byte zlib's two-byte header is defined by.
         out.byte(0x78)
@@ -268,15 +301,29 @@ internal class GzipRewrappingDeflater(private val compressor: Compressor) : Zlib
 
     /** The deflate stream inside a minimal gzip envelope, or null if this is not one. */
     private fun deflatePayloadOf(gzip: ByteArray): ByteArray? {
-        val headerSize = 10
-        val trailerSize = 8
-        if (gzip.size <= headerSize + trailerSize) return null
+        if (gzip.size <= GZIP_HEADER_BYTES + GZIP_TRAILER_BYTES) return null
         if (gzip[0] != 0x1F.toByte() || gzip[1] != 0x8B.toByte()) return null
-        if (gzip[2].toInt() != 8) return null
+        if (gzip[2].toInt() != GZIP_METHOD_DEFLATE) return null
         // Any flag set means an optional field follows the fixed header, and the payload does not
         // start where this expects it to.
-        if (gzip[3].toInt() != 0) return null
-        return gzip.copyOfRange(headerSize, gzip.size - trailerSize)
+        if (gzip[3].toInt() != GZIP_NO_OPTIONAL_FIELDS) return null
+        return gzip.copyOfRange(GZIP_HEADER_BYTES, gzip.size - GZIP_TRAILER_BYTES)
+    }
+
+    private companion object {
+        /** Two bytes of zlib header plus its four-byte Adler-32, from RFC 1950. */
+        const val ZLIB_ENVELOPE_BYTES = 6
+
+        /**
+         * The minimal gzip envelope of RFC 1952: ten bytes of fixed header, then a CRC-32 and a
+         * length. Both hosts write exactly this, and [deflatePayloadOf] checks rather than assumes.
+         */
+        const val GZIP_HEADER_BYTES = 10
+        const val GZIP_TRAILER_BYTES = 8
+
+        /** The compression-method byte, and the flags byte with nothing optional following it. */
+        const val GZIP_METHOD_DEFLATE = 8
+        const val GZIP_NO_OPTIONAL_FIELDS = 0
     }
 }
 
@@ -289,14 +336,16 @@ internal class GzipRewrappingDeflater(private val compressor: Compressor) : Zlib
  * no export: every reader opens it.
  */
 internal fun storedDeflate(raw: ByteArray): ByteArray {
-    val blockLimit = 65535
-    val out = ByteSink(raw.size + raw.size / blockLimit * 5 + 16)
+    // The largest a stored block can be, because its length is written as sixteen bits.
+    val blockLimitBytes = 65535
+    // Five bytes of block header per block, and sixteen for the envelope with room to spare.
+    val out = ByteSink(raw.size + raw.size / blockLimitBytes * 5 + 16)
     out.byte(0x78)
     out.byte(0x01) // (0x7801) % 31 == 0, and the level bits say "fastest", which stored is.
 
     var at = 0
     do {
-        val length = minOf(blockLimit, raw.size - at)
+        val length = minOf(blockLimitBytes, raw.size - at)
         val last = at + length >= raw.size
         out.byte(if (last) 1 else 0)
         // A stored block's length and its ones-complement, both little-endian, as RFC 1951 has it.
@@ -314,31 +363,42 @@ internal fun storedDeflate(raw: ByteArray): ByteArray {
 
 /** zlib's checksum over the uncompressed data. */
 internal fun adler32(data: ByteArray): Int {
+    // The largest prime below 65536, which is what makes the two halves of the sum independent.
     val modulus = 65521
-    var low = 1
-    var high = 0
-    for (b in data) {
-        low = (low + (b.toInt() and 0xFF)) % modulus
-        high = (high + low) % modulus
+    var runningSum = 1
+    var sumOfSums = 0
+    for (byte in data) {
+        runningSum = (runningSum + (byte.toInt() and 0xFF)) % modulus
+        sumOfSums = (sumOfSums + runningSum) % modulus
     }
-    return (high shl 16) or low
+    return (sumOfSums shl 16) or runningSum
 }
 
 /** PNG's and zip's checksum, the ordinary reflected CRC-32. */
 internal object Crc32 {
 
-    private val table = IntArray(256) { n ->
-        var c = n
-        repeat(8) { c = if (c and 1 != 0) 0xEDB88320.toInt() xor (c ushr 1) else c ushr 1 }
-        c
+    /** The reversed generator polynomial CRC-32 is defined by, one table entry per byte value. */
+    private const val REVERSED_POLYNOMIAL = 0xEDB88320.toInt()
+    private const val BITS_IN_A_BYTE = 8
+
+    private val table = IntArray(256) { byteValue ->
+        var remainder = byteValue
+        repeat(BITS_IN_A_BYTE) {
+            remainder =
+                if (remainder and 1 != 0) REVERSED_POLYNOMIAL xor (remainder ushr 1)
+                else remainder ushr 1
+        }
+        remainder
     }
 
     fun of(data: ByteArray, from: Int = 0, length: Int = data.size - from): Int {
-        var c = -1
-        for (i in from until from + length) {
-            c = table[(c xor data[i].toInt()) and 0xFF] xor (c ushr 8)
+        // Starts at all ones and is inverted at the end, both of which the standard requires.
+        var remainder = -1
+        for (at in from until from + length) {
+            remainder = table[(remainder xor data[at].toInt()) and 0xFF] xor
+                (remainder ushr BITS_IN_A_BYTE)
         }
-        return c.inv()
+        return remainder.inv()
     }
 }
 
@@ -392,7 +452,7 @@ internal class ByteSink(capacity: Int = 32) {
 
     fun ascii(text: String) {
         room(text.length)
-        for (c in text) buffer[size++] = c.code.toByte()
+        for (character in text) buffer[size++] = character.code.toByte()
     }
 
     /** One PNG chunk: its length, its four-letter type, its payload and the CRC of the last two. */

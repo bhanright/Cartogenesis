@@ -62,7 +62,7 @@ private external fun triggerDownload(buffer: ByteBuffer, name: String, mime: Str
 /** Hands the browser a finished file to save. */
 internal fun downloadBytes(name: String, bytes: ByteArray, mime: String) {
     val buffer = allocateBytes(bytes.size)
-    for (i in bytes.indices) setByte(buffer, i, bytes[i].toInt() and 0xFF)
+    for (at in bytes.indices) setByte(buffer, at, bytes[at].toInt() and 0xFF)
     triggerDownload(buffer, name, mime)
 }
 

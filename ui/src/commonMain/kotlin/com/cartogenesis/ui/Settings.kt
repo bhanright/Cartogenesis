@@ -26,7 +26,7 @@ import kotlinx.serialization.json.Json
  */
 @Serializable
 data class AppSettings(
-    /** Which chrome. [ThemeChoice.SYSTEM] follows the host, which is what F1 shipped. */
+    /** Which chrome. [ThemeChoice.SYSTEM] follows the host's own light/dark setting. */
     @SerialName("theme")
     val theme: ThemeChoice = ThemeChoice.SYSTEM,
 
@@ -43,11 +43,14 @@ data class AppSettings(
     /**
      * Whether the graphics device is reached for without being asked.
      *
-     * The stored key is still `graphicsCardAtLaunch`, which is what every settings file written
-     * before F8 says. The switch was renamed because "card" is wrong on a phone; a preference file
-     * that stopped loading over a change of wording would be a worse thing than an out-of-date key.
+     * The stored key is the Kotlin name. It used to be `graphicsCardAtLaunch`, from before the
+     * switch was reworded — "card" is wrong on a phone, where the device is a block of cores on
+     * the processor's own die — and a wire name that disagrees with the property it carries is a
+     * thing a reader has to hold in their head. Nothing is distributed, so it moves; the cost is
+     * that a settings file written before this opens with the switch off, which is the default
+     * and is the safe end of it. See `CODE_STYLE.md`, "Serialised names".
      */
-    @SerialName("graphicsCardAtLaunch")
+    @SerialName("graphicsAccelerationAtLaunch")
     val graphicsAccelerationAtLaunch: Boolean = false,
 
     @SerialName("exportFormat")
@@ -162,8 +165,8 @@ internal object SettingsEffects {
      * The config the application opens with.
      *
      * `atResolution` rather than a copy, for the reason [Knobs.atResolution] gives, and the
-     * graphics-card preference is written through [Knobs.graphicsAcceleration] rather than by reaching
-     * into the erosion config here — one writer per setting, so the switch in the header and the
+     * acceleration preference is written through [Knobs.graphicsAcceleration] rather than by
+     * reaching into the erosion config here — one writer per setting, so the switch in the header and the
      * preference in the dialog cannot come to disagree about what "on" means.
      */
     fun startingConfig(
@@ -176,11 +179,11 @@ internal object SettingsEffects {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
         // A machine with no device gets the CPU whatever the preference says: a config claiming
         // GPU acceleration that silently ran on the CPU would be a lie told to the header switch.
-        val gpu = settings.graphicsAccelerationAtLaunch && platform.accelerator != null
-        return Knobs.graphicsAcceleration.set(base, gpu)
+        val accelerate = settings.graphicsAccelerationAtLaunch && platform.accelerator != null
+        return Knobs.graphicsAcceleration.set(base, accelerate)
     }
 
-    /** Whether [startingConfig] will have asked for the graphics card. */
+    /** Whether [startingConfig] will have asked for the graphics device. */
     fun usesGraphicsAcceleration(config: WorldGenConfig): Boolean =
         config.erosion.acceleration == Acceleration.GPU
 

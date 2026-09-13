@@ -122,10 +122,9 @@ class WorldCodecTest {
         runTest(timeout = 10.minutes) {
             // Erosion has exactly one section, so dropping it drops the whole stage cleanly: this
             // is what an old save looks like to a reader that has since added a field to some
-            // *other* stage's result. It has to come back as a world with a hole in it, not throw
-            // - the old behaviour here (`assertFailsWith<WorldFormatException>`) is precisely the
-            // bug D4 fixes, and refusing a file this way is what broke every version-3 save written
-            // before A1's climate fields, D2's checked-in gzip fixture included.
+            // *other* stage's result. It has to come back as a world with a hole in it, not throw:
+            // refusing the file outright broke every save written before the climate stage gained
+            // its seasonal fields, the checked-in gzip fixture included.
             val world = WorldGenerationEngine.generate(worldConfig)
             val complete = WorldSections.of(world)
             val short = complete.filterNot { it.name == "erosion.height" }
@@ -168,8 +167,8 @@ class WorldCodecTest {
     @Test
     fun `a save missing the climate sections opens, regenerating climate and everything after it`() =
         runTest(timeout = 10.minutes) {
-            // The exact shape of A1's fallout: a version-3 save written before a chunk added fields
-            // to one stage's result is missing that stage's sections and no others. It must open,
+            // The exact shape of the defect: a save written before a chunk added fields to one
+            // stage's result is missing that stage's sections and no others. It must open,
             // reusing the stages whose sections survived and regenerating climate and everything
             // the pipeline runs after it - not refuse the whole file.
             val world = WorldGenerationEngine.generate(worldConfig)

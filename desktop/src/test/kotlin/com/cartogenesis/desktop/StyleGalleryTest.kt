@@ -63,7 +63,7 @@ class StyleGalleryTest {
     }
 
     /**
-     * F6's style, on its own, at the size the spec asks to look at it in.
+     * The colour-blind style, on its own, at the size the spec asks to look at it in.
      *
      * Two of the fifteen views are what the style is *for* — the fantasy view, where the land ramp
      * and the flat sea are the whole of it, and the political view, which is the worst case colour
@@ -115,7 +115,7 @@ class StyleGalleryTest {
     }
 
     /**
-     * F9's style, at the two sizes it has to be drawn by the same pen at.
+     * The pen-and-ink style, at the two sizes it has to be drawn by the same pen at.
      *
      * The engraving's claim is that a mark is a fixed number of pixels whatever the sheet, so the
      * two details below are the review that matters: a square of a 512 render and a square four

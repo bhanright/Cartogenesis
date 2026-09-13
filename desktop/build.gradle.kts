@@ -75,14 +75,23 @@ tasks.withType<Test>().configureEach {
     )
 }
 
-// T1: `ExportAuditTest`'s 2048/4096 exports move to the on-demand / nightly audit tier, matching
-// the class-name-plus-filter split used in `:worldgen` (see that module's build script for why a
-// `@Tag` was not used there; the same filter mechanism works unchanged on this module's JUnit5
-// runner, so both modules are split the same way).
+// The tests whose 2048 and 4096 work belongs to the on-demand / nightly audit tier rather than to
+// every merge. Split by class name and a filter, matching `:worldgen` (see that module's build
+// script for why a `@Tag` was not used there; the same filter mechanism works unchanged on this
+// module's JUnit5 runner, so both modules are split the same way).
 val auditOnlyClasses = listOf(
+    // The 2048 and 4096 exports: minutes of pipeline before a pixel is drawn.
     "com.cartogenesis.desktop.ExportAuditTest",
-    // H5's own 2048 pair, four worlds and four renders: the same tier for the same reason.
-    "com.cartogenesis.desktop.SeaLevelHistoryAuditTest"
+    // A 2048 pair, four worlds and four renders: the same tier for the same reason.
+    "com.cartogenesis.desktop.SeaLevelHistoryAuditTest",
+    // A render review: two worlds at 2048, drawn in three styles with four details of each.
+    // Ninety seconds of generation for thirty pictures nothing but a person can judge.
+    "com.cartogenesis.desktop.ClimateReliefGalleryTest",
+    // The generalisation crops: two 2048 worlds, eight sheets and their crops, and the shoreline
+    // trace timed against the raster. Nothing per-merge depends on any of it.
+    "com.cartogenesis.desktop.GeneralisationRenderTest",
+    // The littoral before-and-after pictures: four worlds, one at 2048, and twenty renders.
+    "com.cartogenesis.desktop.LittoralCoastRenderTest"
 )
 
 /**

@@ -46,12 +46,13 @@ import kotlin.math.sqrt
  * the same two grids. The cheap half, settling the height of what was built, walks the few thousand
  * cells the sweeps moved and stays on the processor by that rule's own carve-out for a graph walk.
  *
- * All of it is on the processor, and the figure is 74 ms at 2048 on seed 718106 against the rule's
- * fifty. Reported rather than acted on: that is 1.5% of the sea-level stage's own 4.7 seconds at
- * that grid and a thousandth of a whole generation, so a compute shader would buy back time nobody
- * can see. Two thirds of the 74 ms is the three box filters, and the fetch's — a five-hundred-
- * kilometre window over a field that cannot vary between neighbouring cells — would come down by
- * most of its share on a grid eight times coarser if anyone wants the milliseconds.
+ * All of it is on the processor, and the figure is 72 to 74 ms at 2048 on seed 718106 against the
+ * rule's fifty — 122 ms in a test worker that had just built five 512 worlds, which is the
+ * collector rather than the pass. Reported rather than acted on: 74 ms is 1.5% of the sea-level
+ * stage's own 4.7 seconds at that grid and a thousandth of a whole generation, so a compute shader
+ * would buy back time nobody can see. Two thirds of it is the three box filters, and the fetch's —
+ * a five-hundred-kilometre window over a field that cannot vary between neighbouring cells — would
+ * come down by most of its share on a grid eight times coarser if anyone wants the milliseconds.
  */
 internal object LittoralGrading {
 

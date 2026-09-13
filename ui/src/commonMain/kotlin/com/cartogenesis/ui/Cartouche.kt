@@ -15,8 +15,8 @@ import kotlin.random.Random
  * A printed chart carries a cartouche: the name of the country, then the small print — the scale,
  * the projection, the surveyor, the year. The application had a status line instead, one run-on
  * sentence of `Seed 59758 · 512x512 in 1840 ms · 12 realms · 431 rivers`, filed in the settings
- * panel where it read as a debug print rather than as part of the map. F3 makes it a cartouche and
- * moves it onto the sheet, at the left of the legend along the map's bottom edge.
+ * panel where it read as a debug print rather than as part of the map. Here it is a cartouche, on
+ * the sheet, at the left of the legend along the map's bottom edge.
  *
  * Three parts, in descending weight:
  *
@@ -27,9 +27,9 @@ import kotlin.random.Random
  *  - the **facts**: the seed and the working resolution, and nothing else. The largest realm and
  *    its share were here for a draft and read as a statistic rather than as a caption.
  *  - the **scale**: how far one pixel of the sheet reaches on the ground, and the representative
- *    fraction that follows from it. A printed chart puts this under the title, and F14 does the
- *    same — see [com.cartogenesis.cartography.MapScale] for why the fraction is quoted the way it
- *    is and why it says *at the equator*.
+ *    fraction that follows from it, under the title where a printed chart puts it — see
+ *    [com.cartogenesis.cartography.MapScale] for why the fraction is quoted the way it is and why
+ *    it says *at the equator*.
  *  - the **footnote**: how long the world took to make, in the muted colour, because it is a fact
  *    about this machine rather than about the world.
  *
@@ -72,19 +72,29 @@ internal object Cartouches {
      * a different case from the blank canvas, which has no cartouche at all.
      */
     fun worldName(seed: Long, languageSeed: Long?): String {
-        val language = languageSeed ?: (seed * 31 + 1_013)
-        // Three syllables: a one-syllable world name reads as a typo and the generator's own
-        // ceiling is three.
-        return NameForge.styleFor(language).word(Random(seed), 3)
+        // A world with no peoples has no language to be named in, so one is derived from the
+        // world's own seed. Any invertible mixing would do; this is the seed put through an odd
+        // multiplier and an odd offset so that neighbouring seeds do not land on the same
+        // phonetics, and it is fixed because the name has to be the same every time.
+        val language = languageSeed ?: (seed * LANGUAGE_MULTIPLIER + LANGUAGE_OFFSET)
+        return NameForge.styleFor(language).word(Random(seed), WORLD_NAME_SYLLABLES)
     }
+
+    /** See [worldName]: the mixing that turns a world seed into a language seed. */
+    private const val LANGUAGE_MULTIPLIER = 31L
+    private const val LANGUAGE_OFFSET = 1_013L
+
+    /** A one-syllable world name reads as a typo, and [NameForge]'s own ceiling is three. */
+    private const val WORLD_NAME_SYLLABLES = 3
 
     /** `seed 59758 · 2048 × 2048`: which world, and how finely it was computed. */
     fun facts(seed: Long, width: Int, height: Int): String = "seed $seed · $width × $height"
 
-    /** `generated in 1.8 s`. Sub-second worlds are quoted in milliseconds, as they were. */
+    /** `generated in 1.8 s`, or milliseconds for a world that took less than a second. */
     fun footnote(millis: Long): String = when {
         millis <= 0L -> ""
         millis < 1_000L -> "generated in $millis ms"
+        // Truncated to a tenth rather than rounded: "1.8 s" for 1899 ms overstates nothing.
         else -> "generated in ${(millis / 100L) / 10.0} s"
     }
 

@@ -61,8 +61,8 @@ internal class Shortcut(val key: Key, val shift: Boolean = false, val label: Str
  *
  * Each carries its own label and its own shortcut, so the strip, the keyboard handler and the test
  * are three readers of one declaration rather than three copies of it. [needsWorld] marks the
- * items that are meaningless with a blank canvas up — since F0 the application opens without a
- * world, and offering "Save" then would be offering to save nothing.
+ * items that are meaningless with a blank canvas up — the application opens without a world, and
+ * offering "Save" then would be offering to save nothing.
  */
 internal enum class MenuCommand(
     val label: String,
@@ -109,9 +109,9 @@ internal object Menus {
     /**
      * The same fifteen, on three shelves.
      *
-     * F7 took the list past the point where a flat run is a list: Standard, Accessible and Styled
-     * are three headings over the same chromes in the same order within each, and every name and
-     * every stored value is exactly what it was. A group with nothing in it is dropped rather than
+     * Fifteen is past the point where a flat run is a list: Standard, Accessible and Styled are
+     * three headings over the same chromes in the same order within each, and neither a name nor
+     * a stored value differs from the flat list's. A group with nothing in it is dropped rather than
      * drawn empty, which is only defensive — all three have members and a test says so.
      */
     val themeGroups: List<Pair<ThemeGroup, List<ThemeChoice>>> = ThemeGroup.entries
@@ -188,7 +188,7 @@ internal fun MenuStrip(
                 // The theme submenu, flattened into a labelled run of items with a tick beside the
                 // current one. A real nested submenu is a hover-timing problem Material 3 has no
                 // component for, and fifteen items do not need one — but they do need the three
-                // headings F7 put over them, which is all `themeGroups` is.
+                // headings over them, which is all `themeGroups` is.
                 MenuHeading("Theme")
                 Menus.themeGroups.forEach { (group, chromes) ->
                     MenuSubHeading(group.label)
@@ -241,8 +241,8 @@ internal fun MenuStrip(
  * compares when it asks whether the compact arrangement can still reach everything.
  *
  * Over the chart it is drawn in [OverMap]'s ink, which is what [tint] defaults to — the menu it
- * opens is a sheet over the application and takes the theme's paper either way, exactly as the view
- * menu beside it does. F8 gave the atlas and the library a bar of their own, which is ordinary
+ * opens is a sheet over the application and takes the theme's paper either way, exactly as the
+ * view menu beside it does. The atlas and the library have a bar of their own, which is ordinary
  * chrome rather than an annotation on a chart, and the same glyph on that bar has to be the
  * scheme's ink or it is parchment on paper. Hence the argument: one button, drawn in whatever
  * colour the surface it lies on calls for.

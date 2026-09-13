@@ -63,7 +63,7 @@ class NoticesTest {
     fun `the build knows its own version, date and licence position`() {
         assertTrue(BuildInfo.VERSION.isNotBlank())
         assertTrue(
-            Updates.parse(BuildInfo.VERSION) != null,
+            Updates.parseVersion(BuildInfo.VERSION) != null,
             "the generated version ${BuildInfo.VERSION} is not a version the update check can read"
         )
         // yyyy-mm-dd, which is what `LocalDate.toString` gives and what the About dialog prints.

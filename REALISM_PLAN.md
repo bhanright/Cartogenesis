@@ -1873,7 +1873,24 @@ a first pass and stopped at William's request after he saw its renders; its bran
 unmerged. Full tier and `siteTest` green on the branch before the cut. Portable zip 97 MB, MSI
 98 MB, web zip 5.4 MB; the packaged exe passes `--gpu-check`. The save format on this line is 3
 (F25's bump never merged). Worlds regenerated from their seeds differ where rivers and drained
-basins moved; saves draw as saved.
+basins moved; saves draw as saved. **Forward merge into `main`** the same day (232f131): 27
+conflicts resolved by intent — F18's facet routing rewritten in the C2 vocabulary with
+`FlowRouting.FLAT_GRADIENT_STEP` made public for the breach and the SplitMix hash shared with
+`LakeWaterBalance` bit-identically; F22's walk reusing main's `outletReachKm` (1,500 km through
+`WorldScale`) and main's `MAX_POST_CUT_OUTLET_PASSES` of 16 (a pass that cuts more only shortens
+the retreat); the release's extra seed and routing parameters dropped where main passes the whole
+config; `HeadedChipRow` carrying the FlowRow body; both sides' endorheic-arrival tests kept in
+`RiverCourseTest`. Figures moved: the twelve style records re-taken; `DepositionTest` land
+6426 -> 6404; `ReliefShading.ORDINARY_GROUND` 0.936 -> 0.9318 (defined as the median illumination
+over seed 234475's land, cut differently now) and its GLSL copy; `GlaciationTest`'s comb bar
+restated as 2% of what the ice adds (seed 42 reads 5.66% with the ice and 6.03% without);
+`OutletIncisionTest`'s sill case asserted on seed 99 (2.15x -> 0.47x the Caspian) and reported on
+718106, which under S1's 120 m stand no longer carries such a sill. 471 tests green, siteTest
+green, 718106 rendered in Atlas and Natural on the merged tree and looked at by the agent and by
+Fable. Found (TODO): the facet routing doubles the un-glaciated share of standing water in thin
+parallel bars on seed 42 at 1024 (49 -> 124 cells; short bars in ranks, not F18's ruled trench,
+and without a guard of its own), and which basin is the largest drowned one is unstable between
+seeds.
 
 ## Track M — the Earth-likeness yardstick (3.0)
 

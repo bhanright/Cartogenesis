@@ -99,6 +99,10 @@ class PenAndInkTest {
          * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
          * this size and this zoom it draws the same pixels the raster did. Its generalisation is an
          * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
+         *
+         * F23 added the twelfth entry and changed none of the eleven, which is the whole of what a
+         * new style is allowed to do: a style is a row of levers the raster already reads, so a
+         * chunk that adds one and moves an existing hash has reached outside its own palette.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
             MapStyle.ATLAS to -173307292,
@@ -111,6 +115,7 @@ class PenAndInkTest {
             MapStyle.SCROLL to -1448446961,
             MapStyle.PEN_AND_INK to 1950662391,
             MapStyle.MARS to -1005799490,
+            MapStyle.NATURAL to -1079641503,
             MapStyle.CLEAR to -361190112
         )
 

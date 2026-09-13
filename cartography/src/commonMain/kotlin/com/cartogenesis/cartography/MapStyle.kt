@@ -550,6 +550,124 @@ enum class MapStyle(
     ),
 
     /**
+     * The world as a satellite sees it: no paper, no ink convention, only ground.
+     *
+     * Every other style in this list is a *drawing* of a world — a chart, a plate, an engraving —
+     * and each one is honest about it, because the conventions are what make a map readable. This
+     * one is the photograph, and its whole palette is measured off one: a "Blue Marble" view of
+     * Earth centred on North America, sampled region by region rather than invented. Each colour
+     * below carries the pixel box it came out of, on that 570-pixel image, and the median of the
+     * box is the value; where a stop had to be derived because the photograph had nothing at that
+     * height, the derivation is written beside it and it is arithmetic on a sample rather than a
+     * guess.
+     *
+     * Four decisions carry it, and every one of them is a lever the raster already reads:
+     *
+     *  - **[climateTint] at full**, which is the whole claim. A satellite photograph has no
+     *    hypsometric series at all: the colour of a place is what grows there, and the height only
+     *    shows through where nothing does. At 1 a desert is ochre at the coast as surely as on the
+     *    plateau, frozen ground pales toward snow, and a closed canopy is darker ground — see
+     *    [ClimateTint], whose three numbers this spends in full.
+     *  - **A land ramp of earths under it**, so height still reads where the cover is uniform: the
+     *    reference's own woodland green at the shore, its Great Plains olive where the earth band
+     *    begins ([ClimateTint.ARID_RAMP_FLOOR] lands on that fourth stop), its Great Basin umber
+     *    and Colorado rust above, and its Greenland snow at the top.
+     *  - **A sea taken from the same photograph**: the deep saturated cobalt of the open Pacific,
+     *    running up to the turquoise of a sunlit shelf. The depth contours are left faint, at
+     *    [isobathInk] 0.08 — a photograph has none, and what little is drawn here is there so the
+     *    shelf break reads at all.
+     *  - **One ink for the coast, the borders and the sheet's lettering**, chosen by measurement
+     *    rather than taste. `NaturalStyleTest` searches for the ink that reads best over the
+     *    darkest and lightest ground this style can paint and holds this one to what it found.
+     *
+     * The one thing it is not is a filter over Atlas. Atlas is a modern atlas plate — a
+     * hypsometric series modulated by climate, which is Imhof's rule — and its greens are the
+     * greens a cartographer chose. These are the greens a camera recorded.
+     */
+    NATURAL(
+        label = "Natural",
+        detail = "Satellite earth: saturated greens, ochre and rust, a cobalt sea",
+        // Abyss first. The photograph's open ocean is one narrow band of cobalt — over 14,800 lit
+        // open-water pixels its second percentile is #003E84 and its median #015294 — so it can
+        // furnish the middle of this ramp but not its ends. The two deep stops are therefore the
+        // open-Pacific sample taken down to three fifths and four fifths of itself, which is the
+        // only honest way to reach an abyssal plain from a photograph of a fully lit disc.
+        oceanRamp = intArrayOf(
+            0xFF002B57.toInt(), // the open Pacific at 0.60: the abyss the lit disc never shows
+            0xFF003974.toInt(), // the same at 0.80
+            0xFF004892.toInt(), // open Pacific off Baja, (148,338)-(180,366)
+            0xFF046597.toInt(), // the open Pacific and the shelf, half and half
+            0xFF09839C.toInt() // sunlit shelf, Hudson Bay, (296,206)-(320,226)
+        ),
+        // Coast first, snow line last, and every stop but the summit is a region of the reference
+        // read straight off it. They climb in relative luminance without a step backwards —
+        // 0.099, 0.110, 0.187, 0.199, 0.220, 0.258, 0.317, 0.615 — which is what lets height read
+        // through a cover that is doing most of the talking.
+        landRamp = intArrayOf(
+            0xFF2C6504.toInt(), // eastern woodland, (328,282)-(344,298)
+            0xFF3A6904.toInt(), // Mississippi lowland grass, (300,288)-(316,304)
+            0xFF668042.toInt(), // Pacific north-west, (232,250)-(246,264)
+            0xFF7F7F2F.toInt(), // Great Plains olive, (282,302)-(298,318) — the earth band begins
+            0xFF977E4A.toInt(), // Great Basin umber, (252,312)-(270,328)
+            0xFFAB8455.toInt(), // Chihuahua plateau ochre, (244,330)-(258,344)
+            0xFFC08F61.toInt(), // Colorado Plateau red rock, (250,318)-(262,332)
+            0xFFCECECA.toInt() // Greenland interior snow, (318,136)-(332,150) — see below
+        ),
+        // The reference is a photograph and has no paper. The one pale thing in it is its snow, so
+        // that is what the cold pales toward and what the sheet plates its scale bar on. The
+        // sample reads #CDCECA, one unit greener than it is red; over the 196 pixels of the box
+        // that difference runs from -5 to +7 with a mean of 1.5, which is the JPEG's own scatter
+        // and not a colour. Red is lifted the one unit to meet green, because a summit whose
+        // strongest channel is green is a summit `ClimateTintTest` reads as a lawn.
+        paper = 0xFFCECECA.toInt(),
+        // High, and the highest of any style that is not the illustrated one. On a photograph the
+        // ground's colour *is* its cover: this is the lever that makes the Amazon read as forest
+        // rather than as low ground that happens to be wet.
+        biomeWash = 0.55f,
+        // Almost none. Muting is what makes an aged chart look stained rather than printed, and
+        // nothing here is stained — a camera records the cover at the saturation it has.
+        biomeMuting = 0.05f,
+        // The shelf turquoise lightened three tenths toward the snow, which is the one blue that
+        // reads over the dark woodland greens the lowlands are painted in. Inland water in the
+        // reference is a handful of pixels across and every box over it takes in its banks, so it
+        // is derived from the shelf rather than sampled badly.
+        river = 0xFF4499A9.toInt(),
+        // A lake is shallow water and takes the shelf's colour; a deep one takes the open sea's.
+        lake = 0xFF09839C.toInt(),
+        lakeDeep = 0xFF004892.toInt(),
+        // The boreal forest east of Hudson Bay — the darkest ground anywhere in the reference at a
+        // relative luminance of 0.030 — taken half again as dark. A photograph of a planet has no
+        // ink in it, and this is the nearest thing to one it owns. See `NaturalStyleTest`, which
+        // holds it to the best contrast any single ink can reach over this style's own ground.
+        coastline = 0xFF0E1B09.toInt(),
+        // Half. A shoreline on a satellite image is a change of surface rather than a drawn line,
+        // and inking it at the weight a chart would use turns every coast into a cartoon.
+        coastlineStrength = 0.5f,
+        // The same ink. A style whose whole claim is that it draws no conventions has no business
+        // owning two of them, and one ink for the coast, the realm borders and the sheet's
+        // lettering is the smallest set that draws the map.
+        border = 0xFF0E1B09.toInt(),
+        // The tundra of the Arctic archipelago, (268,178)-(286,194): a grey-olive that no realm
+        // colour comes near, and the colour of ground nobody holds.
+        wilderness = 0xFF7D8774.toInt(),
+        // A shade over the computed hillshade. The reference is a lit sphere and its ranges are
+        // visible as shadow rather than as tint, so the relief is worth a little more here than on
+        // a chart — short of enough to turn a satellite view into a shaded-relief plate.
+        reliefStrength = 1.1f,
+        // The full effect, and the reason this style exists. See the note above.
+        climateTint = 1f,
+        // Faint. A photograph has no contours at all; these are drawn only so the shelf break is
+        // findable, and the shelf is already the lightest stop of the sea.
+        isobathInk = 0.08f,
+        glyphMuting = 0.15f,
+        lineArt = false,
+        inkGain = 0f,
+        // Space, measured over the four corners of the reference well clear of the limb, with the
+        // stars excluded: black, at the median of 6,281 pixels.
+        backdrop = 0xFF000000.toInt()
+    ),
+
+    /**
      * The same world drawn so that nothing in it is told by hue alone.
      *
      * About one man in twelve cannot separate a red from a green, and every other style in this

@@ -153,14 +153,17 @@ make one map into two.
 
 ## Styles
 
-Eleven ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+Twelve ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
 parchment and sepia ink), **Ink wash** (sumi-e, grey ink on pale paper), **Nautical** (an admiralty
 chart with depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (the
 saturated pull-down physical map from a classroom wall), **Verdant** (illustrated fantasy: teal sea,
 cream land, deep woods), **Scroll** (painted parchment with a jade sea and vermilion marks),
 **Pen and ink** (line art: no fill at all, relief hatched, borders in red), **Mars** (the same
-world as a dry planet) and **Colour-blind** (a cividis-ordered land ramp over one flat slate sea,
-with Paul Tol's muted nine hatched beyond nine realms, so nothing is told by hue alone).
+world as a dry planet), **Natural** (the world as a satellite sees it, in a palette sampled off a
+Blue Marble photograph: saturated forest greens, olive plains, ochre and rust deserts, a deep
+cobalt sea turning turquoise over the shelves) and **Colour-blind** (a cividis-ordered land ramp
+over one flat slate sea, with Paul Tol's muted nine hatched beyond nine realms, so nothing is told
+by hue alone).
 
 Mars is the one that changes what the map *says* rather than only how it looks. The world beneath
 it still has a sea, rivers and lakes — the generator is untouched — but the ocean basins are drawn
@@ -462,7 +465,7 @@ already packed, every ramp already chosen, a colour table per realm, people and 
 per-cell numbers the climate has to say about the ground — so nothing about the palette or the
 aridity index is written twice; the blends are integer and truncate where `MapPalette` truncates,
 and `GpuRasterTest` holds the two within one channel step of 255 at the 99.9th percentile across all
-fifteen views in all eleven styles. It is not behind the acceleration toggle because that
+fifteen views in all twelve styles. It is not behind the acceleration toggle because that
 toggle is a promise about whether the *world* can be regenerated from its seed, and drawing pixels
 makes no such promise either way.
 

@@ -38,8 +38,8 @@ class PlacedScaleBar(
  * The projection is equirectangular, so a kilometre is only a kilometre along the equator and along
  * every meridian; east-west distances shrink by the cosine of the latitude as they go poleward.
  * That is the projection's own distortion and not something a scale bar can fix, which is why the
- * bar and the cartouche both say *at the equator* and neither pretends otherwise. The audit's P1
- * chunk is where a projection that could say more belongs.
+ * bar and the cartouche both say *at the equator* and neither pretends otherwise. A projection that
+ * could say more is a later chunk's work; see REALISM_AUDIT.md, P1.
  */
 object MapScale {
 

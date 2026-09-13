@@ -132,9 +132,9 @@ class LandmarkGlyph(
  *
  * Keeping this as geometry means Android and desktop make the same decisions about which segments
  * to skip, how wide a river runs and which glyph a landmark gets — and differ only in which
- * drawing API executes it. Since F14 it is also where generalisation happens: what is in here is
- * what survives at the scale the map is being seen at, so the front end draws all of it and decides
- * none of it.
+ * drawing API executes it. It is also where generalisation happens: what is in here is what
+ * survives at the scale the map is being seen at, so the front end draws all of it and decides none
+ * of it. See [MapSheet].
  */
 class MapOverlay(
     val rivers: List<RiverSegment>,
@@ -621,9 +621,9 @@ object MapRasterizer {
      * that the last cell on land drains into, kept so the line reaches the water rather than
      * stopping a step short of it. Drawn literally that puts the centre of the stroke a whole cell
      * past the coast, and the round cap that blends one cell-long segment into the next then adds
-     * half a stroke on top of that. Measured on seeds 7/42/1234/99 at 512 under F10's five-pixel
-     * pen, the ink reached 3.0 to 3.2 pixels past the shoreline — a blob of river sitting on the
-     * open sea, which is what William saw at the widest mouth of seed 298405 (F15).
+     * half a stroke on top of that. Under the five-pixel pen that preceded this the ink reached
+     * about three pixels past the shoreline — a blob of river sitting on the open sea. See
+     * REALISM_PLAN.md, F15, for the per-seed figures.
      *
      * A round cap centred half a stroke back from the shore, on the other hand, is tangent to it:
      * the last pixel of the stroke is the shoreline pixel and the sea takes over with no seam. So

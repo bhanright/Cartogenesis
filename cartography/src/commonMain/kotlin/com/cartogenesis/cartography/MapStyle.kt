@@ -656,7 +656,7 @@ enum class MapStyle(
      * toward the paper by the cold, darkened under a canopy, and finally washed with the biome's own
      * colour exactly as [tint] always did. [dryness], [coldness] and [canopy] are the three numbers
      * [ClimateTint] computes for the cell; at [climateTint] 0 none of them is read and this is the
-     * pre-F13 colour to the bit.
+     * colour the plain ramp gave before the climate reached it, to the bit.
      */
     internal fun ground(
         relative: Float,
@@ -704,7 +704,7 @@ enum class MapStyle(
      * Whether the political and peoples views take this style's own realm set.
      *
      * False for every style but [CLEAR], which is what leaves the other ten drawing exactly the
-     * pixels they drew before F6.
+     * pixels they drew before a realm set existed.
      */
     internal val ownsRealms: Boolean get() = realmRamp != null
 

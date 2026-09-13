@@ -27,10 +27,10 @@ import kotlin.math.sqrt
  * Mark's four-lamp oblique-weighted relief (1992, USGS Open-File Report 92-422) was written first
  * and measured worse than the lamp it replaced: four lamps inside a 135-degree arc leave a whole
  * quadrant with no direct light at all, so the far side of a cone came out darker than the single
- * lamp had left it. The dome above is what fixed it; the figures are in the plan's F13 row.
+ * lamp had left it. The dome above is what fixed it. See REALISM_PLAN.md, F13, for the figures.
  *
  * The single lamp is kept, exactly as it was, because a reader may prefer it — see
- * [RenderOptions.singleLamp]. Under it this file reproduces the pre-F13 shading bit for bit.
+ * [RenderOptions.singleLamp]. Under it this file reproduces the older shading bit for bit.
  *
  * The reference implementation, as [Engraving] is: every line here has a copy in the compute
  * shader (`GpuRaster.SOURCE`) written against it, and the two are one model in two languages.
@@ -233,8 +233,8 @@ internal object ReliefShading {
     /**
      * The single lamp's exaggeration at a 512 grid.
      *
-     * Twelve, which is what every render before F13 was drawn at and what the engraving's own
-     * gradient is still scaled by.
+     * Twelve, which is what every render before the sky model was drawn at and what the
+     * engraving's own gradient is still scaled by.
      */
     private const val SLOPE_SCALE_AT_512 = 12f
 
@@ -279,8 +279,8 @@ internal object ReliefShading {
     /**
      * The single lamp, in the north-west at 32 degrees above the horizon.
      *
-     * The cartographic convention, and the exact numbers every render before F13 used: x eastward,
-     * y southward, so a light in the north-west points west and north. Kept to the last bit so that
+     * The cartographic convention, and the exact numbers every render before the sky model used:
+     * x eastward, y southward, so a light in the north-west points west and north. Kept so that
      * [RenderOptions.singleLamp] reproduces the older picture rather than approximating it.
      */
     private const val LAMP_EAST = -0.6f

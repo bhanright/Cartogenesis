@@ -63,9 +63,61 @@ object TerrainStage {
 
     fun generate(config: WorldGenConfig): TerrainResult {
         val normals = buildNormalField(config)
-        val height = integrate(normals)
+        val height = integrate(normals, ReliefBand.of(config))
         smooth(height, config.terrain.smoothing)
         return TerrainResult(normals, height.normalize())
+    }
+
+    /**
+     * The band of wavelengths the base relief is allowed to carry, as a filter on the integrated
+     * surface: everything broader than [TerrainConfig.reliefCornerKm] is taken out of it.
+     *
+     * Integration divides each component's amplitude by its wavenumber, so an fBm slope field
+     * integrates to a surface whose power grows without limit toward the map's own width — a
+     * continent-wide tilt with the detail riding on it as a ripple. That is the right shape for a
+     * field that is *all* the terrain there is, and the wrong one now that the crust decides the
+     * broad shape: the two fight. Measured, the fight had a winner and it was the wrong one. The
+     * broadest component of the noise ran to several kilometres and smeared the two hypsometric
+     * modes isostasy had just separated, so S2's first pass scaled the whole field down until the
+     * modes came apart — and took the relief the eye reads with it, leaving a collision belt as a
+     * smooth pale tongue with 300 m of modulation on four kilometres of stamp.
+     *
+     * Shaping it instead of scaling it gives both. `k^2 / (k^2 + k0^2)` is the gentlest high pass
+     * there is — first order, no ringing, no phase to speak of — and against the `1/k` the
+     * integration puts in, the product peaks at exactly [TerrainConfig.reliefCornerKm] and falls
+     * away either side. So the surface's own relief now lives at the scale that setting names, and
+     * the map-scale tilt that was fighting the crust is gone.
+     *
+     * Isotropic in kilometres rather than in cells: an equirectangular map is twice as wide as it
+     * is tall, so a 512 by 512 grid has cells 23 km across and 12 km down and a filter written in
+     * cells would smooth twice as far east as it does south. The same reason [Isostasy.Flexure]
+     * converts its wavenumbers.
+     */
+    class ReliefBand(
+        cornerWavelengthKm: Double,
+        private val cellWidthKm: Double,
+        private val cellHeightKm: Double
+    ) {
+
+        private val cornerWavenumberSquared =
+            (2.0 * PI / cornerWavelengthKm) * (2.0 * PI / cornerWavelengthKm)
+
+        /** How much of a component at these per-cell angular frequencies survives, 0..1. */
+        fun responseAt(radiansPerCellAcross: Double, radiansPerCellDown: Double): Double {
+            val acrossPerKm = radiansPerCellAcross / cellWidthKm
+            val downPerKm = radiansPerCellDown / cellHeightKm
+            val wavenumberSquared = acrossPerKm * acrossPerKm + downPerKm * downPerKm
+            return wavenumberSquared / (wavenumberSquared + cornerWavenumberSquared)
+        }
+
+        companion object {
+            /** Null where the setting is off, which is the unfiltered surface and the control. */
+            fun of(config: WorldGenConfig): ReliefBand? {
+                val cornerKm = config.terrain.reliefCornerKm
+                if (cornerKm <= 0.0) return null
+                return ReliefBand(cornerKm, config.cellWidthKm, config.cellHeightKm)
+            }
+        }
     }
 
     /**
@@ -138,8 +190,13 @@ object TerrainStage {
      * radians per cell. Z is accumulated in place over P rather than into a third pair of buffers.
      * At export resolutions these arrays dominate the app's memory: six of them at 4096x4096 is
      * over 800MB, which no device will grant.
+     *
+     * [band], where one is given, multiplies Z by its response before the inverse transform, so
+     * the whole cost of shaping the relief's spectrum is one multiply inside a loop that was
+     * already running. Null recovers the surface exactly, which is what `HeightIntegrationTest`
+     * reads back.
      */
-    fun integrate(normals: NormalField): FloatField {
+    fun integrate(normals: NormalField, band: ReliefBand? = null): FloatField {
         val cellsAcross = normals.width
         val cellsDown = normals.height
         val cellCount = cellsAcross * cellsDown
@@ -181,8 +238,13 @@ object TerrainStage {
                         radiansPerCellDown * southwardSpectrumImaginary[cell]
                 // Z, written back over P: multiplying by -i swaps the parts and negates the new
                 // imaginary one. From here the eastward pair holds the surface, not the slope.
-                eastwardSpectrumReal[cell] = projectedSlopeImaginary / angularMagnitudeSquared
-                eastwardSpectrumImaginary[cell] = -projectedSlopeReal / angularMagnitudeSquared
+                val response =
+                    if (band == null) 1.0
+                    else band.responseAt(radiansPerCellAcross, radiansPerCellDown)
+                eastwardSpectrumReal[cell] =
+                    response * projectedSlopeImaginary / angularMagnitudeSquared
+                eastwardSpectrumImaginary[cell] =
+                    -response * projectedSlopeReal / angularMagnitudeSquared
             }
         }
 

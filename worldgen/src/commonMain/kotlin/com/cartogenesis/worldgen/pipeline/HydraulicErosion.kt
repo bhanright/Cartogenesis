@@ -146,9 +146,10 @@ internal object HydraulicErosion {
          * `E = K * A^m * S^n` with m = 0.5 and n = 1, over
          * [WorldScale.yearsPerHydraulicRound]. The stage holds the catchment as a share of all
          * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)` and
-         * `S` is that rise times `highestLandMetres / worldWidth`; the cut is spent on a height
-         * field whose whole 0..1 spans [WorldScale.reliefSpanMetres]. Everything but the share and
-         * the rise is constant over a generation, and this is it.
+         * `S` is that rise times [WorldScale.reliefSpanMetres] over the map's width in metres; the
+         * cut is spent on the same field, whose whole 0..1 is that same span, so the two cancel
+         * and what is left is `K * years * sqrt(landArea) / worldWidth`. Everything but the share
+         * and the rise is constant over a generation, and this is it.
          *
          * The land's area is the configured share of the world rather than the round's own count
          * of land cells. Sea level is a percentile, so that share *is* the land's area by
@@ -156,23 +157,25 @@ internal object HydraulicErosion {
          * round to round as the lowstand moved the shoreline, which is a property of the sea's
          * history and not of the rock.
          *
-         * One term of that arithmetic is now known to be the wrong one, and it is written up in
-         * `TODO.md` rather than changed here. The slope's rise is read as `highestLandMetres` per
-         * unit of the height field, which is what S1 could say while the field's own unit was
-         * ambiguous; S2 gave the field an absolute scale and its unit is the whole
-         * [WorldScale.reliefSpanMetres], so the two cancel and what is left is `K * years *
-         * sqrt(landArea) / worldWidth`. The cut this stage actually spends is therefore 2.67 times
-         * weaker than `K` and the time step together say. Which of the two should move — the
-         * coefficient up or the round's length down — is a question about
-         * [WorldScale.yearsPerHydraulicRound], which S1 derived from this very expression, and
-         * answering it moves every erosion figure the project has recorded. It is left as it
-         * stands so that S2 changes the world only where it says it does.
+         * The cancellation above is S2's second pass and it fixed a real error. S1 read the
+         * slope's rise as `highestLandMetres` per unit of the height field, which was the honest
+         * reading while the field was renormalised to its own extremes and its unit was whatever a
+         * given world made it; S2 gave the field an absolute scale whose unit *is*
+         * [WorldScale.reliefSpanMetres], and the two terms then cancel. Left in, the factor made
+         * the stage cut 2.67 times less per round than `K` and the time step together said.
+         *
+         * What moved is the time step and not the coefficient, because that is S1's own
+         * derivation: it fixed `K` at the literature's value and solved the length of a round from
+         * the cut a round makes. Solving the corrected expression gives 0.375 of the figure S1
+         * reached — see [WorldScale.yearsPerHydraulicRound] — so the coefficient is the same float
+         * it has always been, every world is unmoved to the last bit, and what changed is the
+         * label on the clock.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
             val perYear = erosion.bedrockErodibilityPerYear.toDouble() * scale.yearsPerHydraulicRound
             val geometry = sqrt(landAreaKm2) / scale.worldWidthKm
-            (perYear * geometry * scale.highestLandMetres / scale.reliefSpanMetres).toFloat()
+            (perYear * geometry).toFloat()
         }
 
         /**

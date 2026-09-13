@@ -186,6 +186,7 @@ internal object WorldSections {
         // and the second never appears in it at all — and erosion reads the second every round, so
         // both are written like any other per-cell array.
         Section("plates.continentalShare", SectionType.F32, floats = world.plates.continentalShare.data),
+        Section("plates.seafloorAgeMyr", SectionType.F32, floats = world.plates.seafloorAgeMyr.data),
         Section(
             "plates.upliftRateMmPerYear", SectionType.F32,
             floats = world.plates.upliftRateMmPerYear.data
@@ -265,7 +266,7 @@ internal object WorldSections {
             // of them has every other section of this stage and not that one, so the stage counts
             // as absent and is regenerated rather than half-built from what happens to be there.
             "plates.nearestBoundaryClass", "plates.height", "plates.crustAge",
-            "plates.continentalShare", "plates.upliftRateMmPerYear"
+            "plates.continentalShare", "plates.upliftRateMmPerYear", "plates.seafloorAgeMyr"
         ),
         GenerationStage.EROSION to listOf("erosion.height"),
         GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
@@ -426,6 +427,8 @@ internal object WorldSections {
                 nearestBoundaryClass = ints("plates.nearestBoundaryClass"),
                 height = field("plates.height"),
                 continentalShare = field("plates.continentalShare"),
+                seafloorAgeMyr = field("plates.seafloorAgeMyr"),
+                seafloorHalfSpreadingRateKmPerMyr = lists.seafloorHalfSpreadingRateKmPerMyr,
                 upliftRateMmPerYear = field("plates.upliftRateMmPerYear"),
                 crustAge = field("plates.crustAge")
             )

@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.sqrt
 import kotlin.test.Test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -45,48 +46,87 @@ class IsostasyTest {
      *
      * Arithmetic rather than a world, so it is exact and instant. What it holds is that the
      * constants in `IsostasyConfig` are the ones the section says they are: a standard continental
-     * column floats at Earth's mean land elevation, a standard oceanic column at Earth's mean ocean
-     * depth, and the difference between the second and what a *cold* oceanic column would do is the
-     * thermal buoyancy the field's own note quotes.
+     * column floats at Earth's mean land elevation, a column of new sea floor floats at Parsons
+     * and Sclater's ridge depth and one of the oldest floor at their flattened asymptote, and what
+     * separates the two from a *cold* oceanic column is a thermal buoyancy inside the band their
+     * subsidence curve allows.
      */
     @Test
     fun `the two crusts float where Earth's do`() {
         val isostasy = WorldGenConfig().isostasy
         val columns = Isostasy.Columns(isostasy)
 
+        val referenceAge = columns.seafloorAgeAtDepth(isostasy.oceanicMeanFloorMetres)
         println(
-            ("ISOSTASY columns continental %.0f m, oceanic %.0f m, a cold oceanic column %.0f m," +
-                " thermal buoyancy %.0f m").format(
-                columns.altitudeMetres(1f), columns.altitudeMetres(0f),
-                columns.coldOceanicFloorMetres, columns.oceanicThermalBuoyancyMetres
+            ("ISOSTASY columns continental %.0f m, a ridge %.0f m, %.0f-Myr floor %.0f m, the" +
+                " oldest floor %.0f m, a cold oceanic column %.0f m; thermal buoyancy %.0f m at" +
+                " the ridge and %.0f m on the oldest floor").format(
+                columns.altitudeMetres(1f, 0f),
+                columns.altitudeMetres(0f, 0f),
+                referenceAge,
+                columns.altitudeMetres(0f, referenceAge),
+                columns.altitudeMetres(0f, isostasy.oldestSeafloorAgeMyr),
+                columns.coldOceanicFloorMetres,
+                columns.oceanicThermalBuoyancyMetres(0f),
+                columns.oceanicThermalBuoyancyMetres(isostasy.oldestSeafloorAgeMyr)
             )
         )
         assertEquals(
             "a standard continental column does not float at Earth's mean land elevation",
             isostasy.continentalFreeboardMetres.toDouble(),
-            columns.altitudeMetres(1f).toDouble(), 1.0
+            columns.altitudeMetres(1f, 0f).toDouble(), 1.0
         )
         assertEquals(
-            "a standard oceanic column does not float at Earth's mean ocean depth",
-            isostasy.oceanicFloorMetres.toDouble(),
-            columns.altitudeMetres(0f).toDouble(), 1.0
+            "new sea floor does not float at Parsons & Sclater's ridge depth",
+            -isostasy.seafloorRidgeDepthMetres.toDouble(),
+            columns.altitudeMetres(0f, 0f).toDouble(), 1.0
         )
-        // Parsons & Sclater put a ridge at 2,500 m and 80-Myr floor at 5,700 against a cold
-        // asymptote near 6,400, so the mean sea floor is buoyed by something between one and four
-        // kilometres. A model whose figure fell outside that would be saying the ocean is deep for
-        // some reason other than the age of its crust.
-        val buoyancy = columns.oceanicThermalBuoyancyMetres
+        // Parsons & Sclater's own curve: 350 m per root of a million years below the flattening
+        // age, their exponential above it, and an asymptote at 6,400 m.
+        assertEquals(
+            "20-Myr floor does not lie where Parsons & Sclater's root puts it",
+            -(isostasy.seafloorRidgeDepthMetres +
+                isostasy.seafloorSubsidenceMetresPerRootMyr * sqrt(20f)).toDouble(),
+            columns.altitudeMetres(0f, 20f).toDouble(), 1.0
+        )
+        val oldestFloor = columns.altitudeMetres(0f, isostasy.oldestSeafloorAgeMyr)
         assertTrue(
-            "the thermal buoyancy the two Earth figures imply is ${"%.0f".format(buoyancy)} m," +
-                " outside the 1,000-4,000 m Parsons & Sclater's subsidence curve allows",
-            buoyancy in 1_000f..4_000f
+            "the oldest floor does not approach Parsons & Sclater's asymptote: " +
+                "%.0f m".format(oldestFloor),
+            oldestFloor in -6_400f..-5_500f
+        )
+        // A model whose thermal buoyancy fell outside this band would be saying the ocean is deep
+        // for some reason other than the age of its crust: Parsons & Sclater put a ridge some
+        // 3,900 m above the cold asymptote and the oldest floor a few hundred metres above it.
+        val ridgeBuoyancy = columns.oceanicThermalBuoyancyMetres(0f)
+        val oldBuoyancy = columns.oceanicThermalBuoyancyMetres(isostasy.oldestSeafloorAgeMyr)
+        assertTrue(
+            "the buoyancy of new sea floor is %.0f m, outside the 2,000-4,000 m Parsons &".format(
+                ridgeBuoyancy
+            ) + " Sclater's subsidence curve allows",
+            ridgeBuoyancy in 2_000f..4_000f
+        )
+        assertTrue(
+            "the oldest floor keeps %.0f m of buoyancy, which is not the cold column Parsons &"
+                .format(oldBuoyancy) + " Sclater's asymptote describes",
+            oldBuoyancy in -600f..600f
         )
         // A margin is a mixture, so its level has to be between the two and to move one way only.
-        var previous = columns.altitudeMetres(0f)
+        var previous = columns.altitudeMetres(0f, referenceAge)
         for (step in 1..20) {
-            val here = columns.altitudeMetres(step / 20f)
+            val here = columns.altitudeMetres(step / 20f, referenceAge)
             assertTrue("the margin's level is not monotone in the crust it is made of", here > previous)
             previous = here
+        }
+        // And the floor sinks with age, monotonically, across the join between the two branches.
+        var deepest = columns.altitudeMetres(0f, 0f)
+        for (age in 1..isostasy.oldestSeafloorAgeMyr.toInt()) {
+            val here = columns.altitudeMetres(0f, age.toFloat())
+            assertTrue(
+                "sea floor of $age Myr does not lie below floor of one million years younger",
+                here <= deepest + 1f
+            )
+            deepest = here
         }
     }
 
@@ -478,6 +518,88 @@ class IsostasyTest {
      * one. Giving the orogen a thrust load of its own means building a belt out of crustal
      * thickness rather than out of a stamped profile, and it is in `TODO.md`.
      */
+    /**
+     * The uplift rate against the erosion it is racing, which is where the rate came from.
+     *
+     * England and Molnar (*Surface uplift, uplift of rocks, and exhumation of rocks*, Geology 18,
+     * 1990) exist to insist that rock uplift and surface uplift are different quantities and that
+     * exhumation is the difference: the Himalaya's rock rises five millimetres a year and its
+     * surface gains about half of one, because the rest comes off as sediment. A model can only
+     * copy the *surface* figure — the rock rate it needs is that plus whatever its own rivers
+     * remove, which is a property of this grid and this erodibility and has to be measured.
+     *
+     * So this runs the standard worlds with every uplift rate at zero, measures what the rounds
+     * take off a present belt, and holds `collisionUpliftMmPerYear` to Earth's surface uplift plus
+     * that. It is the derivation of the constant, run rather than remembered — which matters,
+     * because S2's first pass took the same measurement against a round four times too long and a
+     * terrain with a quarter of the mid-band relief, and reached a rate a third of this one.
+     */
+    @Test
+    fun `the collision rate is Earth's surface uplift plus this model's own denudation`() {
+        val rates = SEEDS.map { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val still = base.copy(
+                tectonics = base.tectonics.copy(
+                    collisionUpliftMmPerYear = 0f,
+                    andeanUpliftMmPerYear = 0f,
+                    islandArcUpliftMmPerYear = 0f,
+                    riftShoulderUpliftMmPerYear = 0f
+                )
+            )
+            val world = WorldGenerationEngine.generateBlocking(still)
+            val rate = beltDenudationMmPerYear(world)
+            println("ISOSTASY denudation seed %d: %.3f mm/yr off an active belt, uplift off"
+                .format(seed, rate))
+            rate
+        }
+        val denudation = rates.average()
+        val tectonics = WorldGenConfig().tectonics
+        val implied = EARTH_COLLISION_SURFACE_UPLIFT_MM_PER_YEAR + denudation
+        println(
+            ("ISOSTASY denudation pooled %.3f mm/yr; Earth's collision surface uplift %.2f, so the" +
+                " rock uplift is %.2f mm/yr against the %.2f the setting carries").format(
+                denudation, EARTH_COLLISION_SURFACE_UPLIFT_MM_PER_YEAR, implied,
+                tectonics.collisionUpliftMmPerYear
+            )
+        )
+        assertEquals(
+            "the collision uplift rate is not Earth's surface uplift plus what this model's own" +
+                " rivers take off a belt",
+            implied, tectonics.collisionUpliftMmPerYear.toDouble(),
+            UPLIFT_RATE_TOLERANCE_MM_PER_YEAR
+        )
+        // And the ratios between the four are England & Molnar's, unchanged by the scale above.
+        assertEquals(
+            "the Andean rate is not England & Molnar's 2-in-5 of the collision rate",
+            0.4, tectonics.andeanUpliftMmPerYear / tectonics.collisionUpliftMmPerYear.toDouble(),
+            0.02
+        )
+    }
+
+    /** Metres of rock the rounds took off the present belts, as a rate over the time they stand for. */
+    private fun beltDenudationMmPerYear(world: WorldMap): Double {
+        val scale = world.config.scale
+        val falloff = world.config.tectonics.boundaryFalloffCells
+        var sum = 0.0
+        var cells = 0
+        for (cell in world.sea.isLand.indices) {
+            if (!world.sea.isLand[cell]) continue
+            if (world.plates.boundaryDistance.data[cell] > falloff) continue
+            val pairClass = world.plates.nearestBoundaryClass[cell]
+            if (pairClass != BoundaryClass.COLLISION_PLATEAU.ordinal &&
+                pairClass != BoundaryClass.ANDEAN_MARGIN.ordinal
+            ) continue
+            sum += (
+                scale.altitudeAtField(world.plates.height.data[cell]) -
+                    scale.altitudeAtField(world.erosion.height.data[cell])
+                ).toDouble()
+            cells++
+        }
+        if (cells == 0) return 0.0
+        val years = scale.yearsPerHydraulicRound * world.config.erosion.hydraulicRounds
+        return (sum / cells) * METRES_TO_MILLIMETRES / years
+    }
+
     @Test
     fun `a stripped range rebounds and its foreland sinks`() {
         val seed = 42L
@@ -631,6 +753,32 @@ class IsostasyTest {
          * crust, so the control is that conversion set wrong and nothing else.
          */
         const val CONTROL_SUBMERGED_SHARE = 0.7f
+
+        /**
+         * The surface uplift an active continental collision manages on Earth, in millimetres a
+         * year.
+         *
+         * Half of one. England and Molnar (Geology 18, 1990) put the Himalaya's *rock* uplift near
+         * five and its surface uplift near a half, the rest going out as sediment, and the Southern
+         * Alps and Taiwan are the same story at higher rates. A model has to copy the surface
+         * figure and add its own exhumation to get the rock figure, which is what the guard above
+         * does.
+         */
+        const val EARTH_COLLISION_SURFACE_UPLIFT_MM_PER_YEAR = 0.5
+
+        /**
+         * How far the collision rate may sit from Earth's surface uplift plus the measured
+         * denudation, in millimetres a year.
+         *
+         * A twentieth. The denudation is a mean over five worlds whose own figures span 0.398 to
+         * 0.454, so a tenth of a millimetre either side is the measurement's own spread; half that
+         * is tight enough that the constant cannot drift away from its derivation unnoticed and
+         * loose enough that a seed's chaos cannot fail it.
+         */
+        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.05
+
+        /** Millimetres in a metre, for the denudation rate above. */
+        const val METRES_TO_MILLIMETRES = 1_000.0
 
         /** How much relief the plain under a synthetic belt carries, peak to peak, in metres. */
         const val PLAIN_RELIEF_METRES = 100f

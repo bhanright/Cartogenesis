@@ -96,6 +96,19 @@ data class PlateResult(
      */
     val height: FloatField,
     /**
+     * How long ago the sea floor under each cell was made, in millions of years, and how fast the
+     * ridges that made it spread.
+     *
+     * The ocean's whole shape, since S2's second pass. Depth goes as the square root of age
+     * (Parsons & Sclater 1977), so a ridge stands two and a half kilometres down and the floor
+     * sinks away from it along a smooth curve — where before, every piece of floor was of one age
+     * and the deep sea was a set of flat plate polygons. Continental cells carry an age too; it
+     * simply does nothing there, because their altitude is their crust's business. See
+     * [PlateStage.seafloorAgeOf], which is also where the rate comes from.
+     */
+    val seafloorAgeMyr: FloatField,
+    val seafloorHalfSpreadingRateKmPerMyr: Double,
+    /**
      * How much of each cell's crust is continental rather than oceanic, 0 to 1 — which is what
      * decides the altitude the cell floats at before anything is stamped on it.
      *
@@ -243,6 +256,8 @@ object PlateStage {
         var presentDistanceCells = FloatArray(0)
         var nearestBoundaryType = IntArray(0)
         var nearestBoundaryClass = IntArray(0)
+        // Where the present epoch's sea floor is being made, for [seafloorAgeMyr].
+        var presentRidgeCells: List<Int> = emptyList()
 
         for (epoch in 0 until epochs) {
             val epochsAgo = epochs - 1 - epoch
@@ -293,6 +308,12 @@ object PlateStage {
                 presentDistanceCells = epochDistanceCells
                 nearestBoundaryType = IntArray(cellsAcross * cellsDown) { -1 }
                 nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
+                // In cell order, not the map's iteration order, so the age field below is the
+                // same field however the boundary map happens to be walked.
+                presentRidgeCells = boundaries.entries
+                    .filter { it.value.interaction.pairClass == BoundaryClass.OCEAN_RIDGE }
+                    .map { it.key }
+                    .sorted()
             }
             if (!hasBoundaries) continue
 
@@ -362,9 +383,23 @@ object PlateStage {
         val isostatic = config.isostasy.enabled
         val elevationLimit = Limit(tectonics.elevationLimitKneeMetres, scale.highestLandMetres)
         val beltReliefMetres = tectonics.beltReliefMetres
-        val continentalReliefMetres = tectonics.continentalReliefMetres
-        val oceanicReliefMetres = tectonics.oceanicReliefMetres
+        val continentalReliefMetres = tectonics.continentalReliefStandardDeviationMetres
+        val oceanicReliefMetres = tectonics.oceanicReliefStandardDeviationMetres
+        val orogenReliefMetres = tectonics.orogenReliefStandardDeviationMetres
+        val crustAgeReference = tectonics.crustAgeReference.coerceAtLeast(1e-6f)
         val height = FloatField(cellsAcross, cellsDown)
+
+        // How old the sea floor is under each cell, which is what decides how deep it lies. See
+        // [seafloorAgeOf].
+        val seafloor = seafloorAgeOf(config, columns, continentalShare, presentRidgeCells)
+        val seafloorAgeMyr = seafloor.ageMyr
+
+        // The base noise as a standard score: zero mean, unit deviation. The settings above are
+        // deviations in metres, so this is what makes them mean that — and it is what makes them
+        // mean the same thing at every grid, since a filtered field's extremes are two outlying
+        // cells while its spread is a property of the filter. See
+        // [com.cartogenesis.worldgen.model.TerrainConfig.reliefCornerKm].
+        val standardisedNoise = standardised(terrain.height)
 
         // Fine relief, an order of magnitude below anything the eye picks out of the shading. Both
         // the isostatic base and the uplift falloff are very smooth, which leaves some plains
@@ -384,12 +419,19 @@ object PlateStage {
                     // With isostasy switched off both crusts get the continental answer and the
                     // datum goes flat, which is the world before S2 and the control every guard in
                     // this chunk is shown to fail against.
-                    val baseMetres = if (isostatic) columns.altitudeMetres(share) else 0f
+                    val baseMetres =
+                        if (isostatic) columns.altitudeMetres(share, seafloorAgeMyr[cell]) else 0f
+                    // How hard the present epoch worked here, which is what makes an orogen
+                    // rougher than the plain it stands on and leaves the foreland alone.
+                    val orogenShare =
+                        (uplift.data[cell] / crustAgeReference).coerceIn(0f, 1f)
                     val reliefMetres =
                         if (isostatic) {
-                            oceanicReliefMetres + share * (continentalReliefMetres - oceanicReliefMetres)
+                            oceanicReliefMetres +
+                                share * (continentalReliefMetres - oceanicReliefMetres) +
+                                orogenShare * orogenReliefMetres
                         } else {
-                            continentalReliefMetres
+                            continentalReliefMetres + orogenShare * orogenReliefMetres
                         }
                     val detail = tectonics.detailAmplitude * detailNoise.fbm(
                         column * detailCyclesAcrossMap / cellsAcross,
@@ -398,9 +440,10 @@ object PlateStage {
                         tectonics.detailFrequency,
                         tectonics.detailFrequency
                     )
-                    // The base noise runs 0..1 and is centred here, so it adds relief without
-                    // moving the level the crust floats at.
-                    val noiseMetres = (terrain.height.data[cell] - 0.5f) * reliefMetres
+                    // The base noise is a standard score, so multiplying by a deviation in metres
+                    // is all there is to it, and its mean of zero is what keeps it from moving the
+                    // level the crust floats at.
+                    val noiseMetres = standardisedNoise[cell] * reliefMetres
                     val stampedMetres = (uplift.data[cell] + detail) * beltReliefMetres
                     height.data[cell] =
                         scale.fieldAtAltitude(elevationLimit.applyTo(baseMetres + noiseMetres + stampedMetres))
@@ -416,10 +459,175 @@ object PlateStage {
             nearestBoundaryClass = nearestBoundaryClass,
             height = height,
             continentalShare = continentalShare,
+            seafloorAgeMyr = FloatField(cellsAcross, cellsDown, seafloor.ageMyr),
+            seafloorHalfSpreadingRateKmPerMyr = seafloor.halfSpreadingRateKmPerMyr,
             upliftRateMmPerYear = upliftRate,
             crustAge = crustAge
         )
     }
+
+    /**
+     * [field] as a standard score: the same shape with a mean of zero and a deviation of one.
+     *
+     * So that a relief written in metres in `TectonicsConfig` is a *deviation* in metres, which is
+     * the only reading of a band-filtered field that means the same thing at every grid — the
+     * extremes of one are a pair of outlying cells and move with the cell count, its spread does
+     * not. A field with no spread at all (a constant, which is what a zeroed terrain stage gives)
+     * comes back as zeros rather than as a division by nothing.
+     */
+    private fun standardised(field: FloatField): FloatArray {
+        val values = field.data
+        var sum = 0.0
+        for (value in values) sum += value.toDouble()
+        val mean = sum / values.size
+        var squares = 0.0
+        for (value in values) {
+            val offset = value.toDouble() - mean
+            squares += offset * offset
+        }
+        val deviation = kotlin.math.sqrt(squares / values.size)
+        if (deviation <= 0.0) return FloatArray(values.size)
+        return FloatArray(values.size) { ((values[it].toDouble() - mean) / deviation).toFloat() }
+    }
+
+    /**
+     * How long ago the sea floor under each cell was made, and how fast the ridges that made it
+     * are spreading.
+     */
+    internal class SeafloorAge(
+        /** Millions of years, one entry per cell; the reference age where there is no ridge. */
+        val ageMyr: FloatArray,
+        /** Solved rather than declared — see [seafloorAgeOf]. Kilometres per million years. */
+        val halfSpreadingRateKmPerMyr: Double,
+        /** How many cells of the present epoch's boundaries are spreading ridges. */
+        val ridgeCells: Int
+    )
+
+    /**
+     * How long ago the sea floor under each cell was made, in millions of years.
+     *
+     * Ocean floor is a conveyor. It is made at a spreading ridge, carried away from it, cools and
+     * contracts as it goes, and is destroyed at a trench — so its depth is a function of its age
+     * and of very little else, which is the most robust relationship in marine geophysics (Parsons
+     * & Sclater 1977). Distance to the nearest ridge over the spreading rate is that age, and it is
+     * the field this generator was missing: without it every piece of sea floor was of one age, the
+     * deep ocean stood at one level per plate, and the Voronoi partition showed straight through
+     * the bathymetry as flat polygons meeting at triple junctions.
+     *
+     * Measured to the *present* epoch's spreading boundaries only. A ridge that closed three
+     * hundred million years ago is not making floor now and the floor it made has been subducted;
+     * what a past epoch leaves on this map is a belt, not a basin.
+     *
+     * **The rate is solved, not declared, and that is the interesting part.** Floor is destroyed as
+     * fast as it is made, so the mean age of a planet's sea floor is its ocean's area over its
+     * ridges' production — a world with less ridge for its ocean must spread faster, or its floor
+     * would be older than the planet. This map has about half Earth's ridge for its ocean, because
+     * fourteen plates on a cylinder put most of their boundaries between crusts that are not both
+     * oceanic. So the rate this world spreads at is not an Earth figure to be copied; what *is* an
+     * Earth figure, and what the map can be held to, is how deep the floor ends up
+     * ([IsostasyConfig.oceanicMeanFloorMetres]). The rate is whatever puts the mean there, found by
+     * bisection on a histogram of the distances, and it is reported rather than hidden — see
+     * `IsostasyTest` and `TODO.md`, which record it running well above Earth's fastest ridge and
+     * why.
+     *
+     * Where a world has no spreading ridge at all — one plate, or every boundary convergent —
+     * every cell takes the age that floats at that same mean depth, which is the one-age ocean
+     * S2's first pass drew and the control the depth-age guards are shown to fail against.
+     */
+    internal fun seafloorAgeOf(
+        config: WorldGenConfig,
+        columns: Isostasy.Columns,
+        continentalShare: FloatField,
+        ridgeCells: List<Int>
+    ): SeafloorAge {
+        val cellCount = config.width * config.height
+        val isostasy = config.isostasy
+        val targetDepthMetres = isostasy.oceanicMeanFloorMetres
+        val referenceAge = columns.seafloorAgeAtDepth(targetDepthMetres)
+        if (!isostasy.seafloorAge || ridgeCells.isEmpty()) {
+            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
+        }
+
+        val distanceCells = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestRidgeCell = IntArray(cellCount) { -1 }
+        ridgeCells.forEach { cell ->
+            distanceCells[cell] = 0f
+            nearestRidgeCell[cell] = cell
+        }
+        JumpFloodDistance.run(config.width, config.height, distanceCells, nearestRidgeCell)
+
+        val kilometresPerCell = config.cellWidthKm
+        val oldest = isostasy.oldestSeafloorAgeMyr
+
+        // The distances of the cells the answer is about, in one histogram, so the bisection below
+        // costs a few thousand operations rather than a few hundred million at 4096. Only the
+        // cells that are more oceanic than continental count: a continental platform's altitude is
+        // its crust's business and no age changes it, and letting it into the mean would make the
+        // solved rate depend on how much of the map happens to be land.
+        var longestKm = 0.0
+        for (cell in 0 until cellCount) {
+            if (continentalShare.data[cell] >= 0.5f) continue
+            val cells = distanceCells[cell]
+            if (cells >= JumpFloodDistance.INFINITE) continue
+            val kilometres = cells * kilometresPerCell
+            if (kilometres > longestKm) longestKm = kilometres
+        }
+        if (longestKm <= 0.0) {
+            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
+        }
+        val bins = LongArray(DISTANCE_HISTOGRAM_BINS)
+        var oceanicCells = 0L
+        for (cell in 0 until cellCount) {
+            if (continentalShare.data[cell] >= 0.5f) continue
+            val cells = distanceCells[cell]
+            if (cells >= JumpFloodDistance.INFINITE) continue
+            val bin = ((cells * kilometresPerCell / longestKm) * (DISTANCE_HISTOGRAM_BINS - 1))
+                .toInt().coerceIn(0, DISTANCE_HISTOGRAM_BINS - 1)
+            bins[bin]++
+            oceanicCells++
+        }
+        if (oceanicCells == 0L) {
+            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
+        }
+
+        fun meanDepthAt(rateKmPerMyr: Double): Double {
+            var sum = 0.0
+            for (bin in bins.indices) {
+                if (bins[bin] == 0L) continue
+                val kilometres = longestKm * bin / (DISTANCE_HISTOGRAM_BINS - 1)
+                val age = (kilometres / rateKmPerMyr).toFloat().coerceAtMost(oldest)
+                sum += -columns.seafloorDepthMetres(age).toDouble() * bins[bin]
+            }
+            return sum / oceanicCells
+        }
+
+        // Deeper the slower it spreads, so the mean depth falls monotonically with the rate and a
+        // bisection cannot miss. The bounds are a millimetre a year and ten metres a year, which
+        // bracket anything a plate partition can ask for; forty halvings settle the rate to a part
+        // in ten thousand, which is far finer than the depth curve's own fit.
+        var slow = SLOWEST_HALF_RATE_KM_PER_MYR
+        var fast = FASTEST_HALF_RATE_KM_PER_MYR
+        repeat(RATE_BISECTIONS) {
+            val middle = 0.5 * (slow + fast)
+            if (meanDepthAt(middle) > targetDepthMetres) slow = middle else fast = middle
+        }
+        val rate = 0.5 * (slow + fast)
+
+        val ageMyr = FloatArray(cellCount) { cell ->
+            val cells = distanceCells[cell]
+            if (cells >= JumpFloodDistance.INFINITE) referenceAge
+            else (cells * kilometresPerCell / rate).toFloat().coerceAtMost(oldest)
+        }
+        return SeafloorAge(ageMyr, rate, ridgeCells.size)
+    }
+
+    /** Bins the distance histogram the spreading rate is solved on carries. */
+    private const val DISTANCE_HISTOGRAM_BINS = 512
+
+    /** The rate bisection's bracket, in kilometres per million years, and its depth. */
+    private const val SLOWEST_HALF_RATE_KM_PER_MYR = 1.0
+    private const val FASTEST_HALF_RATE_KM_PER_MYR = 10_000.0
+    private const val RATE_BISECTIONS = 40
 
     /**
      * Breaks the crust boundary up, in place, so that a coastline standing on it is a coastline.

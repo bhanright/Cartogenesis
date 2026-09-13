@@ -5,6 +5,8 @@ import com.cartogenesis.worldgen.math.Fft2D
 import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.sqrt
 
 /**
  * The crust floating on the mantle, and the crust bending under what is put on it.
@@ -49,9 +51,15 @@ internal object Isostasy {
      * to that.
      *
      * `buoyancy` is the air-equivalent height a column gains from being hot rather than from being
-     * thick. Continental crust gets none; oceanic crust gets the amount that puts a standard
-     * oceanic column at [IsostasyConfig.oceanicFloorMetres], which is Earth's mean ocean depth and
-     * is 2,245 m shallower than a cold column of the same crust would sit. See that field for why.
+     * thick. Continental crust gets none; oceanic crust gets whatever amount puts a column of its
+     * own age at the depth Parsons and Sclater's curve says floor of that age lies at — 2,357 m
+     * of buoyancy at a spreading ridge, falling as the root of the age to nothing on the oldest
+     * floor there is. See [IsostasyConfig.seafloorRidgeDepthMetres].
+     *
+     * Reading the depth-age curve backwards through Airy rather than writing it onto the map is
+     * what keeps a continental margin a mixture: a cell halfway across one carries a column
+     * halfway between the two crusts in thickness, in density *and* in heat, and there is no
+     * special case anywhere for the shelf, the slope or the rise.
      */
     class Columns(private val isostasy: IsostasyConfig) {
 
@@ -71,16 +79,57 @@ internal object Isostasy {
         val datum: Float = isostasy.continentalFreeboardMetres * mantleDensity - continentalBuoyantMass
 
         /**
-         * Solved so a standard oceanic column floats at Earth's mean ocean depth: the heat in
-         * young sea floor, expressed as the air-equivalent metres it is worth.
+         * How deep Parsons and Sclater put sea floor of [ageMyr] millions of years, in metres and
+         * so negative.
+         *
+         * The root branch below the flattening age, their exponential above it. The two agree to
+         * within a few tens of metres where they meet, which is the fit's own business and not
+         * something this blends over.
          */
-        val oceanicThermalBuoyancyMetres: Float =
-            (isostasy.oceanicFloorMetres * (mantleDensity - waterDensity) - datum - oceanicBuoyantMass) /
-                mantleDensity
+        fun seafloorDepthMetres(ageMyr: Float): Float {
+            val age = ageMyr.coerceAtLeast(0f)
+            val root = isostasy.seafloorRidgeDepthMetres +
+                isostasy.seafloorSubsidenceMetresPerRootMyr * sqrt(age)
+            val flattened = isostasy.seafloorAbyssalAsymptoteMetres -
+                isostasy.seafloorFlatteningRangeMetres * exp(-age / isostasy.seafloorFlatteningTimeMyr)
+            // Whichever is shallower, which is where the two branches actually meet. Parsons and
+            // Sclater fitted them to different halves of their data and quote a crossover "near 70
+            // Myr"; evaluated, their root runs a little above their exponential from about 50 Myr
+            // on, so switching at a declared age would step the floor up by three hundred metres
+            // and make it younger the deeper it got. The shallower of two curves that both rise
+            // with age rises with age, and it is continuous by construction.
+            return -(if (root < flattened) root else flattened)
+        }
+
+        /**
+         * The age, in millions of years, at which sea floor lies [depthMetres] below the water —
+         * [seafloorDepthMetres] read backwards.
+         *
+         * Only the root branch is inverted, because the only caller wants an age near the mean and
+         * the mean of any ocean this generator draws is well inside the flattening age. A depth
+         * shallower than the ridge itself comes back as brand new floor.
+         */
+        fun seafloorAgeAtDepth(depthMetres: Float): Float {
+            val below = depthMetres - isostasy.seafloorRidgeDepthMetres
+            if (below <= 0f) return 0f
+            val roots = below / isostasy.seafloorSubsidenceMetresPerRootMyr
+            return roots * roots
+        }
+
+        /**
+         * The heat in sea floor of [ageMyr], as the air-equivalent metres of buoyancy it is worth.
+         *
+         * Solved rather than declared: it is whatever makes an oceanic column of that age float at
+         * [seafloorDepthMetres]. At the ridge it comes to 2,357 m and on the oldest floor to a
+         * little under nothing, which is the same statement as the curve it was read out of.
+         */
+        fun oceanicThermalBuoyancyMetres(ageMyr: Float): Float =
+            (seafloorDepthMetres(ageMyr) * (mantleDensity - waterDensity) - datum -
+                oceanicBuoyantMass) / mantleDensity
 
         /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
-         * and the rest oceanic.
+         * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic.
          *
          * The share is not a label but a mixture, and the mixture is the point: a continental
          * margin is crust that has been stretched and thinned on its way out to the ocean floor,
@@ -88,21 +137,24 @@ internal object Isostasy {
          * density and in heat. That is where the shelf, the slope and the rise come from, and it
          * is why [PlateStage] blurs the share across the plate boundary rather than stepping it.
          */
-        fun altitudeMetres(continentalShare: Float): Float {
+        fun altitudeMetres(continentalShare: Float, seafloorAgeMyr: Float): Float {
             val share = continentalShare.coerceIn(0f, 1f)
             val buoyantMass = oceanicBuoyantMass + share * (continentalBuoyantMass - oceanicBuoyantMass)
-            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres
+            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr)
             val columnMass = datum + buoyantMass + mantleDensity * buoyancy
             return if (columnMass >= 0f) columnMass / mantleDensity
             else columnMass / (mantleDensity - waterDensity)
         }
 
         /**
-         * What a cold oceanic column would float at, in metres — the figure
-         * [IsostasyConfig.oceanicFloorMetres]'s note compares Earth's ocean against.
+         * What a cold oceanic column would float at, in metres — the depth the sea floor would
+         * reach if the heat ran all the way out of it.
          *
-         * Reported rather than used: it is how the thermal buoyancy above is shown to be a
-         * measurement of Earth and not a free parameter.
+         * Reported rather than used, and it is the check on the whole scheme: -5,926 m, against
+         * Parsons and Sclater's cold asymptote of -6,400 measured on Earth's oldest floor. The two
+         * agree to within 8%, which is as close as two independent readings of the same physics
+         * come, and it is why the thermal buoyancy above is a measurement rather than a free
+         * parameter.
          */
         val coldOceanicFloorMetres: Float
             get() = (datum + oceanicBuoyantMass) / (mantleDensity - waterDensity)

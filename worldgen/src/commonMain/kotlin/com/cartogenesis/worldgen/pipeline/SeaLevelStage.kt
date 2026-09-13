@@ -75,8 +75,13 @@ object SeaLevelStage {
      * Shallower than [SeaConfig.shelfDepthMetres] at the shelf break, so the plateau slopes
      * seaward instead of being a dead-flat plain up to the shore; and shallower than the 1,200 m
      * [ClimateStage] uses for `SHALLOW_OCEAN`, so the whole plateau is drawn as shallow water.
+     *
+     * Thirty metres, which is Earth's inner shelf: the Grand Banks, the North Sea and the Sunda
+     * shelf all sit between 20 and 60 m over most of their area, and the break is at 130. It was
+     * 200 while the break was 1,000; both figures came down to Earth's in S2's second pass, when
+     * the sea gained a floor deep enough for a 130 m break to mean something.
      */
-    private const val SHELF_DEPTH_AT_COAST_METRES = -200f
+    private const val SHELF_DEPTH_AT_COAST_METRES = -30f
 
     /**
      * The most passes [drainDrownedBasins] makes over the drowned basins' outlets.
@@ -200,6 +205,14 @@ object SeaLevelStage {
      *  - beyond that, untouched: the natural sea floor is deep enough on its own once clear of the
      *    coast, so only the margin needed fixing.
      *
+     * It fills rather than replaces, which is S2's second pass and matters more than it sounds.
+     * What this wedge stands for is the sediment shed off the continent and laid on the margin,
+     * and sediment fills a hollow without shaving a rise: so a cell takes the *shallower* of its
+     * own floor and the wedge's surface, and any bank, rise or ridge flank the crust put inside the
+     * band goes on showing through. Replacing outright — which is what it did until now — turned
+     * the whole margin into a function of one number, the distance to the nearest land, and drew
+     * it as the concentric bands around every landmass that S2's first pass was called out for.
+     *
      * Shaping the shelf earlier, as a depression on oceanic crust before the percentile ran, was
      * tried and reverted; see [SeaConfig] and REALISM_PLAN.md, B1.
      */
@@ -258,7 +271,7 @@ object SeaLevelStage {
             if (isLand[cell]) continue
             val distance = distanceToLand[cell]
             val naturalFloor = beforeShelf.relativeElevation.data[cell]
-            withShelf.data[cell] = when {
+            val wedgeSurface = when {
                 distance <= shelfBreakCells -> {
                     val acrossPlateau = (distance / shelfBreakCells).coerceIn(0f, 1f)
                     shelfDepthAtCoast +
@@ -272,6 +285,8 @@ object SeaLevelStage {
                 }
                 else -> naturalFloor
             }
+            // Sediment fills; it does not shave. Whichever of the two stands higher is the floor.
+            withShelf.data[cell] = if (wedgeSurface > naturalFloor) wedgeSurface else naturalFloor
         }
 
         return beforeShelf.copy(relativeElevation = withShelf)

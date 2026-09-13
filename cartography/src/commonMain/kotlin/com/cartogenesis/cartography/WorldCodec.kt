@@ -30,6 +30,12 @@ data class WorldLists(
      * already had this number subtracted out of it.
      */
     val shorelineHeight: Float,
+    /**
+     * How fast this world's ridges spread, in kilometres per million years — solved from the plate
+     * partition rather than declared, and so not derivable from the arrays either. See
+     * [com.cartogenesis.worldgen.pipeline.PlateStage.seafloorAgeOf].
+     */
+    val seafloorHalfSpreadingRateKmPerMyr: Double,
     val landCellCount: Int,
     val rivers: List<River>,
     val lakes: List<Lake>,
@@ -41,6 +47,7 @@ data class WorldLists(
         fun of(world: WorldMap): WorldLists = WorldLists(
             plates = world.plates.plates,
             shorelineHeight = world.sea.shorelineHeight,
+            seafloorHalfSpreadingRateKmPerMyr = world.plates.seafloorHalfSpreadingRateKmPerMyr,
             landCellCount = world.sea.landCellCount,
             rivers = world.rivers.rivers,
             lakes = world.rivers.lakes.lakes,

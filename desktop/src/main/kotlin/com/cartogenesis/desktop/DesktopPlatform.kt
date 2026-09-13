@@ -101,32 +101,32 @@ class DesktopPlatform(
     override suspend fun fetchText(url: String): String? = withContext(Dispatchers.IO) {
         runCatching {
             val client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(8))
+                .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
             val request = HttpRequest.newBuilder(URI(url))
-                .timeout(Duration.ofSeconds(12))
+                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "Cartogenesis")
                 .GET()
                 .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() in 200..299) response.body() else null
+            if (response.statusCode() in HTTP_SUCCESS) response.body() else null
         }.getOrNull()
     }
 
     // Probed once, at startup. A machine with no usable device gets the switch disabled and told
     // why, which is more use than a switch that silently does nothing.
-    private val gpu = GpuErosion.createOrNull()
+    private val erosionProbe = GpuErosion.createOrNull()
 
     // The export raster shares that device and the context it runs on. It is deliberately not
     // behind the same switch: the erosion one is a promise about whether the world can be
     // regenerated from its seed, and drawing pixels makes no such promise either way.
-    private val gpuRaster = GpuRaster.createOrNull()
+    private val rasterProbe = GpuRaster.createOrNull()
 
-    override val accelerator: ErosionAccelerator? get() = gpu.accelerator
+    override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator
 
-    override val accelerationUnavailableBecause: String? get() = gpu.unavailableBecause
+    override val accelerationUnavailableBecause: String? get() = erosionProbe.unavailableBecause
 
     override suspend fun export(
         config: WorldGenConfig,
@@ -138,7 +138,7 @@ class DesktopPlatform(
         // not, or the window stops answering for the best part of a minute.
         val destination = chooseSaveFile(Exporter.defaultName(config, size, format)) ?: return null
         val result = withContext(Dispatchers.Default) {
-            Exporter.export(config, options, size, destination, format, gpuRaster.accelerator)
+            Exporter.export(config, options, size, destination, format, rasterProbe.accelerator)
         }
         return ExportOutcome(result.file.name, result.millis, result.bytes)
     }
@@ -163,6 +163,17 @@ class DesktopPlatform(
         val sidecar = Exporter.sidecarNameFor(result.file.name)
         return ExportOutcome("${result.file.name} and $sidecar", result.millis, result.bytes)
     }
+
+    private companion object {
+        /** Long enough for a slow DNS lookup, short enough that an offline check gives up. */
+        const val CONNECT_TIMEOUT_SECONDS = 8L
+
+        /** The whole request. A release document is a few kilobytes; this is generous. */
+        const val REQUEST_TIMEOUT_SECONDS = 12L
+
+        /** 2xx. A redirect is followed by the client, so anything else here is a refusal. */
+        val HTTP_SUCCESS = 200..299
+    }
 }
 
 /**
@@ -174,16 +185,16 @@ class DesktopPlatform(
  * every read comes back as the defaults, which is the right failure for a preferences file.
  */
 internal fun configDirectory(): File {
-    val os = System.getProperty("os.name").orEmpty().lowercase()
+    val osName = System.getProperty("os.name").orEmpty().lowercase()
     val home = System.getProperty("user.home")
-    val dir = when {
-        os.contains("win") ->
+    val directory = when {
+        osName.contains("win") ->
             File(System.getenv("APPDATA") ?: "$home\\AppData\\Roaming", "Cartogenesis")
-        os.contains("mac") -> File(home, "Library/Application Support/Cartogenesis")
+        osName.contains("mac") -> File(home, "Library/Application Support/Cartogenesis")
         else -> File(System.getenv("XDG_CONFIG_HOME") ?: "$home/.config", "cartogenesis")
     }
-    runCatching { dir.mkdirs() }
-    return dir
+    runCatching { directory.mkdirs() }
+    return directory
 }
 
 /**

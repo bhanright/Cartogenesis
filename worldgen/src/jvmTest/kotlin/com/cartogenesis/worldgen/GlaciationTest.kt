@@ -131,6 +131,13 @@ class GlaciationTest {
         // country's water the ice put there. It was measured at four and a half times
         // (0.69 -> 3.11 lakes per 10k cold cells), with the two zones' ratio going 6.87 -> 9.26.
         //
+        // F17 found how fine a knife-edge that is on integer lake counts, and the finding stands
+        // whether the clause asserts or reports: on seed 42 the ice takes one lake to three, which
+        // is exactly the factor asked for, and whether `3f * (1 / n)` came out at or a hair under
+        // `3 / n` depended on the land count under both — a few hundred cells of coastline turned
+        // the same three lakes from a pass into a failure. Cross-multiplying on longs is the fix
+        // for that, and the figures below are cross-multiplied where they are compared.
+        //
         // **Both clauses are findings from W1 rather than assertions, and the reason is upstream of
         // this stage.** Pooled over the three seeds the ice adds only about a third more lakes to
         // cold country (0.21 -> 0.28 per 10k) and the zone ratio reaches 1.70 against a bar of 2.5.
@@ -148,7 +155,9 @@ class GlaciationTest {
                 " ${"%.2f".format(without.coldDensity)} to ${"%.2f".format(with.coldDensity)} per" +
                 " 10k (asked: three times) and the iced zone ratio to" +
                 " ${"%.2f".format(with.ratio)} (asked: $COLD_LAKE_RATIO); control zone ratio" +
-                " ${"%.2f".format(without.ratio)}"
+                " ${"%.2f".format(without.ratio)}; the control clause cross-multiplied," +
+                " ${with.coldLakes.toLong() * without.coldLand} against" +
+                " ${3L * without.coldLakes * with.coldLand}"
         )
     }
 

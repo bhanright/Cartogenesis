@@ -70,9 +70,9 @@ class ChromeGalleryTest {
     /**
      * The same window with every section of the panel unrolled.
      *
-     * F2's subject is the panel, and the panel a reader first sees is five ruled headings with a
+     * The panel is the subject, and the panel a reader first sees is five ruled headings with a
      * `+` at the margin — which is the point of it, and which shows none of the settings inside.
-     * So there is a second light shot with all six sections open, for reviewing what F2 actually
+     * So there is a second light shot with all six sections open, for reviewing what the panel
      * put in them. It doubles as the only assertion anyone can make about a disclosure control
      * without reading pixels: clicking the headings has to change the picture.
      */
@@ -93,10 +93,10 @@ class ChromeGalleryTest {
     }
 
     /**
-     * F4's additions — the window with its menu strip, the File menu open, Settings, About — in
+     * The window with its menu strip, the File menu open, Settings and About — in
      * light, dark and Mars.
      *
-     * Twelve shots, and none of them waits for a world: everything F4 draws is chrome, and a blank
+     * Twelve shots, and none of them waits for a world: all of this is chrome, and a blank
      * canvas photographs it in a tenth of the time a generated one does.
      *
      * The menu and the two dialogs are photographed *on their own* rather than over the window,
@@ -111,7 +111,7 @@ class ChromeGalleryTest {
      * identical files), and that nothing came out blank.
      */
     @Test
-    fun `the menus and the F4 dialogs are photographed in three chromes`() {
+    fun `the menus and the dialogs are photographed in three chromes`() {
         val dir = File("build/screens").apply { mkdirs() }
         val chromes = listOf(
             "light" to ThemeChoice.LIGHT,
@@ -140,11 +140,13 @@ class ChromeGalleryTest {
                 "$what looks the same in all three chromes, so the theme is not reaching it"
             )
         }
-        println("CHROME wrote twelve F4 shots (window, menu, settings, about x three chromes) to $dir")
+        println(
+            "CHROME wrote twelve shots (window, menu, settings, about x three chromes) to $dir"
+        )
     }
 
     /**
-     * F5's subject: the same application at a phone's size and a portrait tablet's, beside the
+     * The same application at a phone's size and a portrait tablet's, beside the
      * 1440x900 the rest of this file photographs, in both themes.
      *
      * Two shots of each, because a compact window has two states and both are the point: the map
@@ -190,7 +192,7 @@ class ChromeGalleryTest {
     }
 
     /**
-     * F11's subject: the button that stops a generation, in both arrangements.
+     * The button that stops a generation, in both arrangements.
      *
      * Stop takes Generate's place while a world is being built and nowhere else, so photographing
      * it means photographing an application in the middle of something — which is what the two
@@ -256,9 +258,10 @@ class ChromeGalleryTest {
     }
 
     /**
-     * F6's five, each with a world on screen at 1440x900.
+     * The five chromes asked for by name, each with a world on screen at 1440x900.
      *
-     * With a map in the window rather than on the blank canvas the F4 shots use, and that is the
+     * With a map in the window rather than on the blank canvas the chrome shots use, and that is
+     * the
      * point of these five: three of them change something *over* the chart — High contrast makes
      * the toolbar and legend strips opaque, Allied boxes the cartouche — and two change the rule
      * under a section heading, which is only worth photographing beside the rest of the interface.
@@ -270,7 +273,7 @@ class ChromeGalleryTest {
      * a copy of another), and that none came out flat.
      */
     @Test
-    fun `the five F6 chromes are photographed with a world in the window`() {
+    fun `the five named chromes are photographed with a world in the window`() {
         val dir = File("build/screens").apply { mkdirs() }
         val chromes = listOf(
             "highcontrast" to ThemeChoice.HIGH_CONTRAST,
@@ -289,8 +292,8 @@ class ChromeGalleryTest {
             fingerprints[name] = shot.fingerprint
             assertTrue(shot.distinctColours > 200, "the $name shot is nearly blank")
         }
-        println("CHROME wrote five ${WIDTH}x$HEIGHT F6 shots to ${dir.absolutePath}")
-        println("CHROME F6 fingerprints $fingerprints")
+        println("CHROME wrote five ${WIDTH}x$HEIGHT named-chrome shots to ${dir.absolutePath}")
+        println("CHROME named fingerprints $fingerprints")
         assertEquals(
             chromes.size,
             fingerprints.values.toSet().size,
@@ -299,9 +302,10 @@ class ChromeGalleryTest {
     }
 
     /**
-     * F7's four, each with a world on screen at 1440x900.
+     * The four typographic chromes, each with a world on screen at 1440x900.
      *
-     * The same shot as F6's, for the same reason: every one of these four changes something the
+     * The same shot as the five above, for the same reason: every one of these four changes
+     * something the
      * panel and the map frame do rather than only what colour they are — a prompt before each
      * section heading and a monospaced face throughout (Matrix), a weave behind the panels and a
      * running stitch under every heading (Hessian), a Greek key and a double-ruled cartouche
@@ -310,7 +314,7 @@ class ChromeGalleryTest {
      * where the six ruled headings are.
      */
     @Test
-    fun `the four F7 chromes are photographed with a world in the window`() {
+    fun `the four typographic chromes are photographed with a world in the window`() {
         val dir = File("build/screens").apply { mkdirs() }
         val chromes = listOf(
             "matrix" to ThemeChoice.MATRIX,
@@ -326,8 +330,10 @@ class ChromeGalleryTest {
             fingerprints[name] = shot.fingerprint
             assertTrue(shot.distinctColours > 200, "the $name shot is nearly blank")
         }
-        println("CHROME wrote four ${WIDTH}x$HEIGHT F7 shots to ${dir.absolutePath}")
-        println("CHROME F7 fingerprints $fingerprints")
+        println(
+            "CHROME wrote four ${WIDTH}x$HEIGHT typographic shots to ${dir.absolutePath}"
+        )
+        println("CHROME typographic fingerprints $fingerprints")
         assertEquals(
             chromes.size,
             fingerprints.values.toSet().size,
@@ -336,7 +342,7 @@ class ChromeGalleryTest {
     }
 
     /**
-     * The settings dialog in the two F7 chromes whose lettering only shows there.
+     * The settings dialog in the two chromes whose lettering only shows there.
      *
      * Roman's interpunct and Matrix's prompt are transformations of a *heading*, and the panel's own
      * six headings are all single words set in one line — so the dialog, whose rows are "Working
@@ -345,7 +351,7 @@ class ChromeGalleryTest {
      * the menu item still opens what it claims to.
      */
     @Test
-    fun `the F7 lettering is photographed in the settings dialog`() {
+    fun `the interpunct and the prompt are photographed in the settings dialog`() {
         val dir = File("build/screens").apply { mkdirs() }
         val chromes = listOf("matrix" to ThemeChoice.MATRIX, "roman" to ThemeChoice.ROMAN)
         val fingerprints = mutableMapOf<String, Int>()
@@ -355,7 +361,7 @@ class ChromeGalleryTest {
             fingerprints[name] = shot.fingerprint
             assertTrue(shot.distinctColours > 3, "the settings shot in $name is a flat colour")
         }
-        println("CHROME wrote two F7 settings shots to ${dir.absolutePath}")
+        println("CHROME wrote two settings-dialog lettering shots to ${dir.absolutePath}")
         assertEquals(2, fingerprints.values.toSet().size, "both settings shots are identical")
     }
 
@@ -376,7 +382,7 @@ class ChromeGalleryTest {
                 // `dark` is consulted only by ThemeChoice.SYSTEM. It is passed rather than left to
                 // its default so that a shot of SYSTEM is the same picture on a machine set to dark
                 // as on one set to light — which the identity check below depends on, and which the
-                // F4 shots of Light, Dark and Mars are unaffected by either way.
+                // The Light, Dark and Mars shots are unaffected by either way.
                 CartogenesisTheme(dark = dark, choice = choice) {
                     CartogenesisApp(ChromePlatform())
                 }
@@ -414,7 +420,7 @@ class ChromeGalleryTest {
     /**
      * Composes the application at 1440x900, presses Generate, waits for the world, and captures.
      *
-     * Pressing the button rather than handing the app a world is deliberate: since F0 the app opens
+     * Pressing the button rather than handing the app a world is deliberate: the app opens
      * on a blank canvas, so this is also the only way to photograph it with a map in it, and it
      * exercises the same path a reader takes.
      */
@@ -442,7 +448,7 @@ class ChromeGalleryTest {
             waitForIdle()
 
             if (openSections) {
-                // In the panel's own order. Since F3 took the style and view lists out of
+                // In the panel's own order. With the style and view lists out of
                 // Cartography there is nothing inside a section whose name could be mistaken for
                 // a heading, but the order is still the reader's.
                 listOf("Terrain", "Climate", "Water", "Peoples", "Cartography").forEach {
@@ -500,7 +506,7 @@ class ChromeGalleryTest {
      *
      * No test hook and no held generation: a 512 world takes a couple of seconds on any machine
      * this runs on, and the busy state is painted before the first cell is computed — that is
-     * exactly what F8's opening frame yield is for — so waiting for the button to read Stop lands
+     * exactly what the generator's opening frame yield is for — so waiting for Stop to appear lands
      * the shot squarely inside the generation.
      */
     @OptIn(ExperimentalTestApi::class)
@@ -646,7 +652,7 @@ class ChromeGalleryTest {
         const val WIDTH = 1440
         const val HEIGHT = 900
 
-        /** An iPhone 14's viewport in CSS pixels, which is the size F5 was drawn against. */
+        /** An iPhone 14's viewport in CSS pixels: the size the compact arrangement is drawn for. */
         const val PHONE_WIDTH = 390
         const val PHONE_HEIGHT = 844
 
@@ -665,7 +671,7 @@ class ChromeGalleryTest {
             "Climate", "Seasonal tilt", "Rain shadow", "Ice sheets and glaciers",
             "Water", "Rivers", "Lakes", "Dry basins hold less water",
             "Peoples", "Realms", "Leave wilderness unclaimed", "Realm borders",
-            "Cartography", "Relief shading", "Coastline"
+            "Cartography", "Relief shading", "Coastline", "Graticule"
         )
     }
 }
@@ -686,7 +692,7 @@ private class ChromePlatform(private val desktop: Platform = DesktopPlatform()) 
 /**
  * The same desktop, reporting a fingertip.
  *
- * What the compact shots are of is a phone, and half of what F5 changed for one is the size of the
+ * What the compact shots are of is a phone, and half of the compact arrangement is the size of the
  * targets — which the theme takes from the pointer rather than from the width, so photographing the
  * arrangement without also reporting a coarse pointer would photograph a phone-shaped window drawn
  * with a mouse's 13 dp slider thumbs. A delegating override rather than a second platform, so

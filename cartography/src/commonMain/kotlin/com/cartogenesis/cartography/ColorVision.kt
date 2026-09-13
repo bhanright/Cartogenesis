@@ -12,15 +12,19 @@ import kotlin.math.sqrt
 /**
  * The instrument the palettes are measured with: colour difference, and colour vision.
  *
- * F6 asks two questions that cannot be answered by looking — whether two colours are still *told
- * apart* by a reader with dichromatic vision, and whether text is legible against the ground it is
- * printed on — and both have standard answers with numbers attached. This is those answers, and it
- * lives beside the palettes rather than inside one test because two modules ask them: the map
- * style's guard (`ClearStyleTest`, in this module) and the chrome's (`ChromeContrastTest`, in
- * `:ui`). Two implementations of CIEDE2000 would be two implementations free to disagree, and the
- * whole point of a stated margin is that the two guards state the same one.
+ * Two questions cannot be answered by looking — whether two colours are still *told apart* by a
+ * reader with dichromatic vision, and whether text is legible against the ground it is printed on
+ * — and both have standard answers with numbers attached. This is those answers, and it lives
+ * beside the palettes rather than inside one test because two modules ask them: the map style's
+ * guard (`ClearStyleTest`, in this module) and the chrome's (`ChromeContrastTest`, in `:ui`). Two
+ * implementations of CIEDE2000 would be two implementations free to disagree, and the whole point
+ * of a stated margin is that the two guards state the same one.
  *
  * Nothing in the application draws with this. It is a ruler.
+ *
+ * The identifiers inside [deltaE2000] are the standard's own — `kL`, `sC`, `dH`, `rt` and the rest
+ * — rather than words, so that the code can be read line for line against CIE 142-2001. That is
+ * the one place in this module where a symbol beats a name.
  */
 object ColorVision {
 

@@ -1,6 +1,8 @@
 package com.cartogenesis.desktop
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,14 +27,17 @@ import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.ThemeChoice
+import java.io.File
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
 
 /**
- * F8: that the atlas on a phone can be got out of again.
+ * That the atlas on a phone can be got out of again.
  *
  * William opened it on his phone against 2.0.0 and could not close it: "it opens up an atlas menu
  * that becomes hidden by the top transparent menu screen and isn't navigable so it's impossible to
@@ -87,7 +93,7 @@ class PhoneAtlasTest {
             back.assertIsDisplayed()
             val bounds = back.fetchSemanticsNode().boundsInRoot
             println(
-                "F8 Map button at ${bounds.left}, ${bounds.top} to ${bounds.right}, " +
+                "PHONE Map button at ${bounds.left}, ${bounds.top} to ${bounds.right}, " +
                     "${bounds.bottom} in a ${PHONE_WIDTH}x$PHONE_HEIGHT viewport"
             )
             assertTrue(
@@ -97,7 +103,7 @@ class PhoneAtlasTest {
             )
 
             val strips = onAllNodesWithContentDescription(MAP_TOOLBAR).fetchSemanticsNodes()
-            println("F8 map toolbars drawn over the atlas: ${strips.size}")
+            println("PHONE map toolbars drawn over the atlas: ${strips.size}")
             assertEquals(
                 0,
                 strips.size,
@@ -167,7 +173,7 @@ class PhoneAtlasTest {
     }
 
     /**
-     * The wide arrangement's own version of the same question, which F8 expected to find already
+     * The wide arrangement's own version of the same question, which was expected to be already
      * answered: the header there is always on screen, so "Show map" is never hidden, and the strips
      * are already withheld from anything that is not the map. Written down because "we checked"
      * is worth less than a test that fails if somebody stops it being true.
@@ -220,7 +226,7 @@ class PhoneAtlasTest {
                 if (ratio < LEGIBLE) illegible += "${choice.name} in $tone at ${ratio.round()}:1"
             }
         }
-        println("F8 library heading contrast $measured")
+        println("PHONE library heading contrast $measured")
         assertTrue(
             illegible.isEmpty(),
             "the library's heading is below $LEGIBLE:1 against its own ground: $illegible"
@@ -244,7 +250,7 @@ class PhoneAtlasTest {
             measured[choice.name] = ratio.round()
             if (ratio < LEGIBLE) illegible += "${choice.name} at ${ratio.round()}:1"
         }
-        println("F8 realm page contrast $measured")
+        println("PHONE realm page contrast $measured")
         assertTrue(
             illegible.isEmpty(),
             "a realm's page is below $LEGIBLE:1 against its own ground: $illegible"
@@ -309,6 +315,97 @@ class PhoneAtlasTest {
     }
 
     /**
+     * The graticule on a phone: it can be turned on from the sheet, and it reaches the map.
+     *
+     * The toggle is in the Cartography section, which rolls up like every other, so the route is
+     * the reader's own: pull the sheet up, generate, unroll Cartography, flip Graticule, put the
+     * sheet away and look. Two claims a capture can make and a declaration cannot — that the switch
+     * is reachable at 390 dp, and that flipping it changes the picture rather than only the state —
+     * plus the third, that the legend prints the scale the sheet is at.
+     *
+     * The shot is written out because the graticule is the one thing here whose worth is a matter
+     * of looking: whether ten degrees is fine enough to place a coast by and coarse enough not to
+     * bury one, at the size a phone shows a whole world.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `a phone can turn the graticule on and see it`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = PhonePlatform()
+            setContent {
+                CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Generate").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            val plain = captureRoot()
+            File(dir, "f14-phone-plain.png").writeBytes(plain.png)
+
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            onNodeWithText("Cartography").performScrollTo().performClick()
+            waitForIdle()
+            val toggle = onNodeWithContentDescription("Graticule")
+            toggle.performScrollTo()
+            toggle.assertIsEnabled()
+            toggle.performClick()
+            waitForIdle()
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+            // The redraw runs off the composition on a background dispatcher, so the frame the
+            // switch was flipped on is not yet the frame that carries the graticule.
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
+                captureRoot().fingerprint != plain.fingerprint
+            }
+            val figured = captureRoot()
+            File(dir, "f14-phone-graticule.png").writeBytes(figured.png)
+
+            println(
+                "PHONE graticule at ${PHONE_WIDTH}x$PHONE_HEIGHT: plain ${plain.fingerprint}, " +
+                    "with the graticule ${figured.fingerprint}, written to ${dir.absolutePath}"
+            )
+            assertTrue(
+                figured.fingerprint != plain.fingerprint,
+                "turning the graticule on changed nothing on the phone's screen"
+            )
+            // And the legend says what scale the sheet is at, which is the other half of it.
+            assertTrue(
+                onAllNodesWithText("km per pixel", substring = true).fetchSemanticsNodes()
+                    .isNotEmpty(),
+                "the cartouche does not print the map's scale"
+            )
+        }
+    }
+
+    /** The whole window as a PNG and a fingerprint of it, for the two shots above. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.captureRoot(): PhoneShot {
+        val image = onRoot().captureToImage()
+        val pixels = image.toPixelMap()
+        var fingerprint = 17
+        for (y in 0 until pixels.height step 3) {
+            for (x in 0 until pixels.width step 3) {
+                fingerprint = fingerprint * 31 + pixels[x, y].toArgb()
+            }
+        }
+        val bytes = Image.makeFromBitmap(image.asSkiaBitmap())
+            .encodeToData(EncodedImageFormat.PNG)!!.bytes
+        return PhoneShot(bytes, fingerprint)
+    }
+
+    private class PhoneShot(val png: ByteArray, val fingerprint: Int)
+
+    /**
      * The contrast between the lightest and the darkest pixel of one piece of text.
      *
      * A text node's bounds are tight around its glyphs, so the box holds the ink, the ground it is
@@ -362,7 +459,7 @@ class PhoneAtlasTest {
          */
         val REALM_ROW = hasText(" · ", substring = true) and hasClickAction()
 
-        /** An iPhone 14's viewport in CSS pixels, which is the size F5 was drawn against. */
+        /** An iPhone 14's viewport in CSS pixels: the size the compact arrangement is drawn for. */
         const val PHONE_WIDTH = 390
         const val PHONE_HEIGHT = 844
         const val WIDE_WIDTH = 1440

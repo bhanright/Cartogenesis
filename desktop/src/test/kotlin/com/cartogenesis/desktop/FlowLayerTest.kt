@@ -48,7 +48,7 @@ class FlowLayerTest {
 
         // Wind is easterly in the tropics and westerly in mid-latitudes; if the belts were not
         // being read, every arrow would share a sign.
-        val eastward = winds.flow.count { it.dx > 0 }
+        val eastward = winds.flow.count { it.directionX > 0 }
         assertTrue(
             eastward > winds.flow.size / 10 && eastward < winds.flow.size * 9 / 10,
             "wind arrows do not reverse across belts: $eastward of ${winds.flow.size} eastward"
@@ -64,7 +64,7 @@ class FlowLayerTest {
 
         // Arrows have to be unit length, or the barb geometry skews with speed.
         val badLength = currents.flow.count {
-            abs(it.dx * it.dx + it.dy * it.dy - 1f) > 1e-3f
+            abs(it.directionX * it.directionX + it.directionY * it.directionY - 1f) > 1e-3f
         }
         assertTrue(badLength == 0, "$badLength current arrows are not unit vectors")
 

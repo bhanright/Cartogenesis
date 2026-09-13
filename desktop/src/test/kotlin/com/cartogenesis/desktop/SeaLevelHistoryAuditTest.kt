@@ -16,7 +16,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
 /**
- * H5 at the size the author exports at, rendered and measured.
+ * Sea-level history at the size the author exports at, rendered and measured.
  *
  * The 512 guards live in `:worldgen`'s `SeaLevelHistoryTest`; this is the pair of worlds the plan
  * named — 718106 and 59758, on the default settings, which are the author's — before and after, at
@@ -42,8 +42,8 @@ class SeaLevelHistoryAuditTest {
                 base.copy(sea = base.sea.copy(lowstandMetres = 0f, enclosedSeaIsLand = false))
             )
             val after = WorldGenerationEngine.generateBlocking(base)
-            val was = Coast(before, "seed $seed at 2048 PRE-H5")
-            val now = Coast(after, "seed $seed at 2048 H5    ")
+            val was = Coast(before, "seed $seed at 2048 NO HISTORY")
+            val now = Coast(after, "seed $seed at 2048 HISTORY   ")
             gains.add(
                 "$seed estuaries ${was.estuaries} -> ${now.estuaries}, indentation " +
                     "${"%.2f".format(was.indentation)} -> ${"%.2f".format(now.indentation)}"
@@ -73,13 +73,13 @@ class SeaLevelHistoryAuditTest {
                 "seed $seed at 2048: ${now.estuaries} river mouths inside an inlet against " +
                     "${was.estuaries} before the chunk"
             )
-            // H5b, at the size the author exports at. A basin the enclosure rule converts from
+            // At the size the author exports at. A basin the enclosure rule converts from
             // unreachable sea to land is filled by the drainage to its sill, and until
             // `SeaConfig.postCutOutlet` nothing could cut that sill: the notch inside the
             // hydraulic rounds ran while the ground was still under the provisional sea, and the
             // water balance has nowhere to drain a floor that is already below sea level. On
             // 718106 at 2048 that left a Caspian-shaped lake filling a coastal rift trough, which
-            // is what the render review after H5 and F6 singled out. The bar is the same one
+            // is what a render review singled out. The bar is the same one
             // `OutletIncisionTest` and `OutletResolutionTest` hold every other lake to: the
             // Caspian's 0.249% share of Earth's land.
             val drowned = largestDrownedShare(after)

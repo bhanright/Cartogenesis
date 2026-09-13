@@ -1,25 +1,35 @@
 package com.cartogenesis.cartography
 
 /**
- * The nib a river is drawn with, in output pixels.
+ * The nib a river is drawn with.
  *
- * In pixels, and for the reason [EngravingPlan] is: a pen does not grow with the sheet. An
- * exported map four times the side of the preview is not the same picture enlarged — it is more of
- * the country at the same scale of line, with four times as many tributaries fine enough to draw.
- * Sizing the stroke as a share of the width instead is what made a 2048 export's trunk rivers
- * eleven pixels across, wide enough to hide the valley they run down.
+ * A drawn river is not its width to scale. The Amazon's mouth is about ten kilometres of channel on
+ * a world twelve thousand kilometres round (`NationsConfig.worldWidthKm`), which is 0.08% of the
+ * width and, on a sheet a thousand pixels across, less than one pixel: draw a river honestly and
+ * the greatest river on the map disappears. What a cartographer does instead is exaggerate it,
+ * roughly threefold for a river of that class, and that is the figure this pen is: a quarter of a
+ * percent of the width of the sheet for the biggest river on it.
  *
- * Two figures, and the ratio between them is the whole of the idea. Leopold and Maddock's downstream
- * hydraulic geometry has width going as the square root of discharge, so a trunk carrying a thousand
- * times a headwater's water is some thirty times the headwater's width, and no pen can honestly span
- * that on one sheet: below a certain stroke there is no line at all. What can be kept is the shape
- * of the law — the stroke rising with the square root of the discharge, from the finest line a nib
- * leaves to the widest a river should take on a map that also has to show the land it crosses.
+ * So the full stroke is a *share of the map*, not a count of pixels. Held at a fixed five pixels it
+ * looked right at 2048 and twice too heavy at 1024 — the same country, the same rivers, half the
+ * sheet, the same ink. A share gives the same picture at every size: two and a half pixels at 1024,
+ * five at 2048, ten at 4096, and a map printed twice as large has rivers twice as wide, exactly as
+ * a map printed twice as large has everything else. See REALISM_PLAN.md, F15.
+ *
+ * The hairline is the exception and stays in pixels, because it is not a width at all — it is the
+ * finest mark a nib can leave, and on a bigger sheet the smallest channel is still the smallest
+ * channel. The engraving's hachures are the same kind of thing and stay in pixels for the same
+ * reason; see [Engraving].
+ *
+ * Between the two ends the stroke follows the shape of Leopold and Maddock's law — width going as
+ * the square root of discharge, which `RiverWidth` in `:worldgen` turns into a ratio in 0..1. No
+ * pen can span the law itself: a trunk carrying a thousand times a headwater's water is thirty
+ * times its width, and below a certain stroke there is no line at all.
  */
 object RiverPen {
 
     /**
-     * The finest line, drawn for the smallest channel on the map.
+     * The finest line, drawn for the smallest channel on the map, in output pixels.
      *
      * Under a pixel, so it comes out as a grey thread rather than a black one: a headwater is a
      * hint that water starts here, and it should not read as firmly as the coast beside it.
@@ -27,15 +37,23 @@ object RiverPen {
     const val HAIRLINE_PIXELS: Float = 0.8f
 
     /**
-     * The widest, drawn at the mouth of the biggest river on the map.
+     * The widest stroke, at the mouth of the biggest river on the map, as a share of the map width.
      *
-     * Six times the hairline. A trunk has to be unmistakably a trunk at a glance and from across
-     * the room, which is what the whole change is for, and five pixels is about where a line stops
-     * reading as a line and starts reading as a strip of water.
+     * The Amazon's ten-kilometre mouth is 0.083% of a twelve-thousand-kilometre world; a printed
+     * map exaggerates a river of that class about threefold, which is 0.25%. The five pixels on a
+     * 2048 sheet this replaced is 0.244% of the same width, arrived at by eye and agreeing to the
+     * second digit. Both round to the figure used here.
      */
-    const val FULL_PIXELS: Float = 5f
+    const val FULL_SHARE_OF_MAP_WIDTH: Float = 0.0024f
 
-    /** The stroke for a point whose [com.cartogenesis.worldgen.pipeline.River.widthRatio] is this. */
-    fun widthPixels(widthRatio: Float): Float =
-        HAIRLINE_PIXELS + (FULL_PIXELS - HAIRLINE_PIXELS) * widthRatio.coerceIn(0f, 1f)
+    /** The widest stroke on a sheet [mapWidthPixels] across, never finer than the hairline. */
+    fun fullPixels(mapWidthPixels: Int): Float =
+        (mapWidthPixels * FULL_SHARE_OF_MAP_WIDTH).coerceAtLeast(HAIRLINE_PIXELS)
+
+    /**
+     * The stroke for a point whose [com.cartogenesis.worldgen.pipeline.River.widthRatio] is
+     * [widthRatio], on a sheet [mapWidthPixels] across.
+     */
+    fun widthPixels(widthRatio: Float, mapWidthPixels: Int): Float =
+        HAIRLINE_PIXELS + (fullPixels(mapWidthPixels) - HAIRLINE_PIXELS) * widthRatio.coerceIn(0f, 1f)
 }

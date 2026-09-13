@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -43,7 +44,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cartogenesis.cartography.MapScale
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -58,9 +62,8 @@ import kotlin.math.sin
  * Everything a reader does *to the picture* — which style it is drawn in, which layer of the world
  * it shows, how far in it is zoomed — now happens on the picture, and everything the picture says
  * about itself is said along its bottom edge. The settings panel keeps what makes a world; the map
- * keeps what looks at one. Before F3 the style and the view were forty-eight rows of chips in a
- * side panel, so choosing between Vellum and Nautical meant reading two words in a column and
- * watching something change three hundred pixels away.
+ * keeps what looks at one. As rows of chips in a side panel, choosing between Vellum and Nautical
+ * meant reading two words in a column and watching something change three hundred pixels away.
  *
  * Both strips are drawn in [OverMap]'s colours rather than the theme's, for the reason that object
  * gives: they lie on a rendered chart whose paper is the *style's*, and a paper-coloured strip over
@@ -81,10 +84,10 @@ internal const val MAP_TOOLBAR: String = "Map toolbar"
  * Along the top edge of the map, inside it: the styles as a segmented control, the views as a menu.
  *
  * Why the two are drawn differently is a matter of arithmetic at the width this application is
- * designed for. With the right-hand column folded away (F3 moved Export into the header panel) the
- * map is about 1080 dp wide at a 1440 dp window. The eleven style names — Atlas, Vellum, Ink wash,
- * Nautical, Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars (F4) and Colour-blind (F6) —
- * measure some 740 dp set as cells, so they still fit on one row with room left for the small
+ * designed for. With Export in the header panel rather than a column of its own, the map is about
+ * 1080 dp wide at a 1440 dp window. The eleven style names — Atlas, Vellum, Ink wash, Nautical,
+ * Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars and Colour-blind — measure some 740 dp
+ * set as cells, so they still fit on one row with room left for the small
  * print, which is the first thing to be elided as the row fills. The fifteen view names run past 1300
  * dp, largely because four of them are things like "Temperature, summer"; a second segmented row
  * would either wrap or be cut, and a wrapped segmented control is no longer a segmented control.
@@ -252,8 +255,8 @@ private fun StripCell(
                 // exactly as wide as the cell and cannot be pushed around by the row.
                 drawRect(
                     color = colour,
-                    topLeft = Offset(0f, size.height - 1.5f),
-                    size = Size(size.width, 1.5f)
+                    topLeft = Offset(0f, size.height - CHOSEN_CELL_RULE_PIXELS),
+                    size = Size(size.width, CHOSEN_CELL_RULE_PIXELS)
                 )
             }
             .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -261,6 +264,14 @@ private fun StripCell(
         Text(label, style = MaterialTheme.typography.labelMedium, color = colour, maxLines = 1)
     }
 }
+
+/**
+ * The rule under the chosen style's name, in device pixels.
+ *
+ * Half a pixel heavier than the hairlines beside it, which is what makes it read as underlining
+ * the word rather than as one more division of the strip.
+ */
+private const val CHOSEN_CELL_RULE_PIXELS = 1.5f
 
 /** The hairline between two cells of the segmented control. */
 @Composable
@@ -271,10 +282,10 @@ private fun CellRule() {
 /**
  * A box ruled on all four sides, which is what a control over the chart looks like here.
  *
- * Lifted out of [ViewMenu], where it was written inline, so that the style menu beside it is
- * plainly the same object and not a second one that happens to look similar. The only thing F5
- * adds is the minimum size, which is zero under a mouse — so the wide toolbar's View button is the
- * same pixels it was — and a fingertip's worth under a coarse pointer.
+ * Written once rather than inline in [ViewMenu], so that the style menu beside it is plainly the
+ * same object and not a second one that happens to look similar. The minimum size is zero under a
+ * mouse — so the wide toolbar's View button is exactly the pixels it was drawn at — and a
+ * fingertip's worth under a coarse pointer.
  */
 @Composable
 private fun RuledButton(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
@@ -352,8 +363,8 @@ private fun ViewMenu(
  * it. This one carries the name of the world, its seed and largest realm, and how far in the view
  * is — which is as close to a scale bar as a world with no stated size can honestly get.
  *
- * With no world on screen there is nothing to name, so the left side falls back to the one line
- * F0 wrote for the empty canvas, which is the only instruction the application has ever given.
+ * With no world on screen there is nothing to name, so the left side falls back to the one line of
+ * instruction for the empty canvas, which is the only instruction the application ever gives.
  */
 @Composable
 internal fun ChartLegend(
@@ -380,92 +391,160 @@ internal fun ChartLegend(
     parts: List<LegendPart>
 ) {
     Surface(color = LocalChromeDetail.current.strip(), contentColor = OverMap.Parchment) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            // Dressed where the chrome asks — Allied's map-margin box, Hessian's sewn label,
-            // Roman's double rule, Hitchcock's spiral. Every one of them is drawn in [OverMap]'s
-            // ink, because this lies on a chart whose paper belongs to the style.
-            val shape = LocalChromeDetail.current.cartouche
-            Column(Modifier.weight(1f).cartoucheFrame(shape)) {
-                if (progress != null) {
-                    Text(
-                        progress,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OverMap.Parchment,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                } else if (cartouche == null) {
-                    Text(
-                        prompt,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OverMap.ParchmentDim
-                    )
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (shape == CartoucheStyle.SPIRAL) Spiral()
+        // Measured rather than assumed: the scale bar's length is a share of the frame, and the
+        // legend spans the map's own width, so this box is the frame the bar is a share of.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val frameWidth = maxWidth
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                // Dressed where the chrome asks — Allied's map-margin box, Hessian's sewn label,
+                // Roman's double rule, Hitchcock's spiral. Every one of them is drawn in [OverMap]'s
+                // ink, because this lies on a chart whose paper belongs to the style.
+                val shape = LocalChromeDetail.current.cartouche
+                Column(Modifier.weight(1f).cartoucheFrame(shape)) {
+                    if (progress != null) {
                         Text(
-                            cartouche.worldName,
-                            style = MaterialTheme.typography.titleMedium,
+                            progress,
+                            style = MaterialTheme.typography.bodySmall,
                             color = OverMap.Parchment,
-                            maxLines = 1
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            cartouche.facts,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = OverMap.ParchmentDim,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (cartouche.footnote.isNotEmpty()) {
+                    } else if (cartouche == null) {
+                        Text(
+                            prompt,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OverMap.ParchmentDim
+                        )
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (shape == CartoucheStyle.SPIRAL) Spiral()
                             Text(
-                                "· ${cartouche.footnote}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = OverMap.ParchmentFaint,
+                                cartouche.worldName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = OverMap.Parchment,
                                 maxLines = 1
                             )
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                cartouche.facts,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = OverMap.ParchmentDim,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (cartouche.footnote.isNotEmpty()) {
+                                Text(
+                                    "· ${cartouche.footnote}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = OverMap.ParchmentFaint,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        // The scale, under the facts it is a fact about: it is quoted for the size the
+                        // line above states, which is the size an export of this world comes out at.
+                        Text(
+                            cartouche.scale,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OverMap.ParchmentFaint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-            }
 
-            // The wheel and the pinch are both invisible, so the same thing is offered where it
-            // can be seen. These sat loose over the bottom-right corner of the map before F3;
-            // they are the right-hand half of the legend now.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 12.dp)
-            ) {
-                if (LegendPart.ZOOM_OUT in parts || LegendPart.ZOOM_IN in parts) {
-                    Text(
-                        "${camera.percent}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = OverMap.ParchmentDim,
-                        modifier = Modifier.widthIn(min = 34.dp)
-                    )
+                if (LegendPart.SCALE in parts && cartouche != null && progress == null) {
+                    ScaleBarStrip(cartouche.kilometresPerCellWidth, camera, frameWidth)
                 }
-                if (LegendPart.ZOOM_OUT in parts) {
-                    ZoomButton("−") { camera.step(1f / MapCamera.STEP) }
-                }
-                if (LegendPart.ZOOM_IN in parts) {
-                    ZoomButton("+") { camera.step(MapCamera.STEP) }
-                }
-                if (LegendPart.FIT in parts) {
-                    ZoomButton("Fit") { camera.fit() }
+
+                // The wheel and the pinch are both invisible, so the same thing is offered where it
+                // can be seen: the right-hand half of the legend, rather than floating loose over
+                // the map's bottom-right corner.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
+                    if (LegendPart.ZOOM_OUT in parts || LegendPart.ZOOM_IN in parts) {
+                        Text(
+                            "${camera.zoomPercent}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OverMap.ParchmentDim,
+                            modifier = Modifier.widthIn(min = 34.dp)
+                        )
+                    }
+                    if (LegendPart.ZOOM_OUT in parts) {
+                        ZoomButton("−") { camera.step(1f / MapCamera.ZOOM_STEP) }
+                    }
+                    if (LegendPart.ZOOM_IN in parts) {
+                        ZoomButton("+") { camera.step(MapCamera.ZOOM_STEP) }
+                    }
+                    if (LegendPart.FIT in parts) {
+                        ZoomButton("Fit") { camera.fit() }
+                    }
                 }
             }
         }
     }
 }
+
+/**
+ * The scale bar in the legend: a round distance, and how far it reaches on the screen right now.
+ *
+ * The bar on an exported sheet is drawn onto the paper and is fixed once and for all; this one is
+ * the same arithmetic taken at the zoom the reader is at, so it restates itself as they zoom in and
+ * the distance it names comes down. [MapScale] chooses the number, from the 1-2-5 series and a
+ * quarter of [frameWidth]; nothing here decides anything but where to put the ink.
+ *
+ * Nothing at all until the map pane has measured itself, because until then there is no honest
+ * answer to how far a screen pixel reaches.
+ */
+@Composable
+private fun ScaleBarStrip(kilometresPerCellWidth: Double, camera: MapCamera, frameWidth: Dp) {
+    val pixelsPerCell = camera.pixelsPerCell
+    if (pixelsPerCell <= 0f) return
+    val density = LocalDensity.current
+    val bar = MapScale.longestBarThatFits(
+        kilometresPerCellWidth / pixelsPerCell,
+        with(density) { frameWidth.toPx() }
+    )
+    if (bar.lengthPixels <= 0f || !bar.lengthPixels.isFinite()) return
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(start = 12.dp)
+    ) {
+        Text(
+            bar.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = OverMap.ParchmentDim,
+            maxLines = 1
+        )
+        Canvas(
+            Modifier
+                .width(with(density) { bar.lengthPixels.toDp() })
+                .height(SCALE_BAR_HEIGHT)
+        ) {
+            val rule = 1.dp.toPx()
+            // The bar itself along the bottom, with a tick standing up at each end: two ends and a
+            // length is the whole of what a scale bar has to show.
+            drawRect(OverMap.Parchment, Offset(0f, size.height - rule), Size(size.width, rule))
+            drawRect(OverMap.Parchment, Offset(0f, 0f), Size(rule, size.height))
+            drawRect(OverMap.Parchment, Offset(size.width - rule, 0f), Size(rule, size.height))
+        }
+    }
+}
+
+/** How tall the legend's scale bar stands: a cap height, so it reads as a bracket. */
+private val SCALE_BAR_HEIGHT = 7.dp
 
 /**
  * The frame round the title block, as this chrome frames one.
@@ -507,28 +586,39 @@ private fun Modifier.cartoucheFrame(shape: CartoucheStyle): Modifier = when (sha
 /**
  * Vertigo's spiral, at the size of a capital letter, beside the world's name.
  *
- * An Archimedean spiral — radius growing linearly with angle — drawn as one stroked path over three
+ * An Archimedean spiral — radius growing linearly with angle — drawn as one stroked path over two
  * turns. Saul Bass's is a Lissajous figure drawn on a pendulum harmonograph, which is a lovely
  * thing and quite illegible at 14 dp; this is the shape everyone remembers it as.
  */
 @Composable
 private fun Spiral() {
-    Canvas(Modifier.size(15.dp)) {
-        val turns = 2
-        val steps = turns * 36
-        val outer = size.minDimension / 2f - 0.5.dp.toPx()
+    Canvas(Modifier.size(SPIRAL_SIZE)) {
+        val outerRadius = size.minDimension / 2f - SPIRAL_MARGIN.toPx()
+        val segments = SPIRAL_TURNS * SEGMENTS_PER_TURN
         val path = Path()
-        for (k in 0..steps) {
-            val t = k / steps.toFloat()
-            val angle = t * turns * 2f * PI.toFloat()
-            val radius = t * outer
+        for (segment in 0..segments) {
+            val alongSpiral = segment / segments.toFloat()
+            val angle = alongSpiral * SPIRAL_TURNS * 2f * PI.toFloat()
+            val radius = alongSpiral * outerRadius
             val x = size.width / 2f + radius * cos(angle)
             val y = size.height / 2f + radius * sin(angle)
-            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            if (segment == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         drawPath(path, OverMap.Parchment, style = Stroke(width = 1.dp.toPx()))
     }
 }
+
+/** A capital's worth of spiral, so it sets beside the world's name rather than beneath it. */
+private val SPIRAL_SIZE = 15.dp
+
+/** Half a stroke of air outside the outermost turn, so it does not touch the box's edge. */
+private val SPIRAL_MARGIN = 0.5.dp
+
+/** Two turns read as a spiral at this size; one reads as a comma and three as a smudge. */
+private const val SPIRAL_TURNS = 2
+
+/** Ten degrees a segment, which is below the point where the curve shows its corners at 15 dp. */
+private const val SEGMENTS_PER_TURN = 36
 
 /** Deliberately plain: these sit over the map and should not compete with it. */
 @Composable
@@ -555,16 +645,30 @@ private fun ZoomButton(label: String, onClick: () -> Unit) {
 /**
  * Where the map is being looked at from: how far in, and how far across.
  *
- * Hoisted out of the map canvas because F3 puts the zoom readout and its three buttons in the
- * legend, which is a sibling of the canvas rather than a child of it. Plain Compose state in a
- * plain class, so the arithmetic — which is the only part that can be wrong — is testable without
- * a composition, and so that a trip to the atlas and back does not reset the view.
+ * Held here rather than inside the map canvas, because the zoom readout and its three buttons are
+ * in the legend, which is a sibling of the canvas rather than a child of it. Plain Compose state
+ * in a plain class, so the arithmetic — which is the only part that can be wrong — is testable
+ * without a composition, and so that a trip to the atlas and back does not reset the view.
  */
 internal class MapCamera {
     var zoom by mutableStateOf(1f)
     var pan by mutableStateOf(Offset.Zero)
 
-    val percent: Int get() = (zoom * 100).roundToInt()
+    /**
+     * Screen pixels one cell of the world covers when the whole sheet is fitted into the pane.
+     *
+     * Written by the map pane as it measures, because the pane is the only thing that knows how big
+     * it is; one for a sheet no larger than the pane, and a fraction for the usual case of a 2048
+     * world in a window. Everything that has to say how far a distance on the screen reaches —
+     * [pixelsPerCell], the legend's scale bar, the generalisation the overlay is drawn at — comes
+     * off this and the zoom.
+     */
+    var fitScale by mutableStateOf(1f)
+
+    /** Screen pixels one cell covers right now. See [fitScale]. */
+    val pixelsPerCell: Float get() = fitScale * zoom
+
+    val zoomPercent: Int get() = (zoom * 100).roundToInt()
 
     /**
      * Zoom about a point rather than about the origin: whatever is under the cursor, or between
@@ -591,6 +695,6 @@ internal class MapCamera {
         const val MAX_ZOOM = 40f
 
         /** One wheel notch, or one press of a button. Compounds, so it is a modest step. */
-        const val STEP = 1.15f
+        const val ZOOM_STEP = 1.15f
     }
 }

@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,6 +71,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldSave
@@ -92,7 +97,7 @@ import kotlinx.coroutines.withContext
 /**
  * The application, with its preferences read and its chrome put on: what a front end launches.
  *
- * The split between this and [CartogenesisApp] is the whole of how F4's settings reach the
+ * The split between this and [CartogenesisApp] is the whole of how the settings reach the
  * interface. Preferences are read through the [Platform] seam, which is asynchronous on both hosts
  * (a file on one, browser storage on the other), and two of them — the chrome and the interface
  * scale — are properties of the theme rather than of the application, so they have to be applied
@@ -148,8 +153,8 @@ fun CartogenesisRoot(platform: Platform) {
  * [BoxWithConstraints] rather than a platform question, because the answer is about the window and
  * not about the host — a desktop window dragged narrow is a compact window, and the same browser is
  * wide in landscape and compact in portrait. It measures and places its content exactly as a plain
- * `Box(Modifier.fillMaxSize())` would, so the wide arrangement below is laid out to the pixel as it
- * was before F5; all this adds is the width, in dp, to decide with.
+ * `Box(Modifier.fillMaxSize())` would, so the wide arrangement below is laid out to the pixel it
+ * would have been without this; all it adds is the width, in dp, to decide with.
  */
 @Composable
 fun CartogenesisApp(
@@ -175,17 +180,26 @@ private fun Application(
 ) {
     val compact = shape == WindowShape.COMPACT
     /** What this arrangement puts within reach. See [Arrangements]. */
-    val reach = remember(shape, platform) { Arrangements.of(shape, platform) }
+    val reachable = remember(shape, platform) { Arrangements.of(shape, platform) }
     /** 2048 in a phone browser, 4096 otherwise. See [Platform.exportCeiling]. */
     val exportCeiling = platform.exportCeiling(compact)
     var config by remember {
         mutableStateOf(
-            SettingsEffects.startingConfig(settings, platform, Random.nextLong(1_000_000), compact)
+            SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
         )
     }
     var options by remember { mutableStateOf(RenderOptions()) }
     var world by remember { mutableStateOf<WorldMap?>(null) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
+    /**
+     * The ground under the overlay, kept so that a change of zoom redraws the ink and not the world.
+     *
+     * Zooming generalises the overlay differently — fewer rivers at whole-world scale, a coast
+     * simplified to what the screen can show — so the picture has to be drawn again; but the raster
+     * beneath it has not changed at all, and at 2048 that raster is most of a second of arithmetic.
+     * Holding it costs four bytes a cell, which beside a whole world's fields is nothing.
+     */
+    var raster by remember { mutableStateOf<RasterSheet?>(null) }
     var stage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     /**
@@ -205,13 +219,13 @@ private fun Application(
     var generationMillis by remember { mutableStateOf(0L) }
     var pendingExport by remember { mutableStateOf<Int?>(null) }
     // The preference is the *starting* format, not a live binding: changing the default in the
-    // dialog must not change the format of an export the reader has already set up. Since F12 the
-    // selection can also be a data layer, which no preference carries — see [ExportChoice].
+    // dialog must not change the format of an export the reader has already set up. The selection
+    // can also be a data layer, which no preference carries — see [ExportChoice].
     var exportChoice by remember {
         mutableStateOf<ExportChoice>(ExportChoice.Picture(settings.exportFormat))
     }
 
-    // ---- F4: what the menu strip opens, and what it opens onto. ----
+    // ---- What the menu strip opens, and what it opens onto. ----
     var showSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var updateOpen by remember { mutableStateOf(false) }
@@ -224,8 +238,8 @@ private fun Application(
     /**
      * Whether the compact arrangement's settings sheet is pulled up. Unused when wide.
      *
-     * It starts down, over a whole-screen map, which is the same decision F0 made about the blank
-     * canvas: the application opens showing what it is for rather than showing its controls.
+     * It starts down, over a whole-screen map, which is the same decision the blank canvas makes:
+     * the application opens showing what it is for rather than showing its controls.
      */
     var sheetOpen by remember { mutableStateOf(false) }
 
@@ -268,15 +282,15 @@ private fun Application(
     // What opening a save amounts to, whether it came from the library or from an uploaded file:
     // hand the world back to the engine as the world to reuse, which recomputes nothing.
     fun openSave(save: WorldSave) {
-        val doc = save.document
-        documentId = doc.id
-        naming.opened(doc.config.seed, doc.title)
-        overrides = doc.overrides
-        labels = doc.labels
-        nextLabelId = (doc.labels.maxOfOrNull { it.id } ?: 0L) + 1
-        storedTerrain = doc.terrain
+        val opened = save.document
+        documentId = opened.id
+        naming.opened(opened.config.seed, opened.title)
+        overrides = opened.overrides
+        labels = opened.labels
+        nextLabelId = (opened.labels.maxOfOrNull { it.id } ?: 0L) + 1
+        storedTerrain = opened.terrain
         world = save.world
-        config = doc.config
+        config = opened.config
         // Nothing was generated, so there is no time to quote: the footnote stays off until this
         // world is next made rather than read.
         generationMillis = 0L
@@ -346,7 +360,7 @@ private fun Application(
     fun perform(command: MenuCommand) {
         when (command) {
             MenuCommand.NEW_WORLD -> {
-                config = Knobs.withSeed(config, Random.nextLong(1_000_000))
+                config = Knobs.withSeed(config, freshSeed())
                 gate.request()
                 screen = Screen.MAP
             }
@@ -428,9 +442,15 @@ private fun Application(
                 // for the whole of it.
                 Generation.run(config, reusable, accelerator) { reached = it; stage = it.label }
             }
-            val rendered = withContext(Dispatchers.Default) { MapImage.render(generated, options) }
+            val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+            val (drawnRaster, drawnImage) = withContext(Dispatchers.Default) {
+                val pixels = MapRasterizer.rasterize(generated, options)
+                RasterSheet(generated, options, pixels) to
+                    MapImage.render(generated, options, pixels, sheet)
+            }
             world = generated
-            image = rendered
+            raster = drawnRaster
+            image = drawnImage
             generationMillis = epochMillis() - started
             // A world nobody has named yet, or a world at a seed this name was not given to, takes
             // the name its largest people would give it. A settings edit at the same seed keeps
@@ -457,7 +477,29 @@ private fun Application(
 
     LaunchedEffect(options) {
         val current = world ?: return@LaunchedEffect
-        image = withContext(Dispatchers.Default) { MapImage.render(current, options) }
+        val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+        val pixels = withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
+        raster = RasterSheet(current, options, pixels)
+        image = withContext(Dispatchers.Default) {
+            MapImage.render(current, options, pixels, sheet)
+        }
+    }
+
+    /**
+     * How much of a cell one screen pixel covers, in half-octave steps. See [MapSheet.onScreen].
+     *
+     * Read as a derived state so the effect below wakes only when the *band* moves, not on every
+     * notch of the wheel: a scroll from fit to four times crosses four bands and redraws the ink
+     * four times, rather than redrawing it on each of the twenty notches it takes to get there.
+     */
+    val sheet by remember { derivedStateOf { MapSheet.onScreen(camera.pixelsPerCell) } }
+
+    // Only the band: whoever replaced the raster has already drawn the picture that goes with it.
+    LaunchedEffect(sheet) {
+        val drawn = raster ?: return@LaunchedEffect
+        image = withContext(Dispatchers.Default) {
+            MapImage.render(drawn.world, drawn.options, drawn.pixels, sheet)
+        }
     }
 
     LaunchedEffect(pendingExport) {
@@ -543,25 +585,26 @@ private fun Application(
         )
     }
 
-    // The map is the point, so it takes everything the panel does not. F3 gave it the right-hand
-    // column as well: Export was the only thing left over there after F2, a 200dp strip holding
-    // two chips and three buttons, and it is a thing done to a finished map rather than a thing
-    // about the map on screen — so it has folded into the header panel, under the resolution row,
-    // beside Library and Atlas which are the other two document actions. The alternative the spec
-    // offered was a popover from a toolbar button; both free the same 210dp, and this one needs no
-    // overlay machinery and keeps the map's own chrome to the two things that are about the map.
+    // The map is the point, so it takes every column the panel does not, including the right-hand
+    // one. Export is the only thing that would otherwise be over there, a 200 dp strip holding two
+    // chips and three buttons, and it is a thing done to a finished map rather than a thing about
+    // the map on screen — so it is folded into the header panel, under the resolution row, beside
+    // Library and Atlas, which are the other two document actions. A popover from a toolbar button
+    // frees the same 210 dp; this needs no overlay machinery and keeps the map's own chrome to the
+    // two things that are about the map.
+    //
     // The strip is drawn once, above everything, on both platforms — see [MenuStrip] for why it is
     // drawn rather than hung off the window. The keyboard shortcuts are previewed at the root so
     // that Ctrl+S works wherever the focus happens to be; they are filtered on a modifier being
     // held, so typing a seed or a name never reaches them, and [Menus.shortcuts] hands back an
     // empty list on the web, where these keystrokes belong to the browser.
     //
-    // F5 adds the second arrangement of all of this, and nothing else. The five values below are
-    // the contents — the pane, the banner, the legend, the panel's header and the panel's sections
-    // — and the two branches after them are the two ways of enclosing those five. Written as
-    // composable values rather than as private functions because between them they read some thirty
-    // pieces of this composable's state, and a parameter list carrying all of it out to a function
-    // would be a second and worse copy of the same thing.
+    // The five values below are the contents — the pane, the banner, the legend, the panel's header
+    // and the panel's sections — and the two branches after them are the two ways of enclosing
+    // those five, one per arrangement. Written as composable values rather than as private
+    // functions because between them they read some thirty pieces of this composable's state, and
+    // a parameter list carrying all of it out to a function would be a second and worse copy of
+    // the same thing.
     val shortcuts = remember(platform) { Menus.shortcuts(platform) }
 
     // Only the map gets the dark backdrop. The atlas and library are ordinary reading
@@ -670,7 +713,7 @@ private fun Application(
                 )
             }
         } else {
-            MapView(
+            MapPane(
                 image = image,
                 labels = labels,
                 labelMode = labelMode,
@@ -729,8 +772,8 @@ private fun Application(
             }
         }
         ChartLegend(
-            // No world, no cartouche: an empty sheet is named by nothing, so the
-            // legend carries F0's one line of instruction instead.
+            // No world, no cartouche: an empty sheet is named by nothing, so the legend carries
+            // the blank canvas's one line of instruction instead.
             cartouche = world?.let {
                 Cartouches.of(it, naming.title, generationMillis)
             },
@@ -739,7 +782,7 @@ private fun Application(
             // from where the reader just pressed Generate. The same sentence, at the foot.
             progress = if (compact && busy) "${stage ?: "Generating"}…" else null,
             camera = camera,
-            parts = reach.legend
+            parts = reachable.legend
         )
     }
 
@@ -753,9 +796,9 @@ private fun Application(
             hasWorld = world != null,
             exportChoice = exportChoice,
             exportCeiling = exportCeiling,
-            exportSizes = reach.exportSizes,
-            pictureFormats = reach.pictureFormats,
-            dataLayers = reach.dataLayers,
+            exportSizes = reachable.exportSizes,
+            pictureFormats = reachable.pictureFormats,
+            dataLayers = reachable.dataLayers,
             headerKnobs = Arrangements.headerKnobs(platform),
             worldName = naming.name,
             platform = platform,
@@ -766,7 +809,7 @@ private fun Application(
             onSeed = { config = Knobs.withSeed(config, it); gate.request() },
             onResolution = { config = Knobs.atResolution(config, it) },
             onNewWorld = {
-                config = Knobs.withSeed(config, Random.nextLong(1_000_000))
+                config = Knobs.withSeed(config, freshSeed())
                 gate.request()
             },
             onGenerate = { gate.request() },
@@ -827,11 +870,11 @@ private fun Application(
             )
 
             // Everything below the strip: the panel and the map, taking whatever height is left.
-            Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp)) {
+            Row(Modifier.weight(1f).fillMaxWidth().padding(GUTTER)) {
 
                 Column(
-                    Modifier.width(320.dp).fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Modifier.width(PANEL_WIDTH).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(GUTTER)
                 ) {
                     Panel { header() }
 
@@ -841,7 +884,7 @@ private fun Application(
                 }
 
                 Box(
-                    Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp)
+                    Modifier.weight(1f).fillMaxHeight().padding(horizontal = GUTTER)
                         .background(backdrop)
                 ) {
                     pane()
@@ -852,7 +895,7 @@ private fun Application(
                     // while a world is being made, and the legend at the foot.
                     Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
                         if (screen == Screen.MAP && toolbarVisible) {
-                            MapToolbar(options, reach.styles, reach.views) { options = it }
+                            MapToolbar(options, reachable.styles, reachable.views) { options = it }
                         }
                         banner()
                     }
@@ -908,8 +951,8 @@ private fun Application(
                         if (screen == Screen.MAP) {
                             CompactMapToolbar(
                                 options = options,
-                                styles = reach.styles,
-                                views = reach.views,
+                                styles = reachable.styles,
+                                views = reachable.views,
                                 // The style and view menus are about the picture, so they go when
                                 // View has put the toolbar away; the menu button is how the
                                 // application is reached at all here and stays.
@@ -993,8 +1036,8 @@ private fun ColumnScope.SettingsSheet(
                         orientation = Orientation.Vertical,
                         onDragStarted = { travelled = 0f },
                         onDragStopped = {
-                            if (travelled < -DRAG_TO_SETTLE) onOpen(true)
-                            else if (travelled > DRAG_TO_SETTLE) onOpen(false)
+                            if (travelled < -DRAG_TO_SETTLE_PIXELS) onOpen(true)
+                            else if (travelled > DRAG_TO_SETTLE_PIXELS) onOpen(false)
                         }
                     )
                     .clickable { onOpen(!open) }
@@ -1031,14 +1074,31 @@ private fun ColumnScope.SettingsSheet(
     }
 }
 
+/**
+ * The panel column in the wide arrangement.
+ *
+ * Wide enough for a slider with its label and value on the line above, and for "Working
+ * resolution" beside "2048 px" without either being cut. See [Layouts.COMPACT_BELOW_DP], which is
+ * this plus its gutters plus the narrowest useful map.
+ */
+private val PANEL_WIDTH = 320.dp
+
+/** The air between the panel, the map and the window's edge. */
+private val GUTTER = 10.dp
+
 /** How much of a compact window the settings sheet takes when it is up. */
 private const val SHEET_SHARE = 0.72f
 
 /** The sheet with the settings down: a handle, the word, and one line about the world. */
 private val PEEK_HEIGHT = 44.dp
 
-/** How far a finger has to travel before a drag counts as a pull rather than a wobble. */
-private const val DRAG_TO_SETTLE = 24f
+/**
+ * How far a finger has to travel, in pixels, before a drag counts as a pull rather than a wobble.
+ *
+ * Well under the touch slop a tap already has to stay inside, so a deliberate pull of the handle
+ * always passes it, and far enough that resting a thumb on the handle does not open the sheet.
+ */
+private const val DRAG_TO_SETTLE_PIXELS = 24f
 
 /**
  * The bar over the atlas and the library in the compact arrangement: what this is, and the way out.
@@ -1123,12 +1183,28 @@ private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScop
 
 
 /**
- * Pan and zoom over the rendered map, with labels drawn on top.
+ * A finished raster and the world and options it was drawn from.
+ *
+ * Held by the application so that a change of zoom can redraw the vector overlay over the same
+ * ground rather than rasterising a whole world again; see the `raster` state and [MapSheet].
+ */
+private class RasterSheet(
+    val world: WorldMap,
+    val options: RenderOptions,
+    /** ARGB, row-major, `world.width * world.height` long, as [MapRasterizer.rasterize] returns. */
+    val pixels: IntArray
+)
+
+/**
+ * The map itself: pan and zoom over the rendered picture, with labels drawn on top.
+ *
+ * Named for the pane rather than for the view, because [com.cartogenesis.cartography.MapView] is
+ * which layer of the world is being drawn, and that is a different question from this.
  *
  * Labels are drawn in screen space rather than map space, so they stay readable at any zoom
  * instead of growing into the terrain.
  *
- * The touch gestures F5 asks for are, all three, gestures this already had or gets for nothing.
+ * The three touch gestures are, all three, gestures this already had or gets for nothing.
  * `detectTransformGestures` is the same handler for a two-finger pinch as for a drag — one pointer
  * reports a pan and no zoom, two report both — and Compose for Wasm delivers a browser's touch
  * events through the same pointer pipeline the desktop's mouse uses, so nothing here is
@@ -1136,7 +1212,7 @@ private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScop
  * and it is optional for the reason given at its call site.
  */
 @Composable
-private fun MapView(
+private fun MapPane(
     image: ImageBitmap?,
     labels: List<MapLabel>,
     labelMode: Boolean,
@@ -1153,81 +1229,109 @@ private fun MapView(
     val fitOnDoubleTap: ((Offset) -> Unit)? =
         if (doubleTapToFit) ({ _: Offset -> camera.fit() }) else null
 
-    Canvas(
-        Modifier.fillMaxSize()
-            .pointerInput(Unit) {
-                // Drag to pan and pinch to zoom, in one handler: a single pointer reports a pan
-                // and a zoom of 1, two pointers report both, and the centroid is the point the
-                // zoom is taken about — which is what keeps whatever is between the fingers
-                // between the fingers.
-                detectTransformGestures { centroid, panChange, zoomChange, _ ->
-                    camera.about(centroid, zoomChange, panChange)
+    // The pane measures itself so that the camera can say how far a screen pixel reaches, which is
+    // what the legend's scale bar and the overlay's generalisation are both read off. Measured in
+    // the layout rather than in the draw, because writing state from a draw is how a composition
+    // ends up redrawing itself for ever.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val paneWidth = constraints.maxWidth.toFloat()
+        val paneHeight = constraints.maxHeight.toFloat()
+        val measured = image
+        val fitScale =
+            if (measured == null || measured.width == 0 || measured.height == 0) 1f
+            else min(paneWidth / measured.width, paneHeight / measured.height)
+        LaunchedEffect(fitScale) { camera.fitScale = fitScale }
+
+        Canvas(
+            Modifier.fillMaxSize()
+                .pointerInput(Unit) {
+                    // Drag to pan and pinch to zoom, in one handler: a single pointer reports a pan
+                    // and a zoom of 1, two pointers report both, and the centroid is the point the
+                    // zoom is taken about — which is what keeps whatever is between the fingers
+                    // between the fingers.
+                    detectTransformGestures { centroid, panChange, zoomChange, _ ->
+                        camera.about(centroid, zoomChange, panChange)
+                    }
                 }
-            }
-            .pointerInput(Unit) {
-                // A wheel is not a gesture, so detectTransformGestures never sees it, and a mouse
-                // is how most of this will be driven.
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val change = event.changes.firstOrNull() ?: continue
-                        val scrolled = change.scrollDelta.y
-                        if (scrolled == 0f) continue
-                        // Scrolling down is positive, and should zoom out.
-                        camera.about(
-                            change.position,
-                            if (scrolled < 0f) MapCamera.STEP else 1f / MapCamera.STEP
+                .pointerInput(Unit) {
+                    // A wheel is not a gesture, so detectTransformGestures never sees it, and a mouse
+                    // is how most of this will be driven.
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type != PointerEventType.Scroll) continue
+                            val change = event.changes.firstOrNull() ?: continue
+                            val scrolled = change.scrollDelta.y
+                            if (scrolled == 0f) continue
+                            // Scrolling down is positive, and should zoom out.
+                            camera.about(
+                                change.position,
+                                if (scrolled < 0f) MapCamera.ZOOM_STEP else 1f / MapCamera.ZOOM_STEP
+                            )
+                            change.consume()
+                        }
+                    }
+                }
+                .pointerInput(labelMode, labels, image, doubleTapToFit) {
+                    detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
+                        val drawn = image ?: return@detectTapGestures
+                        val fitScale = min(
+                            size.width.toFloat() / drawn.width,
+                            size.height.toFloat() / drawn.height
                         )
-                        change.consume()
+                        val offsetX = (size.width - drawn.width * fitScale) / 2f
+                        val offsetY = (size.height - drawn.height * fitScale) / 2f
+
+                        fun toScreen(label: MapLabel) = Offset(
+                            (label.x * drawn.width * fitScale + offsetX) * zoom + pan.x,
+                            (label.y * drawn.height * fitScale + offsetY) * zoom + pan.y
+                        )
+
+                        val struck = labels.firstOrNull {
+                            (toScreen(it) - tap).getDistance() < LABEL_HIT_RADIUS_PIXELS
+                        }
+                        if (struck != null) {
+                            onLabelClick(struck)
+                            return@detectTapGestures
+                        }
+                        if (!labelMode) return@detectTapGestures
+
+                        // Back out of the pan and the zoom, then out of the letterboxing, to a
+                        // fraction of the sheet — which is how a label is stored, so that it stays
+                        // on the same piece of coast at any zoom and at any export size.
+                        val unpanned = (tap - pan) / zoom
+                        val acrossSheet = (unpanned.x - offsetX) / fitScale / drawn.width
+                        val downSheet = (unpanned.y - offsetY) / fitScale / drawn.height
+                        if (acrossSheet in 0f..1f && downSheet in 0f..1f) {
+                            onPlace(acrossSheet, downSheet)
+                        }
                     }
                 }
+        ) {
+            val drawn = image ?: return@Canvas
+            val fitScale = min(size.width / drawn.width, size.height / drawn.height)
+            val offsetX = (size.width - drawn.width * fitScale) / 2f
+            val offsetY = (size.height - drawn.height * fitScale) / 2f
+
+            withTransform({
+                translate(pan.x, pan.y)
+                scale(zoom, zoom, pivot = Offset.Zero)
+                translate(offsetX, offsetY)
+                scale(fitScale, fitScale, pivot = Offset.Zero)
+            }) {
+                drawImage(drawn)
             }
-            .pointerInput(labelMode, labels, image, doubleTapToFit) {
-                detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
-                    val img = image ?: return@detectTapGestures
-                    val fit = min(size.width.toFloat() / img.width, size.height.toFloat() / img.height)
-                    val offsetX = (size.width - img.width * fit) / 2f
-                    val offsetY = (size.height - img.height * fit) / 2f
 
-                    fun toScreen(label: MapLabel) = Offset(
-                        (label.x * img.width * fit + offsetX) * zoom + pan.x,
-                        (label.y * img.height * fit + offsetY) * zoom + pan.y
-                    )
-
-                    val hit = labels.firstOrNull { (toScreen(it) - tap).getDistance() < 24f }
-                    if (hit != null) {
-                        onLabelClick(hit)
-                        return@detectTapGestures
-                    }
-                    if (!labelMode) return@detectTapGestures
-
-                    val unpanned = (tap - pan) / zoom
-                    val nx = (unpanned.x - offsetX) / fit / img.width
-                    val ny = (unpanned.y - offsetY) / fit / img.height
-                    if (nx in 0f..1f && ny in 0f..1f) onPlace(nx, ny)
-                }
+            labels.forEach { label ->
+                val x = (label.x * drawn.width * fitScale + offsetX) * zoom + pan.x
+                val y = (label.y * drawn.height * fitScale + offsetY) * zoom + pan.y
+                drawCircle(OverMap.Ink, radius = LABEL_PIN_RADIUS_PIXELS, center = Offset(x, y))
+                drawCircle(
+                    OverMap.Parchment,
+                    radius = LABEL_PIN_EYE_RADIUS_PIXELS,
+                    center = Offset(x, y)
+                )
             }
-    ) {
-        val img = image ?: return@Canvas
-        val fit = min(size.width / img.width, size.height / img.height)
-        val offsetX = (size.width - img.width * fit) / 2f
-        val offsetY = (size.height - img.height * fit) / 2f
-
-        withTransform({
-            translate(pan.x, pan.y)
-            scale(zoom, zoom, pivot = Offset.Zero)
-            translate(offsetX, offsetY)
-            scale(fit, fit, pivot = Offset.Zero)
-        }) {
-            drawImage(img)
-        }
-
-        labels.forEach { label ->
-            val x = (label.x * img.width * fit + offsetX) * zoom + pan.x
-            val y = (label.y * img.height * fit + offsetY) * zoom + pan.y
-            drawCircle(OverMap.Ink, radius = 4f, center = Offset(x, y))
-            drawCircle(OverMap.Parchment, radius = 2f, center = Offset(x, y))
         }
     }
 
@@ -1238,9 +1342,25 @@ private fun MapView(
         }
     }
 
-    // The zoom readout and its three buttons used to float here, over the bottom-right corner of
-    // the map. They are the right-hand half of the legend now; see [ChartLegend].
+    // The zoom readout and its three buttons are not here: they are the right-hand half of the
+    // legend along the map's foot, rather than floating over its bottom-right corner. See
+    // [ChartLegend].
 }
+
+/**
+ * How near a tap has to land, in screen pixels, to count as a tap on a label.
+ *
+ * The pin itself is [LABEL_PIN_RADIUS_PIXELS] across, which nobody can hit; this is roughly a
+ * fingertip, and it is in screen pixels rather than map pixels so that removing a label is no
+ * harder when the map is zoomed out.
+ */
+private const val LABEL_HIT_RADIUS_PIXELS = 24f
+
+/** The ink pin marking a placed label, in screen pixels: a dot, not a marker. */
+private const val LABEL_PIN_RADIUS_PIXELS = 4f
+
+/** The parchment eye inside it, so the pin reads against dark water as well as against land. */
+private const val LABEL_PIN_EYE_RADIUS_PIXELS = 2f
 
 @Composable
 private fun LabelChip(label: MapLabel) {
@@ -1276,6 +1396,7 @@ private fun LabelChip(label: MapLabel) {
  */
 @Composable
 private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
+    // Long.MAX_VALUE is nineteen digits, so this is "every seed there is" and not a taste.
     var text by remember(seed) { mutableStateOf(seed.toString()) }
     val parsed = text.trim().toLongOrNull()
     val changed = parsed != null && parsed != seed
@@ -1293,7 +1414,9 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
             value = text,
             // Digits only, and a minus sign, since the seed is a Long. Filtering here rather than
             // rejecting on submit means the field cannot be put into a state it will not accept.
-            onValueChange = { typed -> text = typed.filter { it.isDigit() || it == '-' }.take(19) },
+            onValueChange = { typed ->
+                text = typed.filter { it.isDigit() || it == '-' }.take(SEED_DIGITS)
+            },
             label = { Text("Seed") },
             singleLine = true,
             enabled = !busy,
@@ -1331,7 +1454,7 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
 private fun NameField(name: String, onName: (String) -> Unit) {
     OutlinedTextField(
         value = name,
-        onValueChange = { onName(it.take(60)) },
+        onValueChange = { onName(it.take(MAX_WORLD_NAME_LENGTH)) },
         label = { Text("Name") },
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
@@ -1390,8 +1513,8 @@ private fun PanelHeader(
         // the reader who wants out of a generation is looking at the button they started it with,
         // and a Generate greyed out beside a Stop elsewhere would be two controls for one decision.
         // The label is the whole of the difference - no colour of its own, because the danger roles
-        // are not part of what the fifteen chromes were measured against and a hand-styled button
-        // is what F1 took out of this file.
+        // are not part of what the fifteen chromes were measured against, and because no button in
+        // this application is styled where it is used. See `Controls.kt`.
         Button(
             onClick = if (generating) onStop else onGenerate,
             enabled = generating || !busy,
@@ -1437,15 +1560,15 @@ private fun PanelHeader(
 
     // Where the work runs, directly under how finely it is done. The only knob the header draws,
     // and it is drawn from the declaration rather than by hand — from the *arrangement's*
-    // declaration since F5, which is how a host with no graphics API at all draws no switch here
-    // rather than a disabled one. Nothing in this section is a [Mark] — a knob that writes
+    // declaration, which is how a host with no graphics API at all draws no switch here rather
+    // than a disabled one. Nothing in this section is a [Mark] — a knob that writes
     // `RenderOptions` — which `PanelKnobsTest` holds to, so the options handed in here are never
     // read and the writer is never called.
     headerKnobs.forEach { knob ->
         KnobControl(knob, config, RenderOptions(), busy, platform, onConfig) {}
     }
 
-    // Export, which had a 200dp column of its own on the far side of the map until F3.
+    // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
     OutputOptions(
         busy, hasWorld, exportChoice, exportCeiling, exportSizes,
         pictureFormats, dataLayers, onExportChoice, onExport
@@ -1691,16 +1814,15 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
 /**
  * Where a finished map goes.
  *
- * The graphics-acceleration switch used to head this panel, under "Acceleration". It has moved to World:
- * it decides how the world is *made*, and filing it beside the export buttons implied it was
- * something about the picture. F3 moved what was left of the panel into the header, so this is
- * three rows in a 320dp column rather than a 200dp column of its own — the heading and the two
- * format chips share a line, which is the row the narrower home cost it.
+ * Three rows in the header's 320 dp column rather than a 200 dp column of its own, which is why
+ * the heading and the format chips share a line. The graphics-acceleration switch is deliberately
+ * not here: it decides how the world is *made*, and filing it beside the export buttons would
+ * imply it was something about the picture.
  *
- * F12 gave it a second line of chips. "Export" is the picture of the map and "Data" is the world
- * underneath it, and the two are labelled rather than run together because they are answers to
- * different questions: one is what you put in a document, the other is what you load into Blender
- * or QGIS. Exactly one chip across both lines is selected — see [ExportChoice] for why there is one
+ * Two lines of chips. "Export" is the picture of the map and "Data" is the world underneath it,
+ * and the two are labelled rather than run together because they are answers to different
+ * questions: one is what you put in a document, the other is what you load into Blender or QGIS.
+ * Exactly one chip across both lines is selected — see [ExportChoice] for why there is one
  * selection and not two — so the size buttons below stay a single row that means one thing.
  */
 @Composable
@@ -1719,7 +1841,7 @@ private fun OutputOptions(
     // remembering: the small print for a size that works is the selected chip's own line.
     var reachingFor by remember { mutableStateOf<Int?>(null) }
 
-    ChipRow("Export") {
+    HeadedChipRow("Export") {
         pictureFormats.forEach { format ->
             val choice = ExportChoice.Picture(format)
             FilterChip(
@@ -1729,7 +1851,7 @@ private fun OutputOptions(
             )
         }
     }
-    ChipRow("Data") {
+    HeadedChipRow("Data") {
         dataLayers.forEach { layer ->
             val choice = ExportChoice.Layer(layer)
             FilterChip(
@@ -1753,18 +1875,18 @@ private fun OutputOptions(
             // width when the ceiling moves, and a missing control says nothing about why it is
             // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
             // says what is wrong.
-            val reachable = Exports.reachable(size, exportCeiling)
-            val hover = remember { MutableInteractionSource() }
-            val hovered by hover.collectIsHoveredAsState()
-            LaunchedEffect(hovered, reachable) {
-                if (!reachable && hovered) reachingFor = size
+            val withinCeiling = Exports.reachable(size, exportCeiling)
+            val hoverSource = remember { MutableInteractionSource() }
+            val hovered by hoverSource.collectIsHoveredAsState()
+            LaunchedEffect(hovered, withinCeiling) {
+                if (!withinCeiling && hovered) reachingFor = size
                 else if (reachingFor == size) reachingFor = null
             }
             Button(
                 onClick = { onExport(Exports.clamp(size, exportCeiling)) },
-                enabled = reachable && !busy && hasWorld,
+                enabled = withinCeiling && !busy && hasWorld,
                 contentPadding = TIGHT,
-                modifier = Modifier.weight(1f).hoverable(hover)
+                modifier = Modifier.weight(1f).hoverable(hoverSource)
             ) { Text("$size", maxLines = 1) }
         }
     }
@@ -1785,7 +1907,7 @@ private fun OutputOptions(
  * look like two controls the single selection across them stops making sense.
  */
 @Composable
-private fun ChipRow(heading: String, chips: @Composable RowScope.() -> Unit) {
+private fun HeadedChipRow(heading: String, chips: @Composable RowScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1795,6 +1917,18 @@ private fun ChipRow(heading: String, chips: @Composable RowScope.() -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), content = chips)
     }
 }
+
+/**
+ * The longest a world's name may be.
+ *
+ * It has to fit the cartouche at the foot of a 390 dp phone screen on one line, and it is what the
+ * library lists and what the save is filed under. Sixty characters is about twice the longest name
+ * the generator itself produces, so nothing generated is ever cut.
+ */
+internal const val MAX_WORLD_NAME_LENGTH = 60
+
+/** Every digit of a Long, so the field accepts any seed the generator can be given. */
+private const val SEED_DIGITS = 19
 
 /** Buttons here carry longer words than Material assumes, in narrower panels than it assumes. */
 internal val TIGHT = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
@@ -1829,29 +1963,48 @@ internal fun Toggle(
             color = if (enabled) MaterialTheme.colorScheme.onSurface
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        // The switch carries the label too. A bare Material switch announces only "on" or "off" —
+        // the word beside it is a separate node with no relation to it — so a reader on a screen
+        // reader hears a list of switches for nothing in particular, and a test cannot say which
+        // of eight switches it means either.
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = label }
+        )
     }
 }
 
-/** Chooses where to save. Kept out of the composable so it can be called from a background job. */
-
+/** Which of the three screens the pane is showing. */
 private enum class Screen { MAP, ATLAS, LIBRARY }
 
-/** Random enough for a document id, without pulling in a UUID dependency. */
+/**
+ * A seed for a world nobody has asked for by number.
+ *
+ * Six digits, because the seed is printed in the cartouche and typed back into the header's field
+ * to return to a world, and a nineteen-digit number is one nobody would read out or copy. The
+ * field itself accepts the whole of a Long — see [SeedField] — so nothing here is a limit on
+ * which worlds exist, only on which ones the dice will hand out.
+ */
+private fun freshSeed(): Long = Random.nextLong(SEED_CEILING)
+
+private const val SEED_CEILING = 1_000_000L
 
 /**
  * Places a composable at a fraction of its parent, which is how labels stay put in map
  * coordinates while being laid out in screen space.
  */
-private fun Modifier.offsetFraction(fx: Float, fy: Float): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-    layout(constraints.maxWidth, constraints.maxHeight) {
-        placeable.place(
-            x = (constraints.maxWidth * fx).toInt() - placeable.width / 2,
-            y = (constraints.maxHeight * fy).toInt() - placeable.height / 2
-        )
+private fun Modifier.offsetFraction(acrossParent: Float, downParent: Float): Modifier =
+    layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placeable.place(
+                x = (constraints.maxWidth * acrossParent).toInt() - placeable.width / 2,
+                y = (constraints.maxHeight * downParent).toInt() - placeable.height / 2
+            )
+        }
     }
-}
 
 @Composable
 private fun NameLabelDialog(onDismiss: () -> Unit, onConfirm: (String, LabelKind) -> Unit) {

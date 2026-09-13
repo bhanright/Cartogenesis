@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
  * chosen, and the diagnostic views — elevation, rainfall, plates, the flow layers — ignore styles
  * entirely, because their colours mean something and a pretty ramp would make them lie.
  *
- * The three levers that do most of the work are worth naming, since they are what separates a
+ * The four levers that do most of the work are worth naming, since they are what separates a
  * cartographer's map from a satellite photograph:
  *
  *  - **[biomeWash]** — how much of the vegetation colour is allowed through. At 0.45 the map reads
@@ -20,6 +20,9 @@ import kotlinx.serialization.Serializable
  *  - **[biomeMuting]** — how far each biome colour is dragged toward the paper before it is used.
  *    This is what stops an old chart looking like a modern one with a filter over it: aged inks
  *    are not saturated greens dimmed, they are earths.
+ *  - **[climateTint]** — how far the height ramp itself follows the climate, rather than only being
+ *    washed with it: whether a desert is sand at every height or green ground with a sandy wash
+ *    over it. See [ClimateTint].
  *  - **[reliefStrength]** — how much the hillshade is exaggerated. Ink drawings lean on it hard,
  *    because without colour there is nothing else to carry the mountains.
  */
@@ -42,6 +45,25 @@ enum class MapStyle(
     internal val border: Int,
     internal val wilderness: Int,
     internal val reliefStrength: Float,
+    /**
+     * How far the land ramp is allowed to follow the climate rather than the height alone.
+     *
+     * Imhof's modulated hypsometric series, in one number: at 1 a desert is sand at every height, a
+     * frozen coast is pale and a wood is dark ground, and at 0 the ramp is the ramp. See
+     * [ClimateTint], which computes the three things a cell's climate has to say, and [ground],
+     * which spends this on them. Two styles hold it at 0 and each has a reason of its own — a pen
+     * has no tint to modulate, and the colour-blind ramp is a promise measured in CIEDE2000 that
+     * nothing may move.
+     */
+    internal val climateTint: Float,
+    /**
+     * How black this style rules its depth contours, or 0 for a sea with none.
+     *
+     * Drawn in [coastline], the style's own ink, at this share of it. See [Isobaths]. Zero for the
+     * engraving, whose sea is a vignette and has no room for a second family of lines, and for the
+     * colour-blind style, whose flat slate sea is a decision rather than an omission.
+     */
+    internal val isobathInk: Float,
     /**
      * How far the landmark markers are dragged toward the paper.
      *
@@ -116,6 +138,11 @@ enum class MapStyle(
         border = 0xFF2A2118.toInt(),
         wilderness = 0xFF6E6A5E.toInt(),
         reliefStrength = 1f,
+        // The full effect. A modern atlas is the thing Imhof was describing when he wrote that a
+        // hypsometric series has to follow the vegetation, and this style is the one that claims to
+        // be one.
+        climateTint = 1f,
+        isobathInk = 0.18f,
         glyphMuting = 0f,
         lineArt = false,
         inkGain = 0f,
@@ -152,6 +179,10 @@ enum class MapStyle(
         border = 0xFF6B3F2A.toInt(),
         wilderness = 0xFFBCAE8C.toInt(),
         reliefStrength = 0.75f,
+        // Half. An old chart knew perfectly well where the deserts were and drew them as sand, but
+        // its whole palette is already earths, so there is less for the climate to move.
+        climateTint = 0.45f,
+        isobathInk = 0.12f,
         glyphMuting = 0.55f,
         lineArt = false,
         inkGain = 0f,
@@ -186,6 +217,10 @@ enum class MapStyle(
         border = 0xFF7A2E28.toInt(),
         wilderness = 0xFFC9C4B8.toInt(),
         reliefStrength = 1.8f,
+        // Almost nothing to modulate: with the colour this nearly gone, what is left of a climate
+        // is a shade of grey either way.
+        climateTint = 0.15f,
+        isobathInk = 0.10f,
         glyphMuting = 0.70f,
         lineArt = false,
         inkGain = 0f,
@@ -219,6 +254,11 @@ enum class MapStyle(
         border = 0xFF8A3B2E.toInt(),
         wilderness = 0xFFD8CBA9.toInt(),
         reliefStrength = 0.5f,
+        // The land is deliberately near-blank buff and the interest is all in the water, so the
+        // climate gets a third of a say ashore and the contours are the strongest on the list. A
+        // chart is the one document here that is *about* the depth.
+        climateTint = 0.30f,
+        isobathInk = 0.30f,
         glyphMuting = 0.40f,
         lineArt = false,
         inkGain = 0f,
@@ -251,6 +291,10 @@ enum class MapStyle(
         border = 0xFFD8A05A.toInt(),
         wilderness = 0xFF39424F.toInt(),
         reliefStrength = 1.3f,
+        // Moonlight drains the colour out of everything, so only a quarter of the climate survives
+        // — and what "paler" means here is bluer, since the paper this style prints on is dark.
+        climateTint = 0.25f,
+        isobathInk = 0.14f,
         glyphMuting = 0f,
         lineArt = false,
         inkGain = 0f,
@@ -284,6 +328,12 @@ enum class MapStyle(
         border = 0xFFB03A3A.toInt(),
         wilderness = 0xFFBFB9A8.toInt(),
         reliefStrength = 0.45f,
+        // The full effect, as on Atlas, and for a blunter reason: the pull-down map printed the
+        // Sahara yellow and the Congo dark green, and that is most of what it was for. Anything
+        // less leaves this ramp's lowland green under a coastal desert, because the green band of
+        // a classroom map runs a third of the way up the sheet before it turns to sand.
+        climateTint = 1f,
+        isobathInk = 0.10f,
         glyphMuting = 0.2f,
         lineArt = false,
         inkGain = 0f,
@@ -319,6 +369,10 @@ enum class MapStyle(
         border = 0xFF7A4A22.toInt(),
         wilderness = 0xFFC9BC95.toInt(),
         reliefStrength = 0.9f,
+        // An illustrated map draws the desert as a desert and the wood as a wood — they are named
+        // places on it, which is the same reason its biome wash runs higher than anyone else's.
+        climateTint = 0.80f,
+        isobathInk = 0.10f,
         glyphMuting = 0.15f,
         lineArt = false,
         inkGain = 0f,
@@ -351,6 +405,10 @@ enum class MapStyle(
         border = 0xFFA32F26.toInt(),
         wilderness = 0xFFC8C4A2.toInt(),
         reliefStrength = 1.15f,
+        // Half, like the other painted parchment: the sage and ochre it is painted in are already
+        // most of the way to being climate colours.
+        climateTint = 0.50f,
+        isobathInk = 0.12f,
         glyphMuting = 0.25f,
         lineArt = false,
         inkGain = 0f,
@@ -404,6 +462,11 @@ enum class MapStyle(
         border = 0xFFA82820.toInt(),
         wilderness = 0xFFF1EDE3.toInt(),
         reliefStrength = 1f,
+        // Nothing, three times over. There is no tint to modulate, no colour to veil the low ground
+        // with, and the sea already carries four lines of its own — a second family of them running
+        // the other way would turn the ocean into a net.
+        climateTint = 0f,
+        isobathInk = 0f,
         glyphMuting = 0.5f,
         lineArt = true,
         // Full weight at a slope of 0.40, which is the seventy-fifth percentile of this world's
@@ -474,6 +537,12 @@ enum class MapStyle(
         wilderness = 0xFF6E5241.toInt(),
         // Pushed hard: with no water and no vegetation the relief is most of what there is to see.
         reliefStrength = 1.4f,
+        // A third. A dry world has one climate, so what little the modulation has to say comes out
+        // as pale dust against darker plain — and the polar caps, which the cold term draws.
+        climateTint = 0.35f,
+        // On the contours of a sea that is not there any more, which is exactly how the northern
+        // lowlands of a dry planet are charted: the old floor, still with its terraces.
+        isobathInk = 0.12f,
         glyphMuting = 0.25f,
         lineArt = false,
         inkGain = 0f,
@@ -547,6 +616,13 @@ enum class MapStyle(
         wilderness = 0xFF9A9A9A.toInt(),
         // Enough to keep the mountains, short of enough to push a stop into its neighbour.
         reliefStrength = 0.9f,
+        // Off, all three, for the reason the biome wash is off: this style's ramp is a measured
+        // promise — every adjacent pair at least 8.00 CIEDE2000 apart under both red-green
+        // deficiencies — and a climate that moved a cell along the ramp, an air that lifted the
+        // lowlands toward white or a contour that broke the flat sea would each make the colour on
+        // the page something other than the colour the guard measured.
+        climateTint = 0f,
+        isobathInk = 0f,
         glyphMuting = 0.2f,
         lineArt = false,
         inkGain = 0f,
@@ -572,6 +648,39 @@ enum class MapStyle(
     internal fun land(elevation: Float): Int =
         MapPalette.ramp(landRamp, elevation.coerceIn(0f, 1f))
 
+    /**
+     * The land at [relative] height under this climate, as this style would paint it.
+     *
+     * The whole of the land colour in one call, so that the processor and the graphics card cannot
+     * end up doing it in a different order: the ramp read at a height the drought has lifted, paled
+     * toward the paper by the cold, darkened under a canopy, and finally washed with the biome's own
+     * colour exactly as [tint] always did. [dryness], [coldness] and [canopy] are the three numbers
+     * [ClimateTint] computes for the cell; at [climateTint] 0 none of them is read and this is the
+     * colour the plain ramp gave before the climate reached it, to the bit.
+     */
+    internal fun ground(
+        relative: Float,
+        dryness: Float,
+        coldness: Float,
+        canopy: Float,
+        biome: Biome
+    ): Int {
+        if (climateTint <= 0f) return tint(land(relative), biome)
+
+        val height = relative.coerceIn(0f, 1f)
+        // Dry ground starts at the ramp's earth band and climbs what is left of the ramp from
+        // there, so a desert is sand at the coast and still reaches snow at the summit.
+        val lifted = height + climateTint * dryness * ClimateTint.ARID_RAMP_FLOOR * (1f - height)
+        var colour = land(lifted)
+        colour = MapPalette.blend(
+            colour, paper, climateTint * coldness * ClimateTint.COLD_PALING
+        )
+        colour = MapPalette.shade(
+            colour, 1f - climateTint * canopy * ClimateTint.CANOPY_DARKENING
+        )
+        return tint(colour, biome)
+    }
+
     /** The biome colour as this style would print it: muted toward the paper, then washed in. */
     internal fun tint(base: Int, biome: Biome): Int {
         if (biomeWash <= 0f) return base
@@ -595,7 +704,7 @@ enum class MapStyle(
      * Whether the political and peoples views take this style's own realm set.
      *
      * False for every style but [CLEAR], which is what leaves the other ten drawing exactly the
-     * pixels they drew before F6.
+     * pixels they drew before a realm set existed.
      */
     internal val ownsRealms: Boolean get() = realmRamp != null
 
@@ -627,7 +736,7 @@ enum class MapStyle(
      */
     internal fun people(id: Int): Int {
         val ramp = realmRamp ?: return MapPalette.culture(id)
-        return ramp[(id + 4).mod(ramp.size)]
+        return ramp[(id + PEOPLES_OFFSET_IN_THE_SET).mod(ramp.size)]
     }
 
     /**
@@ -639,28 +748,37 @@ enum class MapStyle(
      * coarser pitch — two cells of ink in six — so that it reads as a hatch at map scale rather
      * than as a dither.
      */
-    internal fun hatched(id: Int, x: Int, y: Int): Boolean {
+    internal fun hatched(id: Int, column: Int, row: Int): Boolean {
         val ramp = realmRamp ?: return false
-        return when ((id / ramp.size) % 3) {
-            1 -> (x + y) % 6 < 2
-            // Written with no negative operand anywhere, rather than as (x - y) mod 6: GLSL
-            // leaves % undefined when either side is negative, and the shader has to agree with
-            // this to the bit. (x + (6 - y mod 6)) mod 6 is the same anti-diagonal.
-            2 -> (x + (6 - y % 6)) % 6 < 2
+        return when ((id / ramp.size) % HATCHES_BEFORE_REPEATING) {
+            1 -> (column + row) % COMB_PITCH_CELLS < COMB_INK_CELLS
+            // Written with no negative operand anywhere, rather than as (column - row) mod 6:
+            // GLSL leaves % undefined when either side is negative, and the shader has to agree
+            // with this to the bit. (column + (6 - row mod 6)) mod 6 is the same anti-diagonal.
+            2 -> (column + (COMB_PITCH_CELLS - row % COMB_PITCH_CELLS)) % COMB_PITCH_CELLS <
+                COMB_INK_CELLS
             else -> false
         }
     }
 
     /** A realm fill with its hatch applied, where the cell takes one. */
-    internal fun realmFill(id: Int, x: Int, y: Int): Int {
+    internal fun realmFill(id: Int, column: Int, row: Int): Int {
         val fill = realm(id)
-        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+        return if (hatched(id, column, row)) {
+            MapPalette.blend(fill, coastline, HATCH_STRENGTH)
+        } else {
+            fill
+        }
     }
 
     /** The same for a people. */
-    internal fun peopleFill(id: Int, x: Int, y: Int): Int {
+    internal fun peopleFill(id: Int, column: Int, row: Int): Int {
         val fill = people(id)
-        return if (hatched(id, x, y)) MapPalette.blend(fill, coastline, HATCH_STRENGTH) else fill
+        return if (hatched(id, column, row)) {
+            MapPalette.blend(fill, coastline, HATCH_STRENGTH)
+        } else {
+            fill
+        }
     }
 
     companion object {
@@ -669,8 +787,36 @@ enum class MapStyle(
          *
          * Far enough to be a texture at a glance (7.52 CIEDE2000 at worst against the fill it
          * crosses, over every ground and under both red-green deficiencies, measured in
-         * `ClearStyleTest`), short of far enough to swallow which colour is underneath it. Public only because [RasterRecipe] carries it to the graphics card.
+         * `ClearStyleTest`), short of far enough to swallow which colour is underneath it.
+         *
+         * Public only because [RasterRecipe] carries it to the graphics card.
          */
         const val HATCH_STRENGTH: Float = 0.45f
+
+        /**
+         * How many turns of the realm set are told apart before the textures repeat.
+         *
+         * Three: the plain fill, one diagonal, the other. Twenty-eight realms would begin the
+         * whole cycle again, which is well past the point at which a reader is counting rather
+         * than recognising.
+         */
+        private const val HATCHES_BEFORE_REPEATING = 3
+
+        /**
+         * The comb the hatch is ruled at: two cells of ink in every six.
+         *
+         * Coarser than the comb [MapStyle.PEN_AND_INK] draws with, deliberately, so that at map
+         * scale it reads as a hatch rather than as a dither of the fill it crosses.
+         */
+        private const val COMB_PITCH_CELLS = 6
+        private const val COMB_INK_CELLS = 2
+
+        /**
+         * How far along the realm set the peoples' colours start.
+         *
+         * Four of nine, so no people shares a colour with the realm of the same id and the two
+         * layers are plainly a change of subject. See [people].
+         */
+        private const val PEOPLES_OFFSET_IN_THE_SET = 4
     }
 }

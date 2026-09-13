@@ -37,7 +37,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * What F12's three data exports promise, held to.
+ * What the three data exports promise, held to.
  *
  * A picture export is judged by eye. These are judged by whether another program can read them, and
  * that is a question with an exact answer: the heightmap has to come back off disk as the elevation
@@ -170,7 +170,8 @@ class DataExportTest {
         }
 
         // The same world with enclosed seas left as sea, which `SeaConfig.enclosedSeaIsLand` calls
-        // the pre-H5 behaviour exactly. Every below-the-waterline land cell goes with it.
+        // the behaviour from before sea-level history exactly. Every below-the-waterline land
+        // cell goes with it.
         val undrowned = WorldGenerationEngine.generateBlocking(
             config.copy(sea = config.sea.copy(enclosedSeaIsLand = false))
         )
@@ -551,11 +552,18 @@ class DataExportTest {
          *
          * The 99th and not the 99.9th `ExportSmokeTest` holds WebP to, because this is the coarser
          * question: is the compatibility format in the same band as the one it substitutes for.
-         * WebP at the quality the application ships measures 53 on seed 42 at 512 and JPEG at 90
-         * measures 55, so the bound is WebP's own figure with a little room; quality 30, which the
-         * test above measures beside it, is 72 and misses it.
+         * The bound is WebP's own figure on the same picture with seven of room, and quality 30,
+         * which the test above measures beside it, has to miss it.
+         *
+         * Re-derived once when the river pen changed, and the reason is worth keeping: the
+         * figures were 53 for WebP
+         * and 55 for JPEG when the widest river on a 512 sheet was a five-pixel channel, and are
+         * 61 and 63 now that it is a 1.2-pixel one. A thin line is nearly all edge — almost every
+         * pixel of it is a partial blend rather than a run of one colour — and a lossy codec pays
+         * for that. Both formats moved by the same eight, which is what says the picture changed
+         * and not the relation between them; quality 30 is 74 and still misses the bound.
          */
-        const val MAX_JPEG_DRIFT = 60
+        const val MAX_JPEG_DRIFT = 68
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

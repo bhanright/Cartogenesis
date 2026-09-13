@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.cartography.EngravingPlan
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RasterRecipe
+import com.cartogenesis.worldgen.pipeline.Biome
 import org.lwjgl.opengl.GL43C
 import org.lwjgl.system.MemoryUtil
 
@@ -17,15 +18,17 @@ import org.lwjgl.system.MemoryUtil
  * Three things are worth knowing about how it is arranged.
  *
  * **The shader is dumb on purpose.** It is handed a [RasterRecipe] — every colour already packed,
- * every ramp already chosen, a colour table per realm, people and plate — so it never reproduces the
- * palette's hue arithmetic or the style's rules. Anything that could drift from `MapRasterizer` is
- * computed once on the processor and uploaded; what is left on the device is blending, a ramp
- * lookup, a square root for the relief, and the neighbour tests the coast and border passes need.
+ * every ramp already chosen, a colour table per realm, people and plate, and the two per-cell
+ * numbers the climate has to say about the ground — so it never reproduces the palette's hue
+ * arithmetic, the style's rules or an aridity index. Anything that could drift from `MapRasterizer`
+ * is computed once on the processor and uploaded; what is left on the device is blending, a ramp
+ * lookup, the arithmetic of the lighting model, and the neighbour tests the coast, the contours and
+ * the border pass need.
  *
  * **The colour arithmetic is integer, so it can agree exactly.** `MapPalette` blends in 0..255 and
  * truncates; this does the same, in floats that hold integers, with a `floor` wherever the Kotlin
- * has a `toInt`. The one place that genuinely cannot agree is the hillshade, which is a square root
- * and a divide: hardware rounds those its own way, and a channel one step off at a truncation
+ * has a `toInt`. The one place that genuinely cannot agree is the shading, which is square roots
+ * and divides: hardware rounds those its own way, and a channel one step off at a truncation
  * boundary is the expected result.
  *
  * **The output is tiled, the input is not.** The world's fields go up once per render; the pixels
@@ -44,23 +47,28 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
     private val uniforms = HashMap<String, Int>()
 
     override suspend fun rasterize(recipe: RasterRecipe): IntArray? = GlContext.run("The export raster") {
-        val w = recipe.width
-        val h = recipe.height
-        val cells = w * h
+        val widthPixels = recipe.width
+        val heightPixels = recipe.height
+        val cells = widthPixels * heightPixels
         if (program == 0) return@run null
 
         // Bands of a few million pixels: one dispatch for anything up to 2048, sixteen at 8192.
-        val rowsPerTile = (TILE_PIXELS / w).coerceIn(1, h)
+        val rowsPerTile = (TILE_PIXELS / widthPixels).coerceIn(1, heightPixels)
         val buffers = ArrayList<Int>()
 
         try {
             GL43C.glUseProgram(program)
 
-            val dummy = buffer(buffers)
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, dummy)
-            GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, 16L, GL43C.GL_STATIC_DRAW)
+            // Every binding the shader declares must have something bound to it, whether or not
+            // this recipe fills it: an unbound storage buffer is undefined behaviour, and the
+            // optional fields below bind only the ones they have. So they all start here.
+            val placeholder = newBuffer(buffers)
+            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, placeholder)
+            GL43C.glBufferData(
+                GL43C.GL_SHADER_STORAGE_BUFFER, PLACEHOLDER_BYTES, GL43C.GL_STATIC_DRAW
+            )
             for (binding in 0..BINDING_OUTPUT) {
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, dummy)
+                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, placeholder)
             }
 
             bindFloats(buffers, BINDING_ELEVATION, recipe.elevation)
@@ -92,11 +100,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             bindRamps(buffers, recipe)
 
-            val output = buffer(buffers)
+            val output = newBuffer(buffers)
             GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, output)
             GL43C.glBufferData(
                 GL43C.GL_SHADER_STORAGE_BUFFER,
-                (rowsPerTile.toLong() * w * 4), GL43C.GL_DYNAMIC_COPY
+                rowsPerTile.toLong() * widthPixels * BYTES_PER_PIXEL,
+                GL43C.GL_DYNAMIC_COPY
             )
             GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, BINDING_OUTPUT, output)
 
@@ -106,8 +115,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             val uploadError = GL43C.glGetError()
             if (uploadError != GL43C.GL_NO_ERROR) {
                 System.err.println(
-                    "The export raster could not fit ${w}x$h on the device (GL error $uploadError); " +
-                        "drawing it on the processor instead"
+                    "The export raster could not fit ${widthPixels}x$heightPixels on the device " +
+                        "(GL error $uploadError); drawing it on the processor instead"
                 )
                 return@run null
             }
@@ -115,18 +124,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             setUniforms(recipe)
 
             val pixels = IntArray(cells)
-            val tile = IntArray(rowsPerTile * w)
+            val tile = IntArray(rowsPerTile * widthPixels)
             var rowStart = 0
-            while (rowStart < h) {
-                val rows = minOf(rowsPerTile, h - rowStart)
+            while (rowStart < heightPixels) {
+                val rows = minOf(rowsPerTile, heightPixels - rowStart)
                 GL43C.glUniform1i(uniform("uRowStart"), rowStart)
                 GL43C.glUniform1i(uniform("uRows"), rows)
-                GL43C.glDispatchCompute((w + GROUP - 1) / GROUP, (rows + GROUP - 1) / GROUP, 1)
+                GL43C.glDispatchCompute(
+                    (widthPixels + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE,
+                    (rows + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE,
+                    1
+                )
                 GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
 
                 GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, output)
                 GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, tile)
-                tile.copyInto(pixels, rowStart * w, 0, rows * w)
+                tile.copyInto(pixels, rowStart * widthPixels, 0, rows * widthPixels)
                 rowStart += rows
             }
             pixels
@@ -135,26 +148,27 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         }
     }
 
-    private fun buffer(buffers: MutableList<Int>): Int {
-        val id = GL43C.glGenBuffers()
-        buffers.add(id)
-        return id
+    /** A fresh buffer, remembered in [buffers] so the `finally` can hand every one of them back. */
+    private fun newBuffer(buffers: MutableList<Int>): Int {
+        val buffer = GL43C.glGenBuffers()
+        buffers.add(buffer)
+        return buffer
     }
 
     private fun bindFloats(buffers: MutableList<Int>, binding: Int, data: FloatArray): Int {
-        val id = buffer(buffers)
-        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+        val buffer = newBuffer(buffers)
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
         GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, GL43C.GL_STATIC_DRAW)
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
-        return id
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+        return buffer
     }
 
     private fun bindInts(buffers: MutableList<Int>, binding: Int, data: IntArray): Int {
-        val id = buffer(buffers)
-        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+        val buffer = newBuffer(buffers)
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
         GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, GL43C.GL_STATIC_DRAW)
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
-        return id
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+        return buffer
     }
 
     /**
@@ -162,19 +176,19 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
      * of an odd-sized grid do not send the shader reading past the end of the buffer.
      */
     private fun bindBytes(buffers: MutableList<Int>, binding: Int, data: ByteArray) {
-        val id = buffer(buffers)
-        val padded = ((data.size + 3) / 4) * 4
-        val staging = MemoryUtil.memAlloc(padded)
+        val buffer = newBuffer(buffers)
+        val paddedBytes = ((data.size + BYTES_PER_WORD - 1) / BYTES_PER_WORD) * BYTES_PER_WORD
+        val staging = MemoryUtil.memAlloc(paddedBytes)
         try {
             staging.put(data)
             while (staging.hasRemaining()) staging.put(0.toByte())
             staging.flip()
-            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, id)
+            GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
             GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, staging, GL43C.GL_STATIC_DRAW)
         } finally {
             MemoryUtil.memFree(staging)
         }
-        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, id)
+        GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffer)
     }
 
     /** Every ramp end to end in one buffer, with an offset and a length per ramp as uniforms. */
@@ -200,14 +214,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1i(uniform("uHeight"), recipe.height)
         GL43C.glUniform1i(uniform("uView"), recipe.view)
         GL43C.glUniform1i(uniform("uHillshade"), recipe.hillshade.toGl())
+        GL43C.glUniform1i(uniform("uSingleLamp"), recipe.singleLamp.toGl())
         GL43C.glUniform1i(uniform("uLineArt"), recipe.lineArt.toGl())
         GL43C.glUniform1i(uniform("uShowLakes"), recipe.showLakes.toGl())
         GL43C.glUniform1i(uniform("uShowCoastline"), recipe.showCoastline.toGl())
         GL43C.glUniform1i(uniform("uShowBorders"), recipe.showBorders.toGl())
 
-        GL43C.glUniform1f(uniform("uZScale"), recipe.hillshadeScale)
+        GL43C.glUniform1f(uniform("uSlopeScale"), recipe.slopeScale)
+        GL43C.glUniform1i(uniform("uOpennessStep"), recipe.opennessStep)
         GL43C.glUniform1f(uniform("uBiomeWash"), recipe.biomeWash)
         GL43C.glUniform1f(uniform("uBiomeMuting"), recipe.biomeMuting)
+        GL43C.glUniform1f(uniform("uClimateTint"), recipe.climateTint)
+        GL43C.glUniform1f(uniform("uIsobathInk"), recipe.isobathInk)
+        GL43C.glUniform1f(uniform("uIsobathInterval"), recipe.isobathInterval)
+        GL43C.glUniform1f(uniform("uIsobathFlattest"), recipe.isobathFlattestSlope)
+        GL43C.glUniform1i(uniform("uIsobathStencil"), recipe.isobathSlopeStencil)
+        GL43C.glUniform1fv(uniform("uBiomeCanopy"), recipe.biomeCanopy)
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
@@ -252,7 +274,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uStrokeHalfLength"), plan.strokeHalfLengthCells)
         GL43C.glUniform1f(uniform("uStrokeHalfWidth"), plan.strokeHalfWidthCells)
         GL43C.glUniform1f(uniform("uSlopeFloor"), EngravingPlan.SLOPE_FLOOR)
-        GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT)
+        GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT_STEEPNESS)
         GL43C.glUniform1f(uniform("uAntialias"), EngravingPlan.ANTIALIAS_CELLS)
         GL43C.glUniform1f(uniform("uVignetteBase"), plan.vignetteBaseCells)
         GL43C.glUniform1f(uniform("uVignetteHalf"), plan.vignetteHalfWidthCells)
@@ -286,8 +308,27 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
     companion object {
 
-        /** 16x16 is 256 invocations, which every device with compute shaders must allow. */
-        private const val GROUP = 16
+        /**
+         * The side of a work group, in invocations. 16x16 is 256, which every device with compute
+         * shaders must allow. Written into `layout(local_size_x...)` in [SOURCE] as well, because
+         * a shader's declaration cannot read a Kotlin constant.
+         */
+        private const val WORK_GROUP_SIDE = 16
+
+        /** One ARGB word a pixel, which is what comes back from the output buffer. */
+        private const val BYTES_PER_PIXEL = 4L
+
+        /** A `uint` on the device, which is how a byte-a-cell field is read four at a time. */
+        private const val BYTES_PER_WORD = 4
+
+        /**
+         * The size of the buffer bound to every binding this recipe does not fill: one word of
+         * padding either way, and never read, since the shader tests before it reads.
+         */
+        private const val PLACEHOLDER_BYTES = 16L
+
+        /** How long a driver may take over one large compute shader before it is given up on. */
+        private const val COMPILE_TIMEOUT_SECONDS = 30L
 
         /**
          * Pixels a tile: four million, which is 16MB coming back over the bus. Small enough that
@@ -295,6 +336,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
          * dispatches rather than four hundred.
          */
         private const val TILE_PIXELS = 4 shl 20
+
+        /**
+         * How many entries the per-biome tables have.
+         *
+         * The canopy table travels as a uniform array rather than as a buffer, because it is
+         * sixteen floats and the device is already out of storage bindings; a uniform array's
+         * length has to be written into the source, so it is written from the enum itself and
+         * cannot fall behind it.
+         */
+        private val BIOME_SLOTS = Biome.entries.size
 
         private const val BINDING_ELEVATION = 0
         private const val BINDING_LAND = 1
@@ -323,7 +374,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 ?: return Result(null, context.unavailableBecause ?: "unknown failure")
 
             val raster = GpuRaster(device)
-            raster.program = GlContext.run("Compiling the export raster", seconds = 30) {
+            raster.program = GlContext.run(
+                "Compiling the export raster",
+                timeoutSeconds = COMPILE_TIMEOUT_SECONDS
+            ) {
                 GlContext.compileCompute(SOURCE)
             } ?: return Result(null, "the raster shader would not compile")
             return Result(raster, null)
@@ -356,14 +410,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform int uRows;
             uniform int uView;
             uniform int uHillshade;
+            uniform int uSingleLamp;
             uniform int uLineArt;
             uniform int uShowLakes;
             uniform int uShowCoastline;
             uniform int uShowBorders;
 
-            uniform float uZScale;
+            uniform float uSlopeScale;
+            uniform int uOpennessStep;
             uniform float uBiomeWash;
             uniform float uBiomeMuting;
+            uniform float uClimateTint;
+            uniform float uIsobathInk;
+            uniform float uIsobathInterval;
+            uniform float uIsobathFlattest;
+            uniform int uIsobathStencil;
+            uniform float uBiomeCanopy[$BIOME_SLOTS];
             uniform float uCoastlineStrength;
             uniform float uReliefStrength;
             uniform float uInkGain;
@@ -440,12 +502,56 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const int V_WIND = 9;
             const int V_NORMALS = 10;
 
-            // Lambertian light in the north-west, the cartographic convention. The same numbers as
-            // MapRasterizer.computeHillshade; the two are one formula in two languages and have to
-            // be changed together.
-            const float LIGHT_X = -0.6;
-            const float LIGHT_Y = -0.6;
-            const float LIGHT_Z = 0.53;
+            /*
+             * The lighting model, copied out of ReliefShading.kt: one lamp in the north-west, or
+             * four lamps and a sky. The same numbers on both sides — the two are one model in two
+             * languages and have to be changed together, which GpuRasterTest is what catches.
+             */
+            const float LAMP_EAST = -0.6;
+            const float LAMP_SOUTH = -0.6;
+            const float LAMP_HEIGHT = 0.53;
+            const float LAMP_AMBIENT = 0.72;
+            const float LAMP_SWING = 0.55;
+            const float LAMP_REACH = 0.848;
+            const float ROOT_HALF = 0.70710678;
+            const float ROOT_TWO = 1.4142135;
+            // The sky at ReliefShading.HAZE, which is 0.10: a diffuse share of
+            // 0.15 + 0.85 * haze, and a brightness per bearing of
+            // evenness + (1 - evenness) * toward, with evenness 0.1 + 0.9 * haze. Copied out of
+            // the Kotlin's own arithmetic rather than recomputed here, so the two agree to the bit.
+            const float SKY_BRIGHTNESS_TOTAL = 4.76000016;
+            const float SKY_SHARE = 0.23500001;
+            const float ORDINARY_GROUND = 0.936;
+            const float DARKEST = 0.45;
+            const float BRIGHTEST = 1.35;
+            const int HORIZON_BEARINGS = 8;
+            const int HORIZON_STEPS = 3;
+
+            // The eight compass bearings, as whole steps for the horizon stencil and as unit
+            // vectors for the lamps, with the brightness of the sky along each: east, south-east,
+            // south, south-west, west, north-west, north, north-east.
+            const int BEARING_EAST[8] = int[8](1, 1, 0, -1, -1, -1, 0, 1);
+            const int BEARING_SOUTH[8] = int[8](0, 1, 1, 1, 0, -1, -1, -1);
+            const float BEARING_LENGTH[8] =
+                float[8](1.0, ROOT_TWO, 1.0, ROOT_TWO, 1.0, ROOT_TWO, 1.0, ROOT_TWO);
+            const float BEARING_UNIT_EAST[8] =
+                float[8](1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF, 0.0, ROOT_HALF);
+            const float BEARING_UNIT_SOUTH[8] =
+                float[8](0.0, ROOT_HALF, 1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF);
+            const float SKY_BRIGHTNESS[8] = float[8](
+                0.30862176, 0.19, 0.30862176, 0.59500003,
+                0.88137829, 1.0, 0.88137829, 0.59500003
+            );
+
+            /* And from ClimateTint.kt and Isobaths.kt, on the same terms. */
+            const float ARID_RAMP_FLOOR = 0.42857143;
+            const float COLD_PALING = 0.30;
+            const float CANOPY_DARKENING = 0.12;
+            const float ISOBATH_HALF_WIDTH = 0.5;
+            const float ISOBATH_ANTIALIAS = 0.6;
+            const float ISOBATH_CROWDED = 4.0;
+            const float ISOBATH_PLAIN_FADE = 0.5;
+            const float FLATTEST_SLOPE = 1e-6;
 
             vec3 unpack(uint c) {
                 return vec3(
@@ -503,13 +609,70 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return elevation[clamp(y, 0, uHeight - 1) * uWidth + wrapped];
             }
 
-            float hillshadeAt(int x, int y) {
-                precise float dzdx = (elevationAt(x + 1, y) - elevationAt(x - 1, y)) * uZScale;
-                precise float dzdy = (elevationAt(x, y + 1) - elevationAt(x, y - 1)) * uZScale;
-                precise float len = sqrt(dzdx * dzdx + dzdy * dzdy + 1.0);
-                precise float lambert = (-dzdx * LIGHT_X - dzdy * LIGHT_Y + LIGHT_Z) / len;
-                precise float shading = 0.72 + 0.55 * lambert;
-                return clamp(shading, 0.45, 1.35);
+            /*
+             * ReliefShading.openness: how much of the sky the ground here can see. The horizon
+             * angle along each of the eight grid bearings over three doubling steps, and the mean
+             * of their sines is the share of the sky the surrounding ground has taken away.
+             */
+            float openness(int x, int y) {
+                float here = elevationAt(x, y);
+                precise float blocked = 0.0;
+                for (int bearing = 0; bearing < HORIZON_BEARINGS; bearing++) {
+                    int east = BEARING_EAST[bearing];
+                    int south = BEARING_SOUTH[bearing];
+                    float steepest = 0.0;
+                    int reach = uOpennessStep;
+                    precise float stride = BEARING_LENGTH[bearing] * float(uOpennessStep);
+                    for (int further = 0; further < HORIZON_STEPS; further++) {
+                        precise float rise =
+                            (elevationAt(x + east * reach, y + south * reach) - here) * uSlopeScale;
+                        precise float tangent = rise / stride;
+                        if (tangent > steepest) steepest = tangent;
+                        reach += reach;
+                        stride += stride;
+                    }
+                    // Weighted by how bright that quarter of the sky is, so a ridge standing
+                    // between the ground and the sun costs it more light than one behind it.
+                    blocked +=
+                        SKY_BRIGHTNESS[bearing] * (steepest / sqrt(steepest * steepest + 1.0));
+                }
+                return 1.0 - blocked / SKY_BRIGHTNESS_TOTAL;
+            }
+
+            /* ReliefShading.at: the single lamp, or four lamps weighted by aspect plus the sky. */
+            float reliefAt(int x, int y) {
+                precise float eastward =
+                    (elevationAt(x + 1, y) - elevationAt(x - 1, y)) * uSlopeScale;
+                precise float southward =
+                    (elevationAt(x, y + 1) - elevationAt(x, y - 1)) * uSlopeScale;
+                precise float normalLength =
+                    sqrt(eastward * eastward + southward * southward + 1.0);
+
+                if (uSingleLamp != 0) {
+                    precise float lambert =
+                        (-eastward * LAMP_EAST - southward * LAMP_SOUTH + LAMP_HEIGHT) /
+                        normalLength;
+                    return clamp(LAMP_AMBIENT + LAMP_SWING * lambert, DARKEST, BRIGHTEST);
+                }
+
+                // ReliefShading.directLight: eight lamps round the whole compass, each lighting
+                // this slope as it faces it and as bright as its quarter of the sky is.
+                precise float direct = 0.0;
+                for (int bearing = 0; bearing < HORIZON_BEARINGS; bearing++) {
+                    float bearingEast = BEARING_UNIT_EAST[bearing];
+                    float bearingSouth = BEARING_UNIT_SOUTH[bearing];
+                    precise float lambert = (
+                        -eastward * bearingEast * LAMP_REACH -
+                        southward * bearingSouth * LAMP_REACH + LAMP_HEIGHT
+                    ) / normalLength;
+                    if (lambert > 0.0) direct += SKY_BRIGHTNESS[bearing] * lambert;
+                }
+                direct /= SKY_BRIGHTNESS_TOTAL;
+
+                precise float sky = openness(x, y);
+                precise float illumination =
+                    SKY_SHARE * sky + (1.0 - SKY_SHARE) * (direct / LAMP_HEIGHT);
+                return clamp(illumination / ORDINARY_GROUND, DARKEST, BRIGHTEST);
             }
 
             /*
@@ -642,6 +805,61 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return blend(base, muted, uBiomeWash);
             }
 
+            /*
+             * MapStyle.ground: the land ramp read at a height the drought has lifted, paled toward
+             * the paper by the cold, darkened under a canopy, then washed with the biome's colour.
+             * The dryness and the coldness are per-cell fields worked out on the processor; the
+             * canopy is a table indexed by the biome this pixel already has.
+             */
+            vec3 ground(int i, float relative, int biome) {
+                if (uClimateTint <= 0.0) {
+                    return tint(rampAt(RAMP_LAND, clamp(relative, 0.0, 1.0)), biome);
+                }
+                precise float height = clamp(relative, 0.0, 1.0);
+                precise float lifted =
+                    height + uClimateTint * scalarA[i] * ARID_RAMP_FLOOR * (1.0 - height);
+                vec3 colour = rampAt(RAMP_LAND, lifted);
+                colour = blend(colour, uPaper, uClimateTint * scalarB[i] * COLD_PALING);
+                colour = shade(colour, 1.0 - uClimateTint * uBiomeCanopy[biome] * CANOPY_DARKENING);
+                return tint(colour, biome);
+            }
+
+            /*
+             * Isobaths.ink: a depth contour, held at a width in pixels by dividing the distance to
+             * the line by how fast the floor falls here, and faded out where the lines crowd.
+             */
+            float seaContourInk(int x, int y, float depth) {
+                if (depth <= 0.0) return 0.0;
+                int reach = uIsobathStencil;
+                precise float span = 1.0 / (2.0 * float(reach));
+                precise float eastward =
+                    (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * span;
+                precise float southward =
+                    (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * span;
+                precise float slope = sqrt(eastward * eastward + southward * southward);
+                // A contour is a line only where the floor slopes; on a plain the level set is a
+                // region, and the drawing stains a basin instead of tracing a line through it.
+                float onASlope = uIsobathFlattest <= 0.0 ? 1.0 : smoothstep(
+                    uIsobathFlattest * ISOBATH_PLAIN_FADE, uIsobathFlattest, slope);
+                if (onASlope <= 0.0) return 0.0;
+                precise float run = slope < FLATTEST_SLOPE ? FLATTEST_SLOPE : slope;
+
+                precise float steps = depth / uIsobathInterval;
+                precise float pastLine = steps - floor(steps);
+                precise float stepsFromLine = 0.5 - abs(pastLine - 0.5);
+                precise float pixelsFromLine = stepsFromLine * uIsobathInterval / run;
+                precise float pixelsBetweenLines = uIsobathInterval / run;
+
+                float line = 1.0 - smoothstep(
+                    ISOBATH_HALF_WIDTH - ISOBATH_ANTIALIAS,
+                    ISOBATH_HALF_WIDTH + ISOBATH_ANTIALIAS,
+                    pixelsFromLine
+                );
+                float legible =
+                    smoothstep(ISOBATH_CROWDED * 0.5, ISOBATH_CROWDED, pixelsBetweenLines);
+                return line * legible * onASlope;
+            }
+
             vec3 temperatureColour(float celsius) {
                 precise float warmed = celsius + 30.0;
                 precise float t = warmed / 70.0;
@@ -656,8 +874,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             vec3 baseColour(int x, int y, int i, bool land, float relative) {
                 if (uView == V_FANTASY) {
-                    if (!land) return rampAt(RAMP_OCEAN, 1.0 - clamp(-relative, 0.0, 1.0));
-                    return tint(rampAt(RAMP_LAND, clamp(relative, 0.0, 1.0)), biomeAt(i));
+                    if (!land) {
+                        vec3 water = rampAt(RAMP_OCEAN, 1.0 - clamp(-relative, 0.0, 1.0));
+                        if (uIsobathInk <= 0.0) return water;
+                        return blend(
+                            water, uCoastline, uIsobathInk * seaContourInk(x, y, -relative)
+                        );
+                    }
+                    return ground(i, relative, biomeAt(i));
                 }
                 if (uView == V_POLITICAL || uView == V_CULTURES) {
                     if (!land) {
@@ -753,7 +977,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                             colour = blend(colour, uCoastline, hachureInk(x, y));
                         } else {
                             precise float relief =
-                                1.0 + (hillshadeAt(x, y) - 1.0) * uReliefStrength;
+                                1.0 + (reliefAt(x, y) - 1.0) * uReliefStrength;
                             colour = shade(colour, relief);
                         }
                     }

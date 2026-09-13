@@ -69,9 +69,11 @@ internal object Updates {
         if (body == null) return Status.Unknown("Could not reach GitHub. Check the connection.")
         val release = runCatching { json.decodeFromString(Release.serializer(), body) }.getOrNull()
             ?: return Status.Unknown("GitHub's answer was not in a form this build understands.")
-        val theirs = parse(release.tag)
-            ?: return Status.Unknown("The latest release is tagged \"${release.tag}\", which is not a version.")
-        val mine = parse(current)
+        val theirs = parseVersion(release.tag)
+            ?: return Status.Unknown(
+                "The latest release is tagged \"${release.tag}\", which is not a version."
+            )
+        val mine = parseVersion(current)
             ?: return Status.Unknown("This build's own version, \"$current\", is not a version.")
         // A draft or a pre-release should never be offered as "the latest": GitHub's own endpoint
         // excludes drafts, but a repository can publish a pre-release as latest by hand.
@@ -97,13 +99,13 @@ internal object Updates {
      * all makes the whole tag unparseable rather than zero: `v1.x.0` is a mistake somebody should
      * see, not a version equal to 1.0.0.
      */
-    fun parse(tag: String): IntArray? {
+    fun parseVersion(tag: String): IntArray? {
         val cleaned = tag.trim().removePrefix("v").removePrefix("V")
             .substringBefore('-').substringBefore('+')
         if (cleaned.isEmpty()) return null
         val parts = cleaned.split('.')
-        if (parts.size > 3) return null
-        val numbers = IntArray(3)
+        if (parts.size > VERSION_PARTS) return null
+        val numbers = IntArray(VERSION_PARTS)
         parts.forEachIndexed { index, part ->
             val value = part.trim().toIntOrNull() ?: return null
             if (value < 0) return null
@@ -112,20 +114,20 @@ internal object Updates {
         return numbers
     }
 
-    /** Negative, zero or positive as [a] sorts before, with, or after [b]. */
-    fun compare(a: IntArray, b: IntArray): Int {
-        for (i in 0 until 3) {
-            if (a[i] != b[i]) return a[i].compareTo(b[i])
+    /** Major, minor, patch — the three [parseVersion] fills in, missing ones read as zero. */
+    private const val VERSION_PARTS = 3
+
+    /** Negative, zero or positive as [left] sorts before, with, or after [right]. */
+    fun compare(left: IntArray, right: IntArray): Int {
+        for (part in 0 until VERSION_PARTS) {
+            if (left[part] != right[part]) return left[part].compareTo(right[part])
         }
         return 0
     }
 
     /** Convenience for the guard: compares two tags, or null if either is not a version. */
-    fun compareTags(a: String, b: String): Int? {
-        val left = parse(a) ?: return null
-        val right = parse(b) ?: return null
-        return compare(left, right)
-    }
+    fun compareTags(left: String, right: String): Int? =
+        compare(parseVersion(left) ?: return null, parseVersion(right) ?: return null)
 
     /**
      * The first few lines of the release notes.
@@ -137,6 +139,7 @@ internal object Updates {
     fun summarise(body: String?, lines: Int = 6): String {
         if (body.isNullOrBlank()) return "No notes were published with this release."
         val kept = body.replace("\r\n", "\n").split('\n')
+            // Up to three leading hashes, which is every markdown heading level this ever sees.
             .map { it.trim().removePrefix("#").removePrefix("#").removePrefix("#").trim() }
             .map { if (it.startsWith("- ") || it.startsWith("* ")) "• " + it.drop(2) else it }
             .filter { it.isNotBlank() }

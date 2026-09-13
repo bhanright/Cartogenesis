@@ -113,6 +113,10 @@ val auditOnlyClasses = listOf(
     // S1: the scale-free suite's third grid. `ScaleFreeTest` holds 512 against 1024 per
     // merge; four worlds at 2048 is four minutes of erosion for one more octave of lever.
     "com.cartogenesis.worldgen.ScaleFreeAuditTest",
+    // F17's diagnosis: five seeds cut seven ways to find which rule roughens every coast, which
+    // means fifteen runs of erosion for a printed table. Its guards run at 512 in
+    // `LittoralCoastTest` and stay in the per-merge tier.
+    "com.cartogenesis.worldgen.CoastVarietyAuditTest",
     // W1's renders: the author's two worlds at 2048 in three views apiece, whole and cropped.
     // A harness like `DebugMapDump`, and asserts nothing.
     "com.cartogenesis.worldgen.W1RenderDump"

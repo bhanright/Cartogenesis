@@ -25,6 +25,69 @@ headwaters — channel cells with no upstream channel — which by definition si
 `RiverEndingsTest` follows the whole drainage and finds no breaks. Depression filling guarantees
 every land cell has a downhill path out.
 
+**A river runs from its farthest source.** A course is traced from the headwater with the longest
+way down to the water rather than from the one already carrying the most, so what the map calls a
+river holds the whole of the longest watercourse in its catchment and every other branch is drawn
+as a tributary of it. Ranking by flow instead picks a short fat tributary surprisingly often, and
+then the river's own upper half is drawn afterwards as a tributary stopping at the junction — the
+union of drawn cells is the same either way, but nothing that reads one `River` as one river is
+right. Measured on seeds 7/42/1234/99 at 512, the drawn courses cover **1.000** of the watercourses
+they stand for by cell count, against 0.780 under the biggest-headwater order (M1's own measure of
+the same defect: 0.484 at 512 and 0.408 at 2048).
+
+**A river is drawn through water narrower than itself.** A lake stands at its basin's spill level,
+which at the ends of the basin covers the channel that feeds it. Where that strip is one cell wide
+it is a river and not a lake — a cell here is 23 km at 512 down to 6 km at 2048, and the Amazon's
+mouth is about 10 — so the tracer and the renderer stop only at *open* water, meaning a lake cell
+belonging to some 2×2 square of its own lake, and run the line through the rest. Left as lake, such
+a strip was painted in flat water with no river over it, and a whole catchment's trunk crossed it as
+a one-pixel thread between two thick channels (a dotted one where the strip ran diagonally and the
+cells met only at their corners). Over seeds 7/42/1234/99 at 512, 237 channel cells stand under
+water one cell wide; before, none of them was drawn and every line that reached one stopped dead.
+
+**A river's ink stops at the shoreline.** A traced course ends *in* the water, so that the line
+reaches it rather than stopping a step short; drawn literally that put the stroke's centre a whole
+cell past the coast and the round cap that blends one cell-long segment into the next half a stroke
+beyond that again — 3.0 to 3.2 pixels of river ink lying on the open sea under F10's pen. The last
+stroke is now cut back along its own course by half its width, so the cap is tangent to the coast
+and the last pixel of the river is the shoreline pixel. Measured on 298405 and seeds 7/42/1234/99 at
+512: no stroke ends over water, and no river pixel falls on water with no land beside it (3 to 16
+before).
+
+**How wide a river is drawn is a share of the sheet.** A drawn river is a cartographic
+exaggeration, not a width to scale: the Amazon's ten-kilometre mouth is 0.08% of a
+twelve-thousand-kilometre world and would be invisible, and a printed map exaggerates a river of
+that class about threefold. So the widest stroke on a map is **0.24% of its width** — 1.2 px at
+512, 2.5 at 1024, 4.9 at 2048, 9.8 at 4096 — and the finest is a 0.8-pixel hairline, which is a
+nib rather than a width and does not grow. Between them the stroke follows Leopold and Maddock's
+square root of discharge. F10 held the full pen at five pixels whatever the size of the sheet,
+which at 2048 was right and at 1024 was twice the ink against the same country. One consequence is
+worth stating: with the hairline fixed, the range a sheet can show shrinks with it — the nib spans
+6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
+are nearly the same line, because the headwater is already the finest mark there is.
+
+**The coast is a line, not a staircase of cells.** The raster inks the landward cell of every
+land–water pair, which is right at one pixel to the cell and wrong at any other size: shrink it and
+the line thins to nothing, enlarge it and the reader is looking at the grid. So the same boundary is
+also traced off the land mask by marching squares — every vertex halfway between one land cell and
+one water cell, so it runs exactly where the raster inks — and stroked over the fill at 0.05% of the
+sheet's width, one pixel at 2048. Where four cells meet in a checkerboard the contour is closed so
+that land touching corner to corner stays one coast, which is the same assumption the flow routing
+makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
+is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
+
+**A map drawn smaller carries fewer features.** Töpfer and Pillewizer measured what cartographers
+actually kept when they derived one map from another (*The principles of selection*, The
+Cartographic Journal 3(1), 1966) and found the count went as the square root of the change in
+scale. So the number of rivers drawn is the traced count times the square root of the pixels one
+cell covers on the surface the reader is looking at: at 2048 in a laptop's pane that is about 0.44,
+and 198 of 718106's 279 rivers are drawn; at four times zoom all 279 are back; an export is drawn
+cell for pixel and never loses one. The cut is on the peak width ratio, which is the square root of
+discharge normalised over the network, so it is a cut on discharge — and because a trunk's peak is
+never below its tributaries', it can never leave a tributary hanging off a river that is not there.
+The coast is generalised the same way, by Douglas–Peucker at half a drawn pixel: 19,634 vertices at
+fit against 51,749 at four times on the same world.
+
 **Mountains come from plate tectonics, in ranges.** Uplift is applied along classified plate
 boundaries — convergent belts, subduction trenches, divergent ridges — rather than scattered. Belts
 now also vary along their length (`rangeVariation`), because a uniform ridge for a boundary's whole
@@ -57,8 +120,8 @@ coastline deciding how much of each a place gets. See "Temperature is solved, no
 they can see, so with the sea fixed at today's level no valley may continue below it and every
 coastline is a clean percentile cut. Earth's rivers cut to a stand about 120 m lower and the sea
 came back up their valleys when the ice melted, which is the Chesapeake, the Severn, Galicia's rias
-and the sounds of the Atlantic seaboard. `SeaConfig.lowstand` puts the base level 1.5% of the land's
-relief down — Earth's 120 m against eight kilometres of relief — for the first nine of the twelve
+and the sounds of the Atlantic seaboard. `SeaConfig.lowstandMetres` puts the base level 120 m down,
+read off the height field's own 16,000 m of relief, for the first nine of the twelve
 rounds and walks it up to today over the last three, so the drowned valleys collect some of the
 sediment coming down them as a real estuary does, and the deltas are built at the level the map is
 drawn at. Measured at 512 on seeds 7, 42 and 1234: river mouths lying more than three cells inside a
@@ -104,12 +167,61 @@ the largest such basin covers 1.13% of seed 718106's land with the pass off and 
 Eight passes at most, the loop stopping when a pass finds nothing left to cut: 718106's takes seven
 to stop retreating, seed 99's one.
 
-**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidthCells` of a
-coast (twenty cells at 512, scaled with resolution) is remapped onto a shallow platform at
-`shelfDepth` of the depth range, falling away to the abyss beyond. The remap touches only water,
+**Continents stand on shelves.** After the sea-level cut, the sea floor within `shelfWidthKm` of a
+coast (468.75 km, which is twenty cells at 512) is remapped onto a shallow platform at
+`shelfDepthMetres` below the shoreline, falling away to the abyss beyond. The remap touches only water,
 so no coastline moves: `ContinentalShelfTest` finds 100% of near-coast sea shallow against 60% with
 the remap off, 0–2.5% of far sea shallow, and zero land cells changed on any seed. Island arcs
 inherit the same platform, which is what makes an archipelago read as one drowned ridge.
+
+**A valley narrower than the cell is not a bay.** The lowstand above cuts a channel down to the low
+stand at every shore, and the transgression floods every one of them, so the cut used to come back
+with a notch at every stream mouth. On the grid a channel is a whole cell wide whatever it carries.
+Measured with a ruler — the coastline's length at one cell against two, which is Richardson's own
+method and, unlike a box count, has no ceiling to run into — the coast of 2.0.2 gives a dimension of
+1.582 over its finest octave against 1.260 from four cells to sixteen, and a real coast gives much
+the same figure at every scale. A disc drawn on the same grid reads 1.006 against 1.000, so the
+excess is the coast and not the ruler. Earth's coasts at six to twelve kilometres are indented by the
+Chesapeake, the Severn and the Gironde and by nothing smaller; the Rias Baixas are two to seven
+kilometres across and a 1024 map cannot hold one. So `SeaConfig.drownedValleyFill` keeps a drowned
+cell as water only where the valley behind it crosses at least half the cell, by Leopold and
+Maddock's square root of the catchment — the constant is 0.08 km per root square kilometre, measured
+off the Chesapeake, the Delaware, the Severn, the Thames and the Gironde — and where it does not, the
+cell takes the height it would have if the channel occupied the share of it that it really does.
+Because the width goes as the root of the area and the bar goes as the cell, the catchment a valley
+needs comes out as a fixed number of cells — about 39 — at every grid. New ground may never stand above the
+ground beside it, nor fail to fall towards the sea, so a valley whose walls are no higher than the
+water at its mouth is left as water. Measured on the five seeds at 512, the excess of the finest
+octave over the coarsest falls from 0.322 to 0.270 with the littoral grading alone and to 0.198 with
+both passes. What is left is not channels — filling *every* drowned notch reaches the same 0.199,
+because the two rules above and not the width bar are what stop the fill — it is the percentile cut
+running through the erosion's own texture at the cell, and it survives with the lowstand switched off
+entirely (0.288 there).
+
+**Not every coast is a ria.** The lowstand above drops the base level everywhere for nine of the
+twelve rounds, so running water works every cell within about 120 m of the shoreline and the
+transgression floods all of it. Measured at 512 pooled over the four standard seeds and 298405, that
+took the shoreline from 43,967 cells to 60,755 and the box dimension over the finest octave from
+1.22 to 1.26, on every coast alike — while the shelf remap moved the coastline not at all, the
+enclosure rule by 7% and the plate detail noise by under 1%. Earth had the same fringe six thousand
+years ago and has spent the time since filling it in where the coast is low: Texas, Holland and
+Bengal are graded arcs of beach and marsh, while Galicia, Maine and western Norway kept the outline
+the drowning gave them, and Luijendijk et al. (2018) find 31% of the ice-free shoreline sandy.
+`SeaConfig.littoralGrading` runs that six thousand years, after the cut and before the shelf. It
+ranks the shoreline by the height of the land within 187 km of it, takes Earth's third — a share
+rather than a height, because no height derivable from Earth lands on it — scales how far the fill
+reaches by the fetch in front (`H ∝ U√F`, so the square root of the open water within 500 km), and
+fills the re-entrants of that third with sweeps of a three-by-three majority. It only fills: waves
+take a cliff back 0.6 to 6 km in six thousand years, under a tenth of a cell at 2048, while the
+Mississippi's plain advanced a hundred kilometres in the same time. It never dams a channel, so the
+rias H5 cut stay open. Measured on the same five seeds at 512, with the drowned-valley
+rule above running too: the share of coast reading smooth by Australia's 1.13 rises from 0.086 to
+0.188 over 750 km stretches and from 0.141 to 0.224 over 375 km ones, against Earth's third; the
+shoreline falls 8 to 10%, the land gains 0.2 to 0.4% of the map, and no body of land or water is
+gained or lost on any seed. The world's coastline over four to sixteen cells reads 1.255 by the
+coarsened ruler against 1.260 before, which is Mandelbrot's Britain; by M1's box count the same coast
+reads 1.167 against 1.207, because a box is mixed by a
+single cell of the other kind and so that instrument counts the teeth as well as the coast.
 
 **Rivers put back what they take.** The hydraulic pass carries a sediment load down the same flow
 network it cuts with, and lays the surplus down wherever the gradient can no longer hold it:
@@ -155,10 +267,10 @@ sides of it differ by at least 10% of its mean radius where every shape a compas
 axis gives under 4%.
 
 **A delta reaches further over a shelf than into deep water.** The cost of advancing into a cell is
-one, plus one for every 1.5% of the land's relief of water standing over it — 130 m against eight
-kilometres, which is Earth's shelf break, and Earth's shelf break is where it is because that is
-roughly where the shoreline stood at the last glacial maximum, the same figure `SeaConfig.lowstand`
-uses. So a lobe spends its budget on shallow ground and progrades across a shelf the way the Nile
+one, plus one for every 130 m of water standing over it, read off the height field's own range.
+That is Earth's shelf break, and Earth's shelf break is where it is because that is roughly where
+the shoreline stood at the last glacial maximum — which is why it lands within a few metres of
+`SeaConfig.lowstandMetres`. So a lobe spends its budget on shallow ground and progrades across a shelf the way the Nile
 has, and stubs into a trench the way a delta at the head of a fjord does. On a synthetic coast with
 a shelf on one side of the mouth and water thirty times deeper on the other, the lobe reaches 3.1
 times further over the shelf; with the depth term off, 1.02 times. A lobe of more than four cells'
@@ -444,15 +556,23 @@ E8 and reverted: it cannot reach the scene it was built for (see the rift deviat
 broke three guards with no Earth figure behind them to buy 1517 cells of 4.19 million on the
 author's world at 2048. The figures are in that test and in E8's ledger row.
 
-**The lowstand roughens every coast, not only the ones a river reaches.** The base level falls
-everywhere for nine of the twelve rounds, so any ground within 1.5% of the land's relief of the
-shoreline is cut, and what the rise then floods is a fringe of small bays all round a continent as
-well as the rias at the river mouths. The renders at 2048 show both: seed 718106's middle island
-goes from a smooth outline to a crenulated one along its whole perimeter, and the shoreline
-development index rises 1.7 times where the estuary count rises tenfold. Earth's own drowned coasts
-are more selective than that — the Atlantic seaboard is indented where the rivers are and straight
-where they are not — and the likely repair is to scale the stand by the local drainage rather than
-applying it flat.
+**A graded coast is smoothed rather than built.** The littoral pass above fills a re-entrant; it
+does not throw a barrier across the mouth of one and leave a lagoon behind it, which is what Earth's
+depositional coasts actually look like — Padre Island and the Laguna Madre, the Frisian chain and
+the Wadden Sea, the Curonian Spit. Two consequences are measured. The share of coast reading smooth
+by Australia's 1.13 reaches 0.123 over 750 km stretches and 0.200 over 375 km ones, against Earth's
+third: a graded shore that is a plain arc has less of a stretch to itself than one with a lagoon
+system on it. And the world's pooled box dimension falls from 1.207 to 1.176, because a filled bay
+is one shoreline where a barred one is two. The barrier islands, the spits and the tidal inlets are
+the audit's K1, and this is the deviation that chunk closes.
+
+**A flat coast on hard rock is graded like a coastal plain.** What separates Earth's graded coasts
+from its ragged ones is not the height of the land behind them alone: Finland, the Canadian Shield
+and western Scotland are all flat, all ragged, and all rock. This generator has no lithology (the
+plan's H3), so the littoral criterion ranks coasts by the height of the land within 187 km and takes
+Earth's third of them. Measured against a fixed height instead, the postglacial rise calls 59% of
+the shoreline depositional and a coastal plain's own gradient calls 1.9% of it depositional; Earth's
+31% sits between and no height derivable from Earth lands on it.
 
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut
@@ -477,7 +597,8 @@ shaped, or a second erosion pass after the climate.
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
 run into it, and one river leaves at the outlet. River segments *inside* a lake are no longer drawn,
 since the river there is the lake — and those were precisely the segments that appeared to flow
-uphill. Depth is shaded from how far the water surface stands above the ground beneath it. (The
+uphill. (Inside *open* water, since F15; see "A river is drawn through water narrower than itself"
+above.) Depth is shaded from how far the water surface stands above the ground beneath it. (The
 spill level is now only where a lake sits when it overflows; see "A dry basin is not a full one"
 above for the basins that stand below their rims.)
 

@@ -167,8 +167,16 @@ object SeaLevelStage {
     }
 
     /**
-     * The whole stage: the percentile cut ([percentileCut]), then the enclosure rule, the drowned
-     * basins' outlets and the continental shelf, each as its [SeaConfig] switch asks for it.
+     * The whole cut: the percentile, the two rules that decide which water is sea, the two that
+     * decide what shape the shoreline is, and the continental shelf under all of it.
+     *
+     * In that order, and the order is the argument. The percentile ([percentileCut]) decides where
+     * the coastline is; [markUnreachableWaterAsLand] and [drainDrownedBasins] decide which of the
+     * water below it the ocean can actually reach; [DrownedValleys] and [LittoralGrading] move the
+     * shoreline itself, so they have to run before anything is measured from it, and the valleys go
+     * first because the grading should be asked about a coast the grid can hold rather than about
+     * the channels through it; and the shelf remap is measured from the finished shoreline and
+     * touches only water, so it runs last. Each runs as its [SeaConfig] switch asks for it.
      *
      * The shelf is a remap of the ocean floor *after* the cut has already fixed the coastline, and
      * it touches only cells [SeaLevelResult.isLand] marks as water, so no coastline moves. Three
@@ -184,7 +192,18 @@ object SeaLevelStage {
      * Shaping the shelf earlier, as a depression on oceanic crust before the percentile ran, was
      * tried and reverted; see [SeaConfig] and REALISM_PLAN.md, B1.
      */
-    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult {
+    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult =
+        applyWithValleyBar(height, config, DrownedValleys.RESOLVED_SHARE_OF_A_CELL)
+
+    /**
+     * The same cut with [DrownedValleys]' bar moved, which only the diagnosis that asks what the
+     * coast would measure with every drowned notch filled ever does. See that constant.
+     */
+    internal fun applyWithValleyBar(
+        height: FloatField,
+        config: WorldGenConfig,
+        resolvedShareOfCell: Float
+    ): SeaLevelResult {
         val seaConfig = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this is
         // cutting, not to the map that is drawn.
@@ -199,12 +218,24 @@ object SeaLevelStage {
             }
         // The basins the line above turned into land get their outlets cut, once, now that there is
         // a shoreline for them to be measured against.
-        val beforeShelf =
+        val drained =
             if (seaConfig.enclosedSeaIsLand && seaConfig.postCutOutlet) {
                 drainDrownedBasins(enclosed, height, config)
             } else {
                 enclosed
             }
+        // Then the two passes that decide what the coastline the map draws actually is. First the
+        // drowned valleys the grid cannot hold: the lowstand cut a channel to every shore and the
+        // transgression flooded all of them, and a channel a kilometre wide has no business filling
+        // a cell twelve kilometres wide. Then the six thousand years since, in which the waves grade
+        // the coasts that are low enough to be graded and leave the rest alone.
+        //
+        // The enclosure rule is not run again over what either of them leaves: both only ever turn
+        // water into land, and neither will touch a cell whose filling would cut the water around it
+        // in two, so no body of water can be enclosed by them. See [WaterTopology], and
+        // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
+        val resolved = DrownedValleys.apply(drained, height, config, resolvedShareOfCell)
+        val beforeShelf = LittoralGrading.apply(resolved, config)
         if (seaConfig.shelfWidthKm <= 0.0) return beforeShelf
 
         val cellsAcross = beforeShelf.relativeElevation.width

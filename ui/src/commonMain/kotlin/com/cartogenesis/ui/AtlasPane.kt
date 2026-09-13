@@ -44,8 +44,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
  * Where there is room, the list sits beside the detail, so picking a realm keeps its neighbours in
  * view — which is most of the point of an atlas. Where there is not, it drills down from the list
  * into the realm and back, because 320 dp of list on a 390 dp screen leaves 70 dp for the realm's
- * own page, and 70 dp is not a page. That sentence was written here when the phone was the retired
- * Android build; F8 made it true of the web build, which is the phone now.
+ * own page, and 70 dp is not a page.
  */
 @Composable
 fun AtlasPane(
@@ -70,10 +69,9 @@ fun AtlasPane(
         HorizontalDivider()
         // The list beside the detail where there is room for both, and one or the other where
         // there is not. A 320 dp column on a 390 dp screen leaves 70 dp for the realm's own page,
-        // which is where "Pick a realm." wrapped onto two lines and nothing else would have fitted
-        // at all; on a phone the list is the whole width until a realm is picked, and then the
-        // realm is, with the list one press away — which is what this file's own opening paragraph
-        // said a phone should do, written when the retired Android build was the phone.
+        // which is narrow enough that "Pick a realm." wraps onto two lines and nothing else fits
+        // at all; so on a phone the list is the whole width until a realm is picked, and then the
+        // realm is, with the list one press away.
         val drillDown = LocalWindowShape.current == WindowShape.COMPACT
         val chosen = nations.firstOrNull { it.id == selected }
         Row(Modifier.fillMaxSize()) {
@@ -112,7 +110,8 @@ fun AtlasPane(
                                 Column(Modifier.weight(1f)) {
                                     Text(nation.name, style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        "${nation.government} · ${people(nation.population)}",
+                                        "${nation.government} · " +
+                                            populationLabel(nation.population),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -247,19 +246,21 @@ private fun NationDetail(
         }
 
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Field("Realm", nation.name, Modifier.weight(1f)) { v ->
-                onEdit(nation.id) { it.copy(name = v) }
+            Field("Realm", nation.name, Modifier.weight(1f)) { typed ->
+                onEdit(nation.id) { it.copy(name = typed) }
             }
-            Field("Government", nation.government, Modifier.weight(1f)) { v ->
-                onEdit(nation.id) { it.copy(government = v) }
+            Field("Government", nation.government, Modifier.weight(1f)) { typed ->
+                onEdit(nation.id) { it.copy(government = typed) }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Field("Capital", nation.capitalName, Modifier.weight(1f)) { v ->
-                onEdit(nation.id) { it.copy(capitalName = v) }
+            Field("Capital", nation.capitalName, Modifier.weight(1f)) { typed ->
+                onEdit(nation.id) { it.copy(capitalName = typed) }
             }
-            Field("Population", nation.population.toString(), Modifier.weight(1f)) { v ->
-                onEdit(nation.id) { it.copy(population = v.filter(Char::isDigit).toLongOrNull()) }
+            Field("Population", nation.population.toString(), Modifier.weight(1f)) { typed ->
+                onEdit(nation.id) {
+                    it.copy(population = typed.filter(Char::isDigit).toLongOrNull())
+                }
             }
         }
 
@@ -274,7 +275,7 @@ private fun NationDetail(
             style = MaterialTheme.typography.bodyMedium
         )
         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            nation.source.biomeShare.take(4).forEach { (biome, share) ->
+            nation.source.biomeShare.take(BIOME_CHIPS).forEach { (biome, share) ->
                 AssistChip(
                     onClick = {},
                     label = { Text("${biomeLabel(biome)} ${(share * 100).toInt()}%", maxLines = 1) }
@@ -284,17 +285,17 @@ private fun NationDetail(
 
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("Trade", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Field("Exports", nation.exports.joinToString(", "), Modifier.fillMaxWidth()) { v ->
-            onEdit(nation.id) { it.copy(exports = splitList(v)) }
+        Field("Exports", nation.exports.joinToString(", "), Modifier.fillMaxWidth()) { typed ->
+            onEdit(nation.id) { it.copy(exports = commaSeparated(typed)) }
         }
-        Field("Imports", nation.imports.joinToString(", "), Modifier.fillMaxWidth()) { v ->
-            onEdit(nation.id) { it.copy(imports = splitList(v)) }
+        Field("Imports", nation.imports.joinToString(", "), Modifier.fillMaxWidth()) { typed ->
+            onEdit(nation.id) { it.copy(imports = commaSeparated(typed)) }
         }
 
         HorizontalDivider(Modifier.padding(vertical = 14.dp))
         Text("Description", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Field("Lore", nation.lore, Modifier.fillMaxWidth(), minLines = 5) { v ->
-            onEdit(nation.id) { it.copy(lore = v) }
+        Field("Lore", nation.lore, Modifier.fillMaxWidth(), minLines = LORE_LINES) { typed ->
+            onEdit(nation.id) { it.copy(lore = typed) }
         }
     }
 }
@@ -317,12 +318,16 @@ private fun Field(
     )
 }
 
-private fun splitList(raw: String): List<String> =
+/** A comma-separated list as the reader typed it: `iron, salt, timber`. */
+private fun commaSeparated(raw: String): List<String> =
     raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+/** Room for a paragraph of lore without the field growing under the reader as they type. */
+private const val LORE_LINES = 5
 
 // String.format is a JVM convenience and does not exist in the browser, so the rounding is
 // spelled out. Only ever a millions or thousands figure, so one decimal place is the lot.
-private fun people(population: Long): String = when {
+private fun populationLabel(population: Long): String = when {
     population >= 1_000_000 -> oneDecimal(population / 1_000_000.0) + "M"
     population >= 1_000 -> (population / 1_000.0).roundToLong().toString() + "k"
     else -> population.toString()
@@ -332,6 +337,9 @@ private fun oneDecimal(value: Double): String {
     val tenths = (value * 10).roundToLong()
     return "${tenths / 10}.${tenths % 10}"
 }
+
+/** How many biomes a realm's page names: enough to characterise it, few enough to read. */
+private const val BIOME_CHIPS = 4
 
 private fun biomeLabel(biome: Biome): String =
     biome.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }

@@ -494,7 +494,8 @@ internal object WorldSections {
                 lakes = LakeResult(
                     lakeId = ints("rivers.lakeId"),
                     lakes = lists.lakes,
-                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } }
+                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } },
+                    cellsAcross = config.width
                 )
             )
         } else null

@@ -14,9 +14,10 @@ import kotlin.test.assertTrue
 /**
  * A stored terrain has to come back exactly, and has to rebuild exactly the world it came from.
  *
- * This was the guarantee that let a world generated on the graphics card be saved at all. A save
- * has carried every stage since the container format, so nothing written today needs it; the
- * replay seam is kept, and tested, because it is what proves a stored terrain is a terrain.
+ * This is the guarantee that let a world generated on the graphics card be pinned down at all. A
+ * save has carried every stage since the container format, so nothing reaches the seam today — see
+ * [TerrainSnapshot], which says so — and it is tested anyway, because the day something does reach
+ * it, what it hands back has to be the terrain and not an approximation of one.
  */
 class TerrainSnapshotTest {
 

@@ -94,10 +94,15 @@ Each stage feeds the next, and all of them are deterministic for a given seed.
    the two seasonal temperature fields: about 2300 mm a year in a hot desert, 550 in cool temperate
    country) the lake settles below its rim, is endorheic, and the rivers end in it; a basin too dry
    to hold water at all is a playa. A basin that balances at the brim overflows as before, with an
-   outlet river leaving at the spill point. A channel is drawn as wide as the water it carries:
-   Leopold and Maddock's downstream hydraulic geometry has width going as the square root of
-   discharge, so the map's smallest stream is a 0.8-pixel thread and its biggest river a 5-pixel
-   channel, with the same pen at every resolution and export size.
+   outlet river leaving at the spill point. A course runs from its farthest headwater rather than
+   its biggest, so a river is the whole of the longest watercourse in its catchment, and it runs on
+   through water one cell wide — a lake's spill level covers the channel that feeds it, and a strip
+   of water that narrow is the river. A channel is drawn as wide as the water it carries: Leopold
+   and Maddock's downstream hydraulic geometry has width going as the square root of discharge, so
+   the map's smallest stream is a 0.8-pixel hairline and its biggest river a quarter of a percent
+   of the map's width — 2.5 pixels at 1024, 4.9 at 2048, 9.8 at 4096 — which is the same weight of
+   ink against the same country whatever size the sheet is. The stroke stops at the shoreline
+   rather than running on into the sea.
 
 ## Styles
 

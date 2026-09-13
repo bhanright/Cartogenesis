@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
+import com.cartogenesis.worldgen.pipeline.River
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -295,24 +296,28 @@ object MapRasterizer {
         val w = world.width
         val rivers = ArrayList<RiverSegment>()
         val skipInLakes = options.showLakes && options.view.showsTerrain
+        val water = world.rivers.lakes
 
         if (options.showRivers && !options.view.showsFlow) {
             world.rivers.rivers.forEach { river ->
-                for (k in 0 until river.cells.size - 1) {
+                val course = trimmedAtTheShore(world, river, w)
+                for (k in 0 until course.vertexCount - 1) {
                     val from = river.cells[k]
                     val to = river.cells[k + 1]
                     val x0 = from % w
                     val x1 = to % w
                     val y0 = (from / w) + 0.5f
                     val y1 = (to / w) + 0.5f
-                    val width = RiverPen.widthPixels(river.widthRatio[k])
+                    val width = RiverPen.widthPixels(river.widthRatio[k], w)
+                    // The last drawn segment stops short of the water, so the round cap's outer
+                    // edge lands on the shoreline; [trimmedAtTheShore] says why.
+                    val reach = if (k == course.vertexCount - 2) course.lastFraction else 1f
 
-                    // Inside a lake the river *is* the lake. Drawing it would put a channel across
-                    // open water — and these are exactly the segments that run uphill on raw
-                    // terrain, because the basin was raised to let the water out.
-                    if (skipInLakes && world.rivers.lakes.isLake(from) &&
-                        world.rivers.lakes.isLake(to)
-                    ) continue
+                    // Inside open water the river *is* the lake. Drawing it would put a channel
+                    // across the surface — and these are exactly the segments that run uphill on
+                    // raw terrain, because the basin was raised to let the water out. A strip of
+                    // lake one cell wide is not open water and is drawn; see `LakeResult.openWater`.
+                    if (skipInLakes && water.isOpenWater(from) && water.isOpenWater(to)) continue
 
                     if (abs(x1 - x0) > w / 2) {
                         // The river crosses the east-west seam. Drawing it as-is would streak a
@@ -320,13 +325,28 @@ object MapRasterizer {
                         // stopping dead at the edge. Draw it twice instead, shifted a map-width
                         // each way, so it runs off one side and arrives on the other.
                         val shifted = if (x1 > x0) x1 - w else x1 + w
-                        rivers.add(RiverSegment(x0 + 0.5f, y0, shifted + 0.5f, y1, width))
+                        rivers.add(
+                            RiverSegment(
+                                x0 + 0.5f, y0,
+                                x0 + 0.5f + reach * (shifted - x0), y0 + reach * (y1 - y0), width
+                            )
+                        )
                         val back = if (x1 > x0) x0 + w else x0 - w
-                        rivers.add(RiverSegment(back + 0.5f, y0, x1 + 0.5f, y1, width))
+                        rivers.add(
+                            RiverSegment(
+                                back + 0.5f, y0,
+                                back + 0.5f + reach * (x1 - back), y0 + reach * (y1 - y0), width
+                            )
+                        )
                         continue
                     }
 
-                    rivers.add(RiverSegment(x0 + 0.5f, y0, x1 + 0.5f, y1, width))
+                    rivers.add(
+                        RiverSegment(
+                            x0 + 0.5f, y0,
+                            x0 + 0.5f + reach * (x1 - x0), y0 + reach * (y1 - y0), width
+                        )
+                    )
                 }
             }
         }
@@ -405,6 +425,70 @@ object MapRasterizer {
         }
         return MapOverlay(rivers, glyphs, flow, flowScale,
             options.style.river, 0xFF241C14.toInt(), 1f)
+    }
+
+    /**
+     * How much of a river's course to draw: every vertex up to [vertexCount], with the last
+     * segment run only [lastFraction] of the way to its far end.
+     */
+    private class DrawnCourse(val vertexCount: Int, val lastFraction: Float)
+
+    /**
+     * A course cut back so that the ink stops at the shoreline instead of pooling beyond it.
+     *
+     * A traced course ends *in* the water: the last cell is the sea cell, or the open-water cell,
+     * that the last cell on land drains into, kept so the line reaches the water rather than
+     * stopping a step short of it. Drawn literally that puts the centre of the stroke a whole cell
+     * past the coast, and the round cap that blends one cell-long segment into the next then adds
+     * half a stroke on top of that. Measured on seeds 7/42/1234/99 at 512 under F10's five-pixel
+     * pen, the ink reached 3.0 to 3.2 pixels past the shoreline — a blob of river sitting on the
+     * open sea, which is what William saw at the widest mouth of seed 298405 (F15).
+     *
+     * A round cap centred half a stroke back from the shore, on the other hand, is tangent to it:
+     * the last pixel of the stroke is the shoreline pixel and the sea takes over with no seam. So
+     * the course is walked back from the shore — which is the edge between the last cell on land
+     * and the water, half a step past that cell's centre — until half a stroke has been given up,
+     * and the stroke ends there. Every vertex closer than that goes, because a round cap at a
+     * vertex within half a stroke of the shore would cross it just as the end cap did.
+     *
+     * A course that ends on land is a tributary stopping on the trunk it joins, and is left whole.
+     */
+    private fun trimmedAtTheShore(world: WorldMap, river: River, cellsAcross: Int): DrawnCourse {
+        val cells = river.cells
+        val whole = DrawnCourse(cells.size, 1f)
+        if (cells.size < 3) return whole
+        val mouth = cells[cells.size - 1]
+        val lastOnLandIndex = cells.size - 2
+        val intoWater = !world.sea.isLand[mouth] || world.rivers.lakes.isOpenWater(mouth)
+        if (!intoWater) return whole
+
+        val half = RiverPen.widthPixels(river.widthRatio[lastOnLandIndex], cellsAcross) / 2f
+        val toTheShore = stepLength(cells[lastOnLandIndex], mouth, cellsAcross) / 2f
+        if (toTheShore >= half) {
+            // The stroke ends on the last step, between that cell's centre and the shoreline.
+            return DrawnCourse(cells.size, (toTheShore - half) / (2f * toTheShore))
+        }
+
+        var owed = half - toTheShore
+        var vertex = lastOnLandIndex
+        while (vertex > 0) {
+            val step = stepLength(cells[vertex - 1], cells[vertex], cellsAcross)
+            if (owed <= step) return DrawnCourse(vertex + 1, (step - owed) / step)
+            owed -= step
+            vertex--
+        }
+        // A course shorter than its own pen: leave it whole rather than draw a dot. It takes a
+        // headwater-length reach carrying a trunk's water, which the widths make near impossible.
+        return whole
+    }
+
+    /** Distance between two cells' centres, in cells, across the east-west seam if need be. */
+    private fun stepLength(from: Int, to: Int, cellsAcross: Int): Float {
+        var dx = to % cellsAcross - from % cellsAcross
+        if (dx > cellsAcross / 2) dx -= cellsAcross
+        if (dx < -cellsAcross / 2) dx += cellsAcross
+        val dy = to / cellsAcross - from / cellsAcross
+        return sqrt((dx * dx + dy * dy).toFloat())
     }
 
     /** Shape carries the kind, so the map stays readable in greyscale and without a legend. */

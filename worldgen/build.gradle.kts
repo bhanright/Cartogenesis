@@ -103,7 +103,11 @@ val auditOnlyClasses = listOf(
     // E7: whether a rift floor of sub-basins holds more water than E4's smooth wedge can only be
     // answered in the author's own trough at 2048 — `RiftDepthTest` measures the same question at
     // 512 and records that nothing there can. Two 2048 worlds for one comparison is an audit's job.
-    "com.cartogenesis.worldgen.RiftDepthAuditTest"
+    "com.cartogenesis.worldgen.RiftDepthAuditTest",
+    // F18: the network statistics and the moved-cell tally need every world generated twice, once
+    // under each routing rule — ten worlds, a pair of them at 1024. The census that guards the
+    // chunk is in `StraightRunTest` and runs per merge.
+    "com.cartogenesis.worldgen.StraightRunAuditTest"
 )
 
 tasks.named<Test>("jvmTest") {

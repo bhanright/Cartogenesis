@@ -14,9 +14,10 @@ zones](https://worldbuildingpasta.blogspot.com/2020/05/an-apple-pie-from-scratch
 
 ## Held by construction
 
-**Rivers never split.** Measured 0 splits across all seeds. D8 routing gives every cell exactly one
-downstream neighbour, so the drawn network is a forest — a river physically cannot fork. This is the
-single most common river sin and the pipeline cannot commit it.
+**Rivers never split.** Measured 0 splits across all seeds. The routing gives every cell exactly one
+downstream neighbour — the direction is taken from the steepest facet and the receiver drawn across
+it, but it is still one receiver — so the drawn network is a forest and a river physically cannot
+fork. This is the single most common river sin and the pipeline cannot commit it.
 
 **Rivers never run coast to coast.** Measured 0 rivers rising on the shoreline. Sources are
 headwaters — channel cells with no upstream channel — which by definition sit inland.
@@ -250,6 +251,29 @@ is a real landform and is left alone. With the clamp the incision makes none, an
 the map ends up drawing as standing water fall from 1627 to 780 on seed 718106, 106 to 54 on 42 and
 323 to 265 on 7. On the author's own world at 1024 the lakes go from 25 to 17 and the standing water
 from 1.60% of the land to 0.49%. See `ReceiverClampTest`.
+
+**A river crossing smooth ground does not run in a ruled line.** Eight neighbours cannot express a
+slope that faces between two of them, so on ground that is a plane at the cell scale — the apron
+below a range, laid by deposition and worn smooth by the thermal relaxation — the steepest of the
+eight is the same neighbour at every cell and the water runs dead straight for as far as the plane
+goes. That is the grid speaking rather than the ground: a real apron has relief at scales a
+six-to-twenty-three-kilometre cell cannot hold, and a real river crossing one wanders. Left alone
+the stream power cuts a ruled trench along such a run, the trench ponds behind its own lip, and the
+map grows a lake shaped like a ruler — the "diagonal rectangle" the author found on seed 298405 at
+1024, 53 cells all within 1.06 of one line and running 20.1 cells along it. The direction is
+therefore read off the surface, not off the neighbour list: Tarboton's steepest triangular facet
+(1997) gives the true bearing, and the single receiver every stage downstream needs is drawn across
+that facet at the bearing's own share, which is Fairfield and Leymarie's Rho8 (1991). A reach four
+fifths of the way toward the diagonal takes the diagonal four steps in five. Where the facet's
+descent points out of the facet the answer collapses to the old steepest-neighbour one exactly,
+which is what an incised channel always does — over the channel cells of five worlds the runner-up
+carries 0.155 of the winner's slope on average — so the rule bites on smooth ground and almost
+nowhere else. Measured on the apron the trench crossed, before erosion touched it: seven cells
+running one bearing with the drop to the winning diagonal 1.9489e-02 and to the runner-up
+1.5050e-02, the same two figures to four digits at every cell, which is a plane facing 83% of the
+way toward the diagonal and not a tie. Census of standing water within 1.2 cells of one line and
+twenty cells long: 1/0/0/0/0 on 298405 at 1024 and 7/42/1234/99 at 512 before, 0/0/0/0/0 after. See
+`StraightRunTest`, and `REALISM_PLAN.md`, F18, for the figures.
 
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as

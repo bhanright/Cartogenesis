@@ -19,9 +19,10 @@ import kotlin.test.assertTrue
  * from the steepest triangular facet and draws the one receiver across it, so a course crossing an
  * apron follows the same slope without being ruled.
  *
- * Both halves are measured here: the census on the five seeds with the rule in place, and the same
- * census on the same seeds with [WorldGenConfig.facetRouting] off, which is the plain rule this
- * replaced. The second is what makes the first worth reading.
+ * Two things are asked. That no standing water on the five seeds is shaped like a ruled line, which
+ * is the artefact itself and is rare. And that the old rule, kept under [WorldGenConfig.facetRouting]
+ * and run on the same day, still draws more of the map with a ruler than the new one — which is the
+ * defect itself, is on every map, and is what makes the census above worth reading.
  */
 class StraightRunTest {
 
@@ -33,6 +34,9 @@ class StraightRunTest {
         /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val STANDARD_SIDE = 512
+
+        /** The seed the live control runs on: the most ruled runs of the four at 512. */
+        const val CONTROL_SEED = 42L
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
@@ -45,14 +49,23 @@ class StraightRunTest {
     /**
      * The census, on the five seeds F15 took it on.
      *
-     * Measured on the merge base (7b38716, the plain rule) at **1 / 0 / 0 / 0 / 0** on
+     * Measured on the merge base (7b38716, before any of this branch) at **1 / 0 / 0 / 0 / 0** on
      * 298405 at 1024 and 7, 42, 1234, 99 at 512 — the one being William's own, 53 cells at
-     * (503, 866), every cell within 1.06 of the line it runs 20.1 cells along. F15's note in
-     * `TODO.md` records 1/0/0/1/2 for the same census; the two other bodies it counted are a
-     * 28-cell body on 1234 that is 16.1 cells long and two on 99 that are 9.3 and 12.4, all of them
-     * short of the twenty cells a bar has to run, and F15's figure came from a least-squares axis
-     * rather than from the narrowest strip. Counting bodies of twenty *cells* instead of twenty
-     * cells of *length* reproduces F15's seeds exactly bar one: 1/0/0/1/1.
+     * (503, 866), every cell within 1.06 of the line it runs 20.1 cells along. With the facet rule
+     * and nothing else changed it read 0 / 0 / 0 / 0 / 0, which is what this asserts.
+     *
+     * `TODO.md` records F15's own figure for the same census as 1/0/0/1/2. The three other bodies
+     * it counted are a 28-cell one on 1234 that is 16.1 cells long and two on 99 at 9.3 and 12.4,
+     * all short of the twenty a bar has to run; F15 measured against a least-squares axis rather
+     * than the narrowest strip, and counted cells rather than length. Counting bodies of twenty
+     * *cells* here reproduces F15's seeds bar one, at 1/0/0/1/1.
+     *
+     * A ruled bar needs a ruled course *and* a lip for it to pond behind, and the second is chance:
+     * one of these five worlds had one. That makes the census a poor way to tell one routing rule
+     * from another — the sill fix committed beside this one moves the terrain enough that 298405
+     * stops ponding under the old rule as well, so running the old rule here now counts zero too.
+     * What separates the rules on every seed is the ruled *course*, which is the defect itself;
+     * see the case below.
      */
     @Test
     fun `no standing water is a ruled bar`() {
@@ -61,7 +74,7 @@ class StraightRunTest {
         val seeds = listOf(AUTHORS_SEED to AUTHORS_SIDE) + STANDARD_SEEDS.map { it to STANDARD_SIDE }
         seeds.forEach { (seed, side) ->
             val world = world(seed, side)
-            val bars = StraightWaterBars.ruledBarsOf(world)
+            val bars = RuledLines.ruledBarsOf(world)
             counted += "$seed@$side=${bars.size}"
             total += bars.size
             bars.forEach { println("F18 BAR on $seed@$side: $it") }
@@ -75,20 +88,26 @@ class StraightRunTest {
     }
 
     /**
-     * The same census against the rule this replaced, so the one above is known to discriminate.
+     * The rule this replaced draws more of the map with a ruler, on the same seed and the same day.
      *
-     * Only William's own world, and only because it is the one that carries the defect: generating
-     * the other four twice over to count zero twice proves nothing the case above does not, and
-     * this class already generates five worlds. The audit tier runs the control on all five.
+     * The live control, and the reason the census above is worth reading. A run of seven steps on
+     * one bearing is 40 to 160 km of watercourse without a bend at these grids; the plain rule
+     * leaves more of them than the facet rule on every seed measured — 73/27/39/17/30 against
+     * 64/22/33/13/21 on 298405 at 1024 and on 7/42/1234/99 at 512 — and one seed at 512 keeps
+     * proving that per merge. The audit tier runs the whole table.
      */
     @Test
-    fun `the plain steepest-neighbour rule fails that census`() {
-        val bars = StraightWaterBars.ruledBarsOf(world(AUTHORS_SEED, AUTHORS_SIDE, byFacet = false))
-        bars.forEach { println("F18 CONTROL bar on $AUTHORS_SEED@$AUTHORS_SIDE: $it") }
+    fun `the old rule draws more of the map with a ruler`() {
+        val plain = RuledLines.ruledRunsOf(world(CONTROL_SEED, STANDARD_SIDE, byFacet = false))
+        val facet = RuledLines.ruledRunsOf(world(CONTROL_SEED, STANDARD_SIDE))
+        println(
+            "F18 ruled runs of ${RuledLines.RULED_RUN_CELLS}+ on $CONTROL_SEED@$STANDARD_SIDE: " +
+                "steepest neighbour $plain, steepest facet $facet"
+        )
         assertTrue(
-            bars.isNotEmpty(),
-            "the steepest-neighbour control produced no ruled bar on $AUTHORS_SEED at " +
-                "$AUTHORS_SIDE, so the census above cannot tell the two rules apart"
+            facet < plain,
+            "the facet rule left $facet ruled runs against the plain rule's $plain, so the two " +
+                "cannot be told apart and the census above proves nothing"
         )
     }
 

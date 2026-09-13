@@ -173,32 +173,8 @@ internal object LakeWaterBalance {
      * smallest real cell-to-cell drop the routing has to respect — a basin floor measured at 2048
      * falls by 3e-3 to 1.3e-2 per cell — so nowhere with genuine relief in it is moved at all.
      */
-    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float {
-        val lattice = (width / JITTER_PERIOD).coerceAtLeast(1)
-        val gx = x / JITTER_PERIOD
-        val gy = y / JITTER_PERIOD
-        val fx = (x - gx * JITTER_PERIOD).toFloat() / JITTER_PERIOD
-        val fy = (y - gy * JITTER_PERIOD).toFloat() / JITTER_PERIOD
-        // Smoothstep, so the field has no creases on the lattice lines for a path to follow.
-        val sx = fx * fx * (3f - 2f * fx)
-        val sy = fy * fy * (3f - 2f * fy)
-        val x0 = gx % lattice
-        val x1 = (gx + 1) % lattice
-        val top = lerp(hash(x0, gy, seed), hash(x1, gy, seed), sx)
-        val bottom = lerp(hash(x0, gy + 1, seed), hash(x1, gy + 1, seed), sx)
-        return lerp(top, bottom, sy) * JITTER_AMPLITUDE
-    }
-
-    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
-
-    /**
-     * One lattice corner's value in -1..1, from [FlowRouting.seededNoise] — the same mixing the
-     * routing's own draw uses, sampled here on the lattice rather than per cell.
-     */
-    private fun hash(ix: Int, iy: Int, seed: Long): Float = FlowRouting.seededNoise(ix, iy, seed)
-
-    /** Cells across one period of the jitter field: short enough to bend a path inside one basin. */
-    private const val JITTER_PERIOD = 8
+    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float =
+        FlowRouting.smoothSeededField(width, x, y, seed) * JITTER_AMPLITUDE
 
     private const val JITTER_AMPLITUDE = 1e-5f
 

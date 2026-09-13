@@ -6,7 +6,8 @@ import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * Standing water shaped like a ruled line: the artefact F18 was dispatched to remove, measured.
+ * The two ways a map can come out ruled, measured: a course that holds one bearing for cell after
+ * cell, and the standing water such a course leaves behind it.
  *
  * William saw one on seed 298405 at 1024 and called it "this diagonal rectangle section of river"
  * — 53 cells laid along one diagonal with square ends, in a straight-walled trench. F15 diagnosed
@@ -27,7 +28,7 @@ import kotlin.math.hypot
  * the least-squares axis through the cells is one particular line and answers a weaker question.
  * Half the strip's width is the furthest any cell sits from the line down its middle.
  */
-internal object StraightWaterBars {
+internal object RuledLines {
 
     /**
      * How far a cell may lie from the line and still count as on it.
@@ -68,6 +69,70 @@ internal object StraightWaterBars {
                     offsetFromTheLine, lengthAlongTheLine
                 )
     }
+
+    /**
+     * How many drawn reaches hold one bearing for [atLeast] steps together.
+     *
+     * The defect itself, rather than the rare thing it occasionally leaves behind. A ruled bar of
+     * standing water needs a ruled course *and* a lip for it to pond behind, and the second is
+     * chance: one map in five carries one. A ruled course is on every map, in quantity, and it is
+     * what the eye reads as a river drawn with a ruler — so this is the figure that can tell one
+     * routing rule from another on any seed, where the census can only do it on the seed that
+     * happened to pond.
+     *
+     * Seven is where a run stops being something country does and starts being something a grid
+     * does. A real river holds a bearing for a few cells at a time — over a cell of 6 to 23 km,
+     * seven steps is 40 to 160 km of watercourse without a bend, which the Rhine and the Mississippi
+     * manage only where they are confined. Counted over the drawn courses alone, since those are
+     * what a reader sees, and only where both ends of a step are drawn channel rather than lake.
+     */
+    fun ruledRunsOf(world: WorldMap, atLeast: Int = RULED_RUN_CELLS): Int {
+        val cellsAcross = world.width
+        val drawn = BooleanArray(cellsAcross * world.height)
+        world.rivers.rivers.forEach { river ->
+            river.cells.forEach { cell ->
+                if (world.sea.isLand[cell] && !world.rivers.lakes.isLake(cell)) drawn[cell] = true
+            }
+        }
+
+        var ruled = 0
+        world.rivers.rivers.forEach { river ->
+            var run = 1
+            var lastEast = OFF_THE_COMPASS
+            var lastSouth = OFF_THE_COMPASS
+            for (step in 0 until river.cells.size - 1) {
+                val from = river.cells[step]
+                val to = river.cells[step + 1]
+                if (!drawn[from] || !drawn[to]) {
+                    if (run >= atLeast) ruled++
+                    run = 1
+                    lastEast = OFF_THE_COMPASS
+                    lastSouth = OFF_THE_COMPASS
+                    continue
+                }
+                var east = to % cellsAcross - from % cellsAcross
+                if (east > cellsAcross / 2) east -= cellsAcross
+                if (east < -cellsAcross / 2) east += cellsAcross
+                val south = to / cellsAcross - from / cellsAcross
+                if (east == lastEast && south == lastSouth) {
+                    run++
+                } else {
+                    if (run >= atLeast) ruled++
+                    run = 1
+                }
+                lastEast = east
+                lastSouth = south
+            }
+            if (run >= atLeast) ruled++
+        }
+        return ruled
+    }
+
+    /** See [ruledRunsOf]. */
+    const val RULED_RUN_CELLS = 7
+
+    /** No bearing, so the first step of a course never continues a run. */
+    private const val OFF_THE_COMPASS = 99
 
     /** Every lake body on the world, measured. Cells are grouped by lake id, which is per basin. */
     fun bodiesOf(world: WorldMap): List<WaterBody> {

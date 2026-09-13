@@ -134,7 +134,15 @@ class DepositionTest {
      * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
      * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
      */
-    private val startingPointLand = 6327
+    /**
+     * And once more at F18, which changes how the water is routed and so what the twelve hydraulic
+     * rounds cut: the direction is now taken from the steepest triangular facet with the receiver
+     * drawn across it, rather than snapped to the steepest of the eight neighbours. Different rock
+     * under the same percentile is a different set of cells below it, and the land moved from 6327
+     * to 6345 at 128 on seed 42. The cut itself has not: exactly 62% of the cells still lie below
+     * it, and the three structural cases below are untouched.
+     */
+    private val startingPointLand = 6345
 
     @Test
     fun `every round conserves mass`() {

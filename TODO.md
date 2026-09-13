@@ -1,20 +1,14 @@
 # To do
 
-- **A lake can be a dead-straight diagonal bar.** On seed 298405 at 1024 one of the eight lakes —
-  53 cells at (509,860), every one of them within 1.2 cells of a single straight line — is drawn as
-  a rectangle laid on the diagonal with square ends, in a straight-walled trench beside it. It is
-  the artefact William called "this diagonal rectangle section of river" (F15). Diagnosed and not
-  fixed: it survives with the outlet incision off, with deposition off and with the post-cut outlet
-  off, at the same place and the same size each time, and disappears only with erosion switched off
-  altogether — so what cuts the trench is the ordinary stream-power incision, and what makes it
-  straight is D8 itself, which on ground smooth at the cell scale (here the apron below a range)
-  takes the same neighbour twenty cells running. The reach then ponds behind its own lip, the fill
-  raises it, and `findLakes` calls it standing water. Rare: a census of straight bars of 20 cells or
-  more finds 1 on 298405 at 1024, 0 on seeds 7 and 42 at 512, 1 on 1234 and 2 on 99. The repair is
-  to break D8's straight-line bias on smooth ground — `LakeWaterBalance.jitter` already does exactly
-  this inside an endorheic basin's re-routing, and the same idea in `FlowRouting.flowDirections`
-  would do it everywhere — but `FlowRouting` is shared with erosion, so it moves every world's
-  terrain and belongs in a chunk that can render and review the lot. 2026-09-12.
+- ~~**A lake can be a dead-straight diagonal bar.**~~ Fixed at F18 (2026-09-13). The cause was not a
+  tie among near-equal descents, as the jitter's case would have been: on the apron the trench
+  crossed, the drop to the winning diagonal was 1.9489e-02 and to the runner-up 1.5050e-02, the same
+  two figures to four digits at seven cells running. The plane simply faces 83% of the way from the
+  cardinal toward the diagonal, and rounding a bearing to one of eight makes that 100% every time.
+  `FlowRouting.flowDirections` now takes the direction from Tarboton's steepest triangular facet and
+  draws the one receiver across it at the bearing's own share (Rho8), so the course follows the same
+  slope without being ruled. Census of straight bars 1/0/0/0/0 before, 0/0/0/0/0 after. See
+  `StraightRunTest` and `GEOGRAPHY.md`.
 - **A basin can be left standing at the waterline behind a sill at the waterline.** The post-cut
   outlet stops when it has cut a sill to the shoreline, correctly, and 10/5/23/22 hollows survive
   that on seeds 7/42/1234/99 at 512 over 15/12/189/47 cells. On Earth a barrier within a storm

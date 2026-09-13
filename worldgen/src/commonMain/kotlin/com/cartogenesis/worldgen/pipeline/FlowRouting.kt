@@ -19,7 +19,7 @@ import kotlin.math.sqrt
 internal object FlowRouting {
 
     /** Raised by this much per step when flooding a flat, so filled ground still has a gradient. */
-    private const val EPSILON = 1e-6f
+    const val EPSILON = 1e-6f
 
     /**
      * Raises every hollow to the level of its lowest outlet, so no cell is left without a downhill
@@ -102,20 +102,23 @@ internal object FlowRouting {
      * the way from the cardinal to the diagonal.
      *
      * The whole flow then goes to *one* of the two, drawn at that share — Fairfield and Leymarie's
-     * Rho8 (1991, *Water Resources Research* 27(5), 709-717), which was written for exactly this
-     * defect. Every stage downstream of this one needs one receiver per cell: the drainage is a
-     * forest, a river cannot fork, and the incision walks the tree from the outlets upstream. So
-     * the split is spent on *which* cell rather than on how much, and a reach whose true bearing
-     * lies four fifths of the way toward the diagonal takes the diagonal four steps in five and the
-     * cardinal the fifth, which is a course that follows the same slope without being ruled.
+     * Rho8 (1991, *Water Resources Research* 27(5), 709-717), which was written for this defect.
+     * Every stage below this one needs a single receiver: the drainage is a forest, a river cannot
+     * fork, and the incision walks the tree from the outlets upstream. So the split is spent on
+     * *which* cell rather than on how much, and a reach whose true bearing lies four fifths of the
+     * way toward the diagonal takes the diagonal four steps in five — the same slope, without the
+     * ruled line. Where the facet's descent points out of the facet, which is what an incised
+     * channel always does, the answer collapses to the steepest neighbour exactly.
      *
-     * The draw is a plain hash of the cell and the world's seed, not the smooth field
-     * [LakeWaterBalance.jitter] lays down, and the difference is the point. That field exists to
-     * give ground with *no* gradient one to follow, where an unrelated choice per cell would leave
-     * the path staggering on the spot. Here the gradient is already known and the draw only decides
-     * how to round it, and what does the rounding in nature is the relief between one cell and the
-     * next — which is sub-grid, and therefore uncorrelated at this scale. The two share the hash
-     * and nothing else.
+     * The draw is a per-cell hash of the world's seed, and it shares that hash with
+     * [LakeWaterBalance.jitter] and nothing else. The jitter's own field is smoothed over eight
+     * cells, deliberately, because its job is to give ground with *no* gradient one to follow and a
+     * value that changed from cell to cell would leave the path staggering on the spot. Reading the
+     * draw off that same smooth field was tried here and does nothing at all: a reach twenty cells
+     * long sits inside one period, draws one value, and rounds every one of its bearings the same
+     * way, which is the ruled line again — measured on seed 42 at 512, 39 ruled runs against the
+     * plain rule's 39. The two questions want opposite fields. This one wants relief between one
+     * cell and the next, which is sub-grid and so uncorrelated at this scale.
      *
      * Two invariants hold, and everything downstream rests on them. The receiver is always strictly
      * lower on [filled] than the cell itself — where the drawn share is strictly between the ends,
@@ -140,7 +143,6 @@ internal object FlowRouting {
         seed: Long,
         byFacet: Boolean = true
     ): IntArray {
-        if (!byFacet) return steepestNeighbours(width, height, isLand, elevation, filled)
         val target = IntArray(width * height) { -1 }
         val routingSurface = filled.data
         val trueGround = elevation.data
@@ -149,6 +151,12 @@ internal object FlowRouting {
                 val cell = y * width + x
                 if (!isLand[cell]) continue
                 val here = routingSurface[cell]
+                if (!byFacet) {
+                    target[cell] = steepestNeighbourOf(
+                        width, height, isLand, trueGround, routingSurface, x, y
+                    )
+                    continue
+                }
 
                 var steepestFacet = 0f
                 var facetCardinal = -1
@@ -216,55 +224,82 @@ internal object FlowRouting {
     }
 
     /**
-     * The steepest of the eight neighbours, which is what the water followed before F18.
+     * The steepest of the eight neighbours, which is what the water followed everywhere before F18
+     * and still follows on ground the fill had to raise.
      *
-     * Kept because a guard that has only ever been green proves nothing: the straight-bar census
-     * is run against this as well as against [flowDirections]'s own answer, and asserts that this
-     * one fails it. See `REALISM_PLAN.md`, F18.
+     * Also the whole rule when [flowDirections] is asked for it, because a guard that has only ever
+     * been green proves nothing: the straight-bar census is run against this as well as against the
+     * facet's answer, and asserts that this one fails it. See `REALISM_PLAN.md`, F18.
      */
-    private fun steepestNeighbours(
+    private fun steepestNeighbourOf(
         width: Int,
         height: Int,
         isLand: BooleanArray,
-        elevation: FloatField,
-        filled: FloatField
-    ): IntArray {
-        val target = IntArray(width * height) { -1 }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val cell = y * width + x
-                if (!isLand[cell]) continue
-
-                var steepest = -1
-                var steepestDrop = 0f
-                val here = filled.data[cell]
-                forEachNeighbourWithDistance(width, height, x, y) { neighbour, distance ->
-                    // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-                    val there =
-                        if (isLand[neighbour]) filled.data[neighbour] else elevation.data[neighbour]
-                    val drop = (here - there) / distance
-                    if (drop > steepestDrop) {
-                        steepestDrop = drop
-                        steepest = neighbour
-                    }
-                }
-                target[cell] = steepest
+        trueGround: FloatArray,
+        routingSurface: FloatArray,
+        x: Int,
+        y: Int
+    ): Int {
+        var steepest = -1
+        var steepestDrop = 0f
+        val here = routingSurface[y * width + x]
+        forEachNeighbourWithDistance(width, height, x, y) { neighbour, distance ->
+            // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
+            val there = if (isLand[neighbour]) routingSurface[neighbour] else trueGround[neighbour]
+            val drop = (here - there) / distance
+            if (drop > steepestDrop) {
+                steepestDrop = drop
+                steepest = neighbour
             }
         }
-        return target
+        return steepest
     }
 
     /**
-     * A number in 0..1 standing for the relief between one cell and the next that a grid this
-     * coarse cannot hold, which is what decides a step the slope itself leaves open.
+     * A number in 0..1 standing for the relief a grid this coarse cannot hold, which is what
+     * decides a step the slope itself leaves open.
      *
-     * Uncorrelated between neighbouring cells on purpose; see [flowDirections]. Salted so it is
-     * independent of [LakeWaterBalance.jitter], which mixes the same seed for a different question.
+     * The same smooth field [LakeWaterBalance.jitter] is built on, salted so the two decisions are
+     * independent, and smooth for the reason that one is: a value that changes from cell to cell
+     * makes each cell round its bearing on its own and the course staggers, while a field that
+     * turns over a few cells rounds a whole reach one way and the next reach the other, which is a
+     * course that meanders. It also keeps neighbouring flow lines agreeing with each other, so a
+     * hillside's drainage stays the coherent thing the terrain says it is instead of being
+     * scrambled cell by cell — which matters more than the wander itself, because everything below
+     * this reads that network: the basins, their spills, and the sills the outlet pass has to cut.
      */
     private fun subGridDraw(x: Int, y: Int, seed: Long): Float =
         (seededNoise(x, y, seed xor SUB_GRID_DRAW_SALT) + 1f) * 0.5f
 
     private const val SUB_GRID_DRAW_SALT = 0x5f3a91c7_2b64d8e3L
+
+    /**
+     * Value noise in -1..1 on a lattice of [SMOOTH_FIELD_PERIOD] cells, smoothstepped between the
+     * corners so the field has no creases on the lattice lines for a path to follow.
+     *
+     * Shared: [LakeWaterBalance.jitter] scales it to nudge exactly-flat ground, and [subGridDraw]
+     * reads it as a quantile. Integer mixing at the corners, so every platform agrees.
+     */
+    fun smoothSeededField(width: Int, x: Int, y: Int, seed: Long): Float {
+        val lattice = (width / SMOOTH_FIELD_PERIOD).coerceAtLeast(1)
+        val cornerX = x / SMOOTH_FIELD_PERIOD
+        val cornerY = y / SMOOTH_FIELD_PERIOD
+        val alongX = (x - cornerX * SMOOTH_FIELD_PERIOD).toFloat() / SMOOTH_FIELD_PERIOD
+        val alongY = (y - cornerY * SMOOTH_FIELD_PERIOD).toFloat() / SMOOTH_FIELD_PERIOD
+        val easedX = alongX * alongX * (3f - 2f * alongX)
+        val easedY = alongY * alongY * (3f - 2f * alongY)
+        val west = cornerX % lattice
+        val east = (cornerX + 1) % lattice
+        val top = lerp(seededNoise(west, cornerY, seed), seededNoise(east, cornerY, seed), easedX)
+        val bottom =
+            lerp(seededNoise(west, cornerY + 1, seed), seededNoise(east, cornerY + 1, seed), easedX)
+        return lerp(top, bottom, easedY)
+    }
+
+    private fun lerp(from: Float, to: Float, at: Float): Float = from + (to - from) * at
+
+    /** Cells across one period: short enough to bend a course inside one reach. */
+    private const val SMOOTH_FIELD_PERIOD = 8
 
     /**
      * One lattice point's value in -1..1. Integer mixing only, so every platform agrees.

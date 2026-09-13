@@ -12,8 +12,8 @@ import kotlin.test.assertTrue
  * On a slope it is: the floor crosses the level once, and the pixels near that crossing are a curve
  * a pixel or so wide. On an abyssal plain it is not. The floor there is level to within its own
  * roughness over a whole basin, so the level of any contour lying in it is crossed again and again,
- * and the drawing fills the open sea with a ragged nest of closed loops that say nothing. The first
- * render review of F13 caught it in the open basin of seed 718106 at 2048.
+ * and the drawing fills the open sea with a ragged nest of closed loops that say nothing. A render
+ * review caught it in an open basin at 2048; see REALISM_PLAN.md, F13.
  *
  * The floor below is made rather than generated, for the same reason the cone in `ReliefShadingTest`
  * is: the defect is a property of flat ground, and a made floor has exactly as much flat ground as

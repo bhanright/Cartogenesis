@@ -9,9 +9,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
- * A save carries the world now, and compression is a platform seam — the JVM's `java.util.zip`
- * and, since this chunk, a browser's `CompressionStream` — so nothing before this proved the two
- * actually agree on what "gzip" means rather than each merely reading its own writing back.
+ * A save carries the world, and compression is a platform seam — the JVM's `java.util.zip` and a
+ * browser's `CompressionStream` — so without this nothing proves the two agree on what "gzip"
+ * means rather than each merely reading its own writing back.
  *
  * [GZIP_FIXTURE_BASE64] is a small world (32x32) written once by the JVM's own gzip algorithm and
  * checked in as bytes, precisely so this does not depend on a JVM being present to write one at
@@ -25,9 +25,8 @@ class GzipInteroperabilityTest {
     @Test
     fun `a gzip container the JVM wrote decodes on this platform too`() = runTest {
         if (!platformGzipAvailable()) {
-            // Documented in the D2 report: the plan allows for a test Node too old to have
-            // CompressionStream/DecompressionStream at all, in which case there is nothing this
-            // platform's test run can prove either way.
+            // A test Node too old to have CompressionStream/DecompressionStream at all is
+            // allowed for: there is then nothing this platform's run can prove either way.
             return@runTest
         }
 

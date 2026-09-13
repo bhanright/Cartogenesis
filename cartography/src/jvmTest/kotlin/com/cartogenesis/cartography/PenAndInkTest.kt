@@ -29,9 +29,9 @@ import kotlin.test.assertTrue
  *    plate: an engraver handed a larger one draws the same hachure with the same nib and fits more
  *    of them on it. So the pitch below is measured in pixels and asserted identical at 512, 1024,
  *    2048 and 4096, and the stroke *count* over the same ground is asserted to grow as the square
- *    of the grid ratio. The control is the drawing enlarged with the sheet, which is what F9
- *    shipped first and what the review sent back: at 2048 its hachures are dashes thirty pixels
- *    long and its stipple is polka dots.
+ *    of the grid ratio. The control is the drawing enlarged with the sheet, which is what shipped
+ *    first and what the review sent back: at 2048 its hachures are dashes thirty pixels long and
+ *    its stipple is polka dots.
  */
 class PenAndInkTest {
 
@@ -59,9 +59,8 @@ class PenAndInkTest {
          * Nought, near enough, and that is the point: every mark is a fixed count of pixels, so the
          * only thing that can move this is how the cone's own geometry falls across the grid.
          * Measured at 0.7% across 512, 1024, 2048 and 4096 — 8.96, 9.02, 9.02 and 9.03 pixels —
-         * and the bar is 5%. The control, the same drawing enlarged with the sheet, which is what
-         * F9 shipped first and what the review sent back, goes 8.96, 17.69, 35.18, 70.13: out by
-         * a factor of nearly eight over the same range.
+         * and the bar is 5%. The control, the same drawing enlarged with the sheet, goes 8.96,
+         * 17.69, 35.18, 70.13: out by a factor of nearly eight over the same range.
          */
         const val MAX_PITCH_DRIFT = 0.05
 
@@ -82,30 +81,16 @@ class PenAndInkTest {
         /**
          * Every style's 512 fantasy render, hashed, as it stands today.
          *
-         * A change detector rather than a claim about any particular colour: a chunk that means to
-         * redraw one style can check here that it redrew only that one, and a chunk that means to
-         * redraw them all re-records the lot and says so in its report. F9 wrote it with ten
-         * entries and pen and ink deliberately absent, because that chunk changed exactly one
-         * style; F13 changed every one of them — the climate reaches the land ramp, the sky
-         * replaces the lamp and the sea carries depth contours — so all eleven were recorded again
-         * against that chunk's renders. F17 changed every one of them again, from the other end: it
-         * fills the drowned valleys the grid cannot hold and grades Earth's third of the shoreline
-         * after the sea-level cut, so the land mask under all eleven is a different mask. Recorded
-         * twice for that chunk, once for each of its two passes; how far the coastline actually
-         * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
+         * A change detector rather than a claim about any particular colour. What it is good for
+         * is the *shape* of a change: a chunk meaning to redraw one style can check here that it
+         * redrew only that one, and a chunk that moves the land under all eleven — a new sky, a
+         * climate that reaches the land ramp, a shoreline cut a different way — shows up as all
+         * eleven moving together. One entry out of step with the rest is the thing to look at.
          *
-         * F14 and F17 were merged after both were written and all eleven were checked again: not
-         * one moved. That is worth a line, because it is the answer to the question the two chunks
-         * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
-         * this size and this zoom it draws the same pixels the raster did. Its generalisation is an
-         * overlay at other zooms, and the fit render these hashes are taken from is untouched by it.
-         *
-         * Recorded once more when the 2.0.3 line was merged onto the 3.0 line, which moved the
-         * world rather than the drawing of it: S1's units give the postglacial rise F17 spends its
-         * 120 m against the height field's own ruler instead of each world's measured land relief,
-         * so the drowned valleys and the graded coasts come out on a slightly different mask and
-         * every style draws the difference. That the eleven move *together* is what this still
-         * proves; a style redrawn on its own would show up as one entry out of step with the rest.
+         * A chunk that means to move them all re-records the lot and says so in its report; how
+         * far a coastline actually moved is measured rather than hashed, in `LittoralCoastTest`
+         * and in `GEOGRAPHY.md`. See REALISM_PLAN.md, F9, F13, F14 and F17, for which chunk moved
+         * what, and the 2.0.3 forward-merge row for the last re-recording.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
             MapStyle.ATLAS to 1747304240,
@@ -124,6 +109,20 @@ class PenAndInkTest {
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
 
+        /**
+         * The grid the plan is built at, the pen's own reference size, and the band of the cone
+         * the stroke scan measures over.
+         *
+         * The band avoids the summit, where every bearing meets and the strokes cross, and the
+         * foot, where the flank runs out below the slope floor and there is no ink to count.
+         */
+        const val REFERENCE_SIDE = 512
+        const val SCANNED_BAND_FROM = 0.12f
+        const val SCANNED_BAND_TO = 0.45f
+
+        /** Where a pixel counts as inked, on the 0-to-1 scale [Engraving.hachure] returns. */
+        const val INKED = 0.5f
+
         /** How far the structure tensor looks, in stroke pitches. */
         const val TENSOR_WINDOW_PITCHES = 1.5f
 
@@ -139,8 +138,21 @@ class PenAndInkTest {
         /** Where two neighbouring strokes stop reading as one stroke and start reading as a break. */
         val SEAM_RADIANS = Math.toRadians(60.0)
 
-        /** The ink gain the fixed-bearing hatch used, so the control is the control that shipped. */
+        /**
+         * The fixed-bearing hatch exactly as it shipped, so the control is the control that
+         * shipped: the north-west lamp at 32 degrees, its ambient and swing, its clamp, and a
+         * diagonal comb of five cells stepped in sixths. See [fixedBearingHatch].
+         */
         const val OLD_INK_GAIN = 1.15f
+        const val OLD_LAMP_EAST = -0.6f
+        const val OLD_LAMP_SOUTH = -0.6f
+        const val OLD_LAMP_HEIGHT = 0.53f
+        const val OLD_LAMP_AMBIENT = 0.72f
+        const val OLD_LAMP_SWING = 0.55f
+        const val OLD_DARKEST = 0.45f
+        const val OLD_BRIGHTEST = 1.35f
+        const val OLD_COMB_PITCH = 5
+        const val OLD_COMB_STEPS = 6f
     }
 
     @Test
@@ -200,7 +212,7 @@ class PenAndInkTest {
 
     @Test
     fun `the pen is the same size at every resolution, and lays more strokes on a bigger plate`() {
-        val sizes = listOf(512, 1024, 2048, 4096)
+        val sizes = listOf(REFERENCE_SIDE, 1024, 2048, 4096)
         val pen = sizes.associateWith { strokeScan(it, enlarged = false) }
         val enlarged = sizes.associateWith { strokeScan(it, enlarged = true) }
 
@@ -226,9 +238,10 @@ class PenAndInkTest {
 
         // The other half of the same property, and the one a reader sees: a fixed pitch in pixels
         // over a grid n times finer means n squared times as many strokes on the same ground.
-        sizes.filter { it != 512 }.forEach { side ->
-            val ratio = pen[side]!!.runs.toDouble() / pen[512]!!.runs
-            val expected = (side.toDouble() / 512) * (side.toDouble() / 512)
+        sizes.filter { it != REFERENCE_SIDE }.forEach { side ->
+            val ratio = pen[side]!!.runs.toDouble() / pen[REFERENCE_SIDE]!!.runs
+            val expected =
+                (side.toDouble() / REFERENCE_SIDE) * (side.toDouble() / REFERENCE_SIDE)
             println(
                 "PENINK $side lays %.2f times as many strokes as 512 over the same ground, against %.0f"
                     .format(ratio, expected)
@@ -250,9 +263,10 @@ class PenAndInkTest {
 
     // ---- measurements ----
 
+    /** The ordinary 17-and-31 hash over every pixel. Order matters, which is the point. */
     private fun fingerprint(pixels: IntArray): Int {
         var hash = 17
-        for (p in pixels) hash = hash * 31 + p
+        for (pixel in pixels) hash = hash * 31 + pixel
         return hash
     }
 
@@ -316,9 +330,11 @@ class PenAndInkTest {
     }
 
     private fun allLand(land: BooleanArray, width: Int, x: Int, y: Int, window: Int): Boolean {
-        for (dy in -window..window) {
-            val row = (y + dy) * width
-            for (dx in -window..window) if (!land[row + x + dx]) return false
+        for (offsetRow in -window..window) {
+            val rowStart = (y + offsetRow) * width
+            for (offsetColumn in -window..window) {
+                if (!land[rowStart + x + offsetColumn]) return false
+            }
         }
         return true
     }
@@ -331,21 +347,23 @@ class PenAndInkTest {
         y: Int,
         window: Int
     ): Double? {
-        var xx = 0.0
-        var yy = 0.0
-        var xy = 0.0
-        for (dy in -window..window) {
-            for (dx in -window..window) {
-                val i = (y + dy) * width + x + dx
-                val ix = (luminance(pixels[i + 1]) - luminance(pixels[i - 1])).toDouble()
-                val iy = (luminance(pixels[i + width]) - luminance(pixels[i - width])).toDouble()
-                xx += ix * ix
-                yy += iy * iy
-                xy += ix * iy
+        var eastEast = 0.0
+        var southSouth = 0.0
+        var eastSouth = 0.0
+        for (offsetRow in -window..window) {
+            for (offsetColumn in -window..window) {
+                val cell = (y + offsetRow) * width + x + offsetColumn
+                val eastward = (luminance(pixels[cell + 1]) - luminance(pixels[cell - 1])).toDouble()
+                val southward =
+                    (luminance(pixels[cell + width]) - luminance(pixels[cell - width])).toDouble()
+                eastEast += eastward * eastward
+                southSouth += southward * southward
+                eastSouth += eastward * southward
             }
         }
-        if (xx + yy < 1.0) return null
-        return 0.5 * atan2(2.0 * xy, xx - yy)
+        // Flat ink: no gradient anywhere in the window, so there is no direction to report.
+        if (eastEast + southSouth < 1.0) return null
+        return 0.5 * atan2(2.0 * eastSouth, eastEast - southSouth)
     }
 
     private fun luminance(argb: Int): Int =
@@ -363,27 +381,36 @@ class PenAndInkTest {
      * The hatch this style used to draw, reproduced so the guards have something to fail against.
      *
      * A diagonal comb at one bearing with a five-cell period, thresholded against the hillshade —
-     * `MapStyle.inked` and the line-art branch of `MapRasterizer` as they stood at 2.0.0.
+     * `MapStyle.inked` and the line-art branch of `MapRasterizer` as they stood at 2.0.0. The
+     * lamp and the ramp are written out rather than called, so that what this test fails against
+     * is a control it owns and cannot lose to a change in [ReliefShading].
      */
     private fun fixedBearingHatch(world: WorldMap): IntArray {
         val width = world.width
         val height = world.height
         val elevation = world.sea.relativeElevation
         val style = MapStyle.PEN_AND_INK
-        val zScale = ReliefShading.slopeScale(width)
+        val slopeScale = ReliefShading.slopeScale(width)
         val pixels = IntArray(width * height) { style.paper }
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val i = y * width + x
-                if (!world.sea.isLand[i]) continue
-                val dzdx = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * zScale
-                val dzdy = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * zScale
-                val length = sqrt(dzdx * dzdx + dzdy * dzdy + 1f)
-                val lambert = (-dzdx * -0.6f - dzdy * -0.6f + 0.53f) / length
-                val shade = (0.72f + 0.55f * lambert).coerceIn(0.45f, 1.35f)
+        for (row in 0 until height) {
+            for (column in 0 until width) {
+                val cell = row * width + column
+                if (!world.sea.isLand[cell]) continue
+                val eastward =
+                    (elevation.sample(column + 1, row) -
+                        elevation.sample(column - 1, row)) * slopeScale
+                val southward =
+                    (elevation.sample(column, row + 1) -
+                        elevation.sample(column, row - 1)) * slopeScale
+                val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
+                val lambert =
+                    (-eastward * OLD_LAMP_EAST - southward * OLD_LAMP_SOUTH + OLD_LAMP_HEIGHT) /
+                        normalLength
+                val shade = (OLD_LAMP_AMBIENT + OLD_LAMP_SWING * lambert)
+                    .coerceIn(OLD_DARKEST, OLD_BRIGHTEST)
                 val steepness = (1f - shade).coerceAtLeast(0f)
-                val hatch = (((x + y) % 5) + 1) / 6f
-                if (steepness * OLD_INK_GAIN > hatch) pixels[i] = style.coastline
+                val comb = (((column + row) % OLD_COMB_PITCH) + 1) / OLD_COMB_STEPS
+                if (steepness * OLD_INK_GAIN > comb) pixels[cell] = style.coastline
             }
         }
         return pixels
@@ -475,35 +502,36 @@ class PenAndInkTest {
      * at every angle and what it counts is how often ink starts.
      *
      * [enlarged] is the control: the same drawing blown up with the sheet, which is what sizing a
-     * mark as a share of the width does and what F9 shipped first. It is the 512 plan's ink read at
-     * map coordinates, so a stroke that is twelve pixels long at 512 is forty-eight at 2048 — which
-     * is exactly the woodcut the review sent back.
+     * mark as a share of the width does and what shipped first. It is the [REFERENCE_SIDE] plan's
+     * ink read at map coordinates, so a stroke that is twelve pixels long at that size is
+     * forty-eight at four times it — which is exactly the woodcut the review sent back.
      */
     private fun strokeScan(width: Int, enlarged: Boolean): StrokeScan {
-        val plan = if (enlarged) EngravingPlan(512) else EngravingPlan(width)
+        val plan = if (enlarged) EngravingPlan(REFERENCE_SIDE) else EngravingPlan(width)
         val gain = MapStyle.PEN_AND_INK.inkGain
         // Half way up the ink ramp, so the strokes are neither hairlines nor a solid mass.
         val slope = EngravingPlan.SLOPE_FLOOR + 0.5f / gain
         val centre = width / 2f
-        val inner = width * 0.12f
-        val outer = width * 0.45f
+        val innerRadius = width * SCANNED_BAND_FROM
+        val outerRadius = width * SCANNED_BAND_TO
 
         var runs = 0L
         var scanned = 0L
-        for (y in 0 until width) {
+        for (row in 0 until width) {
             var wasInk = false
-            for (x in 0 until width) {
-                val dx = x - centre
-                val dy = y - centre
-                val radius = sqrt(dx * dx + dy * dy)
-                if (radius in inner..outer) {
-                    // Under the control the same map position is read at the 512 grid's coordinates,
-                    // so the whole picture arrives magnified by the grid ratio.
-                    val readX = if (enlarged) x * 512 / width else x
-                    val readY = if (enlarged) y * 512 / width else y
+            for (column in 0 until width) {
+                val fromCentreX = column - centre
+                val fromCentreY = row - centre
+                val radius = sqrt(fromCentreX * fromCentreX + fromCentreY * fromCentreY)
+                if (radius in innerRadius..outerRadius) {
+                    // Under the control the same map position is read at the reference grid's
+                    // coordinates, so the whole picture arrives magnified by the grid ratio.
+                    val readX = if (enlarged) column * REFERENCE_SIDE / width else column
+                    val readY = if (enlarged) row * REFERENCE_SIDE / width else row
                     val ink = Engraving.hachure(
-                        readX, readY, dx / radius * slope, dy / radius * slope, plan, gain
-                    ) > 0.5f
+                        readX, readY,
+                        fromCentreX / radius * slope, fromCentreY / radius * slope, plan, gain
+                    ) > INKED
                     scanned++
                     if (ink && !wasInk) runs++
                     wasInk = ink

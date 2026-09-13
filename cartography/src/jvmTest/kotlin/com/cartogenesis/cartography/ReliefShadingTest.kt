@@ -162,7 +162,7 @@ class ReliefShadingTest {
      * How many bearings round the flank the single lamp gives no light to at all.
      *
      * The lamp reproduced here rather than called, so that what fails is a control this test owns:
-     * the north-west light at 32 degrees, exactly as every render before F13 was drawn under. Where
+     * the north-west light at 32 degrees, exactly as every render before the sky model. Where
      * this dot product is at or below zero the face is turned away from the only light there is —
      * and the drawing goes on darkening it past that point, which is what "unlit" means on a map
      * lit by one lamp.

@@ -1897,7 +1897,11 @@ seeds.
 Cut from `release/2.0` at 2e66619, tagged `v2.0.5`: F28, the Blacklight chrome from William's two
 colours, and its guard that reads the site's theme sentence back against the enum. Interface
 gates and `siteTest` green on the branch; worldgen untouched since 2.0.4's full tier. Portable zip
-97 MB, MSI 98 MB, web zip 5.4 MB; the packaged exe passes `--gpu-check`. Saves open unchanged.
+97 MB, MSI 98 MB, web zip 5.4 MB; the packaged exe passes `--gpu-check`. Saves open unchanged. Forward merge into `main` the same day (3da27bc): eight
+conflicts, all wording and counts in the swept modules; F28's block swept to main's voice (its
+section header now parallels Lemon Blueberry's, the chunk labels out); the F28 guards reproduce
+the ledger's figures on the merged tree; cartography 54, ui 105 JVM and 105 wasm, desktop 67,
+siteTest 10, all green.
 
 ## Track M — the Earth-likeness yardstick (3.0)
 

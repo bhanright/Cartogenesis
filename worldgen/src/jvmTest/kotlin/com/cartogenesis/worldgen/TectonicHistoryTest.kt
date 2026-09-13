@@ -64,10 +64,11 @@ class TectonicHistoryTest {
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         val config = base.copy(
-            tectonics = base.tectonics.copy(
-                historyEpochs = epochs,
-                plateElevationBias = if (flatten) 0f else base.tectonics.plateElevationBias
-            )
+            tectonics = base.tectonics.copy(historyEpochs = epochs),
+            // Flattening the plate interiors is switching isostasy off since S2, where before it
+            // was setting the step between them to zero: either way what is left is one level for
+            // every crust, so a belt's radial profile is the belt and not the crust under it.
+            isostasy = base.isostasy.copy(enabled = !flatten)
         )
         return PlateStage.generate(config, TerrainStage.generate(config))
     }
@@ -210,7 +211,8 @@ class TectonicHistoryTest {
     private fun configOf(seed: Long, epochs: Int): WorldGenConfig {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         return base.copy(
-            tectonics = base.tectonics.copy(historyEpochs = epochs, plateElevationBias = 0f)
+            tectonics = base.tectonics.copy(historyEpochs = epochs),
+            isostasy = base.isostasy.copy(enabled = false)
         )
     }
 

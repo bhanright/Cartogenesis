@@ -1,7 +1,9 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
+import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.sqrt
@@ -18,6 +20,14 @@ import kotlinx.coroutines.ensureActive
  * that nobody looks at is how a stage quietly removes a tenth of a continent.
  */
 internal data class GlacialMass(
+    /**
+     * The deepest the ice load pushed the crust down, in metres, and zero where the load is off.
+     *
+     * A tenth of the sheet's own thickness at its margin and 28% of it well inside, which is
+     * `iceDensity / mantleDensity` once the plate has flattened out under a load broader than its
+     * own flexural parameter.
+     */
+    val iceDepressionMetres: Float,
     val frozenCells: Int,
     /** Frozen cells with enough local relief for the ice to be channelled into a valley. */
     val channelledCells: Int,
@@ -646,8 +656,17 @@ object GlaciationStage {
             }
         }
 
+        // And the weight of it. Ice standing on the crust holds the crust down, which is why
+        // Greenland's bed lies below sea level under three kilometres of ice and why Scandinavia,
+        // which lost its own sheet ten thousand years ago, is still coming back up at a centimetre
+        // a year. The load is handed to the same flexure the hydraulic rounds use; what the map
+        // shows of the rebound is the ground the *former* ice has already let go, since only the
+        // ice that is still here is weighed. See `IsostasyConfig.iceLoad` and REALISM_PLAN.md, S2.
+        val iceDepression = iceLoadDepression(config, frozen, isLand, carved)
+
         onBudget?.invoke(
             GlacialMass(
+                iceDepressionMetres = iceDepression,
                 frozenCells = frozenCount,
                 channelledCells = channelledCells,
                 glacierCells = glacierCells,
@@ -673,6 +692,71 @@ object GlaciationStage {
         )
 
         return sea.copy(relativeElevation = FloatField(cellsAcross, cellsDown, carved))
+    }
+
+    /**
+     * Presses the crust down under the ice standing on it, in place, and reports the deepest bend.
+     *
+     * The sheet's thickness is the crudest thing that can be true of it: a flat
+     * [IsostasyConfig.iceSheetThicknessMetres] over the interior, ramped to nothing over
+     * [IsostasyConfig.iceSheetMarginRampKm] of its margin, from the Euclidean distance to the
+     * nearest ice-free cell. Antarctica averages 2,126 m and Greenland 1,673 and both thin to
+     * nothing at the coast, so the shape is right and the profile is not: a real sheet's surface
+     * goes as the square root of the distance from its margin (Vialov 1958), which is I1's to draw
+     * and this to read once it exists.
+     *
+     * The bend is spent on the shoreline-relative field this stage is already rewriting, since
+     * that is what the rest of the pipeline reads and the erosion stage's own height field is two
+     * stages upstream and must not be touched. It goes on water as well as land: a sheet grounded
+     * below the waterline depresses the floor under it exactly as one on land does.
+     */
+    private fun iceLoadDepression(
+        config: WorldGenConfig,
+        frozen: BooleanArray,
+        isLand: BooleanArray,
+        carved: FloatArray
+    ): Float {
+        val isostasy = config.isostasy
+        if (!isostasy.enabled || !isostasy.flexure || !isostasy.iceLoad) return 0f
+        if (isostasy.iceSheetThicknessMetres <= 0f) return 0f
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
+        if (frozen.none { it }) return 0f
+
+        // How far each frozen cell stands from the nearest ice-free ground, in cells.
+        val distanceToEdge = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestEdge = IntArray(cellCount) { -1 }
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) {
+                distanceToEdge[cell] = 0f
+                nearestEdge[cell] = cell
+            }
+        }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToEdge, nearestEdge)
+
+        val rampCells = config.cellsFor(isostasy.iceSheetMarginRampKm).coerceAtLeast(1f)
+        val load = FloatArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) continue
+            val thickness = isostasy.iceSheetThicknessMetres *
+                (distanceToEdge[cell] / rampCells).coerceAtMost(1f)
+            load[cell] = Isostasy.loadPascals(thickness, isostasy.iceDensity, isostasy.gravity)
+        }
+
+        Isostasy.Flexure(config).deflectionMetres(load, load)
+        // The bend is a change in altitude, and the field this stage works in is piecewise: a land
+        // cell is measured against the land's half of the ruler and a water cell against the sea's,
+        // so each converts through its own.
+        val scale = config.scale
+        var deepest = 0f
+        for (cell in 0 until cellCount) {
+            val bend = load[cell]
+            if (bend > deepest) deepest = bend
+            carved[cell] -=
+                if (isLand[cell]) scale.reliefShareOfMetres(bend) else scale.depthShareOfMetres(bend)
+        }
+        return deepest
     }
 
     /** What the scour did, for the tally. */

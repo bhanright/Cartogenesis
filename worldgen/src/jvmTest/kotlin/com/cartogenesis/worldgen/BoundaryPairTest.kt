@@ -62,17 +62,17 @@ class BoundaryPairTest {
      * crust either side and no step at all. Measured through it, an Andean margin's belt appears a
      * third of its real height for reasons that have nothing to do with its profile.
      *
-     * Setting the bias to zero removes the step and leaves the terrain noise, which is the same
-     * everywhere and averages out of a radial profile. Both sides of every comparison here are
-     * measured the same way, including the one-profile control, so what is compared is the belts.
+     * Switching isostasy off removes the step — every crust floats at one level — and leaves the
+     * terrain noise, which is the same everywhere and averages out of a radial profile. Both sides
+     * of every comparison here are measured the same way, including the one-profile control, so
+     * what is compared is the belts. Before S2 the same flattening was had by setting the plate
+     * elevation bias to zero, which was the step's own setting.
      */
     private fun platesOf(seed: Long, crustPairs: Boolean = true): Pair<WorldGenConfig, PlateResult> {
         val config = WorldGenConfig(seed = seed, width = 512, height = 512).let {
             it.copy(
-                tectonics = it.tectonics.copy(
-                    crustPairProfiles = crustPairs,
-                    plateElevationBias = 0f
-                )
+                tectonics = it.tectonics.copy(crustPairProfiles = crustPairs),
+                isostasy = it.isostasy.copy(enabled = false)
             )
         }
         return config to PlateStage.generate(config, TerrainStage.generate(config))

@@ -181,6 +181,15 @@ internal object WorldSections {
             ints = world.plates.nearestBoundaryClass
         ),
         Section("plates.height", SectionType.F32, floats = world.plates.height.data),
+        // Which crust each cell is made of, and how fast it is still rising. Neither can be
+        // recovered from the height field — the first is what isostasy turned *into* that field
+        // and the second never appears in it at all — and erosion reads the second every round, so
+        // both are written like any other per-cell array.
+        Section("plates.continentalShare", SectionType.F32, floats = world.plates.continentalShare.data),
+        Section(
+            "plates.upliftRateMmPerYear", SectionType.F32,
+            floats = world.plates.upliftRateMmPerYear.data
+        ),
         // How long ago each cell's crust was last built. Not derivable from anything else in the
         // file — it is the record of epochs that left no other trace — and erosion reads it, so it
         // is written like any other per-cell array rather than recomputed on open.
@@ -255,7 +264,8 @@ internal object WorldSections {
             // Both of these were added to the stage after the others. A save written before one
             // of them has every other section of this stage and not that one, so the stage counts
             // as absent and is regenerated rather than half-built from what happens to be there.
-            "plates.nearestBoundaryClass", "plates.height", "plates.crustAge"
+            "plates.nearestBoundaryClass", "plates.height", "plates.crustAge",
+            "plates.continentalShare", "plates.upliftRateMmPerYear"
         ),
         GenerationStage.EROSION to listOf("erosion.height"),
         GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
@@ -415,6 +425,8 @@ internal object WorldSections {
                 nearestBoundaryType = ints("plates.nearestBoundaryType"),
                 nearestBoundaryClass = ints("plates.nearestBoundaryClass"),
                 height = field("plates.height"),
+                continentalShare = field("plates.continentalShare"),
+                upliftRateMmPerYear = field("plates.upliftRateMmPerYear"),
                 crustAge = field("plates.crustAge")
             )
         } else null

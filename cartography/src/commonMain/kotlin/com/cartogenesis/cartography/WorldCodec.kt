@@ -128,6 +128,14 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 8 because the crust became a thing the world carries. The plate stage now writes which crust
+     * each cell is made of and how fast the rock under it is still rising, the settings gained an
+     * `isostasy` section for the densities and the elastic thickness, and the height field itself
+     * changed meaning: it is an absolute altitude on the world's own ruler where it used to be
+     * renormalised to whatever the tallest cell of that particular world happened to be. A format-7
+     * file's heights would parse and mean something else, which is exactly the kind of silence
+     * refusing by version exists to prevent.
+     *
      * 7 because the world gained a `scale` section — its width in kilometres, the two ends of its
      * vertical range in metres and the years a hydraulic round stands for — and every physical
      * knob moved onto it: the sea's lowstand and the glacial depths became metres, every reach and
@@ -144,7 +152,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 7
+    const val FORMAT_VERSION = 8
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

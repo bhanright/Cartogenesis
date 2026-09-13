@@ -77,10 +77,14 @@ object ErosionStage {
     suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
+        upliftRateMmPerYear: FloatField? = null,
         accelerator: ErosionAccelerator? = null
-    ): ErosionResult = apply(config, height, accelerator, onRound = null)
+    ): ErosionResult = apply(config, height, upliftRateMmPerYear, accelerator, onRound = null)
 
     /**
+     * @param upliftRateMmPerYear how fast the rock is still rising under each cell, which the
+     *   hydraulic rounds add to the terrain round by round; null runs the rounds without the
+     *   tectonics, which is the control the uplift guards are measured against.
      * @param onRound handed each hydraulic round's mass budget as it closes, for the guard that
      *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing,
      *   except that the round's pit census is only counted when someone asked for it.
@@ -93,6 +97,7 @@ object ErosionStage {
     internal suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
+        upliftRateMmPerYear: FloatField?,
         accelerator: ErosionAccelerator?,
         onRound: ((RoundMass) -> Unit)?,
         log: DepositionLog? = null,
@@ -115,7 +120,8 @@ object ErosionStage {
 
         return ErosionResult(
             HydraulicErosion.apply(
-                config, weathered.height, config.seaLevel, onRound, log, receiverClamp
+                config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
+                receiverClamp
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             }

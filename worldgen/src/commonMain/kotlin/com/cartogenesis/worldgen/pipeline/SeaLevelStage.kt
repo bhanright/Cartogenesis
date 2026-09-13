@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.SeaConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 
 /** Where the shoreline sits, which cells are land, and how far each cell stands from the water. */
 data class SeaLevelResult(
@@ -119,35 +120,43 @@ object SeaLevelStage {
     fun percentileCut(
         height: FloatField,
         seaLevelFraction: Float,
+        scale: WorldScale,
         lowstandShareOfField: Float = 0f
     ): SeaLevelResult {
         val submergedFraction = seaLevelFraction.coerceIn(0f, 1f)
         val todaysShoreline = shorelineForFraction(height, submergedFraction)
         val shorelineHeight = todaysShoreline - lowstandShareOfField
 
-        return landAndWaterAt(height, shorelineHeight, height.max())
+        return landAndWaterAt(height, shorelineHeight, scale)
     }
 
     /**
      * Land, water and the shoreline-relative field, for a shoreline already decided.
      *
-     * [highestGround] and [lowestGround] are handed in rather than measured, so that the post-cut
-     * outlet pass can re-cut a field whose few sill cells it has just lowered and get, for every
-     * cell it did not touch, the same float it got the first time. Both ends of the range are
-     * properties of the world the shoreline was chosen from, not of the working copy.
+     * The two halves of [SeaLevelResult.relativeElevation] are divided by the two halves of the
+     * *declared* ruler — `highestLandMetres` above the water and `deepestOceanMetres` below it,
+     * each as a share of the height field — and not by the range this particular world happens to
+     * occupy. That is only possible since S2: isostasy gives the field an absolute vertical scale,
+     * so `+1` means six kilometres up on every seed rather than "as high as this world happens to
+     * go", and `WorldScale.metresAboveShoreline` is exactly true instead of approximately so.
+     *
+     * What it costs is that no cell need reach 1 or -1, which is the honest answer — a world whose
+     * tallest mountain is four kilometres has a tallest mountain of four kilometres. What it buys
+     * is that every constant read through the ruler means the same depth everywhere: the shelf
+     * break really is at 1,000 m, the navigable depth really is where it says, and the hypsometric
+     * curve is a measurement rather than a normalisation. See `UnitsTest`.
      */
     private fun landAndWaterAt(
         height: FloatField,
         shorelineHeight: Float,
-        highestGround: Float,
-        lowestGround: Float = height.min()
+        scale: WorldScale
     ): SeaLevelResult {
         val cellCount = height.data.size
         val isLand = BooleanArray(cellCount)
         val relativeElevation = FloatField(height.width, height.height)
 
-        val reliefAboveShoreline = (highestGround - shorelineHeight).coerceAtLeast(MIN_RANGE)
-        val depthBelowShoreline = (shorelineHeight - lowestGround).coerceAtLeast(MIN_RANGE)
+        val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
+        val seaHalfOfField = scale.seaHalfOfField.coerceAtLeast(MIN_RANGE)
 
         var landCellCount = 0
         for (cell in 0 until cellCount) {
@@ -155,11 +164,9 @@ object SeaLevelStage {
             if (groundHeight >= shorelineHeight) {
                 isLand[cell] = true
                 landCellCount++
-                relativeElevation.data[cell] =
-                    (groundHeight - shorelineHeight) / reliefAboveShoreline
+                relativeElevation.data[cell] = (groundHeight - shorelineHeight) / landHalfOfField
             } else {
-                relativeElevation.data[cell] =
-                    (groundHeight - shorelineHeight) / depthBelowShoreline
+                relativeElevation.data[cell] = (groundHeight - shorelineHeight) / seaHalfOfField
             }
         }
 
@@ -188,11 +195,11 @@ object SeaLevelStage {
         val seaConfig = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this is
         // cutting, not to the map that is drawn.
-        val plainCut = percentileCut(height, config.seaLevel)
+        val plainCut = percentileCut(height, config.seaLevel, config.scale)
         val enclosed =
             if (seaConfig.enclosedSeaIsLand) {
                 markUnreachableWaterAsLand(
-                    plainCut, height, seaConfig, config.squareKilometresPerCell
+                    plainCut, height, seaConfig, config.scale, config.squareKilometresPerCell
                 )
             } else {
                 plainCut
@@ -294,6 +301,7 @@ object SeaLevelStage {
         base: SeaLevelResult,
         height: FloatField,
         seaConfig: SeaConfig,
+        scale: WorldScale,
         squareKilometresPerCell: Double
     ): SeaLevelResult {
         val cellsAcross = height.width
@@ -343,7 +351,7 @@ object SeaLevelStage {
             (seaConfig.enclosedSeaMaxKm2 / squareKilometresPerCell).toInt()
         val isLand = base.isLand.copyOf()
         val relativeElevation = base.relativeElevation.copy()
-        val reliefAboveShoreline = (height.max() - base.shorelineHeight).coerceAtLeast(MIN_RANGE)
+        val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
         var landCellCount = base.landCellCount
         for (cell in 0 until cellCount) {
             val body = bodyOfCell[cell]
@@ -351,7 +359,7 @@ object SeaLevelStage {
             isLand[cell] = true
             landCellCount++
             relativeElevation.data[cell] =
-                (height.data[cell] - base.shorelineHeight) / reliefAboveShoreline
+                (height.data[cell] - base.shorelineHeight) / landHalfOfField
         }
 
         return SeaLevelResult(base.shorelineHeight, isLand, relativeElevation, landCellCount)
@@ -405,11 +413,8 @@ object SeaLevelStage {
         val cellsAcross = height.width
         val cellsDown = height.height
         val shorelineHeight = enclosed.shorelineHeight
-        // Both ends of the world's own range, so that re-cutting the working copy leaves every
-        // untouched cell on the float it already had.
-        val highestGround = height.max()
-        val lowestGround = height.min()
-        val reliefAboveShoreline = (highestGround - shorelineHeight).coerceAtLeast(MIN_RANGE)
+        val scale = config.scale
+        val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
         // The same rates the hydraulic rounds cut with, converted from the world's scale and this
         // grid: this pass is the outlet notch run once more on the far side of the cut, so it must
         // use the notch's own reach, gradient and stream power and not a second copy of them.
@@ -451,16 +456,17 @@ object SeaLevelStage {
             val breached = HydraulicErosion.breach(
                 config.erosion, rates, cellsAcross, spillways, isLand, relativeElevation.data,
                 filled.data, flowDirections, catchmentArea.data,
-                current.landCellCount.toFloat(), reliefAboveShoreline, terrain.data,
+                current.landCellCount.toFloat(), landHalfOfField, terrain.data,
                 settled = null, load = null, belowSea = true
             )
             // Nothing left that the outflow can take off a sill: every basin still here is one the
             // water cannot open, and another pass would only cost a priority flood.
             if (breached.cells == 0) return current
             current = markUnreachableWaterAsLand(
-                landAndWaterAt(terrain, shorelineHeight, highestGround, lowestGround),
+                landAndWaterAt(terrain, shorelineHeight, scale),
                 terrain,
                 config.sea,
+                scale,
                 config.squareKilometresPerCell
             )
         }

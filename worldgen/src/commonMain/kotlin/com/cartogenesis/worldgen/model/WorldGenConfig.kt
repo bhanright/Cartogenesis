@@ -143,18 +143,48 @@ data class WorldScale(
     /**
      * The metres one unit of the *raw* height field is worth, which is the whole world's relief.
      *
-     * The field the terrain and erosion stages work in is normalised to 0..1 between the deepest
-     * floor and the highest land, so its span is by construction the two figures above added
-     * together. This is the ruler a stage has to use when it is working before the shoreline
-     * exists — the thermal sweeps and the stream-power incision both do — and it agrees with
-     * [metresAtRelativeElevation] exactly when the shoreline sits at
-     * `deepestOceanMetres / reliefSpanMetres` of the field. It does not sit exactly there: the
-     * shoreline is a percentile of the cells rather than of the range, so the two rulers differ by
-     * however far the world's own hypsometry is from that. `UnitsTest` measures the difference and
-     * holds it inside a stated factor; closing it needs an absolute vertical scale, which is S2's
-     * uplift and isostasy.
+     * The field the terrain and erosion stages work in runs 0..1 between the deepest floor and the
+     * highest land, so its span is by construction the two figures above added together. This is
+     * the ruler a stage has to use when it is working before the shoreline exists — the thermal
+     * sweeps and the stream-power incision both do.
+     *
+     * Since S2 the field is an *absolute* altitude and not a normalisation: [altitudeAtField] and
+     * [fieldAtAltitude] are exact inverses and the shoreline stands at [shorelineFieldLevel],
+     * because isostasy gives the two crusts their levels in metres and nothing divides by a
+     * measured range any more. Before that the field was renormalised to its own extremes after
+     * every generation, so the same 120 m meant a different level on every seed; `UnitsTest`
+     * measured the disagreement at 0.64x to 1.09x of the declared ruler and S2 closed it.
      */
     val reliefSpanMetres: Float get() = highestLandMetres + deepestOceanMetres
+
+    /**
+     * Where the shoreline stands in the raw height field: the level worth an altitude of zero.
+     *
+     * The field's floor is [deepestOceanMetres] below the water and its ceiling
+     * [highestLandMetres] above it, so the waterline is that much of the way up — 0.625 at the
+     * stock figures. This is a *declaration* about the field, and since S2 it is also true of it:
+     * the plate stage builds the field from altitudes rather than normalising it, so a cell above
+     * this level is above the sea by construction rather than by percentile.
+     */
+    val shorelineFieldLevel: Float get() = deepestOceanMetres / reliefSpanMetres
+
+    /** The raw height field's value for an altitude of [metres] above (or below) the waterline. */
+    fun fieldAtAltitude(metres: Float): Float = (metres + deepestOceanMetres) / reliefSpanMetres
+
+    /** The altitude in metres, above the waterline, of a raw height field standing at [field]. */
+    fun altitudeAtField(field: Float): Float = field * reliefSpanMetres - deepestOceanMetres
+
+    /**
+     * How much of the raw height field the land's half of the ruler occupies, and the sea's.
+     *
+     * The two conversions `SeaLevelStage` divides by to turn an altitude into
+     * `SeaLevelResult.relativeElevation`. Declared rather than measured since S2: the land's half
+     * runs 0..1 from the waterline to [highestLandMetres] whether or not any cell of a given world
+     * reaches that high, which is what makes [metresAboveShoreline] exactly true instead of
+     * approximately so.
+     */
+    val landHalfOfField: Float get() = highestLandMetres / reliefSpanMetres
+    val seaHalfOfField: Float get() = deepestOceanMetres / reliefSpanMetres
 
     /** How wide one cell is, in kilometres, on a grid [cellsAcross] cells wide. */
     fun cellWidthKm(cellsAcross: Int): Double = worldWidthKm / cellsAcross
@@ -210,26 +240,96 @@ data class TerrainConfig(
 @Serializable
 data class TectonicsConfig(
     val plateCount: Int = 14,
-    /** Fraction of plates that are oceanic (sit lower). */
-    val oceanicFraction: Float = 0.55f,
-    /** Height added at continental collision boundaries, in normalized elevation units. */
+    /**
+     * How much of a plate's continental crust stands under water, as a share of its area — which
+     * is what turns the ocean-coverage slider into a count of continental plates.
+     *
+     * Continental crust is not the same thing as land. Earth's continental crust covers 41.2% of
+     * the surface and its land 29.2% (Cogley, *Continental margins and the extent and number of
+     * the continents*, Rev. Geophys. 22, 1984), so 29% of the continents are drowned — the shelves,
+     * the banks and the shallow seas. `PlateStage` reads it backwards: to put `1 - seaLevel` of the
+     * world above water it has to draw `(1 - seaLevel) / (1 - this)` of it as continental crust,
+     * which at 62% ocean and the figure below is 44.7%.
+     *
+     * That is the whole of what the ocean-coverage slider now does to the tectonics, and it is why
+     * there is no longer a plate-count fraction here: which plates are continental is chosen by
+     * *area* until the target is met, so a world of fourteen plates of unequal size lands on the
+     * share asked for rather than on the nearest whole plate.
+     *
+     * The figure is fifteen per cent and not Earth's twenty-nine, and the gap is a finding rather
+     * than a fudge. Measured on the five standard worlds at 512, this generator drowns 8.8, 9.2,
+     * 8.8, 16.6 and 15.6 per cent of its continental crust — a middle of about 0.12 and a spread
+     * that is mostly which plates a seed happens to make coastal. It drowns less than Earth for two
+     * reasons the model can name. Its continental surface has about a fifth of Earth's spread about
+     * its own mean, so far less of it dips below the waterline: `continentalReliefMetres` carries 2
+     * km peak to peak where Earth's land elevations have a standard deviation near 0.9 km. And it
+     * has no epicontinental seas — no Hudson Bay, no Baltic, no North Sea, no Sunda shelf — because
+     * nothing in the model floods a continent's interior. Both are written up in `TODO.md`. See
+     * REALISM_PLAN.md, S2.
+     */
+    val continentalCrustSubmergedShare: Float = 0.15f,
+    /**
+     * What one unit of every belt height below is worth, in metres.
+     *
+     * The profiles in this section are shapes: a plateau is flat across 60% of its half-width, a
+     * margin's arc stands 0.20 where its range stands 0.52. Until S2 the field they were stamped
+     * into was renormalised to its own extremes afterwards, so those numbers had no vertical scale
+     * at all and `WorldGenConfig.atResolution` had to carry a belt's width and its height together
+     * or not at all. Isostasy gives the field an absolute scale, so the shapes get one too, and
+     * this is it: one multiplier for the lot, which keeps every ratio `BoundaryPairTest` measures
+     * exactly where B2 left it.
+     *
+     * Thirteen thousand metres, and the derivation is the plateau. A continental collision stamps
+     * [collisionHeight] times the pair's convergence times its along-strike swell: the strongest
+     * pair on a map reaches about 0.55 of this scale and a typical one about 0.15, so the tallest
+     * plateau a world draws stands near 7,000 m before erosion and an ordinary one near 2,000.
+     * Tibet's interior averages 5,023 m (Fielding, Isacks, Barazangi & Duncan, *How flat is
+     * Tibet?*, Geology 22, 1994) and the Altiplano 3,800, above forelands near 500 — so the
+     * strongest collisions on this map are Tibet with room above it for the twelve rounds of
+     * erosion that follow, and the weakest are worn uplands. It is also, to within a percent, the
+     * scale the normalised field carried before it was declared: the old field spanned about 1.2
+     * raw units and stood for [WorldScale.reliefSpanMetres], which is 13,300 m per raw unit.
+     */
+    val beltReliefMetres: Float = 13_000f,
+    /**
+     * Height added at continental collision boundaries, as a share of [beltReliefMetres].
+     *
+     * Only the one-profile control reads it; see [crustPairProfiles].
+     */
     val mountainHeight: Float = 0.55f,
-    /** Depth of oceanic trenches at subduction boundaries. */
+    /** Depth of oceanic trenches at subduction boundaries, on the same scale. */
     val trenchDepth: Float = 0.3f,
     /** How far, in cells, boundary effects reach inland. */
     val boundaryFalloffCells: Float = 26f,
-    /** Elevation offset between continental and oceanic plate interiors. */
-    val plateElevationBias: Float = 0.35f,
     /**
-     * How strongly tectonics dominate the base noise terrain. The plate base is heavily blurred,
-     * so pushing this high gives smooth, obviously plate-shaped continents; too low and the plates
-     * stop reading as continents at all.
+     * The relief the base noise carries on continental crust and on oceanic, peak to peak in
+     * metres — the ground the belts and the isostatic levels are laid on.
+     *
+     * These two numbers are what makes the hypsometry bimodal, and getting them wrong is what
+     * made it unimodal for the whole life of the generator. Earth's two modes stand 4,500 m apart
+     * (a continental platform near +800 m against a sea floor near -3,700), so a noise field with
+     * more relief than that in it smears the two together into one peak straddling the shoreline —
+     * which is exactly what M1 measured: the busiest land band and the busiest sea band adjacent,
+     * no trough at all, and 0.52 of the surface in the two modal bands against Earth's 0.85. The
+     * old blend gave the noise about 7,300 m of range, well over the separation.
+     *
+     * Two kilometres on the continents, from Earth's own non-orogenic surface: the shields sit
+     * between 0 and 500 m (the Canadian, Baltic and West African shields), the platforms between
+     * 200 and 800 (the Russian and North American platforms), and the high plains and epeirogenic
+     * plateaus between 1,000 and 1,700 (the Great Plains, the Brazilian and East African
+     * highlands). Nothing outside an orogen stands higher, and the orogens are the belts' business.
+     *
+     * One kilometre on the sea floor, and it is generous. The abyssal plains are the flattest
+     * ground on the planet — abyssal hills carry 50 to 300 m of relief (Goff & Jordan 1988) — and
+     * what gives the deep ocean the rest of its range is the ridge flanks, the fracture zones and
+     * the seamounts, which this generator draws with its own profiles rather than with noise.
      */
-    val tectonicWeight: Float = 0.45f,
+    val continentalReliefMetres: Float = 2_000f,
+    val oceanicReliefMetres: Float = 1_000f,
     /**
-     * Amplitude of the fine relief added on top of the blended terrain. Small enough not to alter
-     * the visible shape of the land, large enough to stop flat plains routing water in straight
-     * parallel lines.
+     * Amplitude of the fine relief added on top of the blended terrain, as a share of
+     * [beltReliefMetres]. Small enough not to alter the visible shape of the land, large enough to
+     * stop flat plains routing water in straight parallel lines.
      */
     val detailAmplitude: Float = 0.012f,
     /** Cycles across the map for that fine relief; also its noise period, so it tiles in X. */
@@ -341,9 +441,9 @@ data class TectonicsConfig(
     /**
      * Crest height of an island arc, in normalized elevation units.
      *
-     * Sized so the arc mostly stays under water — it is built on oceanic crust, which sits a
-     * [plateElevationBias] below continental — and only the swells of [rangeVariation] break the
-     * surface. That is what makes an arc a chain of islands rather than a ridge of land.
+     * Sized so the arc mostly stays under water — it is built on oceanic crust, which isostasy
+     * sets some four kilometres below continental — and only the swells of [rangeVariation] break
+     * the surface. That is what makes an arc a chain of islands rather than a ridge of land.
      */
     val islandArcHeight: Float = 0.24f,
     /**
@@ -459,7 +559,8 @@ data class TectonicsConfig(
      * So the stage runs itself [historyEpochs] times. Each past epoch displaces every plate seed
      * back along minus its own drift (see [epochDriftCells]), classifies the boundaries of *that*
      * configuration by the same crust pairs, stamps the same profiles, and then ages what it
-     * stamped: lower ([beltAgeDecay]), broader ([beltAgeWidening]), rounder ([beltAgeBlurCells]). The
+     * stamped: lower (by the time since it stopped rising — see [epochLengthYears] and
+     * [orogenDecayTimeYears]), broader ([beltAgeWidening]), rounder ([beltAgeBlurCells]). The
      * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
      * ones the rest of the pipeline sees, unchanged.
      *
@@ -480,15 +581,103 @@ data class TectonicsConfig(
      */
     val epochDriftCells: Float = 45f,
     /**
-     * What fraction of its height a belt keeps per epoch of age.
+     * How long one tectonic epoch lasts, in years, and how long a dead orogen takes to fall to
+     * `1/e` of its height once its uplift has stopped.
      *
-     * Earth's figure is the Appalachians against the Alps: a Palaeozoic collision stands about
-     * 2000 m where an active one stands 4000-4800, so a little under a half per orogeny. Two
-     * epochs back that leaves a fifth, which is the Urals and the worn stumps of the Caledonides
-     * — high ground, not mountains. Measured, the belts of one epoch ago come out 2.2 times below
-     * the present ones; `TectonicHistoryTest` reports the figure.
+     * H1 aged a belt by a factor per epoch — 0.45, chosen from the Appalachians against the Alps.
+     * A factor is not a mechanism: it says a belt is low because it is old, where what is true is
+     * that a belt is low because its uplift stopped and erosion went on, and the two are only the
+     * same thing when the arithmetic between them is written down. So the factor is retired and
+     * these two times replace it, with the decay `exp(-epochsAgo * epochLengthYears /
+     * orogenDecayTimeYears)` derived from them. Double the epoch and an old belt is lower by the
+     * exponential's own amount rather than by nothing; `TectonicHistoryTest` holds that.
+     *
+     * Both figures are Earth's, and the pair reproduces H1's 0.45 to two places, which is why the
+     * belts did not have to move to gain a reason. Three hundred million years is the age of the
+     * Alleghanian orogeny that finished the Appalachians and of the Uralian that finished the
+     * Urals, which are the two collisions the ageing was written from; the Variscan is the same
+     * epoch. And the decay time is those two ranges themselves: an active collision stands
+     * 4,000-4,800 m (the Alps, the Southern Alps, the Zagros) and the Appalachians stand about
+     * 2,000 and the Urals about 1,500 after 300 Myr, so the ratio is 0.42 and the time constant
+     * `300 / ln(1 / 0.42)` is 345 Myr. Baldwin, Whipple & Tucker (*Implications of the
+     * shear stress river incision model for the timescale of postorogenic decay of topography*,
+     * JGR 108, 2003) put the decay of an unforced orogen at 10 to 100 Myr for a soft lithology and
+     * several hundred for a resistant one, which is the band this sits in.
+     *
+     * `exp(-300/345)` is 0.42, against the 0.45 H1 used: an old belt is 7% lower than it was, and
+     * two epochs back 13%.
      */
-    val beltAgeDecay: Float = 0.45f,
+    val epochLengthYears: Double = 300e6,
+    val orogenDecayTimeYears: Double = 345e6,
+    /**
+     * How fast the rock rises in an active belt, in millimetres a year, by the crust pair that is
+     * raising it — the field the hydraulic rounds add to the terrain every round.
+     *
+     * This is the coupling the generator lacked. Uplift used to be a thing that happened once,
+     * before erosion started, and stopped the moment it did; on Earth the two run together, and
+     * the height of a range is the balance between them (Whipple & Tucker, *Dynamics of the
+     * stream-power river incision model*, JGR 104, 1999). A belt that is still being pushed up
+     * holds its height against the rivers cutting it down, and one whose boundary has moved away
+     * does not — which is the whole difference between the Alps and the Appalachians, and the
+     * reason [epochLengthYears] above can retire a decay factor.
+     *
+     * The *ratios* between the four are England & Molnar's (*Surface uplift, uplift of rocks, and
+     * exhumation of rocks*, Geology 18, 1990), which is also the paper that insists on the
+     * distinction these numbers have to make. Active collision runs 1-10 mm/yr of rock uplift (the
+     * Himalaya 5, the Southern Alps 5-10, Taiwan 5-7) and an Andean margin 1-3 (the Central Andes
+     * 1-2 through the Neogene); a rift's shoulders are a fraction of that, lifted by the flexure of
+     * the fault rather than by convergence (the Rwenzori, the Ethiopian escarpment, a few tenths);
+     * an island arc has no continent to thicken and manages less still; and a craton does nothing
+     * at all, which is what makes it a craton. Five to two to seven-tenths to three-tenths is that,
+     * and it is the part of their measurement this model can take unchanged.
+     *
+     * The *scale* is this model's own, and the reason is a measurement rather than a preference.
+     * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
+     * at five millimetres a year and gain about half of one, because the rest comes off as
+     * sediment — so a rate is only meaningful beside the erosion it is racing. This generator's
+     * rivers and hillslopes take **0.101 mm/yr** off an active belt, measured over the belts of the
+     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off
+     * (0.096, 0.107, 0.100, 0.102 and 0.102), which is a fiftieth of Earth's orogenic denudation.
+     * That is not a defect to be tuned away but a consequence of the grid: stream power goes as the
+     * slope, a cell of this map is 23 km across, and the steepest mean gradient 23 km of ground can
+     * hold is `ErosionConfig.criticalFallMetresPerKm` — 12 m/km, where a Himalayan flank is 100.
+     *
+     * So the collision rate is set to the surface uplift Earth's own collisions manage — half a
+     * millimetre a year — plus what this model's rivers will take back off it, which is 0.6 mm/yr
+     * of rock uplift, and the other three follow the ratios above. Over the four million years
+     * twelve rounds stand for that is 2.4 km of rock into a collision belt and 0.4 km out of it,
+     * against a dead belt of the same age that only loses. The difference between the two is what
+     * S2 exists to show.
+     *
+     * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
+     */
+    val collisionUpliftMmPerYear: Float = 0.6f,
+    val andeanUpliftMmPerYear: Float = 0.24f,
+    val islandArcUpliftMmPerYear: Float = 0.084f,
+    val riftShoulderUpliftMmPerYear: Float = 0.036f,
+    /**
+     * The height, in metres, past which the crust's own strength starts to hold a range back.
+     *
+     * Not a clamp for tidiness but the oldest limit in orogeny: rock is not strong enough to
+     * support unlimited relief, so a range that is pushed up past a few kilometres spreads
+     * sideways under its own weight instead of rising further. Molnar and Lyon-Caen (*Some simple
+     * physical aspects of the support, structure, and evolution of mountain belts*, GSA Special
+     * Paper 218, 1988) put that limit at about three kilometres of elevation above the
+     * surroundings for crust of ordinary strength, which is why Tibet and the Altiplano stand at
+     * five and nothing on Earth stands at ten; Whipple and Tucker reach the same ceiling from the
+     * erosional side and Willett (*Orogeny and orography*, JGR 104, 1999) from the critical wedge.
+     *
+     * Two things read it, and both need it. The belts are stamped by profiles whose along-strike
+     * swell puts a strong pair's crest eight times above a typical one's, so without a limit one
+     * massif per map would stand at ten kilometres and out of the ruler the climate reads; above
+     * this knee the stamp is compressed toward [WorldScale.highestLandMetres] by
+     * `knee + span * (1 - exp(-(h - knee) / span))`, which never reaches the ceiling and never
+     * flattens a crest into a bench — a slope through it is compressed, not erased. And the uplift
+     * the hydraulic rounds add tapers linearly to nothing between here and the ceiling, so a belt
+     * rising at five millimetres a year for four million years arrives at Tibet's height and
+     * stops.
+     */
+    val elevationLimitKneeMetres: Float = 3_000f,
     /**
      * How much broader a belt gets per epoch of age.
      *
@@ -563,6 +752,154 @@ data class TectonicsConfig(
      * guard measures "before" against.
      */
     val hotspotConeDetail: Boolean = true
+)
+
+/**
+ * The crust floating on the mantle: what sets the two levels the world's hypsometry is built
+ * around, and how the ground bends under a load.
+ *
+ * Two ideas, one section, because they are two readings of the same equation. Airy isostasy is the
+ * local one — a column of crust displaces its own weight of mantle, so a thick light column floats
+ * high and a thin dense one floats low, and that is why continents stand about 800 m above the sea
+ * and the abyssal floor lies 3,700 m below it. Flexure is the same statement made about a plate
+ * with strength: a load does not sink only where it stands, it bends the plate around it, so a
+ * mountain belt is ringed by a moat and a low swell, an ice sheet depresses ground far beyond its
+ * margin, and a river's delta subsides under its own sediment.
+ *
+ * Before this section the generator had neither. Sea level was a percentile through a field that
+ * had been renormalised to its own extremes, so "62% ocean" was a statement about the histogram
+ * and not about the planet, the hypsometric curve came out as one peak straddling the shoreline,
+ * and erosion could take four kilometres off a range without the range rising by a millimetre in
+ * reply. See `REALISM_AUDIT.md` 1.2 and REALISM_PLAN.md, S2.
+ */
+@Serializable
+data class IsostasyConfig(
+    /**
+     * Off puts every crust at one level and lets the sea-level percentile decide the coastline
+     * again, as it did before S2 — which is the control every guard in this chunk is shown to fail
+     * against, and the flat base `BoundaryPairTest` measures a belt profile over.
+     */
+    val enabled: Boolean = true,
+    /**
+     * The densities of the four things a column can be made of, in kilograms per cubic metre.
+     *
+     * The mantle is Turcotte and Schubert's peridotite (*Geodynamics*, 3rd ed., table 4-1); the
+     * continental crust is Christensen and Mooney's global mean of 2,835 over 41 km of thickness
+     * (*Seismic velocity structure and composition of the continental crust*, JGR 100, 1995); the
+     * oceanic crust is Carlson and Raskin's 2,900 (*Density of the ocean crust*, Nature 311,
+     * 1984) over the 7.1 km White, McKenzie and O'Nions measure from seismic refraction
+     * (*Oceanic crustal thickness from seismic measurements*, JGR 97, 1992). Sea water at 1,030 is
+     * the standard mean.
+     */
+    val mantleDensity: Float = 3_300f,
+    val continentalCrustDensity: Float = 2_835f,
+    val oceanicCrustDensity: Float = 2_900f,
+    val seaWaterDensity: Float = 1_030f,
+    /** The two crusts' thicknesses, in kilometres; see [continentalCrustDensity] for the sources. */
+    val continentalCrustThicknessKm: Float = 41f,
+    val oceanicCrustThicknessKm: Float = 7.1f,
+    /**
+     * How high a standard continental column floats, in metres — the constant of integration for
+     * every other column on the map.
+     *
+     * Airy isostasy fixes the *differences* between columns and says nothing about where the datum
+     * is; what puts the datum where it is on a real planet is how much water it has. So one figure
+     * is declared and the rest follow, and this is Earth's own: the mean elevation of the land is
+     * 840 m (Cogley 1984; Eakins & Sharman's ETOPO1 volumes give 797 m for the same quantity, and
+     * the difference is what counts as land at the shelf edge).
+     */
+    val continentalFreeboardMetres: Float = 840f,
+    /**
+     * How deep a standard oceanic column floats, in metres below the water, and so — read through
+     * the same equation — how much of that is the heat in it.
+     *
+     * The mean depth of Earth's ocean is 3,682 m (Charette & Smith, *The volume of Earth's ocean*,
+     * Oceanography 23, 2010). A *cold* column of 7.1 km of 2,900 kg/m³ crust on 3,300 kg/m³ mantle,
+     * with the continental column above floating at [continentalFreeboardMetres], would sit at
+     * -5,927 m instead, and the 2,245 m between the two is not an error in the arithmetic: it is
+     * the thermal buoyancy of oceanic lithosphere, which is young and hot and therefore light.
+     * Parsons and Sclater (*An analysis of the variation of ocean floor bathymetry and heat flow
+     * with age*, JGR 82, 1977) put a spreading ridge at 2,500 m and 80-Myr floor at 5,700, against
+     * a cold asymptote near 6,400 — so the buoyancy runs from about 3,900 m at the ridge to about
+     * 700 at the oldest floor, and its mean over Earth's sea floor is the figure this implies.
+     *
+     * S2 carries it as one number, so every piece of ocean floor is of the mean age. Giving it the
+     * square root of the distance to the nearest spreading ridge is the right shape and is written
+     * up in `TODO.md`: it would make ridges shallow, abyssal plains deep, and the ocean's
+     * hypsometry a distribution rather than a spike.
+     */
+    val oceanicFloorMetres: Float = -3_682f,
+    /**
+     * Whether the plate bends under a load as well as floating on the mantle, and the elastic
+     * thickness it bends with, in kilometres.
+     *
+     * The elastic thickness is the depth of plate that behaves as a beam rather than flowing, and
+     * it is what decides *how far* a load is felt. Watts (*Isostasy and Flexure of the
+     * Lithosphere*, 2001) puts continents between 20 and 40 km once thermally mature, oceanic
+     * lithosphere lower and young orogens lower still; thirty is the middle of the continental
+     * band and the figure the Ganges and Po forelands are usually fitted with.
+     *
+     * What it comes to on this map: the flexural rigidity `D = E * Te^3 / (12 * (1 - v^2))` is
+     * 1.68e23 N m at these figures, and the flexural parameter `(4D / (dRho * g))^(1/4)` is 68 km
+     * against an empty moat — three cells of the default grid. A load's own basin therefore reaches
+     * some 160 km in front of it and its forebulge some 210, and once the range's debris has filled
+     * the basin the response to that reaches further again. Earth's Ganges foreland is 300 km wide
+     * over a plate stiffer than this one (the Indian shield's elastic thickness is 70-90 km where
+     * an average continent's is 30), and the Alpine molasse is 100.
+     */
+    val flexure: Boolean = true,
+    val elasticThicknessKm: Float = 30f,
+    /** Young's modulus in gigapascals and Poisson's ratio, for the rigidity above. */
+    val youngsModulusGPa: Float = 70f,
+    val poissonRatio: Float = 0.25f,
+    /**
+     * The density of whatever fills the space the plate bends into, in kilograms per cubic metre —
+     * which with [mantleDensity] is the `dRho` of the flexure equation.
+     *
+     * Air, which is to say nothing, and the reason is worth setting out because the textbook
+     * figure is not this one. Turcotte and Schubert's worked foreland case takes `dRho` as mantle
+     * against sediment — `3,300 - 2,700 = 600` — because the moat they are describing is already
+     * full: the sediment shed off the range beside it is itself a load, and counting it into the
+     * restoring term is how a closed-form solution gets the amplification without iterating. This
+     * model does iterate. It has a deposition stage that fills the moat with the range's own
+     * debris round after round, and the next round's flexure answers the extra weight, so taking
+     * the 600 here would count that sediment twice and deepen every basin by a factor of five and
+     * a half. An empty moat bends against the whole mantle, so `dRho` is 3,300, and the 600 comes
+     * back out of the loop where the sediment actually arrives.
+     */
+    val deflectionFillDensity: Float = 0f,
+    /** Gravity, in metres per second squared. Earth's standard value. */
+    val gravity: Float = 9.81f,
+    /**
+     * Whether an ice sheet's weight is handed to the flexure, and the density of the ice.
+     *
+     * Glacial isostasy is the most directly observed part of this whole section: Scandinavia is
+     * still rising a centimetre a year from the load that left it ten thousand years ago, its
+     * raised beaches are the record of it, and Greenland's bed lies below sea level over most of
+     * its interior because three kilometres of ice are standing on it. Ice at 917 kg/m³ against
+     * mantle at 3,300 depresses its bed by 28% of its own thickness once the mantle has flowed.
+     *
+     * The map is drawn after the last deglaciation, so what it shows of that is the ground the
+     * *present* ice still holds down and the ground the *former* ice has already let go: the
+     * rebound is the absence of a load rather than a load of its own. S2 takes the ice mask the
+     * glaciation stage produces and gives it a thickness; I1 gives the sheet a Vialov profile and
+     * this reads it instead. See REALISM_PLAN.md, S2 and `REALISM_AUDIT.md` section 5.
+     */
+    val iceLoad: Boolean = true,
+    val iceDensity: Float = 917f,
+    /**
+     * How thick the ice is taken to be at the middle of a sheet, in metres, and how far in from
+     * its margin it reaches that thickness, in kilometres.
+     *
+     * Antarctica averages 2,126 m of ice and Greenland 1,673 (Fretwell et al. 2013; Morlighem et
+     * al. 2017), and both thin to nothing at the coast over a few hundred kilometres. Two
+     * thousand metres over a 400 km ramp is that, and it is deliberately the crudest thing that
+     * can be true: a sheet's real profile is a parabola in the distance from its margin (Vialov
+     * 1958) and drawing it is I1's, which this chunk exists to leave room for rather than to
+     * pre-empt.
+     */
+    val iceSheetThicknessMetres: Float = 2_000f,
+    val iceSheetMarginRampKm: Double = 400.0
 )
 
 /**
@@ -1862,8 +2199,24 @@ data class WorldGenConfig(
     val scale: WorldScale = WorldScale(),
     val terrain: TerrainConfig = TerrainConfig(),
     val tectonics: TectonicsConfig = TectonicsConfig(),
+    /**
+     * How the crust floats and how it bends — which is what gives the height field an absolute
+     * scale, so it belongs beside the tectonics that stamp into it rather than inside them.
+     */
+    val isostasy: IsostasyConfig = IsostasyConfig(),
     val erosion: ErosionConfig = ErosionConfig(),
-    /** Fraction of the world covered by ocean, 0..1. */
+    /**
+     * Fraction of the world covered by ocean, 0..1.
+     *
+     * Read twice since S2, and the two readings are the point of the chunk. The plate stage draws
+     * `(1 - this) / (1 - TectonicsConfig.continentalCrustSubmergedShare)` of the world as
+     * continental crust, so the share of the map that stands above the waterline is a consequence
+     * of what the crust is rather than of where a histogram was cut; and the sea-level stage still
+     * cuts at the percentile this asks for, which is a statement about how much water the planet
+     * has and is the one thing isostasy cannot supply. How far apart the two answers land — the
+     * coverage the crust alone would give against the coverage asked for — is what
+     * `IsostasyTest` measures and what the shoreline residual in `UnitsTest` reads.
+     */
     val seaLevel: Float = 0.62f,
     val sea: SeaConfig = SeaConfig(),
     val glaciation: GlaciationConfig = GlaciationConfig(),
@@ -1907,13 +2260,13 @@ data class WorldGenConfig(
      * rates in years, converted to the grid by [WorldScale] where each stage reads them, so the
      * scaling is arithmetic rather than a contract and there is nothing left here to carry.
      *
-     * What is left is the tectonics, and it is left deliberately. A belt's width and a belt's
-     * height are read together, cell by cell, in one stamping function, and only the width can
-     * carry a unit today: the heights are shares of a field that is normalised to 0..1 after the
-     * stamping, so they have no metre value until uplift and isostasy give the field an absolute
-     * vertical scale. Splitting the pair — kilometres on one side of an expression and a bare
-     * ratio on the other — would read worse than leaving both alone, so both move together in S2.
-     * See REALISM_PLAN.md, S1 and S2.
+     * What is left is the tectonics' *widths*, and they are left deliberately. Since S2 a belt's
+     * height does carry a metre value — every one of them is a share of
+     * [TectonicsConfig.beltReliefMetres], so none of them appears below — but a belt's half-width
+     * is still written as a count of cells, and carrying that count across a change of grid is
+     * what this function is for. Writing the widths in kilometres instead would do exactly the
+     * same arithmetic in a different place; it is a rename with no physics under it, and it is in
+     * `TODO.md` rather than here. See REALISM_PLAN.md, S1 and S2.
      *
      *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur
      *    that softens the plate base. Left alone, a 4x larger grid makes both four times narrower

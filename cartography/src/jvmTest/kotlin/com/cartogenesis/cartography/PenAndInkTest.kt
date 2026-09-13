@@ -488,7 +488,7 @@ class PenAndInkTest {
             "(blank below %.2f, fully black at %.2f, widest stroke at %.2f)").format(
             slopes.size, at(0.10), at(0.50), at(0.75), at(0.90), at(0.99),
             EngravingPlan.SLOPE_FLOOR,
-            EngravingPlan.SLOPE_FLOOR + EngravingPlan.FULL_INK_AT / gain,
+            EngravingPlan.SLOPE_FLOOR + EngravingPlan.FULL_INK_AT_STEEPNESS / gain,
             EngravingPlan.SLOPE_FLOOR + 1f / gain
         )
     }

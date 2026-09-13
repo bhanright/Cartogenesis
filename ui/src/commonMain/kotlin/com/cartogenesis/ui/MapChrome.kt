@@ -512,7 +512,7 @@ private fun ScaleBarStrip(kilometresPerCellWidth: Double, camera: MapCamera, fra
     val pixelsPerCell = camera.pixelsPerCell
     if (pixelsPerCell <= 0f) return
     val density = LocalDensity.current
-    val bar = MapScale.bar(
+    val bar = MapScale.longestBarThatFits(
         kilometresPerCellWidth / pixelsPerCell,
         with(density) { frameWidth.toPx() }
     )

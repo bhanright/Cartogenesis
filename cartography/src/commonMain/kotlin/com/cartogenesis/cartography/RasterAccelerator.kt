@@ -74,6 +74,11 @@ object RasterView {
  * tables) are copies because the pipeline holds them as types no graphics API can read: a
  * `BooleanArray`, an array of enum objects, and a function of an id.
  *
+ * The A and B of [scalarA], [indexA] and [colorsA] are the shader's own buffer names
+ * (`ScalarA`, `IndexA`, `ColorsA` in `GpuRaster.SOURCE`) and stay as they are, so the two sides of
+ * the upload can be read against each other line for line. What each slot carries depends on the
+ * view rather than on its name, which is what the table below is for.
+ *
  * The seasonal temperature and rainfall views collapse into one [RasterView] each, because they
  * differ only in which field lands in [scalarA]. Which fields are populated depends on the view:
  *

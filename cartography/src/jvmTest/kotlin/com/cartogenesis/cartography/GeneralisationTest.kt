@@ -135,7 +135,7 @@ class GeneralisationTest {
     fun `a coast is simplified harder the further out the reader stands`() {
         val map = world(42L)
         val counts = listOf(AT_FIT, AT_FOUR_TIMES, 1f).map { pixelsPerCell ->
-            val sheet = if (pixelsPerCell == 1f) MapSheet.SHEET else MapSheet.onScreen(pixelsPerCell)
+            val sheet = if (pixelsPerCell == 1f) MapSheet.UNGENERALISED else MapSheet.onScreen(pixelsPerCell)
             sheet to Shoreline.of(map.sea.isLand, map.width, map.height, sheet)
                 .sumOf { it.size / 2 }
         }
@@ -167,7 +167,7 @@ class GeneralisationTest {
 
         val atFit = MapRasterizer.overlay(map, options, MapSheet.onScreen(AT_FIT)).riversDrawn
         val zoomed = MapRasterizer.overlay(map, options, MapSheet.onScreen(AT_FOUR_TIMES)).riversDrawn
-        val onTheSheet = MapRasterizer.overlay(map, options, MapSheet.SHEET).riversDrawn
+        val onTheSheet = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).riversDrawn
         println(
             "SCALE rivers drawn: $atFit at fit, $zoomed at 4x, $onTheSheet on the sheet " +
                 "(of ${map.rivers.rivers.size} traced)"
@@ -222,7 +222,7 @@ class GeneralisationTest {
         assertEquals(scale.cellWidthKm(cellsAcross), perPixel, 1e-9)
 
         val frame = cellsAcross.toFloat()
-        val bar = MapScale.bar(perPixel, frame)
+        val bar = MapScale.longestBarThatFits(perPixel, frame)
         println(
             "SCALE scale bar on a $cellsAcross sheet: ${bar.label} over ${bar.lengthPixels} px, " +
                 "at ${MapScale.oneDecimal(perPixel)} km per pixel; " +
@@ -251,7 +251,7 @@ class GeneralisationTest {
     fun `the bar shortens as the reader zooms in, and stays a round number`() {
         val scale = WorldGenConfig().scale
         val quoted = listOf(0.25f, 0.5f, 1f, 2f, 8f, 32f).map { pixelsPerCell ->
-            val bar = MapScale.bar(
+            val bar = MapScale.longestBarThatFits(
                 MapScale.kilometresPerPixel(scale, 2048, pixelsPerCell),
                 900f
             )
@@ -367,7 +367,7 @@ class GeneralisationTest {
     fun `an export carries a scale bar and the live view does not`() {
         val map = world(42L)
         assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.PRINTED).scaleBar != null)
-        assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.SHEET).scaleBar == null)
+        assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.UNGENERALISED).scaleBar == null)
         assertTrue(MapRasterizer.overlay(map, RenderOptions(), MapSheet.onScreen(1f)).scaleBar == null)
 
         val graticuled = MapRasterizer.overlay(map, RenderOptions(showGraticule = true))

@@ -361,7 +361,7 @@ object MapRasterizer {
     fun overlay(
         world: WorldMap,
         options: RenderOptions = RenderOptions(),
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): MapOverlay {
         val cellsAcross = world.width
         val rivers = ArrayList<RiverSegment>()
@@ -588,7 +588,7 @@ object MapRasterizer {
             world.width.toFloat() * Graticule.DEGREES / DEGREES_OF_LONGITUDE
         )
         return PlacedScaleBar(
-            bar = MapScale.bar(
+            bar = MapScale.longestBarThatFits(
                 MapScale.kilometresPerPixel(world.config.scale, world.width, 1f),
                 world.width.toFloat()
             ),

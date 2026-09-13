@@ -63,12 +63,12 @@ abstract class ByteWorldLibrary(
     protected abstract suspend fun remove(name: String)
 
     /**
-     * The first [limit] bytes, or the whole blob if this platform cannot read part of one.
+     * The first [limitBytes] bytes, or the whole blob if this platform cannot read part of one.
      *
      * Returning everything is correct but slow to list a library of large worlds, which is the
      * one thing a listing must not be.
      */
-    protected open suspend fun readPrefix(name: String, limit: Int): ByteArray? = read(name)
+    protected open suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? = read(name)
 
     private fun fileName(id: String) = "$id$EXTENSION"
 

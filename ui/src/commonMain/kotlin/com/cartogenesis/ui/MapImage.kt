@@ -37,7 +37,7 @@ object MapImage {
     fun render(
         world: WorldMap,
         options: RenderOptions,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): ImageBitmap = finish(toBitmap(world, options, sheet))
 
     /**
@@ -71,7 +71,7 @@ object MapImage {
     fun toBitmap(
         world: WorldMap,
         options: RenderOptions,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): Bitmap = toBitmap(world, options, MapRasterizer.rasterize(world, options), sheet)
 
     /**
@@ -85,7 +85,7 @@ object MapImage {
         world: WorldMap,
         options: RenderOptions,
         pixels: IntArray,
-        sheet: MapSheet = MapSheet.SHEET
+        sheet: MapSheet = MapSheet.UNGENERALISED
     ): Bitmap {
         val widthPixels = world.width
         val heightPixels = world.height

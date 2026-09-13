@@ -208,7 +208,7 @@ internal class IndexedDbLibrary(
 
     override suspend fun read(name: String): ByteArray? = withDb { it.get(STORE_PAYLOADS, name) }
 
-    override suspend fun readPrefix(name: String, limit: Int): ByteArray? =
+    override suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? =
         withDb { it.get(STORE_HEADERS, name) }
 
     override suspend fun write(name: String, bytes: ByteArray) = withDb { db ->

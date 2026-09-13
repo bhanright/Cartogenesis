@@ -168,11 +168,14 @@ class EngravingPlan(width: Int) {
         const val SLOPE_FLOOR: Float = 0.07f
 
         /**
-         * The steepness at which a stroke is fully black, as a fraction of the way from the slope
-         * floor to the steepest ground. Below it the stroke is grey, which is what a light hand on
-         * gentle ground looks like.
+         * The steepness at which a stroke is fully black, as a fraction of the way from
+         * [SLOPE_FLOOR] to the steepest ground.
+         *
+         * Below it the stroke is grey, which is what a light hand on gentle ground looks like. A
+         * third of the way up, so the rolling country between the ranges still takes a legible
+         * mark and only the ranges themselves run solid.
          */
-        const val FULL_INK_AT: Float = 0.34f
+        const val FULL_INK_AT_STEEPNESS: Float = 0.34f
 
         /** How black a lake's water lines run against the firm ink of its shore. */
         const val LAKE_LINE_STRENGTH: Float = 0.8f
@@ -271,7 +274,7 @@ internal object Engraving {
             }
         }
 
-        val darkness = (steepness / EngravingPlan.FULL_INK_AT).coerceAtMost(1f)
+        val darkness = (steepness / EngravingPlan.FULL_INK_AT_STEEPNESS).coerceAtMost(1f)
         return strongest * darkness
     }
 

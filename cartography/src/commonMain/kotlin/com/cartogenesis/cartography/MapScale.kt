@@ -81,7 +81,7 @@ object MapScale {
      * scale bar and every axis tick uses, because those are the numbers a reader can halve and
      * quarter by eye against the bar.
      */
-    fun bar(kilometresPerPixel: Double, frameWidthPixels: Float): ScaleBar {
+    fun longestBarThatFits(kilometresPerPixel: Double, frameWidthPixels: Float): ScaleBar {
         val longest = frameWidthPixels * SHARE_OF_FRAME * kilometresPerPixel
         val kilometres = roundedDownTo125(longest)
         return ScaleBar(

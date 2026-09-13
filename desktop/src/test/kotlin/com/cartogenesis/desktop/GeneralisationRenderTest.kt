@@ -131,7 +131,7 @@ class GeneralisationRenderTest {
             // river and every bend of coast the world has, which is what the renderer did before.
             listOf(
                 "generalised" to MapSheet.onScreen(AT_FIT),
-                "ungeneralised" to MapSheet.SHEET
+                "ungeneralised" to MapSheet.UNGENERALISED
             ).forEach { (how, sheet) ->
                 val bitmap = MapImage.toBitmap(map, plain, ground, sheet)
                 written += write(dir, "$name-asseen-$how.png", shrunkToThePane(bitmap))
@@ -222,7 +222,7 @@ class GeneralisationRenderTest {
      * window full of drainage is a window full of coast as well.
      */
     private fun busiestWindow(map: WorldMap, options: RenderOptions): Pair<Int, Int> {
-        val rivers = MapRasterizer.overlay(map, options, MapSheet.SHEET).rivers
+        val rivers = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).rivers
         var best = 0
         var at = (SIZE - CROP) / 2 to (SIZE - CROP) / 2
         var top = 0

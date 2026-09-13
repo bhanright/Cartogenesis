@@ -1081,7 +1081,10 @@ IBM Plex Sans, Plex Mono, flat surfaces, hairline rules, the ink/bone/brass/oxbl
 with restraint). The site adopts the app's identity; every image is a real export produced by
 the site's own build from a fixed seed and crop, so the pictures regenerate with each release.*
 Decisions approved: the app's typefaces self-hosted; the palette kept, gradients, bevel and
-ornament removed; headline "Give it a seed. It builds the plates, the weather and the peoples.";
+ornament removed; headline "Give it a seed. It builds the plates, the weather and the peoples."
+(superseded after launch, 2026-09-12: William preferred the handoff's "Build a world from the
+ground up." with the subhead "Terrain, rivers, climate and borders. A world shaped by geography,
+starting with a seed.", and the page says that now);
 buttons "Open in the browser" and "Download for Windows (recommended)"; imagery rendered from
 seed 718106 at build time; one combined strip of four readings; the generator interface out of
 scope.

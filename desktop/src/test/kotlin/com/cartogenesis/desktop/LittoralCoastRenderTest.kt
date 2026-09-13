@@ -21,7 +21,8 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.SamplingMode
 
 /**
- * The two worlds F17 is judged on, before and after, with a low coast and a mountain coast cropped
+ * The two worlds the littoral rule is judged on, before and after, with a low coast and a
+ * mountain coast cropped
  * out of each.
  *
  * There is no numeric test for "the coasts vary now". `LittoralCoastTest` in `:worldgen` measures
@@ -62,8 +63,8 @@ class LittoralCoastRenderTest {
     }
 
     private fun report(dir: File, written: List<String>) {
-        println("F17 wrote ${written.size} files to ${dir.absolutePath}")
-        written.forEach { println("F17 $it") }
+        println("LITTORAL wrote ${written.size} files to ${dir.absolutePath}")
+        written.forEach { println("LITTORAL $it") }
         assertTrue(written.isNotEmpty())
     }
 

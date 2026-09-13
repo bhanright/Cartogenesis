@@ -49,8 +49,8 @@ class ClimateReliefGalleryTest {
             val windows = DETAILS.associate { detail ->
                 detail.name to densestWindow(world, detail)
             }
-            println("F13 $name windows: $windows")
-            println("F13 $name ${contourPatches(world)}")
+            println("CLIMATE RELIEF $name windows: $windows")
+            println("CLIMATE RELIEF $name ${contourPatches(world)}")
 
             styles.forEach { style ->
                 val options = RenderOptions(view = MapView.FANTASY, style = style)
@@ -72,7 +72,7 @@ class ClimateReliefGalleryTest {
 
         val written = dir.listFiles()?.count { it.name.endsWith(".png") } ?: 0
         assertTrue(written >= 30, "only $written pictures were written to ${dir.absolutePath}")
-        println("F13 wrote $written pictures to ${dir.absolutePath}")
+        println("CLIMATE RELIEF wrote $written pictures to ${dir.absolutePath}")
     }
 
     /**

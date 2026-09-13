@@ -99,9 +99,9 @@ val buildDate: Provider<String> = providers.gradleProperty("buildDate")
 /**
  * The project's own licence, read from the repository root rather than asserted here.
  *
- * As of F4 there is no licence file in this repository at all, so this says so in as many words.
- * That is the honest answer and it is visible in the About dialog, which is the point: a constant
- * reading "MIT" would have been a claim nobody has made.
+ * There is no licence file in this repository at all, so this says so in as many words. That is
+ * the honest answer and it is visible in the About dialog, which is the point: a constant reading
+ * "MIT" would be a claim nobody has made.
  */
 val licenceNotice: Provider<String> = providers.provider {
     val file = listOf("LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "COPYING")
@@ -146,8 +146,8 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
                 appendLine(" * installer's version comes from, so the About dialog and the packaged")
                 appendLine(" * artefact cannot disagree about which release this is.")
                 appendLine(" *")
-                appendLine(" * Public rather than internal since F12: a data export's sidecar names")
-                appendLine(" * the build that wrote it, and the two front ends are the ones writing")
+                appendLine(" * Public rather than internal: a data export's sidecar names the")
+                appendLine(" * build that wrote it, and the two front ends are the ones writing")
                 appendLine(" * the file, so they have to be able to read this.")
                 appendLine(" */")
                 appendLine("object BuildInfo {")
@@ -211,8 +211,8 @@ val generateNotices = tasks.register("generateNotices") {
 
     // The three faces are bundled as Compose resources rather than resolved as dependencies, so
     // they appear in no graph — and they are the three notices that are a licence requirement
-    // rather than a courtesy. The OFL text beside them is what is read here. F7 added the mono cut,
-    // which Matrix sets its type in; it comes from the same IBM Plex release as the sans.
+    // rather than a courtesy. The OFL text beside them is what is read here. The mono cut, which
+    // Matrix sets its type in, comes from the same IBM Plex release as the sans.
     inputs.files(layout.projectDirectory.dir("licences").asFileTree)
         .withPropertyName("bundledFontLicences")
         .withPathSensitivity(PathSensitivity.RELATIVE)

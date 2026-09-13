@@ -310,15 +310,23 @@ data class TerrainConfig(
      * outside Horton's 3 to 5, by halving the count of third- and fourth-order streams: the
      * catchments stopped merging.
      *
-     * A tenth, and the floor is small because the unfiltered amplitude at that scale is enormous:
+     * A fifth, and the floor is small because the unfiltered amplitude at that scale is enormous:
      * integration makes it grow as the wavelength, so the map's own width carries fifteen times
-     * what the corner does, and a tenth of that is still one and a half times the corner's own
-     * amplitude. Measured over 0, 0.02, 0.05, 0.10, 0.15, 0.20 and 0.30 on the four standard
-     * worlds, a tenth is where the bifurcation ratio stops falling and the coastline has not yet
-     * begun to: it takes the ratio from 5.82 to 5.03 and the third- and fourth-order streams from
-     * 185 and 10 back to 259 and 32, while the coastline holds at 1.13 and the island count goes
-     * from 31 to 57. Above it the coastline goes — a map-scale tilt moves the shoreline bodily, and
-     * by 0.15 two of the four seeds are under Mandelbrot's floor.
+     * what the corner does, and a fifth of that is three times the corner's own amplitude.
+     *
+     * S2's second pass took a tenth and measured that as where the bifurcation ratio stopped
+     * falling. It is not enough, and what the ratio could not see the eye could: with a tenth the
+     * ground between the belts has no slope worth the name, so the water ponds where it falls and
+     * the sea-level cut lands on a platform flat enough to drown into an archipelago. Rendered at
+     * 2048, 718106's southern half was a maze of inlets and islands and both worlds were pocked
+     * with small lakes. Measured over 0.15, 0.20, 0.25 and 0.30 on the five standard worlds, a
+     * fifth is where the drainage is Earth's and the coast is still a coast: the lake share of
+     * land falls from 3.55% to 1.87% against Earth's 1.48% at this cell area, the drainage
+     * density rises from 0.0023 to 0.0030 km/km2 against main's 0.0026 (the bar is main's fifth
+     * either way, so 0.0031 is the ceiling), the drawn rivers go from 160 to 192 against main's
+     * 170, and the coastline's box dimension holds at 1.114 where a tenth gave 1.137. Above a
+     * fifth the coastline goes — a map-scale tilt moves the shoreline bodily — and the drainage
+     * density overshoots: at 0.25 it is 0.0032 and at 0.30 it is 0.0033.
      *
      * A continental interior swell of Bond's own amplitude and wavelength, windowed onto the crust,
      * was built and measured as the physically better answer and removed again: over 400, 800 and
@@ -1524,13 +1532,28 @@ data class ErosionConfig(
      * The critical slope: the steepest a hillside can stand before it fails, as a fall in metres
      * per kilometre of ground.
      *
-     * Twelve metres per kilometre, which is 1.2% or 0.69 degrees. That is nothing like the thirty
+     * Sixty metres per kilometre, which is 6% or 3.4 degrees. That is nothing like the thirty
      * degrees a scree slope stands at, and it should not be: a cell of the default grid is 23 km
-     * across, so this is the steepest *mean* slope a stretch of ground 23 km long may hold, and
-     * the Himalayan front — five kilometres of rise over fifty of ground — is 100 m/km only
-     * because fifty kilometres is a short distance for a mountain range. What this number governs
-     * is the shape of a belt hundreds of kilometres wide, not the angle of any real hillside, and
-     * the finer detail below the cell is not represented at all.
+     * across, so this is the steepest *mean* slope a stretch of ground 23 km long may hold. What
+     * this number governs is the shape of a belt hundreds of kilometres wide, not the angle of any
+     * real hillside, and the finer detail below the cell is not represented at all.
+     *
+     * The figure is the gentlest of the great mountain fronts, read over a cell's width: the
+     * Andes' western flank climbs 6,000 m in the 100 km from the Peruvian coast to the Altiplano's
+     * rim, which is 60 m/km; the Himalayan front is 5,000 m in 50, which is 100; the Sierra
+     * Nevada's east face is 3,000 m in 20, which is 150. Taking the gentlest means the sweeps
+     * plane nothing that any real range sustains, and everything steeper than all of them.
+     *
+     * It was 12 m/km until S2's third pass, and that was never a slope anybody had chosen. The
+     * figure S1 found in the code was 9 units of a renormalised height field per 512 cells, and
+     * converting it honestly gave 0.69 degrees — a twentieth of the gentlest front on Earth, and
+     * gentle enough to plane a collision belt's own rim. A stamped plateau's rim ramp falls at
+     * about 12 m/km over its 200 km, so it sat exactly at the threshold and the sweeps flattened
+     * it to a dead plane: what the eye saw was a smooth cream annulus round every belt, with no
+     * channel crossing it. Measured over 18, 24, 36 and 60 m/km on the five standard worlds, the
+     * belt's band-pass relief at 5 to 20 cells climbs from 222 m to 253 against main's 200 and
+     * the coastline's box dimension from 1.114 to 1.126; the figures are flat from 36 upward,
+     * because by then the sweeps no longer reach anything a belt profile draws.
      *
      * Converted to the height field at the point of use, through
      * [WorldScale.reliefSpanMetres] and the cell's own width, so the same terrain wears to the

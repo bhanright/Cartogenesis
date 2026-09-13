@@ -77,8 +77,15 @@ because its uplift stopped and erosion went on, and the epochs say when: the age
 `w(k) = L(k) / (dRho g + D k^4)`, solved by the same FFT the terrain stage uses. A range that is
 being stripped loses mass and rebounds; the ground in front of it takes that mass as sediment and
 sinks, which is a foreland basin; a delta subsides under its own load; and an ice sheet holds its
-bed down, which is why the ground under one stands lower than the ground beside it and why a
-formerly glaciated shield stands where it does. The elastic thickness is 30 km, the middle of the
+bed down, which is why Greenland's bed lies below sea level and why Scandinavia is still rising a
+centimetre a year. What the ice presses down is the *bed*, and the elevation field is a surface —
+the climate reads its altitude for a temperature and the rivers run down it — so over the middle of
+a cap, where the ice fills the hollow it makes, the surface does not move at all; the bend shows at
+the margin, where the sheet has thinned to nothing and there is nothing to fill it. That is the
+moat: the Baltic, and the string of lakes along the Laurentide's rim. S2's second pass spent the
+whole bend on the surface instead, and the map paid for it twice — the biome stage read the cap's
+own ground as warmer and the ice share of land fell from 8.0% to 6.2%, while the hollow under the
+cap ponded and the lake share rose from 2.6% to 3.6%. The elastic thickness is 30 km, the middle of the
 20-40 km Watts measures for mature continents, which puts the flexural parameter at 68 km — three
 cells of the default grid, so a load's own basin reaches some 160 km in front of it.
 
@@ -92,9 +99,14 @@ integrates it, leaving the relief loudest at 400 km, which is the scale Earth's 
 continental relief sits at and the scale a range is read at on a map. Its amplitude is a standard
 deviation in metres: 700 m on continental crust, which is Earth's own spread away from its orogens,
 250 on the sea floor, which is Goff and Jordan's abyssal hills, and 700 m more inside an active
-orogen, which is the relief between the cordilleras of one. A tenth of the map-scale component is
+orogen, which is the relief between the cordilleras of one. A fifth of the map-scale component is
 kept, because drainage is organised by a continent's longest slopes and a surface with nothing at
-that wavelength grows many short rivers instead of a few long ones.
+that wavelength grows many short rivers instead of a few long ones — and, as S2's third pass found,
+ponds the water where it falls. At a tenth, which is what the second pass measured the bifurcation
+ratio against, lakes covered 3.55% of the land against Earth's 1.48% at this cell area and the
+sea-level cut landed on a platform flat enough to drown into an archipelago; at a fifth the lakes
+are 1.87%, the drainage density is 0.0030 km/km² against the pre-S2 generator's 0.0026, and the
+coastline's box dimension is still 1.114.
 
 **Rain shadow is real, not decorative.** Rainfall is produced by marching moist air along prevailing
 winds and wringing it out on windward slopes, so leeward dryness emerges from the simulation. Wind
@@ -806,7 +818,15 @@ Two details matter more than they look. Incision is interleaved with the thermal
 run after them, because on its own it cuts a slot one cell wide — and a one-cell slot is twice as
 steep on a grid twice as fine, so the world stops being the same world at different resolutions.
 Letting the walls fail between rounds caps them at the critical slope, which is a property of the
-map. And nothing cuts below sea level, because that is the base level every river grades to; without
+map. That slope is 60 m per kilometre — 3.4 degrees, which sounds absurdly gentle until you
+remember that a cell of the default grid is 23 km across and this is therefore the steepest *mean*
+gradient a stretch of ground 23 km long may hold. It is the gentlest of the great mountain fronts
+read at that width: the Andes' western flank climbs 6,000 m in 100 km, the Himalayan front 5,000 in
+50, the Sierra Nevada's east face 3,000 in 20. Until S2's third pass it was 12 m/km, which was S1's
+honest conversion of a unitless figure nobody had ever chosen as a slope, and a twentieth of the
+gentlest front on Earth. A stamped plateau's rim ramp falls at about 12 m/km over its 200 km, so the
+sweeps found it exactly at the threshold and planed it to a dead plane: every collision belt on the
+map wore a smooth cream annulus with no channel crossing it. And nothing cuts below sea level, because that is the base level every river grades to; without
 that limit the cells nearest the shore incise hardest, having a whole catchment behind them and open
 water in front, and the coastline shreds into drowned valleys.
 

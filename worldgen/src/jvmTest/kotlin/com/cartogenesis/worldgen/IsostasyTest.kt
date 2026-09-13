@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.Biome
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -682,22 +683,43 @@ class IsostasyTest {
     }
 
     /**
-     * Ice holds its bed down, which is why Greenland's lies below sea level.
+     * Ice holds its bed down, and what it holds down is the bed and not the surface.
      *
-     * The same world with the ice load on and off. Under a sheet at its full thickness the bed
-     * should be down by `iceDensity / mantleDensity` of that thickness once the plate has flattened
-     * out — 28% of it, or 556 m at the stock two kilometres — and less at the margin, where the
-     * sheet is thinner and the plate is holding it up from both sides.
+     * The same world with the ice load on and off. A sheet at its full thickness presses its bed
+     * down by `iceDensity / mantleDensity` of that thickness once the plate has flattened out —
+     * 28% of it, or 556 m at the stock two kilometres — and less at the margin, where the sheet is
+     * thinner and the plate is holding it up from both sides. That is a fact about the rock.
+     *
+     * The elevation field is not the rock. The climate stage reads its altitude for a temperature,
+     * the river stage runs water down it and the renderer shades it, so it is a *surface*, and
+     * over the middle of a cap the surface is the top of the ice. A sheet presses a hollow and
+     * then fills it with itself: the air touches the same height it did before. What moves is the
+     * ground round the edge, where the ice has thinned to nothing and there is nothing to fill the
+     * bend — the moat, which on Earth is the Baltic and the string of lakes along the Laurentide's
+     * rim.
+     *
+     * S2's second pass spent the whole bend on the surface, and both halves of the cost were
+     * measured on the five standard worlds at 512: the cap's own ground read several hundred
+     * metres lower, the biome stage read that as warmer, and the ice share of land fell from 8.0%
+     * to 6.2% against main's 9.6%, while the hollow under the cap ponded and the lake share of
+     * land rose from 2.6% to 3.6%.
+     *
+     * So this guard reads two things: the moat is there and is a real fraction of what a sheet of
+     * this thickness floats out at, and the middle of the cap has not moved.
      */
     @Test
-    fun `ice holds its bed down`() {
+    fun `ice holds its bed down, and the ice fills the hollow`() {
         val seed = 7L
         val world = worldAt(seed)
         val without = WorldGenerationEngine.generateBlocking(
             world.config.copy(isostasy = world.config.isostasy.copy(iceLoad = false))
         )
         val scale = world.config.scale
-        var deepest = 0.0
+        val frozen = BooleanArray(world.sea.isLand.size) {
+            world.climate.biome[it] == Biome.ICE_SHEET
+        }
+        var deepestMoat = 0.0
+        var deepestUnderIce = 0.0
         var moved = 0
         for (cell in world.sea.relativeElevation.data.indices) {
             if (!world.sea.isLand[cell] || !without.sea.isLand[cell]) continue
@@ -705,20 +727,31 @@ class IsostasyTest {
             val there = scale.metresAboveShoreline(without.sea.relativeElevation.data[cell])
             val down = (there - here).toDouble()
             if (down > 1.0) moved++
-            if (down > deepest) deepest = down
+            if (frozen[cell]) {
+                if (down > deepestUnderIce) deepestUnderIce = down
+            } else if (down > deepestMoat) deepestMoat = down
         }
         val isostasy = world.config.isostasy
         val airy = isostasy.iceSheetThicknessMetres * isostasy.iceDensity / isostasy.mantleDensity
         println(
-            "ISOSTASY ice seed %d: %d cells pressed down, the deepest by %.0f m, against the %.0f m"
-                .format(seed, moved, deepest, airy) + " a sheet of this thickness floats out at"
+            ("ISOSTASY ice seed %d: %d cells pressed down, the moat deepest by %.0f m and the" +
+                " ground under the cap by %.0f, against the %.0f m a sheet of this thickness" +
+                " floats out at")
+                .format(seed, moved, deepestMoat, deepestUnderIce, airy)
         )
         assertTrue("seed $seed carries no ice, so there is no load to weigh", moved > 0)
         assertTrue(
-            "the deepest the ice presses its bed is ${"%.0f".format(deepest)} m, which is not" +
-                " within half and one and a half of the ${"%.0f".format(airy)} m" +
+            "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
+                " a fifth and the whole of the ${"%.0f".format(airy)} m" +
                 " `iceDensity / mantleDensity` of the sheet's own thickness comes to",
-            deepest in (airy * 0.5)..(airy * 1.5)
+            deepestMoat in (airy * MOAT_SHARE_OF_AIRY_FLOOR)..airy.toDouble()
+        )
+        assertTrue(
+            "the ground under the ice dropped ${"%.0f".format(deepestUnderIce)} m, more than the" +
+                " ${"%.0f".format(airy * CAP_SHARE_OF_AIRY_CEILING)} m a cap is allowed to move:" +
+                " the bend is being spent on the surface rather than on the bed under it, which is" +
+                " what the climate stage then reads as warmer ground",
+            deepestUnderIce <= airy * CAP_SHARE_OF_AIRY_CEILING
         )
     }
 
@@ -838,5 +871,20 @@ class IsostasyTest {
          */
         const val FIRST_FORELAND_BIN = 3
         const val MIN_FOREBULGE_METRES = 2.0
+
+        /**
+         * What the moat round an ice sheet and the ground under it may be, as shares of the Airy
+         * depression a sheet of the stock thickness floats out at.
+         *
+         * The moat is a real bend and the whole of it reaches the surface, but it is measured at
+         * the edge of the load rather than under the middle of it, where a plate holding the sheet
+         * up from both sides carries part of the weight; a fifth is a floor under that with room
+         * for how much ice a given seed happens to grow. The cap's own ground is allowed a tenth,
+         * which is the arithmetic of a ramp: the taper is one minus the ice's thickness profile,
+         * so a cell one cell inside the margin still shows a sliver of the bend, and a tenth is
+         * where that sliver sits at this grid.
+         */
+        const val MOAT_SHARE_OF_AIRY_FLOOR = 0.2
+        const val CAP_SHARE_OF_AIRY_CEILING = 0.1
     }
 }

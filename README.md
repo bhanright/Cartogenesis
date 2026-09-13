@@ -40,7 +40,9 @@ rate below is written in those units and converted to whatever grid the world is
    by Frankot-Chellappa least-squares integration (a 2D FFT). The same transform shapes the result's
    spectrum, leaving its relief loudest at 400 km — the scale Earth's continental topography away
    from its mountains sits at — because the broad shape of the ground is the crust's business and
-   not the noise's.
+   not the noise's. A fifth of the map-wide component survives that filter, because a continent
+   that tilts one way for two thousand kilometres is what makes a long river, and a continent that
+   does not ponds its water where it falls.
 2. **Plates.** The world splits into drifting Voronoi plates, each made of continental or oceanic
    crust; boundaries are classified by relative motion and by which crusts meet, raising coastal
    ranges, collision plateaus, island arcs, rifts or ridges accordingly. Three past epochs of the
@@ -55,7 +57,8 @@ rate below is written in those units and converted to whatever grid the world is
    ocean-coverage setting chooses how much of the world is drawn as continental crust; the
    sea-level cut is the check that it did.
 3. **Erosion.** Thermal erosion slides material off slopes steeper than a critical gradient of
-   12 m per km while stream-power incision (`E = K A^0.5 S`, with K at Whipple and Tucker's 10^-6
+   60 m per km — the gentlest of Earth's great mountain fronts read over a cell's width, the Andes'
+   western flank at 6,000 m in 100 km — while stream-power incision (`E = K A^0.5 S`, with K at Whipple and Tucker's 10^-6
    for bedrock) cuts channels in proportion to the water draining through them,
    interleaved round by round. Every cell is clamped to never end a round below the neighbour it
    drains to (the receiver clamp), which keeps a channel grading smoothly instead of filling with a

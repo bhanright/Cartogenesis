@@ -5,17 +5,43 @@
   topography sits and where the eye reads a range — and it left the ground with almost nothing at
   the wavelength that makes a *long river*. The Mississippi, the Ob, the Parana and the Congo are
   long because the ground tilts one way for two thousand kilometres, and this world's continental
-  crust is one thickness everywhere, so between its belts it is level. Measured, the weighted mean
-  bifurcation ratio went from 4.63 to 5.82 as the third- and fourth-order streams halved:
-  catchments stopped merging. `TerrainConfig.regionalReliefShare` puts a tenth of the map-scale
-  component back and recovers most of it — 5.03 pooled, third- and fourth-order streams back to 259
-  and 32 — but a tenth is all the coastline will bear, and the bar in `EarthLikeness` was widened by
-  0.4 to admit what is left. Every other lever was measured and none of them moved it: the corner
-  wavelength over seven values, the relief's amplitude, the amplitude on orogens, the fine detail
-  noise, the enclosed-sea rule, and a continental interior swell of Bond's own amplitude and
-  wavelength built for the purpose and then removed because the metrics could not see it. What is
-  wanted is not a swell of the surface but a variation in the crust's own thickness, which is the
-  same thing the epicontinental-seas entry below wants. 2026-09-13, S2.
+  crust is one thickness everywhere, so between its belts it is level.
+  `TerrainConfig.regionalReliefShare` puts some of the map-scale component back, and S2's third pass
+  raised it from a tenth to a fifth after finding that a tenth cost far more than the bifurcation
+  ratio the second pass measured it by: at a tenth, lakes covered 3.55% of the land against Earth's
+  1.48% at this cell area and whole regions drowned into mazes of inlets, because ground with no
+  long slope ponds the water where it falls. A fifth is where the drainage density lands on the
+  pre-S2 generator's 0.0026 km/km² and the coastline is still a coastline at 1.114; above it the
+  coast goes and the density overshoots. What a fifth buys is bought against the coast, and the
+  trade is the finding: `main` before S2 had both — a coastline of 1.21 *and* Earth's drainage —
+  because its shoreline was a percentile through a fractal noise field rather than a contour across
+  a 4,500 m crustal step. Every other lever was measured and none of them moved it: the corner
+  wavelength over seven values, the relief's amplitude over 700 to 2,000 m (with the submerged
+  share moved with it to keep the cut on the datum), the amplitude on orogens, the margin's own
+  roughness over 0.35, 0.70 and 1.00 — worth 0.01 on the dimension, because the window that lets a
+  margin wander is zero where the shoreline actually stands — the fine detail noise, the
+  enclosed-sea rule, and a continental interior swell of Bond's own amplitude and wavelength built
+  for the purpose and then removed because the metrics could not see it. What is wanted is not a
+  swell of the surface but a variation in the crust's own thickness, which is the same thing the
+  epicontinental-seas entry below wants. 2026-09-13, S2.
+- **There are twice as many lakes as there were, and they are the right area.** Measured over the
+  five standard worlds at 512 after S2's third pass: 1.87% of land under lakes against Earth's
+  1.48% at this cell area and the pre-S2 generator's 0.72%, in 36 lakes against its 19. So the map
+  now holds about Earth's share of its land in lakes where it used to hold half of it, and it does
+  that with twice as many, each smaller. Which of the two figures is the defect is not settled:
+  Earth's lake *count* at a 275 km² floor is not a number this project has looked up, and the
+  Pareto exponent M1 does assert is 1.05 against Downing's 1.06. Whoever looks should start by
+  asking where the extra basins are — they are not the ice moat, which S2's third pass fixed, and
+  they are not the flexure, which costs about a fifth of them. 2026-09-13, S2.
+- **The thermal sweeps no longer give a mountain its flanks.** S2's third pass raised the critical
+  slope from 12 m/km to 60, which is the gentlest of Earth's great mountain fronts read over a
+  cell's width, and every measurement improved — the belt flank stopped being planed into an
+  annulus, the coastline rose, the lakes fell. But the figures are flat from about 36 m/km upward,
+  which says the sweeps now reach almost nothing a belt profile draws, and `GEOGRAPHY.md` still
+  says they are what gives a mountain its flanks. They are not; the rivers are. Either the claim
+  should go or the sweeps should be given a threshold that means something at a 23 km cell, which
+  is a question about what a sub-cell distribution of slopes does and belongs with lithology (H3)
+  rather than with a constant. 2026-09-13, S2.
 - **The spreading rate this world needs is faster than Earth's fastest ridge.** Sea floor is
   destroyed as fast as it is made, so the mean age of a planet's floor is its ocean's area over its
   ridges' production, and a world with less ridge for its ocean has to spread faster or its floor

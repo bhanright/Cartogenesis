@@ -195,10 +195,20 @@ class RiverCourseTest {
             drawnTotal += narrowDrawn
 
             // A break: a drawn line stops at water one cell wide and nothing carries on through it.
+            //
+            // Unless there is nothing to carry on to. A lake below its spill is endorheic — the
+            // Caspian, not Erie — so its cells are sinks in the flow graph and the rivers that run
+            // into it are the end of the story. A course stopping at one of those has not been
+            // broken by the water it stopped at; it has arrived. F18 met the case on seed 99, where
+            // three courses end in the same 668-cell endorheic lake at cells whose receiver is -1
+            // by construction, and counting them was measuring the lake's dryness rather than the
+            // tracing this class is about.
             var broken = 0
             world.rivers.rivers.forEach { river ->
                 val end = river.cells.last()
-                if (lakes.isLake(end) && !lakes.isOpenWater(end) && !runThrough[end]) broken++
+                if (!lakes.isLake(end) || lakes.isOpenWater(end) || runThrough[end]) return@forEach
+                if (lakes.lakes[lakes.lakeId[end]].endorheic) return@forEach
+                broken++
             }
             // A gap: narrow water with a drawn channel above it and a drawn channel below, and no
             // line across. This is the thread William saw, counted.

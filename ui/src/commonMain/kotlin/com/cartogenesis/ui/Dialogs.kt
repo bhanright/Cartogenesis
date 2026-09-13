@@ -62,7 +62,7 @@ internal fun SettingsDialog(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 SettingRow("Theme", "Applies at once. System follows this machine's own setting.") {
-                    // Fifteen chips in one wrapped block is a wall; three labelled shelves is a
+                    // Sixteen chips in one wrapped block is a wall; three labelled shelves is a
                     // list. Same names, same order within a shelf, same stored value — see
                     // [Menus.themeGroups].
                     Menus.themeGroups.forEach { (group, chromes) ->

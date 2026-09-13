@@ -596,13 +596,13 @@ shared code serialises, so neither front end owns the shape of it. A file writte
 an older one, or a hand that mistyped a theme name all open, because the failure mode of a strict
 parser here is an application that will not start.
 
-There are fifteen chromes, offered on three shelves so that a list of fifteen is still a list.
+There are sixteen chromes, offered on three shelves so that a list of sixteen is still a list.
 **Standard** is System, Light and Dark — the paper-and-ink pair F1 drew, with System following the
 host. **Accessible** is two chromes whose promise is a measured threshold rather than a look: *High
 contrast* (pure black and white, 2 dp rules, type a step larger, every text pair past WCAG AAA) and
 *Colorblind* (Okabe–Ito's orange and sky blue on warm dark greys, with a shape cue — an underline, a
-doubled rule, a strike — wherever a state would otherwise be told by hue alone). **Styled** is ten
-rooms to work in: *Nautical*, *Midnight* and *Mars* lifted from the map styles of those names;
+doubled rule, a strike — wherever a state would otherwise be told by hue alone). **Styled** is
+eleven rooms to work in: *Nautical*, *Midnight* and *Mars* lifted from the map styles of those names;
 *Allied*, a 1940s Army Map Service sheet in buff and olive drab with its title block boxed;
 *Hallowed*, an illuminated manuscript in lapis and vellum with its section rules doubled in gold
 leaf; *Baroque*, gilt and walnut with the headings in italic; *Matrix*, a phosphor terminal set
@@ -610,9 +610,10 @@ throughout in IBM Plex Mono with a `>` before every heading; *Hessian*, burlap a
 with a woven crosshatch behind the panels, running-stitch rules and a sewn label for a cartouche;
 *Roman*, Pompeian red and marble with pointed inscriptional capitals and a Greek key under each
 heading; and *Hitchcock*, Saul Bass's charcoal and vermilion with the section rules cut into three
-displaced bars and Vertigo's spiral beside the world's name. Every text pair in all fifteen is
-measured — AAA for High contrast, AA for the rest — and the numbers are asserted rather than
-claimed.
+displaced bars and Vertigo's spiral beside the world's name; and *Lemon Blueberry*, a deep
+blue-violet room written in lemon, whose alarm is the pink blueberry pigment turns when a lemon is
+squeezed into it. Every text pair in all sixteen is measured — AAA for High contrast, AA for the
+rest — and the numbers are asserted rather than claimed.
 
 **Check for updates** reads GitHub's `releases/latest` for the repository and compares its tag with
 this build's version, which is generated at build time from `gradle.properties` rather than typed

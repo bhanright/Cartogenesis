@@ -145,9 +145,24 @@ class OutletIncisionTest {
                 "seed $seed: the control was expected to keep its water and kept only " +
                     "${control * 100}% of it, so this guard proves nothing"
             )
+            // The notch does work, and the control does none. Stated over the run rather than
+            // round by round, because "every round cuts something" is a claim about the terrain's
+            // supply of work and not about the notch: once the notch is good enough, a round can
+            // legitimately find nothing left above grade. Seed 42 does exactly that at F22, when
+            // the outflow over a sill lying level to the water stopped reading as having no
+            // gradient — its largest basin sits at 45 cells from the seventh round on, round eleven
+            // cuts nothing at all, and round twelve cuts 327 cells again. Asserting universality
+            // there would fail the notch for having finished early. What the sentence means is
+            // carried by the three assertions around it: the fill more than halves, the control
+            // does not, and the control cuts nothing in any round.
             assertTrue(
-                on.all { it.notched > 0.0 },
-                "seed $seed: some round cut no notch at all"
+                on.sumOf { it.notched } > 0.0,
+                "seed $seed: the notch cut nothing in any of the ${on.size} rounds"
+            )
+            assertTrue(
+                on.first().notched > 0.0,
+                "seed $seed: the notch cut nothing in the first round, when every basin the fill " +
+                    "found is still there to be opened"
             )
             assertTrue(
                 off.all { it.notched == 0.0 },
@@ -254,6 +269,47 @@ class OutletIncisionTest {
             "these worlds keep a basin below the sea-level cut holding more water than the " +
                 "Caspian's ${"%.4f".format(caspianShare * 100)}% share of Earth's land: " +
                 overSizedDrowned
+        )
+    }
+
+    /**
+     * And what keeps the drowned basins under that bar is the notch measuring its fall to the water
+     * it empties into, rather than to the last cell of land before it.
+     *
+     * The control for the case above, and the reason it is worth reading. A sill lying level all
+     * the way to the water reads as having no gradient when the fall is measured a cell short of
+     * it, so its outflow has no stream power and the basin behind it never opens however large its
+     * catchment. Switch the step off and seed 99 keeps a 668-cell basin at 2.64 times the Caspian's
+     * share of its land and seed 718106 one at 1.65 times, which is what this branch found; switch
+     * it on and they are 0.12% and 0.08% of land, against the Caspian's 0.25%.
+     *
+     * Two seeds rather than six: these are the two that carry such a sill, and the case above
+     * already generates twelve worlds.
+     */
+    @Test
+    fun `a sill level to the water is what the notch could not cut`() {
+        val stuck = ArrayList<String>()
+        listOf(718106L, 99L).forEach { seed ->
+            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val without = WorldGenerationEngine.generateBlocking(
+                base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
+            )
+            val with = WorldGenerationEngine.generateBlocking(base)
+            val before = largestLakeShare(without, drowned = true)
+            val after = largestLakeShare(with, drowned = true)
+            println(
+                ("OUTLET seed %d: the largest drowned basin is %.4f%% of land with the fall " +
+                    "measured to the last land cell and %.4f%% measured to the water " +
+                    "(the Caspian's share is %.4f%%)").format(
+                    seed, before * 100, after * 100, caspianShare * 100
+                )
+            )
+            if (before < caspianShare * chaos) stuck += "$seed at ${"%.4f".format(before * 100)}%"
+        }
+        assertTrue(
+            stuck.isEmpty(),
+            "the control was expected to keep an over-large drowned basin on both seeds and did " +
+                "not on $stuck, so the case above cannot tell the two rules apart"
         )
     }
 

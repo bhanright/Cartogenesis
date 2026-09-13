@@ -94,6 +94,18 @@ class PenAndInkTest {
          * twice for that chunk, once for each of its two passes; how far the coastline actually
          * moved is measured rather than hashed, in `LittoralCoastTest` and in `GEOGRAPHY.md`.
          *
+         * And all eleven once more at F22, which is the world moving again rather than the drawing:
+         * the outlet notch no longer measures a sill lying level to the water as having no
+         * gradient, so basins that had stood undrained for the life of the world are opened and
+         * the coast around them is a different coast. On the gallery world it is a small change
+         * and every hash moved, which is what a hash does.
+         *
+         * And all eleven at F18, from the other end once more: the water is routed by the
+         * steepest triangular facet rather than the steepest of eight neighbours, so twelve rounds
+         * of erosion cut different rock and every style is drawing a different land. What moved is
+         * the world, not the drawing — nothing in this file's own arithmetic changed — and how far
+         * the rivers actually moved is measured rather than hashed, in `StraightRunAuditTest`.
+         *
          * F14 and F17 were merged after both were written and all eleven were checked again: not
          * one moved. That is worth a line, because it is the answer to the question the two chunks
          * raise together — F14 rewrote the rasterizer around a traced, simplified shoreline, and at
@@ -102,21 +114,25 @@ class PenAndInkTest {
          *
          * F23 added the twelfth entry and changed none of the eleven, which is the whole of what a
          * new style is allowed to do: a style is a row of levers the raster already reads, so a
-         * chunk that adds one and moves an existing hash has reached outside its own palette.
+         * chunk that adds one and moves an existing hash has reached outside its own palette. All
+         * twelve are recorded here against F18's world rather than the one F23 was written on —
+         * merging the two moved the land under the new style exactly as it moved it under the
+         * other eleven, and the twelfth hash was taken again after the merge for that reason and
+         * no other.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -173307292,
-            MapStyle.VELLUM to -23465626,
-            MapStyle.INK_WASH to 323555479,
-            MapStyle.NAUTICAL to -965577701,
-            MapStyle.MIDNIGHT to 580634097,
-            MapStyle.SCHOOLROOM to 328982709,
-            MapStyle.VERDANT to -2116422614,
-            MapStyle.SCROLL to -1448446961,
-            MapStyle.PEN_AND_INK to 1950662391,
-            MapStyle.MARS to -1005799490,
-            MapStyle.NATURAL to 402057573,
-            MapStyle.CLEAR to -361190112
+            MapStyle.ATLAS to -980125225,
+            MapStyle.VELLUM to 1913949796,
+            MapStyle.INK_WASH to 576177003,
+            MapStyle.NAUTICAL to -83741925,
+            MapStyle.MIDNIGHT to 1234410841,
+            MapStyle.SCHOOLROOM to -511879054,
+            MapStyle.VERDANT to 7506317,
+            MapStyle.SCROLL to 270812201,
+            MapStyle.PEN_AND_INK to 986838792,
+            MapStyle.MARS to -2108325037,
+            MapStyle.NATURAL to 1616649832,
+            MapStyle.CLEAR to -267579735
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

@@ -103,10 +103,11 @@ fun CartogenesisTheme(
  * two chromes F1 wrote are literally two of them (Vellum's paper, and the author's site). F4's
  * three are lifted from the styles rather than invented: choosing Nautical dresses the window in
  * the admiralty chart's buff and oxide, Midnight in its slate and brass-gold, Mars in basalt and
- * rust, so a reader who works in one style can put the whole window in it. F6's five and F7's four
- * are asked for by name — high contrast, colour-blind, Allied, Hallowed, Baroque, Matrix, Hessian,
- * Roman, Hitchcock — and each is a room rather than a chart. Fifteen is more than a flat list can
- * carry, so [group] puts them on three shelves; nothing about a name or a stored value moves.
+ * rust, so a reader who works in one style can put the whole window in it. F6's five, F7's four and
+ * F24's one are asked for by name — high contrast, colour-blind, Allied, Hallowed, Baroque, Matrix,
+ * Hessian, Roman, Hitchcock, Lemon Blueberry — and each is a room rather than a chart. Sixteen is
+ * more than a flat list can carry, so [group] puts them on three shelves; nothing about a name or a
+ * stored value moves.
  *
  * The map is *not* restyled by this, and that separation is deliberate: which style a map is drawn
  * in is a property of the map (and of the exported file), while this is a property of the room the
@@ -127,7 +128,8 @@ enum class ThemeChoice(val label: String) {
     MATRIX("Matrix"),
     HESSIAN("Hessian"),
     ROMAN("Roman"),
-    HITCHCOCK("Hitchcock");
+    HITCHCOCK("Hitchcock"),
+    LEMON_BLUEBERRY("Lemon Blueberry");
 
     /** [systemDark] is consulted only by [SYSTEM]; every other choice is an answer already. */
     internal fun scheme(systemDark: Boolean): ColorScheme = when (this) {
@@ -146,6 +148,7 @@ enum class ThemeChoice(val label: String) {
         HESSIAN -> HessianChrome
         ROMAN -> RomanChrome
         HITCHCOCK -> HitchcockChrome
+        LEMON_BLUEBERRY -> LemonBlueberryChrome
     }
 
     /**
@@ -156,29 +159,30 @@ enum class ThemeChoice(val label: String) {
     internal fun isDark(): Boolean? = when (this) {
         SYSTEM -> null
         LIGHT, NAUTICAL, ALLIED, HALLOWED, BAROQUE, HESSIAN, ROMAN -> false
-        DARK, MIDNIGHT, MARS, HIGH_CONTRAST, COLORBLIND, MATRIX, HITCHCOCK -> true
+        DARK, MIDNIGHT, MARS, HIGH_CONTRAST, COLORBLIND, MATRIX, HITCHCOCK,
+        LEMON_BLUEBERRY -> true
     }
 
     /**
      * Which of the three shelves this chrome sits on in the picker and in the View menu.
      *
-     * Fifteen names in one flat run is a list nobody reads to the end of, and the three groups are
+     * Sixteen names in one flat run is a list nobody reads to the end of, and the three groups are
      * not arbitrary: [ThemeGroup.STANDARD] is what the application shipped with and what a reader
      * who wants no opinion should take, [ThemeGroup.ACCESSIBLE] is the two whose promise is a
-     * measured threshold rather than a look, and [ThemeGroup.STYLED] is the ten that are a room to
-     * work in. No name and no stored value moves: this is a heading over a list, nothing more.
+     * measured threshold rather than a look, and [ThemeGroup.STYLED] is the eleven that are a room
+     * to work in. No name and no stored value moves: this is a heading over a list, nothing more.
      */
     internal fun group(): ThemeGroup = when (this) {
         SYSTEM, LIGHT, DARK -> ThemeGroup.STANDARD
         HIGH_CONTRAST, COLORBLIND -> ThemeGroup.ACCESSIBLE
         NAUTICAL, MIDNIGHT, MARS, ALLIED, HALLOWED, BAROQUE,
-        MATRIX, HESSIAN, ROMAN, HITCHCOCK -> ThemeGroup.STYLED
+        MATRIX, HESSIAN, ROMAN, HITCHCOCK, LEMON_BLUEBERRY -> ThemeGroup.STYLED
     }
 
     /**
      * Everything about a chrome that is not a colour or a type size.
      *
-     * See [ChromeDetail]. Nine of the fifteen answer with something other than the default, and the
+     * See [ChromeDetail]. Ten of the sixteen answer with something other than the default, and the
      * six that came before F6 all answer with the default itself — which is what keeps their
      * screenshots pixel-identical.
      */
@@ -193,11 +197,12 @@ enum class ThemeChoice(val label: String) {
         HESSIAN -> HessianDetail
         ROMAN -> RomanDetail
         HITCHCOCK -> HitchcockDetail
+        LEMON_BLUEBERRY -> LemonBlueberryDetail
     }
 }
 
 /**
- * The three shelves the fifteen chromes are offered on.
+ * The three shelves the sixteen chromes are offered on.
  *
  * A grouping, not a setting: nothing here is stored, nothing here is a name a reader has already
  * chosen, and [ThemeChoice.entries] is still the whole list in its own order for anything that
@@ -375,7 +380,7 @@ internal class ChromeDetail(
      * premise is a *panel set against a ground*: burlap with linen labels sewn to it, marble panels
      * on a Pompeian wall, a terminal's windows on a black screen, a Bass card's blocks on charcoal.
      * Material's `background` role is the colour each of those wants and the frame does not read it,
-     * so the chrome says so here rather than the frame changing its mind for all fifteen.
+     * so the chrome says so here rather than the frame changing its mind for all sixteen.
      */
     val windowGround: Color? = null,
     /** What shape the cartouche is, the way a map margin decides about its title block. */
@@ -1443,6 +1448,124 @@ private val HitchcockDetail = ChromeDetail(
     cartouche = CartoucheStyle.SPIRAL
 )
 
+// ---- F24's one. ----
+
+// LEMON BLUEBERRY: the two colours the name says, and the question of which way round they go.
+//
+// William asked for the pair and left the rest open, so the arrangement was decided by measuring
+// rather than by taste. Both were built to the same rules — the same two families of colour, the
+// F1 armed button (a wash of the ground stained toward the accent, with the accent for a label,
+// which is what every chrome that does not invert does) — and every text pair in each was measured
+// against WCAG AA:
+//
+//   lemon ground, blueberry ink   worst pair 7.38:1 (the secondary as a word), Stop 7.80:1
+//   blueberry ground, lemon ink   worst pair 7.76:1 (the alarm as a word),     Stop 10.19:1
+//
+// Blueberry-as-ground wins both, and not by luck. On a lemon ground the accent has to be dark
+// enough to be *read* against a near-white yellow, which pushes it down into the same range as the
+// ink — so the accent stops looking like an accent, and the armed button's wash and its label are
+// two dark-on-light tones a little way apart. On a blueberry ground the accent is the lemon itself,
+// bright against a deep violet, and the button's stain is deeper still, which opens the pair by
+// two and a half points. So the fruit is the room and the peel is the writing.
+//
+// The rest of the palette is derived from the pair rather than chosen beside it. The raised and
+// sunk surfaces are the ground lifted toward the bloom on a blueberry's skin — that dusty violet is
+// already in the fruit, so a well and a card stay the same colour as the room. The alarm is the one
+// tone that is neither: blueberry pigment is an anthocyanin, which is a pH indicator, and squeezing
+// a lemon into blueberry juice turns it pink. Both halves of the name are in it, and it is the one
+// colour in the chrome that cannot be mistaken for either.
+
+/** The window: the fruit at its darkest, where no light gets through the skin. */
+private val BlueberryGround = Color(0xFF151033)
+
+/** A panel raised off it — the same violet, a little further into the flesh. */
+private val BlueberryPanel = Color(0xFF1E1845)
+
+/** A sunk panel: a well cut into the fruit, lit by the bloom rather than by a light. */
+private val BlueberrySunk = Color(0xFF282052)
+
+/** The stain under an armed control. F1's wash, in the only colour this room has to stain with. */
+private val BlueberryWash = Color(0xFF2C2456)
+
+/** The hairline. 3.15:1 on a panel, past WCAG 1.4.11's 3:1 for a control's own boundary. */
+private val BlueberryRule = Color(0xFF6F63A6)
+
+/** The fainter rule, for a division that is a hint rather than an edge. */
+private val BlueberryRuleFaint = Color(0xFF352C68)
+
+/** The bloom on the skin: a dusty violet, and the chrome's secondary. */
+private val BlueberryBloom = Color(0xFFC4B4F0)
+
+/** The text: lemon flesh, pale and warm, 14.20:1 on a panel. */
+private val LemonInk = Color(0xFFF7EFC0)
+
+/** The same flesh dimmed for anything secondary. 9.47:1 on a panel. */
+private val LemonInkDim = Color(0xFFD0C58C)
+
+/** The peel: the lemon at full strength, and the one accent. 11.97:1 on a panel. */
+private val LemonZest = Color(0xFFF0DC7A)
+
+/** The peel in shadow, for the inverse accent Material asks for and nothing here draws large. */
+private val LemonZestShaded = Color(0xFF7A6714)
+
+/**
+ * The alarm, and it is made of the pair: lemon juice turns blueberry pigment pink.
+ *
+ * Anthocyanin is a pH indicator, so acid takes it from violet to red — which is why this is the one
+ * tone in the chrome that reads as neither of the two colours and cannot be confused with the
+ * accent. 7.76:1 on a panel.
+ */
+private val BerryJuice = Color(0xFFFF8FB8)
+
+/** The same, deep enough to hold pale lettering: an error's own block. */
+private val BerryJuiceDeep = Color(0xFF4A1030)
+
+private val LemonBlueberryChrome: ColorScheme = darkColorScheme(
+    primary = LemonZest,
+    onPrimary = BlueberryGround,
+    primaryContainer = BlueberryWash,
+    onPrimaryContainer = LemonZest,
+    inversePrimary = LemonZestShaded,
+    secondary = BlueberryBloom,
+    onSecondary = BlueberryGround,
+    secondaryContainer = BlueberryWash,
+    onSecondaryContainer = LemonInk,
+    tertiary = LemonInkDim,
+    onTertiary = BlueberryGround,
+    tertiaryContainer = BlueberrySunk,
+    onTertiaryContainer = LemonInk,
+    background = BlueberryGround,
+    onBackground = LemonInk,
+    surface = BlueberryPanel,
+    onSurface = LemonInk,
+    surfaceVariant = BlueberrySunk,
+    onSurfaceVariant = LemonInkDim,
+    surfaceTint = BlueberryPanel,
+    inverseSurface = LemonInk,
+    inverseOnSurface = BlueberryGround,
+    error = BerryJuice,
+    onError = Color(0xFF3A0A20),
+    errorContainer = BerryJuiceDeep,
+    onErrorContainer = Color(0xFFFFC4D8),
+    outline = BlueberryRule,
+    outlineVariant = BlueberryRuleFaint,
+    scrim = Color(0xFF0A0720),
+    surfaceBright = Color(0xFF332A66),
+    surfaceDim = BlueberryGround,
+    surfaceContainerLowest = Color(0xFF100C28),
+    surfaceContainerLow = Color(0xFF191333),
+    surfaceContainer = BlueberryPanel,
+    surfaceContainerHigh = Color(0xFF241D4E),
+    surfaceContainerHighest = Color(0xFF2B2359)
+)
+
+private val LemonBlueberryDetail = ChromeDetail(
+    // The darkest of the fruit behind the panels, so the panels read as things set on a ground
+    // rather than as a single flat violet with hairlines ruled across it — the same move Hessian,
+    // Roman and Hitchcock make, and the only piece of ornament this chrome takes.
+    windowGround = BlueberryGround
+)
+
 /**
  * The handful of colours that sit *over the map* rather than beside it.
  *
@@ -1523,7 +1646,7 @@ private fun cartogenesisTypography(choice: ThemeChoice): Typography {
     )
     // The third face, and it is built only by the chrome that sets its type in it. `Font` reads the
     // resource where it is called, so building this family unconditionally would have a browser
-    // fetch 314 KB of a face fourteen of the fifteen chromes never draw a glyph of.
+    // fetch 314 KB of a face fifteen of the sixteen chromes never draw a glyph of.
     val mono = if (choice == ThemeChoice.MATRIX) {
         FontFamily(
             Font(Res.font.plex_mono_regular, FontWeight.Normal),
@@ -1538,12 +1661,13 @@ private fun cartogenesisTypography(choice: ThemeChoice): Typography {
 /**
  * The same faces, set the way this chrome sets them.
  *
- * Seven of the fifteen chromes ask for a change of *type* rather than of colour, and none of them
+ * Eight of the sixteen chromes ask for a change of *type* rather than of colour, and none of them
  * is a thing a call site should be doing: High contrast wants everything one step larger, Allied,
  * Hessian and Roman want the display face tracked out for capitals, Baroque wants the headings in
- * italic, Hitchcock wants them heavy and tight, and Matrix wants a different face entirely. So each
- * is a transformation of the one [Typography] rather than a second one written out, which is also
- * what guarantees the other eight chromes are untouched — they take the identity transformation.
+ * italic, Hitchcock wants them heavy and tight, Lemon Blueberry wants a hair more air between the
+ * letters of a heading, and Matrix wants a different face entirely. So each is a transformation of
+ * the one [Typography] rather than a second one written out, which is also what guarantees the
+ * other eight chromes are untouched — they take the identity transformation.
  */
 private fun typographyFor(
     choice: ThemeChoice,
@@ -1601,6 +1725,17 @@ private fun typographyFor(
         // italic — which is what a gilt cartouche's lettering was too, more often than not.
         ThemeChoice.BAROQUE -> base.mapDisplay {
             it.copy(fontStyle = FontStyle.Italic, fontSynthesis = FontSynthesis.Style)
+        }
+
+        // The optical correction every light-on-dark setting needs, and no other change: a pale
+        // glyph on a deep ground spreads into its own counters — irradiation, which is why a
+        // reversed-out serif always looks a weight heavier than the same face printed black on
+        // white — and Spectral's headings close up under it. 0.3sp is the smallest step that opens
+        // them again without the heading reading as tracked-out capitals, which is a different
+        // chrome's idea. The sans is left alone: it carries figures, and a tracked figure is a
+        // figure read one digit at a time.
+        ThemeChoice.LEMON_BLUEBERRY -> base.mapDisplay {
+            it.copy(letterSpacing = (it.letterSpacing.value + 0.3f).sp)
         }
 
         else -> base

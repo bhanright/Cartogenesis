@@ -217,7 +217,9 @@ object GlaciationStage {
         // the cold came, which is both what really happens and what makes the result legible: the
         // trough is where the map already had a valley.
         val filled = FlowRouting.fillDepressions(w, h, isLand, sea.relativeElevation)
-        val directions = FlowRouting.flowDirections(w, h, isLand, sea.relativeElevation, filled)
+        val directions = FlowRouting.flowDirections(
+            w, h, isLand, sea.relativeElevation, filled, config.seed, config.facetRouting
+        )
         val order = FlowRouting.drainageOrder(w, h, isLand, directions, sea.landCellCount)
 
         // How much frozen ground drains through each cell — the ice's own catchment, as distinct

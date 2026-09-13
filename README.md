@@ -137,25 +137,35 @@ deviates from Earth, is in [GEOGRAPHY.md](GEOGRAPHY.md).
 
 ## Styles
 
-Eleven ways to draw the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+Twelve ways to draw the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
 parchment and sepia ink), **Ink wash** (sumi-e grey on pale paper), **Nautical** (an admiralty chart
 with depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (a saturated
 classroom pull-down map), **Verdant** (illustrated fantasy: teal sea, cream land, deep woods),
 **Scroll** (painted parchment, jade sea, vermilion marks), **Pen and ink** (line art, no fill, relief
 hatched by slope, borders in red), **Mars** (the same world as a dry planet: oceans become basalt
-plains, the old shoreline a scarp) and **Colour-blind** (a cividis land ramp over one flat sea,
+plains, the old shoreline a scarp), **Natural** (the world as a satellite sees it, in a palette
+sampled off a Blue Marble photograph: forest greens, olive plains, ochre and rust deserts, a cobalt
+sea turning turquoise over the shelves) and **Colour-blind** (a cividis land ramp over one flat sea,
 ordered so nothing is told by hue alone).
 
-A style changes only appearance; the same seed gives the same world in all eleven, and the
+A style changes only appearance; the same seed gives the same world in all twelve, and the
 diagnostic views (elevation, biomes, climate and the rest) ignore styles entirely, since their
-colours carry meaning a prettier ramp would obscure. `StyleGalleryTest` renders all eleven and
+colours carry meaning a prettier ramp would obscure. `StyleGalleryTest` renders all twelve and
 asserts that they differ from one another.
 
-Most of the difference between them is four numbers rather than eleven separate repaints: how much
+Most of the difference between them is four numbers rather than twelve separate repaints: how much
 vegetation colour is let through, how far each biome colour is dragged toward the paper first (old
 inks are earths, not dimmed greens), how far the height ramp follows the climate, and how hard the
 hillshade is exaggerated — which is why the ink style works at all, since with the colour gone
 relief is the only thing left describing the mountains.
+
+Natural is the one whose palette was measured rather than chosen. Every colour in it is sampled off
+one photograph — a Blue Marble view of Earth centred on North America — region by region, and each
+constant in the source carries the pixel box its median came out of: the land ramp is that image's
+eastern woodland, Mississippi lowland, Pacific north-west, Great Plains olive, Great Basin umber,
+Chihuahua ochre, Colorado red rock and Greenland snow, in that order, which is also their order of
+lightness. Its climate lever is at full, because on a photograph the colour of a place is what grows
+there and the height only shows through where nothing does.
 
 ### Tints that follow the climate, and light from the sky
 
@@ -420,13 +430,16 @@ which doubles the processor's raster (0.81s at 4096 under the lamp) and costs th
 notices. The shader is handed a `RasterRecipe` — every colour already packed and the two per-cell
 numbers the climate has to say about the ground — so neither the palette nor the aridity index is
 written twice, and `GpuRasterTest` holds the two paths within one channel step of 255 at the 99.9th
-percentile across all fifteen views and eleven styles. None of this is the
+percentile across all fifteen views and twelve styles. None of this is the
 bottleneck it looks like: a 4096 export spends over three minutes generating the world and under a
 second drawing it.
 
 Erosion is what takes the three minutes: it is the great majority of a generation (82% of a 2048
 export, by `StageProfileTest`), because material moves one cell per sweep, so the cost of covering a
-given distance rises eightfold rather than fourfold each time resolution doubles.
+given distance rises eightfold rather than fourfold each time resolution doubles. Tiles that have
+gone quiet are skipped, which is exact — `ErosionSkipTest` asserts bit-identical output — but buys
+only around 1.3x, because roughness at cell scale rises with resolution and most of a fine grid is
+genuinely still moving.
 
 Erosion is a pure stencil over independent cells, so it is also the one stage worth running on a
 graphics device, and there is an opt-in toggle for it — **Graphics acceleration**, in the header
@@ -510,16 +523,17 @@ Settings persist through the `Platform` seam as one JSON document (`%APPDATA%\Ca
 on Windows, browser local storage on the web), and a file from a different build, or a hand-edited
 typo, opens anyway rather than refusing to start.
 
-There are fifteen chromes on three shelves. **Standard**: System, Light, Dark. **Accessible**: *High
+There are sixteen chromes on three shelves. **Standard**: System, Light, Dark. **Accessible**: *High
 contrast* (pure black and white, every text pair past WCAG AAA) and *Colorblind* (Okabe-Ito orange
 and sky blue, with a shape cue wherever a state would otherwise be told by hue alone). **Styled**,
-ten rooms: *Nautical*, *Midnight* and *Mars* (from the map styles of those names), *Allied* (1940s
+eleven rooms: *Nautical*, *Midnight* and *Mars* (from the map styles of those names), *Allied* (1940s
 Army Map Service buff and olive drab), *Hallowed* (an illuminated manuscript in lapis and vellum
 with gold-leaf rules), *Baroque* (gilt and walnut, italic headings), *Matrix* (a phosphor terminal in
 IBM Plex Mono), *Hessian* (burlap and linen with a woven crosshatch), *Roman* (Pompeian red and
-marble with a Greek key) and *Hitchcock* (Saul Bass's charcoal and vermilion, with Vertigo's spiral
-in the cartouche). Every text pair in all fifteen is measured, not just claimed: AAA for High
-contrast, AA for the rest.
+marble with a Greek key), *Hitchcock* (Saul Bass's charcoal and vermilion, with Vertigo's spiral
+in the cartouche) and *Lemon Blueberry* (a deep blue-violet room written in lemon, whose alarm is
+the pink the blueberry pigment turns when a lemon is squeezed into it). Every text pair in all
+sixteen is measured, not just claimed: AAA for High contrast, AA for the rest.
 
 **Check for updates** compares GitHub's `releases/latest` tag against this build's own version
 (generated from `gradle.properties`); it is off by default and only ever runs from the menu, so

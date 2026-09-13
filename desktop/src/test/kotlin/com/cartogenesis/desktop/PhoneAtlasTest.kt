@@ -237,7 +237,7 @@ class PhoneAtlasTest {
      * The same question of the realm's own page, which is the other text the panes draw bare.
      *
      * `NationDetail` is a scrolling column, not a `Surface`, so its heading and its paragraphs of
-     * geography took the same default black. The four chromes here are the dark ones a reader would
+     * geography took the same default black. The chromes here are the dark ones a reader would
      * actually meet it in; one world apiece, because there is no realm to open without one.
      */
     @OptIn(ExperimentalTestApi::class)
@@ -471,12 +471,13 @@ class PhoneAtlasTest {
         /** WCAG AA for text at the size a heading in these panes is set. */
         const val LEGIBLE = 4.5
 
-        /** The four a reader would meet a dark pane in, which is where this went wrong. */
+        /** The dark chromes a reader would meet a dark pane in, which is where this went wrong. */
         val DARK_CHROMES = listOf(
             ThemeChoice.DARK,
             ThemeChoice.MIDNIGHT,
             ThemeChoice.MATRIX,
-            ThemeChoice.HITCHCOCK
+            ThemeChoice.HITCHCOCK,
+            ThemeChoice.LEMON_BLUEBERRY
         )
 
         /**

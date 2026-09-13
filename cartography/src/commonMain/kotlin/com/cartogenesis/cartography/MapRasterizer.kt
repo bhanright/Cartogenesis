@@ -833,7 +833,7 @@ object MapRasterizer {
      *
      * Ordinarily the shared ocean ramp, because these views are about the land and their sea is
      * only the shape around it — and because a political map that changed colour with the style
-     * would make eleven political maps out of one. Two styles are exceptions, and
+     * would make twelve political maps out of one. Two styles are exceptions, and
      * [MapStyle.ownsPoliticalGround] says why.
      */
     private fun politicalSea(style: MapStyle, relative: Float): Int =

@@ -14,9 +14,10 @@ zones](https://worldbuildingpasta.blogspot.com/2020/05/an-apple-pie-from-scratch
 
 ## Held by construction
 
-**Rivers never split.** Measured 0 splits across all seeds. D8 routing gives every cell exactly one
-downstream neighbour, so the drawn network is a forest — a river physically cannot fork. This is the
-single most common river sin and the pipeline cannot commit it.
+**Rivers never split.** Measured 0 splits across all seeds. The routing gives every cell exactly one
+downstream neighbour — the direction is taken from the steepest facet and the receiver drawn across
+it, but it is still one receiver — so the drawn network is a forest and a river physically cannot
+fork. This is the single most common river sin and the pipeline cannot commit it.
 
 **Rivers never run coast to coast.** Measured 0 rivers rising on the shoreline. Sources are
 headwaters — channel cells with no upstream channel — which by definition sit inland.
@@ -373,6 +374,35 @@ the map ends up drawing as standing water fall from 1627 to 780 on seed 718106, 
 323 to 265 on 7. On the author's own world at 1024 the lakes go from 25 to 17 and the standing water
 from 1.60% of the land to 0.49%. See `ReceiverClampTest`.
 
+**A river crossing smooth ground does not run in a ruled line.** Eight neighbours cannot express a
+slope that faces between two of them, so on ground that is a plane at the cell scale — the apron
+below a range, laid by deposition and worn smooth by the thermal relaxation — the steepest of the
+eight is the same neighbour at every cell and the water runs dead straight for as far as the plane
+goes. That is the grid speaking rather than the ground: a real apron has relief at scales a
+six-to-twenty-three-kilometre cell cannot hold, and a real river crossing one wanders. Left alone
+the stream power cuts a ruled trench along such a run, the trench ponds behind its own lip, and the
+map grows a lake shaped like a ruler — the "diagonal rectangle" the author found on seed 298405 at
+1024, 53 cells all within 1.06 of one line and running 20.1 cells along it. The direction is
+therefore read off the surface, not off the neighbour list: Tarboton's steepest triangular facet
+(1997) gives the true bearing, and the single receiver every stage downstream needs is drawn across
+that facet at the bearing's own share, which is Fairfield and Leymarie's Rho8 (1991). A reach four
+fifths of the way toward the diagonal takes the diagonal four steps in five. Where the facet's
+descent points out of the facet the answer collapses to the old steepest-neighbour one exactly,
+which is what an incised channel always does — over the channel cells of five worlds the runner-up
+carries 0.155 of the winner's slope on average — so the rule bites on smooth ground and almost
+nowhere else. Measured on the apron the trench crossed, before erosion touched it: seven cells
+running one bearing with the drop to the winning diagonal 1.9489e-02 and to the runner-up
+1.5050e-02, the same two figures to four digits at every cell, which is a plane facing 83% of the
+way toward the diagonal and not a tie. Census of standing water within 1.2 cells of one line and
+twenty cells long: 1/0/0/0/0 on 298405 at 1024 and 7/42/1234/99 at 512 before, 0/0/0/0/0 after. A
+ruled bar needs a lip to pond behind as well as a ruled course, so it is rare and the census is a
+poor way to compare two routing rules; the ruled *course* is on every map, and runs of seven steps
+on one bearing — 40 to 160 km of watercourse without a bend at these grids — fall from 76/28/38/22/31
+to 66/21/32/15/20 over the same five worlds. Hack's exponent moves at most 0.018 against a spread of
+0.032 across seeds and stays inside Earth's band; a third of the drawn river cells move, three
+quarters of them by a cell or two. See `StraightRunTest` and `StraightRunAuditTest`, and
+`REALISM_PLAN.md`, F18.
+
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as
 the one piece of ground on the map the water never touched, so a tectonic hollow stayed a lake the
@@ -389,6 +419,31 @@ world, seed 718106 at 512: the fill over the largest basin's floor falls from 0.
 relief to 0.010 across the twelve rounds, where with `outletIncision` off it ends at 0.240, exactly
 where it started. What the map keeps is bounded by a figure with a meaning — no world has a lake
 larger than the Caspian's 0.073% share of its surface, where two seeds in four did before.
+
+**And the outflow's gradient is measured to the water it empties into.** The walk that measures an
+outlet channel's fall stops on the last cell of land, one step short of the water below it. Where
+the sill runs level all the way to that water — which is precisely the case the post-cut outlet pass
+exists for, a basin below the shoreline behind a bar at the waterline — the whole of the fall is in
+the step the walk did not take, and what is read instead is the 1e-6 the depression fill nudges a
+flat by: not a small gradient but the absence of one, so no stream power, so a sill that stands for
+the life of the world however large the catchment behind it. Seed 99 at 512 kept a 668-cell basin
+that way, 2.64 times the Caspian's share of its land, its outflow's measured fall 1.0e-6 against the
+2.5e-2 it actually descends and unmoved over every pass it was given; seed 718106 kept one at 1.65
+times, and seed 42 had a hydraulic round in which the notch cut nothing anywhere. The step into the
+water now counts, and only where the walk found no fall the fill did not put there — one epsilon a
+step is the flood's own staircase on a flat — so an outlet that measured a real gradient keeps the
+answer it had. Re-rating every sill instead hands each coastal one the whole fall to sea level at
+once and empties basins that ought to hold their water: measured, that took seed 718106 from 44
+lakes to 12. Largest drowned basin, as a share of land: 0.361% to 0.083% on 718106 and 0.658% to
+0.122% on 99, against the Caspian's 0.249%. Every lake this drains is one below the sea-level cut —
+classified over six seeds, the ice's own lakes are untouched to the last one (718106 7 and 7, seed 7
+16 and 16, seed 99 9 and 9) and so are the lakes above the cut that the ice did not make, because
+glaciation runs after this pass and a glacially over-deepened basin has no outlet to cut. With the
+sill cutting, the retreat of the largest drowned basin takes ten passes rather than eight to stop:
+1849, 1196, 988, 839, 727, 605, 495, 391, 285, 157, then 138 and flat. That was measured against a
+lowstand read as a share of each world's land relief; the ceiling the pass actually runs to is the
+sixteen the metre-deep stand needs, and a pass that cuts more can only shorten the retreat under it.
+See `OutletIncisionTest`.
 
 **A glacier is where the snow outlasts the year, not where it is cold.** Ice used to be simply
 "the mean annual temperature is at or below freezing", which made an ice sheet of every cold

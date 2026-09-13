@@ -106,7 +106,14 @@ object SeaLevelStage {
      * largest drowned basin comes out at the same 0.3515% of the land it does at sixteen. Not
      * more, because each pass that does find something is a priority flood and a D8 route over the
      * whole grid.
-     * See REALISM_PLAN.md, H5b and S1, for the pass-by-pass figures.
+     *
+     * The 2.0 line re-derived the same eight to ten over the same span, for its own reason: the
+     * breach there stopped measuring a sill that runs level to the water as having no gradient, so
+     * a notch that never cut now cuts and the retreat has more to remove per pass. That reason
+     * survives this merge and the ten does not, because it was read against a lowstand of the old
+     * shallow depth. A pass that cuts more can only shorten the retreat, and the loop leaves early
+     * when a pass finds nothing, so sixteen still bounds it.
+     * See REALISM_PLAN.md, H5b, S1 and F22, for the pass-by-pass figures.
      */
     private const val MAX_POST_CUT_OUTLET_PASSES = 16
 
@@ -423,8 +430,7 @@ object SeaLevelStage {
         return SeaLevelResult(base.shorelineHeight, isLand, relativeElevation, landCellCount)
     }
 
-    /**
-     * Cuts the outlet of every basin the enclosure rule just made, on the far side of the cut.
+    /**     * Cuts the outlet of every basin the enclosure rule just made, on the far side of the cut.
      *
      * [markUnreachableWaterAsLand] hands the river stage a hollow whose floor lies below sea level
      * and whose rim is ordinary land, and the depression fill then raises the hollow to that rim —
@@ -490,7 +496,13 @@ object SeaLevelStage {
                 cellsAcross, cellsDown, isLand, relativeElevation
             )
             val flowDirections = FlowRouting.flowDirections(
-                cellsAcross, cellsDown, isLand, relativeElevation, filled
+                cellsAcross,
+                cellsDown,
+                isLand,
+                relativeElevation,
+                filled,
+                config.seed,
+                config.facetRouting
             )
             val catchmentArea = FlowRouting.accumulate(
                 cellsAcross, cellsDown, isLand, filled, flowDirections, current.landCellCount

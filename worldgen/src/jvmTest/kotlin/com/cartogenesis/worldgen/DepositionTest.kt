@@ -157,11 +157,25 @@ class DepositionTest {
      *
      * And a thirteenth time at S2, which gave the height field an absolute vertical scale: the two
      * crusts float at their own levels, so the percentile falls through different ground. S2's own
-     * branch read 6232 where the pre-S2 tree read 6290; F17's branch read 6426 where it read 6290;
-     * the two together, taken on the merged tree, read 6289. The cut itself has not moved in any of
-     * them: exactly 62% of the cells still lie below it.
+     * branch read 6232 where the pre-S2 tree read 6290, and F17's branch read 6426 where it read
+     * 6290.
+     *
+     * And once more where the 2.0.x line meets this one. Two changes arrive together and both are
+     * the same kind of change as every one above: they move the rock, so a percentile taken over it
+     * sits on a different set of cells. The routing now takes its direction from the steepest
+     * triangular facet with the one receiver drawn across it, rather than snapping to the steepest
+     * of the eight neighbours, which changes what the twelve hydraulic rounds cut. And the outlet
+     * notch now measures its channel's fall to the water it empties into, so a sill lying level to
+     * the shore is no longer read as having no gradient at all. On the release line the two took
+     * the land from 6464 to 6488 and then to 6403; on the pre-S2 line they take it from 6426 to
+     * 6404.
+     *
+     * The figure below is all of them together, re-measured on this merged tree rather than
+     * carried over from any one side, because no side's number was read against the others'
+     * terrain. The cut itself has not moved in any of them: exactly 62% of the cells still lie
+     * below it, and the structural cases are untouched.
      */
-    private val startingPointLand = 6289
+    private val startingPointLand = 6404
 
     @Test
     fun `every round conserves mass`() {

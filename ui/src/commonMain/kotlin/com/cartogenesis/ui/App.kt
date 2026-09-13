@@ -21,12 +21,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
@@ -41,6 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
@@ -621,7 +624,7 @@ private fun Application(
      * laid inside a `Surface`, and a `Surface` is what otherwise says what ink its paper takes. So
      * `LocalContentColor` here was Material's own default — plain black — and the library's two
      * headings and every unstyled line of a realm's page were drawn in it. On paper that is very
-     * nearly right and nobody noticed for two rounds of review; on the fifteen chromes whose ground
+     * nearly right and nobody noticed for two rounds of review; on the sixteen chromes whose ground
      * is not paper it ran from poor to invisible, and on High contrast it was black on pure black
      * at exactly 1.0:1. The controls around them were never affected, because a text field, a
      * button and a card each carry their own colour or their own `Surface`.
@@ -844,7 +847,7 @@ private fun Application(
 
     /** The keystrokes, previewed above everything, in whichever arrangement is drawn. */
     val frame = Modifier.fillMaxSize()
-        // The paper the panels are laid on, which for eleven of the fifteen chromes is the same
+        // The paper the panels are laid on, which for eleven of the sixteen chromes is the same
         // paper the panels are — see [ChromeDetail.windowGround].
         .background(LocalChromeDetail.current.ground(MaterialTheme.colorScheme))
         // So the cloth runs behind the gutter between the panels and the map as well as inside
@@ -1513,7 +1516,7 @@ private fun PanelHeader(
         // the reader who wants out of a generation is looking at the button they started it with,
         // and a Generate greyed out beside a Stop elsewhere would be two controls for one decision.
         // The label is the whole of the difference - no colour of its own, because the danger roles
-        // are not part of what the fifteen chromes were measured against, and because no button in
+        // are not part of what the sixteen chromes were measured against, and because no button in
         // this application is styled where it is used. See `Controls.kt`.
         Button(
             onClick = if (generating) onStop else onGenerate,
@@ -1905,16 +1908,41 @@ private fun OutputOptions(
  * A helper rather than the row written twice, so the picture chips and the data chips cannot drift
  * apart in spacing or alignment — they are read as one control with two lines, and the moment they
  * look like two controls the single selection across them stops making sense.
+ *
+ * The chips wrap. The data line carries three words rather than two short formats — Heightmap,
+ * Biomes, Realms — and beside a heading in a 320 dp column they want more room than the line has,
+ * so the last one was squeezed and the panel drew "Real". A chip that has lost the end of its word
+ * is worse than a chip on a second line: it still looks like a chip, so nobody reads it as a fault.
+ * `FlowRow` keeps the single line wherever the words fit — which is every width the Export line and
+ * the phone's 390 dp sheet are ever drawn at, so nothing there moves — and takes a second line only
+ * where they do not. The chips stay against the right margin on both lines, so the block still
+ * reads as one control sitting opposite its heading.
+ *
+ * The heading is centred on the *first* line of chips rather than on the block, which is what the
+ * box round it is for. Centred on the block, a wrapped row puts "Data" level with the gap between
+ * its two lines and the group reads as two things with a word between them; centred on the first
+ * line it stays where a heading beside a row of chips belongs, and an unwrapped row is laid out
+ * exactly as it was before, because a box one chip high round a centred heading is what a Row with
+ * `CenterVertically` was already producing.
  */
 @Composable
-private fun HeadedChipRow(heading: String, chips: @Composable RowScope.() -> Unit) {
+private fun HeadedChipRow(heading: String, chips: @Composable FlowRowScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
-        Text(heading, style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), content = chips)
+        Box(
+            Modifier.heightIn(min = FilterChipDefaults.Height),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(heading, style = MaterialTheme.typography.titleSmall)
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            content = chips
+        )
     }
 }
 

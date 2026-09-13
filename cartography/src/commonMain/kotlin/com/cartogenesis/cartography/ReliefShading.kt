@@ -335,8 +335,16 @@ internal object ReliefShading {
      * ordinary country comes to; dividing by it leaves the sheet's overall tone where the single
      * lamp had it and lets only the relief move. `ReliefShadingTest` measures it at the haze it
      * derives and asserts this is that figure.
+     *
+     * It was 0.936 until the 2.0.x line's routing came across. Nothing in this file changed; the
+     * ground did. The water is routed by the steepest triangular facet now, so twelve rounds of
+     * erosion cut different rock, and the median illumination over that seed's land measures
+     * 0.9318 where it measured 0.936. Re-derived rather than argued with, because the figure is
+     * defined as that median and for no other reason — and re-derived rather than absorbed into
+     * the drift bar, because leaving it stale would draw every map half a percent off the tone the
+     * lamp set, which is the one thing this constant exists to hold still.
      */
-    private const val ORDINARY_GROUND = 0.936f
+    private const val ORDINARY_GROUND = 0.9318f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

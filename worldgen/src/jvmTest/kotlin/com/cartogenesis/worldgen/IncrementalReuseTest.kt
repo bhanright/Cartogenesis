@@ -88,6 +88,7 @@ class IncrementalReuseTest {
                 tectonics = base.tectonics.copy(historyEpochs = 1)
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
+            "facetRouting" to base.copy(facetRouting = false),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
             "sea" to base.copy(sea = base.sea.copy(shelfDepthMetres = base.sea.shelfDepthMetres + 500f)),
             // H5: the lowstand is the one field of the sea section that reaches *back* into

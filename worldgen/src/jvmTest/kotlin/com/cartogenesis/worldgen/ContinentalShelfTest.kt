@@ -32,7 +32,7 @@ class ContinentalShelfTest {
     fun `shallow water hugs the coast and the open ocean is deep`() {
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val shelfWidthCells = config.sea.shelfWidthCells
+            val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
             val world = WorldGenerationEngine.generateBlocking(config)
             val (near, far) = shallowShares(world, shelfWidthCells)
             println(
@@ -59,9 +59,9 @@ class ContinentalShelfTest {
     /** Ground rule 2: shown failing without the fix, at exactly the width the guard above uses. */
     @Test
     fun `the near-coast share fails without the shelf`() {
-        val defaultWidth = WorldGenConfig().sea.shelfWidthCells
+        val defaultWidth = WorldGenConfig().let { it.cellsFor(it.sea.shelfWidthKm) }
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512).let {
-            it.copy(sea = it.sea.copy(shelfWidthCells = 0f))
+            it.copy(sea = it.sea.copy(shelfWidthKm = 0.0))
         }
         val world = WorldGenerationEngine.generateBlocking(config)
         val (near, far) = shallowShares(world, defaultWidth)
@@ -98,7 +98,7 @@ class ContinentalShelfTest {
             }
             val withShelf = WorldGenerationEngine.generateBlocking(base)
             val noShelf = WorldGenerationEngine.generateBlocking(
-                base.copy(sea = base.sea.copy(shelfWidthCells = 0f))
+                base.copy(sea = base.sea.copy(shelfWidthKm = 0.0))
             )
 
             assertTrue(

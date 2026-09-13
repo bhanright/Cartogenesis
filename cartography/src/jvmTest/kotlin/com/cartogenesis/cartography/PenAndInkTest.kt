@@ -80,24 +80,29 @@ class PenAndInkTest {
         const val MAX_DENSITY_DRIFT = 0.08
 
         /**
-         * Every style's 512 fantasy render, hashed, as it stood at v2.0.0 — before F9 touched
-         * anything.
+         * Every style's 512 fantasy render, hashed.
          *
          * F9 redraws one style, and the cheapest way to be sure it redrew only that one is to hold
          * the other ten to the pixel. Pen and ink's own entry is deliberately absent: it is the one
          * that is supposed to have changed.
+         *
+         * Recorded at v2.0.0 and re-recorded once at S1, which moved the world rather than the
+         * drawing of it: the sea's own stand gained a depth in metres and a ruler to read it
+         * against, so the terrain the hydraulic rounds cut is a little different and every style
+         * draws the difference. That the ten move *together* is what this still proves; a style
+         * redrawn on its own would show up as one entry out of step with the rest.
          */
         val UNCHANGED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1505162113,
-            MapStyle.VELLUM to 1731718276,
-            MapStyle.INK_WASH to 940010414,
-            MapStyle.NAUTICAL to -615327928,
-            MapStyle.MIDNIGHT to -337638301,
-            MapStyle.SCHOOLROOM to 1860155522,
-            MapStyle.VERDANT to -206922609,
-            MapStyle.SCROLL to -1085895034,
-            MapStyle.MARS to 1710409417,
-            MapStyle.CLEAR to -958663001
+            MapStyle.ATLAS to -1251658432,
+            MapStyle.VELLUM to -894858538,
+            MapStyle.INK_WASH to -2025451479,
+            MapStyle.NAUTICAL to 353681580,
+            MapStyle.MIDNIGHT to 1100943998,
+            MapStyle.SCHOOLROOM to 2113429675,
+            MapStyle.VERDANT to -102946448,
+            MapStyle.SCROLL to -1099453844,
+            MapStyle.MARS to -956322526,
+            MapStyle.CLEAR to -703349694
         )
 
         /** The gallery's world, at the size the guards measure on. */
@@ -128,13 +133,17 @@ class PenAndInkTest {
 
     @Test
     fun `every other style is left alone to the pixel`() {
+        val moved = ArrayList<String>()
         UNCHANGED_STYLES.forEach { (style, expected) ->
-            assertEquals(
-                expected,
-                fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = style))),
-                "${style.label} no longer renders the pixels it rendered at 2.0.0"
-            )
+            val now = fingerprint(MapRasterizer.rasterize(WORLD, RenderOptions(style = style)))
+            println("PENINK ${style.name} to $now")
+            if (now != expected) moved.add("${style.label} $expected -> $now")
         }
+        assertTrue(
+            moved.isEmpty(),
+            "styles that no longer render the pixels they rendered when this was last recorded:" +
+                " ${moved.joinToString("; ")}"
+        )
         println(
             "PENINK the other ${UNCHANGED_STYLES.size} styles are unchanged at 512; " +
                 "pen and ink now fingerprints " +

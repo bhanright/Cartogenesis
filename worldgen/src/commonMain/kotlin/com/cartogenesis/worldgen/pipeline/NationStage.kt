@@ -574,6 +574,8 @@ object NationStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val nationsConfig = config.nations
+        // Below the shoreline, so it is read off the sea's half of the ruler.
+        val navigableDepth = config.scale.depthShareOfMetres(nationsConfig.navigableDepthMetres)
 
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {
@@ -601,7 +603,7 @@ object NationStage {
                         anomalySumC += anomalyC
                         // Shelf, not open ocean: depth below sea level, small means shallow.
                         val depth = -sea.relativeElevation.data[neighbour]
-                        if (anomalyC < 0f && depth < nationsConfig.navigableDepth) {
+                        if (anomalyC < 0f && depth < navigableDepth) {
                             shelfUpwellingC += -anomalyC
                         }
                     }

@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.HydraulicErosion
 import com.cartogenesis.worldgen.pipeline.DeltaFan
 import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.FlowRouting
@@ -49,7 +50,7 @@ class DeltaOutlineTest {
 
     /**
      * The author's own settings, at a size the per-merge tier can afford. The artefacts were seen
-     * at 2048; `deltaReachCells` is scaled by `atResolution`, so the same lobe is six cells across here
+     * at 2048; `deltaReachKm` is a length on the ground, so the same lobe is six cells across here
      * and twenty-four there, and every figure below is expressed against the reach rather than
      * against the cell.
      */
@@ -65,7 +66,7 @@ class DeltaOutlineTest {
     private class Run(config: WorldGenConfig) {
         val w = config.width
         val h = config.height
-        val reach = config.erosion.deltaReachCells
+        val reach = HydraulicErosion.Rates(config).deltaReachCells
         val log = DepositionLog(w * h)
         val height: FloatField
         val isLand: BooleanArray

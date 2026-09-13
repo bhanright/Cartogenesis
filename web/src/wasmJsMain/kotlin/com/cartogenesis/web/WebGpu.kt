@@ -52,11 +52,11 @@ internal external fun deviceLabel(device: JsHandle): String
  * expensive part, so it happens once rather than per sweep.
  */
 @JsFun(
-    """(device, width, height, heightsBuffer, talus, passes, rate) => (async () => {
+    """(device, width, height, heightsBuffer, maxOrthogonalDrop, passes, rate) => (async () => {
         if (device.__lost) return null;
 
         const cells = width * height;
-        const orthogonal = talus / width;
+        const orthogonal = maxOrthogonalDrop;
         const diagonal = orthogonal * Math.SQRT2;
         const settled = orthogonal * 1e-3;
 
@@ -256,7 +256,7 @@ internal external fun runErosion(
     width: Int,
     height: Int,
     heights: JsHandle,
-    talus: Float,
+    maxOrthogonalDrop: Float,
     passes: Int,
     rate: Float
 ): JsHandle

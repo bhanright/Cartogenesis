@@ -39,7 +39,7 @@ class SeaLevelHistoryAuditTest {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
                 .atResolution(2048, 2048)
             val before = WorldGenerationEngine.generateBlocking(
-                base.copy(sea = base.sea.copy(lowstand = 0f, enclosedSeaIsLand = false))
+                base.copy(sea = base.sea.copy(lowstandMetres = 0f, enclosedSeaIsLand = false))
             )
             val after = WorldGenerationEngine.generateBlocking(base)
             val was = Coast(before, "seed $seed at 2048 PRE-H5")
@@ -133,7 +133,9 @@ class SeaLevelHistoryAuditTest {
             val size = w * h
             val land = world.sea.isLand
             val scale = w / 512f
-            val cap = (size * WorldGenConfig().sea.enclosedSeaMaxShare).toInt()
+            val cap = world.config.let {
+                (it.sea.enclosedSeaMaxKm2 / it.squareKilometresPerCell).toInt()
+            }
 
             val body = IntArray(size) { -1 }
             val stack = IntArray(size)

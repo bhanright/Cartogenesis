@@ -105,7 +105,7 @@ internal data class GlacialMass(
  *
  * So the regimes are split on the one physical quantity that separates them, the relief of the
  * ground: the elevation range within [GlaciationConfig.reliefWindow] valley-widths, against
- * [GlaciationConfig.valleyRelief] of the land's range. Above that line the ice is channelled and
+ * [GlaciationConfig.valleyReliefMetres] of local relief. Above that line the ice is channelled and
  * everything below still applies. Below it the ice is a sheet, and the sheet regime owes nothing
  * to the flow network: a smooth hummocky lowering, and basins thresholded out of a seeded
  * low-frequency noise field pulled toward the hollows the ground already has. The result is blobs
@@ -145,6 +145,69 @@ internal data class GlacialMass(
  */
 object GlaciationStage {
 
+    /**
+     * Every length, depth and area the ice carves with, converted out of [WorldScale] and the grid
+     * once, where the stage reads them.
+     *
+     * The section holds kilometres, metres and square kilometres; the carving works in cells and in
+     * shares of the land's relief. This is the whole of the translation between the two, in one
+     * place, so a reader can see every unit the stage spends and a guard can read each of them
+     * back through the scale it came from.
+     */
+    internal class Carving(config: WorldGenConfig) {
+
+        private val scale = config.scale
+        private val glaciation = config.glaciation
+        private val squareKilometresPerCell = config.squareKilometresPerCell
+
+        /** Half-width of the widest trough, in cells. */
+        val valleyWidthCells: Float = config.cellsFor(glaciation.valleyWidthKm)
+
+        /** The shortest channelled path that may become a trough, in whole cells. */
+        val minTroughLengthCells: Int = config.wholeCellsFor(glaciation.minTroughLengthKm, atLeast = 2)
+
+        /** How far a glacier runs past the freezing line, in whole cells. */
+        val runOutCells: Int = config.wholeCellsFor(glaciation.runOutKm)
+
+        /** The furthest one reach may run before the next basin, in cells. */
+        val basinSpacingCells: Float = config.cellsFor(glaciation.basinSpacingKm)
+
+        /** Radius of the bowl bitten out of a glacier's head, in cells. */
+        val cirqueRadiusCells: Float = config.cellsFor(glaciation.cirqueRadiusKm)
+
+        /** How far out to sea a fjord basin reaches, in whole cells. */
+        val fjordReachCells: Int = config.wholeCellsFor(glaciation.fjordReachKm)
+
+        /** Local relief a valley glacier needs, as a share of the land's relief. */
+        val valleyRelief: Float = scale.reliefShareOfMetres(glaciation.valleyReliefMetres)
+
+        /** The sheet's own lowering and basin depth, in the same shares. */
+        val sheetLowering: Float = scale.reliefShareOfMetres(glaciation.sheetLoweringMetres)
+        val sheetBasinDepth: Float = scale.reliefShareOfMetres(glaciation.sheetBasinDepthMetres)
+
+        /** A valley glacier's cuts and spoil, in the same shares. */
+        val deepening: Float = scale.reliefShareOfMetres(glaciation.deepeningMetres)
+        val overDeepening: Float = scale.reliefShareOfMetres(glaciation.overDeepeningMetres)
+        val basinDrop: Float = scale.reliefShareOfMetres(glaciation.basinDropMetres)
+        val cirqueDepth: Float = scale.reliefShareOfMetres(glaciation.cirqueDepthMetres)
+        val moraineHeight: Float = scale.reliefShareOfMetres(glaciation.moraineHeightMetres)
+        val riegelHeight: Float = scale.reliefShareOfMetres(glaciation.riegelHeightMetres)
+
+        /** A fjord basin is cut into the sea floor, so it is read off the sea's half of the ruler. */
+        val fjordDepth: Float = scale.depthShareOfMetres(glaciation.fjordDepthMetres)
+
+        /**
+         * The smallest and largest basin the ice may cut, as counts of cells on this grid.
+         *
+         * Four and 41 at 512, 67 and 671 at 2048 - the same two lakes on the ground either way,
+         * which is the point of holding them as areas.
+         */
+        val minBasinCells: Int =
+            (glaciation.minLakeAreaKm2 / squareKilometresPerCell).toInt().coerceAtLeast(4)
+        val maxBasinCells: Int =
+            (glaciation.maxLakeAreaKm2 / squareKilometresPerCell).toInt().coerceAtLeast(minBasinCells)
+    }
+
     suspend fun apply(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -165,6 +228,7 @@ object GlaciationStage {
         snowBalance: FloatField?,
         onBudget: ((GlacialMass) -> Unit)?
     ): SeaLevelResult {
+        val carving = Carving(config)
         /*
          * Between the passes below, so a reader who presses Stop while the ice is being cut is
          * answered within one walk of the grid rather than at the end of the stage. Each pass is a
@@ -240,9 +304,9 @@ object GlaciationStage {
         // have, while a headland standing over the sea does.
         stopIfAsked()
         val landRange = landRange(isLand, relative)
-        val reliefRadius = (glaciation.reliefWindow * glaciation.valleyWidthCells).toInt().coerceIn(2, 64)
+        val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt().coerceIn(2, 64)
         val relief = localRelief(cellsAcross, cellsDown, relative, reliefRadius)
-        val channelThreshold = glaciation.valleyRelief * landRange
+        val channelThreshold = carving.valleyRelief * landRange
         var channelledCells = 0
         val channelled = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -287,7 +351,7 @@ object GlaciationStage {
             val fieldId = fieldOf[cell]
             val fieldShare = if (fieldId >= 0) ice[cell] / field.size[fieldId].toFloat() else 0f
             if (share >= glaciation.minCatchment && fieldShare >= glaciation.trunkCatchment &&
-                runOut[cell] <= glaciation.runOutCells && channelled[cell]
+                runOut[cell] <= carving.runOutCells && channelled[cell]
             ) {
                 candidate[cell] = true
             }
@@ -352,7 +416,7 @@ object GlaciationStage {
         var glacierCells = 0
         for (cell in 0 until cellCount) {
             if (!candidate[cell]) continue
-            if (upstream[cell] + downstream[cell] - 1 < glaciation.minTroughLengthCells) continue
+            if (upstream[cell] + downstream[cell] - 1 < carving.minTroughLengthCells) continue
             val wander = sinuosity(
                 head[cell], snout[cell], upLength[cell] + downLength[cell], cellsAcross
             )
@@ -375,7 +439,8 @@ object GlaciationStage {
         // is one glacier, and a rank of them is the comb.
         stopIfAsked()
         val suppressed = suppressParallel(
-            glaciation, cellsAcross, cellsDown, glacier, directions, ice, strength, order
+            glaciation,
+            carving, cellsAcross, cellsDown, glacier, directions, ice, strength, order
         )
         glacierCells -= suppressed.cells
 
@@ -403,22 +468,22 @@ object GlaciationStage {
         // the same world. The denominator is the frozen flat ground, with a floor at a quarter of
         // all frozen ground so that an ice field which is nothing but mountains still has an
         // allowance to spend on its valley floors.
-        val minBasinCells = (glaciation.minLakeShareOfMap * cellCount).toInt().coerceAtLeast(4)
-        val maxBasinCells = (glaciation.maxLakeShareOfMap * cellCount).toInt().coerceAtLeast(minBasinCells)
+        val minBasinCells = carving.minBasinCells
+        val maxBasinCells = carving.maxBasinCells
         val lakeBudget =
             (glaciation.sheetLakeShare * maxOf(sheetCells, frozenCount / 4).toFloat()).toInt()
 
         // How far down the staircase each cell is.
         //
         // Two things advance it, and they simply add: how far the ice has run (in cells, over
-        // [GlaciationConfig.basinSpacingCells]) and how far it has fallen (in elevation, over
-        // [GlaciationConfig.basinDrop]). A reach ends when the sum passes the next whole number, so
+        // [GlaciationConfig.basinSpacingKm]) and how far it has fallen (in elevation, over
+        // [GlaciationConfig.basinDropMetres]). A reach ends when the sum passes the next whole number, so
         // whichever runs out first ends it — a long flat reach on a plain, a short one on a
         // mountainside. Measured from the head of the longest feeder rather than the nearest, so a
         // tributary joining halfway down does not restart the count.
         stopIfAsked()
-        val spacing = glaciation.basinSpacingCells.coerceAtLeast(2f)
-        val drop = glaciation.basinDrop.coerceAtLeast(1e-4f)
+        val spacing = carving.basinSpacingCells.coerceAtLeast(2f)
+        val drop = carving.basinDrop.coerceAtLeast(1e-4f)
         val progress = FloatArray(cellCount)
         for (rank in order.indices) {
             val cell = order[rank]
@@ -462,10 +527,10 @@ object GlaciationStage {
             // valley-width in every direction, including forward down the long profile, and
             // quietly planes off whatever it was supposed to stand above. A cross-section is a
             // cross-section.
-            val bed = (relative[cell] - glaciation.deepening * strength[cell]).coerceAtLeast(0f)
+            val bed = (relative[cell] - carving.deepening * strength[cell]).coerceAtLeast(0f)
             swath(
                 cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
-                valleyHalfWidth(glaciation, strength[cell]), glaciation.floorShare, bed,
+                valleyHalfWidth(carving, strength[cell]), glaciation.floorShare, bed,
                 isLand, relative, carved
             )
         }
@@ -482,9 +547,9 @@ object GlaciationStage {
         for (cell in 0 until cellCount) {
             if (!glacier[cell] || fedByIce[cell]) continue
             cirques++
-            val depth = glaciation.cirqueDepth * maxOf(strength[cell], 0.5f)
+            val depth = carving.cirqueDepth * maxOf(strength[cell], 0.5f)
             bowl(
-                cellsAcross, cellsDown, cell, glaciation.cirqueRadiusCells.coerceAtLeast(1f), glaciation.floorShare,
+                cellsAcross, cellsDown, cell, carving.cirqueRadiusCells.coerceAtLeast(1f), glaciation.floorShare,
                 (relative[cell] - depth).coerceAtLeast(0f), isLand, relative, carved
             )
         }
@@ -492,7 +557,8 @@ object GlaciationStage {
         // The over-deepened basins, as regions rather than as cells along a line. See [cutBasins].
         stopIfAsked()
         val basins = cutBasins(
-            glaciation, cellsAcross, cellsDown, isLand, frozen, glacier, directions, order, reach, progress,
+            glaciation,
+            carving, cellsAcross, cellsDown, isLand, frozen, glacier, directions, order, reach, progress,
             strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget
         )
 
@@ -502,7 +568,7 @@ object GlaciationStage {
         val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
         if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
-                config, glaciation, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, landRange, carved,
+                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, landRange, carved,
                 minBasinCells, maxBasinCells, sheetBudget
             )
             scourCells = tally.cells
@@ -534,18 +600,18 @@ object GlaciationStage {
                 moraines++
                 bar(
                     cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
-                    valleyHalfWidth(glaciation, strength[cell]) * 1.15f,
-                    till(glaciation.moraineHeight, strength[cell]), isLand, moraine
+                    valleyHalfWidth(carving, strength[cell]) * 1.15f,
+                    till(carving.moraineHeight, strength[cell]), isLand, moraine
                 )
-            } else if (reach[receiver] != reach[cell] && glaciation.riegelHeight > 0f) {
+            } else if (reach[receiver] != reach[cell] && carving.riegelHeight > 0f) {
                 // A recessional moraine, at the lower end of every reach. Off by default now that a
                 // basin is a region closed by its own rim: see [GlaciationConfig.riegelHeight] for
                 // why a bar of till one cell thick across the flow could only add straight water.
                 riegels++
                 bar(
                     cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
-                    valleyHalfWidth(glaciation, strength[cell]),
-                    till(glaciation.riegelHeight, strength[cell]), isLand, moraine
+                    valleyHalfWidth(carving, strength[cell]),
+                    till(carving.riegelHeight, strength[cell]), isLand, moraine
                 )
             }
         }
@@ -564,9 +630,9 @@ object GlaciationStage {
         // shelf left standing beyond it as the sill. Water only, and after the shelf remap, so
         // there is nothing left to re-flatten it.
         var submarine = 0.0
-        if (glaciation.fjords && glaciation.fjordReachCells > 0) {
+        if (glaciation.fjords && carving.fjordReachCells > 0) {
             val stamp = IntArray(cellCount)
-            val queue = IntArray((2 * glaciation.fjordReachCells + 1) * (2 * glaciation.fjordReachCells + 1))
+            val queue = IntArray((2 * carving.fjordReachCells + 1) * (2 * carving.fjordReachCells + 1))
             val queueDistance = IntArray(queue.size)
             var mouthId = 0
             for (cell in 0 until cellCount) {
@@ -574,7 +640,7 @@ object GlaciationStage {
                 val receiver = directions[cell]
                 if (receiver < 0 || isLand[receiver]) continue
                 submarine += fjord(
-                    cellsAcross, cellsDown, receiver, glaciation.fjordReachCells, glaciation.fjordDepth * strength[cell],
+                    cellsAcross, cellsDown, receiver, carving.fjordReachCells, carving.fjordDepth * strength[cell],
                     isLand, carved, stamp, ++mouthId, queue, queueDistance
                 )
             }
@@ -649,8 +715,8 @@ object GlaciationStage {
      *     a threshold that could be argued with. A one-cell filament off the side of a trough has
      *     no such block in it and vanishes; a basin that is nothing but filament has no core at all
      *     and is refused.
-     *  5. **Sized**: under [GlaciationConfig.minLakeShareOfMap] of the map it is not worth cutting;
-     *     over [GlaciationConfig.maxLakeShareOfMap] it is peeled inward ring by ring until it fits.
+     *  5. **Sized**: under [GlaciationConfig.minLakeAreaKm2] it is not worth cutting; over
+     *     [GlaciationConfig.maxLakeAreaKm2] it is peeled inward ring by ring until it fits.
      *  6. **Not a bar**, as a last check on the finished shape: nothing two cells or less across and
      *     four or more long on any grid bearing survives. After the opening this cannot fire, which
      *     is the point of asserting it — a shape guard that can only be satisfied by construction.
@@ -658,10 +724,12 @@ object GlaciationStage {
      *
      * The floor is then cut from the lowest cell of the region *and its rim*, so the basin is
      * closed the same way a scour basin is, and saucered by distance from the rim so it is not a
-     * slab. No till is needed to dam it, which is why [GlaciationConfig.riegelHeight] is now zero.
+     * slab. No till is needed to dam it, which is why [GlaciationConfig.riegelHeightMetres] is
+     * now zero.
      */
     private fun cutBasins(
         glaciation: GlaciationConfig,
+        carving: Carving,
         cellsAcross: Int,
         cellsDown: Int,
         isLand: BooleanArray,
@@ -799,7 +867,7 @@ object GlaciationStage {
             var footCount = 0
             for (index in from until until) {
                 val walked = packed[index]
-                val radius = valleyHalfWidth(glaciation, strength[walked])
+                val radius = valleyHalfWidth(carving, strength[walked])
                 val centreColumn = walked % cellsAcross
                 val centreRow = walked / cellsAcross
                 val span = radius.toInt() + 1
@@ -891,7 +959,7 @@ object GlaciationStage {
             var thickness = 0f
             for (index in from until until) thickness += strength[packed[index]]
             thickness /= (until - from).toFloat()
-            val depth = (glaciation.deepening + glaciation.overDeepening) * thickness
+            val depth = (carving.deepening + carving.overDeepening) * thickness
             cutSaucer(
                 cellsAcross, cellsDown, regionList, regionCount, region, segmentId, depth,
                 isLand, carved, inset
@@ -1162,6 +1230,7 @@ object GlaciationStage {
      */
     private fun suppressParallel(
         glaciation: GlaciationConfig,
+        carving: Carving,
         cellsAcross: Int,
         cellsDown: Int,
         glacier: BooleanArray,
@@ -1282,7 +1351,7 @@ object GlaciationStage {
                     cellsAcross,
                     cellsDown,
                     walked,
-                    valleyHalfWidth(glaciation, strength[walked]) * glaciation.parallelSpacing,
+                    valleyHalfWidth(carving, strength[walked]) * glaciation.parallelSpacing,
                     orientX[walked], orientY[walked], claimed, claimX, claimY
                 )
             }
@@ -1476,19 +1545,20 @@ object GlaciationStage {
      * Which candidates become lakes is then a matter of the allowance rather than of the quantile.
      * The blobs are ranked by how strongly the score chose them and taken in that order until the
      * budget [GlaciationConfig.sheetLakeShare] sets is spent; one under
-     * [GlaciationConfig.minLakeShareOfMap] of the map is passed over, and one over
-     * [GlaciationConfig.maxLakeShareOfMap] is peeled inward until it fits, because a world map has
+     * [GlaciationConfig.minLakeAreaKm2] is passed over, and one over
+     * [GlaciationConfig.maxLakeAreaKm2] is peeled inward until it fits, because a world map has
      * no business carrying a lake several times the size of Superior.
      *
      * Every basin is closed *by construction*. Its floor is cut from the lowest ground in the blob
      * **and its one-cell rim**, so no cell on the rim can be lower than the floor and the river
      * stage is guaranteed to find a depression rather than a channel. Even the shallowest part of
-     * the floor stands [GlaciationConfig.sheetBasinDepth] × 0.45 below that rim, comfortably clear
+     * the floor stands [GlaciationConfig.sheetBasinDepthMetres] × 0.45 below that rim, comfortably clear
      * of [LakesConfig.minDepth].
      */
     private fun scour(
         config: WorldGenConfig,
         glaciation: GlaciationConfig,
+        carving: Carving,
         cellsAcross: Int,
         cellsDown: Int,
         sheet: BooleanArray,
@@ -1511,7 +1581,7 @@ object GlaciationStage {
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
-        val lowering = glaciation.sheetLowering * landRange
+        val lowering = carving.sheetLowering * landRange
         if (lowering > 0f) {
             for (cell in 0 until cellCount) {
                 if (!sheet[cell]) continue
@@ -1525,13 +1595,13 @@ object GlaciationStage {
             }
         }
 
-        val depth = glaciation.sheetBasinDepth * landRange
+        val depth = carving.sheetBasinDepth * landRange
         if (depth <= 0f || budget < minCells) return ScourTally(0, 0)
 
         // How hollow each cell is against the ground around it, and the scale of that hollowness
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
-        val meanRadius = (glaciation.valleyWidthCells * 0.5f).toInt().coerceIn(2, 24)
+        val meanRadius = (carving.valleyWidthCells * 0.5f).toInt().coerceIn(2, 24)
         val concavity = FloatArray(cellCount)
         var concavityScale = 0.0
         for (cell in 0 until cellCount) {
@@ -1572,7 +1642,7 @@ object GlaciationStage {
         }
         // Smoothed before it is cut, and this is not cosmetic. The concavity of eroded ground
         // varies cell to cell, so an unsmoothed score threshold shatters every blob into a spray
-        // of three- and four-cell fragments, all of them below [GlaciationConfig.minLakeShareOfMap]
+        // of three- and four-cell fragments, all of them below [GlaciationConfig.minLakeAreaKm2]
         // and none of them a lake — measured on seed 718106, a fifth of the cells the quantile
         // chose survived into a basin. A basin is a landform, so the field that chooses it is read
         // at a landform's scale.
@@ -1745,8 +1815,8 @@ object GlaciationStage {
      * How far up the sides the ice reaches, in cells. Wider for a bigger glacier, but slowly — the
      * root again, since a trough draining four times the ground is about twice the valley.
      */
-    private fun valleyHalfWidth(glaciation: GlaciationConfig, strength: Float): Float =
-        (glaciation.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
+    private fun valleyHalfWidth(carving: Carving, strength: Float): Float =
+        (carving.valleyWidthCells * sqrt(strength)).coerceAtLeast(1f)
 
     /**
      * The flow direction at a glacier cell, as a unit vector, for orienting its cross-section.

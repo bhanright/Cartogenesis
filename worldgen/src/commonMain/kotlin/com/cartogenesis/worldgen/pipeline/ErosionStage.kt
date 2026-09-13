@@ -54,7 +54,7 @@ object ErosionStage {
      * Each sweep moves a fraction of the excess, so the excess decays geometrically and never
      * reaches zero — without a floor, ground that is done moving in any meaningful sense still
      * reports itself as active for ever and nothing can be skipped. A thousandth of the critical
-     * slope is about five centimetres of rock against a six-kilometre range.
+     * slope is about a centimetre of fall per kilometre of ground.
      */
     private const val SETTLED_SHARE_OF_CRITICAL_SLOPE = 1e-3f
 
@@ -111,14 +111,13 @@ object ErosionStage {
         // exists to prevent, and `ResolutionScalingTest`'s to catch.
         val erosion = config.erosion
         val sweepsPerRound =
-            (erosion.passes / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
-        val relaxConfig = config.copy(erosion = erosion.copy(passes = sweepsPerRound))
+            (sweepsFor(config) / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
 
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, onRound, log, receiverClamp
             ) { field ->
-                thermalErosion(relaxConfig, field, accelerator).height
+                thermalErosion(config, field, accelerator, sweepsPerRound).height
             }
         )
     }
@@ -130,10 +129,11 @@ object ErosionStage {
     private suspend fun thermalErosion(
         config: WorldGenConfig,
         height: FloatField,
-        accelerator: ErosionAccelerator?
+        accelerator: ErosionAccelerator?,
+        sweeps: Int = sweepsFor(config)
     ): ErosionResult {
         val erosion = config.erosion
-        if (erosion.passes <= 0) return ErosionResult(height)
+        if (sweeps <= 0) return ErosionResult(height)
 
         // Asked before the batch rather than only inside it. A batch handed to the graphics card is
         // a single call that cannot be interrupted part-way, so the place to notice a stop is
@@ -148,15 +148,15 @@ object ErosionStage {
                 config.width,
                 config.height,
                 height.data,
-                erosion.talus,
-                erosion.passes,
+                maxOrthogonalDrop(config),
+                sweeps,
                 erosion.rate
             )
             if (accelerated != null) {
                 return ErosionResult(FloatField(config.width, config.height, accelerated))
             }
         }
-        return thermalSweep(config, height, skipSettled = true)
+        return thermalSweep(config, height, skipSettled = true, sweeps = sweeps)
     }
 
     /**
@@ -173,10 +173,11 @@ object ErosionStage {
     internal suspend fun thermalSweep(
         config: WorldGenConfig,
         height: FloatField,
-        skipSettled: Boolean
+        skipSettled: Boolean,
+        sweeps: Int = sweepsFor(config)
     ): ErosionResult {
         val erosion = config.erosion
-        if (!erosion.enabled || erosion.passes <= 0) return ErosionResult(height)
+        if (!erosion.enabled || sweeps <= 0) return ErosionResult(height)
 
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -190,10 +191,10 @@ object ErosionStage {
         // only ever needs the product.
         val giveRate = FloatArray(cellsAcross * cellsDown)
 
-        // The critical slope is held in elevation per unit of map width, not per cell, so the same
-        // terrain wears to the same shape whatever grid it is computed on. Cells are treated as
-        // square here, as they are everywhere else in the pipeline.
-        val maxOrthogonalDrop = erosion.talus / cellsAcross
+        // The critical slope arrives as a fall in metres per kilometre and is turned into a drop
+        // per cell here, once, so the same terrain wears to the same shape whatever grid it is
+        // computed on. Cells are treated as square, as they are everywhere else in the pipeline.
+        val maxOrthogonalDrop = maxOrthogonalDrop(config)
         val maxDiagonalDrop = maxOrthogonalDrop * SQRT2
         val settled = maxOrthogonalDrop * SETTLED_SHARE_OF_CRITICAL_SLOPE
 
@@ -211,7 +212,7 @@ object ErosionStage {
         var canChange = BooleanArray(tilesAcross * tilesDown) { true }
         var canHoldExcess = BooleanArray(tilesAcross * tilesDown) { true }
 
-        repeat(erosion.passes) {
+        repeat(sweeps) {
             // One sweep is one walk of the grid, and the finest a stop can be answered at: the
             // sweeps that open the stage and the few that relax the field between hydraulic rounds
             // all pass through here, so a reader who presses Stop waits out at most one of them.
@@ -335,6 +336,32 @@ object ErosionStage {
         }
 
         return ErosionResult(FloatField(cellsAcross, cellsDown, heights))
+    }
+
+    /**
+     * How many sweeps [ErosionConfig.debrisTravelKm] of debris travel comes to on this grid.
+     *
+     * Material moves at most one cell per sweep, so a distance on the ground is a count of sweeps
+     * once the grid is known: eighty at 512 and three hundred and twenty at 2048, which is the
+     * same apron either way.
+     */
+    internal fun sweepsFor(config: WorldGenConfig): Int =
+        config.wholeCellsFor(config.erosion.debrisTravelKm, atLeast = 0)
+
+    /**
+     * The steepest drop one cell may hold, in the height field's own units.
+     *
+     * [ErosionConfig.criticalFallMetresPerKm] is a gradient, so this is that gradient over one
+     * cell's width, divided by what one unit of the height field is worth in metres. The grid
+     * cancels out of the pair - a finer grid has narrower cells and so a smaller drop - which is
+     * the whole point of writing the knob as a gradient.
+     *
+     * Public because an accelerator is handed the converted figure rather than the knob: a kernel
+     * has no business knowing how wide the world is. See [ErosionAccelerator.erode].
+     */
+    fun maxOrthogonalDrop(config: WorldGenConfig): Float {
+        val fallMetres = config.erosion.criticalFallMetresPerKm * config.cellWidthKm.toFloat()
+        return fallMetres / config.scale.reliefSpanMetres
     }
 
     /** Grows a tile mask by one tile in every direction, wrapping in x as the world does. */

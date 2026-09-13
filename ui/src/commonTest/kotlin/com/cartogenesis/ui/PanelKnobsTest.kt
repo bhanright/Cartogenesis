@@ -201,8 +201,8 @@ class PanelKnobsTest {
             Knobs.mountainHeight.set(base, 0.7f)
         )
         assertEquals(
-            base.copy(erosion = base.erosion.copy(erodibility = 0.08f)),
-            Knobs.erosionStrength.set(base, 0.08f)
+            base.copy(erosion = base.erosion.copy(bedrockErodibilityPerYear = 1.5e-6f)),
+            Knobs.erosionStrength.set(base, 1.5e-6f)
         )
         assertEquals(
             base.copy(climate = base.climate.copy(seasonalTiltDegrees = 18f)),
@@ -272,7 +272,7 @@ class PanelKnobsTest {
     fun `the new knobs read the generator's own defaults`() {
         val stock = WorldGenConfig()
         assertEquals(stock.tectonics.andeanHeight, Knobs.mountainHeight.read(stock))
-        assertEquals(stock.erosion.erodibility, Knobs.erosionStrength.read(stock))
+        assertEquals(stock.erosion.bedrockErodibilityPerYear, Knobs.erosionStrength.read(stock))
         assertEquals(stock.climate.seasonalTiltDegrees, Knobs.seasonalTiltDegrees.read(stock))
         assertEquals(stock.climate.orographicStrength, Knobs.rainShadow.read(stock))
         assertEquals(stock.glaciation.enabled, Knobs.ice.read(stock))

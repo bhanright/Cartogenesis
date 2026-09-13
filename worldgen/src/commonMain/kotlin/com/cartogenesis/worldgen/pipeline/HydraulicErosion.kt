@@ -104,28 +104,102 @@ internal object HydraulicErosion {
 
     /**
      * How far the depression-filled surface must stand above real ground before a cell counts as
-     * standing water rather than a flat the epsilon-fill nudged.
+     * standing water rather than a flat the epsilon-fill nudged, in metres.
      *
-     * Deliberately the same figure as `LakesConfig.minDepth`, and deliberately a constant rather
-     * than a read of that setting: the lakes section is chosen long after erosion runs, and having
-     * erosion read it would mean adding `lakes` to erosion's reuse guard so that moving a river
-     * setting re-cut every valley.
+     * Deliberately the same figure as `LakesConfig.minDepthMetres`, and deliberately a constant
+     * rather than a read of that setting: the lakes section is chosen long after erosion runs, and
+     * having erosion read it would mean adding `lakes` to erosion's reuse guard so that moving a
+     * river setting re-cut every valley.
      */
-    internal const val POND_DEPTH = 0.004f
+    internal const val POND_DEPTH_METRES = 24f
 
     /**
-     * The fall per cell of a freshly cut breach, in the shoreline-relative units the routing works
-     * in.
+     * Every rate, reach and depth this stage spends, converted out of [WorldScale] and the grid
+     * once, where the stage reads them.
+     *
+     * One class rather than a scatter of conversions, so a reader can see the whole ruler in one
+     * place and a guard can read every one of them back. Nothing below is a fraction of an assumed
+     * range: each is a length in kilometres, a depth in metres or a rate in years, and what the
+     * grid does to it is arithmetic.
+     */
+    internal class Rates(config: WorldGenConfig) {
+
+        private val scale = config.scale
+        private val erosion = config.erosion
+
+        /**
+         * Stream-power incision per round, as the coefficient on `sqrt(catchment share) * slope`
+         * that the walk actually spends on the height field.
+         *
+         * `E = K * A^m * S^n` with m = 0.5 and n = 1, over
+         * [WorldScale.yearsPerHydraulicRound]. The stage holds the catchment as a share of all
+         * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)` and
+         * `S` is that rise times `highestLandMetres / worldWidth`; the cut is spent on a height
+         * field whose whole 0..1 spans [WorldScale.reliefSpanMetres]. Everything but the share and
+         * the rise is constant over a generation, and this is it.
+         *
+         * The land's area is the configured share of the world rather than the round's own count
+         * of land cells. Sea level is a percentile, so that share *is* the land's area by
+         * construction; taking the count instead would make the coefficient wobble a percent from
+         * round to round as the lowstand moved the shoreline, which is a property of the sea's
+         * history and not of the rock.
+         */
+        val incisionCoefficient: Float = run {
+            val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
+            val perYear = erosion.bedrockErodibilityPerYear.toDouble() * scale.yearsPerHydraulicRound
+            val geometry = sqrt(landAreaKm2) / scale.worldWidthKm
+            (perYear * geometry * scale.highestLandMetres / scale.reliefSpanMetres).toFloat()
+        }
+
+        /**
+         * The same rate in the shoreline-relative units the outlet notch is measured and spent in,
+         * which is [incisionCoefficient] read off the land's half of the ruler instead of the
+         * whole field's.
+         */
+        val relativeIncisionCoefficient: Float =
+            incisionCoefficient * scale.reliefSpanMetres / scale.highestLandMetres
+
+        /** [POND_DEPTH_METRES] as a share of the land's relief, which is what the routing works in. */
+        val pondDepth: Float = scale.reliefShareOfMetres(POND_DEPTH_METRES)
+
+        /** [NOTCH_FALL_METRES_PER_KM] as the fall of one cell, in those same units. */
+        val notchFallPerCell: Float =
+            scale.reliefShareOfMetres(NOTCH_FALL_METRES_PER_KM * config.cellWidthKm.toFloat())
+
+        /**
+         * [SHELF_BREAK_METRES] as a share of the raw height field, which is where the depth it is
+         * compared against is measured.
+         *
+         * The field's own ruler and not either half of the piecewise one, for the reason
+         * `SeaConfig.lowstandMetres` gives: a depth taken from the shoreline down into the height
+         * field is a distance in that field, and multiplying it by a measured range would make the
+         * same 130 m a different depth on every seed. It was 0.015 of the land's relief, which
+         * came to 0.0088 of the field on the worlds measured against this one's 0.0081.
+         */
+        val shelfBreak: Float = scale.fieldShareOfMetres(SHELF_BREAK_METRES)
+
+        /** [ErosionConfig.deltaFreeboardMetres] as a share of the land's relief. */
+        val deltaFreeboard: Float = scale.reliefShareOfMetres(erosion.deltaFreeboardMetres)
+
+        /** [ErosionConfig.deltaReachKm] as a whole number of cells of this grid. */
+        val deltaReachCells: Int = config.wholeCellsFor(erosion.deltaReachKm)
+
+        /** [ErosionConfig.outletReachKm] as a whole number of cells of this grid. */
+        val outletReachCells: Int = config.wholeCellsFor(erosion.outletReachKm)
+    }
+
+    /**
+     * The fall of a freshly cut breach, in metres per kilometre of channel.
      *
      * A notch has to slope, or the D8 step out of the basin has nowhere to go and the next round's
      * fill turns the whole channel back into part of the lake. It does not have to slope by much,
-     * and it must not slope by more at one grid than at another, so it is held per unit of map
-     * width and divided by the grid where it is used: at 512 cells that is ten times the epsilon
-     * the fill itself uses, enough to give every cell along the breach a strictly lower neighbour, and
-     * over the longest breach the map allows it is a rounding error against the depth of the water
-     * it is letting out.
+     * and it must not slope by more at one grid than at another, which is what a gradient gets:
+     * two and a half millimetres per kilometre is ten times the epsilon the fill itself uses at
+     * 512 cells, enough to give every cell along the breach a strictly lower neighbour, and over
+     * the longest breach the map allows it is a rounding error against the depth of the water it
+     * is letting out.
      */
-    private const val NOTCH_GRADIENT = 5e-3f
+    private const val NOTCH_FALL_METRES_PER_KM = 0.0025f
 
     /**
      * How many times the outlets are cut again on the finished surface, once the spoil has been
@@ -161,12 +235,12 @@ internal object HydraulicErosion {
      * How far below today's shoreline the sea stands for [round], as a fraction of the land's
      * relief — the one thing the sea-level history changes about the hydraulic rounds.
      *
-     * Zero for every round when [com.cartogenesis.worldgen.model.SeaConfig.lowstand] is zero, and
+     * Zero for every round when [com.cartogenesis.worldgen.model.SeaConfig.lowstandMetres] is zero, and
      * zero for the final round always, so the world the map is cut from is a world whose last act
      * was at the present sea level.
      */
     private fun standBelowToday(config: WorldGenConfig, round: Int): Float {
-        val lowstand = config.sea.lowstand
+        val lowstand = config.scale.fieldShareOfMetres(config.sea.lowstandMetres)
         val rounds = config.erosion.hydraulicRounds
         if (lowstand <= 0f || rounds <= 1) return 0f
         val rising = (rounds * TRANSGRESSION_SHARE).toInt().coerceAtLeast(1)
@@ -209,14 +283,15 @@ internal object HydraulicErosion {
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
-        if (erosion.hydraulicRounds <= 0 || erosion.erodibility <= 0f) return height
+        if (erosion.hydraulicRounds <= 0 || erosion.bedrockErodibilityPerYear <= 0f) return height
+        val rates = Rates(config)
 
         val cellsAcross = config.width
         val cellsDown = config.height
         var working = height.copy()
 
         val carryingSediment = erosion.deposition
-        val reachCells = erosion.deltaReachCells.coerceAtLeast(0)
+        val reachCells = rates.deltaReachCells.coerceAtLeast(0)
         // Sediment in transit, per cell, handed on as the walk works its way downstream.
         //
         // In double, and that is not fussiness. A trunk near the coast carries the yield of its
@@ -350,11 +425,11 @@ internal object HydraulicErosion {
             }
 
             // Raw height a delta cell is built up to.
-            val deltaTop = sea.shorelineHeight + erosion.deltaFreeboard * landRange
+            val deltaTop = sea.shorelineHeight + rates.deltaFreeboard * landRange
             // Where the rim of a lobe stands, and how deep the water has to be before the lobe
-            // stops wanting to cross it. See [SHELF_BREAK].
+            // stops wanting to cross it. See [SHELF_BREAK_METRES].
             val rimTop = sea.shorelineHeight + (deltaTop - sea.shorelineHeight) * LOBE_RIM
-            val shelfDepth = (SHELF_BREAK * landRange).coerceAtLeast(1e-9f)
+            val shelfDepth = rates.shelfBreak.coerceAtLeast(1e-9f)
 
             var incised = 0.0
             var deposited = 0.0
@@ -382,7 +457,9 @@ internal object HydraulicErosion {
             }
 
             val notch = if (erosion.outletIncision || onRound != null) {
-                FlowRouting.spillways(cellsAcross, cellsDown, isLand, relative, ground, directions, POND_DEPTH)
+                FlowRouting.spillways(
+                    cellsAcross, cellsDown, isLand, relative, ground, directions, rates.pondDepth
+                )
             } else {
                 null
             }
@@ -390,7 +467,7 @@ internal object HydraulicErosion {
             var notchCells = 0
             if (notch != null && erosion.outletIncision) {
                 val cut = breach(
-                    erosion, cellsAcross, notch, isLand, relative, ground, directions, area.data, landCells,
+                    erosion, rates, cellsAcross, notch, isLand, relative, ground, directions, area.data, landCells,
                     landRange, surfaceOf,
                     settled = if (carryingSediment) settled else null,
                     load = if (carryingSediment) load else null
@@ -456,7 +533,8 @@ internal object HydraulicErosion {
                 val toSea = !isLand[receiver]
                 val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
                 if (drop <= 0f) continue
-                var taken = cut(erosion, cell, receiver, cellsAcross, drop, area, landCells, relative)
+                var taken =
+                    cut(rates, cell, receiver, cellsAcross, drop, area, landCells, relative)
                 if (receiverClamp && !toSea) {
                     // In the height field's own units, which is what the cut is spent in. A cell
                     // already sitting below its receiver — the floor of a filled basin, where the
@@ -513,7 +591,7 @@ internal object HydraulicErosion {
                 // difference in the last bit of the input -- which is exactly what the GPU's
                 // thermal pass produces -- could change a cell by the full depth of its channel.
                 // `GpuErosionTest` found it, at five cells in a million.
-                val ponded = ground[cell] - relative[cell] > POND_DEPTH
+                val ponded = ground[cell] - relative[cell] > rates.pondDepth
                 run {
                     val distance = if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
                     val slope = if (drop > 0f) drop / distance * cellsAcross else 0f
@@ -680,7 +758,7 @@ internal object HydraulicErosion {
                         lost += carried - laid
                     }
 
-                    !ponded && ground[receiver] - relative[receiver] > POND_DEPTH -> {
+                    !ponded && ground[receiver] - relative[receiver] > rates.pondDepth -> {
                         // A lake inflow. The basin traps a share of the load as a fan built up
                         // toward the water surface, and the rest passes through to the outlet.
                         //
@@ -713,7 +791,7 @@ internal object HydraulicErosion {
                                 log = log,
                                 mark = DepositionLog.LAKE_FAN,
                                 accepts = { candidate ->
-                                    isLand[candidate] && ground[candidate] - relative[candidate] > POND_DEPTH
+                                    isLand[candidate] && ground[candidate] - relative[candidate] > rates.pondDepth
                                 },
                                 advance = { candidate ->
                                     val depth = (ground[candidate] - relative[candidate]) * landRange
@@ -721,7 +799,7 @@ internal object HydraulicErosion {
                                         (if (depth > 0f) depth else 0f) / shelfDepth
                                 },
                                 levelOf = { candidate, reachFraction ->
-                                    val depth = 2f * POND_DEPTH * (1f + LAKE_FAN_SLOPE * reachFraction) *
+                                    val depth = 2f * rates.pondDepth * (1f + LAKE_FAN_SLOPE * reachFraction) *
                                         (0.9f + 0.35f * wobble(candidate))
                                     sea.shorelineHeight + (ground[candidate] - depth) * landRange
                                 }
@@ -735,7 +813,7 @@ internal object HydraulicErosion {
                                 log = log,
                                 mark = DepositionLog.LAKE_FAN,
                                 accepts = { candidate, _ ->
-                                    isLand[candidate] && ground[candidate] - relative[candidate] > POND_DEPTH
+                                    isLand[candidate] && ground[candidate] - relative[candidate] > rates.pondDepth
                                 },
                                 // Deeper the further from the inflow, and uneven cell by cell.
                                 //
@@ -748,7 +826,7 @@ internal object HydraulicErosion {
                                 // rather than a charge per cell; see [LAKE_FAN_SLOPE], and
                                 // REALISM_PLAN.md, E5, for the flat-floored lakes it replaced.
                                 levelOf = { candidate, stepsFromApex ->
-                                    val depth = 2f * POND_DEPTH *
+                                    val depth = 2f * rates.pondDepth *
                                         (1f + LAKE_FAN_SLOPE * stepsFromApex / reachCells.coerceAtLeast(1)) *
                                         (0.9f + 0.35f * wobble(candidate))
                                     sea.shorelineHeight + (ground[candidate] - depth) * landRange
@@ -828,10 +906,10 @@ internal object HydraulicErosion {
                         cellsAcross, cellsDown, after.isLand, spoilFilled, spoilFlow, after.landCellCount
                     ) { 1f }
                     val cut = breach(
-                        erosion, cellsAcross,
+                        erosion, rates, cellsAcross,
                         FlowRouting.spillways(
                             cellsAcross, cellsDown, after.isLand, spoilGround.data, spoilFilled.data, spoilFlow,
-                            POND_DEPTH
+                            rates.pondDepth
                         ),
                         after.isLand, spoilGround.data, spoilFilled.data, spoilFlow, spoilArea.data,
                         after.landCellCount.toFloat(),
@@ -853,7 +931,9 @@ internal object HydraulicErosion {
             // business, and the ground it would have had to cross to find the ocean is dead flat,
             // which is this pass's. See [openMouths].
             if (closing && erosion.deltaLobe && spoil != null) {
-                val opened = openMouths(cellsAcross, cellsDown, working, provisionalSeaLevel, spoil)
+                val opened = openMouths(
+                    cellsAcross, cellsDown, working, provisionalSeaLevel, spoil, rates.pondDepth
+                )
                 incised += opened.removed
                 lost += opened.removed
             }
@@ -1020,7 +1100,7 @@ internal object HydraulicErosion {
      * How much of the land a watercourse must drain before this stage treats it as a river.
      *
      * Deliberately the same figure as `RiverConfig.sourceFlowShare`, and deliberately a constant
-     * rather than a read of that setting, for the same reason [POND_DEPTH] is: the rivers section
+     * rather than a read of that setting, for the same reason [POND_DEPTH_METRES] is: the rivers section
      * is chosen long after erosion runs, and reading it here would mean adding `rivers` to
      * erosion's reuse guard so that moving a river setting re-cut every valley. The two agree
      * because the stage works to flat rain, so a share of the world's runoff and a share of its
@@ -1038,26 +1118,32 @@ internal object HydraulicErosion {
      *
      * Charged against the fraction of the fan's rim and not against the cell, because a charge
      * per cell gives the same lake a different floor at every grid — which is the thing
-     * `atResolution` exists to prevent. One and a half against a rim fraction reproduces the 512
+     * the units exist to prevent. One and a half against a rim fraction reproduces the 512
      * figure exactly and holds it at every grid. See REALISM_PLAN.md, E6, for the depths measured
      * each way.
      */
     private const val LAKE_FAN_SLOPE = 1.5f
 
     /**
-     * How deep the water has to be, as a share of the land's relief, before a fan finds it as
-     * expensive to build into as it finds one whole cell of distance.
+     * How deep the water has to be, in metres, before a fan finds it as expensive to build into as
+     * it finds one whole cell of distance.
      *
-     * Earth's shelf break stands at about 130 m, and 130 m against the eight kilometres of relief
-     * this model's land spans is 0.016 — the same figure as `SeaConfig.lowstand`, and not by
-     * coincidence: the shelf break is roughly where the shoreline stood at the last glacial
-     * maximum. It is the right scale for the question this constant answers, which is how much
-     * accommodation space a fan has to fill before it can advance. On a shelf a delta walks out
-     * almost freely and builds the Nile's two hundred kilometres of new land; over the lip it is
-     * paying eight or ten times as much per cell and stops, which is why a fjord-head delta is a
-     * step and not a fan. `DeltaOutlineTest` measures the ratio on a synthetic coast.
+     * Earth's shelf break stands at about 130 m, which is what this is — and not by coincidence
+     * within a few metres of `SeaConfig.lowstandMetres`, because the shelf break is roughly where
+     * the shoreline stood at the last glacial maximum. It is the right scale for the question this
+     * constant answers, which is how much accommodation space a fan has to fill before it can
+     * advance. On a shelf a delta walks out almost freely and builds the Nile's two hundred
+     * kilometres of new land; over the lip it is paying eight or ten times as much per cell and
+     * stops, which is why a fjord-head delta is a step and not a fan. `DeltaOutlineTest` measures
+     * the ratio on a synthetic coast.
+     *
+     * Read off the height field's own ruler rather than either half of the piecewise one: the
+     * depth this is compared against is taken from the shoreline down into that field, so it is a
+     * distance in it. 130 m of 16,000 is 0.0081, where the constant it replaced was 0.015 of the
+     * land's relief above the shoreline — which came to 0.0088 of the field on the worlds
+     * measured, and to a different figure on every one of them.
      */
-    private const val SHELF_BREAK = 0.015f
+    private const val SHELF_BREAK_METRES = 130f
 
     /** How many cells of distance one shelf-break depth of water costs a fan. */
     private const val DEPTH_COST = 1f
@@ -1113,7 +1199,8 @@ internal object HydraulicErosion {
         cellsDown: Int,
         working: FloatField,
         provisionalSeaLevel: Float,
-        spoil: FloatArray
+        spoil: FloatArray,
+        pondDepth: Float
     ): Opened {
         val cellCount = cellsAcross * cellsDown
         val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
@@ -1125,7 +1212,7 @@ internal object HydraulicErosion {
         // freeboard is what it is cutting through. `DepositionTest` holds that no deposition knob
         // may change a world with deposition switched off, and this pass runs either way; reading
         // `deltaFreeboard` here let the fiddled-knobs case move the terrain. It caught that too.
-        val step = POND_DEPTH * landRange
+        val step = pondDepth * landRange
         // Per cell, from a gradient held against the map, so a groove of a given length on the
         // ground is the same groove however fine the grid that cuts it.
         val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / cellsAcross).coerceAtLeast(1e-7f)
@@ -1159,7 +1246,7 @@ internal object HydraulicErosion {
             // at the author's own mouth on seed 59758 did not qualify and nothing was cut.
             if (area.data[cell] / landCells < DRAWN_RIVER) continue
             val standing = filled.data[cell] - sea.relativeElevation.data[cell]
-            val onFlat = standing > 0f && (standing <= POND_DEPTH || spoil[cell] > 0f)
+            val onFlat = standing > 0f && (standing <= pondDepth || spoil[cell] > 0f)
             if (!onFlat) continue
             val receiver = flow[cell]
             if (receiver < 0) continue
@@ -1203,6 +1290,7 @@ internal object HydraulicErosion {
      */
     internal fun breach(
         erosion: ErosionConfig,
+        rates: Rates,
         cellsAcross: Int,
         notch: FlowRouting.Spillways,
         isLand: BooleanArray,
@@ -1238,7 +1326,7 @@ internal object HydraulicErosion {
             var fall = 0f
             var length = 0
             var cell = spill
-            while (cell >= 0 && isLand[cell] && length < erosion.outletReachCells) {
+            while (cell >= 0 && isLand[cell] && length < rates.outletReachCells) {
                 fall = level - relative[cell]
                 if (fall > level - floor) break
                 length++
@@ -1246,7 +1334,7 @@ internal object HydraulicErosion {
             }
             if (length == 0) continue
             val slope = (fall / length * cellsAcross).coerceAtLeast(0f)
-            val power = erosion.erodibility * erosion.outletIncisionRatio *
+            val power = rates.relativeIncisionCoefficient * erosion.outletIncisionRatio *
                 sqrt(area[spill] / landCells) * slope
 
             // Never below the floor of its own basin, because past that there is no lake left to
@@ -1265,15 +1353,15 @@ internal object HydraulicErosion {
             val newLevel = level - dropRelative
             cell = spill
             var stepsFromLip = 0
-            // The breach's own fall, per cell, from a gradient held against the map: a channel of a
-            // given length on the ground descends by the same amount however many cells that
+            // The breach's own fall, per cell, from a gradient in metres per kilometre: a channel
+            // of a given length on the ground descends by the same amount however many cells that
             // length is cut into.
-            val gradient = NOTCH_GRADIENT / cellsAcross
-            while (cell >= 0 && isLand[cell] && stepsFromLip < erosion.outletReachCells) {
+            val gradient = rates.notchFallPerCell
+            while (cell >= 0 && isLand[cell] && stepsFromLip < rates.outletReachCells) {
                 val cutLevel = newLevel - stepsFromLip * gradient
                 if (relative[cell] <= cutLevel) break
                 val take = (relative[cell] - cutLevel).toDouble() * landRange
-                val ponded = ground[cell] - relative[cell] > POND_DEPTH
+                val ponded = ground[cell] - relative[cell] > rates.pondDepth
                 val removedHere = -raise(surfaceOf, cell, -take)
                 if (removedHere > 0.0) {
                     val asRelative = (removedHere / landRange).toFloat()
@@ -1317,7 +1405,7 @@ internal object HydraulicErosion {
             if (belowSea) {
                 var back = 1
                 var from = spill
-                while (back <= erosion.outletReachCells) {
+                while (back <= rates.outletReachCells) {
                     var bestDonor = -1
                     var bestArea = -1f
                     FlowRouting.forEachNeighbour(
@@ -1327,7 +1415,7 @@ internal object HydraulicErosion {
                         from / cellsAcross
                     ) { neighbour ->
                         if (isLand[neighbour] && directions[neighbour] == from &&
-                            ground[neighbour] - relative[neighbour] > POND_DEPTH
+                            ground[neighbour] - relative[neighbour] > rates.pondDepth
                         ) {
                             val neighbourArea = area[neighbour]
                             val ties = neighbourArea == bestArea &&
@@ -1421,7 +1509,7 @@ internal object HydraulicErosion {
      * ordered pass rather than to this arithmetic because it needs the receiver's *new* height.
      */
     private fun cut(
-        erosion: ErosionConfig,
+        rates: Rates,
         cell: Int,
         receiver: Int,
         cellsAcross: Int,
@@ -1434,7 +1522,7 @@ internal object HydraulicErosion {
         val slope = drop / distance * cellsAcross
         val share = area.data[cell] / landCells
 
-        val incision = erosion.erodibility * sqrt(share) * slope
+        val incision = rates.incisionCoefficient * sqrt(share) * slope
         val aboveSea = relative[cell].coerceAtLeast(0f)
         return minOf(incision, drop * 0.5f, aboveSea)
     }

@@ -124,7 +124,17 @@ class DepositionTest {
      * still lie below it — and `PipelineTest`'s land-fraction promise still holds inside its own
      * tolerance.
      *
-     * And again at H5b, which moves the shoreline twice over and in both directions. The receiver
+     * And a twelfth time at S1, for the same one reason it has ever moved: the shoreline. S1 gave
+     * the sea's own stand a depth in metres and a ruler to read it against — 120 m of the height
+     * field's whole range, where the setting used to be a share of each world's *land* relief, a
+     * quantity that is a quarter of the field on one seed and three fifths on another. On seed 42
+     * at 128 the stand comes out about 15% shallower than it was and the land goes from 6327 cells
+     * to 6290. The cut itself has not moved: exactly 62% of the cells still lie below it, and the
+     * shoreline the percentile chooses is the same shoreline; what changed is the lower stand the
+     * hydraulic rounds grade to, and so the terrain the percentile is taken over. See
+     * REALISM_PLAN.md, S1.
+     *
+     * And at H5b, which moves the shoreline twice over and in both directions. The receiver
      * clamp changes how deep the incision may cut in a round — the cap it replaces was written in
      * the shoreline-relative units the drop is measured in and spent on the height field, so it
      * allowed a well-fed channel cell to be cut by about twice the height it stood above its own
@@ -134,7 +144,7 @@ class DepositionTest {
      * seed 42, the two together take the land from 6382 to 6327, of which 38 is the clamp and 17
      * the outlet pass. The cut itself has not moved: exactly 62% of the cells still lie below it.
      */
-    private val startingPointLand = 6327
+    private val startingPointLand = 6290
 
     @Test
     fun `every round conserves mass`() {
@@ -253,8 +263,8 @@ class DepositionTest {
                 deltaShare = 1f,
                 deltaMinCatchment = 0f,
                 lakeShare = 1f,
-                deltaReachCells = 20,
-                deltaFreeboard = 0.5f
+                deltaReachKm = 469.0,
+                deltaFreeboardMetres = 3_000f
             )
         )
         assertEquals(

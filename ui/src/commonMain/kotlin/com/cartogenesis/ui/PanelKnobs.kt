@@ -267,18 +267,21 @@ internal object Knobs {
     )
 
     /**
-     * How readily running water cuts down, per hydraulic round. Raising it deepens valleys and
-     * sharpens divides; the range stops a fifth of the default, where the land is barely
-     * dissected, and twice it, above which channels cut clean to the sea and leave the ground
-     * between them as unconnected plateaux.
+     * How readily running water cuts down: the stream-power law's K, in m^(1-2m) per year. Raising
+     * it deepens valleys and sharpens divides; the range stops a fifth of the default, where the
+     * land is barely dissected, and twice it, above which channels cut clean to the sea and leave
+     * the ground between them as unconnected plateaux. Both ends sit inside the 10^-7 to 10^-4
+     * Lague (2014) reviews for real bedrock rivers.
      */
     val erosionStrength = Dial(
         section = PanelSection.TERRAIN,
         label = "Erosion strength",
-        range = 0.011f..0.110f,
-        show = relativeTo(0.055f),
-        read = { it.erosion.erodibility },
-        write = { config, v -> config.copy(erosion = config.erosion.copy(erodibility = v)) }
+        range = 2e-7f..2e-6f,
+        show = relativeTo(1e-6f),
+        read = { it.erosion.bedrockErodibilityPerYear },
+        write = { config, v ->
+            config.copy(erosion = config.erosion.copy(bedrockErodibilityPerYear = v))
+        }
     )
 
     /**

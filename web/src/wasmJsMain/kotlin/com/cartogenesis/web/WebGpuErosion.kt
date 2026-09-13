@@ -27,7 +27,7 @@ class WebGpuErosion private constructor(
         width: Int,
         height: Int,
         heights: FloatArray,
-        talus: Float,
+        maxOrthogonalDrop: Float,
         passes: Int,
         rate: Float
     ): FloatArray? {
@@ -38,7 +38,7 @@ class WebGpuErosion private constructor(
         for (i in heights.indices) setFloat(input, i, heights[i])
 
         val result = awaitPromise(
-            runErosion(device, width, height, input, talus, passes, rate)
+            runErosion(device, width, height, input, maxOrthogonalDrop, passes, rate)
         )
         if (result == null || isNullish(result)) return null
 

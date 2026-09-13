@@ -24,13 +24,19 @@ class ErosionConvergenceTest {
     @Test
     fun `report convergence against sweep count`() {
         val config = WorldGenConfig(seed = 234475L, width = 1024, height = 1024)
-            .let { it.copy(erosion = it.erosion.copy(passes = 0)) }
+            .let { it.copy(erosion = it.erosion.copy(debrisTravelKm = 0.0)) }
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         println("EROSION parallelism reported as ${parallelism()}")
 
+        // The sweep counts this reports are counts at 1024, so they are written as the distance
+        // on the ground that gives each of them: a sweep moves material one cell, and a cell of a
+        // 1024 grid is 11.72 km.
         listOf(18, 40, 80, 160, 320).forEach { passes ->
-            val cfg = config.copy(erosion = config.erosion.copy(passes = passes, enabled = true))
+            val travelKm = passes * config.cellWidthKm
+            val cfg = config.copy(
+                erosion = config.erosion.copy(debrisTravelKm = travelKm, enabled = true)
+            )
             lateinit var result: com.cartogenesis.worldgen.pipeline.ErosionResult
             val ms = measureTimeMillis { result = erodeBlocking(cfg, uplift) }
             val (over, worst) = disequilibrium(cfg, result.height.data)
@@ -81,7 +87,7 @@ class ErosionConvergenceTest {
     private fun disequilibrium(config: WorldGenConfig, data: FloatArray): Pair<Double, Double> {
         val w = config.width
         val h = config.height
-        val limit = config.erosion.talus / w
+        val limit = ErosionStage.maxOrthogonalDrop(config)
         val diagonal = limit * sqrt(2f)
         var over = 0
         var worst = 0f

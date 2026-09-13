@@ -155,7 +155,7 @@ object WorldGenerationEngine {
                     // enclosed-water rule both happen after erosion, and re-running twelve
                     // hydraulic rounds because someone moved a shelf slider would undo the whole
                     // point of this chain.
-                    it.config.sea.lowstand == config.sea.lowstand
+                    it.config.sea.lowstandMetres == config.sea.lowstandMetres
             }
             ?.erosion
             ?: ErosionStage.apply(config, plates.height, accelerator)

@@ -57,43 +57,59 @@ object SeaLevelStage {
     private const val MIN_RANGE = 1e-6f
 
     /**
-     * Depth of the continental shelf right at the coast, in [SeaLevelResult.relativeElevation]
-     * units.
+     * Depth of the continental shelf right at the coast, in metres below the shoreline.
      *
-     * Shallower than [SeaConfig.shelfDepth] at the shelf break, so the plateau slopes seaward
-     * instead of being a dead-flat plain up to the shore; and shallower than the -0.12 that
+     * Shallower than [SeaConfig.shelfDepthMetres] at the shelf break, so the plateau slopes
+     * seaward instead of being a dead-flat plain up to the shore; and shallower than the 1,200 m
      * [ClimateStage] uses for `SHALLOW_OCEAN`, so the whole plateau is drawn as shallow water.
      */
-    private const val SHELF_DEPTH_AT_COAST = -0.02f
+    private const val SHELF_DEPTH_AT_COAST_METRES = -200f
 
     /**
      * The most passes [drainDrownedBasins] makes over the drowned basins' outlets.
      *
      * A ceiling rather than a count: the loop stops as soon as a pass finds nothing left to cut,
-     * which on most seeds is well inside it. What the ceiling is for is the case that does not stop
-     * quickly — a sill standing high above the shoreline, which the outflow takes down by one
-     * stream-power bite per pass exactly as a knickpoint retreats over successive floods. Eight is
-     * where the retreat stops rather than where a guard turns green: the largest drowned basin
-     * measured is already flat by the seventh pass and a ninth moves neither its area nor its
-     * surface. Not more, because each pass is a priority flood and a D8 route over the whole grid.
-     * See REALISM_PLAN.md, H5b, for the pass-by-pass figures.
+     * which on most seeds is well inside it, and a pass that finds nothing costs nothing beyond one
+     * priority flood. What the ceiling is for is the case that does not stop quickly — a sill
+     * standing high above the shoreline, which the outflow takes down by one stream-power bite per
+     * pass exactly as a knickpoint retreats over successive floods.
+     *
+     * Eight at H5b, which measured the retreat stopping by the seventh pass on the largest drowned
+     * basin it had. Sixteen since S1 gave the sea's stand its true depth: a lowstand of 120 m is
+     * twice the drop seed 718106 was getting while the same setting was read against that world's
+     * own land relief, so the tract the sea comes back over is deeper, its sill higher, and the
+     * retreat has further to go.
+     *
+     * Sixteen is again where the retreat stops rather than where a guard turns green, and this
+     * time the curve was printed. On seed 718106 at 512 the pass removes 0.60, 0.34, 0.22, 0.14,
+     * 0.089, 0.057, 0.038, 0.025, 0.016, 0.011, 0.0070, 0.0047, 0.0032, 0.0022, 0.0016 and 0.0012
+     * of the height field per pass — a geometric retreat at about 0.65 a pass, which never reaches
+     * zero and is a thousandth of the first pass by the sixteenth. Run to forty instead, the
+     * largest drowned basin comes out at the same 0.3515% of the land it does at sixteen. Not
+     * more, because each pass that does find something is a priority flood and a D8 route over the
+     * whole grid.
+     * See REALISM_PLAN.md, H5b and S1, for the pass-by-pass figures.
      */
-    private const val MAX_POST_CUT_OUTLET_PASSES = 8
+    private const val MAX_POST_CUT_OUTLET_PASSES = 16
 
     /**
      * The percentile cut on its own, without the three rules that [apply] runs on top of it.
      *
      * [seaLevelFraction] is the share of the world's cells to put under water, clamped to 0..1.
-     * [lowstandShareOfRelief] then drops the shoreline below where the percentile puts it, as a
-     * fraction of the land's relief above it; at zero the arithmetic is the plain percentile cut,
-     * to the last bit.
+     * [lowstandShareOfField] then drops the shoreline below where the percentile puts it, as a
+     * fraction of the height field's whole range; at zero the arithmetic is the plain percentile
+     * cut, to the last bit.
+     *
+     * Of the *field*, and not of the land's relief above the shoreline, which is what it was until
+     * S1. The shoreline is a level in the height field and moving it is neither a height above the
+     * water nor a depth below it, so the ruler it takes is the field's own —
+     * `WorldScale.reliefSpanMetres`. The old form multiplied by a measured range that is 0.25 of
+     * the field on one seed and 0.59 on another, so the same setting was a different lowstand on
+     * every world and at every grid; this one is 120 m everywhere.
      *
      * The hydraulic rounds call this once per round to find the base level they grade to, and
-     * handing them a lower one is what lets a valley continue below today's shoreline. The stand is
-     * a share of relief rather than a height because relief is a different number at every grid,
-     * and it is the same unit `HydraulicErosion` holds its own rates in, so a stand of 1.5% means
-     * the same fraction of the same thing at 512 as at 2048. See [SeaConfig.lowstand] and
-     * REALISM_PLAN.md, H5.
+     * handing them a lower one is what lets a valley continue below today's shoreline. See
+     * [SeaConfig.lowstandMetres] and REALISM_PLAN.md, H5 and S1.
      *
      * Named apart from [apply] rather than overloading it: a caller that wanted the whole stage
      * and reached the two-float form by accident would silently lose the enclosure rule, the
@@ -103,20 +119,13 @@ object SeaLevelStage {
     fun percentileCut(
         height: FloatField,
         seaLevelFraction: Float,
-        lowstandShareOfRelief: Float = 0f
+        lowstandShareOfField: Float = 0f
     ): SeaLevelResult {
         val submergedFraction = seaLevelFraction.coerceIn(0f, 1f)
         val todaysShoreline = shorelineForFraction(height, submergedFraction)
-        val highestGround = height.max()
-        val reliefAboveShoreline = (highestGround - todaysShoreline).coerceAtLeast(MIN_RANGE)
-        val shorelineHeight =
-            if (lowstandShareOfRelief > 0f) {
-                todaysShoreline - lowstandShareOfRelief * reliefAboveShoreline
-            } else {
-                todaysShoreline
-            }
+        val shorelineHeight = todaysShoreline - lowstandShareOfField
 
-        return landAndWaterAt(height, shorelineHeight, highestGround)
+        return landAndWaterAt(height, shorelineHeight, height.max())
     }
 
     /**
@@ -165,9 +174,9 @@ object SeaLevelStage {
      * it touches only cells [SeaLevelResult.isLand] marks as water, so no coastline moves. Three
      * bands, keyed on distance to the nearest land cell in cells:
      *
-     *  - out to `shelfWidthCells`, a shallow plateau sloping from [SHELF_DEPTH_AT_COAST] at the coast to
-     *    `-shelfDepth` at the shelf break;
-     *  - from there to `2 * shelfWidthCells`, a smoothstep from `-shelfDepth` back down to whatever the
+     *  - out to the shelf's width, a shallow plateau sloping from [SHELF_DEPTH_AT_COAST_METRES]
+     *    at the coast to `shelfDepthMetres` at the shelf break;
+     *  - from there to twice that width, a smoothstep from the shelf break back down to whatever the
      *    unshelved depth at that cell already was — the continental slope;
      *  - beyond that, untouched: the natural sea floor is deep enough on its own once clear of the
      *    coast, so only the margin needed fixing.
@@ -182,7 +191,9 @@ object SeaLevelStage {
         val plainCut = percentileCut(height, config.seaLevel)
         val enclosed =
             if (seaConfig.enclosedSeaIsLand) {
-                markUnreachableWaterAsLand(plainCut, height, seaConfig)
+                markUnreachableWaterAsLand(
+                    plainCut, height, seaConfig, config.squareKilometresPerCell
+                )
             } else {
                 plainCut
             }
@@ -194,7 +205,7 @@ object SeaLevelStage {
             } else {
                 enclosed
             }
-        if (seaConfig.shelfWidthCells <= 0f) return beforeShelf
+        if (seaConfig.shelfWidthKm <= 0.0) return beforeShelf
 
         val cellsAcross = beforeShelf.relativeElevation.width
         val cellsDown = beforeShelf.relativeElevation.height
@@ -215,9 +226,12 @@ object SeaLevelStage {
             JumpFloodDistance.run(cellsAcross, cellsDown, distanceToLand, nearestLandCell)
         }
 
-        val shelfBreakCells = seaConfig.shelfWidthCells
+        // The three bands, converted from the world's own scale once: the shelf's width in cells
+        // of this grid, and its two depths as shares of the sea's own range below the shoreline.
+        val shelfBreakCells = config.cellsFor(seaConfig.shelfWidthKm)
         val slopeFootCells = 2f * shelfBreakCells
-        val shelfBreakDepth = -seaConfig.shelfDepth
+        val shelfBreakDepth = -config.scale.depthShareOfMetres(seaConfig.shelfDepthMetres)
+        val shelfDepthAtCoast = config.scale.depthShareOfMetres(SHELF_DEPTH_AT_COAST_METRES)
         val withShelf = FloatField(cellsAcross, cellsDown)
         beforeShelf.relativeElevation.data.copyInto(withShelf.data)
 
@@ -228,8 +242,8 @@ object SeaLevelStage {
             withShelf.data[cell] = when {
                 distance <= shelfBreakCells -> {
                     val acrossPlateau = (distance / shelfBreakCells).coerceIn(0f, 1f)
-                    SHELF_DEPTH_AT_COAST +
-                        acrossPlateau * (shelfBreakDepth - SHELF_DEPTH_AT_COAST)
+                    shelfDepthAtCoast +
+                        acrossPlateau * (shelfBreakDepth - shelfDepthAtCoast)
                 }
                 distance <= slopeFootCells -> {
                     val downSlope =
@@ -274,12 +288,13 @@ object SeaLevelStage {
      *
      * The cut itself stays where the percentile put it. Solving instead for the rank at which the
      * *ocean* covers what the slider asks for was written and reverted; see
-     * [SeaConfig.enclosedSeaMaxShare], `GEOGRAPHY.md` and REALISM_PLAN.md, H5.
+     * [SeaConfig.enclosedSeaMaxKm2], `GEOGRAPHY.md` and REALISM_PLAN.md, H5.
      */
     private fun markUnreachableWaterAsLand(
         base: SeaLevelResult,
         height: FloatField,
-        seaConfig: SeaConfig
+        seaConfig: SeaConfig,
+        squareKilometresPerCell: Double
     ): SeaLevelResult {
         val cellsAcross = height.width
         val cellsDown = height.height
@@ -323,8 +338,9 @@ object SeaLevelStage {
         if (bodyCount <= 1) return base
 
         // Anything bigger than the largest lake Earth has is a sea, whatever the connectivity says.
-        // See [SeaConfig.enclosedSeaMaxShare], which carries the measurements this cap comes from.
-        val largestLakeCells = (cellCount * seaConfig.enclosedSeaMaxShare).toInt()
+        // See [SeaConfig.enclosedSeaMaxKm2], which carries the measurements this cap comes from.
+        val largestLakeCells =
+            (seaConfig.enclosedSeaMaxKm2 / squareKilometresPerCell).toInt()
         val isLand = base.isLand.copyOf()
         val relativeElevation = base.relativeElevation.copy()
         val reliefAboveShoreline = (height.max() - base.shorelineHeight).coerceAtLeast(MIN_RANGE)
@@ -394,6 +410,10 @@ object SeaLevelStage {
         val highestGround = height.max()
         val lowestGround = height.min()
         val reliefAboveShoreline = (highestGround - shorelineHeight).coerceAtLeast(MIN_RANGE)
+        // The same rates the hydraulic rounds cut with, converted from the world's scale and this
+        // grid: this pass is the outlet notch run once more on the far side of the cut, so it must
+        // use the notch's own reach, gradient and stream power and not a second copy of them.
+        val rates = HydraulicErosion.Rates(config)
 
         var current = enclosed
         var workingHeight: FloatField? = null
@@ -414,7 +434,7 @@ object SeaLevelStage {
             ) { 1f }
             val spillways = FlowRouting.spillways(
                 cellsAcross, cellsDown, isLand, relativeElevation.data, filled.data,
-                flowDirections, HydraulicErosion.POND_DEPTH
+                flowDirections, rates.pondDepth
             )
 
             // A floor at or above zero stands above the shoreline in relative units, so that basin
@@ -429,7 +449,7 @@ object SeaLevelStage {
 
             val terrain = workingHeight ?: height.copy().also { workingHeight = it }
             val breached = HydraulicErosion.breach(
-                config.erosion, cellsAcross, spillways, isLand, relativeElevation.data,
+                config.erosion, rates, cellsAcross, spillways, isLand, relativeElevation.data,
                 filled.data, flowDirections, catchmentArea.data,
                 current.landCellCount.toFloat(), reliefAboveShoreline, terrain.data,
                 settled = null, load = null, belowSea = true
@@ -440,7 +460,8 @@ object SeaLevelStage {
             current = markUnreachableWaterAsLand(
                 landAndWaterAt(terrain, shorelineHeight, highestGround, lowestGround),
                 terrain,
-                config.sea
+                config.sea,
+                config.squareKilometresPerCell
             )
         }
         return current

@@ -73,7 +73,11 @@ class GenerationStopTest {
         // everything downstream of it while terrain and plates stand.
         val onScreen = WorldGenerationEngine.generateBlocking(base)
         val onScreenBefore = fingerprint(onScreen)
-        val changed = base.copy(erosion = base.erosion.copy(talus = base.erosion.talus + 2f))
+        val changed = base.copy(
+            erosion = base.erosion.copy(
+                criticalFallMetresPerKm = base.erosion.criticalFallMetresPerKm + 3f
+            )
+        )
 
         // What that change produces when nobody interrupts it, which is the answer the interrupted
         // engine has to give as well.
@@ -137,7 +141,11 @@ class GenerationStopTest {
     fun `a stopped generation leaves the last completed world as the one to reuse`() {
         val small = WorldGenConfig(seed = 99L, width = 256, height = 256)
         val onScreen = WorldGenerationEngine.generateBlocking(small)
-        val changed = small.copy(erosion = small.erosion.copy(talus = small.erosion.talus + 2f))
+        val changed = small.copy(
+            erosion = small.erosion.copy(
+                criticalFallMetresPerKm = small.erosion.criticalFallMetresPerKm + 3f
+            )
+        )
 
         runBlocking {
             val reachedErosion = CompletableDeferred<Unit>()

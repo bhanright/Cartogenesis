@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.HydraulicErosion
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -78,7 +79,8 @@ class DeltaMouthTest {
                 config.copy(erosion = config.erosion.copy(deposition = false))
             )
 
-            val cap = (2 * config.erosion.deltaReachCells + 1) * (2 * config.erosion.deltaReachCells + 1)
+            val reach = HydraulicErosion.Rates(config).deltaReachCells
+            val cap = (2 * reach + 1) * (2 * reach + 1)
             val was = Delta(before, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = false))
             val now = Delta(after, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = true))
             val floor = Delta(bare, bare, config.seaLevel, cap, BooleanArray(0)).inPocket

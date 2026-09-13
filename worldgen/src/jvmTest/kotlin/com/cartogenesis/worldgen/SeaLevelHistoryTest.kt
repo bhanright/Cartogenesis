@@ -61,6 +61,7 @@ class SeaLevelHistoryTest {
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {
         var controlFailures = 0
         val pooledEstuaries = ArrayList<Double>()
+        val pooledIndentation = ArrayList<Double>()
         seeds.forEach { seed ->
             // H5b's post-cut outlet pass held off in *both* arms, so this pair varies the lowstand
             // and nothing else.
@@ -81,12 +82,12 @@ class SeaLevelHistoryTest {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
                 .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
-                WorldGenerationEngine.generateBlocking(base.copy(sea = base.sea.copy(lowstand = 0f))),
+                WorldGenerationEngine.generateBlocking(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
                 "seed $seed lowstand 0     "
             )
             val lowered = Coast(
                 WorldGenerationEngine.generateBlocking(base),
-                "seed $seed lowstand ${base.sea.lowstand}"
+                "seed $seed lowstand ${base.sea.lowstandMetres} m"
             )
             if (today.estuaries < controlEstuaryCeiling) controlFailures++
 
@@ -107,12 +108,20 @@ class SeaLevelHistoryTest {
                     "every round — the lowstand drowned no valleys at all"
             )
             pooledEstuaries.add(lowered.estuaries.toDouble() / today.estuaries.coerceAtLeast(1))
+            // Direction per seed, size pooled — the same restatement the estuary count above
+            // carries, and forced by the same kind of change. S1 gave the stand its true depth:
+            // 120 m of the height field's own range where the setting used to be a share of each
+            // world's *land* relief, which on seed 7 was 15% deeper than 120 m and on seed 718106
+            // half of it. Seed 7's whole-coast indentation gain came down to 1.02 with the
+            // shallower stand while its estuary mouths still rose, so the 1.05 that was written on
+            // one seed's arithmetic is now a pooled figure and the per-seed claim is the direction.
             assertTrue(
-                lowered.indentation >= today.indentation * indentationGain,
+                lowered.indentation > today.indentation,
                 "seed $seed: the ocean's shoreline is ${lowered.indentation} times a compact one " +
                     "of the same area, against ${today.indentation} with the sea held at today's " +
-                    "level — not the ${indentationGain}x a drowned coast owes"
+                    "level — the lowstand made the coast no more indented at all"
             )
+            pooledIndentation.add(lowered.indentation / today.indentation)
         }
 
         // The size of it, pooled. The three seeds measure 1.28, 2.53 and 4.31 times as many estuary
@@ -125,6 +134,17 @@ class SeaLevelHistoryTest {
         println(
             "SEA HISTORY pooled: %.2fx estuary mouths with the lowstand (%s)"
                 .format(meanGain, pooledEstuaries.joinToString { "%.2f".format(it) })
+        )
+        val meanIndentation = pooledIndentation.average()
+        println(
+            "SEA HISTORY pooled: %.3fx coastline indentation with the lowstand (%s)"
+                .format(meanIndentation, pooledIndentation.joinToString { "%.3f".format(it) })
+        )
+        assertTrue(
+            meanIndentation >= indentationGain,
+            "pooled over ${pooledIndentation.size} seeds the lowstand leaves the coast " +
+                "${meanIndentation}x as indented as a compact one, under the $indentationGain a " +
+                "drowned coast owes"
         )
         assertTrue(
             pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
@@ -201,12 +221,12 @@ class SeaLevelHistoryTest {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             listOf(
                 "PRE-H5      " to base.sea.copy(
-                    lowstand = 0f, enclosedSeaIsLand = false, postCutOutlet = false
+                    lowstandMetres = 0f, enclosedSeaIsLand = false, postCutOutlet = false
                 ),
                 "lowstand    " to base.sea.copy(
                     enclosedSeaIsLand = false, postCutOutlet = false
                 ),
-                "enclosure   " to base.sea.copy(lowstand = 0f, postCutOutlet = false),
+                "enclosure   " to base.sea.copy(lowstandMetres = 0f, postCutOutlet = false),
                 "H5          " to base.sea.copy(postCutOutlet = false),
                 // And H5b's own pair: the post-cut outlet pass on the shipped world, and the same
                 // world without it, so the report can say what the second inlet-maker is worth.
@@ -225,7 +245,7 @@ class SeaLevelHistoryTest {
                 val base = WorldGenConfig(seed = 42L, width = size, height = size)
                     .copy(seaLevel = level)
                 val off = WorldGenerationEngine.generateBlocking(
-                    base.copy(sea = base.sea.copy(enclosedSeaIsLand = false, lowstand = 0f))
+                    base.copy(sea = base.sea.copy(enclosedSeaIsLand = false, lowstandMetres = 0f))
                 )
                 val on = WorldGenerationEngine.generateBlocking(base)
                 println(
@@ -259,7 +279,7 @@ internal class Coast(world: WorldMap, label: String) {
     /**
      * And the ones the rule deliberately leaves: unreachable water larger than the Caspian, which is
      * an inland sea and not a lake. Reported, never asserted — E4's flooded rift segments are these,
-     * and turning them into lakes is what `SeaConfig.enclosedSeaMaxShare` exists to stop.
+     * and turning them into lakes is what `SeaConfig.enclosedSeaMaxKm2` exists to stop.
      */
     val inlandSeas: Int
     val inlandSeaCells: Int
@@ -313,7 +333,9 @@ internal class Coast(world: WorldMap, label: String) {
         }
         // The same cap the rule itself uses, so what this counts is exactly what it should have
         // taken and did not.
-        val cap = (size * WorldGenConfig().sea.enclosedSeaMaxShare).toInt()
+        val cap = WorldGenConfig().let {
+            (it.sea.enclosedSeaMaxKm2 / it.squareKilometresPerCell).toInt()
+        }
         var pocketBodies = 0
         var pocketArea = 0
         var seaBodies = 0

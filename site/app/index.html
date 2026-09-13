@@ -35,8 +35,10 @@
 <style>
   html,body{
     margin:0;padding:0;height:100%;overflow:hidden;
-    background:#14171a;
-    font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+    /* The application's own ink, so the shell is the same room the app opens in
+       rather than a different grey that flashes for a second first. */
+    background:#15110f;
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
   }
   #composeTarget{position:absolute;inset:0;display:block;outline:none}
 
@@ -48,19 +50,24 @@
     position:absolute;inset:0;z-index:10;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:18px;padding:32px;text-align:center;
-    background:#14171a;color:#9c9187;
+    background:#15110f;color:#e8dfd0;
     transition:opacity .35s ease;
   }
   #boot.done{opacity:0;pointer-events:none}
   #boot h1{
-    font-family:"Cinzel","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
-    font-size:15px;letter-spacing:.3em;text-transform:uppercase;
-    color:#f2e7cf;margin:0;font-weight:700;
+    /* The wordmark's face, named but not fetched. A web font on this page would
+       be one more request in front of the 4.4 MB the reader is actually waiting
+       for; the fallback serif is close enough for four seconds of loading. */
+    font-family:"Spectral","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    font-size:19px;letter-spacing:.02em;
+    color:#f2e7cf;margin:0;font-weight:600;
   }
   #bar{width:min(280px,70vw);height:2px;background:#3a2f28;border-radius:2px;overflow:hidden}
   #bar i{display:block;height:100%;width:0%;background:#c9a227;transition:width .4s ease}
-  #msg{font-size:13px;margin:0;min-height:1.4em}
-  #sub{font-size:11.5px;color:#6e645c;margin:0;max-width:44ch;line-height:1.6}
+  #msg{font-size:13.5px;color:#9c9187;margin:0;min-height:1.4em}
+  /* #9c9187 on the ink is 6.1:1. The #6e645c this replaces measured 3.2:1,
+     which is below AA for text of any size. */
+  #sub{font-size:12px;color:#9c9187;margin:0;max-width:44ch;line-height:1.6}
   #boot a{color:#c9a227}
   .warn #msg{color:#e0a0a0}
 </style>

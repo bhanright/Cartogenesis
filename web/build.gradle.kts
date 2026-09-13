@@ -81,6 +81,24 @@ val siteStamp: String by lazy {
 val browserDistribution = tasks.named("wasmJsBrowserDistribution")
 
 /**
+ * The five faces the landing page sets its type in, taken from the application's own resources.
+ *
+ * The sixth bundled face, Plex Mono bold, is not here: the page never asks for it, and 154 KB of
+ * a weight nothing draws a glyph of is 154 KB. The page's `@font-face` rules name these files, so
+ * `SiteAssemblyTest` checks that both lists still agree.
+ */
+val siteFontFiles = listOf(
+    "spectral_regular.ttf",
+    "spectral_semibold.ttf",
+    "plex_sans_regular.ttf",
+    "plex_sans_medium.ttf",
+    "plex_mono_regular.ttf"
+)
+
+/** Where `:desktop:renderSiteImagery` leaves the figures the page shows. */
+val siteImagery = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
+
+/**
  * Assembles the whole of cartogenesis.com into `web/build/site`, ready to hand to a static host.
  *
  * `Sync` rather than `Copy` because the wasm filenames carry content hashes: a new build lands
@@ -96,6 +114,11 @@ tasks.register<Sync>("assembleSite") {
     // as ANSI on Windows and writes mojibake back out; stating the charset is the whole fix.
     filteringCharset = "UTF-8"
 
+    // Every picture on the page is rendered from the engine by this task, from a fixed seed and
+    // fixed crop windows, so the release that changes what a coastline looks like changes the
+    // coastline the page shows. Nothing in site/ is an image any more.
+    dependsOn(":desktop:renderSiteImagery")
+
     into(layout.buildDirectory.dir("site"))
 
     from(rootProject.layout.projectDirectory.dir("site")) {
@@ -107,6 +130,20 @@ tasks.register<Sync>("assembleSite") {
                 line.replace(loaderTag(loaderStampPlaceholder), loaderTag(siteStamp))
             }
         }
+    }
+
+    // The page's typefaces, copied rather than committed a second time: the repository keeps one
+    // copy of each face, under ui/, and the site is assembled from it.
+    into("fonts") {
+        from(rootProject.layout.projectDirectory.dir("ui/src/commonMain/composeResources/font")) {
+            siteFontFiles.forEach { include(it) }
+        }
+    }
+
+    // The figures. `include` rather than the whole directory because `-Pcontact` leaves contact
+    // sheets in there, which are a tool for choosing a crop and not part of the site.
+    into("img") {
+        from(siteImagery) { include("*.webp") }
     }
 
     // A task stands in for its own output files, and brings the dependency on itself with it.
@@ -137,7 +174,22 @@ tasks.register<Sync>("assembleSite") {
             "app/index.html still carries the loader placeholder. The replacement is scoped to " +
                 """src="cartogenesis.js?v=..."; check that attribute in site/app/index.html."""
         }
+        // The page's weight is a thing the design has a target for, so the assembly reports it
+        // rather than leaving it to be measured by hand. "Before the app" is what a reader who
+        // never clicks Open pays: the page, its five faces and its figures, and nothing under
+        // app/, which is the 12 MB of WebAssembly the launch button fetches.
+        fun weigh(dir: String) = File(site, dir).walkTopDown()
+            .filter { it.isFile }.sumOf { it.length() }
         val bytes = site.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-        logger.lifecycle("Site assembled at $site (${bytes / 1024 / 1024} MB), loader stamp $siteStamp")
+        val page = File(site, "index.html").length()
+        val fonts = weigh("fonts")
+        val images = weigh("img")
+        logger.lifecycle(
+            "Site assembled at $site (${bytes / 1024 / 1024} MB), loader stamp $siteStamp"
+        )
+        logger.lifecycle(
+            "Landing page before the app: ${(page + fonts + images) / 1024} KB " +
+                "(html ${page / 1024}, fonts ${fonts / 1024}, images ${images / 1024})"
+        )
     }
 }

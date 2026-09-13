@@ -112,6 +112,51 @@ tasks.register<Test>("audit") {
     }
 }
 
+/**
+ * Renders every picture on cartogenesis.com from the engine, into `web/build/site-imagery`.
+ *
+ * It lives in `:desktop` and writes into `:web`'s build directory because that is where the two
+ * halves meet: only a JVM module can run the generator and Skia's encoder, and only `:web` knows
+ * how to assemble a site. `:web:assembleSite` depends on this task and copies what it wrote.
+ *
+ * It must run on the deploy runner, which is Linux with no graphics card and no display, so
+ * nothing here asks for either: `SiteImagery` never requests the raster accelerator, and Skia
+ * writes to memory. Headless is stated anyway, so a stray AWT touch fails here rather than on the
+ * runner.
+ *
+ * `-Pcontact` additionally writes the whole map at half size with a coordinate grid over it and
+ * the page's windows outlined, which is how a window is chosen. Not wanted by a deploy.
+ */
+val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
+
+tasks.register<JavaExec>("renderSiteImagery") {
+    group = "distribution"
+    description = "Renders cartogenesis.com's figures from seed 718106 at 2048 into " +
+        "web/build/site-imagery."
+    mainClass = "com.cartogenesis.desktop.SiteImagery"
+    classpath = sourceSets["main"].runtimeClasspath
+    // The world is 2048x2048 and every stage keeps float fields over it; 6g is comfortable and
+    // well inside a GitHub runner's 16.
+    maxHeapSize = "6g"
+    systemProperty("java.awt.headless", "true")
+    if (project.hasProperty("contact")) {
+        systemProperty("cartogenesis.siteImagery.contact", "true")
+    }
+
+    val output = siteImageryDir.asFile
+    argumentProviders.add { listOf(output.absolutePath) }
+    outputs.dir(output)
+    // The pictures are a function of the generator, so any change to it must re-render them. The
+    // whole source of the three modules that decide what a map looks like is the input; anything
+    // narrower would let a change to a stage ship yesterday's coastline.
+    inputs.files(
+        rootProject.fileTree("worldgen/src"),
+        rootProject.fileTree("cartography/src"),
+        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt")
+    ).withPropertyName("generatorSourcesThatDecideWhatTheFiguresShow")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 tasks.register<Test>("siteTest") {
     group = "verification"
     description = "Assembles cartogenesis.com and checks the tree that would be uploaded."

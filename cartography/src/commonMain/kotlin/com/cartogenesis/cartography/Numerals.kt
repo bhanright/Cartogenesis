@@ -20,16 +20,28 @@ package com.cartogenesis.cartography
  */
 object Numerals {
 
-    /** How much of the height a space takes, and the gap left between two glyphs. */
-    private const val SPACE = 0.42f
-    private const val TRACKING = 0.14f
+    /**
+     * How wide a space is and how much air is left between two glyphs, as fractions of the cap
+     * height.
+     *
+     * A space a little under half the height and tracking of a seventh is what a plotter's
+     * alphabet is drawn at: wide enough that `170` does not read as one shape, tight enough that
+     * `170°W` still reads as one word.
+     */
+    private const val SPACE_SHARE_OF_HEIGHT = 0.42f
+    private const val TRACKING_SHARE_OF_HEIGHT = 0.14f
 
     /** How wide [text] runs when set [heightPixels] tall, in the same pixels. */
     fun widthOf(text: String, heightPixels: Float): Float {
         if (text.isEmpty()) return 0f
-        var units = 0f
-        text.forEach { units += (GLYPHS[it]?.advance ?: SPACE) + TRACKING }
-        return (units - TRACKING) * heightPixels
+        // Every glyph carries a trailing gap, so one is given back at the end: the width is to
+        // the last stroke, not to the air past it.
+        var widthInHeights = 0f
+        text.forEach {
+            widthInHeights +=
+                (GLYPHS[it]?.advance ?: SPACE_SHARE_OF_HEIGHT) + TRACKING_SHARE_OF_HEIGHT
+        }
+        return (widthInHeights - TRACKING_SHARE_OF_HEIGHT) * heightPixels
     }
 
     /**
@@ -39,7 +51,7 @@ object Numerals {
     fun strokes(text: String, leftX: Float, baselineY: Float, heightPixels: Float): List<FloatArray> {
         val drawn = ArrayList<FloatArray>()
         var penX = leftX
-        val top = baselineY - heightPixels
+        val capLineY = baselineY - heightPixels
         text.forEach { character ->
             val glyph = GLYPHS[character]
             if (glyph != null) {
@@ -48,13 +60,14 @@ object Numerals {
                     var at = 0
                     while (at < stroke.size) {
                         placed[at] = penX + stroke[at] * heightPixels
-                        placed[at + 1] = top + stroke[at + 1] * heightPixels
+                        placed[at + 1] = capLineY + stroke[at + 1] * heightPixels
                         at += 2
                     }
                     drawn.add(placed)
                 }
             }
-            penX += ((glyph?.advance ?: SPACE) + TRACKING) * heightPixels
+            penX += ((glyph?.advance ?: SPACE_SHARE_OF_HEIGHT) + TRACKING_SHARE_OF_HEIGHT) *
+                heightPixels
         }
         return drawn
     }

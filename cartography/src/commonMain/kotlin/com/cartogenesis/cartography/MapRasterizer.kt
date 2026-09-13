@@ -150,8 +150,13 @@ class MapOverlay(
     val landmarks: List<LandmarkGlyph>,
     /** Ocean or wind arrows, on the views that show them. */
     val flow: List<FlowArrow>,
-    /** Spacing of the arrow lattice in cells, so a platform can size arrows to fit between them. */
-    val flowScale: Float,
+    /**
+     * How far a flow arrow may reach from its own point, in cells.
+     *
+     * Half the lattice pitch, so two neighbours drawn at full length meet nose to tail and no
+     * further. A platform scales its whole arrow — shaft, head and barbs — off this one figure.
+     */
+    val flowArrowReachCells: Float,
     /** The graticule, when the reader asked for one. */
     val graticule: Graticule?,
     /** The scale bar, on a sheet that carries its own. See [MapSheet.carriesScaleBar]. */
@@ -435,13 +440,13 @@ object MapRasterizer {
         // Flow arrows on a coarse lattice: one every `latticePitchCells`, so the density stays
         // legible whatever the map resolution.
         val flow = ArrayList<FlowArrow>()
-        var flowScale = 1f
+        var flowArrowReachCells = 1f
         if (options.view.showsFlow) {
             val cellsDown = world.height
             val arrowsAcross =
                 if (options.view == MapView.WIND) WIND_ARROWS_ACROSS else CURRENT_ARROWS_ACROSS
             val latticePitchCells = (cellsAcross / arrowsAcross).coerceAtLeast(CLOSEST_ARROWS_CELLS)
-            flowScale = latticePitchCells * HALF_A_CELL
+            flowArrowReachCells = latticePitchCells * HALF_A_CELL
             var row = latticePitchCells / 2
             while (row < cellsDown) {
                 var column = latticePitchCells / 2
@@ -520,7 +525,7 @@ object MapRasterizer {
             coastline = coast,
             landmarks = glyphs,
             flow = flow,
-            flowScale = flowScale,
+            flowArrowReachCells = flowArrowReachCells,
             graticule =
                 if (options.showGraticule) Graticule.of(cellsAcross, world.height) else null,
             scaleBar = if (sheet.carriesScaleBar) placedScaleBar(world) else null,

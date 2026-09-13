@@ -156,10 +156,10 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
             }
             overlay.flow.forEach { arrow ->
-                val length = overlay.flowScale * (0.45f + 0.55f * arrow.strength)
+                val length = overlay.flowArrowReachCells * (0.45f + 0.55f * arrow.strength)
                 val alpha = (70 + 150 * arrow.strength).toInt().coerceIn(0, 255)
                 paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
-                paint.strokeWidth = (overlay.flowScale * 0.15f).coerceAtLeast(1f)
+                paint.strokeWidth = (overlay.flowArrowReachCells * 0.15f).coerceAtLeast(1f)
                 val tipX = arrow.x + arrow.directionX * length
                 val tipY = arrow.y + arrow.directionY * length
                 canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)

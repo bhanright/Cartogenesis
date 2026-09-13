@@ -153,14 +153,17 @@ make one map into two.
 
 ## Styles
 
-Eleven ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
+Twelve ways of drawing the finished map: **Atlas** (modern hypsometric tints), **Vellum** (aged
 parchment and sepia ink), **Ink wash** (sumi-e, grey ink on pale paper), **Nautical** (an admiralty
 chart with depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (the
 saturated pull-down physical map from a classroom wall), **Verdant** (illustrated fantasy: teal sea,
 cream land, deep woods), **Scroll** (painted parchment with a jade sea and vermilion marks),
 **Pen and ink** (line art: no fill at all, relief hatched, borders in red), **Mars** (the same
-world as a dry planet) and **Colour-blind** (a cividis-ordered land ramp over one flat slate sea,
-with Paul Tol's muted nine hatched beyond nine realms, so nothing is told by hue alone).
+world as a dry planet), **Natural** (the world as a satellite sees it, in a palette sampled off a
+Blue Marble photograph: saturated forest greens, olive plains, ochre and rust deserts, a deep
+cobalt sea turning turquoise over the shelves) and **Colour-blind** (a cividis-ordered land ramp
+over one flat slate sea, with Paul Tol's muted nine hatched beyond nine realms, so nothing is told
+by hue alone).
 
 Mars is the one that changes what the map *says* rather than only how it looks. The world beneath
 it still has a sea, rivers and lakes — the generator is untouched — but the ocean basins are drawn
@@ -175,7 +178,15 @@ strokes laid where the ground is steep and left off where it is flat. It stops s
 imitates, in one honest respect: a hand-drawn map draws each range as a little picture shaded by
 eye, where this hatches by slope, so the texture is right and the pictograms are not there.
 
-A style changes appearance and nothing else — the same seed gives the same world in all ten — and
+Natural is the one whose palette was measured rather than chosen. Every colour in it is sampled
+off one photograph — a Blue Marble view of Earth centred on North America — region by region, and
+each constant in the source carries the pixel box its median came out of: the land ramp is that
+image's eastern woodland, Mississippi lowland, Pacific north-west, Great Plains olive, Great Basin
+umber, Chihuahua ochre, Colorado red rock and Greenland snow, in that order, which happens to be
+their order of lightness. Its climate lever is at full, because on a photograph the colour of a
+place is what grows there and the height only shows through where nothing does.
+
+A style changes appearance and nothing else — the same seed gives the same world in all twelve — and
 the diagnostic views ignore styles entirely, because their colours mean something and a prettier
 ramp would make them lie.
 
@@ -462,7 +473,7 @@ already packed, every ramp already chosen, a colour table per realm, people and 
 per-cell numbers the climate has to say about the ground — so nothing about the palette or the
 aridity index is written twice; the blends are integer and truncate where `MapPalette` truncates,
 and `GpuRasterTest` holds the two within one channel step of 255 at the 99.9th percentile across all
-fifteen views in all eleven styles. It is not behind the acceleration toggle because that
+fifteen views in all twelve styles. It is not behind the acceleration toggle because that
 toggle is a promise about whether the *world* can be regenerated from its seed, and drawing pixels
 makes no such promise either way.
 

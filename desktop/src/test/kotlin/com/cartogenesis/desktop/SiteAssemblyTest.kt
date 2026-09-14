@@ -163,16 +163,22 @@ class SiteAssemblyTest {
     /**
      * The panel names a strip's `alt` text promises, in order.
      *
-     * The sentence ends "…, labelled A, B and C." — a shape rather than a word count, so that the
-     * list a reader who cannot see the figure is given and the list `SiteImagery` actually letters
-     * the bands with can be compared name for name. A panel dropped from either side moves one of
-     * the two lists and not the other.
+     * The text ends "Labelled A, B and C." — a shape rather than a word count, so that the list a
+     * reader who cannot see the figure is given and the list `SiteImagery` actually letters the
+     * bands with can be compared name for name. A panel dropped from either side moves one of the
+     * two lists and not the other.
+     *
+     * The capital is optional because the clause has been both: it was the tail of one sentence
+     * ("…drawn three times, labelled Atlas, Schoolroom and Natural.") until the alts were widened
+     * to say what each panel *shows*, which is the half of WCAG 1.1.1 a complex image needs and a
+     * list of names does not give. It is a sentence of its own now, and either spelling is the same
+     * promise.
      */
     private fun namesPromised(alt: String): List<String> {
-        val listed = alt.substringAfter("labelled ", "").substringBefore('.')
+        val listed = Regex("""[Ll]abelled ([^.]*)""").find(alt)?.groupValues?.get(1).orEmpty()
         assertTrue(
             listed.isNotEmpty(),
-            "a comparison strip's alt text has to end \"…, labelled A, B and C.\" so that what it " +
+            "a comparison strip's alt text has to end \"Labelled A, B and C.\" so that what it " +
                 "promises can be compared with what is drawn; this one reads \"$alt\""
         )
         return listed.split(Regex(""",\s*|\s+and\s+""")).map { it.trim() }.filter { it.isNotEmpty() }

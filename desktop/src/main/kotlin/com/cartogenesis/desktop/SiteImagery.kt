@@ -191,10 +191,10 @@ object SiteImagery {
         val inkName: String,
         val ink: Int
     ) {
-        SUNK("ink-sunk", 0xFF241D18.toInt(), "parchment", 0xFFF2E7CF.toInt()),
-        HAIRLINE("hairline", 0xFF3A2F28.toInt(), "parchment", 0xFFF2E7CF.toInt()),
+        SUNK("ink-sunk", 0xFF21252A.toInt(), "parchment", 0xFFF2E7CF.toInt()),
+        HAIRLINE("hairline", 0xFF363C44.toInt(), "parchment", 0xFFF2E7CF.toInt()),
         OXBLOOD("oxblood", 0xFF5D0000.toInt(), "parchment", 0xFFF2E7CF.toInt()),
-        BRASS("brass", 0xFFC9A227.toInt(), "ink", 0xFF15110F.toInt())
+        BRASS("brass", 0xFFC9A227.toInt(), "ink", 0xFF121417.toInt())
     }
 
     /**

@@ -71,6 +71,43 @@ class ChromeGalleryTest {
     }
 
     /**
+     * The two standard chromes around the map they were hardest on: Natural.
+     *
+     * F29's whole argument is about what the surround does to the map inside it, and the Atlas
+     * style the shots above use is the kindest possible frame for a warm chrome — it is itself
+     * ink on buff. Natural is the opposite: greens, a cobalt sea, snow. The brown-black ground
+     * and Vellum's yellow paper both read as a colour cast over that, and a neutral ground does
+     * not, which is a claim only a picture can settle. So the same window, the same seed, with
+     * Natural in the frame, in both chromes.
+     *
+     * Asserted here is what a screenshot allows and no more: that the four pictures differ, and
+     * that none came out flat.
+     */
+    @Test
+    fun `the two standard chromes are photographed around a Natural map`() {
+        val dir = File("build/screens").apply { mkdirs() }
+
+        val light = shoot(dark = false, style = "Natural")
+        val dark = shoot(dark = true, style = "Natural")
+
+        File(dir, "chrome-light-natural.png").writeBytes(light.png)
+        File(dir, "chrome-dark-natural.png").writeBytes(dark.png)
+        println("CHROME wrote two ${WIDTH}x$HEIGHT Natural shots to ${dir.absolutePath}")
+        println(
+            "CHROME light-natural fingerprint ${light.fingerprint} over " +
+                "${light.distinctColours} colours, dark-natural ${dark.fingerprint} over " +
+                "${dark.distinctColours}"
+        )
+
+        assertTrue(
+            light.fingerprint != dark.fingerprint,
+            "the light and dark themes rendered identically around a Natural map"
+        )
+        assertTrue(light.distinctColours > 200, "the light Natural shot is nearly blank")
+        assertTrue(dark.distinctColours > 200, "the dark Natural shot is nearly blank")
+    }
+
+    /**
      * The same window with every section of the panel unrolled.
      *
      * F2's subject is the panel, and the panel a reader first sees is five ruled headings with a
@@ -598,7 +635,14 @@ class ChromeGalleryTest {
     private fun shoot(
         dark: Boolean,
         openSections: Boolean = false,
-        choice: ThemeChoice = ThemeChoice.SYSTEM
+        choice: ThemeChoice = ThemeChoice.SYSTEM,
+        /**
+         * A map style to put in the frame by name, from the toolbar's own strip, or null for the
+         * one the application opens in. The name is the style's `label`, which is the word the
+         * strip letters, so a style that was renamed fails here rather than photographing the
+         * wrong map.
+         */
+        style: String? = null
     ): Shot {
         var shot: Shot? = null
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
@@ -616,6 +660,11 @@ class ChromeGalleryTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
+
+            if (style != null) {
+                onNodeWithText(style).performClick()
+                waitForIdle()
+            }
 
             if (openSections) {
                 // In the panel's own order. Since F3 took the style and view lists out of

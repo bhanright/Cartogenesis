@@ -135,6 +135,15 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 10 because the ice gained a thickness. `glaciation.valleyIceThicknessMetres` is how far above
+     * its bed the ice in a trough stands, and the carving shares its cut by how deeply a cell lies
+     * under that as well as by how far across the section it lies — which is the whole of I2's fix
+     * and the reason the stage no longer planes a ridge down to the height of the valley beside it.
+     * A format-9 file has no such key, so it would open with this build's 600 m and *regenerate* a
+     * world carved by a rule the world in the file was never carved by. The world in the file would
+     * still draw correctly, since a save has carried every stage since the container format; it is
+     * the moment a reader changes a knob and asks for it again that the two would part company.
+     *
      * 9 because the crust became a thing the world carries. The plate stage now writes which crust
      * each cell is made of and how fast the rock under it is still rising, the settings gained an
      * `isostasy` section for the densities and the elastic thickness, and the height field itself
@@ -166,7 +175,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 9
+    const val FORMAT_VERSION = 10
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

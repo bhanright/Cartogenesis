@@ -135,21 +135,36 @@ class GpuOceanTest {
      * Two figures per size, because the stage's headline time is mostly not the part that moved.
      * The solve is on a `solveResolution` grid however large the world is, so it costs the same at
      * every size; what grows is the rest of the stage, above all the two-hundred-pass temperature
-     * advection over every cell. The solve's own share is measured by differencing against a run
-     * with no relaxation passes, at the smallest size, where the stage around it is cheap enough
-     * that the difference is not buried in the noise of a four-second measurement.
+     * advection over every cell, which is lock-step per cell and stays on the processor. The
+     * solve's own share is measured by differencing against a run with no relaxation passes, at
+     * the smallest size, where the stage around it is cheap enough that the difference is not
+     * buried in the noise of a four-second measurement.
+     *
+     * Only that isolated figure is asserted on, and only against [MIN_SOLVE_SPEED_UP]. The stage
+     * totals are printed for the record: holding them to a ratio would be holding the temperature
+     * advection to one, and it never left the processor.
      */
     @Test
     fun `ocean wall clock at export sizes`() = runBlocking {
         val gpu = deviceOrSkip() ?: return@runBlocking
         val accelerated = mustNotDecline(gpu)
 
-        val solveConfig = WorldGenConfig(seed = 42L)
+        // The advection is turned off for this measurement. The solve's cost is obtained by
+        // differencing a run against one with no relaxation passes, and at the shipped settings
+        // the two-hundred-pass advection being subtracted is larger than the solve being measured,
+        // so the difference of two noisy numbers was itself noisier than the answer: the same
+        // machine gave 7.4x, 4.3x and 1.8x on three runs. With the advection out, what is left to
+        // subtract is an interpolation and a gradient, and the difference is mostly signal.
+        val solveConfig = WorldGenConfig(seed = 42L).let {
+            it.copy(ocean = it.ocean.copy(advectionPasses = 0))
+        }
         val noSolve = solveConfig.copy(ocean = solveConfig.ocean.copy(relaxationPasses = 0))
         val solveSea = seaFor(solveConfig)
         repeat(WARM_UP_RUNS) {
             OceanStage.generate(solveConfig, solveSea)
+            OceanStage.generate(noSolve, solveSea)
             OceanStage.generate(onGpuConfig(solveConfig), solveSea, accelerated)
+            OceanStage.generate(onGpuConfig(noSolve), solveSea, accelerated)
         }
         val cpuSolveMillis =
             fastestMillis { OceanStage.generate(solveConfig, solveSea) } -
@@ -157,9 +172,17 @@ class GpuOceanTest {
         val gpuSolveMillis =
             fastestMillis { OceanStage.generate(onGpuConfig(solveConfig), solveSea, accelerated) } -
                 fastestMillis { OceanStage.generate(onGpuConfig(noSolve), solveSea, accelerated) }
+        val solveSpeedUp = cpuSolveMillis.toDouble() / gpuSolveMillis
         println(
             "OCEAN timing device=${gpu.name} the solve alone " +
-                "CPU=${cpuSolveMillis}ms GPU=${gpuSolveMillis}ms"
+                "CPU=${cpuSolveMillis}ms GPU=${gpuSolveMillis}ms: " +
+                "${"%.1f".format(solveSpeedUp)}x, against a bar of ${MIN_SOLVE_SPEED_UP}x"
+        )
+        assertTrue(
+            solveSpeedUp >= MIN_SOLVE_SPEED_UP,
+            "the solve ran only ${"%.1f".format(solveSpeedUp)}x faster on the card " +
+                "(${gpuSolveMillis}ms against ${cpuSolveMillis}ms), under the " +
+                "${MIN_SOLVE_SPEED_UP}x a kernel that ran at all clears"
         )
 
         for (side in listOf(2048, 4096)) {
@@ -426,7 +449,18 @@ class GpuOceanTest {
         val probed: GpuOcean.Result by lazy { GpuOcean.createOrNull() }
 
         /** Runs made before the clock starts, to warm the driver and the code caches. */
-        const val WARM_UP_RUNS = 2
+        const val WARM_UP_RUNS = 1
+
+        /**
+         * The least speed-up on the solve alone that still means the card did the work.
+         *
+         * The solve measures 4x to 7x here - well short of what the sweeps manage, because a
+         * 128-grid relaxation is six thousand tiny dispatches and the cost is mostly the latency
+         * of issuing them rather than the arithmetic. Two therefore still leaves it at least twice
+         * the room it needs, and asks the only question a timing guard should: whether the kernel
+         * ran at all. A bar near the measured figure would be asking whether the machine was busy.
+         */
+        const val MIN_SOLVE_SPEED_UP = 2.0
 
         /** How many times each measurement is repeated before its floor is taken. */
         const val TIMED_RUNS = 3

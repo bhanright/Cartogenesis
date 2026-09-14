@@ -104,7 +104,35 @@
   longer bites and the sixth is carrying an unknown share of its own weight. What it costs is
   measured: TODO's first entry records that a sixth is bought against the coastline. Somebody
   should sweep the share again on the new ground and take back whatever the crust is now paying
-  for. 2026-09-13, S2.
+  for. 2026-09-13, S2. *S2b, 2026-09-14: the control has now been taken out of
+  `GroundTextureTest` rather than printed, and re-measured on the repaired ground it reads 0.84% of
+  land in lakes against a bar of 2.22% — it passes by a factor of two and a half. The clause it
+  stood in no longer claims to justify the sixth, so this entry is the only thing holding the
+  question.*
+- **Four `JumpFloodDistance` callers still measure north-south distance with the cell's width.**
+  S2b gave the flood a row scale and passed it from `PlateStage`'s craton reach and sea-floor age,
+  which are S2's own. The rest still count cells and convert with `cellWidthKm`, so on a 2:1 grid
+  each of them reaches half as far north-south as the kilometres it is given: `ClimateStage`'s
+  `waterDistance`, which sets how maritime a coast is; `SeaLevelStage`'s distance to land, off which
+  the shelf, the slope and the rise are read, so a shelf is half as wide off a northern coast as off
+  a western one; `PlateStage`'s two boundary-distance fields, which every belt profile, plateau rim
+  and trench wall is a function of; and `GlaciationStage`'s distance to the ice edge and distance to
+  ice. Each is a one-line change — pass `config.cellHeightInCellWidths` and convert the answer with
+  `cellWidthKm` — and each moves every world it touches, so each wants its own before-and-after
+  renders and its own re-pinning. The belt profiles are the largest of them and probably want a
+  chunk rather than a line. 2026-09-14, S2b.
+- **The flexure's continuation past a pole is a plain mirror, not the far side of the world.**
+  `Isostasy.Flexure` pads the load out to twice the map's height by reflecting it about each polar
+  row, which stops the two poles bending each other and gives a pole the zero slope it must have.
+  The exact continuation is a reflection in y *together with* a shift of half the map in x, because
+  this world is 12,000 km round and 6,000 from pole to pole, so a meridian is a closed loop and what
+  lies past the north pole is the far side of the world. The two differ only for a load at a pole
+  that is not zonal, which a polar ice cap very nearly is. The same entry covers what the padding
+  costs: the transform pair now runs on a grid twice as tall, which is 2.2 times the arithmetic and
+  twice the buffers (134 MB at 2048, 537 at 4096). Both could be taken back at once — the mirrored
+  field is even, so the y transform is a cosine transform and could run at the map's own height —
+  but that is a real piece of numerical work and the flexure is already a G-track candidate at 4096.
+  2026-09-14, S2b.
 - **The drainage density has no Earth figure, only a regression bar.** `GroundTextureTest` holds
   the channel length per unit area within a third of what the pre-S2 tree measured, which is a bar
   against a generator and not against a planet. It was a fifth until this pass and moved because

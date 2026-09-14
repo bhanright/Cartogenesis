@@ -329,7 +329,8 @@ class DebugMapDump {
         }
     }
 
-    private enum class Mode {
+    /** Internal, with [render], so a sister harness can draw a world without a second palette. */
+    internal enum class Mode {
         FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, CULTURES,
         HABITABILITY,
         // The local warm and cold season, not July and January. Side by side these are where the
@@ -1070,7 +1071,8 @@ class DebugMapDump {
         ImageIO.write(image, "png", File(outputDir, name))
     }
 
-    private fun render(world: WorldMap, mode: Mode): BufferedImage {
+    /** One world drawn in one [mode], at the grid's own pixels. Internal: see [Mode]. */
+    internal fun render(world: WorldMap, mode: Mode): BufferedImage {
         val w = world.width
         val h = world.height
         val image = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)

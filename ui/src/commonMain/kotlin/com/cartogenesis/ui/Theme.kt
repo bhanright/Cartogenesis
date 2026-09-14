@@ -40,12 +40,16 @@ import org.jetbrains.compose.resources.Font
  * Material rather than a thing for drawing maps, and it disagreed with everything inside the map
  * frame — an aged chart in a sepia palette, surrounded by a colour scheme from a phone.
  *
- * So the surround is drawn from the same materials as the map. In daylight the ground is Vellum's
- * own paper and its own inks, taken literally from [com.cartogenesis.cartography.MapStyle.VELLUM]
- * so that chrome and map cannot drift apart: the panel is the page, the text is the ink the
- * coastlines are drawn in, and the one accent is the oxide brown the borders are drawn in. After
- * dark it is the author's site — near-black ink, bone text, brass for anything live and oxblood
- * for anything that has gone wrong.
+ * So the surround is drawn from the same materials as the map: the panel is a page, the text is
+ * the ink a coastline is drawn in, and the one accent is the oxide brown a border is drawn in. The
+ * inks are literally a map style's — the oxide accent, the muted river brown of secondary text and
+ * the coastline's own are [com.cartogenesis.cartography.MapStyle.VELLUM]'s, so chrome and map
+ * cannot drift apart on what a *line* is coloured. The **grounds** are not a style's and no longer
+ * try to be: a whole window of Vellum's yellow paper pulled against a Natural map's greens and a
+ * cobalt sea, so daylight is a modern atlas plate's off-white and after dark a neutral charcoal,
+ * with bone text, brass for anything live and oxblood for anything that has gone wrong. The
+ * author's site follows the dark scheme rather than the other way round — `site/index.html` mirrors
+ * it value for value, and `SitePaletteContrastTest` fails if the two drift.
  *
  * Everything here is set **once**, as a Material `ColorScheme`, `Typography` and `Shapes`, so that
  * every control in the application picks it up without being dressed by hand where it is used. Two
@@ -100,8 +104,8 @@ fun CartogenesisTheme(
  *
  * [SYSTEM] is the default: the desktop's or the browser's own light/dark setting, followed live.
  * The sixteen named ones are a deliberate refusal of the usual "light, dark, auto" triple — the
- * application already owns twelve palettes, one per map style, and [LIGHT] and [DARK] are
- * literally two of them (Vellum's paper, and the author's site). Three more are lifted from the
+ * application already owns twelve palettes, one per map style, and [LIGHT] and [DARK] take their
+ * inks and their one accent from Vellum's, though not its paper. Three more are lifted from the
  * styles rather than invented: choosing Nautical dresses the window in the admiralty chart's buff
  * and oxide, Midnight in its slate and brass-gold, Mars in basalt and rust, so a reader who works
  * in one style can put the whole window in it. The remaining eleven are asked for by name — high
@@ -435,12 +439,24 @@ internal class ChromeDetail(
 
 internal val LocalChromeDetail = staticCompositionLocalOf { ChromeDetail.PLAIN }
 
-// The two palettes, named once. Light is Vellum's; dark is the website's CSS variables verbatim.
+// The two palettes, named once. Both are inked in a map style's colours and grounded in their own:
+// see [CartogenesisTheme] for why, and the two ladders below for how the tiers are placed.
 
-/** Vellum's `paper`, lightened a shade for a whole window's worth of it. */
-private val PaperGround = Color(0xFFEFE4C8)
-private val PaperRaised = Color(0xFFF6EEDB)
-private val PaperSunk = Color(0xFFE4D8B9)
+/**
+ * The three papers of a modern atlas plate: the window, a panel raised off it, a panel sunk into it.
+ *
+ * Off-white and barely warm, rather than the yellow of
+ * [com.cartogenesis.cartography.MapStyle.VELLUM] that these once were. A whole window of
+ * Vellum's `paper` is a far stronger yellow than a map's worth of it, and it fought every map that
+ * was not Vellum — a Natural world's greens and a cobalt sea most of all. The inks that are read on
+ * these are still Vellum's, and did not move.
+ *
+ * The rest of the light scheme's papers lie on the two segments these three define — see
+ * [LightAtlas], where each is named with the fraction of the way along it stands.
+ */
+private val PaperGround = Color(0xFFF4F1EA)
+private val PaperRaised = Color(0xFFFAF8F3)
+private val PaperSunk = Color(0xFFE9E4D8)
 
 /** Darker than Vellum's `coastline`, which is a line weight rather than a text colour. */
 private val Ink = Color(0xFF2B2117)
@@ -454,20 +470,67 @@ private val Slate = Color(0xFF5B4A2F)
 /** Vellum's `border`: the one accent. */
 private val Sepia = Color(0xFF6B3F2A)
 
-/** Vellum's first land stop, which is what a stained page looks like where something is selected. */
-private val SepiaWash = Color(0xFFE2D2A9)
+/**
+ * What a stained page looks like where something is selected: [PaperGround] with 13, 18 and 31
+ * levels of red, green and blue taken out of it.
+ *
+ * Those three numbers are the step Vellum's first land stop took out of Vellum's paper, which is
+ * what this wash was until the paper under it was replaced. Taking the same step out of the new
+ * paper reproduces both properties the old stain had: the page drops 6.24 of L* where it is
+ * selected, against 6.23 before, and the stain carries 7.1 more chroma than the paper, against 7.3
+ * before.
+ *
+ * It is written as a step off the **paper** and not as a share of [Sepia], which is what it was
+ * first built as, because that is what the old stain measured as: 1.0 degrees off its paper's hue
+ * and 40.9 off the accent's. A selection is the page going deeper where it is chosen, not the
+ * accent leaking into it. Laying an eighth of the accent on a paper that has lost three quarters of
+ * its own chroma gave a wash 15.6 degrees off the paper with only 1.8 chroma over it, and it read
+ * pink-grey on the chips rather than as paper.
+ */
+private val SepiaWash = Color(0xFFE7DFCB)
 
-private val Rule = Color(0xFFBFAD86)
-private val RuleFaint = Color(0xFFD7C8A5)
+/**
+ * The two hairline weights, both [InkFaded] laid on [PaperGround]: the rule at three eighths of it,
+ * the faint one at a fifth.
+ *
+ * A rule is a faint ink line, so it is built out of the ink that is already read on this paper
+ * rather than picked. The two shares are the ones that put each rule back at the contrast it had
+ * against Vellum's paper — 1.72:1 against 1.74 for the rule and 1.32:1 against 1.31 for the faint
+ * one — so a panel's edge is exactly as quiet as it was.
+ *
+ * They were Vellum's own khakis, and a khaki that read as paper on a yellow page reads as
+ * faintly green on an off-white one. These sit within one and a half degrees of the hue the old
+ * ones had, with about two fifths of the chroma, because the paper under them lost three quarters
+ * of its own.
+ */
+private val Rule = Color(0xFFC2B9A9)
+private val RuleFaint = Color(0xFFD9D3C7)
 
 /** Nautical's `border`: an oxide red that belongs on the same page. */
 private val Oxide = Color(0xFF8A3B2E)
 
-// The dark palette, from the author's site
-private val InkDark = Color(0xFF15110F)
-private val InkRaised = Color(0xFF1C1714)
-private val InkSunk = Color(0xFF241D18)
-private val Hairline = Color(0xFF3A2F28)
+/**
+ * The dark scheme's four charcoals: the window, a raised panel, a sunk panel, and the rule between.
+ *
+ * One tone at four depths, and the tone is stated once here because every other dark surface is
+ * built from it — red, green and blue in the proportion **1 : 1.116 : 1.268**, which is what these
+ * four share to the last level. A neutral charcoal rather than the brown-black these once were:
+ * a warm ground made every map in the frame look yellow-lit, and made the cobalt of a Natural sea
+ * look like a mistake.
+ *
+ * The proportion is scaled by a **step**, which is simply the red channel, and the rest of the
+ * scheme is the same tone at its own step. [DarkAtlas] names each one's. The steps are the ones the
+ * warm palette had, each three lower — the amount [InkDark] came down — so every gap on the ladder
+ * is the gap it was; [Hairline] is the one exception, a step tighter than the arithmetic would put
+ * it, because that is the value that measured best against the panels it separates.
+ */
+private val InkDark = Color(0xFF121417)
+private val InkRaised = Color(0xFF191C20)
+private val InkSunk = Color(0xFF21252A)
+private val Hairline = Color(0xFF363C44)
+
+// The inks, the accents and the alarm. These and the typography are what carry the identity; the
+// grounds they are read on are free to move, and have.
 private val Bone = Color(0xFFE8DFD0)
 private val BoneDim = Color(0xFF9C9187)
 private val Parchment = Color(0xFFF2E7CF)
@@ -476,13 +539,27 @@ private val BrassDim = Color(0xFF8D7326)
 private val Oxblood = Color(0xFF5D0000)
 private val OxbloodLit = Color(0xFF7E1414)
 
+/** [Brass] laid on [InkDark] at an eighth: what an armed button and a chosen chip are filled with. */
+private val BrassStain = Color(0xFF292619)
+
+/** [Bone] laid on [InkDark] at a sixteenth: the quietest of the three filled blocks. */
+private val BoneStain = Color(0xFF1F2123)
+
 /**
- * Daylight: Vellum's paper and Vellum's inks.
+ * Daylight: an atlas plate's off-white, inked in Vellum's own inks.
  *
- * The numbers are the style's own, lifted from `MapStyle.VELLUM` — `paper` for the ground,
- * `landRamp`'s first stop for a selected wash, `river` for muted text, `coastline` for the ink and
- * `border` for the accent — with only the ground lightened a shade, because a whole window of
- * `0xF0E3C2` is a stronger yellow than a map's worth of it.
+ * The inks are the style's own, lifted from `MapStyle.VELLUM` — `river` for muted text, `coastline`
+ * for the ink, `border` for the accent. The papers are not the style's, and neither are the three
+ * things mixed out of a paper rather than read on it: see [PaperGround], [SepiaWash] for the
+ * selection, and [Rule] for the two hairline weights.
+ *
+ * Every paper that is not one of the three named ones lies on a segment between two of them, at the
+ * fraction of the way along it stood on the old papers, measured as its distance from white in the
+ * red channel. Toward [PaperRaised] from [PaperGround]: `surfaceContainerLow` at 8/7,
+ * `surfaceBright` at 10/7, `surfaceContainerLowest` at 12/7 — all three past the raised panel,
+ * which is what makes them lighter than it. Toward [PaperSunk]: `surfaceContainerHigh` at 2/11 and
+ * `surfaceDim` at 12/11, the one just off the window's own paper and the other just past the sunk
+ * one.
  */
 private val LightAtlas: ColorScheme = lightColorScheme(
     primary = Sepia,
@@ -516,35 +593,48 @@ private val LightAtlas: ColorScheme = lightColorScheme(
     outline = Rule,
     outlineVariant = RuleFaint,
     scrim = Color(0xFF17120B),
-    surfaceBright = Color(0xFFF9F3E3),
-    surfaceDim = Color(0xFFE3D7B8),
-    surfaceContainerLowest = Color(0xFFFBF6E9),
-    surfaceContainerLow = Color(0xFFF7F0DE),
+    // The five papers the KDoc places on the two segments, in the order they lighten.
+    surfaceDim = Color(0xFFE8E3D6),
+    surfaceContainerHigh = Color(0xFFF2EFE7),
+    surfaceContainerLow = Color(0xFFFBF9F4),
+    surfaceBright = Color(0xFFFDFBF7),
+    surfaceContainerLowest = Color(0xFFFEFDF9),
     surfaceContainer = PaperRaised,
-    surfaceContainerHigh = Color(0xFFEDE2C7),
     surfaceContainerHighest = PaperSunk
 )
 
 /**
- * After dark: the author's site palette.
+ * After dark: a neutral charcoal, lit by brass.
  *
- * The author's site palette, exactly — ink, hairline, bone, bone-dim, parchment, brass, brass-dim,
- * oxblood, oxblood-lit — mapped onto the Material roles rather than reinvented. Brass is the only
- * bright thing on the page and so is the only accent; oxblood carries anything that failed.
+ * Bone, bone-dim, parchment, brass, brass-dim, oxblood and oxblood-lit are the author's website's,
+ * exactly, mapped onto the Material roles rather than reinvented; brass is the only bright thing in
+ * the room and so is the only accent, and oxblood carries anything that failed. The grounds were
+ * the site's too until the charcoals of [InkDark] replaced them, and the site now follows this
+ * file rather than leading it.
+ *
+ * Every surface here is that one tone at its own step — the red channel, green and blue at 1.116
+ * and 1.268 of it. In the order they lighten: `scrim` 7, `surfaceContainerLowest` 13, the window 18,
+ * `surfaceContainerLow` 21, a panel 25, `surfaceContainerHigh` 31, a sunk panel 33,
+ * `surfaceContainerHighest` 38, `surfaceBright` 39, `outlineVariant` 40, the rule 54.
+ *
+ * The three containers are the exception, and are stains rather than steps, which is the rule the
+ * class note states: `primaryContainer` and `secondaryContainer` are [Brass] laid on the window at
+ * an eighth, `tertiaryContainer` is [Bone] on it at a sixteenth. Both reproduce the containers the
+ * warm palette had, over the warm window, to within two levels a channel.
  */
 private val DarkAtlas: ColorScheme = darkColorScheme(
     primary = Brass,
     onPrimary = InkDark,
-    primaryContainer = Color(0xFF2A2114),
+    primaryContainer = BrassStain,
     onPrimaryContainer = Brass,
     inversePrimary = Sepia,
     secondary = BrassDim,
     onSecondary = InkDark,
-    secondaryContainer = Color(0xFF2A2114),
+    secondaryContainer = BrassStain,
     onSecondaryContainer = Parchment,
     tertiary = BoneDim,
     onTertiary = InkDark,
-    tertiaryContainer = Color(0xFF241E1A),
+    tertiaryContainer = BoneStain,
     onTertiaryContainer = Bone,
     background = InkDark,
     onBackground = Bone,
@@ -560,15 +650,15 @@ private val DarkAtlas: ColorScheme = darkColorScheme(
     errorContainer = Oxblood,
     onErrorContainer = Parchment,
     outline = Hairline,
-    outlineVariant = Color(0xFF2B231D),
-    scrim = Color(0xFF0A0807),
-    surfaceBright = Color(0xFF2A231E),
+    outlineVariant = Color(0xFF282D33),
+    scrim = Color(0xFF070809),
+    surfaceBright = Color(0xFF272C31),
     surfaceDim = InkDark,
-    surfaceContainerLowest = Color(0xFF100D0B),
-    surfaceContainerLow = Color(0xFF181310),
+    surfaceContainerLowest = Color(0xFF0D0F10),
+    surfaceContainerLow = Color(0xFF15171B),
     surfaceContainer = InkRaised,
-    surfaceContainerHigh = Color(0xFF221B16),
-    surfaceContainerHighest = Color(0xFF29211B)
+    surfaceContainerHigh = Color(0xFF1F2327),
+    surfaceContainerHighest = Color(0xFF262A30)
 )
 
 // ---- The three chromes lifted from map styles. ----

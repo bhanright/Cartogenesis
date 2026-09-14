@@ -134,18 +134,18 @@ class ChromeContrastTest {
          */
         val RECORDED_ROLES: List<Pair<String, String>> = listOf(
         "SYSTEM" to
-            "ff6b3f2a,fffaf8f3,ffe3dbd2,ff2b2117,ffc9a227,ff5b4a2f," +
-            "fffaf8f3,ffe3dbd2,ff2b2117,ff6e5b3c,fffaf8f3,ffe3dbd2," +
+            "ff6b3f2a,fffaf8f3,ffe7dfcb,ff2b2117,ffc9a227,ff5b4a2f," +
+            "fffaf8f3,ffe7dfcb,ff2b2117,ff6e5b3c,fffaf8f3,ffe7dfcb," +
             "ff2b2117,fff4f1ea,ff2b2117,fffaf8f3,ff2b2117,ffe9e4d8," +
             "ff6e5b3c,fffaf8f3,ff2b2117,fffaf8f3,ff8a3b2e,fffaf8f3," +
-            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fffdfbf7," +
+            "ffe8cfc0,ff3a1810,ffc2b9a9,ffd9d3c7,ff17120b,fffdfbf7," +
             "ffe8e3d6,fffefdf9,fffbf9f4,fffaf8f3,fff2efe7,ffe9e4d8",
         "LIGHT" to
-            "ff6b3f2a,fffaf8f3,ffe3dbd2,ff2b2117,ffc9a227,ff5b4a2f," +
-            "fffaf8f3,ffe3dbd2,ff2b2117,ff6e5b3c,fffaf8f3,ffe3dbd2," +
+            "ff6b3f2a,fffaf8f3,ffe7dfcb,ff2b2117,ffc9a227,ff5b4a2f," +
+            "fffaf8f3,ffe7dfcb,ff2b2117,ff6e5b3c,fffaf8f3,ffe7dfcb," +
             "ff2b2117,fff4f1ea,ff2b2117,fffaf8f3,ff2b2117,ffe9e4d8," +
             "ff6e5b3c,fffaf8f3,ff2b2117,fffaf8f3,ff8a3b2e,fffaf8f3," +
-            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fffdfbf7," +
+            "ffe8cfc0,ff3a1810,ffc2b9a9,ffd9d3c7,ff17120b,fffdfbf7," +
             "ffe8e3d6,fffefdf9,fffbf9f4,fffaf8f3,fff2efe7,ffe9e4d8",
         "DARK" to
             "ffc9a227,ff121417,ff292619,ffc9a227,ff6b3f2a,ff8d7326," +
@@ -517,6 +517,11 @@ class ChromeContrastTest {
      * change that improved the look and quietly cost a pair its legibility would be a bad trade, so
      * the pairs are measured — and they came out better rather than worse in daylight, where the
      * weakest of them, muted ink on a sunk panel, went from 4.60:1 to 5.13:1.
+     *
+     * The light chrome's selection wash and its two hairline weights were re-derived a second time
+     * after the first captures were looked at, and both moves raised a pair rather than lowering
+     * one: the armed button's label reads 6.67:1 on the wash, against 6.47 on the first derivation
+     * and 5.92 before F29. `Theme.kt`'s `SepiaWash` and `Rule` say why they moved.
      */
     @Test
     fun `every text pair in the two standard chromes clears WCAG AA`() {

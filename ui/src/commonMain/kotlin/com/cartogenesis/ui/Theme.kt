@@ -470,19 +470,40 @@ private val Slate = Color(0xFF5B4A2F)
 private val Sepia = Color(0xFF6B3F2A)
 
 /**
- * What a stained page looks like where something is selected: [Sepia] laid on [PaperGround] at an
- * eighth.
+ * What a stained page looks like where something is selected: [PaperGround] with 13, 18 and 31
+ * levels of red, green and blue taken out of it.
  *
- * A stain of the accent rather than a block of it, which is the rule the containers all follow (see
- * the class note). It was Vellum's first land stop until F29 took Vellum's paper out of the scheme,
- * and a land stop is a colour a *map* owns, so the wash is now stated as the arithmetic rather than
- * borrowed: an eighth is the fraction that puts it as far from the paper as the land stop stood
- * from Vellum's — 17, 22 and 24 levels of red, green and blue against that stop's 13, 18 and 31.
+ * Those three numbers are the step Vellum's first land stop took out of Vellum's paper, which is
+ * what this wash was until F29 replaced the paper under it. Taking the same step out of the new
+ * paper reproduces both properties the old stain had: the page drops 6.24 of L* where it is
+ * selected, against 6.23 before, and the stain carries 7.1 more chroma than the paper, against 7.3
+ * before.
+ *
+ * It is written as a step off the **paper** and not as a share of [Sepia], which is what it was
+ * first built as, because that is what the old stain measured as: 1.0 degrees off its paper's hue
+ * and 40.9 off the accent's. A selection is the page going deeper where it is chosen, not the
+ * accent leaking into it. Laying an eighth of the accent on a paper that has lost three quarters of
+ * its own chroma gave a wash 15.6 degrees off the paper with only 1.8 chroma over it, and it read
+ * pink-grey on the chips rather than as paper.
  */
-private val SepiaWash = Color(0xFFE3DBD2)
+private val SepiaWash = Color(0xFFE7DFCB)
 
-private val Rule = Color(0xFFBFAD86)
-private val RuleFaint = Color(0xFFD7C8A5)
+/**
+ * The two hairline weights, both [InkFaded] laid on [PaperGround]: the rule at three eighths of it,
+ * the faint one at a fifth.
+ *
+ * A rule is a faint ink line, so it is built out of the ink that is already read on this paper
+ * rather than picked. The two shares are the ones that put each rule back at the contrast it had
+ * against Vellum's paper — 1.72:1 against 1.74 for the rule and 1.32:1 against 1.31 for the faint
+ * one — so a panel's edge is exactly as quiet as it was.
+ *
+ * They were Vellum's own khakis until F29, and a khaki that read as paper on a yellow page read as
+ * faintly green on an off-white one. These sit within one and a half degrees of the hue the old
+ * ones had, with about two fifths of the chroma, because the paper under them lost three quarters
+ * of its own.
+ */
+private val Rule = Color(0xFFC2B9A9)
+private val RuleFaint = Color(0xFFD9D3C7)
 
 /** Nautical's `border`: an oxide red that belongs on the same page. */
 private val Oxide = Color(0xFF8A3B2E)
@@ -527,7 +548,9 @@ private val BoneStain = Color(0xFF1F2123)
  * Daylight: an atlas plate's off-white, inked in Vellum's own inks.
  *
  * The inks are the style's own, lifted from `MapStyle.VELLUM` — `river` for muted text, `coastline`
- * for the ink, `border` for the accent — and did not move in F29. The papers did: see [PaperGround].
+ * for the ink, `border` for the accent — and did not move in F29. The papers did, and with them the
+ * three things that were mixed out of Vellum's paper rather than read on it: see [PaperGround],
+ * [SepiaWash] for the selection, and [Rule] for the two hairline weights.
  *
  * Every paper that is not one of the three named ones lies on a segment between two of them, at the
  * fraction of the way along it stood on the old papers, measured as its distance from white in the

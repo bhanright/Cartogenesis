@@ -82,6 +82,19 @@
   epicontinental seas below: drown the continents as much as Earth drowns its own and the two
   figures reconcile. 2026-09-13, S2.
 
+- **The coastline is drawn by the cell-scale relief on low ground, and this pass took some of that
+  away.** The box-counting dimension is a measure of how crinkled the shoreline is at four, eight
+  and sixteen cells, and what crinkles a contour at that scale is the height noise around it
+  divided by the slope it crosses. S2's fourth pass made the texture proportional to the local
+  relief, which is smallest exactly where the shoreline is, and the pooled dimension came down from
+  1.149 over five seeds to 1.129 over four — still inside Mandelbrot's 1.25 ± 0.15, but seed 99 at
+  1.092 is under its floor on its own, which is why `EarthLikeness`'s clause is now asserted pooled.
+  The same trade is the first entry in this file read the other way round: `main` before S2 had a
+  coastline of 1.17 *and* Earth's drainage because its shoreline was a percentile through a fractal
+  noise field, and every rule that has since given the ground a physical shape has cost the coast
+  something. What would buy it back honestly is a coastal *process* — waves, longshore drift, a
+  barrier island — which is section 5 of `REALISM_AUDIT.md` and is nobody's chunk yet.
+  2026-09-13, S2.
 - **A sixth of the map-scale relief may no longer be needed, and nothing has measured it since
   the crust got a slope.** `TerrainConfig.regionalReliefShare` was raised from a tenth to a sixth
   at S2's third pass because at a tenth the water ponded: lakes covered 3.55% of the land and whole

@@ -72,10 +72,10 @@ private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
     val cpuElapsed = measureTime { onCpu = ErosionStage.apply(config, uplift).height.data }
 
     // Once to compile the shaders and warm the device, then the measurement.
-    ErosionStage.apply(gpuConfig, uplift, accelerator)
+    ErosionStage.apply(gpuConfig, uplift, accelerator = accelerator)
     var onGpu = FloatArray(0)
     val gpuElapsed = measureTime {
-        onGpu = ErosionStage.apply(gpuConfig, uplift, accelerator).height.data
+        onGpu = ErosionStage.apply(gpuConfig, uplift, accelerator = accelerator).height.data
     }
 
     var worst = 0f

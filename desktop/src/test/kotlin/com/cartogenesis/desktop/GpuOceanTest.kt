@@ -140,9 +140,22 @@ class GpuOceanTest {
      * the smallest size, where the stage around it is cheap enough that the difference is not
      * buried in the noise of a four-second measurement.
      *
-     * Only that isolated figure is asserted on, and only against [MIN_SOLVE_SPEED_UP]. The stage
-     * totals are printed for the record: holding them to a ratio would be holding the temperature
-     * advection to one, and it never left the processor.
+     * Nothing here is asserted, and that is deliberate. The solve's cost can only be had by
+     * differencing two stage timings, and it is 50 to 250 ms inside a JVM that runs for twenty
+     * minutes; the same kernel on the same machine gave 7.4x, 4.3x, 1.8x, 4.1x and 1.8x across
+     * five runs, the last two with the rest of the suite around it, and the processor term alone
+     * moved between 132 ms and 246 ms. Turning the advection off removed most of the noise and did
+     * not remove enough. A bar on a number that unstable would fail on a busy machine while the
+     * kernel worked - exactly the fault this chunk was asked to remove from `GpuErosionTest` -
+     * and moving the bar until it passed would be tuning a guard to fit, which ground rule 5
+     * forbids. So the figures are reported and the correctness clauses carry the test.
+     *
+     * The erosion sweeps do carry a bar, because `hydraulicRounds = 0` isolates them into a
+     * directly measured quantity rather than a difference. The ocean has no equivalent seam from
+     * outside :worldgen: `solveOnCpu` is private, and duplicating the reference solver in a test
+     * to time it would be a second copy of the thing under test. If this is wanted as a guard, the
+     * way in is an internal entry point for the coarse solve, which is a change to :worldgen this
+     * chunk should not smuggle in.
      */
     @Test
     fun `ocean wall clock at export sizes`() = runBlocking {
@@ -176,13 +189,7 @@ class GpuOceanTest {
         println(
             "OCEAN timing device=${gpu.name} the solve alone " +
                 "CPU=${cpuSolveMillis}ms GPU=${gpuSolveMillis}ms: " +
-                "${"%.1f".format(solveSpeedUp)}x, against a bar of ${MIN_SOLVE_SPEED_UP}x"
-        )
-        assertTrue(
-            solveSpeedUp >= MIN_SOLVE_SPEED_UP,
-            "the solve ran only ${"%.1f".format(solveSpeedUp)}x faster on the card " +
-                "(${gpuSolveMillis}ms against ${cpuSolveMillis}ms), under the " +
-                "${MIN_SOLVE_SPEED_UP}x a kernel that ran at all clears"
+                "${"%.1f".format(solveSpeedUp)}x (reported, not asserted - see the KDoc)"
         )
 
         for (side in listOf(2048, 4096)) {
@@ -450,17 +457,6 @@ class GpuOceanTest {
 
         /** Runs made before the clock starts, to warm the driver and the code caches. */
         const val WARM_UP_RUNS = 1
-
-        /**
-         * The least speed-up on the solve alone that still means the card did the work.
-         *
-         * The solve measures 4x to 7x here - well short of what the sweeps manage, because a
-         * 128-grid relaxation is six thousand tiny dispatches and the cost is mostly the latency
-         * of issuing them rather than the arithmetic. Two therefore still leaves it at least twice
-         * the room it needs, and asks the only question a timing guard should: whether the kernel
-         * ran at all. A bar near the measured figure would be asking whether the machine was busy.
-         */
-        const val MIN_SOLVE_SPEED_UP = 2.0
 
         /** How many times each measurement is repeated before its floor is taken. */
         const val TIMED_RUNS = 3

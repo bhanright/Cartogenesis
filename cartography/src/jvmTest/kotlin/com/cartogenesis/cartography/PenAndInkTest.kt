@@ -134,20 +134,26 @@ class PenAndInkTest {
          * it from this same world and still measures 0.958 — and pen and ink's record moved anyway,
          * from `-588733464` to `83321747`, which is the other half of the same evidence: the one
          * style with no tint for the shading to multiply moves when, and only when, the ground does.
+         *
+         * And once more at F30, the ground only again. `SeaLevelStage.drainDrownedBasins` routes
+         * its own pass by `FlowRouting`'s `byBestTwo` rule now, so the sill it cuts through a
+         * drowned basin follows a different line, and every coast and river below one of those
+         * basins moves with it. All twelve records moved, pen and ink's from `83321747` to
+         * `-673318124` among them, which says again that what moved is the ground.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -2003151281,
-            MapStyle.VELLUM to 1207385410,
-            MapStyle.INK_WASH to -473762329,
-            MapStyle.NAUTICAL to 1285160262,
-            MapStyle.MIDNIGHT to -1484647674,
-            MapStyle.SCHOOLROOM to 1688611757,
-            MapStyle.VERDANT to -1946081433,
-            MapStyle.SCROLL to -567772364,
-            MapStyle.PEN_AND_INK to 83321747,
-            MapStyle.MARS to -2096662810,
-            MapStyle.NATURAL to -1819354085,
-            MapStyle.CLEAR to -116506008
+            MapStyle.ATLAS to 2121123876,
+            MapStyle.VELLUM to -1278734163,
+            MapStyle.INK_WASH to 322213774,
+            MapStyle.NAUTICAL to -553960593,
+            MapStyle.MIDNIGHT to -1823514715,
+            MapStyle.SCHOOLROOM to -474118908,
+            MapStyle.VERDANT to -111858169,
+            MapStyle.SCROLL to -43630376,
+            MapStyle.PEN_AND_INK to -673318124,
+            MapStyle.MARS to 2057443186,
+            MapStyle.NATURAL to 2064280015,
+            MapStyle.CLEAR to 1197085454
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

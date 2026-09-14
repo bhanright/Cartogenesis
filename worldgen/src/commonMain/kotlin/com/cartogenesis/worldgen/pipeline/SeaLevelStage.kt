@@ -495,6 +495,10 @@ object SeaLevelStage {
             val filled = FlowRouting.fillDepressions(
                 cellsAcross, cellsDown, isLand, relativeElevation
             )
+            // Drawn between the two steepest ways down, which no other caller asks for. This pass is
+            // the one that cuts its notch *below* the waterline, so where its path is ruled the map
+            // does not grow a ruled trench with a river in it but a ruled canal of open water. See
+            // [FlowRouting.flowDirections] and REALISM_PLAN.md, F30.
             val flowDirections = FlowRouting.flowDirections(
                 cellsAcross,
                 cellsDown,
@@ -502,7 +506,8 @@ object SeaLevelStage {
                 relativeElevation,
                 filled,
                 config.seed,
-                config.facetRouting
+                config.facetRouting,
+                byBestTwo = true
             )
             val catchmentArea = FlowRouting.accumulate(
                 cellsAcross, cellsDown, isLand, filled, flowDirections, current.landCellCount

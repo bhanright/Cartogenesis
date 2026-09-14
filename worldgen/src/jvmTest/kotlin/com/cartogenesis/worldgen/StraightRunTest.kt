@@ -37,6 +37,18 @@ class StraightRunTest {
 
         /** The seed the live control runs on: the most ruled runs of the four at 512. */
         const val CONTROL_SEED = 42L
+
+        /**
+         * William's second world, at the one grid the ruled shores can be found on.
+         *
+         * A 2048 world is the better part of two minutes and it is not optional, for the reason
+         * `GlacialBasinShapeTest` keeps one: the bodies the notch opened are three and seven
+         * thousand cells, and at 512 that basin is a few hundred cells with no notch cut at all —
+         * the outlet pass only runs where the enclosure rule has drowned a basin, and how much of a
+         * world it drowns is a question about how finely the coast is resolved.
+         */
+        const val SHORE_SEED = 364673L
+        const val SHORE_SIDE = 2048
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
@@ -84,6 +96,166 @@ class StraightRunTest {
             0, total,
             "standing water still runs in ruled lines: ${counted.joinToString(" ")}"
         )
+    }
+
+    /**
+     * F30: no shore is a ruled line either, which the census above could not see.
+     *
+     * The census asks whether a body of water is *itself* a bar — every cell within a cell and a bit
+     * of one line, twenty cells long — and that is a question about small bodies. William's seed
+     * 364673 at 2048 carried the same defect in a shape it could not read: two inland seas of three
+     * and seven thousand cells, entirely ordinary in outline but for one dead-straight edge apiece,
+     * 41 cells due north-south and 73 on the diagonal. Those edges are the outlet pass's own notch.
+     * [com.cartogenesis.worldgen.pipeline.SeaLevelStage] cuts a drowned basin's sill *below* the
+     * waterline, one cell wide, over sixteen passes; where the path it follows is ruled the map
+     * grows a canal of open water drawn with a ruler, and the shore of the sea it opens is that
+     * canal's side.
+     *
+     * So this asks the question of the *edge* of every body of standing water, with I2's
+     * instrument: [OutlineRuns], which `GlacialBasinShapeTest` asks of the basins the ice cuts and
+     * which carries the derivation of the bar. Both kinds of body, because the defect made one of
+     * each: a lake off [com.cartogenesis.worldgen.pipeline.LakeResult.lakeId], and a connected run
+     * of sea cells, which is what a drowned basin comes out as once it is too big for the enclosure
+     * rule to call it a lake.
+     *
+     * Every body but the world ocean. The ocean's edge is the coastline, its shape is a question
+     * about fractal dimension rather than about straight runs, and `LittoralCoastTest` and F17 own
+     * it with an instrument built for it. Asked of the ocean this bar says nothing useful: the
+     * largest body on a map is most of the map, and a single tidal flat lying along a row reads as
+     * a run of hundreds against a bar derived from a body's curvature.
+     *
+     * And only of a body big enough for the bar to mean anything —
+     * [OutlineRuns.SMALLEST_BODY_THE_BAR_BINDS], which carries that derivation. A puddle of twenty
+     * cells breaks a bar wider than the puddle is by being four cells long and two across, which is
+     * the census above's question and not this one's.
+     *
+     * Measured on main at 00b13fe: **73 cells against 41.7 allowed, 1.75 times the bar**, on the
+     * 7,297-cell inland sea at (2022,1449) of 364673 at 2048, and 41 against 34.2 (1.20 times) on
+     * the 3,314-cell one in William's own window — 72 and 41 of those cells standing above the
+     * waterline in the raw terrain before the outlet pass cut them, which is what says they are the
+     * notch and not a shore. The other five seeds carry between one and six bodies the bar binds
+     * apiece and every one of them was already inside it, 0.26 to 0.55 times — which is why the
+     * defect needed the author's own world at his own grid to be seen, and why that world is worth
+     * two minutes here. The case prints how many bodies each seed offered, so a green pass can be
+     * told from a vacant one.
+     *
+     * **This is red, and on purpose.** F30 fixed one of the two: the 41-cell canal is gone, because
+     * the pass now routes itself by [com.cartogenesis.worldgen.pipeline.FlowRouting]'s `byBestTwo`
+     * rule and no longer follows the fill's staircase in a ruled line. The 73-cell one is not a
+     * ruled *path* at all and does not move when the path does — it stays at 75 cells in the same
+     * place — because the first pass of that notch takes a sill standing a kilometre above the
+     * waterline down to the basin's floor in one bite, and a slot cut in one bite is at one level
+     * however it bends. That is the notch's *depth* and not its bearing, it lives in
+     * `HydraulicErosion.breach`'s `dropRelative`, and it is written up in `TODO.md` with its
+     * figures rather than bought by weakening the bar this case derives.
+     */
+    @Test
+    fun `no shore is a ruled line`() {
+        val failures = ArrayList<String>()
+        var worst = 0f
+        var worstAt = "nothing"
+        val seeds = listOf(SHORE_SEED to SHORE_SIDE, AUTHORS_SEED to AUTHORS_SIDE) +
+            STANDARD_SEEDS.map { it to STANDARD_SIDE }
+        seeds.forEach { (seed, side) ->
+            val world = world(seed, side)
+            var worstHere = 0f
+            var worstHereAt = "nothing"
+            val measurable = standingWaterOf(world)
+                .filter { it.cells.size >= OutlineRuns.SMALLEST_BODY_THE_BAR_BINDS }
+            measurable.forEach { water ->
+                val run = OutlineRuns.longestOutlineRun(
+                    water.cells, water.membership, water.id, side, side
+                )
+                val allowed = OutlineRuns.allowedRunCells(water.cells.size)
+                val overTheBar = run.cells / allowed
+                val described = "${water.kind} ${water.id} of ${water.cells.size} cells: a run of " +
+                    "${run.cells} along bearing ${run.bearing} at (${run.column},${run.row}), " +
+                    "against ${"%.1f".format(allowed)} allowed"
+                if (overTheBar > worstHere) {
+                    worstHere = overTheBar
+                    worstHereAt = described
+                }
+                if (run.cells > allowed) failures += "$seed@$side $described"
+            }
+            println(
+                "F30 SHORE $seed@$side: ${measurable.size} bodies big enough to measure, " +
+                    "worst ${"%.2f".format(worstHere)} times the bar, $worstHereAt"
+            )
+            if (worstHere > worst) {
+                worst = worstHere
+                worstAt = "$seed@$side $worstHereAt"
+            }
+        }
+        println("F30 SHORE worst over all seeds: ${"%.2f".format(worst)} times the bar, $worstAt")
+        assertTrue(
+            failures.isEmpty(),
+            "a shore is ruled along a grid bearing:\n" + failures.joinToString("\n")
+        )
+    }
+
+    /** One body of standing water, and the array its cells are marked in. */
+    private class StandingWater(
+        val kind: String,
+        val id: Int,
+        val cells: List<Int>,
+        val membership: IntArray
+    )
+
+    /**
+     * Every body of standing water on [world] but the world ocean: its lakes, and each connected
+     * run of sea cells that is not the largest one.
+     *
+     * The sea bodies are labelled here rather than read off a field because no field holds them:
+     * `SeaLevelStage` labels them inside its own pass to decide which are small enough to call
+     * lakes, and hands on only the mask. Eight-connected, as every other flood fill on this map is,
+     * and the grid wraps east to west.
+     */
+    private fun standingWaterOf(world: WorldMap): List<StandingWater> {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val isLand = world.sea.isLand
+        val body = IntArray(isLand.size) { -1 }
+        val sizes = ArrayList<Int>()
+        val stack = ArrayDeque<Int>()
+        for (start in body.indices) {
+            if (isLand[start] || body[start] >= 0) continue
+            val id = sizes.size
+            body[start] = id
+            stack.addLast(start)
+            var size = 0
+            while (stack.isNotEmpty()) {
+                val cell = stack.removeLast()
+                size++
+                FlowRouting.forEachNeighbour(
+                    cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
+                ) { neighbour ->
+                    if (!isLand[neighbour] && body[neighbour] < 0) {
+                        body[neighbour] = id
+                        stack.addLast(neighbour)
+                    }
+                }
+            }
+            sizes.add(size)
+        }
+        val ocean = sizes.indices.maxByOrNull { sizes[it] } ?: -1
+
+        val water = ArrayList<StandingWater>()
+        val seaCells = HashMap<Int, MutableList<Int>>()
+        body.forEachIndexed { cell, id ->
+            if (id >= 0 && id != ocean) seaCells.getOrPut(id) { ArrayList() }.add(cell)
+        }
+        seaCells.entries.sortedBy { it.key }.forEach { (id, cells) ->
+            water += StandingWater("inland sea", id, cells, body)
+        }
+        val lakeId = world.rivers.lakes.lakeId
+        val lakeCells = HashMap<Int, MutableList<Int>>()
+        lakeId.forEachIndexed { cell, id ->
+            if (id >= 0) lakeCells.getOrPut(id) { ArrayList() }.add(cell)
+        }
+        lakeCells.entries.sortedBy { it.key }.forEach { (id, cells) ->
+            water += StandingWater("lake", id, cells, lakeId)
+        }
+        return water
     }
 
     /**

@@ -139,19 +139,60 @@ internal object FlowRouting {
      * plain rule's 39. The two questions want opposite fields. This one wants relief between one
      * cell and the next, which is sub-grid and so uncorrelated at this scale.
      *
+     * None of that reaches the ground the fill had to raise, and that ground is the other half of
+     * the defect. Inside a flat every cell stands one [FLAT_GRADIENT_STEP] above the cell the
+     * priority flood reached it from, so the routing surface there is the flood's own expansion
+     * order — a distance in grid steps — and its contours are the grid's metric exactly. The
+     * descent then points *at* a neighbour rather than between two, Rho8 has nothing to draw
+     * against, and the water crosses the flat dead straight for its whole length whichever rule is
+     * asked. It is not smooth ground behaving like a grid; it is a surface the fill invented, and
+     * it has no bearing of its own to follow.
+     *
+     * The facet rule has a second blind spot of the same kind, and a plane finds both. Rho8 can only
+     * draw where the true bearing lies *between* a cardinal and a diagonal; where it points at one
+     * of them the share is 0 or 1 and every step goes the same way. That is the right answer for a
+     * perfect plane — the steepest descent really is due north-east — and it is the wrong answer for
+     * ground, because a real apron is not a perfect plane at six kilometres a cell. The exactly
+     * diagonal case is not rare either: a belt profile is a function of a Euclidean distance field,
+     * and wherever the boundary it is measured from runs on a grid bearing the ground it builds
+     * faces one squarely.
+     *
+     * So [byBestTwo] is the rule for a caller that cannot afford either: the water takes one of the
+     * *two* steepest ways down, drawn in proportion to how steep each is, over the bed where the
+     * cell is under the fill and over its own ground where it is not. See [downTheBed].
+     *
+     * F30 asked for it at the far end of the pipeline. `SeaLevelStage.drainDrownedBasins` cuts its
+     * notch *below* the waterline, so where its path is ruled the map does not grow a ruled trench
+     * with a river in it but a ruled canal of open water: on seed 364673 at 2048, two of them, 73
+     * and 41 cells long, joining two inland seas to the ocean, and the shores William reported are
+     * their sides. See REALISM_PLAN.md, F30.
+     *
      * Two invariants hold, and everything downstream rests on them. The receiver is always strictly
      * lower on [filled] than the cell itself — where the drawn share is strictly between the ends,
-     * the diagonal is below the cardinal and the cardinal below the cell — so the network is still
-     * a forest with no cycles, [heightOrder] still places a cell before its receiver, and
-     * [drainageOrder] still terminates. And a cell has a receiver exactly where the plain
-     * steepest-descent rule gave it one, so the fill's promise that every land cell can reach the
-     * sea is untouched: no new sink, no river that stops inland.
+     * the diagonal is below the cardinal and the cardinal below the cell, and the bed rule picks
+     * only among neighbours already below — so the network is still a forest with no cycles,
+     * [heightOrder] still places a cell before its receiver, and [drainageOrder] still terminates.
+     * And a cell has a receiver exactly where the plain steepest-descent rule gave it one, so the
+     * fill's promise that every land cell can reach the sea is untouched: no new sink, no river
+     * that stops inland.
      *
      * [seed] is the world's, so a world's courses are its own and are the same on every platform;
      * the draw is integer mixing and a comparison, with no transcendental in it.
      *
      * @param byFacet false for the plain steepest-of-eight rule this replaced, which is the control
      *   the straight-bar census is measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.facetRouting].
+     * @param byBestTwo true to draw between the two steepest ways down rather than over the steepest
+     *   facet. Asked for by the one caller whose cut turns a ruled path into open water —
+     *   `SeaLevelStage.drainDrownedBasins` — and off everywhere else, which is a measurement and not
+     *   a preference. Turned on for the hydraulic rounds and the river stage as well it moves every
+     *   world's erosion, and Earth-derived bars go with it: seed 59758 at 1024 keeps a lake of
+     *   **1.83 times the Caspian's share of its land** against the 1.4 times `OutletResolutionTest`
+     *   allows, `RiverWidthTest`'s drawn pen goes to 2.46 px against the 1.23 the nib declares, and
+     *   `OutletIncisionTest`'s control loses the separation it exists to show. Rule 5 forbids moving
+     *   an Earth figure to fit a measurement, so the rule is asked for where its defect is and the
+     *   general case — a ruled course over any filled basin or any plane facing a bearing squarely,
+     *   which is F15's and F18's own family — goes to `TODO.md` with these figures rather than being
+     *   bought with them.
      */
     fun flowDirections(
         width: Int,
@@ -160,7 +201,8 @@ internal object FlowRouting {
         elevation: FloatField,
         filled: FloatField,
         seed: Long,
-        byFacet: Boolean = true
+        byFacet: Boolean = true,
+        byBestTwo: Boolean = false
     ): IntArray {
         val receiver = IntArray(width * height) { -1 }
         val routingSurface = filled.data
@@ -173,6 +215,12 @@ internal object FlowRouting {
                 if (!byFacet) {
                     receiver[cell] = steepestNeighbourOf(
                         width, height, isLand, trueGround, routingSurface, column, row
+                    )
+                    continue
+                }
+                if (byBestTwo) {
+                    receiver[cell] = downTheBed(
+                        width, height, isLand, trueGround, routingSurface, column, row, seed
                     )
                     continue
                 }
@@ -247,8 +295,81 @@ internal object FlowRouting {
     }
 
     /**
+     * Where the water goes under [flowDirections]' [byBestTwo] rule: one of the two steepest ways
+     * down the ground, drawn in proportion to how steep each of them is.
+     *
+     * Two things, and both are the ones the facet rule already stands on. Which neighbours are
+     * *eligible* is still the routing surface's answer — strictly lower on [filled], or on the true
+     * ground where the neighbour is sea — so the receiver is strictly lower than the cell, the
+     * drainage is still a forest, and a filled basin's outlet is still the root of it. Which of them
+     * the water takes is the *ground's* answer: the steepest descent measured on the terrain rather
+     * than on the fill's staircase, because a cell under the fill is crossing the floor of a lake
+     * and a lake's outflow follows the drowned valley beneath it, not the order a priority flood
+     * happened to reach the cells in.
+     *
+     * And the draw, for the reason [flowDirections] draws at all. It is Rho8's bargain — the split
+     * spent on which cell rather than on how much — with a neighbour pair in place of a facet,
+     * because the two cases this exists for are exactly the ones a facet cannot split: a flat, whose
+     * staircase has no bearing of its own, and a plane facing a bearing squarely, where the facet's
+     * own share is 0 or 1 and there is nothing left to draw against.
+     *
+     * What that is worth on a plane, which is the case the whole thing is written for: ground
+     * falling due north gives the north neighbour a descent of `g` and each of the two north
+     * diagonals `g / sqrt(2)`, so the diagonal takes 0.41 of the steps and the course cannot hold
+     * one bearing for more than a few of them. Where a channel is cut into the ground its descent is
+     * several times its neighbours' and the course follows the channel, which is what it should do.
+     *
+     * Ties go to the first neighbour [forEachNeighbourWithDistance] offers, which is a fixed order,
+     * and the draw is [subGridDraw]'s, so this is as deterministic as everything else here.
+     */
+    private fun downTheBed(
+        width: Int,
+        height: Int,
+        isLand: BooleanArray,
+        trueGround: FloatArray,
+        routingSurface: FloatArray,
+        column: Int,
+        row: Int,
+        seed: Long
+    ): Int {
+        var steepest = -1
+        var steepestDrop = -Float.MAX_VALUE
+        var nextSteepest = -1
+        var nextDrop = -Float.MAX_VALUE
+        val cell = row * width + column
+        val here = routingSurface[cell]
+        val bedHere = trueGround[cell]
+        forEachNeighbourWithDistance(width, height, column, row) { neighbour, distance ->
+            // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
+            val there = if (isLand[neighbour]) routingSurface[neighbour] else trueGround[neighbour]
+            if (there < here) {
+                val drop = (bedHere - trueGround[neighbour]) / distance
+                if (drop > steepestDrop) {
+                    nextSteepest = steepest
+                    nextDrop = steepestDrop
+                    steepest = neighbour
+                    steepestDrop = drop
+                } else if (drop > nextDrop) {
+                    nextSteepest = neighbour
+                    nextDrop = drop
+                }
+            }
+        }
+        // Nothing to weigh where the bed does not fall at all — a floor that rises every way out of
+        // this cell has no bearing of its own and the staircase's best is as good an answer as
+        // there is — and a runner-up that climbs is not a way down.
+        if (steepest < 0 || nextSteepest < 0 || steepestDrop <= 0f || nextDrop <= 0f) return steepest
+        val total = steepestDrop + nextDrop
+        return if (subGridDraw(column, row, seed) * total > steepestDrop) {
+            nextSteepest
+        } else {
+            steepest
+        }
+    }
+
+    /**
      * The steepest of the eight neighbours, which is what the water followed everywhere before the
-     * facet rule below it, and still follows on ground the fill had to raise.
+     * facet rule below it.
      *
      * Also the whole rule when [flowDirections] is asked for it, because a guard that has only ever
      * been green proves nothing: the straight-bar census is run against this as well as against the

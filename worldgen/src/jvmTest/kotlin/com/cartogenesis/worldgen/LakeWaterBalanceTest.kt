@@ -32,15 +32,27 @@ class LakeWaterBalanceTest {
     // Seed 7's dry basin fell from 2,774 cells to 409 and seed 14's wet one from 1,004 to 37.
     //
     // Scanned over seeds 1 to 48, largest spill-level basin per seed, dry country under 300 mm and
-    // wet country over 650. The dry sample is seed 6, the largest dry basin of the forty-eight:
-    // 4,817 cells at 112 mm. The wet sample is seed 9, 803 cells at 762 mm — the largest of the
-    // wet ones the balance leaves *full*, which is what the wet case is about. Seed 43's is larger
-    // again at 2,834 cells and 702 mm and the balance empties nearly half of it, so it is a second
-    // dry case wearing wet country's rainfall and not the sample this wants; seeds 3, 4 and 15 all
-    // stay full and are smaller. Size alone is not the criterion and the scan makes that plain — twenty of the
-    // forty-eight carry a dry basin over 500 cells and only some of them empty — because what
-    // decides a lake is the catchment feeding it and not the rain falling on its own footprint.
-    private val drySeed = 6L
+    // wet country over 650. The wet sample is seed 9, 778 cells at 755 mm — the largest of the wet
+    // ones the balance leaves *full*, which is what the wet case is about. Seed 43's is larger
+    // again at 2,695 cells and 676 mm and the balance empties nearly a third of it, so it is a
+    // second dry case wearing wet country's rainfall and not the sample this wants; seeds 3, 15,
+    // 32 and 33 all stay full and are smaller.
+    //
+    // The dry sample is the largest dry basin the balance *empties*, which is the same criterion
+    // read the other way round and is what the dry case is about. Size alone is not the criterion
+    // and the scan makes that plain: twenty-eight of the forty-eight carry a dry basin over 500
+    // cells and eight of those keep every cell of it, seed 20's at 31 mm of rain among them,
+    // because what decides a lake is the catchment feeding it and not the rain falling on its own
+    // footprint. That is seed 13, 2,450 cells at 96 mm, which the balance leaves at 0.24 of its
+    // spill area.
+    //
+    // Re-picked at S2b, whose craton reach doubled the distance a continent's crust thickens over
+    // north-south and so reshaped every interior hollow again. Seed 6, the largest dry basin
+    // outright at both scans, is the sample this replaces: its hollow went from 4,817 cells at
+    // 112 mm to 3,711 at 125 and the balance level came to rest a terrace higher, so it now keeps
+    // 0.48 of its spill area where it kept 0.26 — a dry basin still, half empty and endorheic, but
+    // no longer one that shows what the balance does. The bar has not moved with it.
+    private val drySeed = 13L
     private val wetSeed = 9L
 
     /**

@@ -174,12 +174,19 @@ class DepositionTest {
      * inland and the base relief a texture proportional to the ground's own relief: both move the
      * rock, so the percentile sits on a different set of cells again.
      *
+     * And a fifteenth time at S2b, by four cells, for the same one reason: the craton's reach is
+     * now measured in kilometres in both directions rather than in cells, so the crust thickens
+     * over twice the distance north-south that it did and the percentile falls through different
+     * ground. The two other repairs in that chunk move the rock as well — the flexure no longer
+     * lets one pole bend the other's bed, and the depression fill reaches land that stands below
+     * the water beside it.
+     *
      * The figure below is all of them together, re-measured on this merged tree rather than
      * carried over from any one side, because no side's number was read against the others'
      * terrain. The cut itself has not moved in any of them: exactly 62% of the cells still lie
      * below it, and the structural cases are untouched.
      */
-    private val startingPointLand = 6283
+    private val startingPointLand = 6279
 
     @Test
     fun `every round conserves mass`() {

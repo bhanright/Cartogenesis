@@ -1265,6 +1265,31 @@ accents.*
   Natural style inside the frame in both chromes, the phone capture included. Brand continuity
   is the accents and the typography, both untouched. Ships as 2.0.7 and forward-merges.
 
+### A11y. An accessibility audit to the ADA's standard — after every planned chunk is done
+
+*William, 2026-09-14: "once we have fully finished all planned aspects of this project, we should
+eventually perform an ADA compliant accessibility audit." Queued last, after the 3.0 and 4.0
+work, so it audits the finished thing once rather than a moving one repeatedly.*
+
+- **The standard**: the ADA's technical yardstick for software and web content is WCAG 2.1 (2.2
+  where it adds) at level AA, applied to the website, the browser app and the desktop app. What
+  is already guarded and stays guarded: every chrome's text pairs at AA (`ChromeContrastTest`),
+  the high-contrast chrome at AAA, the colour-blind chrome and map style, the site's palette
+  (`SitePaletteContrastTest`) and its caption bands, touch targets on phones (F5).
+- **What the audit adds, each shown failing where it fails today**: keyboard reach of every
+  control and menu without a pointer, with a visible focus ring; Compose semantics on every
+  control (a name, a role, a state) so a screen reader on Windows and in the browser can read
+  the panel and the toolbar, and the map itself exposed as an image with a description that
+  names the seed and what is shown; the export and save dialogs reachable and announced;
+  motion and animation respecting the reduced-motion setting; text scaling to 200% without
+  loss; the website's landmarks, headings, alt text (the strips already carry their panel
+  names), link purpose and skip navigation; no information carried by colour alone in any view
+  (legends carry a pattern or a label where a view relies on hue).
+- **The deliverable**: an audit document in the repo, criterion by criterion against WCAG 2.1
+  AA with pass/fail and the evidence, the failures fixed as chunks with guards, and the
+  document re-run green. A third party is not required for the ADA, but the document is what a
+  reviewer would ask for.
+
 ### Site 2. cartogenesis.com in the app's own identity — Opus, on `release/2.0`
 
 *From the design review of 2026-09-12 (a Codex handoff William asked Fable to critique; the
@@ -2298,6 +2323,7 @@ guard reported, so the next chunk knows its baseline.
 | V1 Tints by climate and sky-model shading | | pulled forward as F13 on the 2.0.x line | | | |
 | V2 Generalisation, graticule and scale | | pulled forward as F14 on the 2.0.x line (projection and north arrow stay with P1) | | | |
 | V3 Labels | | queued for 4.0 (REALISM_AUDIT.md; William, 2026-09-12: the full atlas with named continents, seas, bays, straits and ranges targets 4.0, and the site says so) | | | |
+| A11y Accessibility audit to WCAG 2.1 AA (the ADA's standard) | | queued last, after every planned chunk (William, 2026-09-14) | 2026-09-14 | | Section above: what is already guarded, what the audit adds, the document as the deliverable |
 | N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N2 Scale-free suite | | folded into S1 (2026-09-12): the suite is what S1 makes possible, so S1 delivers its first form | | | |
 | Audit II Realism audit, literature-backed | Fable | done | 2026-09-12 | see log | REALISM_AUDIT.md: five structural absences (scale, coupled uplift/isostasy, prescribed atmosphere, rectangular planet, coast as a line) plus presentation and determinism findings; twenty-three chunks S/W/R/K/I/P/V/N/M with dependencies, effort, visual weight, rigour and GPU applicability; an Earth-likeness metric table (hypsometry, coastline fractal dimension, Hack and Horton, lake and island size laws, desert, ice, lake and wetland shares, reef limit, delta class mix); sources listed with what was read and what is cited from memory to be checked at dispatch |

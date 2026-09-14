@@ -142,15 +142,19 @@ class SiteAssemblyTest {
     }
 
     /**
-     * One figure's `<img>` tag, as the page writes it.
+     * The tag a figure is published by, as the page writes it.
      *
-     * Attribute order is the page's own and is not going to change by accident; matching the whole
-     * tag rather than hunting for the file name is what lets the width, the height and the `alt`
-     * be read back out of it.
+     * Either the `<img>` a wide screen loads or the `<source>` a phone is handed instead: both
+     * carry the file's name and both state its shape, and which of the two a given figure appears
+     * in is the page's business rather than this guard's. Matching the whole tag rather than
+     * hunting for the file name is what lets the width, the height and the `alt` be read out of it.
      */
-    private fun imageTag(page: String, file: String): String =
-        Regex("""<img\s+src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
-            ?: fail("the page has no <img> for img/$file")
+    private fun imageTag(page: String, file: String): String {
+        val quoted = Regex.escape(file)
+        return Regex("""<img\s+src="img/$quoted"[^>]*>""").find(page)?.value
+            ?: Regex("""<source[^>]*srcset="img/$quoted"[^>]*>""").find(page)?.value
+            ?: fail("the page has no <img> or <source> for img/$file")
+    }
 
     private fun attribute(tag: String, name: String): String =
         Regex("""$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
@@ -181,7 +185,11 @@ class SiteAssemblyTest {
         val expected = mapOf(
             "natural.webp" to (1600 to 800),
             "styles.webp" to (1924 to 711),
-            "layers.webp" to (1926 to 667)
+            "layers.webp" to (1926 to 667),
+            // The same panels stacked, which is what a phone is handed: one window wide, and as
+            // many finished panels tall as there are readings, with a hairline between each pair.
+            "styles-stacked.webp" to (640 to 2137),
+            "layers-stacked.webp" to (480 to 2674)
         )
         val page = file("index.html").readText()
         expected.forEach { (name, size) ->
@@ -206,13 +214,17 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That a comparison strip draws exactly the panels the page says it draws.
+     * That every variant of a comparison strip draws exactly the panels the page says it draws.
      *
      * A strip is one image, so a panel that stopped being rendered would not 404 and would not
      * break the layout: the figure would simply arrive one panel short, with the page's prose and
-     * its `alt` text still promising three. Two things are compared with the one picture — the
-     * names the `alt` lists, and the arithmetic the width has to satisfy — so neither the list nor
-     * the strip can move without the other.
+     * its `alt` text still promising three. And now that a phone is handed a second file, a panel
+     * could go missing from one variant alone and be invisible to anyone reviewing on the other.
+     *
+     * So both files are counted, each along its own axis — the wide one is *n* windows plus the
+     * hairlines between them, the stacked one is *n* finished panels plus the same hairlines — and
+     * both are held to the one list of names in the `alt`, which the two variants share because
+     * they are the same figure turned a different way round.
      */
     @Test
     fun `each comparison strip draws the panels the page's alt text lists`() {
@@ -232,21 +244,6 @@ class SiteAssemblyTest {
                     "and the page's alt text promises a reader ${namesPromised(alt)}"
             )
 
-            val drawn = webpDimensions(file("img/${figure.file}"))
-            assertEquals(
-                figure.width to figure.height, drawn,
-                "img/${figure.file} is not the size ${figure.panels.size} panels of " +
-                    "${figure.window.width}x${figure.window.height} come to"
-            )
-            // The width says how many panels are in the file, independently of what the figure
-            // table claims: n windows and the n-1 hairlines between them.
-            assertEquals(
-                figure.panels.size,
-                (drawn.first + SiteImagery.DIVIDER) / (figure.window.width + SiteImagery.DIVIDER),
-                "img/${figure.file} is ${drawn.first} wide, which is not " +
-                    "${figure.panels.size} panels' worth"
-            )
-
             // The window belongs to the figure and not to the panel, so the panels of a strip
             // cannot be showing different ground. What they must not share is the reading: two
             // panels drawing the same view in the same style would be a comparison of nothing.
@@ -255,11 +252,40 @@ class SiteAssemblyTest {
                 figure.panels.map { it.view to it.style }.distinct().size,
                 "two panels of img/${figure.file} are the same reading of the same window"
             )
-            println(
-                "SITE ${figure.file} ${drawn.first}x${drawn.second}, " +
-                    "${figure.panels.size} panels of ${figure.window.width}x${figure.window.height} " +
-                    "at ${figure.window.x},${figure.window.y}: ${figure.panels.joinToString { it.name }}"
+
+            assertEquals(
+                listOf(SiteImagery.Layout.ACROSS, SiteImagery.Layout.DOWN), figure.layouts,
+                "a comparison strip is published both ways round, or a phone is left scrolling " +
+                    "${figure.file} sideways"
             )
+
+            figure.layouts.forEach { layout ->
+                val name = figure.fileFor(layout)
+                val drawn = webpDimensions(file("img/$name"))
+                assertEquals(
+                    figure.width(layout) to figure.height(layout), drawn,
+                    "img/$name is not the size ${figure.panels.size} panels of " +
+                        "${figure.window.width}x${figure.window.height} come to laid " +
+                        layout.name.lowercase()
+                )
+                // How many panels are in the file, counted off the picture rather than taken from
+                // the figure table: along the axis the panels run, a panel and a hairline each.
+                val along = if (layout == SiteImagery.Layout.ACROSS) drawn.first else drawn.second
+                val panel = if (layout == SiteImagery.Layout.ACROSS) figure.window.width
+                else figure.panelHeight
+                assertEquals(
+                    figure.panels.size,
+                    (along + SiteImagery.DIVIDER) / (panel + SiteImagery.DIVIDER),
+                    "img/$name measures $along along its panels, which is not " +
+                        "${figure.panels.size} panels' worth"
+                )
+                println(
+                    "SITE $name ${drawn.first}x${drawn.second}, ${figure.panels.size} panels of " +
+                        "${figure.window.width}x${figure.window.height} laid " +
+                        "${layout.name.lowercase()} at ${figure.window.x},${figure.window.y}: " +
+                        figure.panels.joinToString { it.name }
+                )
+            }
         }
     }
 

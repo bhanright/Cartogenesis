@@ -42,10 +42,12 @@ import kotlin.math.roundToInt
  * that exists nowhere.
  *
  * A figure is one window and one or more [Panel]s — the same window read a different way in each,
- * laid side by side with a naming band under every panel, in the manner of a game's
- * resolution-comparison screenshot (William, 2026-09-14). One image rather than several, because
- * the claim being made is that these are the *same ground*, and separate pictures in a row on a
- * page are not evidence of that: a strip cut from one window is.
+ * laid out with a naming band under every panel, in the manner of a game's resolution-comparison
+ * screenshot (William, 2026-09-14). One image rather than several, because the claim being made is
+ * that these are the *same ground*, and separate pictures in a row on a page are not evidence of
+ * that: a strip cut from one window is. A strip with more than one panel is published twice, once
+ * [Layout.ACROSS] and once [Layout.DOWN], because the shape that carries the comparison on a
+ * desktop does not fit a phone.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
@@ -215,6 +217,18 @@ object SiteImagery {
     )
 
     /**
+     * Which way a figure's panels are laid out.
+     *
+     * A strip laid [ACROSS] is the comparison William asked for, and it is the wrong shape for a
+     * phone: fitted to a 375px screen its bands come out five pixels tall, and left at its own size
+     * it has to be scrolled sideways, which is a thing readers do not discover. So the same panels
+     * are composed a second time [DOWN] and the page hands that file to a narrow screen. Two files
+     * and one list of panels: the page lays out neither, so the two variants cannot come to
+     * disagree about what a panel is or about what its band says.
+     */
+    enum class Layout { ACROSS, DOWN }
+
+    /**
      * What the page asks for: one window, and the panels it is read in.
      *
      * The window belongs to the figure rather than to the panel, which is the invariant the whole
@@ -222,12 +236,14 @@ object SiteImagery {
      * only one window for them to be cut from.
      *
      * [file] is the name the page references, so renaming one here renames it there, and
-     * `SiteAssemblyTest` is what notices when only one of the two moves.
+     * `SiteAssemblyTest` is what notices when only one of the two moves. [stackedFile] is the same
+     * panels laid [Layout.DOWN], or null for a figure the page shows only one way.
      */
     data class Figure(
         val file: String,
         val window: Window,
         val panels: List<Panel>,
+        val stackedFile: String? = null,
         val quality: Int = QUALITY
     ) {
         /**
@@ -241,8 +257,27 @@ object SiteImagery {
             get() = if (panels.size > 1) (window.height.toFloat() / BAND_IN_PANELS).roundToInt()
             else 0
 
-        val width: Int get() = panels.size * window.width + (panels.size - 1) * DIVIDER
-        val height: Int get() = window.height + bandHeight
+        /** One finished panel: the window, and the band under it. */
+        val panelHeight: Int get() = window.height + bandHeight
+
+        /** Every way this figure is published, in the order the files are written. */
+        val layouts: List<Layout>
+            get() = if (stackedFile == null) listOf(Layout.ACROSS)
+            else listOf(Layout.ACROSS, Layout.DOWN)
+
+        fun fileFor(layout: Layout): String =
+            if (layout == Layout.ACROSS) file
+            else stackedFile ?: error("$file is not published stacked")
+
+        fun width(layout: Layout): Int = when (layout) {
+            Layout.ACROSS -> panels.size * window.width + (panels.size - 1) * DIVIDER
+            Layout.DOWN -> window.width
+        }
+
+        fun height(layout: Layout): Int = when (layout) {
+            Layout.ACROSS -> panelHeight
+            Layout.DOWN -> panels.size * panelHeight + (panels.size - 1) * DIVIDER
+        }
     }
 
     /**
@@ -269,7 +304,8 @@ object SiteImagery {
                 panelFor(MapStyle.ATLAS, BandTint.SUNK),
                 panelFor(MapStyle.SCHOOLROOM, BandTint.HAIRLINE),
                 panelFor(MapStyle.NATURAL, BandTint.OXBLOOD)
-            )
+            ),
+            stackedFile = "styles-stacked.webp"
         ),
         Figure(
             "layers.webp", LAYERS_WINDOW,
@@ -282,7 +318,8 @@ object SiteImagery {
                 ),
                 layer(MapView.WIND, "The prevailing wind through the year", BandTint.OXBLOOD),
                 layer(MapView.RAINFALL, "Annual rainfall", BandTint.BRASS)
-            )
+            ),
+            stackedFile = "layers-stacked.webp"
         )
     )
 
@@ -342,17 +379,23 @@ object SiteImagery {
         // most of a second.
         val sheets = Sheets(world)
         var total = 0L
+        var files = 0
         try {
             for (figure in FIGURES) {
-                val bytes = write(sheets, figure, lettering, outputDir)
-                total += bytes
-                println(
-                    "  ${figure.file.padEnd(20)} ${figure.width}x${figure.height}  " +
-                        "${bytes / 1024} KB  (${figure.panels.joinToString { it.name }}, " +
-                        "window ${figure.window.width}x${figure.window.height} at " +
-                        "${figure.window.x},${figure.window.y}, quality ${figure.quality})"
-                )
-                if (contact) writePreview(sheets, figure, lettering, outputDir)
+                for (layout in figure.layouts) {
+                    val bytes = write(sheets, figure, layout, lettering, outputDir)
+                    total += bytes
+                    files++
+                    println(
+                        "  ${figure.fileFor(layout).padEnd(22)} " +
+                            "${figure.width(layout)}x${figure.height(layout)}  " +
+                            "${bytes / 1024} KB  (${figure.panels.joinToString { it.name }} " +
+                            "${layout.name.lowercase()}, window " +
+                            "${figure.window.width}x${figure.window.height} at " +
+                            "${figure.window.x},${figure.window.y}, quality ${figure.quality})"
+                    )
+                    if (contact) writePreview(sheets, figure, layout, lettering, outputDir)
+                }
             }
             if (contact) writeContactSheets(sheets, outputDir)
         } finally {
@@ -362,7 +405,7 @@ object SiteImagery {
 
         val finished = System.currentTimeMillis()
         println(
-            "SITE IMAGERY ${FIGURES.size} figures, ${total / 1024} KB total, " +
+            "SITE IMAGERY ${FIGURES.size} figures in $files files, ${total / 1024} KB total, " +
                 "${(finished - started) / 1000}s including generation"
         )
     }
@@ -402,22 +445,28 @@ object SiteImagery {
         }
     }
 
-    /** Draws one figure and writes it as WebP. Returns the size on disk. */
+    /** Draws one figure one way round and writes it as WebP. Returns the size on disk. */
     private fun write(
         sheets: Sheets,
         figure: Figure,
+        layout: Layout,
         lettering: Lettering,
         outputDir: File
     ): Long {
+        val name = figure.fileFor(layout)
         val strip = Bitmap().apply {
-            allocPixels(ImageInfo.makeS32(figure.width, figure.height, ColorAlphaType.PREMUL))
+            allocPixels(
+                ImageInfo.makeS32(
+                    figure.width(layout), figure.height(layout), ColorAlphaType.PREMUL
+                )
+            )
         }
-        drawStrip(Canvas(strip), sheets, figure, lettering)
+        drawStrip(Canvas(strip), sheets, figure, layout, lettering)
 
         val image = Image.makeFromBitmap(strip)
         val data = image.encodeToData(EncodedImageFormat.WEBP, figure.quality)
-            ?: error("Skia could not encode ${figure.file} as WebP")
-        val destination = File(outputDir, figure.file)
+            ?: error("Skia could not encode $name as WebP")
+        val destination = File(outputDir, name)
         destination.writeBytes(data.bytes)
 
         image.close()
@@ -425,32 +474,53 @@ object SiteImagery {
         return destination.length()
     }
 
-    /** The panels side by side, the hairlines between them, and a naming band under each. */
-    private fun drawStrip(canvas: Canvas, sheets: Sheets, figure: Figure, lettering: Lettering) {
+    /**
+     * The panels one after another, the hairlines between them, and a naming band under each.
+     *
+     * The only thing [layout] changes is which way "after" runs. Everything that decides what a
+     * panel *is* — the window, the reading, the band's tint and its two lines, and the one pair of
+     * type sizes the whole figure is lettered at — is computed once and used by both variants, so a
+     * phone and a desktop are looking at the same figure turned a different way round.
+     */
+    private fun drawStrip(
+        canvas: Canvas,
+        sheets: Sheets,
+        figure: Figure,
+        layout: Layout,
+        lettering: Lettering
+    ) {
         val window = figure.window
         val bandHeight = figure.bandHeight
         // One size for a strip's bands rather than one per panel: a band whose own text happened to
         // be long would otherwise be set smaller than the band beside it, and the three would read
         // as three different captions instead of one comparison.
         val plan = lettering.plan(figure, window.width.toFloat(), bandHeight.toFloat())
+        val across = layout == Layout.ACROSS
 
-        var left = 0
+        var along = 0
         for ((index, panel) in figure.panels.withIndex()) {
             canvas.save()
-            canvas.translate(left.toFloat(), 0f)
+            if (across) canvas.translate(along.toFloat(), 0f)
+            else canvas.translate(0f, along.toFloat())
             drawWindow(canvas, sheets.of(panel.options), window, sheets.mapWidth)
             if (bandHeight > 0) {
                 drawBand(canvas, panel, window.width, window.height, bandHeight, plan)
             }
             canvas.restore()
 
-            left += window.width
+            along += if (across) window.width else figure.panelHeight
             if (index < figure.panels.lastIndex) {
-                canvas.drawRect(
-                    Rect.makeXYWH(left.toFloat(), 0f, DIVIDER.toFloat(), figure.height.toFloat()),
-                    Paint().apply { color = DIVIDER_COLOUR }
-                )
-                left += DIVIDER
+                val rule = if (across) {
+                    Rect.makeXYWH(
+                        along.toFloat(), 0f, DIVIDER.toFloat(), figure.height(layout).toFloat()
+                    )
+                } else {
+                    Rect.makeXYWH(
+                        0f, along.toFloat(), figure.width(layout).toFloat(), DIVIDER.toFloat()
+                    )
+                }
+                canvas.drawRect(rule, Paint().apply { color = DIVIDER_COLOUR })
+                along += DIVIDER
             }
         }
     }
@@ -554,9 +624,14 @@ object SiteImagery {
             val room = panelWidth - 2 * margin
             var scale = 1f
             for (panel in figure.panels) {
-                scale = minOf(scale, fit(panel.name.uppercase(), medium, NAME_SHARE, bandHeight, room, NAME_TRACKING))
+                val name = panel.name.uppercase()
+                scale = minOf(
+                    scale, fit(name, medium, NAME_SHARE, bandHeight, room, NAME_TRACKING)
+                )
                 if (panel.detail.isNotEmpty()) {
-                    scale = minOf(scale, fit(panel.detail, regular, DETAIL_SHARE, bandHeight, room, 0f))
+                    scale = minOf(
+                        scale, fit(panel.detail, regular, DETAIL_SHARE, bandHeight, room, 0f)
+                    )
                 }
             }
             return Plan(
@@ -677,29 +752,33 @@ object SiteImagery {
     private fun writePreview(
         sheets: Sheets,
         figure: Figure,
+        layout: Layout,
         lettering: Lettering,
         outputDir: File
     ) {
-        val scale = PAGE_COLUMN.toFloat() / figure.width
-        val height = (figure.height * scale).roundToInt()
+        val drawnWidth = figure.width(layout)
+        val drawnHeight = figure.height(layout)
+        val column = if (layout == Layout.ACROSS) PAGE_COLUMN else PHONE_COLUMN
+        val scale = column.toFloat() / drawnWidth
+        val height = (drawnHeight * scale).roundToInt()
         val strip = Bitmap().apply {
-            allocPixels(ImageInfo.makeS32(figure.width, figure.height, ColorAlphaType.PREMUL))
+            allocPixels(ImageInfo.makeS32(drawnWidth, drawnHeight, ColorAlphaType.PREMUL))
         }
-        drawStrip(Canvas(strip), sheets, figure, lettering)
+        drawStrip(Canvas(strip), sheets, figure, layout, lettering)
         val full = Image.makeFromBitmap(strip)
 
         val shrunk = Bitmap().apply {
-            allocPixels(ImageInfo.makeS32(PAGE_COLUMN, height, ColorAlphaType.PREMUL))
+            allocPixels(ImageInfo.makeS32(column, height, ColorAlphaType.PREMUL))
         }
         Canvas(shrunk).drawImageRect(
             full,
-            Rect.makeWH(figure.width.toFloat(), figure.height.toFloat()),
-            Rect.makeWH(PAGE_COLUMN.toFloat(), height.toFloat())
+            Rect.makeWH(drawnWidth.toFloat(), drawnHeight.toFloat()),
+            Rect.makeWH(column.toFloat(), height.toFloat())
         )
-        val name = "preview-" + figure.file.removeSuffix(".webp") + ".png"
+        val name = "preview-" + figure.fileFor(layout).removeSuffix(".webp") + ".png"
         val png = Image.makeFromBitmap(shrunk).encodeToData(EncodedImageFormat.PNG)!!
         File(outputDir, name).writeBytes(png.bytes)
-        println("  preview $name (${PAGE_COLUMN}x$height, the strip as the page shows it)")
+        println("  preview $name (${column}x$height, the figure as the page shows it)")
 
         shrunk.close()
         full.close()
@@ -707,13 +786,15 @@ object SiteImagery {
     }
 
     /**
-     * How wide a figure is drawn on the page: the 1120px measure less its 24px gutters.
+     * How wide a figure is drawn on the page: the 1120px measure less its 24px gutters, and the
+     * same measure on a 375px phone.
      *
-     * Only [writePreview] uses it, and only to answer "is this legible where it lands?". Nothing
-     * that ships is sized by it — a figure is cut at the render's own pixels and left to the
+     * Only [writePreview] uses them, and only to answer "is this legible where it lands?". Nothing
+     * that ships is sized by either — a figure is cut at the render's own pixels and left to the
      * browser to fit.
      */
     private const val PAGE_COLUMN = 1072
+    private const val PHONE_COLUMN = 327
 
     /**
      * The whole map at half size with a grid, one sheet per reading the page uses.

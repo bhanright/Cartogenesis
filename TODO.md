@@ -18,7 +18,9 @@
   Whoever opens it should say what bounds one pass's bite, with the figure derived rather than
   chosen, and should look again at whether a cut one cell wide belongs in the sea mask at all:
   `RiverStage.openWater` and `DrownedValleys` both hold that a strip of water one cell wide is a
-  channel and not a body of water, and the sea mask has no such rule. 2026-09-14, F30.
+  channel and not a body of water, and the sea mask has no such rule. `StraightRunTest`'s
+  `report how straight every shore is` is the instrument, and prints the figure every run.
+  2026-09-14, F30.
 - **The ruled course over a filled basin is still there, and buying it costs Earth figures.** F30
   measured what it takes to stop the depression fill's flats routing water dead straight everywhere,
   rather than in the one pass that turns such a path into open water. The fill raises each cell of a
@@ -29,10 +31,15 @@
   times the shore bar to 0.46 — and takes three Earth-derived guards with it: seed 59758 at 1024
   keeps a lake of 1.83 times the Caspian's share of its land against the 1.4 times
   `OutletResolutionTest` allows, `RiverWidthTest`'s drawn pen goes to 2.46 px against the 1.23 the
-  nib declares, and `OutletIncisionTest`'s control loses the separation it exists to show. Ground
-  rule 5 forbids moving an Earth figure to fit a measurement, so F30 asked for the rule only in
-  `SeaLevelStage.drainDrownedBasins`, where the cut becomes open water. The general case is still
-  open and is F15's and F18's own family. 2026-09-14, F30.
+  nib declares, and `OutletIncisionTest`'s control loses the separation it exists to show. Narrowing
+  it to `SeaLevelStage.drainDrownedBasins` alone — the one pass whose cut becomes open water — does
+  take the 41-cell canal in the author's own window away, and costs one Earth-derived guard instead
+  of three: seed 1234 keeps 189 cells of water the ocean cannot reach, against `SeaLevelHistoryTest`'s
+  rule that every pocket no larger than the Caspian is gone. Ground rule 5 forbids paying an Earth
+  figure for a measurement, so both were reverted and what shipped is the measurement. Whoever opens
+  this should start from the narrow one, which is a hundred lines and one guard away, and find out
+  why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
+  2026-09-14, F30.
 - **The sheet mask's own edges are straight, because local relief is measured in a square.**
   `GlaciationStage.localRelief` takes the elevation range over a sliding window by two separable
   passes of a running maximum and a running minimum, which makes the window a *square* of side

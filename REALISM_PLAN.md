@@ -1318,9 +1318,16 @@ can be made in the meantime."*
   later ones must say.
 - **Order.** C2 first — the sweep for human-maintainable names and comments, so every chunk
   after it is written against readable code; then M1, the yardstick; then S1, which every solid-earth chunk needs and which turns
-  the resolution contracts into a property; then two lines in parallel — S2 → S3 → R1 → I1 on the
-  solid earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with P1 slotted where it
-  touches the fewest open files; K4 once H5b is in; R2 and R3 whenever their inputs exist; V1 and V2 pulled forward to the
+  the resolution contracts into a property; then two lines in parallel — S2 → I1 on the solid
+  earth and W1 → W2 → W3 → W4 → K1 → K2 → K3 on the fluid side — with S3 → R1 taken up only after
+  W4, because S3's guard is a windward-to-leeward dissection ratio and R1's channel threshold has
+  a climate term, and W2 moves the rain shadows, W3 the moisture's reach, and W4 supplies the
+  vegetation S3 reads for erodibility; building them first would mean re-measuring every erosion
+  figure three times (William, 2026-09-14: "wouldn't it make sense to have S3 happen after those
+  ones so that the erosion effect can calculate based on the updated local rainfall figures").
+  So that S3 can still run its march before erosion, W2's pressure term and W3's moisture terms
+  live inside the wind march and take only terrain and the sea mask, never erosion's output;
+  P1 slotted where it touches the fewest open files; K4 once H5b is in; R2 and R3 whenever their inputs exist; V1 and V2 pulled forward to the
   2.0.x line as F13 and F14 (William, 2026-09-12);
   N1 and N2 alongside; P2 last. V3, the full atlas and its labels, moves to 4.0 (William,
   2026-09-12) and the cartogenesis.com page carries a notice saying so. G1 and H3 finish before 3.0 begins if they have not

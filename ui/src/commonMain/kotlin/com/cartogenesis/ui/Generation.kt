@@ -49,13 +49,14 @@ internal object Generation {
      * Generates [config]'s world, naming each stage as it starts and letting the interface draw.
      *
      * [previous] is the world already on screen, so the engine can skip whatever the settings did
-     * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried.
+     * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried;
+     * [oceanAccelerator] is the same device again, for the stream-function solve.
      */
     suspend fun run(
         config: WorldGenConfig,
         previous: PartialWorld?,
         accelerator: ErosionAccelerator?,
-        oceanAccelerator: OceanAccelerator? = null,
+        oceanAccelerator: OceanAccelerator?,
         onStage: (GenerationStage) -> Unit
     ): WorldMap {
         letTheInterfaceDraw()

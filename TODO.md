@@ -1,5 +1,61 @@
 # To do
 
+- **A shore is still a cell over the bar, and nobody has looked at it.** On the merged tree — S2b's
+  flood repair included — `StraightRunTest`'s `report how straight every shore is` finds one body of
+  standing water on six worlds outside the bar it derives: a 296-cell lake at (1075,1998) of 364673
+  at 2048, with a 20-cell run due north-south against 18.7 allowed, **1.07 times the bar**. Every
+  other measurable body on those worlds is at 0.93 times or under. That is marginal where F30's own
+  two were 1.20 and 1.75, and it is a different body from either, so nothing in F30's diagnosis
+  applies to it without being re-done. Whoever opens it should find out what cut it before deciding
+  anything: if it is the same family the case can go back to being the assertion it was written as,
+  and if a lake of three hundred cells can honestly carry a 20-cell straight edge then the bar's
+  `STRAIGHTEST_SHORE_OVER_A_CIRCLE` wants re-deriving against Earth's straightest *small* lake rather
+  than against Tanganyika. 2026-09-14, F30.
+- **The post-cut outlet takes a deep sill down in one bite, and the slot it leaves is drawn as
+  water.** F30's second body, on the tree as it stood at 00b13fe; S2b's flood repair has since moved
+  the drowned basins this was measured on and both of F30's canals are gone with them, so the numbers
+  below are a record of the mechanism rather than of anything on the map today. The mechanism is
+  untouched and will do the same thing again wherever a drowned basin has a deep sill. On seed 364673 at
+  2048 the *first* pass of `SeaLevelStage.drainDrownedBasins` takes a sill standing about a
+  kilometre above the waterline down to the basin's own floor over 75 cells at once — 1,652 cells
+  cut on that pass, the whole reach left at one level falling only by the notch's own gradient —
+  because `HydraulicErosion.breach`'s `dropRelative` is capped by `level - floor`, the basin's whole
+  depth, and F22's `outletFallToTheWater` gives a drowned sill the entire drop to the water as its
+  slope, so the stream power comes out larger than the cap. What the map then shows is a canal of
+  open water one cell wide and 440 km long, its shore a ruled line 1.80 times the bar
+  `StraightRunTest`'s `no shore is a ruled line` derives. Nothing about the *bearing* fixes it:
+  routing that pass by `FlowRouting`'s `byBestTwo` rule leaves the run at exactly 75 cells in
+  exactly the same place, because the reach lies inside the drowned basin's own fill flat where the
+  staircase admits too few eligible neighbours to draw between. The retreat is meant to be
+  geometric — `MAX_POST_CUT_OUTLET_PASSES` records 0.60, 0.34, 0.22 ... of the field per pass on
+  718106 — and a knickpoint that consumes its whole sill on the first pass is not a knickpoint.
+  Whoever opens it should say what bounds one pass's bite, with the figure derived rather than
+  chosen, and should look again at whether a cut one cell wide belongs in the sea mask at all:
+  `RiverStage.openWater` and `DrownedValleys` both hold that a strip of water one cell wide is a
+  channel and not a body of water, and the sea mask has no such rule. `StraightRunTest`'s
+  `report how straight every shore is` is the instrument, and prints the figure every run.
+  2026-09-14, F30.
+- **The ruled course over a filled basin is still there, and buying it costs Earth figures.** Also
+  measured at 00b13fe, before S2b; the flats and their staircase are exactly as they were, so the
+  mechanism stands even though the two bodies it was measured on have gone. F30
+  measured what it takes to stop the depression fill's flats routing water dead straight everywhere,
+  rather than in the one pass that turns such a path into open water. The fill raises each cell of a
+  flat one `FlowRouting.FLAT_GRADIENT_STEP` above the cell the priority flood reached it from, so
+  the routing surface inside a flat is the flood's own expansion order, its contours are the grid's
+  metric exactly, and neither Tarboton's facets nor Rho8's draw has anything to work against.
+  Routing every flat by the bed instead, with the draw, fixes it — 364673 at 2048 falls from 1.75
+  times the shore bar to 0.46 — and takes three Earth-derived guards with it: seed 59758 at 1024
+  keeps a lake of 1.83 times the Caspian's share of its land against the 1.4 times
+  `OutletResolutionTest` allows, `RiverWidthTest`'s drawn pen goes to 2.46 px against the 1.23 the
+  nib declares, and `OutletIncisionTest`'s control loses the separation it exists to show. Narrowing
+  it to `SeaLevelStage.drainDrownedBasins` alone — the one pass whose cut becomes open water — does
+  take the 41-cell canal in the author's own window away, and costs one Earth-derived guard instead
+  of three: seed 1234 keeps 189 cells of water the ocean cannot reach, against `SeaLevelHistoryTest`'s
+  rule that every pocket no larger than the Caspian is gone. Ground rule 5 forbids paying an Earth
+  figure for a measurement, so both were reverted and what shipped is the measurement. Whoever opens
+  this should start from the narrow one, which is a hundred lines and one guard away, and find out
+  why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
+  2026-09-14, F30.
 - **The sheet mask's own edges are straight, because local relief is measured in a square.**
   `GlaciationStage.localRelief` takes the elevation range over a sliding window by two separable
   passes of a running maximum and a running minimum, which makes the window a *square* of side

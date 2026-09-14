@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.pow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -174,26 +173,10 @@ class GlacialBasinShapeTest {
     /**
      * The longest run a basin of [cells] cells may make along one grid bearing, in cells.
      *
-     * A smooth curve drawn on a square grid makes straight runs of its own, and how long they are
-     * is a question about its curvature: a circle of radius `R` cells rises half a cell over a
-     * chord of `sqrt(R)`, so its outline runs about `2 * sqrt(R)` cells along an axis before it
-     * steps. A round lake of `n` cells therefore shows a run of `2 * (n / pi)^(1/4)` — nine cells
-     * for the 671-cell cap a 2048 grid gives
-     * [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeAreaKm2]. That is the floor for any
-     * shape and is not a defect; it is the grid, and a rougher shore than a circle's runs
-     * *shorter*, not longer.
-     *
-     * What is allowed above it is [STRAIGHTEST_SHORE_OVER_A_CIRCLE], and it comes off Earth's
-     * straightest lake shores, which are the graben ones. Tanganyika is 32,900 km2, an equivalent
-     * radius of 102 km, and its western scarp runs about 100 km without a bend worth drawing
-     * (Hutchinson, *A Treatise on Limnology*, 1957, on the graben lakes); at the 5.9 km a cell of a
-     * 2048 map measures across that is a radius of 17.3 cells against a straight run of 17, which
-     * is 2.05 times the 8.3 cells its own circle would have run. So Earth's straightest big lake
-     * shore is about twice as straight as a circle, and it lies along a fault, which has no reason
-     * to fall on one of a grid's three bearings. Three leaves that a margin.
+     * [OutlineRuns.allowedRunCells] holds the derivation; F30 asks the same of a lake's shore off
+     * the same function.
      */
-    private fun allowedOutlineRunCells(cells: Int): Float =
-        STRAIGHTEST_SHORE_OVER_A_CIRCLE * 2f * (cells / PI).pow(0.25).toFloat()
+    private fun allowedOutlineRunCells(cells: Int): Float = OutlineRuns.allowedRunCells(cells)
 
     /**
      * The share of a basin floor of [cells] cells spanning [reliefMetres] that may lie within one
@@ -356,7 +339,9 @@ class GlacialBasinShapeTest {
             if (number >= 0) byBasin.getOrPut(number) { ArrayList() }.add(cell)
         }
         return byBasin.entries.sortedBy { it.key }.map { (number, cells) ->
-            val run = longestStraightOutlineRun(cells, basinFloor, number, cellsAcross, cellsDown)
+            val run = OutlineRuns.longestOutlineRun(
+                cells, basinFloor, number, cellsAcross, cellsDown
+            )
             val heights = cells
                 .map { config.scale.metresAboveShoreline(relativeElevation[it]) }
                 .sorted()
@@ -367,76 +352,12 @@ class GlacialBasinShapeTest {
                 cells = cells.size,
                 column = cells[0] % cellsAcross,
                 row = cells[0] / cellsAcross,
-                longestOutlineRun = run.first,
-                longestOutlineBearing = run.second,
+                longestOutlineRun = run.cells,
+                longestOutlineBearing = run.bearing,
                 reliefMetres = heights.last() - heights.first(),
                 flattestShare = flattestShareOf(heights)
             )
         }
-    }
-
-    /**
-     * The longest unbroken run of a basin's *outline* along one grid bearing, and which bearing.
-     *
-     * [com.cartogenesis.worldgen.pipeline.GlaciationStage]'s own bar test asks whether a whole body
-     * is a ruled bar; this asks the same question of its edge, which is what a reader sees, and
-     * asks it in the same coordinates — `GlaciationStage.alongBearingOf` and `acrossBearingOf` are
-     * that instrument's, shared rather than copied. An outline cell is a basin cell with a
-     * non-basin cell orthogonally beside it; a run is a set of outline cells sharing an across
-     * coordinate and consecutive in the along coordinate, which steps by one on an axis and by two
-     * on a diagonal.
-     */
-    private fun longestStraightOutlineRun(
-        cells: List<Int>,
-        basinFloor: IntArray,
-        number: Int,
-        cellsAcross: Int,
-        cellsDown: Int
-    ): Pair<Int, Int> {
-        val anchorColumn = cells[0] % cellsAcross
-        val outline = cells.filter { cell ->
-            val column = cell % cellsAcross
-            val row = cell / cellsAcross
-            basinFloor[row * cellsAcross + (column + cellsAcross - 1) % cellsAcross] != number ||
-                basinFloor[row * cellsAcross + (column + 1) % cellsAcross] != number ||
-                row == 0 || basinFloor[(row - 1) * cellsAcross + column] != number ||
-                row == cellsDown - 1 || basinFloor[(row + 1) * cellsAcross + column] != number
-        }
-        var longest = 0
-        var atBearing = 0
-        for (bearing in 0 until GlaciationStage.BEARINGS) {
-            val step = if (GlaciationStage.isDiagonalBearing(bearing)) 2 else 1
-            // Across in the high half and along in the low, so sorting the longs groups each line
-            // of the outline and orders it, and the scan below is a single pass.
-            val lines = LongArray(outline.size) { index ->
-                val cell = outline[index]
-                val row = cell / cellsAcross
-                var columnOffset = (cell % cellsAcross) - anchorColumn
-                if (columnOffset > cellsAcross / 2) columnOffset -= cellsAcross
-                if (columnOffset < -cellsAcross / 2) columnOffset += cellsAcross
-                val column = anchorColumn + columnOffset
-                val across = GlaciationStage.acrossBearingOf(column, row, bearing)
-                val along = GlaciationStage.alongBearingOf(column, row, bearing)
-                ((across + COORDINATE_BIAS).toLong() shl 32) or
-                    ((along + COORDINATE_BIAS).toLong() and 0xFFFFFFFFL)
-            }
-            lines.sort()
-            var run = 0
-            var previousAcross = Long.MIN_VALUE
-            var previousAlong = Long.MIN_VALUE
-            for (packed in lines) {
-                val across = packed ushr 32
-                val along = packed and 0xFFFFFFFFL
-                run = if (across == previousAcross && along == previousAlong + step) run + 1 else 1
-                if (run > longest) {
-                    longest = run
-                    atBearing = bearing
-                }
-                previousAcross = across
-                previousAlong = along
-            }
-        }
-        return longest to atBearing
     }
 
     /** The largest share of [sortedHeights] falling inside any [FLAT_WINDOW_METRES] of height. */
@@ -473,20 +394,11 @@ class GlacialBasinShapeTest {
         /** Salar de Uyuni, the flattest large surface on Earth, in square kilometres. */
         const val UYUNI_SQUARE_KILOMETRES = 10_582.0
 
-        /** How straight Earth's straightest lake shore is against a circle of its own size. */
-        const val STRAIGHTEST_SHORE_OVER_A_CIRCLE = 3f
-
         /** The window a height has to fall in to count as "one height", in metres. */
         const val FLAT_WINDOW_METRES = 2f
 
         /** How much of one level a real lake basin may hold over an even bowl's share. */
         const val FLAT_SHARE_OVER_AN_EVEN_BOWL = 2f
-
-        /**
-         * Added to a bearing coordinate before it is packed, so the negative ones — a north-east
-         * coordinate is `column - row` — sort as smaller longs rather than as larger.
-         */
-        const val COORDINATE_BIAS = 1 shl 24
 
         /** One measurement per seed, shared by the three cases. */
         val measured = HashMap<Long, Measurement>()

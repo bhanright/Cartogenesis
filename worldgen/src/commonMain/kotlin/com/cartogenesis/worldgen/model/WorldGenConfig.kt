@@ -2831,6 +2831,15 @@ data class WorldGenConfig(
     /** How tall one cell of this grid is, in kilometres. Not the same as [cellWidthKm]. */
     val cellHeightKm: Double get() = scale.cellHeightKm(height)
 
+    /**
+     * How tall one cell of this grid is as a fraction of how wide it is — a half on a square grid
+     * of a world twice as wide as it is tall.
+     *
+     * What a distance field measured in cells has to be told before it can claim to measure ground.
+     * See `JumpFloodDistance.run`.
+     */
+    val cellHeightInCellWidths: Double get() = cellHeightKm / cellWidthKm
+
     /** How much ground one cell of this grid stands for, in square kilometres. */
     val squareKilometresPerCell: Double get() = scale.squareKilometresPerCell(width, height)
 

@@ -45,22 +45,29 @@ class GpuErosionTest {
             .atResolution(1024, 1024)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
-        val onCpu: FloatArray
-        val cpuMs = measureTimeMillis {
-            onCpu = erodeBlocking(config, uplift).height.data
-        }
-
         val gpuConfig = config.copy(
             erosion = config.erosion.copy(acceleration = Acceleration.GPU)
         )
-        // Once to warm the driver, then the measurement.
+
+        // The whole stage once on each path, for the terrain comparison below. Printed, but
+        // nothing is asserted about it: the stage is the sweeps plus twelve hydraulic rounds, and
+        // the rounds are a priority flood and a routing walk that stay on the processor by design.
+        // So this ratio is mostly Amdahl's law and says little about the kernel - it reads about
+        // 1.1x here while the sweeps themselves are tens of times faster.
+        val onCpu: FloatArray
+        val stageCpuMs = measureTimeMillis {
+            onCpu = erodeBlocking(config, uplift).height.data
+        }
         erodeBlocking(gpuConfig, uplift, gpu)
         val onGpu: FloatArray
-        val gpuMs = measureTimeMillis {
+        val stageGpuMs = measureTimeMillis {
             onGpu = erodeBlocking(gpuConfig, uplift, gpu).height.data
         }
-
-        println("GPU ${gpuMs}ms vs CPU ${cpuMs}ms: ${"%.1f".format(cpuMs.toDouble() / gpuMs)}x")
+        println(
+            "GPU whole stage ${stageGpuMs}ms vs CPU ${stageCpuMs}ms: " +
+                "${"%.1f".format(stageCpuMs.toDouble() / stageGpuMs)}x, " +
+                "most of which is the hydraulic rounds the processor keeps"
+        )
 
         // Same world, different arithmetic. Elevation runs 0..1, so compare in those terms.
         var worst = 0f
@@ -73,7 +80,30 @@ class GpuErosionTest {
         val mean = total / onCpu.size
         println("GPU vs CPU terrain: mean difference %.6f, worst %.6f (elevation is 0..1)".format(mean, worst))
 
-        assertTrue(gpuMs < cpuMs, "the GPU was not faster: ${gpuMs}ms vs ${cpuMs}ms")
+        // What the card actually runs, timed on its own: the sweeps, with the hydraulic rounds
+        // turned off so the processor's share is not being measured alongside them.
+        //
+        // One warm-up per path, then the quickest of three runs each. The quickest rather than a
+        // single run or a mean: every source of noise on a shared machine - the scheduler, a
+        // garbage collection, another build on the same box - can only make a run slower, so the
+        // floor is the closest any of them comes to the cost being measured.
+        val sweepsOnly = config.copy(erosion = config.erosion.copy(hydraulicRounds = 0))
+        val sweepsOnlyOnGpu = gpuConfig.copy(erosion = gpuConfig.erosion.copy(hydraulicRounds = 0))
+        erodeBlocking(sweepsOnly, uplift)
+        erodeBlocking(sweepsOnlyOnGpu, uplift, gpu)
+        val sweepCpuMs = fastestMillis { erodeBlocking(sweepsOnly, uplift) }
+        val sweepGpuMs = fastestMillis { erodeBlocking(sweepsOnlyOnGpu, uplift, gpu) }
+        val sweepSpeedUp = sweepCpuMs.toDouble() / sweepGpuMs
+        println(
+            "GPU sweeps alone ${sweepGpuMs}ms vs CPU ${sweepCpuMs}ms: " +
+                "${"%.1f".format(sweepSpeedUp)}x, against a bar of ${MIN_SWEEP_SPEED_UP}x"
+        )
+        assertTrue(
+            sweepSpeedUp >= MIN_SWEEP_SPEED_UP,
+            "the sweeps ran only ${"%.1f".format(sweepSpeedUp)}x faster on the card " +
+                "(${sweepGpuMs}ms against ${sweepCpuMs}ms), which is under the " +
+                "${MIN_SWEEP_SPEED_UP}x a kernel that ran at all clears with room to spare"
+        )
         // Two bounds, and the mean is the one that would catch a wrong kernel.
         //
         // The worst cell was held under 0.02 and now reads 0.0325 on this machine. What changed is
@@ -217,5 +247,27 @@ class GpuErosionTest {
                     differingOwners * 100.0 / onCpu.nations.nationId.size
                 )
         )
+    }
+
+    /** The quickest of [TIMED_RUNS] runs of [body], in milliseconds. */
+    private fun fastestMillis(body: () -> Unit): Long =
+        (1..TIMED_RUNS).minOf { measureTimeMillis { body() } }
+
+    private companion object {
+        /** How many times a measurement is repeated before its floor is taken. */
+        const val TIMED_RUNS = 3
+
+        /**
+         * The least speed-up on the sweeps alone that still means the card did the work.
+         *
+         * The sweeps are a pure stencil over independent cells - the case graphics hardware is
+         * best at - and measure tens of times faster than the processor on this device, so five
+         * leaves the better part of an order of magnitude of room. It is deliberately far below
+         * what is measured, because the question this asks is whether the kernel ran at all. A bar
+         * set near the measured figure would instead be asking whether the machine was busy, which
+         * is what the `gpuMs < cpuMs` this replaced was really asking, and why it failed for two
+         * agents on a box running four builds while the kernel was working perfectly.
+         */
+        const val MIN_SWEEP_SPEED_UP = 5.0
     }
 }

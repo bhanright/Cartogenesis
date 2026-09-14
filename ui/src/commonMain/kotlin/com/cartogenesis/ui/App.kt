@@ -443,7 +443,10 @@ private fun Application(
                 // generator and the interface share one thread, so a stage name written here is
                 // invisible unless the thread is handed back to let a frame out. See that object
                 // for the whole of it.
-                Generation.run(config, reusable, accelerator) { reached = it; stage = it.label }
+                Generation.run(config, reusable, accelerator, platform.oceanAccelerator) {
+                    reached = it
+                    stage = it.label
+                }
             }
             val sheet = MapSheet.onScreen(camera.pixelsPerCell)
             val (drawnRaster, drawnImage) = withContext(Dispatchers.Default) {

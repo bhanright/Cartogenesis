@@ -10,6 +10,7 @@ import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.Desktop
 import java.io.File
 import java.net.URI
@@ -124,7 +125,13 @@ class DesktopPlatform(
     // regenerated from its seed, and drawing pixels makes no such promise either way.
     private val rasterProbe = GpuRaster.createOrNull()
 
+    // The stream-function solve shares them too, and is behind the switch, because a gyre solved
+    // on the card is a different world in the same sense erosion's terrain is.
+    private val oceanProbe = GpuOcean.createOrNull()
+
     override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator
+
+    override val oceanAccelerator: OceanAccelerator? get() = oceanProbe.accelerator
 
     override val accelerationUnavailableBecause: String? get() = erosionProbe.unavailableBecause
 

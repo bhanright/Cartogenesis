@@ -20,6 +20,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
@@ -32,7 +33,8 @@ import org.jetbrains.skia.Image
  */
 class WebPlatform(
     override val accelerator: ErosionAccelerator?,
-    override val accelerationUnavailableBecause: String?
+    override val accelerationUnavailableBecause: String?,
+    override val oceanAccelerator: OceanAccelerator? = null
 ) : Platform {
 
     // One thread, and generating blocks the page while it runs. 512 takes a few seconds
@@ -55,14 +57,15 @@ class WebPlatform(
     override val coarsePointer: Boolean = pointerIsCoarse()
 
     /**
-     * Erosion alone, and that is not a simplification.
+     * Erosion and the currents, and leaving the raster out is not a simplification.
      *
      * The desktop draws the export raster on its device as well, through OpenGL compute; the WGSL
      * port of that raster has not been written, so in a browser the device runs the erosion sweeps
-     * and nothing else. Saying otherwise here would be promising a speed-up that does not exist.
+     * and the stream-function solve and nothing else. Saying otherwise here would be promising a
+     * speed-up that does not exist.
      */
     override fun acceleratedWork(device: String): String =
-        "Erosion runs on $device, many times faster."
+        "Erosion and ocean currents run on $device, many times faster."
 
     /**
      * 2048 on a phone, 4096 otherwise.
@@ -142,7 +145,9 @@ class WebPlatform(
         // As on the desktop, the whole pipeline re-runs at the target size rather than upscaling
         // the preview, so the detail is real.
         val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(exportConfig, accelerator = accelerator)
+        val world = WorldGenerationEngine.generate(
+            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
+        )
 
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
         // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
@@ -184,7 +189,9 @@ class WebPlatform(
         val started = epochMillisNow()
 
         val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(exportConfig, accelerator = accelerator)
+        val world = WorldGenerationEngine.generate(
+            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
+        )
         val files = DataExports.write(world, layer, compressor, BuildInfo.VERSION)
 
         val bytes = files.asZip()

@@ -1208,6 +1208,37 @@ climate stage and drawn over the map as a Cartography toggle.*
   cloud is not a tint); `PanelKnobsTest` for the mark; render 718106 at 2048 both seasons with
   the toggle on and look: clouds where it rains, clear skies over the deserts.
 
+### I2. Glacial basins take their shape from the ground, not the grid — Opus, on `main`
+
+*William, 2026-09-14, first test of the 3.0.0-dev cut, seed 364673 at 2048, the south-east: "this
+anomaly" (a level, tinted slab with a cross-shaped arm, edges at 45 degrees, beside a lake whose
+shore is a ruled line) and "also this line through this section" (a straight edge running through
+a belt and its lake). Reproduced on main at e539002 on the CPU path: the slab is in
+`erosion.height`, a closed basin floor cut level, holding no water, drawn as flat ground.*
+
+- **Cause**: `GlaciationStage.cutBasins` builds a basin's footprint as a tube of a D8 path at a
+  grid half-width, peels it with four-connected rings, opens it with three-by-three blocks and
+  saucers its floor by a four-connected inset distance. Every one of those is a grid shape: the
+  outline lands on 0, 45 and 90 degrees, the floor's contours are diamonds, and where the peel
+  and the opening meet, a cross. Rivers then run ruler-straight along the basin's edges.
+- **The fix**: a basin's shape comes from the valley it sits in. The footprint is the valley
+  floor — the cells within the trough's half-width of the path by *Euclidean* distance (G4's
+  `JumpFloodDistance` is there for it) and no higher than the floor plus the trough's depth, so
+  the walls bound it and the rim follows the contours; the floor is a bowl by Euclidean distance
+  from that rim; the area cap peels by height rather than by ring. Say why the 364673 basin holds
+  no water (the lake water balance's playa, or a drained outlet) and make it either a lake or a
+  bowl of till the map can read; the renderer does not draw playas today, so if one is what it is,
+  it needs a face. The cross-shaped arm must be explained, not just gone.
+- Guards, each shown failing on main with 364673 at 2048: an outline guard — no cut basin's
+  outline carries a run longer than a stated number of cells along one grid bearing, the number
+  derived from what a natural shore does at 5.9 km per cell (the derivation beside it); a floor
+  guard — no basin floor has more than a stated share of its cells within one metre of one
+  height, derived from a bowl's hypsometry. `GlaciationTest`'s existing clauses hold. Render
+  364673 at 2048 (window 1560,1480 to 2048,1968) before and after, and 718106 and 59758 whole,
+  and look: the basins should read as glacial lakes in valleys, not stamps.
+- Rule 8: the footprint and floor are per-region work on the CPU as they are now; the distance
+  field is the shared jump flood. Rule 9 throughout; `SeedProbe*.kt` never committed.
+
 ### Site 2. cartogenesis.com in the app's own identity — Opus, on `release/2.0`
 
 *From the design review of 2026-09-12 (a Codex handoff William asked Fable to critique; the
@@ -2226,6 +2257,7 @@ guard reported, so the next chunk knows its baseline.
 | K3 Reefs and atolls | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | K4 Fjord coastlines | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | I1 Ice sheets with a profile | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| I2 Glacial basins take their shape from the ground | Opus | in progress on main (2026-09-14) | 2026-09-14 | | William's 364673 south-east: a level slab with 45-degree edges and a cross, a lake with a ruled shore, a straight line through a belt; all one cause in `cutBasins` |
 | P1 Metric-aware physics and a projection | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | P2 A spherical grid | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | V1 Tints by climate and sky-model shading | | pulled forward as F13 on the 2.0.x line | | | |

@@ -121,12 +121,18 @@ class SiteAssemblyTest {
             "the description page no longer points at /app/, so its launch button goes nowhere"
         )
 
-        // The hero is also the link preview image, so a scraper reads this exact file.
-        val hero = file("img/atlas.webp")
+        // The hero is also the link preview image, so a scraper reads this exact file — and reads
+        // it at the address the og:image names, which is why that is checked and not only the tag
+        // the page draws with.
+        val hero = file("img/natural.webp")
         val header = hero.asLatin1()
         assertTrue(
             header.startsWith("RIFF") && header.substring(8, 12) == "WEBP",
-            "img/atlas.webp is not a WebP file — the copy has been filtered as though it were text"
+            "img/natural.webp is not a WebP file — the copy has been filtered as though it were text"
+        )
+        assertTrue(
+            index.readText().contains("""og:image" content="https://cartogenesis.com/img/natural.webp"""),
+            "the link preview still points at a figure the page no longer shows"
         )
         assertEquals(
             1600 to 800, webpDimensions(hero),
@@ -173,7 +179,7 @@ class SiteAssemblyTest {
         // These names are the contract between SiteImagery.FIGURES and the page's img tags.
         // Renaming one side alone deploys a broken figure that nothing else would notice.
         val expected = mapOf(
-            "atlas.webp" to (1600 to 800),
+            "natural.webp" to (1600 to 800),
             "styles.webp" to (1924 to 711),
             "layers.webp" to (1926 to 667)
         )

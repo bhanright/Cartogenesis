@@ -104,6 +104,10 @@ object SiteImagery {
      * claims — a cordillera along its spine, a river system that gathers the whole northern half,
      * lakes, a coast broken into peninsulas and a long spit, islands offshore, and the west coast
      * of the next continent with its own lake and snowfield at the right-hand edge.
+     *
+     * Drawn in `MapStyle.NATURAL` since 2026-09-14, for the colour (William). The window did not
+     * have to move with the style: what it holds is what that style has most to say about — forest
+     * against dry interior, a rust-coloured range between them, and a cobalt sea around it.
      */
     val BAND = Window(448, 64, 1600, 800)
 
@@ -256,8 +260,8 @@ object SiteImagery {
      */
     val FIGURES: List<Figure> = listOf(
         Figure(
-            "atlas.webp", BAND,
-            listOf(Panel(MapView.FANTASY, MapStyle.ATLAS, "Atlas", "", BandTint.SUNK))
+            "natural.webp", BAND,
+            listOf(panelFor(MapStyle.NATURAL, BandTint.SUNK))
         ),
         Figure(
             "styles.webp", STYLES_WINDOW,
@@ -348,9 +352,7 @@ object SiteImagery {
                         "window ${figure.window.width}x${figure.window.height} at " +
                         "${figure.window.x},${figure.window.y}, quality ${figure.quality})"
                 )
-                if (contact && figure.panels.size > 1) {
-                    writePreview(sheets, figure, lettering, outputDir)
-                }
+                if (contact) writePreview(sheets, figure, lettering, outputDir)
             }
             if (contact) writeContactSheets(sheets, outputDir)
         } finally {
@@ -665,7 +667,7 @@ object SiteImagery {
     }
 
     /**
-     * A finished strip at the width the page's column gives it, as a PNG.
+     * A finished figure at the width the page's column gives it, as a PNG.
      *
      * The figures ship as WebP, which is not a format a person can open everywhere, and the thing
      * that most needs looking at before a strip is published is whether its lettering survives

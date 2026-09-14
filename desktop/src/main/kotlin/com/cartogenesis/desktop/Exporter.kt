@@ -9,10 +9,8 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.model.Acceleration
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
-import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.IIOImage
@@ -35,7 +33,10 @@ import org.jetbrains.skia.Image
  * of the sheet, decided where the mark is made, so an export is drawn by the same hand as the
  * preview and simply has more room for it.
  *
- * The graphics acceleration preference governs generation and rasterisation together.
+ * Where the machine has a graphics device the per-pixel half of the drawing runs on it. That is not
+ * governed by the acceleration switch in the panel, which is about whether the *world* can be
+ * reproduced from its seed: the raster changes no part of the world, only how quickly the same
+ * picture is drawn, and it is held to within a channel step of what the processor would have drawn.
  */
 object Exporter {
 
@@ -52,20 +53,14 @@ object Exporter {
         size: Int,
         destination: File,
         format: ExportFormat = ExportFormat.PNG,
-        raster: RasterAccelerator? = null,
-        accelerator: ErosionAccelerator? = null,
-        oceanAccelerator: OceanAccelerator? = null
+        raster: RasterAccelerator? = null
     ): Result {
         val started = System.currentTimeMillis()
 
         val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(
-            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
-        )
+        val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
-        val pixels = MapRasterizer.rasterize(
-            world, options, raster.takeIf { config.erosion.acceleration == Acceleration.GPU }
-        )
+        val pixels = MapRasterizer.rasterize(world, options, raster)
         // A printed sheet: drawn cell for pixel, so nothing is generalised away, and carrying its
         // own scale bar because there is no legend beside a PNG. See [MapSheet].
         val bitmap = MapImage.toBitmap(world, options, pixels, MapSheet.PRINTED)
@@ -99,16 +94,12 @@ object Exporter {
         config: WorldGenConfig,
         size: Int,
         destination: File,
-        layer: DataLayer,
-        accelerator: ErosionAccelerator? = null,
-        oceanAccelerator: OceanAccelerator? = null
+        layer: DataLayer
     ): Result {
         val started = System.currentTimeMillis()
 
         val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(
-            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
-        )
+        val world = WorldGenerationEngine.generateBlocking(exportConfig)
         val files = DataExports.write(world, layer, GzipCompressor, BuildInfo.VERSION)
 
         destination.writeBytes(files.image)

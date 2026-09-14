@@ -1,7 +1,21 @@
 # To do
 
+- **A shore is still a cell over the bar, and nobody has looked at it.** On the merged tree — S2b's
+  flood repair included — `StraightRunTest`'s `report how straight every shore is` finds one body of
+  standing water on six worlds outside the bar it derives: a 296-cell lake at (1075,1998) of 364673
+  at 2048, with a 20-cell run due north-south against 18.7 allowed, **1.07 times the bar**. Every
+  other measurable body on those worlds is at 0.93 times or under. That is marginal where F30's own
+  two were 1.20 and 1.75, and it is a different body from either, so nothing in F30's diagnosis
+  applies to it without being re-done. Whoever opens it should find out what cut it before deciding
+  anything: if it is the same family the case can go back to being the assertion it was written as,
+  and if a lake of three hundred cells can honestly carry a 20-cell straight edge then the bar's
+  `STRAIGHTEST_SHORE_OVER_A_CIRCLE` wants re-deriving against Earth's straightest *small* lake rather
+  than against Tanganyika. 2026-09-14, F30.
 - **The post-cut outlet takes a deep sill down in one bite, and the slot it leaves is drawn as
-  water.** F30's second body, and a different cause from the one that chunk fixed. On seed 364673 at
+  water.** F30's second body, on the tree as it stood at 00b13fe; S2b's flood repair has since moved
+  the drowned basins this was measured on and both of F30's canals are gone with them, so the numbers
+  below are a record of the mechanism rather than of anything on the map today. The mechanism is
+  untouched and will do the same thing again wherever a drowned basin has a deep sill. On seed 364673 at
   2048 the *first* pass of `SeaLevelStage.drainDrownedBasins` takes a sill standing about a
   kilometre above the waterline down to the basin's own floor over 75 cells at once — 1,652 cells
   cut on that pass, the whole reach left at one level falling only by the notch's own gradient —
@@ -21,7 +35,9 @@
   channel and not a body of water, and the sea mask has no such rule. `StraightRunTest`'s
   `report how straight every shore is` is the instrument, and prints the figure every run.
   2026-09-14, F30.
-- **The ruled course over a filled basin is still there, and buying it costs Earth figures.** F30
+- **The ruled course over a filled basin is still there, and buying it costs Earth figures.** Also
+  measured at 00b13fe, before S2b; the flats and their staircase are exactly as they were, so the
+  mechanism stands even though the two bodies it was measured on have gone. F30
   measured what it takes to stop the depression fill's flats routing water dead straight everywhere,
   rather than in the one pass that turns such a path into open water. The fill raises each cell of a
   flat one `FlowRouting.FLAT_GRADIENT_STEP` above the cell the priority flood reached it from, so

@@ -145,30 +145,34 @@ class StraightRunTest {
      * cells breaks a bar wider than the puddle is by being four cells long and two across, which is
      * the census above's question and not this one's.
      *
-     * Measured at 00b13fe and unchanged on the merged tree: **73 cells against 41.7 allowed, 1.75
-     * times the bar**, on the 7,297-cell inland sea at (2022,1449) of 364673 at 2048, and 41 against
-     * 34.2 (1.20 times) on the 3,314-cell one in William's own window — 72 and 41 of those cells
-     * standing above the waterline in the raw terrain before the outlet pass cut them, which is what
-     * says they are the notch and not a shore. The other five seeds carry between one and six bodies
-     * the bar binds apiece and every one of them is inside it, 0.26 to 0.55 times, which is why the
-     * defect needed the author's own world at his own grid to be seen.
+     * Measured at 00b13fe, before S2b: **73 cells against 41.7 allowed, 1.75 times the bar**, on the
+     * 7,297-cell inland sea at (2022,1449) of 364673 at 2048, and 41 against 34.2 (1.20 times) on
+     * the 3,314-cell one in William's own window — 72 and 41 of those cells standing above the
+     * waterline in the raw terrain before the outlet pass cut them, which is what said they were the
+     * notch and not a shore. The other five seeds carried one to six bodies the bar binds apiece and
+     * every one was inside it, 0.26 to 0.55 times, which is why the defect needed the author's own
+     * world at his own grid to be seen.
      *
-     * **Reported, not asserted, and F30's report says why.** Both repairs the chunk built were
-     * measured and reverted, because each buys this bar with an Earth figure and ground rule 5
-     * forbids that trade. Routing the outlet pass itself so it cannot follow the fill's staircase in
-     * a ruled line takes the 41-cell canal away and leaves 189 cells of water the ocean cannot reach
-     * on seed 1234, against `SeaLevelHistoryTest`'s rule that every such pocket is gone. Routing
-     * *every* filled flat that way takes both canals away — 1.75 times the bar to 0.46 — and moves
-     * three more: seed 59758 at 1024 keeps a lake of 1.83 times the Caspian's share of its land
-     * against `OutletResolutionTest`'s 1.4, `RiverWidthTest`'s drawn pen goes to 2.46 px against the
-     * nib's 1.23, and `OutletIncisionTest`'s control loses the separation it exists to show. And the
-     * 73-cell one is not a ruled *path* at all: it does not move when the path does, because the
-     * first pass of that notch takes a sill standing a kilometre above the waterline down to the
-     * basin's floor in one bite, and a slot cut in one bite lies at one level however it bends.
+     * **Both canals are gone on the merged tree, and S2b took them, not F30.** S2b let the sea seed
+     * the depression flood at its own level, which is the same flood this defect was traced to, and
+     * the drowned basins the outlet pass was notching are not the basins it now finds: 364673 at 2048
+     * offers sixteen measurable bodies instead of ten and neither inland sea is among the ones over
+     * the bar. The window William reported reads clean — no canal, no ruled shore, no dead-straight
+     * line at x 1788. What is left over the bar anywhere is **1.07 times it**, a 296-cell lake at
+     * (1075,1998) with a 20-cell run against 18.7 allowed, which is a different body with a different
+     * story and is marginal where the old two were not.
      *
-     * So what ships is the measurement, with both causes and their figures in `TODO.md`. This case
-     * is the instrument the chunk that fixes them will turn back into an assertion, and it prints
-     * how many bodies each seed offered so that a future green cannot be a vacant one.
+     * **Reported, not asserted.** Both repairs F30 built for the old cause were measured and
+     * reverted before S2b landed, because each bought this bar with an Earth figure and ground rule 5
+     * forbids that trade: routing the outlet pass so it could not follow the fill's staircase in a
+     * ruled line left 189 cells of water the ocean cannot reach on seed 1234 against
+     * `SeaLevelHistoryTest`'s rule, and routing every filled flat that way moved three more
+     * (`OutletResolutionTest`'s Caspian bound to 1.83, `RiverWidthTest`'s pen to 2.46 px,
+     * `OutletIncisionTest`'s control). The one body still over the bar has not been diagnosed, so
+     * asserting the bar would be asserting something nobody has looked at. The figures and both old
+     * causes are in `TODO.md`, and the chunk that diagnoses this one turns the report back into the
+     * assertion it was written as. It prints how many bodies each seed offered so that a future
+     * green cannot be a vacant one.
      */
     @Test
     fun `report how straight every shore is`() {

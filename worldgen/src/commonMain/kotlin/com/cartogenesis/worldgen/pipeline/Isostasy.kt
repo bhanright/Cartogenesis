@@ -193,14 +193,23 @@ internal object Isostasy {
      * Airy isostasy again. That is the whole physics of a foreland basin, of post-glacial rebound,
      * and of why a delta subsides but a sand dune does not.
      *
-     * One transform pair over the whole grid per call, which is the same machinery
+     * One transform pair over a grid twice the map's height per call, which is the same machinery
      * [TerrainStage.integrate] uses for Frankot-Chellappa and the reason rule 8 of the plan calls
      * this a G-track candidate at 4096 rather than a per-cell pass needing a kernel today.
+     *
+     * The doubled height is what keeps the poles apart. An FFT is periodic on both axes and the
+     * world is a cylinder, not a torus: x wraps and y does not, so run on the map's own grid the
+     * filter would let a load on the top row bend the bottom row as though the two were
+     * neighbours. They are not neighbours, they are half a world apart, and both poles carry ice.
+     * See [mirrorPadded] for which continuation is used past a pole and why.
      */
     class Flexure(config: WorldGenConfig) {
 
         private val cellsAcross = config.width
         private val cellsDown = config.height
+
+        /** The height the load is mirrored out to before the transform. See [mirrorPadded]. */
+        private val paddedRows = cellsDown * 2
         private val isostasy = config.isostasy
 
         /** `dRho * g`, the restoring term: what the mantle pushes back with per metre of bend. */
@@ -222,18 +231,19 @@ internal object Isostasy {
         val flexuralParameterMetres: Double
             get() = kotlin.math.sqrt(kotlin.math.sqrt(4.0 * rigidity / restoringPerMetre))
 
-        private val transform = Fft2D(cellsAcross, cellsDown)
-        private val real = DoubleArray(cellsAcross * cellsDown)
-        private val imaginary = DoubleArray(cellsAcross * cellsDown)
+        private val transform = Fft2D(cellsAcross, paddedRows)
+        private val real = DoubleArray(cellsAcross * paddedRows)
+        private val imaginary = DoubleArray(cellsAcross * paddedRows)
 
-        // Angular wavenumbers, in radians per metre, per cycle across the map. The two axes have
-        // their own cell size — an equirectangular map is twice as wide as it is tall and its cells
-        // are only square when the grid is — so a load is not filtered isotropically in cells but
-        // is in kilometres, which is the one that matters.
+        // Angular wavenumbers, in radians per metre, per cycle across the transformed grid. The two
+        // axes have their own cell size — an equirectangular map is twice as wide as it is tall and
+        // its cells are only square when the grid is — so a load is not filtered isotropically in
+        // cells but is in kilometres, which is the one that matters. Down, the period is the padded
+        // height rather than the map's, because that is what the transform actually repeats over.
         private val radiansPerCycleAcross =
             2.0 * PI / (cellsAcross * config.cellWidthKm * METRES_PER_KM)
         private val radiansPerCycleDown =
-            2.0 * PI / (cellsDown * config.cellHeightKm * METRES_PER_KM)
+            2.0 * PI / (paddedRows * config.cellHeightKm * METRES_PER_KM)
 
         /**
          * How much of the surface a load bends downward, in metres, one entry per cell.
@@ -247,23 +257,21 @@ internal object Isostasy {
          * at zero. That is not a numerical convenience: a uniform load over a whole planet does not
          * bend anything, it changes where the datum is, and the datum is [Columns]' business. Left
          * in, the term would sink or raise the entire map by the average of whatever erosion had
-         * done that round.
+         * done that round. The mirrored half carries the same mean as the map does, so removing it
+         * over the padded grid removes it over the map.
          */
         fun deflectionMetres(loadPascals: FloatArray, deflection: FloatArray) {
             val cellCount = cellsAcross * cellsDown
             var loadSum = 0.0
             for (cell in 0 until cellCount) loadSum += loadPascals[cell].toDouble()
             val meanLoad = loadSum / cellCount
-            for (cell in 0 until cellCount) {
-                real[cell] = loadPascals[cell].toDouble() - meanLoad
-                imaginary[cell] = 0.0
-            }
+            mirrorPadded(loadPascals, meanLoad)
 
             transform.forward(real, imaginary)
 
-            parallelChunks(0, cellsDown) { startRow, endRow ->
+            parallelChunks(0, paddedRows) { startRow, endRow ->
                 for (row in startRow until endRow) {
-                    val cyclesDown = if (row <= cellsDown / 2) row else row - cellsDown
+                    val cyclesDown = if (row <= paddedRows / 2) row else row - paddedRows
                     val wavenumberDown = cyclesDown * radiansPerCycleDown
                     for (column in 0 until cellsAcross) {
                         val cyclesAcross =
@@ -285,7 +293,49 @@ internal object Isostasy {
             }
 
             transform.inverse(real, imaginary)
+            // Only the map's own half is read back; the mirrored half was scaffolding for the
+            // transform's periodicity and says nothing the map's half does not.
             for (cell in 0 until cellCount) deflection[cell] = real[cell].toFloat()
+        }
+
+        /**
+         * Writes [loadPascals] less [meanLoad] into [real], with the map reflected about each pole
+         * to fill the second half of the padded grid, and clears [imaginary].
+         *
+         * Padded row `paddedRows - 1 - row` takes the load of map row `row`, so the grid the
+         * transform sees is even about the top row and about the bottom one, and its period down is
+         * a whole meridian out and back rather than a single crossing of the map.
+         *
+         * Mirroring rather than zero-filling, for two reasons. The ground does not stop at row 0:
+         * this world is 12,000 km around and 6,000 km from pole to pole, so a meridian is a closed
+         * loop of the same length as the equator, and what lies immediately past the north pole is
+         * the world coming back down the other side. Reflecting the load about the polar row is that
+         * continuation for anything roughly zonal, which a polar ice cap is, and it gives the pole
+         * the symmetry it must have — no slope across it. Zero-filling would instead tell the plate
+         * that the far side of the pole is bare, and a cap sitting on the pole would sag into the
+         * hole as if it were standing on the edge of a continent. The mirrored half also carries the
+         * map's own mean, so the zero-frequency term the filter drops is still the map's mean and
+         * not half of it.
+         *
+         * What is *not* modelled is the half-turn in longitude: the true continuation past the
+         * north pole is the far side of the world, a reflection in y together with a shift of half
+         * the map in x. That refinement is in `TODO.md`; it is invisible to a zonal load and this
+         * solver treats the grid as a plane with a constant cell width anyway.
+         */
+        private fun mirrorPadded(loadPascals: FloatArray, meanLoad: Double) {
+            parallelChunks(0, cellsDown) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    val mapRowStart = row * cellsAcross
+                    val mirrorRowStart = (paddedRows - 1 - row) * cellsAcross
+                    for (column in 0 until cellsAcross) {
+                        val load = loadPascals[mapRowStart + column].toDouble() - meanLoad
+                        real[mapRowStart + column] = load
+                        real[mirrorRowStart + column] = load
+                        imaginary[mapRowStart + column] = 0.0
+                        imaginary[mirrorRowStart + column] = 0.0
+                    }
+                }
+            }
         }
     }
 

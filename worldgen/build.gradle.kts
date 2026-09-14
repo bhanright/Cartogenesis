@@ -123,6 +123,9 @@ val auditOnlyClasses = listOf(
     // W1's renders: the author's two worlds at 2048 in three views apiece, whole and cropped.
     // A harness like `DebugMapDump`, and asserts nothing.
     "com.cartogenesis.worldgen.W1RenderDump",
+    // S2b's renders: the author's two worlds at 2048, whole and at each pole, before and after.
+    // A harness like `DebugMapDump`, and asserts nothing.
+    "com.cartogenesis.worldgen.S2bRenderDump",
     // F18: the network statistics, the moved-cell tally and the routing's own cost need every world
     // generated twice, once under each routing rule — ten worlds, a pair of them at 1024, and one
     // more at 2048 to be timed. The census that guards the chunk is in `StraightRunTest`.

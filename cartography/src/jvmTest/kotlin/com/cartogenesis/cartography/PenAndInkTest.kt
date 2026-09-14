@@ -126,28 +126,32 @@ class PenAndInkTest {
          * record does not move at all — `-588733464` before and after — which is the cleanest
          * evidence there is that what moved is the shading and the ground and not the drawing.
          *
-         * And once more at I2, this time the ground only. The ice used to plane the middle of its
-         * cross-section to the height of the one cell on its axis whatever stood there, and now it
-         * shares the cut by how deeply a cell lies under the ice as well as by how far across it
-         * lies, so every glaciated valley on this world is cut to a different profile.
-         * [ReliefShading.ORDINARY_GROUND] did *not* move with it — `ReliefShadingTest` re-derives
-         * it from this same world and still measures 0.958 — and pen and ink's record moved anyway,
-         * from `-588733464` to `83321747`, which is the other half of the same evidence: the one
-         * style with no tint for the shading to multiply moves when, and only when, the ground does.
+         * And at S2b and I2 together, which is why neither side's numbers stand here. S2b measures
+         * the craton's reach in kilometres instead of cells, so a continent's crust thickens over
+         * twice the distance north-south that it did; it stops the flexure letting one pole bend
+         * the other's bed; and it lets the depression flood reach land standing below the water
+         * beside it. I2 shares the ice's cut by how deeply a cell lies under the ice as well as by
+         * how far across it lies, so every glaciated valley is cut to a different profile. Each
+         * side recorded twelve figures against its own world and the merged world is neither, so
+         * all twelve are re-taken once more on this tree. `ReliefShading.ORDINARY_GROUND` did
+         * *not* move with them — `ReliefShadingTest` re-derives it from the median illumination
+         * over this same world's land and still finds 0.9582 — and pen and ink's record moved
+         * anyway, which is the other half of the same evidence: the one style with no tint for the
+         * shading to multiply moves when, and only when, the ground does.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -2003151281,
-            MapStyle.VELLUM to 1207385410,
-            MapStyle.INK_WASH to -473762329,
-            MapStyle.NAUTICAL to 1285160262,
-            MapStyle.MIDNIGHT to -1484647674,
-            MapStyle.SCHOOLROOM to 1688611757,
-            MapStyle.VERDANT to -1946081433,
-            MapStyle.SCROLL to -567772364,
-            MapStyle.PEN_AND_INK to 83321747,
-            MapStyle.MARS to -2096662810,
-            MapStyle.NATURAL to -1819354085,
-            MapStyle.CLEAR to -116506008
+            MapStyle.ATLAS to 552004496,
+            MapStyle.VELLUM to -289385690,
+            MapStyle.INK_WASH to 1866833523,
+            MapStyle.NAUTICAL to 1503364060,
+            MapStyle.MIDNIGHT to 1514803663,
+            MapStyle.SCHOOLROOM to 1803151843,
+            MapStyle.VERDANT to 1647567678,
+            MapStyle.SCROLL to -142278096,
+            MapStyle.PEN_AND_INK to -92338804,
+            MapStyle.MARS to -534967870,
+            MapStyle.NATURAL to 1686396603,
+            MapStyle.CLEAR to -1434907693
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

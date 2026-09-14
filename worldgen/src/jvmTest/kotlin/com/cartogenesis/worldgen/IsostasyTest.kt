@@ -238,6 +238,69 @@ class IsostasyTest {
         )
     }
 
+    /**
+     * A load on one pole does not bend the other one.
+     *
+     * The world is a cylinder: x wraps and y does not. An FFT is periodic on both axes, so the
+     * flexure solved on the map's own grid treats the top row and the bottom row as neighbours,
+     * and each pole's ice then holds the other pole's ground down. [Isostasy.Flexure] mirrors the
+     * load out to twice the map's height before transforming and crops afterwards, which gives the
+     * bottom row a whole meridian of plate between it and the top one.
+     *
+     * A stripe of a kilometre of crustal rock is laid along row 0 and the bend is read on the row
+     * below it, on the far pole, and in the middle of the map. All three are read against the
+     * middle, because the filter carries no zero-frequency term and so leaves the whole map sharing
+     * one uniform offset; what this clause is about is the part of the bend that depends on where
+     * the load was put.
+     *
+     * The near row's own reading nearly doubles under the mirror, 73 m to 140, and that is the
+     * continuation doing its job rather than a side effect: a stripe sitting *on* the pole carries
+     * on over it, so the plate there is holding up twice the rock the map alone shows.
+     */
+    @Test
+    fun `a load on one pole does not bend the other`() {
+        val config = WorldGenConfig(seed = 1L, width = 512, height = 512)
+        val flexure = Isostasy.Flexure(config)
+        val isostasy = config.isostasy
+        val alphaKm = flexure.flexuralParameterMetres / 1_000.0
+
+        val load = FloatArray(config.width * config.height)
+        for (column in 0 until config.width) {
+            load[column] = Isostasy.loadPascals(
+                POLAR_STRIPE_METRES, isostasy.continentalCrustDensity, isostasy.gravity
+            )
+        }
+        val deflection = FloatArray(load.size)
+        flexure.deflectionMetres(load, deflection)
+
+        val middleOfMap = deflection[config.height / 2 * config.width].toDouble()
+        val nextToTheLoad =
+            deflection[config.width].toDouble() - middleOfMap
+        val farPole = deflection[(config.height - 1) * config.width].toDouble() - middleOfMap
+        val share = abs(farPole) / abs(nextToTheLoad)
+        val poleToPoleKm = (config.height - 1) * config.cellHeightKm
+        println(
+            ("ISOSTASY poles a %.0f m stripe on row 0 bends row 1 by %.2f m and row %d by %.3e m," +
+                " a share of %.3e; the two are %.0f km apart, %.0f flexural parameters of %.0f km")
+                .format(
+                    POLAR_STRIPE_METRES, nextToTheLoad, config.height - 1, farPole, share,
+                    poleToPoleKm, poleToPoleKm / alphaKm, alphaKm
+                )
+        )
+        assertTrue(
+            "the row below the load barely moved (${"%.2f".format(nextToTheLoad)} m), so there is" +
+                " nothing for the far pole to be measured against",
+            abs(nextToTheLoad) > MIN_STRIPE_DEFLECTION_METRES
+        )
+        assertTrue(
+            "a stripe on row 0 bends the far pole by ${"%.3e".format(farPole)} m against the" +
+                " ${"%.2f".format(nextToTheLoad)} m it bends the row beside it — a share of" +
+                " ${"%.3e".format(share)}, over the bar of $FAR_POLE_SHARE_OF_NEAR_ROW: the" +
+                " transform is still periodic in y and the two poles are neighbours",
+            share < FAR_POLE_SHARE_OF_NEAR_ROW
+        )
+    }
+
     // ------------------------------------------------------------------ the ocean as a consequence
 
     /**
@@ -924,6 +987,34 @@ class IsostasyTest {
         const val STREAM_POWER_EXPONENT_TOLERANCE = 0.25
 
         /** Cells per bin, and how many bins, in the profile away from a collision suture. */
+        /** A kilometre of rock, the same load the two-limits clause above uses. */
+        const val POLAR_STRIPE_METRES = 1_000f
+
+        /**
+         * The least the row beside the stripe may bend for the far pole's reading to mean anything,
+         * in metres.
+         *
+         * Airy's answer for a kilometre of continental rock is 860 m and a one-row stripe is a
+         * fifth of a flexural parameter wide, so the plate holds nearly all of it up; the row below
+         * reads about seventy. Ten metres is well under that and well over nothing, and all this
+         * clause needs of it is that the denominator is a real deflection.
+         */
+        const val MIN_STRIPE_DEFLECTION_METRES = 10.0
+
+        /**
+         * How much of the near row's bend the far pole may share.
+         *
+         * The physics says none at all. A line load on an elastic plate falls off as
+         * `exp(-distance / flexuralParameter)`, the parameter is 67 km at Te 30 km, and the two
+         * polar rows are 5,988 km apart — eighty-nine parameters, so `exp(-89)` is about `1e-39`
+         * of the near row. Nothing near that is representable beside a seventy-metre reading: a
+         * float resolves it to about `6e-8` of itself, and the transform's own round trip leaves a
+         * few parts in `1e-15`. So the bar is the arithmetic's floor rather than the physics' —
+         * a millionth, about sixteen float steps beside the near row — and everything above it is
+         * the wrap this clause exists to refuse, which on the unpadded transform is the whole bend.
+         */
+        const val FAR_POLE_SHARE_OF_NEAR_ROW = 1e-6
+
         const val FLEXURE_BIN_CELLS = 8
         const val FLEXURE_BINS = 10
 

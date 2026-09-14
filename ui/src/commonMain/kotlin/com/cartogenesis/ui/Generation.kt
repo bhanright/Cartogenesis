@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import kotlinx.coroutines.delay
 
 /**
@@ -48,16 +49,20 @@ internal object Generation {
      * Generates [config]'s world, naming each stage as it starts and letting the interface draw.
      *
      * [previous] is the world already on screen, so the engine can skip whatever the settings did
-     * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried.
+     * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried;
+     * [oceanAccelerator] is the same device again, for the stream-function solve.
      */
     suspend fun run(
         config: WorldGenConfig,
         previous: PartialWorld?,
         accelerator: ErosionAccelerator?,
+        oceanAccelerator: OceanAccelerator?,
         onStage: (GenerationStage) -> Unit
     ): WorldMap {
         letTheInterfaceDraw()
-        return WorldGenerationEngine.generate(config, previous, accelerator) { stage, _, _ ->
+        return WorldGenerationEngine.generate(
+            config, previous, accelerator, oceanAccelerator
+        ) { stage, _, _ ->
             onStage(stage)
             letTheInterfaceDraw()
         }

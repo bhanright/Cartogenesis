@@ -47,7 +47,9 @@ class GenerationProgressTest {
             }
         }
 
-        val world = Generation.run(SMALL_WORLD, previous = null, accelerator = null) {
+        val world = Generation.run(
+            SMALL_WORLD, previous = null, accelerator = null, oceanAccelerator = null
+        ) {
             showing = it.label
         }
         painter.cancel()
@@ -80,7 +82,9 @@ class GenerationProgressTest {
             painted = true
         }
 
-        Generation.run(SMALL_WORLD, previous = null, accelerator = null) {
+        Generation.run(
+            SMALL_WORLD, previous = null, accelerator = null, oceanAccelerator = null
+        ) {
             if (firstStage == null) {
                 firstStage = it.label
                 assertTrue(

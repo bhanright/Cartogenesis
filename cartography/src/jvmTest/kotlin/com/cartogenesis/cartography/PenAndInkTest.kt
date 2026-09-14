@@ -125,20 +125,29 @@ class PenAndInkTest {
          * same commit and every tinted style moved with it. Pen and ink is again the one whose
          * record does not move at all — `-588733464` before and after — which is the cleanest
          * evidence there is that what moved is the shading and the ground and not the drawing.
+         *
+         * And once more at I2, this time the ground only. The ice used to plane the middle of its
+         * cross-section to the height of the one cell on its axis whatever stood there, and now it
+         * shares the cut by how deeply a cell lies under the ice as well as by how far across it
+         * lies, so every glaciated valley on this world is cut to a different profile.
+         * [ReliefShading.ORDINARY_GROUND] did *not* move with it — `ReliefShadingTest` re-derives
+         * it from this same world and still measures 0.958 — and pen and ink's record moved anyway,
+         * from `-588733464` to `83321747`, which is the other half of the same evidence: the one
+         * style with no tint for the shading to multiply moves when, and only when, the ground does.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 930027704,
-            MapStyle.VELLUM to 457126660,
-            MapStyle.INK_WASH to 619688466,
-            MapStyle.NAUTICAL to -363818632,
-            MapStyle.MIDNIGHT to -1921684469,
-            MapStyle.SCHOOLROOM to -339084382,
-            MapStyle.VERDANT to -1336817398,
-            MapStyle.SCROLL to -418514324,
-            MapStyle.PEN_AND_INK to -588733464,
-            MapStyle.MARS to -1593596128,
-            MapStyle.NATURAL to 1627266891,
-            MapStyle.CLEAR to -747191847
+            MapStyle.ATLAS to -2003151281,
+            MapStyle.VELLUM to 1207385410,
+            MapStyle.INK_WASH to -473762329,
+            MapStyle.NAUTICAL to 1285160262,
+            MapStyle.MIDNIGHT to -1484647674,
+            MapStyle.SCHOOLROOM to 1688611757,
+            MapStyle.VERDANT to -1946081433,
+            MapStyle.SCROLL to -567772364,
+            MapStyle.PEN_AND_INK to 83321747,
+            MapStyle.MARS to -2096662810,
+            MapStyle.NATURAL to -1819354085,
+            MapStyle.CLEAR to -116506008
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

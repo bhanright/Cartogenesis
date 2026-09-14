@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.math.JumpFloodDistance
+import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.IsostasyConfig
@@ -43,14 +44,22 @@ internal data class GlacialMass(
     /** Cells cut into a valley basin, and how many separate basins they form. */
     val basinCells: Int,
     val basins: Int,
-    /** Candidate basins refused: too narrow, too straight, too small, or the budget was spent. */
-    val basinsTooNarrow: Int,
+    /** Candidate basins refused: no valley floor, too straight, too small, or the budget was spent. */
+    val basinsWithNoFloor: Int,
     val basinsTooStraight: Int,
     val basinsTooSmall: Int,
     val basinsOverBudget: Int,
     /** Cells cut into a scour basin, and how many separate basins they form. */
     val scourCells: Int,
     val scourBasins: Int,
+    /**
+     * Which cut basin each cell's floor belongs to, and -1 on every cell that is not one.
+     *
+     * The valley basins are numbered first, `0` until [basins], and the sheet's scour basins
+     * follow them. An observer for the shape guards — `GlaciationTest` reads a basin's outline and
+     * the hypsometry of its floor off this — and nothing in the pipeline reads it at all.
+     */
+    val basinFloor: IntArray,
     val cirques: Int,
     val moraines: Int,
     val riegels: Int,
@@ -133,13 +142,25 @@ internal data class GlacialMass(
  *
  * That is not a threshold that was set too low, it is the wrong shape of thing. A hollow drawn
  * along a line inherits the line's shape, so every guard that passes a few more paths brings the
- * comb back. So a basin is now a **region**: the ground within a trough half-width of the ice's
- * path, opened — eroded by a cell and dilated back — so that what survives is a union of
- * three-by-three blocks and is three cells wide everywhere it exists; refused outright if it has no
- * such block in it, if the ice walked a straight D8 line to make it, or if the finished shape is a
- * bar; peeled inward if it is larger than any lake on Earth in proportion; and paid for out of a
- * fixed allowance of standing water shared with the sheet. The trough itself is still cut cell by
- * cell — a valley *is* a line — but nothing that holds water is. See [cutBasins].
+ * comb back. So a basin is a **region** rather than a line, paid for out of a fixed allowance of
+ * standing water shared with the sheet. The trough itself is still cut cell by cell — a valley
+ * *is* a line — but nothing that holds water is. See [cutBasins].
+ *
+ * ### A basin takes its shape from the ground
+ *
+ * The first version of that region was still a grid shape, and at 2048 the author found it: the
+ * ground within a trough half-width of the path, opened by three-by-three blocks and peeled to its
+ * area cap ring by four-connected ring. A tube around a D8 path is a ruled bar, because a D8 path
+ * runs dead straight for tens of cells; a union of three-by-three blocks has edges at 0 and 90
+ * degrees; four-connected rings are Manhattan diamonds and their contours meet at 45. What that
+ * drew was a level slab with a straight edge and, where a tributary's bar crossed the trunk's, a
+ * cross. See REALISM_PLAN.md, I2.
+ *
+ * A basin's shape comes from the valley it sits in, so the ground is asked at every step: the
+ * footprint is the *valley floor*, bounded by the height the valley walls stand at as well as by
+ * the trough's half-width; the area cap keeps the *lowest* cells rather than the innermost ones,
+ * so the outline is a contour; and the floor is a bowl by Euclidean distance from that rim rather
+ * than a plate at one level. [cutBasins], [keepLowestCells] and [cutBowl] in turn.
  *
  * ### What it does not touch
  *
@@ -581,10 +602,13 @@ object GlaciationStage {
 
         // The over-deepened basins, as regions rather than as cells along a line. See [cutBasins].
         stopIfAsked()
+        // Which basin each cut cell belongs to. Written by both regimes, read by nothing in the
+        // pipeline: it leaves through [GlacialMass] so the shape guards can measure a basin.
+        val basinFloor = IntArray(cellCount) { -1 }
         val basins = cutBasins(
             glaciation,
             carving, cellsAcross, cellsDown, isLand, frozen, glacier, directions, order, reach, progress,
-            strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget
+            strength, ice, carved, minBasinCells, maxBasinCells, lakeBudget, basinFloor
         )
 
         // The sheet's basins get whatever the valleys left of the allowance.
@@ -594,7 +618,7 @@ object GlaciationStage {
         if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
                 config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, carved,
-                minBasinCells, maxBasinCells, sheetBudget
+                minBasinCells, maxBasinCells, sheetBudget, basinFloor, basins.basins
             )
             scourCells = tally.cells
             scourBasins = tally.basins
@@ -691,12 +715,13 @@ object GlaciationStage {
                 lakeBudget = lakeBudget,
                 basinCells = basins.cells,
                 basins = basins.basins,
-                basinsTooNarrow = basins.tooNarrow,
+                basinsWithNoFloor = basins.noFloor,
                 basinsTooStraight = basins.tooStraight,
                 basinsTooSmall = basins.tooSmall,
                 basinsOverBudget = basins.overBudget,
                 scourCells = scourCells,
                 scourBasins = scourBasins,
+                basinFloor = basinFloor,
                 cirques = cirques,
                 moraines = moraines,
                 riegels = riegels,
@@ -855,7 +880,7 @@ object GlaciationStage {
     private class BasinTally(
         val cells: Int,
         val basins: Int,
-        val tooNarrow: Int,
+        val noFloor: Int,
         val tooStraight: Int,
         val tooSmall: Int,
         val overBudget: Int
@@ -880,25 +905,26 @@ object GlaciationStage {
      *     straight and parallel.
      *  2. **Straightness.** If the ice walked the straight-line distance from the head of the
      *     stretch to its lip it repeated one D8 step the whole way. That is the grid, not a valley.
-     *  3. **The footprint**, everything within the trough's half-width of the path that no stronger
-     *     basin has already claimed — so two basins never share ground and a weak one beside a
-     *     strong one simply does not exist.
-     *  4. **Opened**: eroded by one cell and dilated back. Whatever survives is a union of three-by-
-     *     three blocks, so it is nowhere narrower than three cells *by construction* rather than by
-     *     a threshold that could be argued with. A one-cell filament off the side of a trough has
-     *     no such block in it and vanishes; a basin that is nothing but filament has no core at all
-     *     and is refused.
-     *  5. **Sized**: under [GlaciationConfig.minLakeAreaKm2] it is not worth cutting; over
-     *     [GlaciationConfig.maxLakeAreaKm2] it is peeled inward ring by ring until it fits.
-     *  6. **Not a bar**, as a last check on the finished shape: nothing two cells or less across and
-     *     four or more long on any grid bearing survives. After the opening this cannot fire, which
-     *     is the point of asserting it — a shape guard that can only be satisfied by construction.
+     *  3. **The valley floor**: everything within the trough's half-width of the path by Euclidean
+     *     distance — a union of discs, so the tube itself has no bearing — *and standing no higher
+     *     than the lowest ground on that path plus the depth of the cut*, and claimed by no
+     *     stronger basin. The height bound is what the walls of the valley are for. Without it the
+     *     footprint is a tube around a D8 path; a D8 path runs dead straight for tens of cells at
+     *     one of eight bearings, and a tube around a straight line is a ruled bar whatever metric
+     *     drew it. With it the footprint stops where the ground climbs, so its edge is a contour.
+     *  4. **Filled from the bottom**: the lowest cells of that floor, taken outward from its
+     *     deepest point in order of height until [GlaciationConfig.maxLakeAreaKm2] is reached. The
+     *     area cap peels by height, not by ring — see [keepLowestCells] — so what is kept is
+     *     connected by construction and its outline is one contour of the ground.
+     *  5. **Sized**: under [GlaciationConfig.minLakeAreaKm2] it is not worth cutting.
+     *  6. **Not a bar**, as a last check on the finished shape: nothing two cells or less across
+     *     and four or more long on any grid bearing survives.
      *  7. **Within budget**, shared with the sheet: see [GlaciationConfig.sheetLakeShare].
      *
      * The floor is then cut from the lowest cell of the region *and its rim*, so the basin is
-     * closed the same way a scour basin is, and saucered by distance from the rim so it is not a
-     * slab. No till is needed to dam it, which is why [GlaciationConfig.riegelHeightMetres] is
-     * now zero.
+     * closed the same way a scour basin is, and shaped as a bowl by Euclidean distance from that
+     * rim — see [cutBowl]. No till is needed to dam it, which is why
+     * [GlaciationConfig.riegelHeightMetres] is now zero.
      */
     private fun cutBasins(
         glaciation: GlaciationConfig,
@@ -917,7 +943,8 @@ object GlaciationStage {
         carved: FloatArray,
         minCells: Int,
         maxCells: Int,
-        budget: Int
+        budget: Int,
+        basinFloor: IntArray
     ): BasinTally {
         val cellCount = cellsAcross * cellsDown
         if (budget < minCells) return BasinTally(0, 0, 0, 0, 0, 0)
@@ -1009,15 +1036,16 @@ object GlaciationStage {
         ranked.sortWith(compareByDescending<Int> { segIce[it] }.thenBy { segFirst[it] })
 
         val own = IntArray(cellCount) { -1 }
-        val core = IntArray(cellCount) { -1 }
         val region = IntArray(cellCount) { -1 }
-        val inset = IntArray(cellCount)
+        val visited = IntArray(cellCount) { -1 }
+        val rimDistance = FloatArray(cellCount)
         val footList = IntArray(cellCount)
         val regionList = IntArray(cellCount)
+        val heap = LongMinHeap(maxCells * 8 + 16)
 
         var spent = 0
         var basins = 0
-        var tooNarrow = 0
+        var noFloor = 0
         var tooStraight = 0
         var tooSmall = 0
         var overBudget = 0
@@ -1037,6 +1065,23 @@ object GlaciationStage {
                 continue
             }
 
+            // What the ice takes out of this reach — and, because it is the same number, how far
+            // above the valley's own floor the ground still belongs to the basin: a cut this deep
+            // can put that much of the valley under the basin's rim and not a metre more.
+            var thickness = 0f
+            for (index in from until until) thickness += strength[packed[index]]
+            thickness /= (until - from).toFloat()
+            val basinDepth = (carving.deepening + carving.overDeepening) * thickness
+
+            var lowestOnPath = Float.MAX_VALUE
+            for (index in from until until) {
+                if (carved[packed[index]] < lowestOnPath) lowestOnPath = carved[packed[index]]
+            }
+            val highestFloor = lowestOnPath + basinDepth
+
+            // The valley floor: within the trough's half-width of the path, a union of Euclidean
+            // discs so the tube has no bearing of its own, and under the height the walls of the
+            // valley set. Claimed exclusively, so two basins never share ground.
             var footCount = 0
             for (index in from until until) {
                 val walked = packed[index]
@@ -1054,65 +1099,24 @@ object GlaciationStage {
                         if (neighbourColumn < 0) neighbourColumn += cellsAcross
                         val neighbour = neighbourRow * cellsAcross + neighbourColumn
                         if (!isLand[neighbour] || own[neighbour] >= 0) continue
+                        if (carved[neighbour] > highestFloor) continue
                         own[neighbour] = segmentId
+                        region[neighbour] = segmentId
                         footList[footCount++] = neighbour
                     }
                 }
             }
-
-            // Eroded by one: the cells whose whole three-by-three block is inside the footprint.
-            var coreCount = 0
-            for (index in 0 until footCount) {
-                val walked = footList[index]
-                val centreRow = walked / cellsAcross
-                if (centreRow == 0 || centreRow == cellsDown - 1) continue
-                val centreColumn = walked % cellsAcross
-                var solid = true
-                for (rowOffset in -1..1) {
-                    for (columnOffset in -1..1) {
-                        var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
-                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
-                        if (own[(centreRow + rowOffset) * cellsAcross + neighbourColumn] != segmentId) solid = false
-                    }
-                }
-                if (solid) {
-                    core[walked] = segmentId
-                    coreCount++
-                }
-            }
-            if (coreCount == 0) {
+            if (footCount < minCells) {
                 for (index in 0 until footCount) own[footList[index]] = -1
-                tooNarrow++
+                noFloor++
                 continue
             }
 
-            // Dilated back: the union of those blocks, which is three cells wide everywhere.
-            var regionCount = 0
-            for (index in 0 until footCount) {
-                val walked = footList[index]
-                if (core[walked] != segmentId) continue
-                val centreColumn = walked % cellsAcross
-                val centreRow = walked / cellsAcross
-                for (rowOffset in -1..1) {
-                    for (columnOffset in -1..1) {
-                        var neighbourColumn = (centreColumn + columnOffset) % cellsAcross
-                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
-                        val neighbour = (centreRow + rowOffset) * cellsAcross + neighbourColumn
-                        if (region[neighbour] != segmentId) {
-                            region[neighbour] = segmentId
-                            regionList[regionCount++] = neighbour
-                        }
-                    }
-                }
-            }
-
-            if (regionCount < minCells) {
-                for (index in 0 until footCount) own[footList[index]] = -1
-                tooSmall++
-                continue
-            }
-            regionCount =
-                peelToCap(cellsAcross, cellsDown, regionList, regionCount, region, segmentId, inset, queue, maxCells)
+            // Filled from the bottom up to the area cap, which leaves a contour for an outline.
+            val regionCount = keepLowestCells(
+                cellsAcross, cellsDown, footList, footCount, region, segmentId, visited,
+                carved, maxCells, heap, regionList
+            )
             if (regionCount < minCells) {
                 for (index in 0 until footCount) own[footList[index]] = -1
                 tooSmall++
@@ -1129,18 +1133,18 @@ object GlaciationStage {
                 continue
             }
 
-            var thickness = 0f
-            for (index in from until until) thickness += strength[packed[index]]
-            thickness /= (until - from).toFloat()
-            val depth = (carving.deepening + carving.overDeepening) * thickness
-            cutSaucer(
-                cellsAcross, cellsDown, regionList, regionCount, region, segmentId, depth,
-                isLand, carved, inset
+            rimDistanceCells(
+                cellsAcross, cellsDown, regionList, regionCount, region, segmentId, rimDistance
             )
+            cutBowl(
+                cellsAcross, cellsDown, regionList, regionCount, region, segmentId, basinDepth,
+                isLand, carved, rimDistance
+            )
+            for (index in 0 until regionCount) basinFloor[regionList[index]] = basins
             spent += regionCount
             basins++
         }
-        return BasinTally(spent, basins, tooNarrow, tooStraight, tooSmall, overBudget)
+        return BasinTally(spent, basins, noFloor, tooStraight, tooSmall, overBudget)
     }
 
     /**
@@ -1154,33 +1158,26 @@ object GlaciationStage {
     private fun isStraightBar(cells: IntArray, count: Int, cellsAcross: Int): Boolean {
         if (count < BAR_LENGTH) return false
         val anchor = cells[0] % cellsAcross
-        val alongMin = IntArray(4) { Int.MAX_VALUE }
-        val alongMax = IntArray(4) { Int.MIN_VALUE }
-        val acrossMin = IntArray(4) { Int.MAX_VALUE }
-        val acrossMax = IntArray(4) { Int.MIN_VALUE }
+        val alongMin = IntArray(BEARINGS) { Int.MAX_VALUE }
+        val alongMax = IntArray(BEARINGS) { Int.MIN_VALUE }
+        val acrossMin = IntArray(BEARINGS) { Int.MAX_VALUE }
+        val acrossMax = IntArray(BEARINGS) { Int.MIN_VALUE }
         for (index in 0 until count) {
             val cell = cells[index]
             val row = cell / cellsAcross
-            var columnOffset = (cell % cellsAcross) - anchor
-            if (columnOffset > cellsAcross / 2) columnOffset -= cellsAcross
-            if (columnOffset < -cellsAcross / 2) columnOffset += cellsAcross
-            val column = anchor + columnOffset
-            // East, south-east, south, north-east: the along coordinate and the across coordinate
-            // of each. On a diagonal the along coordinate steps by two per cell, which is why the
-            // length is halved and the width is not.
-            val alongBearing = intArrayOf(column, column + row, row, column - row)
-            val acrossBearing = intArrayOf(row, column - row, column, column + row)
-            for (bearing in 0 until 4) {
-                if (alongBearing[bearing] < alongMin[bearing]) alongMin[bearing] = alongBearing[bearing]
-                if (alongBearing[bearing] > alongMax[bearing]) alongMax[bearing] = alongBearing[bearing]
-                if (acrossBearing[bearing] < acrossMin[bearing]) acrossMin[bearing] = acrossBearing[bearing]
-                if (acrossBearing[bearing] > acrossMax[bearing]) acrossMax[bearing] = acrossBearing[bearing]
+            val column = anchor + offsetFrom(anchor, cell % cellsAcross, cellsAcross)
+            for (bearing in 0 until BEARINGS) {
+                val along = alongBearingOf(column, row, bearing)
+                val across = acrossBearingOf(column, row, bearing)
+                if (along < alongMin[bearing]) alongMin[bearing] = along
+                if (along > alongMax[bearing]) alongMax[bearing] = along
+                if (across < acrossMin[bearing]) acrossMin[bearing] = across
+                if (across > acrossMax[bearing]) acrossMax[bearing] = across
             }
         }
-        for (bearing in 0 until 4) {
-            val diagonal = bearing == 1 || bearing == 3
+        for (bearing in 0 until BEARINGS) {
             val length =
-                if (diagonal) (alongMax[bearing] - alongMin[bearing]) / 2 + 1
+                if (isDiagonalBearing(bearing)) (alongMax[bearing] - alongMin[bearing]) / 2 + 1
                 else alongMax[bearing] - alongMin[bearing] + 1
             val across = acrossMax[bearing] - acrossMin[bearing] + 1
             if (across <= BAR_WIDTH && length >= BAR_LENGTH) return true
@@ -1189,97 +1186,164 @@ object GlaciationStage {
     }
 
     /**
-     * How far inside the region each of its cells lies, as a breadth-first walk inward from the
-     * rim: the distance transform the saucered floor and the peeling both read.
+     * Keeps the lowest [cap] cells of a footprint, taken outward from its deepest cell in order of
+     * height, and leaves [stamp] marking exactly those.
+     *
+     * This is the area cap, and it peels by height rather than by ring. A basin holds water from
+     * its bottom up and stops at one level, so the outline of what it keeps is a contour of the
+     * ground underneath it — a shape the terrain chose. Peeling rings off the rim instead shrinks
+     * a region toward its own medial axis, and on a square grid a medial axis is a grid shape
+     * however the ground runs: four-connected rings are Manhattan diamonds and their contours meet
+     * at 45 degrees. What is kept is also connected by construction, because the walk only ever
+     * steps out of a cell it has already taken.
+     *
+     * @param cells the footprint, left as it was found.
+     * @param stamp marks the footprint with [marker] on the way in and the kept cells on the way
+     *   out; everything the cap left outside is set to -1.
+     * @param visited scratch, stamped with [marker] as the walk queues each cell, so it never has
+     *   to be cleared between basins.
+     * @param kept receives the cells that survived, deepest first.
+     * @return how many cells were kept.
      */
-    private fun insetDistance(
+    private fun keepLowestCells(
         cellsAcross: Int,
         cellsDown: Int,
         cells: IntArray,
         count: Int,
         stamp: IntArray,
         marker: Int,
-        inset: IntArray,
-        queue: IntArray
-    ) {
-        var tail = 0
-        for (index in 0 until count) {
+        visited: IntArray,
+        carved: FloatArray,
+        cap: Int,
+        heap: LongMinHeap,
+        kept: IntArray
+    ): Int {
+        var deepest = cells[0]
+        for (index in 1 until count) {
             val cell = cells[index]
-            var edge = false
-            forEachOrthogonal(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) {
-                neighbour ->
-                if (stamp[neighbour] != marker) edge = true
-            }
-            if (edge) {
-                inset[cell] = 0
-                queue[tail++] = cell
-            } else {
-                inset[cell] = -1
-            }
+            if (carved[cell] < carved[deepest]) deepest = cell
         }
-        var head = 0
-        while (head < tail) {
-            val cell = queue[head++]
-            val distance = inset[cell] + 1
-            forEachOrthogonal(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
-                if (stamp[neighbour] == marker && inset[neighbour] < 0) {
-                    inset[neighbour] = distance
-                    queue[tail++] = neighbour
+        heap.push(FlowRouting.encode(carved[deepest], deepest))
+        visited[deepest] = marker
+        var keptCount = 0
+        while (!heap.isEmpty() && keptCount < cap) {
+            val cell = FlowRouting.decodeIndex(heap.pop())
+            kept[keptCount++] = cell
+            FlowRouting.forEachNeighbour(
+                cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
+            ) { neighbour ->
+                if (stamp[neighbour] == marker && visited[neighbour] != marker) {
+                    visited[neighbour] = marker
+                    heap.push(FlowRouting.encode(carved[neighbour], neighbour))
                 }
             }
         }
+        while (!heap.isEmpty()) heap.pop()
+        for (index in 0 until count) stamp[cells[index]] = -1
+        for (index in 0 until keptCount) stamp[kept[index]] = marker
+        return keptCount
     }
 
     /**
-     * Shrinks a basin to at most [cap] cells by peeling whole rings off its rim, and leaves the
-     * distance transform of whatever is left behind it.
+     * Euclidean distance, in cells, from each cell of a basin to the nearest cell outside it.
      *
-     * Rings rather than a truncation, because what has to survive is a *basin*: taking the first
-     * `cap` cells of a list would leave a ragged half of one. What the peeling models is real
-     * enough — the ice scoured the whole hollow, and the water stands only in the deepest part of
-     * it — so the ground outside the cap keeps its scour and loses its lake.
+     * The field the floor is shaped by, and the reason it is Euclidean rather than a walk inward
+     * from the rim: a four-connected walk measures the Manhattan metric, whose contours are
+     * diamonds, so a floor cut from one has facets at 45 degrees however round the basin is.
+     *
+     * Measured by [JumpFloodDistance] over a window around the basin and not over the whole map,
+     * because a basin holds at most [GlaciationConfig.maxLakeAreaKm2] of ground and a 2048 grid is
+     * four million cells. The window is padded on every side by a quarter of the basin's longer
+     * side plus one, because the flood's x axis wraps: a cell of the basin lies at most half the
+     * basin's shorter side from its own rim — walk toward the nearest edge of the basin's box and
+     * you have left the basin before you cross it — so a pad that wide leaves every wrapped-around
+     * rim cell further off than the true one, and the wrap cannot win.
+     *
+     * @param stamp marks the basin's own cells with [marker]. Everything else is rim, the ground
+     *   beyond the poles included, since a basin reaching the top of the map is bounded by it
+     *   exactly as one reaching a hillside is.
+     * @param rimDistance receives the distance at each of [cells] and is read nowhere else.
      */
-    private fun peelToCap(
+    private fun rimDistanceCells(
         cellsAcross: Int,
         cellsDown: Int,
         cells: IntArray,
         count: Int,
         stamp: IntArray,
         marker: Int,
-        inset: IntArray,
-        queue: IntArray,
-        cap: Int
-    ): Int {
-        insetDistance(cellsAcross, cellsDown, cells, count, stamp, marker, inset, queue)
-        if (count <= cap) return count
-        var ring = 0
-        var kept = count
-        while (kept > cap) {
-            val nextRing = ring + 1
-            var neighbour = 0
-            for (index in 0 until count) if (inset[cells[index]] >= nextRing) neighbour++
-            if (neighbour == 0) break
-            ring = nextRing
-            kept = neighbour
-        }
-        if (ring == 0) return count
-        var neighbour = 0
+        rimDistance: FloatArray
+    ) {
+        // Column offsets are all taken from one anchor, so a basin straddling the date line is one
+        // box rather than two at opposite edges of the map.
+        val anchorColumn = cells[0] % cellsAcross
+        var leftOffset = 0
+        var rightOffset = 0
+        var topRow = Int.MAX_VALUE
+        var bottomRow = Int.MIN_VALUE
         for (index in 0 until count) {
             val cell = cells[index]
-            if (inset[cell] >= ring) cells[neighbour++] = cell else stamp[cell] = -1
+            val columnOffset = offsetFrom(anchorColumn, cell % cellsAcross, cellsAcross)
+            if (columnOffset < leftOffset) leftOffset = columnOffset
+            if (columnOffset > rightOffset) rightOffset = columnOffset
+            val row = cell / cellsAcross
+            if (row < topRow) topRow = row
+            if (row > bottomRow) bottomRow = row
         }
-        insetDistance(cellsAcross, cellsDown, cells, neighbour, stamp, marker, inset, queue)
-        return neighbour
+        val boxWidth = rightOffset - leftOffset + 1
+        val boxHeight = bottomRow - topRow + 1
+        val pad = maxOf(boxWidth, boxHeight) / 4 + 1
+        val windowWidth = boxWidth + 2 * pad
+        val windowHeight = boxHeight + 2 * pad
+        val distance = FloatArray(windowWidth * windowHeight)
+        val nearestRim = IntArray(windowWidth * windowHeight)
+        for (windowRow in 0 until windowHeight) {
+            val row = topRow - pad + windowRow
+            for (windowColumn in 0 until windowWidth) {
+                val windowCell = windowRow * windowWidth + windowColumn
+                var insideBasin = false
+                if (row >= 0 && row < cellsDown) {
+                    var column = (anchorColumn + leftOffset - pad + windowColumn) % cellsAcross
+                    if (column < 0) column += cellsAcross
+                    insideBasin = stamp[row * cellsAcross + column] == marker
+                }
+                distance[windowCell] = if (insideBasin) JumpFloodDistance.INFINITE else 0f
+                nearestRim[windowCell] = if (insideBasin) -1 else windowCell
+            }
+        }
+        JumpFloodDistance.run(windowWidth, windowHeight, distance, nearestRim)
+        for (index in 0 until count) {
+            val cell = cells[index]
+            val windowColumn =
+                offsetFrom(anchorColumn, cell % cellsAcross, cellsAcross) - leftOffset + pad
+            val windowRow = cell / cellsAcross - topRow + pad
+            rimDistance[cell] = distance[windowRow * windowWidth + windowColumn]
+        }
+    }
+
+    /** How far east [column] lies of [anchorColumn], taking the short way round the world. */
+    private fun offsetFrom(anchorColumn: Int, column: Int, cellsAcross: Int): Int {
+        var offset = column - anchorColumn
+        if (offset > cellsAcross / 2) offset -= cellsAcross
+        if (offset < -cellsAcross / 2) offset += cellsAcross
+        return offset
     }
 
     /**
-     * Cuts a basin floor out of a region: level below the lowest cell of the region *and its rim*,
-     * so no cell around it can drain it, and saucered by distance from that rim so the floor is a
-     * bowl rather than a slab dropped into the ground.
+     * Cuts a basin floor out of a region: a bowl below the lowest cell of the region *and its rim*,
+     * so nothing around it can drain it, deepest in the middle and grading to nothing at the edge.
+     *
+     * The profile is a paraboloid in [rimDistance] — at a fraction `s` of the way in from the rim
+     * to the deepest point the cut is `1 - (1 - s)^2` of [depth]. A paraboloid is the one bowl
+     * whose area per unit of depth is constant, so no level of it holds more of the floor than any
+     * other and there is no plate in it to read as a slab; Hutchinson (*A Treatise on Limnology*,
+     * 1957) puts real lake basins at a volume development of 0.6 to 1.2 about the paraboloid's 1.0,
+     * so it is also the middle of what a lake basin does. The saucer this replaced took the full
+     * cut at every cell more than two cells inside the rim, which on a basin a hundred cells across
+     * is a dead-level floor over nineteen twentieths of its area.
      *
      * @return how many cells the cut actually lowered.
      */
-    private fun cutSaucer(
+    private fun cutBowl(
         cellsAcross: Int,
         cellsDown: Int,
         cells: IntArray,
@@ -1289,12 +1353,14 @@ object GlaciationStage {
         depth: Float,
         isLand: BooleanArray,
         carved: FloatArray,
-        inset: IntArray
+        rimDistance: FloatArray
     ): Int {
         var base = Float.MAX_VALUE
+        var deepestFromRim = 0f
         for (index in 0 until count) {
             val cell = cells[index]
             if (carved[cell] < base) base = carved[cell]
+            if (rimDistance[cell] > deepestFromRim) deepestFromRim = rimDistance[cell]
             // Land only. A basin that reaches the coast has the sea for a neighbour, and reading
             // the sea floor as its rim would say the floor has to be cut below the ocean — which,
             // clamped at the waterline, plates the whole basin flat at sea level.
@@ -1306,11 +1372,12 @@ object GlaciationStage {
                 }
             }
         }
+        if (deepestFromRim <= 0f) return 0
         var lowered = 0
         for (index in 0 until count) {
             val cell = cells[index]
-            val depthShare = (inset[cell].coerceAtLeast(0) / 2f).coerceIn(0f, 1f)
-            val target = (base - depth * (0.45f + 0.55f * depthShare)).coerceAtLeast(0f)
+            val towardTheRim = 1f - (rimDistance[cell] / deepestFromRim).coerceIn(0f, 1f)
+            val target = (base - depth * (1f - towardTheRim * towardTheRim)).coerceAtLeast(0f)
             if (target < carved[cell]) {
                 carved[cell] = target
                 lowered++
@@ -1324,6 +1391,42 @@ object GlaciationStage {
 
     /** Shortest run along one bearing that makes a narrow body a bar rather than a blob. */
     private const val BAR_LENGTH = 4
+
+    /**
+     * The grid bearings a shape can line up with: east, south-east, south and north-east.
+     *
+     * Four rather than eight, because a bearing and its opposite are one line. These are the only
+     * directions a square grid offers, so they are the only directions an artefact of one can lie
+     * along, and every shape test in this file and in `GlaciationTest` is asked of all four.
+     */
+    internal const val BEARINGS = 4
+
+    /**
+     * How far along bearing [bearing] the cell at ([column], [row]) lies, in half-cells on a
+     * diagonal and whole cells on an axis.
+     *
+     * [column] must already have had the world's wrap taken out of it against a common anchor —
+     * see [offsetFrom] — or two cells either side of the date line will read as being half a world
+     * apart. On a diagonal the coordinate steps by two per cell, which is why a *length* read off
+     * it is halved and a *width* is not.
+     */
+    internal fun alongBearingOf(column: Int, row: Int, bearing: Int): Int = when (bearing) {
+        0 -> column
+        1 -> column + row
+        2 -> row
+        else -> column - row
+    }
+
+    /** How far across bearing [bearing] that same cell lies, on the same terms. */
+    internal fun acrossBearingOf(column: Int, row: Int, bearing: Int): Int = when (bearing) {
+        0 -> row
+        1 -> column - row
+        2 -> column
+        else -> column + row
+    }
+
+    /** Whether [bearing] runs at 45 degrees, where one cell is two steps of the coordinate. */
+    internal fun isDiagonalBearing(bearing: Int): Boolean = bearing == 1 || bearing == 3
 
     /** The connected fields of frozen ground, and how many cells each holds. */
     private class FrozenFields(val id: IntArray, val size: IntArray, val count: Int)
@@ -1729,7 +1832,9 @@ object GlaciationStage {
         carved: FloatArray,
         minCells: Int,
         maxCells: Int,
-        budget: Int
+        budget: Int,
+        basinFloor: IntArray,
+        firstBasinNumber: Int
     ): ScourTally {
         val cellCount = cellsAcross * cellsDown
         // Seeded off the world seed, so the pattern is this world's and is reproduced exactly on
@@ -1899,18 +2004,30 @@ object GlaciationStage {
         ranked.sortWith(compareByDescending<Int> { blobScore[it] }.thenBy { blobFirst[it] })
 
         val members = IntArray(cellCount)
-        val inset = IntArray(cellCount)
+        val kept = IntArray(cellCount)
+        val visited = IntArray(cellCount) { -1 }
+        val rimDistance = FloatArray(cellCount)
+        val heap = LongMinHeap(maxCells * 8 + 16)
         var spent = 0
         var cells = 0
         var basins = 0
         for (blobId in ranked) {
             if (budget - spent < minCells) break
-            var count = offset[blobId + 1] - offset[blobId]
-            if (count < minCells) continue
-            for (index in 0 until count) members[index] = packed[offset[blobId] + index]
-            count = peelToCap(cellsAcross, cellsDown, members, count, blob, blobId, inset, queue, maxCells)
+            val blobCells = offset[blobId + 1] - offset[blobId]
+            if (blobCells < minCells) continue
+            for (index in 0 until blobCells) members[index] = packed[offset[blobId] + index]
+            // The same area cap the valley basins take, by height rather than by ring, so a scour
+            // basin's outline is a contour of the shield it sits on. See [keepLowestCells].
+            val count = keepLowestCells(
+                cellsAcross, cellsDown, members, blobCells, blob, blobId, visited,
+                carved, maxCells, heap, kept
+            )
             if (count < minCells || spent + count > budget) continue
-            cells += cutSaucer(cellsAcross, cellsDown, members, count, blob, blobId, depth, isLand, carved, inset)
+            rimDistanceCells(cellsAcross, cellsDown, kept, count, blob, blobId, rimDistance)
+            cells += cutBowl(
+                cellsAcross, cellsDown, kept, count, blob, blobId, depth, isLand, carved, rimDistance
+            )
+            for (index in 0 until count) basinFloor[kept[index]] = firstBasinNumber + basins
             spent += count
             basins++
         }

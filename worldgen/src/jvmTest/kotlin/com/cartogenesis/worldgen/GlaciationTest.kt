@@ -802,7 +802,7 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
                 " trunks=${mass.trunks} parallelDropped=${mass.parallelCellsDropped}" +
                 " sheet=${mass.sheetCells} budget=${mass.lakeBudget}" +
                 " basins=${mass.basinCells}/${mass.basins}" +
-                " refused(narrow/straight/small/budget)=${mass.basinsTooNarrow}/" +
+                " refused(noFloor/straight/small/budget)=${mass.basinsWithNoFloor}/" +
                 "${mass.basinsTooStraight}/${mass.basinsTooSmall}/${mass.basinsOverBudget}" +
                 " scour=${mass.scourCells}/${mass.scourBasins}" +
                 " cirques=${mass.cirques} moraines=${mass.moraines} riegels=${mass.riegels}" +

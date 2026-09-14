@@ -2460,6 +2460,28 @@ data class GlaciationConfig(
      */
     val valleyWidthKm: Double = 152.34375,
     /**
+     * How thick the ice standing in a trough is, in metres: how far above its bed the ice surface
+     * lies, and so how high up the valley side the ice is in contact with rock at all.
+     *
+     * The figure [valleyWidthKm] above was missing, and the 2048 render is what showed it. A
+     * cross-section 150 km wide is not a valley, it is a province, and planing all of it to the
+     * height of the one cell at its axis is planing whatever stood there — a ridge a kilometre
+     * higher included. What that draws is a dead-level slab with a straight edge at the flow's own
+     * D8 bearing and, where two glaciers of different bearings cross, a cross. So the cut is
+     * shared by how deeply a cell is buried as well as by how far across it lies: the valley floor
+     * is under the whole thickness and is planed, the shoulder is barely under the ice and is
+     * barely touched, and rock standing above the ice surface is not touched at all. See
+     * REALISM_PLAN.md, I2.
+     *
+     * Six hundred metres is what a large valley glacier measures. Radio-echo sounding puts the
+     * Aletsch at about 900 m at its thickest and 300 to 500 m over most of its length, and the
+     * Alaskan trunk glaciers are the same order; 600 m is the middle of that band. It is not
+     * inflated to match [valleyWidthKm] the way the width is, and deliberately: the width is
+     * inflated because a trough narrower than a cell cannot be *drawn*, while a thickness is a
+     * height and this map's heights are true.
+     */
+    val valleyIceThicknessMetres: Float = 600f,
+    /**
      * How much of that half-width is flat floor before the walls start to climb.
      *
      * The U, as against the V. A river's own cross-section comes to a point, because water cuts at

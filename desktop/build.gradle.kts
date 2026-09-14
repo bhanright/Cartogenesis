@@ -130,6 +130,16 @@ tasks.register<Test>("audit") {
 val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
 
 /**
+ * The application's own type, which the comparison strips' naming bands are lettered in.
+ *
+ * The same directory `:web:assembleSite` copies the page's five faces out of, so the band under a
+ * figure and the caption beside it are the same cut of the same typeface. Handed to the renderer as
+ * a path rather than looked for from the working directory, because only the build knows where the
+ * checkout is.
+ */
+val siteFontDir = rootProject.layout.projectDirectory.dir("ui/src/commonMain/composeResources/font")
+
+/**
  * Renders every picture on cartogenesis.com from the engine, into `web/build/site-imagery`.
  *
  * It lives in `:desktop` and writes into `:web`'s build directory because that is where the two
@@ -164,15 +174,22 @@ tasks.register<JavaExec>("renderSiteImagery") {
     }
 
     val output = siteImageryDir.asFile
-    argumentProviders.add { listOf(output.absolutePath) }
+    val fonts = siteFontDir.asFile
+    argumentProviders.add { listOf(output.absolutePath, fonts.absolutePath) }
     outputs.dir(output)
     // The pictures are a function of the generator, so any change to it must re-render them. The
     // whole source of the three modules that decide what a map looks like is the input; anything
-    // narrower would let a change to a stage ship yesterday's coastline.
+    // narrower would let a change to a stage ship yesterday's coastline. The two faces the strips'
+    // naming bands are set in are inputs for the same reason: replace a face and the lettering in
+    // the published figures changes.
     inputs.files(
         rootProject.fileTree("worldgen/src"),
         rootProject.fileTree("cartography/src"),
-        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt")
+        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt"),
+        rootProject.files(
+            "ui/src/commonMain/composeResources/font/plex_sans_medium.ttf",
+            "ui/src/commonMain/composeResources/font/plex_sans_regular.ttf"
+        )
     ).withPropertyName("generatorSourcesThatDecideWhatTheFiguresShow")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

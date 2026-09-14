@@ -167,6 +167,20 @@
     margin:10px 0 0;
   }
 
+  /* ---------- comparison strips --------------------------------------------- */
+  /* One image, not a row of images. What these figures claim is that the panels
+     are the same ground read different ways, and a row of separate pictures is
+     no evidence of that — a strip cut from one window is, which is why the
+     panels, the hairlines between them and the naming bands are all drawn into
+     the file by SiteImagery rather than assembled here.
+
+     A narrow screen scrolls the strip instead of shrinking it: below about
+     960px the bands' second line stops being readable, and a comparison whose
+     labels cannot be read is not one. */
+  .strip{overflow-x:auto}
+  .strip img{min-width:960px}
+  .section-lede{margin:0 0 20px;color:var(--bone-dim);font-size:15px;max-width:64ch}
+
   /* ---------- how a world is made ------------------------------------------- */
   /* The six cards from the earlier page, in this page's panel: William kept the words and the
      new dress (2026-09-12). The oxblood rule on the left is what tells a step of the pipeline
@@ -312,6 +326,48 @@
         <p>Borders follow watersheds, rivers and coasts. Peoples spread through country that resembles their homeland, so cultures cross borders the way real ones do.</p>
       </div>
     </div>
+  </section>
+
+  <section id="styles">
+    <div class="section-head">
+      <h2>The physical map, three ways</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      One window of one world, drawn in each of the three styles that read the ground as a physical map.
+    </p>
+
+    <figure>
+      <div class="plate strip">
+        <img src="img/styles.webp" width="1924" height="711" loading="lazy" decoding="async"
+             alt="The same square of a generated world drawn three times side by side, labelled Atlas, Schoolroom and Natural.">
+      </div>
+      <figcaption>
+        Seed 718106 · 2048 cells · one 640 × 640 window at 1:1
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="layers">
+    <div class="section-head">
+      <h2>The layers under the map</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      The same coast and the sea off it, read as four of the fields the finished map is drawn from.
+    </p>
+
+    <figure>
+      <div class="plate strip">
+        <img src="img/layers.webp" width="1926" height="667" loading="lazy" decoding="async"
+             alt="The same stretch of coast drawn four times side by side, labelled Temperature, Ocean currents, Winds and Rainfall.">
+      </div>
+      <figcaption>
+        Seed 718106 · 2048 cells · one 480 × 600 window at 1:1
+      </figcaption>
+    </figure>
   </section>
 
   <section>

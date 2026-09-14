@@ -1,5 +1,7 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.ColorVision
+import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.test.Test
@@ -36,6 +38,13 @@ class SiteAssemblyTest {
             "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
             "Eighteen", "Nineteen", "Twenty"
         )
+
+        /**
+         * WCAG 2.1 AA for body text (1.4.3), the bar `SitePaletteContrastTest` holds the rest of
+         * the page to. The naming bands are held to it rather than to the large-text bar, because
+         * the line under a band's name is small text by any measure.
+         */
+        const val AA = 4.5
     }
 
     private val repoRoot: File
@@ -126,19 +135,59 @@ class SiteAssemblyTest {
         )
     }
 
+    /**
+     * One figure's `<img>` tag, as the page writes it.
+     *
+     * Attribute order is the page's own and is not going to change by accident; matching the whole
+     * tag rather than hunting for the file name is what lets the width, the height and the `alt`
+     * be read back out of it.
+     */
+    private fun imageTag(page: String, file: String): String =
+        Regex("""<img\s+src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
+            ?: fail("the page has no <img> for img/$file")
+
+    private fun attribute(tag: String, name: String): String =
+        Regex("""$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
+            ?: fail("""$tag has no $name attribute""")
+
+    /**
+     * The panel names a strip's `alt` text promises, in order.
+     *
+     * The sentence ends "…, labelled A, B and C." — a shape rather than a word count, so that the
+     * list a reader who cannot see the figure is given and the list `SiteImagery` actually letters
+     * the bands with can be compared name for name. A panel dropped from either side moves one of
+     * the two lists and not the other.
+     */
+    private fun namesPromised(alt: String): List<String> {
+        val listed = alt.substringAfter("labelled ", "").substringBefore('.')
+        assertTrue(
+            listed.isNotEmpty(),
+            "a comparison strip's alt text has to end \"…, labelled A, B and C.\" so that what it " +
+                "promises can be compared with what is drawn; this one reads \"$alt\""
+        )
+        return listed.split(Regex(""",\s*|\s+and\s+""")).map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
     @Test
     fun `every figure the page shows was rendered, at the size the page reserves`() {
         // These names are the contract between SiteImagery.FIGURES and the page's img tags.
         // Renaming one side alone deploys a broken figure that nothing else would notice.
         val expected = mapOf(
-            "atlas.webp" to (1600 to 800)
+            "atlas.webp" to (1600 to 800),
+            "styles.webp" to (1924 to 711),
+            "layers.webp" to (1926 to 667)
         )
         val page = file("index.html").readText()
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
-            assertTrue(
-                page.contains("img/$name"),
-                "img/$name was rendered and published, but the page never references it"
+            val tag = imageTag(page, name)
+            // Stated in the tag as well as rendered: the page reserves each figure's shape so the
+            // first screenful does not reflow as they load, and a reserved shape that is not the
+            // figure's shape reflows it twice over.
+            assertEquals(
+                size,
+                attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                "the page reserves a different shape for img/$name than the figure that was rendered"
             )
         }
 
@@ -148,6 +197,126 @@ class SiteAssemblyTest {
             "img/ holds something other than the figures the page shows — a contact sheet left " +
                 "by -Pcontact, or a figure the page has stopped asking for"
         )
+    }
+
+    /**
+     * That a comparison strip draws exactly the panels the page says it draws.
+     *
+     * A strip is one image, so a panel that stopped being rendered would not 404 and would not
+     * break the layout: the figure would simply arrive one panel short, with the page's prose and
+     * its `alt` text still promising three. Two things are compared with the one picture — the
+     * names the `alt` lists, and the arithmetic the width has to satisfy — so neither the list nor
+     * the strip can move without the other.
+     */
+    @Test
+    fun `each comparison strip draws the panels the page's alt text lists`() {
+        val page = file("index.html").readText()
+        val strips = SiteImagery.FIGURES.filter { it.panels.size > 1 }
+        assertTrue(
+            strips.isNotEmpty(),
+            "SiteImagery has no comparison strip left; the page's style and layer sections are " +
+                "about figures that are no longer rendered"
+        )
+
+        strips.forEach { figure ->
+            val alt = attribute(imageTag(page, figure.file), "alt")
+            assertEquals(
+                figure.panels.map { it.name }, namesPromised(alt),
+                "img/${figure.file} letters its bands ${figure.panels.joinToString { it.name }}, " +
+                    "and the page's alt text promises a reader ${namesPromised(alt)}"
+            )
+
+            val drawn = webpDimensions(file("img/${figure.file}"))
+            assertEquals(
+                figure.width to figure.height, drawn,
+                "img/${figure.file} is not the size ${figure.panels.size} panels of " +
+                    "${figure.window.width}x${figure.window.height} come to"
+            )
+            // The width says how many panels are in the file, independently of what the figure
+            // table claims: n windows and the n-1 hairlines between them.
+            assertEquals(
+                figure.panels.size,
+                (drawn.first + SiteImagery.DIVIDER) / (figure.window.width + SiteImagery.DIVIDER),
+                "img/${figure.file} is ${drawn.first} wide, which is not " +
+                    "${figure.panels.size} panels' worth"
+            )
+
+            // The window belongs to the figure and not to the panel, so the panels of a strip
+            // cannot be showing different ground. What they must not share is the reading: two
+            // panels drawing the same view in the same style would be a comparison of nothing.
+            assertEquals(
+                figure.panels.size,
+                figure.panels.map { it.view to it.style }.distinct().size,
+                "two panels of img/${figure.file} are the same reading of the same window"
+            )
+            println(
+                "SITE ${figure.file} ${drawn.first}x${drawn.second}, " +
+                    "${figure.panels.size} panels of ${figure.window.width}x${figure.window.height} " +
+                    "at ${figure.window.x},${figure.window.y}: ${figure.panels.joinToString { it.name }}"
+            )
+        }
+    }
+
+    /**
+     * That a naming band's lettering is legible on its own tint, and that the tint is the page's.
+     *
+     * The bands are drawn into the figure, so nothing on the page measures them: they are pixels by
+     * the time a browser sees them, and `SitePaletteContrastTest` only ever sees CSS. A band is
+     * text a reader is asked to read, though, and it is the only text on this site that the page's
+     * own guard cannot reach — so it is measured here, by the same arithmetic and against the same
+     * bar, and the tint is checked against the custom property it claims to be so that the strips
+     * cannot quietly stop matching the page around them.
+     */
+    @Test
+    fun `every naming band is the page's own tint, and legible on it`() {
+        val page = file("index.html").readText()
+        val palette = Regex("""--([a-z-]+):\s*#([0-9a-fA-F]{6})\s*;""").findAll(page)
+            .associate { it.groupValues[1] to (0xFF000000.toInt() or it.groupValues[2].toInt(16)) }
+
+        SiteImagery.BandTint.entries.forEach { tint ->
+            fun fromPage(name: String) = palette[name]
+                ?: fail("a band is tinted --$name, and the page no longer defines that")
+            assertEquals(
+                fromPage(tint.groundName), tint.ground,
+                "${tint.name}'s ground is not the --${tint.groundName} the page sets"
+            )
+            assertEquals(
+                fromPage(tint.inkName), tint.ink,
+                "${tint.name}'s lettering is not the --${tint.inkName} the page sets"
+            )
+            val ratio = ColorVision.contrast(tint.ink, tint.ground)
+            assertTrue(
+                ratio >= AA,
+                "a band's --${tint.inkName} on --${tint.groundName} measures " +
+                    "${"%.2f".format(ratio)}:1, under the $AA:1 the rest of the page keeps"
+            )
+            println(
+                "SITE band ${tint.name}: --${tint.inkName} on --${tint.groundName} " +
+                    "${"%.2f".format(ratio)}:1"
+            )
+        }
+    }
+
+    /**
+     * That the Features list still counts the map styles the application offers.
+     *
+     * "Twelve for the map" is the same kind of sentence as the Themes row below it, and goes stale
+     * the same silent way. It matters more now that the page shows three of the twelve in a figure
+     * of their own: a reader who counts three and is told twelve should be told the truth.
+     */
+    @Test
+    fun `the Features list counts the map styles the application offers`() {
+        val page = file("index.html").readText()
+        val sentence = Regex("""<dt>Styles</dt><dd>([^<]*)</dd>""").find(page)?.groupValues?.get(1)
+            ?: fail("the Features list no longer has a Styles row")
+        val counted = NUMBER_WORDS.indexOf(sentence.substringBefore(' '))
+        assertEquals(
+            MapStyle.entries.size,
+            counted,
+            "the page opens the Styles row with \"${sentence.substringBefore(' ')}\" and the " +
+                "application offers ${MapStyle.entries.size} map styles"
+        )
+        println("SITE the Features list counts $counted map styles")
     }
 
     /**

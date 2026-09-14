@@ -1,5 +1,48 @@
 # To do
 
+- **The sheet mask's own edges are straight, because local relief is measured in a square.**
+  `GlaciationStage.localRelief` takes the elevation range over a sliding window by two separable
+  passes of a running maximum and a running minimum, which makes the window a *square* of side
+  `2 * reliefWindow * valleyWidthCells + 1` — 53 cells at 1024, 105 at 2048. A sliding extremum does
+  not change while the same summit stays inside the window, so the field has plateaus with straight
+  edges at 0 and 90 degrees, and `channelled`, which is that field against one threshold, inherits
+  them; the sheet mask is what `channelled` leaves. A scour basin clipped to it therefore carries a
+  ruled edge: seed 7 at 1024 has a 49-cell basin with a 20-cell straight run along the vertical,
+  1.68 times what a shape that size explains. I2's outline guard reports the scour basins instead of
+  asserting on them for exactly this reason, so the assertion is not measuring a cause it cannot
+  fix. The cure is a window that is not a square: an octagon costs two more separable passes along
+  the diagonals and would halve the facet; a disc is O(r²) a cell and at r = 52 on a 2048 grid that
+  is 8,500 cells per cell over four million cells, which is not affordable. 2026-09-14, I2.
+- **A trough is still stamped along a D8 path, and at 2048 you can just see it.** I2 stopped the
+  cross-section planing ground that stands above the ice, which is what made the slab, but the
+  cross-section is still laid one cell at a time along the flow path and a flow path still runs
+  dead straight at one of eight bearings. What is left on 364673 at 2048, in the crop at
+  `desktop/build/i2-crops/after/364673-2048-window.png`, is a faint pale smear along the two legs of
+  the reach and a faint brightening where they cross — the same cross, at tens of metres instead of
+  the 1,130 to 1,370 m the planing was worth. It reads as a valley rather than as a stamp and no
+  guard fires on it, so it is a note rather than a defect; whoever picks it up should look at
+  smoothing the stamped axis rather than at the cross-section, since the cross-section is now
+  bounded by the ground. 2026-09-14, I2.
+- **`cutBasins` cuts one basin a world, or none, and the sinuosity test is why.** Tallies at 1024 on
+  the four seeds I2 measured: seed 42 one basin from ten candidate stretches, seed 7 one from
+  twelve, 718106 one from nine — and 364673 at 2048 **none at all**, from no candidates. Every
+  refusal is `GlaciationConfig.minSinuosity`, which asks the whole stretch of ice inside one reach to
+  have walked 1.25 times the straight line from its head to its lip. A reach is at most
+  `basinSpacingKm` long or one `basinDropMetres` of descent, whichever ends first, and over that
+  short a run of a D8 path 1.25 is a hard test to pass. The consequence is that the valley regime's
+  over-deepened basins — the landform this stage's own KDoc calls the thing that makes lakes — are
+  almost never cut, and nearly all the standing water the ice leaves is the sheet's scour. Whether
+  the bar is wrong or the reaches are too short to wander in is not settled, and it wants measuring
+  before either is moved. 2026-09-14, I2.
+- **The straight rivers and ruled lake shores on 364673 are not the ice at all.** The author
+  reported three things in the window at (1560,1480)-(2048,1968) and only one of them was glacial.
+  The lakes at about (1740,1760) and (1715,1825), whose shores run straight at 45 degrees, and the
+  dead-straight north-south river at x = 1788 between y = 1717 and 1770, are *identical* with
+  `GlaciationConfig.enabled` false: zero cells of water differ in a 61-cell box around either lake
+  and every flow target along that river is the same with the ice off. So whatever rules those
+  shores is upstream of this stage — the terrain the belt is built from, the depression fill, or the
+  routing — and it is still there. The straight ridge the upper lake's north-east shore lies against
+  is the thing to look at first. 2026-09-14, I2.
 - **A continent has no slope of its own, and the drainage shows it.** Since S2's second pass the
   base relief is shaped into a band around 400 km, which is where Earth's non-orogenic continental
   topography sits and where the eye reads a range — and it left the ground with almost nothing at

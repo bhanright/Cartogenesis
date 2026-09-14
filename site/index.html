@@ -180,6 +180,10 @@
      this page arranges a panel, and the wide strip and the stacked one cannot
      drift apart, because neither of them is assembled by the page. */
   .section-lede{margin:0 0 20px;color:var(--bone-dim);font-size:15px;max-width:64ch}
+  /* The same sentence after a figure rather than before it, so it takes its air
+     above instead of below. A rule on where it sits rather than a second class,
+     because it is the same kind of line doing the same job. */
+  figure+.section-lede{margin:20px 0 0}
 
   /* ---------- how a world is made ------------------------------------------- */
   /* The six cards from the earlier page, in this page's panel: William kept the words and the
@@ -330,12 +334,12 @@
 
   <section id="styles">
     <div class="section-head">
-      <h2>The physical map, three ways</h2>
+      <h2>Realistic map styles</h2>
       <span class="fill"></span>
     </div>
 
     <p class="section-lede">
-      One window of one world, drawn in each of the three styles that read the ground as a physical map.
+      The same ground is drawn three ways, with colours that follow its height or its height and climate.
     </p>
 
     <figure>
@@ -354,12 +358,12 @@
 
   <section id="layers">
     <div class="section-head">
-      <h2>The layers under the map</h2>
+      <h2>The data behind the map</h2>
       <span class="fill"></span>
     </div>
 
     <p class="section-lede">
-      The same coast and the sea off it, read as four of the fields the finished map is drawn from.
+      These four views show the temperature, ocean currents, winds and rainfall the generator computes for the same stretch of coast.
     </p>
 
     <figure>
@@ -374,6 +378,10 @@
         Seed 718106 · 2048 cells · one 480 × 600 window at 1:1
       </figcaption>
     </figure>
+
+    <p class="section-lede">
+      These figures show some of the map styles and views. More are available in the app.
+    </p>
   </section>
 
   <section>

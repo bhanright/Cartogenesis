@@ -96,7 +96,19 @@ class SitePaletteContrastTest {
         )
         // The values are the application's dark scheme in ui/Theme.kt, taken literally. If one of
         // these moves, the page and the window have stopped being the same room.
-        assertEquals(0xFF15110F.toInt(), colour("ink"), "--ink is no longer the application's ink")
+        assertEquals(0xFF121417.toInt(), colour("ink"), "--ink is no longer the application's ink")
+        assertEquals(
+            0xFF191C20.toInt(), colour("ink-raised"),
+            "--ink-raised is no longer the application's raised panel"
+        )
+        assertEquals(
+            0xFF21252A.toInt(), colour("ink-sunk"),
+            "--ink-sunk is no longer the application's sunk panel"
+        )
+        assertEquals(
+            0xFF363C44.toInt(), colour("hairline"),
+            "--hairline is no longer the application's rule"
+        )
         assertEquals(0xFFE8DFD0.toInt(), colour("bone"), "--bone is no longer the app's bone")
         assertEquals(0xFFC9A227.toInt(), colour("brass"), "--brass is no longer the app's brass")
         assertEquals(0xFF5D0000.toInt(), colour("oxblood"), "--oxblood is no longer the app's")

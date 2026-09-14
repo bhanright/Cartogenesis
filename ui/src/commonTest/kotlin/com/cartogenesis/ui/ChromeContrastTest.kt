@@ -123,33 +123,37 @@ class ChromeContrastTest {
         const val HUE_DRIFT = 1.0
 
         /**
-         * The eleven chromes as they were on `main` at 27fd260, role by role.
+         * The eleven chromes that came before F7, role by role, as they are meant to be.
          *
-         * Thirty-six ARGB values each, in the order [roles] writes them. See the test that
-         * reads them; they were produced by running exactly that function on that tree.
+         * Thirty-six ARGB values each, in the order [roles] writes them. Eight were recorded from
+         * `main` at 27fd260, before a line of F7 was written, by running exactly that function on
+         * that tree. Three — SYSTEM, LIGHT and DARK — were re-recorded at F29 (2026-09-14), the one
+         * decision since that deliberately moved a colour any of the eleven had: William replaced
+         * the warm brown-black of the dark grounds with a neutral charcoal and Vellum's yellow
+         * paper with an atlas plate's off-white. Every other chrome is byte for byte what it was.
          */
-        val BEFORE_F7: List<Pair<String, String>> = listOf(
+        val RECORDED_ROLES: List<Pair<String, String>> = listOf(
         "SYSTEM" to
-            "ff6b3f2a,fff6eedb,ffe2d2a9,ff2b2117,ffc9a227,ff5b4a2f," +
-            "fff6eedb,ffe2d2a9,ff2b2117,ff6e5b3c,fff6eedb,ffe2d2a9," +
-            "ff2b2117,ffefe4c8,ff2b2117,fff6eedb,ff2b2117,ffe4d8b9," +
-            "ff6e5b3c,fff6eedb,ff2b2117,fff6eedb,ff8a3b2e,fff6eedb," +
-            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fff9f3e3," +
-            "ffe3d7b8,fffbf6e9,fff7f0de,fff6eedb,ffede2c7,ffe4d8b9",
+            "ff6b3f2a,fffaf8f3,ffe3dbd2,ff2b2117,ffc9a227,ff5b4a2f," +
+            "fffaf8f3,ffe3dbd2,ff2b2117,ff6e5b3c,fffaf8f3,ffe3dbd2," +
+            "ff2b2117,fff4f1ea,ff2b2117,fffaf8f3,ff2b2117,ffe9e4d8," +
+            "ff6e5b3c,fffaf8f3,ff2b2117,fffaf8f3,ff8a3b2e,fffaf8f3," +
+            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fffdfbf7," +
+            "ffe8e3d6,fffefdf9,fffbf9f4,fffaf8f3,fff2efe7,ffe9e4d8",
         "LIGHT" to
-            "ff6b3f2a,fff6eedb,ffe2d2a9,ff2b2117,ffc9a227,ff5b4a2f," +
-            "fff6eedb,ffe2d2a9,ff2b2117,ff6e5b3c,fff6eedb,ffe2d2a9," +
-            "ff2b2117,ffefe4c8,ff2b2117,fff6eedb,ff2b2117,ffe4d8b9," +
-            "ff6e5b3c,fff6eedb,ff2b2117,fff6eedb,ff8a3b2e,fff6eedb," +
-            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fff9f3e3," +
-            "ffe3d7b8,fffbf6e9,fff7f0de,fff6eedb,ffede2c7,ffe4d8b9",
+            "ff6b3f2a,fffaf8f3,ffe3dbd2,ff2b2117,ffc9a227,ff5b4a2f," +
+            "fffaf8f3,ffe3dbd2,ff2b2117,ff6e5b3c,fffaf8f3,ffe3dbd2," +
+            "ff2b2117,fff4f1ea,ff2b2117,fffaf8f3,ff2b2117,ffe9e4d8," +
+            "ff6e5b3c,fffaf8f3,ff2b2117,fffaf8f3,ff8a3b2e,fffaf8f3," +
+            "ffe8cfc0,ff3a1810,ffbfad86,ffd7c8a5,ff17120b,fffdfbf7," +
+            "ffe8e3d6,fffefdf9,fffbf9f4,fffaf8f3,fff2efe7,ffe9e4d8",
         "DARK" to
-            "ffc9a227,ff15110f,ff2a2114,ffc9a227,ff6b3f2a,ff8d7326," +
-            "ff15110f,ff2a2114,fff2e7cf,ff9c9187,ff15110f,ff241e1a," +
-            "ffe8dfd0,ff15110f,ffe8dfd0,ff1c1714,ffe8dfd0,ff241d18," +
-            "ff9c9187,ff1c1714,fff2e7cf,ff15110f,ff7e1414,fff2e7cf," +
-            "ff5d0000,fff2e7cf,ff3a2f28,ff2b231d,ff0a0807,ff2a231e," +
-            "ff15110f,ff100d0b,ff181310,ff1c1714,ff221b16,ff29211b",
+            "ffc9a227,ff121417,ff292619,ffc9a227,ff6b3f2a,ff8d7326," +
+            "ff121417,ff292619,fff2e7cf,ff9c9187,ff121417,ff1f2123," +
+            "ffe8dfd0,ff121417,ffe8dfd0,ff191c20,ffe8dfd0,ff21252a," +
+            "ff9c9187,ff191c20,fff2e7cf,ff121417,ff7e1414,fff2e7cf," +
+            "ff5d0000,fff2e7cf,ff363c44,ff282d33,ff070809,ff272c31," +
+            "ff121417,ff0d0f10,ff15171b,ff191c20,ff1f2327,ff262a30",
         "NAUTICAL" to
             "ff8a3b2e,fffaf3e2,ffd6e9f0,ff1b2c3a,ff6e9db5,ff3e6e8c," +
             "fffaf3e2,ffd6e9f0,ff1b2c3a,ff4c6172,fffaf3e2,ffedf6f9," +
@@ -453,10 +457,11 @@ class ChromeContrastTest {
     private fun assertAA(
         choice: ThemeChoice,
         ground: (Color) -> Color = { it },
-        note: String = ""
+        note: String = "",
+        omit: Set<String> = emptySet()
     ) {
         val scheme = choice.scheme(systemDark = true)
-        val pairs = textPairs(scheme, choice.detail(), ground)
+        val pairs = textPairs(scheme, choice.detail(), ground).filterNot { it.first in omit }
         var worst = Double.MAX_VALUE
         var worstWhere = ""
         pairs.forEach { (where, ink, background) ->
@@ -474,6 +479,49 @@ class ChromeContrastTest {
             "CHROME ${choice.label.lowercase()}$note: ${pairs.size} text pairs, " +
                 "worst ${worst.rounded()}:1 ($worstWhere), bar $AA:1"
         )
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The two standard chromes, which F29 cooled.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The two roles the dark chrome declares and never letters.
+     *
+     * Material's `ColorScheme` has thirty-six roles and this application paints words with about a
+     * dozen; [highContrastPairs] already says so and leaves two out for the same reason. These two
+     * are left out of the dark chrome's measurement, and only the dark chrome's:
+     *
+     *  - `secondary` is brass-dim after dark, and brass-dim is a **rule** colour by decision, not
+     *    an ink. `SitePaletteContrastTest` guards the same colour on the website the opposite way
+     *    round — it fails if a rule on the page ever letters in it — precisely because it measures
+     *    under AA on every ground the palette has. On a dark panel it is 3.76:1.
+     *  - `error` is oxblood-lit, which is a **fill** a parchment label sits on at 8.57:1. As a word
+     *    on a panel it would be 1.63:1, and no composable asks for it: nothing in `:ui` reads
+     *    `colorScheme.error` or `colorScheme.secondary` at all.
+     *
+     * Both measured 3.90:1 and 1.69:1 before F29, so this is not a bar F29 lowered. It is a bar
+     * that had never been set for Light or Dark at all, being set now around the pairs that are
+     * really drawn. The light chrome is held to the whole list, including these two.
+     */
+    private val neverLettered = setOf(
+        "the secondary as a word, on a panel",
+        "an error, on a panel"
+    )
+
+    /**
+     * Light and Dark at WCAG AA, which is what F29 had to leave standing.
+     *
+     * F29 replaced the warm brown-black of the dark grounds with a neutral charcoal and Vellum's
+     * yellow paper with an atlas plate's off-white, and moved no ink and no accent. A palette
+     * change that improved the look and quietly cost a pair its legibility would be a bad trade, so
+     * the pairs are measured — and they came out better rather than worse in daylight, where the
+     * weakest of them, muted ink on a sunk panel, went from 4.60:1 to 5.13:1.
+     */
+    @Test
+    fun `every text pair in the two standard chromes clears WCAG AA`() {
+        assertAA(ThemeChoice.LIGHT)
+        assertAA(ThemeChoice.DARK, omit = neverLettered)
     }
 
     @Test
@@ -969,30 +1017,30 @@ class ChromeContrastTest {
     }
 
     /**
-     * That F7 did not move one colour of the eleven chromes that came before it.
+     * That no chrome moves a colour except where a decision in the plan says it does.
      *
-     * The claim F7 has to make, and the strongest form it can be made in without a picture: every
-     * Material role of every earlier chrome, recorded from `main` at 27fd260 before a line of F7
-     * was written, and compared against what the enum answers now. Recorded rather than recomputed,
-     * because a comparison against something this run also produced would pass however wrong both
-     * halves were.
+     * The claim F7 had to make, and the strongest form it can be made in without a picture: every
+     * Material role of every earlier chrome, recorded on a tree that predates the change, and
+     * compared against what the enum answers now. Recorded rather than recomputed, because a
+     * comparison against something this run also produced would pass however wrong both halves
+     * were. F29 is the one change since that has edited a row here rather than merely passing it,
+     * and it edited three; see [RECORDED_ROLES].
      *
      * Thirty-six roles is the whole of a `ColorScheme` this application ever reads, in the order
      * the probe wrote them. `ChromeGalleryTest` makes the other half of the claim, in pixels: the
-     * same eleven chromes with a menu open, captured and compared with the fingerprints the same
-     * tree produced.
+     * same eleven chromes with a menu open, captured and looked at.
      */
     @Test
-    fun `the eleven chromes before F7 have not moved a colour`() {
-        BEFORE_F7.forEach { (name, expected) ->
+    fun `no chrome has moved a colour since it was recorded`() {
+        RECORDED_ROLES.forEach { (name, expected) ->
             val choice = ThemeChoice.entries.first { it.name == name }
             assertEquals(
                 expected,
                 roles(choice.scheme(systemDark = false)),
-                "$name is not the scheme it was before F7"
+                "$name is not the scheme it was recorded as"
             )
         }
-        println("CHROME F7 identity: ${BEFORE_F7.size} chromes x 36 roles unchanged")
+        println("CHROME identity: ${RECORDED_ROLES.size} chromes x 36 roles as recorded")
     }
 
     /** Every role the application reads, in the order the pre-F7 probe wrote them. */

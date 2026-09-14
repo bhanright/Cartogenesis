@@ -598,7 +598,8 @@ parser here is an application that will not start.
 
 There are seventeen chromes, offered on three shelves so that a list of seventeen is still a list.
 **Standard** is System, Light and Dark — the paper-and-ink pair F1 drew, with System following the
-host. **Accessible** is two chromes whose promise is a measured threshold rather than a look: *High
+host; their grounds are an atlas plate's off-white and a neutral charcoal, and their inks and their
+one accent are a map style's. **Accessible** is two chromes whose promise is a measured threshold rather than a look: *High
 contrast* (pure black and white, 2 dp rules, type a step larger, every text pair past WCAG AAA) and
 *Colorblind* (Okabe–Ito's orange and sky blue on warm dark greys, with a shape cue — an underline, a
 doubled rule, a strike — wherever a state would otherwise be told by hue alone). **Styled** is

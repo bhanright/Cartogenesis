@@ -15,7 +15,7 @@
 <meta property="og:description" content="Build a world from the ground up. Terrain, rivers, climate and borders, shaped by geography from a seed — then a map you can pan, restyle, save and export.">
 <meta property="og:image" content="https://cartogenesis.com/img/natural.webp">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2315110f'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23121417'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
 <!-- The two faces the first screenful is set in. The other three are asked for by @font-face
      below and fetched when the reader gets to them. Fonts are fetched in CORS mode even from the
@@ -63,11 +63,13 @@
 
   :root{
     /* The dark scheme from ui/Theme.kt, value for value. Anything that is not
-       one of these is a mistake rather than a decision. */
-    --ink:#15110f;
-    --ink-raised:#1c1714;
-    --ink-sunk:#241d18;
-    --hairline:#3a2f28;
+       one of these is a mistake rather than a decision. The four charcoals are
+       one tone at four depths (F29, 2026-09-14): red, green and blue in the
+       proportion 1 : 1.116 : 1.268, scaled by 18, 25, 33 and 54. */
+    --ink:#121417;
+    --ink-raised:#191c20;
+    --ink-sunk:#21252a;
+    --hairline:#363c44;
     --bone:#e8dfd0;
     --bone-dim:#9c9187;
     --parchment:#f2e7cf;

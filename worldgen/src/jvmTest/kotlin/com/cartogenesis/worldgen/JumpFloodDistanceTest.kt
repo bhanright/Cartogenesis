@@ -46,51 +46,75 @@ class JumpFloodDistanceTest {
     /** The floor the plan asks for: an eight-fold component under 1% of the radius. */
     private val roundnessFloor = 0.01
 
+    /** A row as tall as a column is wide, which is what a distance in plain cells assumes. */
+    private val squareCells = 1.0
+
+    /** A row half as tall as a column is wide: this project's grids on a 2:1 world. */
+    private val equirectangularCells = 0.5
+
+    /**
+     * Exact against brute force, on square cells and on this project's own 2:1 ones.
+     *
+     * The row scale is the whole of the anisotropic case: at 1 the flood measures in cells and the
+     * brute force does too, and at a half a step down the map is worth half a step across it, in
+     * the comparisons the flood makes as much as in the distance it finally reports. Getting the
+     * second right is not free — a nearer source in cells can be the further one on the ground, so
+     * the flood has to carry the scale through every pass rather than scaling the answer at the end
+     * — and brute force is what says whether it did.
+     */
     @Test
     fun `jump flooding is exact against a brute-force nearest source`() {
-        // Two shapes, one square and one not, both with a wrapping X axis and a hard Y edge.
+        // Two shapes, one square and one not, both with a wrapping X axis and a hard Y edge; and
+        // two row scales, cells and the 2:1 cells of an equirectangular map.
         listOf(64 to 64, 97 to 53).forEach { (w, h) ->
-            val rnd = Random(20260912)
-            val sources = ArrayList<Int>()
-            repeat(24) { sources.add(rnd.nextInt(w * h)) }
-            val seeds = sources.distinct().sorted()
+            listOf(squareCells, equirectangularCells).forEach { rowScale ->
+                val rnd = Random(20260912)
+                val sources = ArrayList<Int>()
+                repeat(24) { sources.add(rnd.nextInt(w * h)) }
+                val seeds = sources.distinct().sorted()
 
-            val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
-            val label = IntArray(w * h) { -1 }
-            seeds.forEach { dist[it] = 0f; label[it] = it }
-            JumpFloodDistance.run(w, h, dist, label)
+                val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
+                val label = IntArray(w * h) { -1 }
+                seeds.forEach { dist[it] = 0f; label[it] = it }
+                JumpFloodDistance.run(w, h, dist, label, rowScale)
 
-            var worst = 0.0
-            var worstAt = -1
-            for (i in 0 until w * h) {
-                val x = i % w
-                val y = i / w
-                var best = Double.MAX_VALUE
-                for (s in seeds) {
-                    var dx = abs(x - s % w)
+                fun distanceFrom(source: Int, x: Int, y: Int): Double {
+                    var dx = abs(x - source % w)
                     dx = min(dx, w - dx)
-                    val dy = (y - s / w).toDouble()
-                    val d = sqrt(dx * dx + dy * dy)
-                    if (d < best) best = d
+                    val dy = (y - source / w) * rowScale
+                    return sqrt(dx * dx + dy * dy)
                 }
-                val error = abs(best - dist[i])
-                if (error > worst) { worst = error; worstAt = i }
-                // The label must name a source that really is that far away, or the boundary
-                // profiles would read the wrong pair's ground.
-                val s = label[i]
-                var lx = abs(x - s % w)
-                lx = min(lx, w - lx)
-                val ly = (y - s / w).toDouble()
+
+                var worst = 0.0
+                var worstAt = -1
+                for (i in 0 until w * h) {
+                    val x = i % w
+                    val y = i / w
+                    var best = Double.MAX_VALUE
+                    for (s in seeds) {
+                        val d = distanceFrom(s, x, y)
+                        if (d < best) best = d
+                    }
+                    val error = abs(best - dist[i])
+                    if (error > worst) { worst = error; worstAt = i }
+                    // The label must name a source that really is that far away, or the boundary
+                    // profiles would read the wrong pair's ground.
+                    assertTrue(
+                        abs(distanceFrom(label[i], x, y) - dist[i]) < 1e-3,
+                        "$w x $h at row scale $rowScale, cell $i: label ${label[i]} is not at the" +
+                            " reported distance ${dist[i]}"
+                    )
+                }
+                println(
+                    ("JFA $w x $h, ${seeds.size} sources, a row worth %.2f of a column: worst" +
+                        " error against brute force %.6f cell widths (at $worstAt)")
+                        .format(rowScale, worst)
+                )
                 assertTrue(
-                    abs(sqrt(lx * lx + ly * ly) - dist[i]) < 1e-3,
-                    "$w x $h cell $i: label $s is not at the reported distance ${dist[i]}"
+                    worst < 1e-3,
+                    "$w x $h at row scale $rowScale: jump flooding was off by $worst cell widths"
                 )
             }
-            println(
-                "JFA $w x $h, ${seeds.size} sources: worst error against brute force " +
-                    "%.6f cells (at $worstAt)".format(worst)
-            )
-            assertTrue(worst < 1e-3, "$w x $h: jump flooding was off by $worst cells")
         }
     }
 

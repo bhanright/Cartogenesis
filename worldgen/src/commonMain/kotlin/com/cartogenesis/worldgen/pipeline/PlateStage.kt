@@ -614,26 +614,31 @@ object PlateStage {
      * `1 - exp(-distance / cratonReachKm)` of the distance to the nearest cell that is not mostly
      * continental crust. Exponential rather than a ramp because a ramp finishes at a distance
      * contour and a distance contour drawn on a map is a visible ring — the annulus S2's earlier
-     * passes were called out for. Measured in kilometres, not in cells: an equirectangular map's
-     * cells are twice as wide as they are tall, so a reach counted in cells would take a continent
-     * twice as far inland from an eastern shore as from a northern one.
+     * passes were called out for.
      *
-     * The distance itself is Euclidean in cells, by the same jump flood every other distance field
-     * in this stage uses, and is converted with the map's own cell width. That leaves the profile
-     * a little wider north-south than east-west, which is the same approximation
-     * `TectonicsConfig.crustMarginKm` already makes for the margin it sits inside.
+     * The distance is Euclidean and in kilometres, by the same jump flood every other distance
+     * field in this stage uses, told how tall a row is so that it propagates a length on the ground
+     * rather than a count of cells. That matters here more than anywhere: a cell of this map is
+     * twice as wide as it is tall, so a reach counted in cells and converted with the cell's width
+     * thickens a craton over half the distance northward that it takes westward — two hundred
+     * kilometres where `TectonicsConfig.cratonReachKm` asks for four hundred — and every continent
+     * comes out with its profile squashed into an ellipse lying east-west.
+     *
+     * Internal rather than private so `CratonReachTest` measures the profile the stage actually
+     * draws on an edge it can put where it likes, instead of hunting for a straight coast in a
+     * generated world.
      */
-    private fun cratonInteriorShare(
+    internal fun cratonInteriorShare(
         config: WorldGenConfig,
         continentalShare: FloatField
     ): FloatArray {
         val cellCount = config.width * config.height
-        val distanceCells = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val distanceCellWidths = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
         val nearest = IntArray(cellCount) { -1 }
         var anyEdge = false
         for (cell in 0 until cellCount) {
             if (continentalShare.data[cell] < 0.5f) {
-                distanceCells[cell] = 0f
+                distanceCellWidths[cell] = 0f
                 nearest[cell] = cell
                 anyEdge = true
             }
@@ -641,11 +646,15 @@ object PlateStage {
         // A world with no ocean at all has no crustal edge to measure from, and every cell of it is
         // as cratonic as ground gets.
         if (!anyEdge) return FloatArray(cellCount) { 1f }
-        JumpFloodDistance.run(config.width, config.height, distanceCells, nearest)
-        val reachCells = config.cellsFor(config.tectonics.cratonReachKm).coerceAtLeast(1e-3f)
+        JumpFloodDistance.run(
+            config.width, config.height, distanceCellWidths, nearest, config.cellHeightInCellWidths
+        )
+        val kilometresPerCellWidth = config.cellWidthKm.toFloat()
+        val reachKm = config.tectonics.cratonReachKm.toFloat().coerceAtLeast(1e-3f)
         return FloatArray(cellCount) {
-            val distance = distanceCells[it]
-            if (distance >= JumpFloodDistance.INFINITE) 1f else 1f - exp(-distance / reachCells)
+            val distance = distanceCellWidths[it]
+            if (distance >= JumpFloodDistance.INFINITE) 1f
+            else 1f - exp(-distance * kilometresPerCellWidth / reachKm)
         }
     }
 
@@ -745,15 +754,22 @@ object PlateStage {
             return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
         }
 
-        val distanceCells = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        // In cell widths and told how tall a row is, so that a ridge running east-west ages its
+        // floor over the same kilometres as one running north-south. Counted in plain cells, the
+        // age-depth curve would read the orientation of the ridge that made a piece of floor as if
+        // it were the floor's age.
+        val distanceCellWidths = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
         val nearestRidgeCell = IntArray(cellCount) { -1 }
         ridgeCells.forEach { cell ->
-            distanceCells[cell] = 0f
+            distanceCellWidths[cell] = 0f
             nearestRidgeCell[cell] = cell
         }
-        JumpFloodDistance.run(config.width, config.height, distanceCells, nearestRidgeCell)
+        JumpFloodDistance.run(
+            config.width, config.height, distanceCellWidths, nearestRidgeCell,
+            config.cellHeightInCellWidths
+        )
 
-        val kilometresPerCell = config.cellWidthKm
+        val kilometresPerCellWidth = config.cellWidthKm
         val oldest = isostasy.oldestSeafloorAgeMyr
 
         // The distances of the cells the answer is about, in one histogram, so the bisection below
@@ -764,9 +780,9 @@ object PlateStage {
         var longestKm = 0.0
         for (cell in 0 until cellCount) {
             if (continentalShare.data[cell] >= 0.5f) continue
-            val cells = distanceCells[cell]
-            if (cells >= JumpFloodDistance.INFINITE) continue
-            val kilometres = cells * kilometresPerCell
+            val cellWidths = distanceCellWidths[cell]
+            if (cellWidths >= JumpFloodDistance.INFINITE) continue
+            val kilometres = cellWidths * kilometresPerCellWidth
             if (kilometres > longestKm) longestKm = kilometres
         }
         if (longestKm <= 0.0) {
@@ -776,10 +792,11 @@ object PlateStage {
         var oceanicCells = 0L
         for (cell in 0 until cellCount) {
             if (continentalShare.data[cell] >= 0.5f) continue
-            val cells = distanceCells[cell]
-            if (cells >= JumpFloodDistance.INFINITE) continue
-            val bin = ((cells * kilometresPerCell / longestKm) * (DISTANCE_HISTOGRAM_BINS - 1))
-                .toInt().coerceIn(0, DISTANCE_HISTOGRAM_BINS - 1)
+            val cellWidths = distanceCellWidths[cell]
+            if (cellWidths >= JumpFloodDistance.INFINITE) continue
+            val bin =
+                ((cellWidths * kilometresPerCellWidth / longestKm) * (DISTANCE_HISTOGRAM_BINS - 1))
+                    .toInt().coerceIn(0, DISTANCE_HISTOGRAM_BINS - 1)
             bins[bin]++
             oceanicCells++
         }
@@ -811,9 +828,9 @@ object PlateStage {
         val rate = 0.5 * (slow + fast)
 
         val ageMyr = FloatArray(cellCount) { cell ->
-            val cells = distanceCells[cell]
-            if (cells >= JumpFloodDistance.INFINITE) referenceAge
-            else (cells * kilometresPerCell / rate).toFloat().coerceAtMost(oldest)
+            val cellWidths = distanceCellWidths[cell]
+            if (cellWidths >= JumpFloodDistance.INFINITE) referenceAge
+            else (cellWidths * kilometresPerCellWidth / rate).toFloat().coerceAtMost(oldest)
         }
         return SeafloorAge(ageMyr, rate, ridgeCells.size)
     }

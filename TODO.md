@@ -147,7 +147,70 @@
   longer bites and the sixth is carrying an unknown share of its own weight. What it costs is
   measured: TODO's first entry records that a sixth is bought against the coastline. Somebody
   should sweep the share again on the new ground and take back whatever the crust is now paying
-  for. 2026-09-13, S2.
+  for. 2026-09-13, S2. *S2b, 2026-09-14: the control has now been taken out of
+  `GroundTextureTest` rather than printed, and re-measured on the repaired ground it reads 0.84% of
+  land in lakes against a bar of 2.22% — it passes by a factor of two and a half. The clause it
+  stood in no longer claims to justify the sixth, so this entry is the only thing holding the
+  question.*
+- **Four `JumpFloodDistance` callers still measure north-south distance with the cell's width.**
+  S2b gave the flood a row scale and passed it from `PlateStage`'s craton reach and sea-floor age,
+  which are S2's own. The rest still count cells and convert with `cellWidthKm`, so on a 2:1 grid
+  each of them reaches half as far north-south as the kilometres it is given: `ClimateStage`'s
+  `waterDistance`, which sets how maritime a coast is; `SeaLevelStage`'s distance to land, off which
+  the shelf, the slope and the rise are read, so a shelf is half as wide off a northern coast as off
+  a western one; `PlateStage`'s two boundary-distance fields, which every belt profile, plateau rim
+  and trench wall is a function of; and `GlaciationStage`'s distance to the ice edge and distance to
+  ice. Each is a one-line change — pass `config.cellHeightInCellWidths` and convert the answer with
+  `cellWidthKm` — and each moves every world it touches, so each wants its own before-and-after
+  renders and its own re-pinning. The belt profiles are the largest of them and probably want a
+  chunk rather than a line. 2026-09-14, S2b.
+- **A below-sea-level basin can come out four rows deep and twenty-five columns long, and nobody
+  has looked at one.** S2b's repair to `fillDepressions` reaches, for the first time, land that the
+  enclosed-water rule left standing below the water beside it, so those hollows now hold standing
+  water instead of lying dry and undrained. On seed 7 at 512 one of them is 28 cells at (344,477),
+  590 km by 47 km on the ground and within 1.12 cells of one straight line — straight enough that
+  `StraightRunTest`'s ruled-bar census counted it until that case was split by the sea-level cut.
+  It is not the ruled *trench* the census exists to catch: it sits at 0.272 of the field against a
+  shoreline at 0.632, its floor is not flat, and the world built with the plain routing rule has no
+  such basin at all. But an inland sea that shape is a claim about the map, and the only thing that
+  can judge it is a render of the seed it is on, which nobody has taken. 2026-09-14, S2b.
+- **No seed left in the rift scan floods as three separate gulfs, so that bar is withdrawn.**
+  `RiftSegmentationTest` held three figures against the unsegmented control: separate bodies of sea
+  inside the rift, land bridges crossing it, and how much the flooded width varies along its length.
+  On the ground S2b leaves, the same twelve-seed scan the class documents finds no seed that clears
+  three bodies with a control that fails — seed 77 reads three either way, and every other segmented
+  rift floods as one body or two. The other two bars still separate the two worlds widely (seed 43
+  reads 3 bridges and 0.15 of variation against 0 and 0.04), so the clause keeps its teeth, but the
+  claim that a flooded rift is a *chain of basins* is now only carried by the picture. What would
+  restore it is a rift that subsides below the waterline along part of its length and not the whole
+  of it, which is the rift's own subsidence entry above; today a rift either floods end to end or
+  stays dry, and the accommodation zones show as bridges rather than as sills between gulfs.
+  2026-09-14, S2b.
+- **`outletFallToTheWater` has one seed's worth of guard left, and it wants a synthetic sill.**
+  The rule is that the outlet notch measures its channel's fall to the water it empties into rather
+  than to the last cell of land, so a sill lying level to the shore is not read as having no
+  gradient at all. `OutletIncisionTest` shows it by generating two worlds per seed and comparing
+  their largest drowned basin, and S2b's depression fill has taken most of that difference away:
+  the flood now raises land standing below the water beside it, which is the ground such a sill is
+  made of, so the fill does part of what the outlet walk used to be left to do. Over the case's six
+  seeds, without the step against with it, 718106 reads 0.1397% of land against 0.1319% and is the
+  only one that still shrinks; 99 reads 0.1093% against 0.1095%, 7 nothing against nothing, and 42,
+  1234 and 43 read *larger* with the step because cutting a level sill lets a neighbouring hollow
+  join the sea and a different body becomes the largest drowned one. A guard resting on one seed's
+  6% is a guard waiting to go green for the wrong reason. What it wants is a synthetic basin with a
+  sill level to the water, the way S2b's other three guards are built. 2026-09-14, S2b.
+- **The flexure's continuation past a pole is a plain mirror, not the far side of the world.**
+  `Isostasy.Flexure` pads the load out to twice the map's height by reflecting it about each polar
+  row, which stops the two poles bending each other and gives a pole the zero slope it must have.
+  The exact continuation is a reflection in y *together with* a shift of half the map in x, because
+  this world is 12,000 km round and 6,000 from pole to pole, so a meridian is a closed loop and what
+  lies past the north pole is the far side of the world. The two differ only for a load at a pole
+  that is not zonal, which a polar ice cap very nearly is. The same entry covers what the padding
+  costs: the transform pair now runs on a grid twice as tall, which is 2.2 times the arithmetic and
+  twice the buffers (134 MB at 2048, 537 at 4096). Both could be taken back at once — the mirrored
+  field is even, so the y transform is a cosine transform and could run at the map's own height —
+  but that is a real piece of numerical work and the flexure is already a G-track candidate at 4096.
+  2026-09-14, S2b.
 - **The drainage density has no Earth figure, only a regression bar.** `GroundTextureTest` holds
   the channel length per unit area within a third of what the pre-S2 tree measured, which is a bar
   against a generator and not against a planet. It was a fifth until this pass and moved because

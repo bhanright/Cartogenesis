@@ -21,7 +21,8 @@ import org.junit.Assert.assertTrue
  *
  * All four are compared against `main` measured by exactly this arithmetic on the same five seeds —
  * the first two against 2eb0f0d, the tree before S2, and the last two against 230deb9, the tree S2's
- * fourth pass merged — and all four carry the control that shows the bar bite.
+ * fourth pass merged. Three of them carry a control that shows the bar bite. The fourth's control
+ * could not bite and has been taken out rather than printed; the clause says so where it stands.
  */
 class GroundTextureTest {
 
@@ -83,71 +84,51 @@ class GroundTextureTest {
     }
 
     /**
-     * A continent's longest slopes are what drain it, and a tenth of them leaves the water standing.
+     * A continent drains, in the two rows of M1's that say whether it does.
      *
-     * Integration divides each component's amplitude by its wavenumber, so the base relief carries
-     * most of its power at the width of the map, and `TerrainConfig.regionalReliefShare` says how
-     * much of that survives the band filter. S2's second pass kept a tenth and measured the
-     * bifurcation ratio, which could not see what it cost: with no slope worth the name between the
-     * belts, the water ponds where it falls.
+     * The lake share of land against Earth's own at this cell area, and the drainage density
+     * against what the tree before S2 measured. Both are plain absolute checks and neither carries
+     * a control, which is a demotion and is written here rather than left to be discovered.
      *
-     * Two rows, both M1's. The lake share of land against Earth's own at this cell area, and the
-     * drainage density against what the tree before S2 measured.
+     * What used to stand beside them was a control that turned `TerrainConfig.regionalReliefShare`
+     * back down to the tenth S2's second pass used, with the crust's thickness profile off beside
+     * it, and was meant to show that the sixth is what keeps the water moving. It was computed and
+     * never asserted, and asserting it would not have worked: on this ground the control reads
+     * 0.84% of land in lakes against a bar of 2.22%, passing by a factor of two and a half, so it
+     * can say nothing about whether the sixth is needed. The figure it was written from was 3.55%,
+     * measured on S2's second pass, whose crust had no profile *and* whose relief spectrum was a
+     * different shape; the crust's own profile now supplies the long slope the sixth was raised to
+     * supply. Ground rule 5 says a guard that cannot discriminate says so, so the control is gone
+     * rather than printed: it cost five worlds a run to restate a conclusion it could not reach.
      *
-     * The lake bar no longer has a control, and the reason is worth stating rather than hiding:
-     * nothing this chunk can switch off ponds the water any more. A tenth of the map-scale relief
-     * *and* a crust with no profile of its own — which is the ground S2's second pass measured
-     * 3.55% of land in lakes on — reads 0.96% here, comfortably inside the bar, because the
-     * crust's own thickness profile now supplies the long slope `regionalReliefShare` was raised
-     * to a sixth to supply. So the control is printed and not asserted (ground rule 5: a guard
-     * that cannot discriminate says so), and whether the sixth is still needed at all is in
-     * `TODO.md`.
+     * So this clause no longer claims to justify the sixth. It claims what it measures: that the
+     * ground as it stands ponds no more of its water than Earth does, and carries about as much
+     * channel as the tree before S2. Whether the sixth is still needed is an open question and is
+     * in `TODO.md`.
      */
     @Test
-    fun `a continent's long slopes drain it, and a tenth of them does not`() {
+    fun `a continent's long slopes drain it`() {
         val lakeShares = ArrayList<Double>()
         val densities = ArrayList<Double>()
-        val controlLakeShares = ArrayList<Double>()
         var squareKilometresPerCell = 0.0
         SEEDS.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val metrics = EarthLikeness.measure(world(seed), "ground/$seed")
-            val control = EarthLikeness.measure(
-                WorldGenerationEngine.generateBlocking(
-                    config.copy(
-                        terrain = config.terrain.copy(
-                            regionalReliefShare = REGIONAL_RELIEF_SHARE_BEFORE
-                        ),
-                        // And the crust with no profile of its own, which is where the tenth was
-                        // measured: see the note on the control below.
-                        isostasy = config.isostasy.copy(cratonThickeningKm = 0f),
-                        tectonics = config.tectonics.copy(
-                            cratonReliefStandardDeviationMetres =
-                                config.tectonics.marginReliefStandardDeviationMetres
-                        )
-                    )
-                ),
-                "control/$seed"
-            )
             squareKilometresPerCell = metrics.squareKilometresPerCell
             lakeShares.add(metrics.lakeShareOfLand)
             densities.add(drainageDensity(metrics))
-            controlLakeShares.add(control.lakeShareOfLand)
             println(
-                "TEXTURE drainage seed %d: lakes %.4f of land (control %.4f), density %.4f km/km2"
-                    .format(seed, metrics.lakeShareOfLand, control.lakeShareOfLand, drainageDensity(metrics))
+                "TEXTURE drainage seed %d: lakes %.4f of land, density %.4f km/km2"
+                    .format(seed, metrics.lakeShareOfLand, drainageDensity(metrics))
             )
         }
         val earthLakeShare = EarthLikeness.lakeShareOfLandOnEarth(squareKilometresPerCell)
         val pooledLakes = lakeShares.average()
-        val pooledControlLakes = controlLakeShares.average()
         val pooledDensity = densities.average()
         println(
-            ("TEXTURE drainage pooled: lakes %.4f against Earth's %.4f (control %.4f)," +
-                " density %.4f against main's %.4f")
+            ("TEXTURE drainage pooled: lakes %.4f against Earth's %.4f, density %.4f against" +
+                " main's %.4f")
                 .format(
-                    pooledLakes, earthLakeShare, pooledControlLakes,
-                    pooledDensity, MAIN_DRAINAGE_DENSITY_KM_PER_KM2
+                    pooledLakes, earthLakeShare, pooledDensity, MAIN_DRAINAGE_DENSITY_KM_PER_KM2
                 )
         )
         assertTrue(
@@ -571,8 +552,7 @@ class GroundTextureTest {
         /** Half again Earth's own share, which is the slack M1's row is read with. */
         const val LAKE_SHARE_ALLOWANCE = 1.5
 
-        /** The two settings this chunk moved, at the value S2's second pass left them. */
+        /** The critical slope at the value S2's second pass left it: the belt flank's control. */
         const val CRITICAL_FALL_BEFORE_S2 = 12f
-        const val REGIONAL_RELIEF_SHARE_BEFORE = 0.10
     }
 }

@@ -34,6 +34,17 @@ internal object FlowRouting {
      * Raises every hollow to the level of its lowest outlet, so no cell is left without a downhill
      * path. Priority-flood (Barnes et al.): start from the outlets and work inward, always taking
      * the lowest cell still on the frontier.
+     *
+     * The sea is the outlet, and it joins the flood at its own level rather than being treated as
+     * a rim of already-drained land. That distinction is the whole of the rule below: touching
+     * water is not the same as being able to drain into it. The enclosed-water rule turns
+     * unreachable sea into land without raising it, so a converted cell keeps a level *below* the
+     * shoreline; where a whole component of such cells is ringed by water standing higher, it has
+     * no cell that could be called an outlet at all, and seeding only from the land would leave it
+     * unvisited with its sinks intact and its rivers draining to nothing. Letting the water in
+     * raises that component to its spill level, which is what a priority flood over the whole grid
+     * does anyway. Ordinary coasts are untouched: land at or above the shoreline is reached from
+     * the lower water beside it and keeps its own elevation, exactly as seeding it directly did.
      */
     fun fillDepressions(
         width: Int,
@@ -45,38 +56,34 @@ internal object FlowRouting {
         val visited = BooleanArray(width * height)
         val heap = LongMinHeap(width * 4)
 
-        for (cell in visited.indices) {
-            if (!isLand[cell]) visited[cell] = true
-        }
-
         fun seedOutlet(cell: Int) {
             if (visited[cell]) return
             visited[cell] = true
             heap.push(encode(filled.data[cell], cell))
         }
 
-        // Outlets: land touching the sea, plus land running off the top and bottom edges.
+        // Water is never raised, so it is marked before anything is pushed and the flood can only
+        // ever move from it onto land.
+        for (cell in visited.indices) {
+            if (!isLand[cell]) visited[cell] = true
+        }
+
+        // Outlets: the sea wherever it meets land, plus land running off the top and bottom edges.
+        // Only water that touches land is pushed. Open water deeper in has nothing but visited
+        // neighbours whatever order it is popped in, so leaving it out is an economy and not a
+        // change: the flood reaches exactly the same cells at exactly the same levels.
         for (row in 0 until height) {
             for (column in 0 until width) {
                 val cell = row * width + column
-                if (!isLand[cell]) continue
-                if (row == 0 || row == height - 1) {
-                    seedOutlet(cell)
+                if (!isLand[cell]) {
+                    var touchesLand = false
+                    forEachNeighbour(width, height, column, row) { neighbour ->
+                        if (isLand[neighbour]) touchesLand = true
+                    }
+                    if (touchesLand) heap.push(encode(filled.data[cell], cell))
                     continue
                 }
-                // Touching water is not the same as being able to drain into it. The
-                // enclosed-water rule turns unreachable sea into land without raising it, so a
-                // converted cell keeps a level *below* the shoreline and can sit lower than the
-                // ocean beside it; seeded as an outlet it is never filled, and the router then
-                // finds it nothing to drain to at all. Nine such cells on seed 42 at 512 and
-                // seven on 298405 at 1024 were what `PipelineTest` and `StraightRunTest` caught.
-                // Every ordinary coast is unaffected: land stands at or above the shoreline and
-                // water below it.
-                forEachNeighbour(width, height, column, row) { neighbour ->
-                    if (!isLand[neighbour] && filled.data[neighbour] < filled.data[cell]) {
-                        seedOutlet(cell)
-                    }
-                }
+                if (row == 0 || row == height - 1) seedOutlet(cell)
             }
         }
 

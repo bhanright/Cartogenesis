@@ -26,9 +26,16 @@ import kotlin.math.sqrt
  * leave. `JumpFloodDistanceTest` checks the result against a brute-force nearest-source search on
  * randomly seeded grids and finds it exact, not merely close.
  *
- * Deterministic and platform-independent: the whole search is integer arithmetic on squared
- * distances, ties go to the lower source index, and each pass reads the previous buffer and writes
- * its own cell, so splitting the rows across cores cannot change the answer.
+ * A grid's cells need not be square, and on this project's they are not: an equirectangular map is
+ * twice as wide as it is tall, so at 512 by 512 a cell is 23.4 km across and 11.7 km down. Distance
+ * measured in cells is therefore not distance on the ground, and a caller that wants the ground's
+ * answer passes [run]'s `cellHeightInCellWidths`, which scales the y term of every comparison the
+ * flood makes. At 1 the answer is in cells, as it always was.
+ *
+ * Deterministic and platform-independent: the whole search is comparisons of squared distances,
+ * which are exact in a double for any grid this program draws and for a row scale of 1 are exactly
+ * the integers they used to be; ties go to the lower source index; and each pass reads the previous
+ * buffer and writes its own cell, so splitting the rows across cores cannot change the answer.
  */
 object JumpFloodDistance {
 
@@ -39,14 +46,26 @@ object JumpFloodDistance {
     private const val NO_SOURCE = -1
 
     /**
-     * @param dist pre-seeded with 0 at source cells and [INFINITE] elsewhere; overwritten with
-     *   the distance to the nearest source, in cells. Cells with no source anywhere keep
-     *   [INFINITE].
+     * @param dist pre-seeded with 0 at source cells and [INFINITE] elsewhere; overwritten with the
+     *   distance to the nearest source, in *cell widths*. Cells with no source anywhere keep
+     *   [INFINITE]. Multiplying by `WorldGenConfig.cellWidthKm` turns the answer into kilometres,
+     *   whatever the row scale.
      * @param label pre-seeded with a source id at source cells and -1 elsewhere; overwritten with
      *   the id of the nearest source. The id is whatever the caller seeded — a cell index, a plate
      *   id — and is carried, not recomputed.
+     * @param cellHeightInCellWidths how tall a row is as a fraction of how wide a column is —
+     *   `cellHeightKm / cellWidthKm`, a half on this project's grids. At 1 the flood measures in
+     *   cells and every figure is exactly what it was before the parameter existed; below 1 a step
+     *   down the map counts for less than a step across it, which is what makes the distance a
+     *   length on the ground rather than a count of cells.
      */
-    fun run(width: Int, height: Int, dist: FloatArray, label: IntArray) {
+    fun run(
+        width: Int,
+        height: Int,
+        dist: FloatArray,
+        label: IntArray,
+        cellHeightInCellWidths: Double = 1.0
+    ) {
         val cellCount = width * height
         if (cellCount == 0) return
 
@@ -63,7 +82,10 @@ object JumpFloodDistance {
 
         var nextNearestSource = IntArray(cellCount)
         for (stepCells in schedule(width, height)) {
-            pass(width, height, stepCells, nearestSource, nextNearestSource)
+            pass(
+                width, height, stepCells, cellHeightInCellWidths,
+                nearestSource, nextNearestSource
+            )
             val previous = nearestSource
             nearestSource = nextNearestSource
             nextNearestSource = previous
@@ -72,8 +94,9 @@ object JumpFloodDistance {
         for (cell in 0 until cellCount) {
             val source = nearestSource[cell]
             if (source < 0) continue
-            val squared = squaredDistance(width, cell % width, cell / width, source)
-            dist[cell] = sqrt(squared.toDouble()).toFloat()
+            val squared =
+                squaredDistance(width, cell % width, cell / width, source, cellHeightInCellWidths)
+            dist[cell] = sqrt(squared).toFloat()
             label[cell] = seedLabel[source]
         }
     }
@@ -113,6 +136,7 @@ object JumpFloodDistance {
         width: Int,
         height: Int,
         stepCells: Int,
+        cellHeightInCellWidths: Double,
         nearestSource: IntArray,
         nextNearestSource: IntArray
     ) {
@@ -124,8 +148,8 @@ object JumpFloodDistance {
                     val cell = row * width + column
                     var best = nearestSource[cell]
                     var bestSquared =
-                        if (best < 0) Int.MAX_VALUE
-                        else squaredDistance(width, column, row, best)
+                        if (best < 0) Double.MAX_VALUE
+                        else squaredDistance(width, column, row, best, cellHeightInCellWidths)
                     for (rowStep in -1..1) {
                         val neighbourRow = row + rowStep * stepCells
                         if (neighbourRow < 0 || neighbourRow >= height) continue
@@ -136,8 +160,9 @@ object JumpFloodDistance {
                             if (neighbourColumn < 0) neighbourColumn += width
                             val candidate = nearestSource[neighbourRowStart + neighbourColumn]
                             if (candidate < 0) continue
-                            val candidateSquared =
-                                squaredDistance(width, column, row, candidate)
+                            val candidateSquared = squaredDistance(
+                                width, column, row, candidate, cellHeightInCellWidths
+                            )
                             // Ties to the lower cell index: two sources exactly as far away is
                             // common on a grid, and which one wins decides the label.
                             if (candidateSquared < bestSquared ||
@@ -155,14 +180,25 @@ object JumpFloodDistance {
     }
 
     /**
-     * Squared distance in cells from ([column], [row]) to cell [source], taking the short way round
-     * in x. Squared, and so an exact integer: the comparisons the flood makes never need the root.
+     * Squared distance in cell widths from ([column], [row]) to cell [source], taking the short way
+     * round in x and counting a row as [cellHeightInCellWidths] of a column.
+     *
+     * Squared, because the comparisons the flood makes never need the root. Both terms are whole
+     * numbers of cells before the scale is applied and stay well inside a double's exact range on
+     * any grid this program draws, so at a scale of 1 this is the integer arithmetic it replaced,
+     * to the bit.
      */
-    private fun squaredDistance(width: Int, column: Int, row: Int, source: Int): Int {
+    private fun squaredDistance(
+        width: Int,
+        column: Int,
+        row: Int,
+        source: Int,
+        cellHeightInCellWidths: Double
+    ): Double {
         var acrossCells = column - source % width
         if (acrossCells < 0) acrossCells = -acrossCells
         if (acrossCells > width - acrossCells) acrossCells = width - acrossCells
-        val downCells = row - source / width
-        return acrossCells * acrossCells + downCells * downCells
+        val downCellWidths = (row - source / width) * cellHeightInCellWidths
+        return acrossCells.toDouble() * acrossCells + downCellWidths * downCellWidths
     }
 }

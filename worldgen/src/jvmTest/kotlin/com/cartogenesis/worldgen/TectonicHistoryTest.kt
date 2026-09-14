@@ -63,12 +63,15 @@ class TectonicHistoryTest {
      * pass moved the map-scale relief and the critical slope, for the same reason and with the
      * same property: the two columns of the printed table still agree cell for cell. And a third
      * time when its fourth pass gave the crust a thickness profile and the base relief a texture
-     * proportional to its own relief, which moves every value in the field again.
+     * proportional to its own relief, which moves every value in the field again. And a fourth time
+     * at S2b, which measures the craton's reach in kilometres rather than in cells, so the crust
+     * thickens over twice the distance north-south that it did and the profile it carries is a
+     * different field.
      */
     private val presentOnlyChecksums = mapOf(
-        7L to -1289201520975330034L,
-        42L to -641253951434604805L,
-        1234L to -5801792433696045243L
+        7L to -1331207900880425545L,
+        42L to 1649099191975081956L,
+        1234L to -6397908842450193871L
     )
 
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {

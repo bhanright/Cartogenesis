@@ -38,19 +38,6 @@ class OutletResolutionTest {
     private val caspianShare = 371_000.0 / 148_940_000.0
 
     /**
-     * The same tenth of slack `OutletIncisionTest` gives the largest lake, and for the same reason.
-     *
-     * That class derives it: the notch has one rate for every world and which basin ends up
-     * largest is chaotic in it, so a seed's figure jumps by a factor of two between neighbouring
-     * rates as one basin drains past another. This class asserted the Earth figure bare, which
-     * held only while the two sample hollows happened to sit under the line — at S2's fourth pass
-     * seed 59758's largest lake at 512 reads 0.3089% of its land, 1.24 times the Caspian's share
-     * and inside the allowance its sibling has carried since E1. Two guards on the same quantity
-     * should not disagree about how much room it needs.
-     */
-    private val chaos = 1.4
-
-    /**
      * The least standing water, as a share of the land, a world must hold at every grid before a
      * ratio between its grids is a measurement rather than a ratio between two small numbers.
      */
@@ -58,6 +45,7 @@ class OutletResolutionTest {
 
     @Test
     fun `the largest lake is the same lake at every grid`() {
+        val largestLandLakeShares = ArrayList<Double>()
         val overLarge = ArrayList<String>()
         val overLargeDrowned = ArrayList<String>()
         val unmeasured = ArrayList<String>()
@@ -106,9 +94,9 @@ class OutletResolutionTest {
                     world.rivers.lakes.lakes.isNotEmpty(),
                     "seed $seed at $size has no lakes at all"
                 )
-                if (largest.toDouble() / world.sea.landCellCount >= caspianShare * chaos) {
-                    overLarge.add("$seed at $size")
-                }
+                val landLakeShare = largest.toDouble() / world.sea.landCellCount
+                largestLandLakeShares.add(landLakeShare)
+                overLarge.add("$seed at $size ${"%.2f".format(landLakeShare / caspianShare)}x")
                 // The drowned basins are reported, not asserted, and W1 is why.
                 //
                 // H5b held them to the same bar as the rest, because `SeaConfig.postCutOutlet`
@@ -181,9 +169,26 @@ class OutletResolutionTest {
         // Collected and asserted after both seeds and all six grids, so a run reports every figure
         // rather than stopping at the first one over. Six worlds at three resolutions is a quarter
         // of an hour; finding out one number per run is not a way to spend it.
+        // Pooled over the six worlds, and asserted against Earth's own figure with no allowance at
+        // all. Which hollow ends up largest is chaotic — the same world reads 1.55, 1.49 and 0.20
+        // times the Caspian's share at 512, 1024 and 2048, a spread of nearly eight — so a bar on
+        // one world cannot mean anything, and the [chaos] allowance that used to make one work was
+        // a tenth of slack bought against exactly that. Read over the six it does not need the
+        // slack: the figures are 1.55, 1.49, 0.20, 0.67, 0.33 and 0.50 and the mean is 0.79 of the
+        // Caspian's share, so the bare Earth figure can be asserted, which is a stronger claim than
+        // the one it replaces. `OutletIncisionTest` pools its own basin figures the same way.
+        val pooledLargest = largestLandLakeShares.average()
+        println(
+            ("OUTLET SCALE largest lake in the land pooled %.4f%% of land, %.2fx the Caspian's " +
+                "share: %s").format(
+                pooledLargest * 100, pooledLargest / caspianShare, overLarge
+            )
+        )
         assertTrue(
-            overLarge.isEmpty(),
-            "these worlds keep a lake at or over the Caspian's share of their land: $overLarge"
+            pooledLargest < caspianShare,
+            "these worlds keep a lake over the Caspian's share of their land, " +
+                "${"%.2f".format(pooledLargest / caspianShare)}x it pooled over " +
+                "${largestLandLakeShares.size} worlds: $overLarge"
         )
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +

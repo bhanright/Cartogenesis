@@ -125,14 +125,32 @@ interface Platform {
      */
     val accelerator: ErosionAccelerator?
 
-    /** Optional coarse ocean solver, governed by the same graphics acceleration preference. */
+    /**
+     * Where to solve the ocean's stream function, or null to leave it on the processor.
+     *
+     * Behind the same switch as [accelerator], and for the same reason: the gyres set the sea
+     * temperature, which sets the climate, so a solve that rounds differently is a different world
+     * in exactly the sense erosion's terrain is.
+     */
     val oceanAccelerator: OceanAccelerator? get() = null
 
     val accelerationUnavailableBecause: String?
 
-    /** Work offered by this host, for the small print below the graphics toggle. */
+    /**
+     * What the graphics device is actually doing here, for the line of small print under the
+     * switch. [device] is [accelerator]'s own name.
+     *
+     * The two front ends do not do the same amount on it, and one sentence for both would tell
+     * one of them a smaller truth than it is owed: the desktop draws the export raster on the
+     * device as well as running the erosion sweeps and the current solve, while the browser's WGSL
+     * raster has not been written, so there it really is erosion and the currents alone. A sentence
+     * that names the raster everywhere is wrong in a browser; one that omits it understates the
+     * desktop. So the host answers, which is what this seam is for. The default is the desktop's,
+     * because a `Platform` that has not thought about the question is one with a real graphics API
+     * behind it.
+     */
     fun acceleratedWork(device: String): String =
-        "Erosion, ocean currents and export rendering run on $device."
+        "Erosion, ocean currents and export rendering run on $device, many times faster."
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.

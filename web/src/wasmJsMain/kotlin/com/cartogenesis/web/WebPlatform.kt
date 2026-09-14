@@ -56,9 +56,16 @@ class WebPlatform(
     /** `(pointer: coarse)`. See [pointerIsCoarse]. */
     override val coarsePointer: Boolean = pointerIsCoarse()
 
-    /** The raster is still computed on the processor on this platform. */
+    /**
+     * Erosion and the currents, and leaving the raster out is not a simplification.
+     *
+     * The desktop draws the export raster on its device as well, through OpenGL compute; the WGSL
+     * port of that raster has not been written, so in a browser the device runs the erosion sweeps
+     * and the stream-function solve and nothing else. Saying otherwise here would be promising a
+     * speed-up that does not exist.
+     */
     override fun acceleratedWork(device: String): String =
-        "Erosion and ocean currents run on $device."
+        "Erosion and ocean currents run on $device, many times faster."
 
     /**
      * 2048 on a phone, 4096 otherwise.

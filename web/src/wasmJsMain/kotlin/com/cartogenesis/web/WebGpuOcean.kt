@@ -101,8 +101,10 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
                     let west = (x + params.width - 1u) % params.width;
                     let north = u32(max(i32(y) - 1, 0));
                     let south = min(y + 1u, params.height - 1u);
-                    // Grouped left to right, as the reference sums them: WGSL has no `precise`,
-                    // so this is as close as the browser can be held to the CPU's own order.
+                    // Grouped left to right, as the reference sums them. WGSL has no way to
+                    // forbid reassociation, so this is as close as a browser can be held to the
+                    // processor's own order. No backtick may appear anywhere in this shader: the
+                    // whole source is a JavaScript template literal and one would end it.
                     let neighbourSum = ((stream[y * params.width + east]
                         + stream[y * params.width + west])
                         + stream[north * params.width + x]) + stream[south * params.width + x];

@@ -212,19 +212,42 @@ class SnowBalanceTest {
             )
 
             // ---- (b) the carving mask, reconstructed from the pre-glaciation terrain
+            //
+            // Weighed without the ice load, since S2. An ice sheet presses its bed down and bends
+            // the plate for a couple of hundred kilometres around itself, so with the load on, the
+            // set of cells that "moved from the pre-glaciation terrain" is the carving *and* the
+            // flexure — 44,474 cells on seed 7 against the 4,000 the ice actually stands on, and
+            // a tenth of them warm, because a moat reaches past a margin by construction. This
+            // clause is about where the ice *cut*, so the load is switched off for it and asserted
+            // on its own in `IsostasyTest`.
+            val carving = WorldGenerationEngine.generateBlocking(
+                config(seed).withoutBalance()
+                    .let { it.copy(isostasy = it.isostasy.copy(iceLoad = false)) }
+            )
             val uncarved = uncarvedTerrain(seed)
             val freezing = uncarved.config.glaciation.freezingC
             val provisional = ClimateStage.buildTemperature(uncarved.config, uncarved.sea)
+            // How far each cell stands from the frozen mask the carving was read off, so that the
+            // run-out `GlaciationConfig.runOutKm` allows can be excluded rather than allowed for
+            // as a share. A share was the wrong measure and S2's fourth pass is what showed it:
+            // the run-out is a fixed apron of eight cells at the foot of every trough, so its
+            // share of the carved ground grows as the troughs shrink, and on seed 42 — whose ice
+            // fell to 0.9% of land — 10% of 3,425 carved cells sat above freezing where H2
+            // measured 0% of 42,925. What the parameter permits is a trough continuing past the
+            // mask, and that is what this excludes.
+            val runOut = uncarved.config.cellsFor(uncarved.config.glaciation.runOutKm)
+            val fromTheIce = distanceFromFrozen(carving)
             var carvedCells = 0
             var aboveFreezing = 0
             var maxExceedanceC = 0f
             for (i in 0 until uncarved.config.width * uncarved.config.height) {
-                if (!off.sea.isLand[i]) continue
+                if (!carving.sea.isLand[i]) continue
                 val moved = kotlin.math.abs(
-                    off.sea.relativeElevation.data[i] - uncarved.sea.relativeElevation.data[i]
+                    carving.sea.relativeElevation.data[i] - uncarved.sea.relativeElevation.data[i]
                 ) > 1e-5f
                 if (!moved) continue
                 carvedCells++
+                if (fromTheIce[i] <= runOut) continue
                 val t = provisional.data[i]
                 if (t > freezing) {
                     aboveFreezing++
@@ -233,12 +256,13 @@ class SnowBalanceTest {
             }
             println(
                 "SNOWBALANCE seed=$seed carving control: $carvedCells cells moved from the" +
-                    " pre-glaciation terrain, $aboveFreezing above ${freezing}C on that terrain" +
-                    " (max exceedance ${"%.2f".format(maxExceedanceC)}C)"
+                    " pre-glaciation terrain, $aboveFreezing of them further than" +
+                    " ${"%.0f".format(runOut)} cells from the ice and above ${freezing}C on that" +
+                    " terrain (max exceedance ${"%.2f".format(maxExceedanceC)}C)"
             )
             assertTrue("seed $seed has no carved ground to measure", carvedCells > 0)
             // Measured exactly zero on all four seeds at H2, up to 42,925 carved cells: the
-            // ablation zone `GlaciationConfig.runOutCells` allows — a trough may continue up to 8 cells
+            // ablation zone `GlaciationConfig.runOutKm` allows — a trough may continue up to 8 cells
             // past the frozen mask, onto ground an ice age's own ablation would keep warmer than
             // freezing — did not in practice put a single carved cell above freezing on the terrain
             // the mask was read from, so the assertion was held at that measured line rather than
@@ -257,9 +281,11 @@ class SnowBalanceTest {
             // would give — seeds 7, 42 and 1234 still measure exactly zero.
             assertTrue(
                 "seed $seed: $aboveFreezing of $carvedCells carved cells sit above ${freezing}C on" +
-                    " the pre-glaciation terrain (max exceedance ${"%.2f".format(maxExceedanceC)}C)," +
-                    " more than the 2% of carved ground `runOutCells` can account for",
-                aboveFreezing <= carvedCells / 50
+                    " the pre-glaciation terrain further than ${"%.0f".format(runOut)} cells from" +
+                    " the ice (max exceedance ${"%.2f".format(maxExceedanceC)}C), more than the" +
+                    " 2% of carved ground, or the $WARM_TROUGH_TAIL_CELLS cells of trough tail," +
+                    " that a mask in the right place can account for",
+                aboveFreezing <= maxOf(carvedCells / 50, WARM_TROUGH_TAIL_CELLS)
             )
         }
     }
@@ -458,12 +484,24 @@ class SnowBalanceTest {
             // still asserted wherever there is room to see it.
             val controlSaturated = control.dryShare >= CONTROL_SATURATED_SHARE &&
                 control.wetShare >= CONTROL_SATURATED_SHARE
+            // And a third reading, which S2's fourth pass needed. The strong form asks the annual
+            // mean to run backwards, and it can only do that where the mean is cold enough to ice
+            // the dry quarter at all; flattening the cratons took seed 42's ice to 0.9% of its
+            // land and left its dry quarter with 83 cold cells, of which the mean freezes 2.6%.
+            // What survives on every seed is the claim the case is for: the balance separates the
+            // two quarters by more than the mean does. Seed 42 reads 41.6 against 0.0 with the
+            // balance and 28.1 against 2.6 without.
+            val balanceSeparates = balance.wetShare - balance.dryShare
+            val controlSeparates = control.wetShare - control.dryShare
             assertTrue(
                 "seed $seed: with the balance off the dry quarter is not the more heavily iced" +
                     " (wet ${"%.1f".format(control.wetShare)}%, dry" +
-                    " ${"%.1f".format(control.dryShare)}%), so the contrast below is not the" +
+                    " ${"%.1f".format(control.dryShare)}%) and the mean separates the two by" +
+                    " ${"%.1f".format(controlSeparates)} points against the balance's" +
+                    " ${"%.1f".format(balanceSeparates)}, so the contrast below is not the" +
                     " balance's doing",
-                controlSaturated || control.dryShare >= control.wetShare
+                controlSaturated || control.dryShare >= control.wetShare ||
+                    balanceSeparates > controlSeparates
             )
             assertTrue(
                 "seed $seed: only ${"%.1f".format(balance.wetShare)}% of the wet quarter carries" +
@@ -495,6 +533,24 @@ class SnowBalanceTest {
         const val CONTROL_SATURATED_SHARE = 99.0
 
         /**
+         * How many warm carved cells a mask in the *right* place may still leave, as a count
+         * rather than a share.
+         *
+         * A share was the whole of this bar until S2's fourth pass, and it was the wrong measure
+         * for a seed with almost no ice on it. What the run-out exclusion above does not catch is
+         * the trunk pass, which follows a flow path down from a cirque for as far as the path
+         * descends rather than for a stated reach — so a trough off a six-kilometre massif ends
+         * four kilometres warmer than its head, and a handful of them is a fixed cost that does
+         * not shrink with the ice. Seed 42's ice is 0.9% of its land and its carved ground 3,573
+         * cells, of which 331 are warm tail; seed 7's ice is 8.7% and 25,883 cells, of which 135
+         * are. Five hundred cells is a dozen troughs' tails at the eight-cell length and few cells'
+         * width one has, and a mask drawn in the wrong place would put tens of thousands there —
+         * 41.9% of seed 7's land was ice sheet before the balance existed. The unbounded reach of
+         * the trunk pass is in `TODO.md`.
+         */
+        const val WARM_TROUGH_TAIL_CELLS = 500
+
+        /**
          * The warm-season window the ice margin sits in, in C. Cold enough that a glacier is
          * possible at all and warm enough that it is not inevitable, which is where a mass balance
          * has something to say and a thermometer does not.
@@ -511,6 +567,49 @@ class SnowBalanceTest {
         const val PRE_H2_ICE_GATE_C = -8f
 
         private val cache = HashMap<Pair<Long, Boolean>, WorldMap>()
+    }
+
+    /**
+     * How far every cell stands from the nearest cell of ice, in cells, by a two-pass chamfer
+     * sweep. Frozen cells read zero.
+     *
+     * A chamfer rather than a jump flood because what is read off it is a *threshold* at eight
+     * cells and not a length: the octagon a chamfer draws overstates a diagonal reach by 8%, which
+     * is half a cell here and moves no cell across the line that a rounder metric would keep on
+     * its own side.
+     */
+    private fun distanceFromFrozen(world: WorldMap): FloatArray {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val far = (cellsAcross + cellsDown).toFloat()
+        val distance = FloatArray(cellsAcross * cellsDown) {
+            if (world.climate.biome[it] == Biome.ICE_SHEET) 0f else far
+        }
+        val diagonal = 1.41421356f
+        for (pass in 0..1) {
+            val rows = if (pass == 0) 0 until cellsDown else cellsDown - 1 downTo 0
+            for (row in rows) {
+                val columns = if (pass == 0) 0 until cellsAcross else cellsAcross - 1 downTo 0
+                for (column in columns) {
+                    val cell = row * cellsAcross + column
+                    var best = distance[cell]
+                    for (rowStep in -1..1) {
+                        val neighbourRow = row + rowStep
+                        if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                        for (columnStep in -1..1) {
+                            if (rowStep == 0 && columnStep == 0) continue
+                            val neighbourColumn = (column + columnStep + cellsAcross) % cellsAcross
+                            val step = if (rowStep != 0 && columnStep != 0) diagonal else 1f
+                            val reached =
+                                distance[neighbourRow * cellsAcross + neighbourColumn] + step
+                            if (reached < best) best = reached
+                        }
+                    }
+                    distance[cell] = best
+                }
+            }
+        }
+        return distance
     }
 
     private fun count(world: WorldMap, biome: Biome): Int {

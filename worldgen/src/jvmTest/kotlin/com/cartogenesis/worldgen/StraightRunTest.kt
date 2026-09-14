@@ -146,7 +146,36 @@ class StraightRunTest {
             val receiver = routed[cell]
             if (receiver < 0) {
                 val row = cell / cellsAcross
-                if (row != 0 && row != lastRow) strandedInland++
+                if (row != 0 && row != lastRow) {
+                    strandedInland++
+                    // Described rather than counted: a cell with no receiver at all is either a
+                    // fill that left no way down or a tie the router could not break, and the two
+                    // read differently in the neighbourhood printed here.
+                    println(
+                        ("STRAIGHTRUN %s stranded at (%d, %d): ground %.9f, filled %.9f," +
+                            " neighbours filled %s")
+                            .format(
+                                label, cell % cellsAcross, row, trueGround[cell], filled[cell],
+                                (-1..1).flatMap { rowStep ->
+                                    (-1..1).mapNotNull { columnStep ->
+                                        if (rowStep == 0 && columnStep == 0) return@mapNotNull null
+                                        val neighbourRow = row + rowStep
+                                        if (neighbourRow < 0 || neighbourRow >= cellsDown) {
+                                            return@mapNotNull null
+                                        }
+                                        val neighbourColumn =
+                                            (cell % cellsAcross + columnStep + cellsAcross) %
+                                                cellsAcross
+                                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
+                                        "%s%.9f".format(
+                                            if (world.sea.isLand[neighbour]) "" else "sea ",
+                                            filled[neighbour]
+                                        )
+                                    }
+                                }
+                            )
+                    )
+                }
                 continue
             }
             val there =

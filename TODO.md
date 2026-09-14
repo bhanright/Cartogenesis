@@ -1,5 +1,201 @@
 # To do
 
+- **A continent has no slope of its own, and the drainage shows it.** Since S2's second pass the
+  base relief is shaped into a band around 400 km, which is where Earth's non-orogenic continental
+  topography sits and where the eye reads a range — and it left the ground with almost nothing at
+  the wavelength that makes a *long river*. The Mississippi, the Ob, the Parana and the Congo are
+  long because the ground tilts one way for two thousand kilometres, and this world's continental
+  crust is one thickness everywhere, so between its belts it is level.
+  `TerrainConfig.regionalReliefShare` puts some of the map-scale component back, and S2's third pass
+  raised it from a tenth to a sixth after finding that a tenth cost far more than the bifurcation
+  ratio the second pass measured it by: at a tenth, lakes covered 3.55% of the land against Earth's
+  1.48% at this cell area and whole regions drowned into mazes of inlets, because ground with no
+  long slope ponds the water where it falls. A sixth is where the drainage density lands on the
+  pre-S2 generator's 0.0026 km/km² and every seed's coastline still clears Mandelbrot's floor;
+  above it the coast goes and the density overshoots. What a sixth buys is bought against the
+  coast, and the trade is the finding: `main` before S2 had both — a coastline of 1.17 pooled *and*
+  Earth's drainage — because its shoreline was a percentile through a fractal noise field rather
+  than a contour across a 4,500 m crustal step. Every other lever was measured and none of them moved it: the corner
+  wavelength over seven values, the relief's amplitude over 700 to 2,000 m (with the submerged
+  share moved with it to keep the cut on the datum), the amplitude on orogens, the margin's own
+  roughness over 0.35, 0.70 and 1.00 — worth 0.01 on the dimension, because the window that lets a
+  margin wander is zero where the shoreline actually stands — the fine detail noise, the
+  enclosed-sea rule, and a continental interior swell of Bond's own amplitude and wavelength built
+  for the purpose and then removed because the metrics could not see it. What is wanted is not a
+  swell of the surface but a variation in the crust's own thickness, which is the same thing the
+  epicontinental-seas entry below wants. 2026-09-13, S2.
+- ~~**There are three times as many lakes as there were, and they are the right area.**~~ Answered
+  at S2's fourth pass, by the crust rather than by anything the entry proposed: giving the
+  continental crust a thickness that rises inland gave a continent a slope of its own, and the
+  water that had been standing on it runs. The lake share of land is 0.70% against Earth's 1.48% at
+  this cell area, where the third pass measured 1.73% and the pre-S2 generator 0.54%. What the
+  entry said below is kept because the question it asks — which of the count and the area is the
+  defect — is still unanswered, and is now asked of a generator with too *few* lakes rather than too
+  many. The original reading follows.
+
+  Measured over the five standard worlds at 512 after S2's third pass: 1.73% of land under lakes
+  against Earth's 1.48% at this cell area and the pre-S2 generator's 0.54%, in 39 lakes against its
+  13. So the map
+  now holds about Earth's share of its land in lakes where it used to hold half of it, and it does
+  that with twice as many, each smaller. Which of the two figures is the defect is not settled:
+  Earth's lake *count* at a 275 km² floor is not a number this project has looked up, and the
+  Pareto exponent M1 does assert is 1.05 against Downing's 1.06. Whoever looks should start by
+  asking where the extra basins are — they are not the ice moat and they are not the bend the plate
+  makes at the end of a round, both of which S2's third pass fixed and which were worth about a
+  third of them between them. 2026-09-13, S2.
+- **The rivers deepen their notches by a fifth where they used to deepen them by half.** Measured
+  along the same courses on the same world's un-eroded ground, seeds 7, 42 and 1234 at 512: the
+  tree before S2 cut its channels to 0.0148 of the height field out of ground standing at 0.0075,
+  and this one cuts to 0.0186 out of ground standing at 0.0157. The finished channel is a quarter
+  deeper and the *deepening* is less than half what it was, because the ground the rivers are
+  handed is twice as rough at this cross-section — the base relief is a band at 400 km with an
+  amplitude in metres where it used to be a `1/k` surface renormalised to its own extremes. Whether
+  a stream-power law calibrated on the smoother ground is under-cutting on the rougher is S3's
+  question, and it is the same question as whether `K` should vary with the rock (H3).
+  2026-09-13, S2.
+- **The thermal sweeps no longer give a mountain its flanks.** S2's third pass raised the critical
+  slope from 12 m/km to 60, which is the gentlest of Earth's great mountain fronts read over a
+  cell's width, and every measurement improved — the belt flank stopped being planed into an
+  annulus, the coastline rose, the lakes fell. But the figures are flat from about 36 m/km upward,
+  which says the sweeps now reach almost nothing a belt profile draws, and `GEOGRAPHY.md` still
+  says they are what gives a mountain its flanks. They are not; the rivers are. Either the claim
+  should go or the sweeps should be given a threshold that means something at a 23 km cell, which
+  is a question about what a sub-cell distribution of slopes does and belongs with lithology (H3)
+  rather than with a constant. 2026-09-13, S2.
+- **The spreading rate this world needs is faster than Earth's fastest ridge.** Sea floor is
+  destroyed as fast as it is made, so the mean age of a planet's floor is its ocean's area over its
+  ridges' production, and a world with less ridge for its ocean has to spread faster or its floor
+  would be older than the planet. `PlateStage.seafloorAgeOf` therefore solves the rate from Earth's
+  mean ocean depth rather than declaring it, and the figure it reaches runs to a few hundred kilometres per million years against
+  Earth's area-weighted mean of 28 mm/yr and its fastest, the East Pacific Rise, at 75. The cause is
+  the plate partition: fourteen Voronoi plates on a cylinder put most of their boundaries between
+  crusts that are not both oceanic, so this map carries about half Earth's ridge length for its
+  ocean area. Giving the plates a spreading history — ridges that propagate, and triple junctions
+  that migrate — is what would fix it, and it is a chunk rather than a knob. 2026-09-13, S2.
+- **The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**
+  Earth's mean ocean depth of 3,682 m is a mean over the whole ocean, and about a fifth of that
+  ocean is shelf, slope and rise standing on continental crust; the deep floor away from the margins
+  averages nearer 4,300. `IsostasyConfig.oceanicMeanFloorMetres` anchors this generator's *oceanic
+  crust* at 3,682 rather than at 4,300, which keeps the whole ocean's mean where Earth's is at the
+  cost of the deep floor's, because the model has far less of that shallow fifth than Earth does.
+  Which of the two to anchor on is a real question and it is the same question as the
+  epicontinental seas below: drown the continents as much as Earth drowns its own and the two
+  figures reconcile. 2026-09-13, S2.
+
+- **The coastline is drawn by the cell-scale relief on low ground, and this pass took some of that
+  away.** The box-counting dimension is a measure of how crinkled the shoreline is at four, eight
+  and sixteen cells, and what crinkles a contour at that scale is the height noise around it
+  divided by the slope it crosses. S2's fourth pass made the texture proportional to the local
+  relief, which is smallest exactly where the shoreline is, and the pooled dimension came down from
+  1.149 over five seeds to 1.129 over four — still inside Mandelbrot's 1.25 ± 0.15, but seed 99 at
+  1.092 is under its floor on its own, which is why `EarthLikeness`'s clause is now asserted pooled.
+  The same trade is the first entry in this file read the other way round: `main` before S2 had a
+  coastline of 1.17 *and* Earth's drainage because its shoreline was a percentile through a fractal
+  noise field, and every rule that has since given the ground a physical shape has cost the coast
+  something. What would buy it back honestly is a coastal *process* — waves, longshore drift, a
+  barrier island — which is section 5 of `REALISM_AUDIT.md` and is nobody's chunk yet.
+  2026-09-13, S2.
+- **A sixth of the map-scale relief may no longer be needed, and nothing has measured it since
+  the crust got a slope.** `TerrainConfig.regionalReliefShare` was raised from a tenth to a sixth
+  at S2's third pass because at a tenth the water ponded: lakes covered 3.55% of the land and whole
+  regions drowned into mazes of inlets. S2's fourth pass gave the continental crust a thickness
+  that rises inland, which is a long slope of the same kind and a better-founded one, and at a
+  tenth *and* a flat crust the lakes now read 0.96%. So the control `GroundTextureTest` used no
+  longer bites and the sixth is carrying an unknown share of its own weight. What it costs is
+  measured: TODO's first entry records that a sixth is bought against the coastline. Somebody
+  should sweep the share again on the new ground and take back whatever the crust is now paying
+  for. 2026-09-13, S2.
+- **The drainage density has no Earth figure, only a regression bar.** `GroundTextureTest` holds
+  the channel length per unit area within a third of what the pre-S2 tree measured, which is a bar
+  against a generator and not against a planet. It was a fifth until this pass and moved because
+  the ground now drains — the lake share fell from 1.73% of land to 0.70% against Earth's 1.48%
+  while the density rose from 0.00256 to 0.0032 km/km², which are the same fact twice. What is
+  missing is Earth's own channel length per unit area *at this instrument's support threshold* of
+  275 km², which M1 never looked up because its own drainage row is a shape claim (density peaks
+  on the dry side of the aridity index) and not a level. Until somebody does, the direction of a
+  change in this figure cannot be read. 2026-09-13, S2.
+- **A glacial trough has no bounded reach.** `GlaciationConfig.runOutKm` is 187.5 km and says how
+  far a trough may continue past the frozen mask onto ground an ice age's ablation would keep warm.
+  The trunk pass does not read it: it follows a flow path down from a cirque for as far as the path
+  descends, so a trough off a six-kilometre massif ends four kilometres warmer than its head and
+  three hundred kilometres away. `SnowBalanceTest`'s carving control had to gain a floor in cells
+  because of it — the warm tail is a fixed cost per trough and its *share* of the carved ground
+  grows as the ice shrinks, which is how a seed with 0.9% of its land under ice reads 10% of its
+  carved ground above freezing where a seed with 8.7% reads 0.5%. Either the trunk should stop at
+  the reach the setting names or the setting should be retired as a description of the cirque pass
+  alone. 2026-09-13, S2.
+- **The lowest ground on the map is the roughest, and on Earth it is the flattest.** Since S2's
+  fourth pass the base relief's texture follows the local relief, and the relief itself follows the
+  crust: `TectonicsConfig.marginReliefStandardDeviationMetres` at the crust's own edge falling to
+  `cratonReliefStandardDeviationMetres` inland. What that leaves is a coastal band carrying the
+  margin's 700 m of spread, so on four of the five standard worlds at 512 the *lowest* quarter of
+  the land is rougher than the second quarter — 69/47, 91/66, 44/37, 44/41 and 66/35 m of
+  cell-scale departure — where `main`'s rises monotonically with elevation on all five. Earth's
+  coastal plains are the flattest large ground there is (the Gulf, the Atlantic, the Amazon, the
+  Ganges, the West Siberian), and they are flat because they are built by deposition rather than
+  left by erosion. The margin's figure is doing two jobs at once — the structure of the shelf and
+  the texture of the plain behind it — and only the first of them is what it was derived for. What
+  is wanted is the coastal plain as a depositional apron, which is the deposition stage's business
+  rather than the noise's. 2026-09-13, S2.
+- **The continental crust's altitude spreads by a fifth more than Earth's.** With the field on an
+  absolute ruler the spread can be read directly: over the five standard worlds at 512 the standard
+  deviation of altitude over cells that are more than half continental crust is 1,341 m. Earth's,
+  worked from its own hypsometry — 71% land at a mean of 840 m and a spread near 1,090, 29% drowned
+  at a mean near −400 and a spread near 500 — is about 1,110. The excess is the same one the entry
+  below names as too much high ground, and it is now a single number that a guard could hold if
+  anybody decided which of the model's amplitudes should give: the margin's relief, the belts'
+  along-strike swell, or the gravitational limit. 2026-09-13, S2.
+- **This generator's continents have no epicontinental seas.** Earth's continental crust covers
+  41.2% of the surface and its land 29.2%, so 29% of the continents are under water; this generator
+  drowns a fifth of its own, which is what `TectonicsConfig.continentalCrustSubmergedShare` carries
+  and what its sea-level cut is solved against. S2's second pass closed most of the gap by giving
+  the continental surface Earth's own spread about its mean — 700 m of standard deviation, where
+  the first pass gave it a fifth of that — and the shoreline residual came down from 428-796 m to
+  -187 to +112 m. What is left is the harder half and it is nameable: there is no Hudson Bay, no
+  Baltic, no North Sea, no Sunda shelf, because nothing in the model floods a continent's *interior*.
+  That is a question about how the crust's own thickness varies inside a plate, which the model does
+  not represent — every continental column is 41 km of crust. A swell of the surface at Bond's
+  amplitude and wavelength was built for S2's second pass and measured: it is not the same thing and
+  the metrics could not see it, so it was removed again. What is wanted is thickness.
+
+  S2's fourth pass gave the crust a thickness that varies *with distance in from its own edge* —
+  44.6 km in the craton against 32.6 at the rim — and that is what moved the drowning to the
+  margins, from 68% of it within 500 km of the crust's edge to 81%. It is not what this entry
+  wants. A Hudson Bay is thin crust in the *middle* of a craton, which is a failed rift or an old
+  suture and not a distance from anywhere; the profile this pass added cannot draw one, and the
+  drowned share fell from a fifth toward the rim rather than rising toward Earth's three tenths.
+  What is wanted is still thickness, and now specifically thickness that varies with the crust's
+  own history rather than with its geometry. 2026-09-13, S2.
+- **There is half again too much high ground.** With the field on an absolute ruler the land's
+  elevation distribution can be read against Earth's for the first time, and the top of it is fat:
+  over the five standard worlds at 512, 4.0-13.0% of land stands above 3 km against Earth's 5% and
+  3.2-7.6% above 4 km against Earth's 2%, while the bands below 2 km are close (25.8-79.3% above
+  1 km against 31%, the spread being how far each seed's sea-level cut sits from the datum). Two
+  candidates and neither was measured apart at S2. The belts' along-strike swell puts a strong
+  pair's crest eight times above a typical one's, which is a much wider spread than Earth's ranges
+  have; and the gravitational limit compresses everything above 3 km toward 6 km rather than
+  removing it, so what the limit refuses to raise it piles up instead. Lowering
+  `TectonicsConfig.beltReliefMetres` from 13,000 to 10,000 moved the figures by less than a tenth,
+  which says it is the limit and the swell rather than the scale. 2026-09-13, S2.
+- **A rift trough does not subside while it opens.** S2's uplift field is positive only: it takes
+  the part of a belt's stamped profile that stands *up*, so a rift's shoulders rise every round and
+  its floor does nothing. On Earth the floor is the half that moves — a half-graben subsides as its
+  master fault slips, which is why the Gulf of California and the Red Sea are drowned across their
+  whole width and this generator's coastal rifts show a dry hinge shelf. The mechanism is one sign:
+  give `CONTINENTAL_RIFT` a negative rate on the trough as well as a positive one on the shoulders,
+  scaled by how far the rift has opened. It was left out of S2 deliberately, because the E-track's
+  rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
+  round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
+  takes it should read E7 and E8's notes below first. 2026-09-13, S2.
+- **The tectonics' belt widths are still counts of cells.** S1 left the widths and the heights
+  together because neither could carry a unit while the field was normalised; S2 gave the heights
+  one — every belt height is a share of `TectonicsConfig.beltReliefMetres` — and left the widths
+  where they were, because `WorldGenConfig.atResolution` already carries them across a change of
+  grid and writing them in kilometres would do the same arithmetic in a different place. It would
+  read better all the same, and it would empty `atResolution` of everything but the moisture
+  march's own knob. A rename with no physics under it. 2026-09-13, S2.
+
+
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes
   of four, eight and sixteen cells holding both land and water, and a box is mixed by a *single*
   cell of the other kind — so a tooth one cell deep makes a four-cell box mixed and rarely makes a
@@ -154,6 +350,33 @@
   density off the terrain's channel network rather than the drawn one for exactly this reason, and
   says so. The cure is a cap that is an area or a share rather than a count, and it belongs with
   R2's rivers-drawn-as-rivers. 2026-09-13, S1.
+- **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
+  sorts channel heads by the flow each already carries and traces the largest first, so the course a
+  `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
+  is drawn afterwards as a tributary stopping at the junction. The union of the drawn cells is the
+  right network and the picture is right; what is wrong is any consumer that reads one `River` as
+  one river. M1 measures how wrong, and it is half: over seeds 7/42/1234/99 at 512 the drawn courses
+  cover **0.484** of the watercourses they stand for by length (0.465/0.531/0.487/0.458), and over
+  the six audited seeds at 2048 **0.408** (0.367 to 0.451), where the share is 1.0 by definition — a
+  river is its own longest watercourse. Hack's exponent over the same basins does not settle in one
+  direction, 0.463 drawn against 0.507 on the terrain at 512 and 0.591 against 0.491 at 2048, so
+  what is wrong is not a consistent scaling but which branch the trace happened to take. It matters
+  for V3's labels, for anything quoting a river's length, and for what `RiverWidth` treats as a
+  trunk. The repair is in the tracing: rank the heads by the length of the path below them rather
+  than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
+
+## Done
+
+- **The generator's ocean was nearly all shallow** (2026-09-13, S2) — the oceanic hypsometric mode
+  sat at about -390 m against Earth's -3,700, because the height field was renormalised to its own
+  extremes and the shoreline was its 62nd percentile, so most water cells sat just below the
+  waterline with a long tail to a few trenches. Two crusts of different density floating at two
+  levels is what makes Earth's floor bimodal, and S2 models it: the mode is now at -3,233 to -4,229
+  m over the five standard worlds, the curve has a trough between its two modes holding 0.086 to
+  0.158 of the smaller one against Earth's 0.17, and both clauses are asserted in
+  `EarthLikenessTest` where they were findings. What the same change did *not* fix is the shelf
+  plateau, which is still 1,000 m and is now its own entry above.
+
 - **The generator's ocean is nearly all shallow.** With the sea's own depth declared, the
   Earth-likeness suite reads the oceanic mode at about -390 m against Earth's -3,700: the height
   field is roughly normal and the shoreline is its 62nd percentile, so most water cells sit just

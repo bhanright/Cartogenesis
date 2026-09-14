@@ -19,8 +19,9 @@ import kotlinx.coroutines.runBlocking
 fun erodeBlocking(
     config: WorldGenConfig,
     height: FloatField,
-    accelerator: ErosionAccelerator? = null
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, accelerator) }
+    accelerator: ErosionAccelerator? = null,
+    upliftRateMmPerYear: FloatField? = null
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, accelerator) }
 
 /**
  * The thermal sweeps alone, with the activity-tile skip switchable — the control
@@ -29,22 +30,25 @@ fun erodeBlocking(
 internal fun thermalSweepBlocking(
     config: WorldGenConfig,
     height: FloatField,
-    skipSettled: Boolean
-): ErosionResult = runBlocking { ErosionStage.thermalSweep(config, height, skipSettled) }
+    skipSettled: Boolean,
+    sweeps: Int = ErosionStage.sweepsFor(config)
+): ErosionResult = runBlocking { ErosionStage.thermalSweep(config, height, skipSettled, sweeps) }
 
 /** The whole stage, reporting each hydraulic round's mass budget to the deposition guard. */
 internal fun erodeBlockingReportingRounds(
     config: WorldGenConfig,
     height: FloatField,
+    upliftRateMmPerYear: FloatField? = null,
     onRound: (RoundMass) -> Unit
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, onRound) }
+): ErosionResult =
+    runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound) }
 
 /** The whole stage, recording which mechanism laid sediment where, for the fan-outline guards. */
 internal fun erodeBlockingLoggingDeposition(
     config: WorldGenConfig,
     height: FloatField,
     log: DepositionLog
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, null, log) }
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, null, null, log) }
 
 /**
  * The whole stage, with the receiver clamp switchable — the control `ReceiverClampTest` needs.
@@ -60,5 +64,5 @@ internal fun erodeBlockingWithReceiverClamp(
     receiverClamp: Boolean,
     onRound: ((RoundMass) -> Unit)? = null
 ): ErosionResult = runBlocking {
-    ErosionStage.apply(config, height, null, onRound, receiverClamp = receiverClamp)
+    ErosionStage.apply(config, height, null, null, onRound, receiverClamp = receiverClamp)
 }

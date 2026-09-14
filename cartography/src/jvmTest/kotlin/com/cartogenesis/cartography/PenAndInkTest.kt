@@ -117,20 +117,28 @@ class PenAndInkTest {
          * land, so a world cut differently measures a different median, and it was re-derived from
          * 0.936 to 0.9318 in the same commit. Pen and ink is the one style these records show
          * untouched by that, because it has no tint for the shading to multiply.
+         *
+         * And once more at S2's fourth pass, for the same two reasons at once. The crust has a
+         * thickness that rises inland and the base relief a texture proportional to the ground's
+         * own relief, so the world under all twelve moved again; and ordinary country came out
+         * smoother, so [ReliefShading.ORDINARY_GROUND] was re-derived from 0.9318 to 0.9582 in the
+         * same commit and every tinted style moved with it. Pen and ink is again the one whose
+         * record does not move at all — `-588733464` before and after — which is the cleanest
+         * evidence there is that what moved is the shading and the ground and not the drawing.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 2008645487,
-            MapStyle.VELLUM to 1859047141,
-            MapStyle.INK_WASH to 279160468,
-            MapStyle.NAUTICAL to -1634641140,
-            MapStyle.MIDNIGHT to -1964822747,
-            MapStyle.SCHOOLROOM to -2014562873,
-            MapStyle.VERDANT to 341708382,
-            MapStyle.SCROLL to 1660858719,
-            MapStyle.PEN_AND_INK to -766702493,
-            MapStyle.MARS to 1103907073,
-            MapStyle.NATURAL to 1345079715,
-            MapStyle.CLEAR to 1823331885
+            MapStyle.ATLAS to 930027704,
+            MapStyle.VELLUM to 457126660,
+            MapStyle.INK_WASH to 619688466,
+            MapStyle.NAUTICAL to -363818632,
+            MapStyle.MIDNIGHT to -1921684469,
+            MapStyle.SCHOOLROOM to -339084382,
+            MapStyle.VERDANT to -1336817398,
+            MapStyle.SCROLL to -418514324,
+            MapStyle.PEN_AND_INK to -588733464,
+            MapStyle.MARS to -1593596128,
+            MapStyle.NATURAL to 1627266891,
+            MapStyle.CLEAR to -747191847
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

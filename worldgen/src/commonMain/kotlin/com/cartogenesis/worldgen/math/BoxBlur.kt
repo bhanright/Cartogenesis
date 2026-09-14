@@ -21,11 +21,28 @@ object BoxBlur {
      * across the map's east-west seam; Y clamps at the poles.
      */
     fun apply(field: FloatField, radius: Int, passes: Int = PASSES_FOR_GAUSSIAN) {
-        if (radius <= 0) return
+        apply(field, radius, radius, passes)
+    }
+
+    /**
+     * The same blur with a window that is [radiusAcross] cells wide and [radiusDown] cells tall.
+     *
+     * For a window that is the same *length* on the ground in both axes, which is not the same
+     * window in cells: an equirectangular map is twice as wide as it is tall, so a 512 by 512 grid
+     * has cells 23 km across and 12 km down and a square window in cells smooths twice as far east
+     * as it does south. A caller that means kilometres wants this one.
+     */
+    fun apply(
+        field: FloatField,
+        radiusAcross: Int,
+        radiusDown: Int,
+        passes: Int = PASSES_FOR_GAUSSIAN
+    ) {
+        if (radiusAcross <= 0 && radiusDown <= 0) return
         val scratch = FloatArray(field.data.size)
         repeat(passes) {
-            horizontal(field, radius, scratch)
-            vertical(field, radius, scratch)
+            if (radiusAcross > 0) horizontal(field, radiusAcross, scratch)
+            if (radiusDown > 0) vertical(field, radiusDown, scratch)
         }
     }
 

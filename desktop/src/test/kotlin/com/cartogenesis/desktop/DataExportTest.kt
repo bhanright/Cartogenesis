@@ -147,7 +147,9 @@ class DataExportTest {
      * the ice accounts for none of them (measured with `GlaciationConfig.enabled` off, which
      * changes nothing here). A heightmap that clamped that floor to sea level would be flattening a
      * real depression, so what is held is the pair that is not allowed: no *open sea* cell may come
-     * back above the line, and with enclosed seas left as sea no land cell may come back below it.
+     * back above the line, and with every rule that puts land below the waterline switched off no
+     * land cell may come back below it. There are three of those rules since S2's fourth pass —
+     * see the control itself.
      */
     @Test
     fun `only water and drowned basin floors come back darker than the stated sea level`() {
@@ -169,11 +171,25 @@ class DataExportTest {
             }
         }
 
-        // The same world with enclosed seas left as sea, which `SeaConfig.enclosedSeaIsLand` calls
-        // the behaviour from before sea-level history exactly. Every below-the-waterline land
-        // cell goes with it.
+        // The same world with every rule that can leave land below the waterline switched off.
+        // Enclosed seas alone were enough until S2's fourth pass, which put more coast within a
+        // hundred metres of the waterline and let the other two show: the drowned-valley fill,
+        // which raises a channel narrower than its own cell back to the ground either side of it
+        // and can leave that floor below the shoreline, and glacial overdeepening, which carves
+        // *after* the sea-level cut and so lowers ground that stays marked land. The third is a
+        // fjord floor and is not a defect — Sognefjord's is 1,300 m below the sea — but it is a
+        // fourth thing this clause has to name before it can say the export is faithful.
+        // Measured on seed 718106 at 512: 23 cells with only the enclosed seas switched off, 19
+        // with the valley fill off as well, 0 with the ice off too.
         val undrowned = WorldGenerationEngine.generateBlocking(
-            config.copy(sea = config.sea.copy(enclosedSeaIsLand = false))
+            config.copy(
+                sea = config.sea.copy(
+                    enclosedSeaIsLand = false,
+                    drownedValleyFill = false,
+                    littoralGrading = false
+                ),
+                glaciation = config.glaciation.copy(enabled = false)
+            )
         )
         val without = decode(
             runBlocking {

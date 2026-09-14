@@ -250,14 +250,20 @@ class DebugMapDump {
         outputDir.mkdirs()
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
 
-        listOf(0.30f, 0.45f, 0.60f).forEach { weight ->
-            listOf(0.92f, 1.0f).forEach { gain ->
+        // The weight the tectonics carry against the base noise used to be one blend factor; since
+        // S2 it is the relief that noise carries in metres against the four kilometres isostasy
+        // puts between the two crusts, and the wavelength that relief sits at, so the sweep runs
+        // over those two instead.
+        listOf(250f, 450f, 900f).forEach { relief ->
+            listOf(250.0, 500.0, 1_500.0).forEach { cornerKm ->
                 val config = base.copy(
-                    terrain = base.terrain.copy(gain = gain),
-                    tectonics = base.tectonics.copy(tectonicWeight = weight)
+                    terrain = base.terrain.copy(reliefCornerKm = cornerKm),
+                    tectonics = base.tectonics.copy(
+                        marginReliefStandardDeviationMetres = relief
+                    )
                 )
                 val world = WorldGenerationEngine.generateBlocking(config)
-                write(render(world, Mode.FANTASY), "sweep-w${weight}-g$gain.png")
+                write(render(world, Mode.FANTASY), "sweep-r${relief.toInt()}-c${cornerKm.toInt()}.png")
             }
         }
         println("Sweep written to ${outputDir.absolutePath}")

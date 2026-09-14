@@ -155,12 +155,10 @@ class DepositionTest {
      * cells. See `SeaConfig.drownedValleyFill`, and `LittoralCoastTest` for what the same rule does
      * at the sizes anybody looks at.
      *
-     * The figure below is that rule spent on S1's ruler, which is where the two lines met: F17
-     * measured 6327 to 6464 against the pre-S1 stand, and 6290 to 6426 against this one. The 120 m
-     * is the same 120 m either way; what moved is that it is now 120 m of the height field's own
-     * range on every world instead of a share of each world's measured land relief, so the valleys
-     * the transgression is allowed to have drowned are a slightly different set. 136 cells filled
-     * before, 136 after — the same rule, on a shoreline 37 cells further out.
+     * And a thirteenth time at S2, which gave the height field an absolute vertical scale: the two
+     * crusts float at their own levels, so the percentile falls through different ground. S2's own
+     * branch read 6232 where the pre-S2 tree read 6290, and F17's branch read 6426 where it read
+     * 6290.
      *
      * And once more where the 2.0.x line meets this one. Two changes arrive together and both are
      * the same kind of change as every one above: they move the rock, so a percentile taken over it
@@ -169,12 +167,19 @@ class DepositionTest {
      * of the eight neighbours, which changes what the twelve hydraulic rounds cut. And the outlet
      * notch now measures its channel's fall to the water it empties into, so a sill lying level to
      * the shore is no longer read as having no gradient at all. On the release line the two took
-     * the land from 6464 to 6488 and then to 6403; against this line's ruler — S1's stand and H5b's
-     * clamp, which is a different shoreline to start from — they take it from 6426 to 6404. Re-measured on the merged tree rather than carried over from either side, because
-     * neither side's number was read against the other's terrain. The cut itself has not moved:
-     * exactly 62% of the cells still lie below it, and the structural cases are untouched.
+     * the land from 6464 to 6488 and then to 6403; on the pre-S2 line they take it from 6426 to
+     * 6404.
+     *
+     * And a fourteenth time at S2's fourth pass, which gave the crust a thickness that rises
+     * inland and the base relief a texture proportional to the ground's own relief: both move the
+     * rock, so the percentile sits on a different set of cells again.
+     *
+     * The figure below is all of them together, re-measured on this merged tree rather than
+     * carried over from any one side, because no side's number was read against the others'
+     * terrain. The cut itself has not moved in any of them: exactly 62% of the cells still lie
+     * below it, and the structural cases are untouched.
      */
-    private val startingPointLand = 6404
+    private val startingPointLand = 6283
 
     @Test
     fun `every round conserves mass`() {

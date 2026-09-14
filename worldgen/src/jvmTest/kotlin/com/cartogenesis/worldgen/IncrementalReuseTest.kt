@@ -75,6 +75,15 @@ class IncrementalReuseTest {
             // H1's knobs live on the same section, so the tectonics guard already covers them —
             // but only if a case actually moves one, and the history is the largest change that
             // section can make: it rewrites the height field every later stage is built on.
+            // The crust's own settings, which the plate stage reads to turn a crust into an
+            // altitude and the erosion stage reads to bend the plate under what it moves.
+            "isostasy" to base.copy(
+                isostasy = base.isostasy.copy(elasticThicknessKm = base.isostasy.elasticThicknessKm * 2f)
+            ),
+            "isostasyOff" to base.copy(isostasy = base.isostasy.copy(enabled = false)),
+            "uplift" to base.copy(
+                tectonics = base.tectonics.copy(collisionUpliftMmPerYear = 0f)
+            ),
             "tectonicHistory" to base.copy(
                 tectonics = base.tectonics.copy(historyEpochs = 1)
             ),
@@ -273,6 +282,11 @@ class IncrementalReuseTest {
                 nearestBoundaryType = world.plates.nearestBoundaryType.copyOf(),
                 nearestBoundaryClass = world.plates.nearestBoundaryClass.copyOf(),
                 height = field(world.plates.height),
+                continentalShare = field(world.plates.continentalShare),
+                seafloorAgeMyr = field(world.plates.seafloorAgeMyr),
+                seafloorHalfSpreadingRateKmPerMyr =
+                    world.plates.seafloorHalfSpreadingRateKmPerMyr,
+                upliftRateMmPerYear = field(world.plates.upliftRateMmPerYear),
                 crustAge = field(world.plates.crustAge)
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),

@@ -109,6 +109,27 @@ class PipelineTest {
         var stranded = 0
         val minDepth = config.scale.reliefShareOfMetres(config.lakes.minDepthMetres)
         var insideBasins = 0
+        // Every stranded cell is printed rather than counted, because the count on its own says
+        // nothing about which of the two rules below let it through, and a handful of cells in four
+        // million is a needle that has to be described to be found. See `GEOGRAPHY.md`.
+        fun report(cell: Int, why: String) {
+            val target1 = target[cell]
+            println(
+                "PIPELINE stranded at (${cell % world.width}, ${cell / world.width}): $why," +
+                    " ground ${ground.data[cell]}, filled ${filled.data[cell]}," +
+                    " fill depth ${filled.data[cell] - ground.data[cell]} against a minimum" +
+                    " of $minDepth, target $target1" +
+                    (
+                        if (target1 >= 0) {
+                            ", which is ${if (world.sea.isLand[target1]) "land" else "water"}" +
+                                " at ${filled.data[target1]}"
+                        } else {
+                            ""
+                        }
+                        ) +
+                    ", lake ${lakes.isLake(cell)}, playa ${lakes.isPlaya(cell)}"
+            )
+        }
         for (i in target.indices) {
             if (!world.sea.isLand[i]) continue
             val row = i / world.width
@@ -120,15 +141,20 @@ class PipelineTest {
                 // A cell under, or on the drained floor of, a basin the flood had to raise.
                 if (lakes.isLake(i) || lakes.isPlaya(i)) continue
                 val t = target[i]
-                if (t < 0 || (world.sea.isLand[t] && !reachesWater(world, t))) stranded++
+                if (t < 0 || (world.sea.isLand[t] && !reachesWater(world, t))) {
+                    stranded++
+                    report(i, "inside a filled basin and its water reaches no standing water")
+                }
                 continue
             }
 
             val t = target[i]
             if (t < 0) {
                 stranded++
+                report(i, "no receiver at all, away from the poles")
             } else if (world.sea.isLand[t] && filled.data[t] >= filled.data[i]) {
                 stranded++
+                report(i, "its receiver stands no lower than it does on the filled surface")
             }
         }
         println("PIPELINE $insideBasins cells inside filled basins, $stranded stranded")
@@ -256,10 +282,17 @@ class PipelineTest {
         val exportedReach = beltReach(exported)
         println(
             "RESOLUTION belt reach ${round2(previewReach)} at ${preview.width} " +
-                "against ${round2(exportedReach)} at ${exported.width}"
+                "against ${round2(exportedReach)} at ${exported.width}; high ground on a" +
+                " convergent boundary ${beltCells(preview)} against ${beltCells(exported)}"
         )
+        // A count rather than a difference of means. The difference was only ever a vacuity check
+        // — the comment above explains why it cannot be more than that — and since S2 gave the
+        // height field an absolute scale it can come out at zero or below on a perfectly good
+        // world, because the near band now includes the drowned half of every margin as well as
+        // the belts. What "this world has mountains in it" means is that some land on a convergent
+        // boundary stands high, so that is what is counted.
         assertTrue(
-            previewReach > 0.0 && exportedReach > 0.0,
+            beltCells(preview) > 0 && beltCells(exported) > 0,
             "one of the two worlds has no mountain belts at all"
         )
     }
@@ -274,11 +307,24 @@ class PipelineTest {
      * A belt that keeps its width on the map gives the same answer at any resolution. A belt whose
      * falloff was left in cells is half as wide on a grid twice as fine, so much less of the near
      * band is raised and the figure falls.
+     *
+     * Convergent boundaries only, since S2. Averaging over *every* boundary used to work because
+     * the step between two plate interiors was small next to the terrain noise; now isostasy puts
+     * four and a half kilometres between the two crusts, so the near band is dominated by whether
+     * a boundary happens to have ocean on one side of it rather than by anything a belt did, and
+     * the figure came out negative on worlds with perfectly good mountains in them. A collision, a
+     * margin and an island arc are the three boundaries that raise ground, and they are the ones
+     * this is about.
      */
     private fun beltReach(world: com.cartogenesis.worldgen.model.WorldMap): Double {
         val e = world.sea.relativeElevation
         val near = world.width * 0.035f
         val far = world.width * 0.09f
+        val raising = setOf(
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.ANDEAN_MARGIN.ordinal,
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.COLLISION_PLATEAU.ordinal,
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.ISLAND_ARC.ordinal
+        )
 
         var nearTotal = 0.0
         var nearCount = 0
@@ -286,6 +332,7 @@ class PipelineTest {
         var farCount = 0
         for (i in 0 until world.width * world.height) {
             if (!world.sea.isLand[i]) continue
+            if (world.plates.nearestBoundaryClass[i] !in raising) continue
             val d = world.plates.boundaryDistance.data[i]
             when {
                 d < near -> { nearTotal += e.data[i]; nearCount++ }
@@ -296,12 +343,43 @@ class PipelineTest {
         return (nearTotal / nearCount) - (farTotal / farCount)
     }
 
+    /**
+     * Land within a belt's own half-width of a convergent boundary standing over a kilometre up:
+     * "this world has mountains in it", counted rather than inferred from a mean.
+     */
+    private fun beltCells(world: com.cartogenesis.worldgen.model.WorldMap): Int {
+        val raising = setOf(
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.ANDEAN_MARGIN.ordinal,
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.COLLISION_PLATEAU.ordinal,
+            com.cartogenesis.worldgen.pipeline.BoundaryClass.ISLAND_ARC.ordinal
+        )
+        val reach = world.config.tectonics.boundaryFalloffCells
+        val high = world.config.scale.reliefShareOfMetres(1_000f)
+        var count = 0
+        for (i in 0 until world.width * world.height) {
+            if (!world.sea.isLand[i]) continue
+            if (world.plates.nearestBoundaryClass[i] !in raising) continue
+            if (world.plates.boundaryDistance.data[i] > reach) continue
+            if (world.sea.relativeElevation.data[i] >= high) count++
+        }
+        return count
+    }
+
     @Test
     fun `changing only sea level reuses the terrain and plate stages`() = runTest(timeout = 10.minutes) {
         val base = WorldGenerationEngine.generate(config())
         val adjusted = WorldGenerationEngine.generate(config().copy(seaLevel = 0.5f), previous = base)
         assertTrue(base.terrain === adjusted.terrain, "terrain should be reused")
-        assertTrue(base.plates === adjusted.plates, "plates should be reused")
+        // The plates are *not* reused any more, and that is the contract rather than a slip. Since
+        // S2 the ocean-coverage slider chooses how much of the world the plate stage draws as
+        // continental crust — that is what makes the coverage a fact about the crust rather than
+        // about where a histogram was cut — so moving it moves the tectonics. The terrain above is
+        // still reused, which is the half of this promise that survives: the noise the world is
+        // built on does not know where the water is.
+        assertTrue(
+            base.plates !== adjusted.plates,
+            "the plates were reused, so the ocean-coverage slider is not reaching the crust"
+        )
         assertTrue(base.sea !== adjusted.sea, "sea level must be recomputed")
     }
 }

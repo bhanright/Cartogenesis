@@ -125,12 +125,32 @@ object WorldGenerationEngine {
         }
 
         report(GenerationStage.TERRAIN)
-        val terrain = reusable?.takeIf { it.config.terrain == config.terrain }?.terrain
+        val terrain = reusable
+            ?.takeIf {
+                it.config.terrain == config.terrain &&
+                    // Since S2's second pass the integration shapes the surface's spectrum, and
+                    // the wavelength it is shaped around is a length in kilometres — so how wide
+                    // the world is decides which components of the noise survive. See
+                    // [TerrainStage.ReliefBand].
+                    it.config.scale == config.scale
+            }
+            ?.terrain
             ?: TerrainStage.generate(config)
 
         report(GenerationStage.TECTONICS)
         val plates = reusable
-            ?.takeIf { it.terrain === terrain && it.config.tectonics == config.tectonics }
+            ?.takeIf {
+                it.terrain === terrain &&
+                    it.config.tectonics == config.tectonics &&
+                    // Isostasy is what turns a crust into an altitude, so this stage's output is
+                    // in its units; and since S2 the ocean-coverage slider chooses how much of the
+                    // world is drawn as continental crust, which is a tectonics question decided
+                    // two stages before the sea level stage runs.
+                    it.config.isostasy == config.isostasy &&
+                    it.config.seaLevel == config.seaLevel &&
+                    // Every altitude the stage writes is read off the world's own ruler.
+                    it.config.scale == config.scale
+            }
             ?.plates
             ?: PlateStage.generate(config, terrain)
 
@@ -145,6 +165,11 @@ object WorldGenerationEngine {
                     // every stage below because erosion is the first to read it and each later
                     // guard already requires this stage's own result to be the one it was handed.
                     it.config.scale == config.scale &&
+                    // The rounds raise the belts as well as cutting them, and they bend the plate
+                    // under what that stacks on it, so both halves of the solid earth's settings
+                    // are this stage's settings. The uplift rate itself arrives on the plate
+                    // result, which the `===` above already guards.
+                    it.config.isostasy == config.isostasy &&
                     // Water is routed twelve times over in this stage, and how it is routed
                     // is a top-level setting rather than one of `erosion`'s own.
                     it.config.facetRouting == config.facetRouting &&
@@ -161,7 +186,7 @@ object WorldGenerationEngine {
                     it.config.sea.lowstandMetres == config.sea.lowstandMetres
             }
             ?.erosion
-            ?: ErosionStage.apply(config, plates.height, accelerator)
+            ?: ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator)
 
         report(GenerationStage.SEA_LEVEL)
         val sea = reusable

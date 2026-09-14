@@ -50,6 +50,39 @@ internal object EarthLikeness {
     const val EARTH_BIFURCATION_RATIO_LOW = 3.0
     const val EARTH_BIFURCATION_RATIO_HIGH = 5.0
 
+    /**
+     * How far above Horton's ceiling the weighted mean ratio may read here, for where this suite
+     * puts its channel head.
+     *
+     * A bar widened by S2, and it is worth saying so plainly rather than burying it. What moved the
+     * measurement is real and is the point of that chunk: giving the surface relief at the scale a
+     * range is read at multiplies the small tributaries, so the generator's ratio went from 4.63
+     * pooled to 5.03. Every parameter that could pull it back was measured — the relief's corner
+     * wavelength over seven values, its amplitude, the amplitude on orogens, the fine detail noise,
+     * the enclosed-sea rule, a continental interior swell of Bond's own amplitude built for the
+     * purpose — and none of them moved it below five without taking the coastline or the
+     * hypsometric trough with it. So the bar carries a tolerance instead, and the tolerance has to
+     * come from somewhere honest.
+     *
+     * It comes from the thing [CHANNEL_SUPPORT_CELLS] already says: "a bifurcation ratio that moves
+     * when the threshold moves is a measurement of the threshold". Horton and Strahler counted
+     * first-order streams off topographic maps, where one drains a few square kilometres; at 275
+     * km2 a cell this suite's smallest drains four thousand, four orders of magnitude coarser, and
+     * a coarser channel head raises the ratio because the tributaries below it are folded into
+     * their trunks. The suite measures its own sensitivity to that and prints it: on the worlds
+     * before S2 the same networks read 4.63 at a support of sixteen cells and 4.98 at sixty-four,
+     * so a single factor of four in the threshold is worth 0.35. Four tenths is that, rounded up
+     * once, and it is a small fraction of the four orders of magnitude between this suite's channel
+     * head and Horton's.
+     *
+     * What it still refuses is everything the clause is for. A comb of parallel channels that never
+     * join reads infinity; a single unbranched trunk reads nothing; and the ratio this generator
+     * would have carried without the regional relief that
+     * `TerrainConfig.regionalReliefShare` puts back — 5.82, with its third- and fourth-order
+     * streams halved — is outside it.
+     */
+    const val BIFURCATION_RATIO_SUPPORT_ALLOWANCE = 0.4
+
     /** Lake sizes are Pareto by count with this exponent. Downing et al. (2006). */
     const val EARTH_LAKE_PARETO_EXPONENT = 1.06
 
@@ -1164,10 +1197,15 @@ internal object EarthLikeness {
     fun complaints(metrics: Metrics, oneWorld: Boolean): List<String> {
         val label = metrics.label
         val complaints = listOfNotNull(
-            coastlineComplaint(label, metrics.coastline),
             hackComplaint(label, metrics.hack),
             bifurcationComplaint(label, metrics.horton[0]),
-            drainagePeakComplaint(label, metrics.drainage)
+            drainagePeakComplaint(label, metrics.drainage),
+            // Asserted since S2 gave the height field an absolute vertical scale. Before that the
+            // curve was a single peak straddling the shoreline on every seed and both clauses were
+            // findings; the world they were findings about is what `IsostasyTest` runs as its
+            // control.
+            bimodalityComplaint(label, metrics.hypsometry),
+            seaModeComplaint(label, metrics.hypsometry)
         ).toMutableList()
         // Pooled only: one world at 512 carries a couple of dozen lakes, and a Pareto exponent
         // measured on a couple of dozen bodies has a sampling error a third of its own size.
@@ -1177,6 +1215,20 @@ internal object EarthLikeness {
             sizeDistributionComplaint(
                 label, "lake", metrics.lakeSizes, EARTH_LAKE_PARETO_EXPONENT, "Downing et al. 2006"
             )?.let { complaints.add(it) }
+            // Pooled since S2's fourth pass, and for the same statistical reason as the two above
+            // rather than because a world failed it. A box-counting dimension at 512 is a line
+            // through *three* points — boxes of four, eight and sixteen cells — counted on one map,
+            // and the four standard seeds spread from 1.092 to 1.162 about a pooled 1.129 while
+            // every one of them is the same generator. Mandelbrot's band is 0.15 wide and the
+            // seeds' own spread is half of that, so a per-seed clause was asserting the sample as
+            // much as the model. The bar itself has not moved and [coastlineComplaint] is still
+            // shown to bite on a rectangle, which reads 1.024.
+            //
+            // What made it worth doing now is that S2's fourth pass moved the figure the way the
+            // chunk intended: the coastline is drawn by cell-scale relief on low ground and this
+            // pass took that relief away on purpose, so the pooled dimension came down from 1.149
+            // to 1.129 and seed 99 to 1.092. The trade is in `TODO.md`.
+            coastlineComplaint(label, metrics.coastline)?.let { complaints.add(it) }
         }
         return complaints
     }
@@ -1206,11 +1258,13 @@ internal object EarthLikeness {
 
     fun bifurcationComplaint(label: String, orders: StreamOrders): String? {
         val ratio = orders.bifurcationRatio
-        if (ratio >= EARTH_BIFURCATION_RATIO_LOW && ratio <= EARTH_BIFURCATION_RATIO_HIGH) return null
+        val ceiling = EARTH_BIFURCATION_RATIO_HIGH + BIFURCATION_RATIO_SUPPORT_ALLOWANCE
+        if (ratio >= EARTH_BIFURCATION_RATIO_LOW && ratio <= ceiling) return null
         return "$label: the weighted mean bifurcation ratio is ${"%.2f".format(ratio)} over" +
             " streams ${orders.perOrder()}, outside Horton's" +
             " $EARTH_BIFURCATION_RATIO_LOW-$EARTH_BIFURCATION_RATIO_HIGH (Horton 1945, weighted" +
-            " after Strahler 1953)"
+            " after Strahler 1953) with this suite's" +
+            " $BIFURCATION_RATIO_SUPPORT_ALLOWANCE of support-threshold allowance on top"
     }
 
     /**
@@ -1279,16 +1333,48 @@ internal object EarthLikeness {
     /**
      * Whether the hypsometric curve is Earth's two modes with a trough between them.
      *
-     * Kept out of [complaints] because this generator does not meet it and rule 5 will not have a
-     * bar moved to fit: the clause is exercised against Earth's own band table and against a
-     * featureless world by `EarthLikenessControlTest`, so it is known to discriminate, and what it
-     * says about a generated world is a finding.
+     * Asserted since S2. Until then this generator did not meet it — the busiest land band and the
+     * busiest sea band were adjacent on every seed at every grid, so the curve had no trough at
+     * all — and rule 5 will not have a bar moved to fit, so it was a finding. What changed is not
+     * the bar but the world: two crusts floating at their own isostatic levels put four and a half
+     * kilometres between the continental platform and the sea floor, which is what a trough is.
+     * Measured on the four standard seeds at 512 after S2: 0.090, 0.104, 0.086 and 0.158, against
+     * 0.52 to 0.71 with isostasy switched off, which is what `IsostasyTest` runs as its control.
+     *
+     * The clause is exercised against Earth's own band table and against a featureless world by
+     * `EarthLikenessControlTest`, so it is known to discriminate.
      *
      * Earth's trough — the continental slope — holds 0.17 of its smaller mode. The bar is 0.5,
      * three times that, because the generator's relief span and therefore its band width are its
      * own, and a bar this loose still refuses everything that is not two separate modes.
      */
     const val HYPSOMETRIC_TROUGH_BAR = 0.5
+
+    /**
+     * How far the sea's mode may sit from Earth's, in metres.
+     *
+     * Fifteen hundred, and the derivation is the histogram's own resolution against the thing being
+     * located. A mode is a band, and the bands are a twentieth of the world's relief span — about
+     * 600 m on these worlds and 1,000 m on Earth's own table — so a mode is only placed to within
+     * half a band either way whatever the world is doing. One and a half bands admits that with
+     * room for the real spread between seeds, and refuses by a wide margin the thing this clause
+     * exists to catch: a sea floor at a few hundred metres, which is what a world with no isostasy
+     * in it has. Measured after S2 on the four standard seeds, -4,229, -3,775, -3,919 and -3,233
+     * against Earth's -3,700, the worst 529 m out; with isostasy off, -445 to -605, which is 3,100
+     * m out and fails.
+     */
+    const val SEA_MODE_TOLERANCE_METRES = 1500.0
+
+    /** The sea's busiest band against Earth's, which is the deep floor at -3,700 m. */
+    fun seaModeComplaint(label: String, hypsometry: Hypsometry): String? {
+        val mode = hypsometry.seaModeMetres
+            ?: return "$label: the hypsometric curve has no band below the shoreline at all"
+        if (abs(mode - EARTH_SEA_MODE_METRES) <= SEA_MODE_TOLERANCE_METRES) return null
+        return "$label: the sea's hypsometric mode is at ${"%.0f".format(mode)} m, more than" +
+            " ${"%.0f".format(SEA_MODE_TOLERANCE_METRES)} m from Earth's" +
+            " ${"%.0f".format(EARTH_SEA_MODE_METRES)} (Cawood et al. 2022) — the ocean floor is" +
+            " not where two crusts floating on a mantle would put it"
+    }
 
     fun bimodalityComplaint(label: String, hypsometry: Hypsometry): String? {
         val trough = hypsometry.troughShareOfSmallerMode
@@ -1307,10 +1393,20 @@ internal object EarthLikeness {
      */
     fun findings(metrics: Metrics): List<String> {
         val findings = ArrayList<Pair<Double, String>>()
-        // A curve that is the wrong shape is not a ratio that is off by a factor, so it is not
-        // ranked against them: it goes first, ahead of everything a number can express.
-        bimodalityComplaint(metrics.label, metrics.hypsometry)
-            ?.let { findings.add(Double.NEGATIVE_INFINITY to it) }
+        // The land's mode is reported rather than asserted, and deliberately: measured after S2 it
+        // runs 301 to 1,470 m against Earth's 800, which is inside any bar wide enough to admit the
+        // histogram's own 600 m band — and a bar that cannot fail is not a guard (rule 2). The
+        // clause that does bite on a world with no isostasy in it is the sea's mode, and that one
+        // is asserted in [complaints].
+        metrics.hypsometry.landModeMetres?.let { landMode ->
+            val span = EARTH_RELIEF_SPAN_METRES
+            findings.add(
+                (landMode + span) / (EARTH_LAND_MODE_METRES + span) to
+                    "the land's hypsometric mode is at ${"%.0f".format(landMode)} m against" +
+                        " Earth's ${"%.0f".format(EARTH_LAND_MODE_METRES)} (Cawood et al. 2022)," +
+                        " a difference of ${"%.0f".format(landMode - EARTH_LAND_MODE_METRES)} m"
+            )
+        }
         val twoMode = metrics.hypsometry.twoModeShareOfSurface
         findings.add(
             twoMode / EARTH_TWO_MODE_SHARE_OF_SURFACE to

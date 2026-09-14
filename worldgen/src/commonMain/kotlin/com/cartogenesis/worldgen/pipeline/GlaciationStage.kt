@@ -1,7 +1,9 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
+import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.sqrt
@@ -18,6 +20,14 @@ import kotlinx.coroutines.ensureActive
  * that nobody looks at is how a stage quietly removes a tenth of a continent.
  */
 internal data class GlacialMass(
+    /**
+     * The deepest the ice load pushed the crust down, in metres, and zero where the load is off.
+     *
+     * A tenth of the sheet's own thickness at its margin and 28% of it well inside, which is
+     * `iceDensity / mantleDensity` once the plate has flattened out under a load broader than its
+     * own flexural parameter.
+     */
+    val iceDepressionMetres: Float,
     val frozenCells: Int,
     /** Frozen cells with enough local relief for the ice to be channelled into a valley. */
     val channelledCells: Int,
@@ -313,10 +323,15 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         stopIfAsked()
-        val landRange = landRange(isLand, relative)
         val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt().coerceIn(2, 64)
         val relief = localRelief(cellsAcross, cellsDown, relative, reliefRadius)
-        val channelThreshold = carving.valleyRelief * landRange
+        // Straight, with nothing between the share and the field. `relative` is a cell's altitude
+        // over `WorldScale.highestLandMetres` since S2, and `valleyRelief` is a depth in metres
+        // over the same figure, so the two are already in one another's units. Before S2 the field
+        // was renormalised to whatever range the world's own land occupied and this had to be
+        // multiplied by that range, which was near 1 by construction and is why nobody noticed it
+        // was a measurement.
+        val channelThreshold = carving.valleyRelief
         var channelledCells = 0
         val channelled = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -578,7 +593,7 @@ object GlaciationStage {
         val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
         if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
-                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, landRange, carved,
+                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, carved,
                 minBasinCells, maxBasinCells, sheetBudget
             )
             scourCells = tally.cells
@@ -656,8 +671,17 @@ object GlaciationStage {
             }
         }
 
+        // And the weight of it. Ice standing on the crust holds the crust down, which is why
+        // Greenland's bed lies below sea level under three kilometres of ice and why Scandinavia,
+        // which lost its own sheet ten thousand years ago, is still coming back up at a centimetre
+        // a year. The load is handed to the same flexure the hydraulic rounds use; what the map
+        // shows of the rebound is the ground the *former* ice has already let go, since only the
+        // ice that is still here is weighed. See `IsostasyConfig.iceLoad` and REALISM_PLAN.md, S2.
+        val iceDepression = iceLoadDepression(config, frozen, isLand, carved)
+
         onBudget?.invoke(
             GlacialMass(
+                iceDepressionMetres = iceDepression,
                 frozenCells = frozenCount,
                 channelledCells = channelledCells,
                 glacierCells = glacierCells,
@@ -683,6 +707,145 @@ object GlaciationStage {
         )
 
         return sea.copy(relativeElevation = FloatField(cellsAcross, cellsDown, carved))
+    }
+
+    /**
+     * Presses the crust down under the ice standing on it, in place, and reports the deepest bend.
+     *
+     * The sheet's thickness is the crudest thing that can be true of it: a flat
+     * [IsostasyConfig.iceSheetThicknessMetres] over the interior, ramped to nothing over
+     * [IsostasyConfig.iceSheetMarginRampKm] of its margin, from the Euclidean distance to the
+     * nearest ice-free cell. Antarctica averages 2,126 m and Greenland 1,673 and both thin to
+     * nothing at the coast, so the shape is right and the profile is not: a real sheet's surface
+     * goes as the square root of the distance from its margin (Vialov 1958), which is I1's to draw
+     * and this to read once it exists.
+     *
+     * The bend is spent on the shoreline-relative field this stage is already rewriting, since
+     * that is what the rest of the pipeline reads and the erosion stage's own height field is two
+     * stages upstream and must not be touched. It goes on water as well as land: a sheet grounded
+     * below the waterline depresses the floor under it exactly as one on land does.
+     */
+    private fun iceLoadDepression(
+        config: WorldGenConfig,
+        frozen: BooleanArray,
+        isLand: BooleanArray,
+        carved: FloatArray
+    ): Float {
+        val isostasy = config.isostasy
+        if (!isostasy.enabled || !isostasy.flexure || !isostasy.iceLoad) return 0f
+        if (isostasy.iceSheetThicknessMetres <= 0f) return 0f
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
+        if (frozen.none { it }) return 0f
+
+        // How far each frozen cell stands from the nearest ice-free ground, in cells.
+        val distanceToEdge = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestEdge = IntArray(cellCount) { -1 }
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) {
+                distanceToEdge[cell] = 0f
+                nearestEdge[cell] = cell
+            }
+        }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToEdge, nearestEdge)
+
+        val rampCells = config.cellsFor(isostasy.iceSheetMarginRampKm).coerceAtLeast(1f)
+        val load = FloatArray(cellCount)
+        // How much ice stands on each cell, as a share of a full sheet's thickness: nothing at the
+        // margin and all of it a ramp's width inside. Kept, because the same profile decides both
+        // how hard the ice presses and how much of the hollow it presses is filled by the ice
+        // itself. See [surfaceShareOfBend].
+        val iceShare = FloatArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) continue
+            val share = (distanceToEdge[cell] / rampCells).coerceAtMost(1f)
+            iceShare[cell] = share
+            val thickness = isostasy.iceSheetThicknessMetres * share
+            load[cell] = Isostasy.loadPascals(thickness, isostasy.iceDensity, isostasy.gravity)
+        }
+
+        Isostasy.Flexure(config).deflectionMetres(load, load)
+
+        // Referred to the ground the ice is nowhere near, which is where the datum belongs for a
+        // load that covers a few per cent of a planet. The filter carries no zero-frequency term,
+        // so its answer sums to nothing over the whole map — which means a sheet pressing its own
+        // bed down half a kilometre lifts every cell of the far hemisphere by ten or twenty metres
+        // to pay for it, and that is an artefact of where the datum was put rather than anything
+        // the mantle does. Subtracting the mean over the ice-free ground puts it back: the far
+        // field reads nothing, the moat around the sheet reads what it should, and the bed under
+        // the sheet reads the difference.
+        var awayFromIce = 0.0
+        var awayCells = 0
+        for (cell in 0 until cellCount) {
+            if (frozen[cell]) continue
+            awayFromIce += load[cell].toDouble()
+            awayCells++
+        }
+        val farField = if (awayCells == 0) 0f else (awayFromIce / awayCells).toFloat()
+
+        // And faded out over the distance a plate actually carries a load, which is a few flexural
+        // parameters. Beyond that the answer this filter gives is not the plate's: a transform on a
+        // grid that wraps has no far field to lose the load into, so what should die away over two
+        // hundred kilometres instead spreads over the whole map as a metre or two of tilt. The
+        // taper puts the boundary where the physics puts it — `Isostasy.Flexure` has the number —
+        // and leaves the ground beyond it exactly where the ice found it.
+        val distanceToIce = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestIce = IntArray(cellCount) { -1 }
+        for (cell in 0 until cellCount) {
+            if (!frozen[cell]) continue
+            distanceToIce[cell] = 0f
+            nearestIce[cell] = cell
+        }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToIce, nearestIce)
+        val reachCells = (
+            FLEXURAL_PARAMETERS_OF_REACH * Isostasy.Flexure(config).flexuralParameterMetres /
+                (config.cellWidthKm * 1_000.0)
+            ).toFloat().coerceAtLeast(1f)
+        for (cell in 0 until cellCount) {
+            val fade = (1f - distanceToIce[cell] / reachCells).coerceIn(0f, 1f)
+            load[cell] = (load[cell] - farField) * fade
+        }
+
+        // The bend is a change in altitude, and the field this stage works in is piecewise: a land
+        // cell is measured against the land's half of the ruler and a water cell against the sea's,
+        // so each converts through its own.
+        //
+        // How much of it reaches the *surface* is the other half, and it is not all of it. This
+        // field is a surface — the climate reads its altitude for a temperature, the rivers run
+        // down it, the renderer shades it — and where a sheet stands the surface is the top of the
+        // ice, not the rock underneath. A sheet presses its own bed down and then fills the hollow
+        // with itself, so the ground the air touches over the middle of a cap has not moved at
+        // all; at the margin, where the ice thins to nothing, there is nothing to fill it and the
+        // whole bend shows. That is the moat — the Baltic, and Agassiz along the Laurentide's rim.
+        // The share is one minus the ice's own thickness profile, which makes the applied bend
+        // continuous across the ice edge rather than stepping by half a kilometre at it.
+        //
+        // Measured on the five standard worlds at 512: with the whole bend spent on the surface,
+        // the cap's own bed reads several hundred metres lower, the biome stage reads that as
+        // warmer ground and the ice share of land falls from 8.0% to 6.2% against main's 9.6%,
+        // while the hollow under the cap ponds and the lake share of land climbs from 2.6% to
+        // 3.6%. Both are the same error: a bed read as a surface.
+        val scale = config.scale
+        var deepest = 0f
+        for (cell in 0 until cellCount) {
+            val bend = load[cell]
+            if (bend > deepest) deepest = bend
+            val surfaceBend = bend * (1f - iceShare[cell])
+            // Sub-metre bends are dropped, and not for speed. A flexure is a filter over the whole
+            // grid, so its answer is non-zero in every cell of the map however far from the ice it
+            // is — and "this cell was touched by the glaciation stage" is a question three guards
+            // ask by comparing the field before and after. A bend of a few centimetres a thousand
+            // kilometres from the nearest sheet is not a landform and must not read as one: without
+            // this floor `SnowBalanceTest` counts every land cell on the map as carved.
+            if (surfaceBend > -MIN_MEANINGFUL_BEND_METRES &&
+                surfaceBend < MIN_MEANINGFUL_BEND_METRES
+            ) continue
+            carved[cell] -=
+                if (isLand[cell]) scale.reliefShareOfMetres(surfaceBend)
+                else scale.depthShareOfMetres(surfaceBend)
+        }
+        return deepest
     }
 
     /** What the scour did, for the tally. */
@@ -1447,18 +1610,6 @@ object GlaciationStage {
      * computed rather than assumed, because a config that never reaches the highest ground would
      * otherwise silently rescale every cut this stage makes.
      */
-    private fun landRange(isLand: BooleanArray, relative: FloatArray): Float {
-        var lowest = Float.MAX_VALUE
-        var highest = -Float.MAX_VALUE
-        for (cell in relative.indices) {
-            if (!isLand[cell]) continue
-            val value = relative[cell]
-            if (value < lowest) lowest = value
-            if (value > highest) highest = value
-        }
-        return if (highest <= lowest) 1f else highest - lowest
-    }
-
     /**
      * The elevation range inside a square window of [radius] cells around every cell: relief, as
      * the one measurement that separates ground a glacier is channelled by from ground it is not.
@@ -1575,7 +1726,6 @@ object GlaciationStage {
         sheetCells: Int,
         isLand: BooleanArray,
         relative: FloatArray,
-        landRange: Float,
         carved: FloatArray,
         minCells: Int,
         maxCells: Int,
@@ -1591,7 +1741,7 @@ object GlaciationStage {
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
-        val lowering = carving.sheetLowering * landRange
+        val lowering = carving.sheetLowering
         if (lowering > 0f) {
             for (cell in 0 until cellCount) {
                 if (!sheet[cell]) continue
@@ -1605,7 +1755,7 @@ object GlaciationStage {
             }
         }
 
-        val depth = carving.sheetBasinDepth * landRange
+        val depth = carving.sheetBasinDepth
         if (depth <= 0f || budget < minCells) return ScourTally(0, 0)
 
         // How hollow each cell is against the ground around it, and the scale of that hollowness
@@ -2080,6 +2230,22 @@ object GlaciationStage {
         }
         return removed
     }
+
+    /**
+     * The smallest bend of the crust under an ice load that is worth writing into the terrain, in
+     * metres. See [iceLoadDepression].
+     */
+    private const val MIN_MEANINGFUL_BEND_METRES = 1f
+
+    /**
+     * How far past an ice sheet's margin its own bend is carried, in flexural parameters.
+     *
+     * Three, which is where a plate's answer to a load has fallen to a few per cent of its peak:
+     * the first zero crossing of the flexure of a line load is at three quarters of a flexural
+     * parameter and the forebulge at one, and by three there is nothing left to draw. See
+     * [iceLoadDepression].
+     */
+    private const val FLEXURAL_PARAMETERS_OF_REACH = 3.0
 
     /** The least thickness any glacier is credited with. See where [GlacialMass] is filled in. */
     private const val MIN_THICKNESS = 0.5f

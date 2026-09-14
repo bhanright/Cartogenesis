@@ -63,7 +63,7 @@ class DeltaOutlineTest {
         return if (size == 512) authored else authored.atResolution(size, size)
     }
 
-    private class Run(config: WorldGenConfig) {
+    private class Run(val config: WorldGenConfig) {
         val seed = config.seed
         val w = config.width
         val h = config.height
@@ -75,7 +75,7 @@ class DeltaOutlineTest {
         init {
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
             height = erodeBlockingLoggingDeposition(config, uplift, log).height
-            isLand = SeaLevelStage.percentileCut(height, config.seaLevel).isLand
+            isLand = SeaLevelStage.percentileCut(height, config.seaLevel, config.scale).isLand
         }
 
         fun mask(mechanism: Byte) = BooleanArray(w * h) { log.mechanism[it] == mechanism }
@@ -649,7 +649,7 @@ class DeltaOutlineTest {
         val w = run.w
         val h = run.h
         val mask = run.mask(DepositionLog.SEA_LOBE)
-        val sea = SeaLevelStage.percentileCut(run.height, 0.62f)
+        val sea = SeaLevelStage.percentileCut(run.height, 0.62f, run.config.scale)
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow =
             FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, run.seed)

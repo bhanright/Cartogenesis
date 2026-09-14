@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.concurrent.standAside
 import com.cartogenesis.worldgen.model.ErosionConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.sqrt
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -21,6 +22,17 @@ internal data class RoundMass(
     val deposited: Double,
     val lostToSea: Double,
     val fieldDrop: Double,
+    /**
+     * Metres of rock the tectonic uplift added this round, summed over the map, and the metres of
+     * bend the flexure answered it and the erosion with, summed as a magnitude.
+     *
+     * The coupling, in two numbers. In a belt at steady state the first is spent against the
+     * incision and the second holds most of it back, which is why a range does not grow by five
+     * millimetres a year for four million years. The bend is summed unsigned because its signed
+     * sum is zero: the filter carries no zero-frequency term, so the plate tips rather than sinks.
+     */
+    val uplifted: Double = 0.0,
+    val deflected: Double = 0.0,
     /** Of [incised], how much the outlet notches took. Zero when the notch is switched off. */
     val notched: Double = 0.0,
     /** How many cells the notches were cut into. */
@@ -134,21 +146,36 @@ internal object HydraulicErosion {
          * `E = K * A^m * S^n` with m = 0.5 and n = 1, over
          * [WorldScale.yearsPerHydraulicRound]. The stage holds the catchment as a share of all
          * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)` and
-         * `S` is that rise times `highestLandMetres / worldWidth`; the cut is spent on a height
-         * field whose whole 0..1 spans [WorldScale.reliefSpanMetres]. Everything but the share and
-         * the rise is constant over a generation, and this is it.
+         * `S` is that rise times [WorldScale.reliefSpanMetres] over the map's width in metres; the
+         * cut is spent on the same field, whose whole 0..1 is that same span, so the two cancel
+         * and what is left is `K * years * sqrt(landArea) / worldWidth`. Everything but the share
+         * and the rise is constant over a generation, and this is it.
          *
          * The land's area is the configured share of the world rather than the round's own count
          * of land cells. Sea level is a percentile, so that share *is* the land's area by
          * construction; taking the count instead would make the coefficient wobble a percent from
          * round to round as the lowstand moved the shoreline, which is a property of the sea's
          * history and not of the rock.
+         *
+         * The cancellation above is S2's second pass and it fixed a real error. S1 read the
+         * slope's rise as `highestLandMetres` per unit of the height field, which was the honest
+         * reading while the field was renormalised to its own extremes and its unit was whatever a
+         * given world made it; S2 gave the field an absolute scale whose unit *is*
+         * [WorldScale.reliefSpanMetres], and the two terms then cancel. Left in, the factor made
+         * the stage cut 2.67 times less per round than `K` and the time step together said.
+         *
+         * What moved is the time step and not the coefficient, and
+         * [WorldScale.yearsPerHydraulicRound] sets out why it was the better of the two: raising
+         * the cut instead was built and measured, and twelve rounds at 2.67 times the incision wear
+         * this landscape away rather than sharpening it. So the coefficient is the same float it
+         * has always been, every world is unmoved to the last bit, and what changed is the label
+         * on the clock.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
             val perYear = erosion.bedrockErodibilityPerYear.toDouble() * scale.yearsPerHydraulicRound
             val geometry = sqrt(landAreaKm2) / scale.worldWidthKm
-            (perYear * geometry * scale.highestLandMetres / scale.reliefSpanMetres).toFloat()
+            (perYear * geometry).toFloat()
         }
 
         /**
@@ -277,6 +304,12 @@ internal object HydraulicErosion {
         config: WorldGenConfig,
         height: FloatField,
         provisionalSeaLevel: Float,
+        /**
+         * How fast the rock is rising under each cell, in millimetres a year — `PlateStage`'s own
+         * field, or null where a caller wants the rounds without the tectonics (which is the
+         * control the uplift guards are shown to fail against).
+         */
+        upliftRateMmPerYear: FloatField? = null,
         onRound: ((RoundMass) -> Unit)? = null,
         log: DepositionLog? = null,
         receiverClamp: Boolean = true,
@@ -289,6 +322,45 @@ internal object HydraulicErosion {
         val cellsAcross = config.width
         val cellsDown = config.height
         var working = height.copy()
+
+        // The solid earth's two answers to what the water is doing, both of them off by default
+        // and both switched by their own setting so a guard can measure the world without them.
+        //
+        // The uplift is the rock still rising under an active belt, spent per round over the years
+        // `WorldScale` says a round stands for; the flexure is the plate bending under what that
+        // uplift stacks on it and springing back under what the rivers carry away. They are here
+        // rather than in the plate stage because neither is a thing that happens once: a range
+        // that is being pushed up while it is being cut down reaches a height where the two
+        // balance, and that balance is the whole of what S2 exists to model. See REALISM_PLAN.md,
+        // S2, and [Isostasy].
+        val tectonics = config.tectonics
+        val scale = config.scale
+        val metresPerFieldUnit = scale.reliefSpanMetres
+        val upliftMetresPerRoundPerMm =
+            (scale.yearsPerHydraulicRound / MILLIMETRES_PER_METRE).toFloat()
+        val elevationLimit =
+            PlateStage.Limit(tectonics.elevationLimitKneeMetres, scale.highestLandMetres)
+        val flexure =
+            if (config.isostasy.enabled && config.isostasy.flexure) Isostasy.Flexure(config) else null
+        // What the field looked like before any of this, and the bend that has been applied to it
+        // so far, so that each round asks the plate about the *whole* load it is carrying rather
+        // than about that round's instalment. Replacing the bend rather than adding to it is what
+        // makes the pass idempotent: run twice on an unchanged load, the second run changes
+        // nothing.
+        val reference = if (flexure != null) working.data.copyOf() else FloatArray(0)
+        val deflectionMetres = if (flexure != null) FloatArray(cellsAcross * cellsDown) else FloatArray(0)
+        val loadPascals = if (flexure != null) FloatArray(cellsAcross * cellsDown) else FloatArray(0)
+        // What the tectonics have added so far, kept apart from what the rivers have moved. The
+        // uplift is not a load: a belt rises because its crust is thickening from below, and the
+        // topography that thickening supports is Airy-compensated the moment it appears — exactly
+        // as the stamped profiles it continues are. Handing it to the flexure as well would
+        // compensate it twice and leave a range holding a seventh of what pushed it up. What the
+        // plate does answer is everything the water has done since.
+        val upliftedMetres =
+            if (flexure != null && upliftRateMmPerYear != null) FloatArray(cellsAcross * cellsDown)
+            else FloatArray(0)
+        val loadDensity = config.isostasy.continentalCrustDensity
+        val gravity = config.isostasy.gravity
 
         val carryingSediment = erosion.deposition
         val reachCells = rates.deltaReachCells.coerceAtLeast(0)
@@ -367,13 +439,86 @@ internal object HydraulicErosion {
             currentCoroutineContext().ensureActive()
             standAside()
 
+            // The rock rises first, before the water is routed over it: a round is a span of time,
+            // and what the rivers of that span work on is the ground the tectonics of that span
+            // have already lifted.
+            //
+            // Rock uplift, not surface uplift — England and Molnar's distinction, and the flexure
+            // below is what turns the one into the other. A cell that gains a metre of rock gains
+            // rather less than a metre of altitude, because the plate it is stacked on bends under
+            // the weight; what is left over is the surface uplift, and in a belt at steady state
+            // the rivers take that away too.
+            var upliftedThisRound = 0.0
+            if (upliftRateMmPerYear != null) {
+                val rate = upliftRateMmPerYear.data
+                val surface = working.data
+                for (cell in surface.indices) {
+                    if (rate[cell] <= 0f) continue
+                    val altitude = scale.altitudeAtField(surface[cell])
+                    val metres = rate[cell] * upliftMetresPerRoundPerMm *
+                        elevationLimit.upliftShareAt(altitude)
+                    if (metres <= 0f) continue
+                    surface[cell] += metres / metresPerFieldUnit
+                    if (upliftedMetres.isNotEmpty()) upliftedMetres[cell] += metres
+                    upliftedThisRound += metres.toDouble()
+                }
+            }
+
+            // And the plate answers — at the top of the round, to everything the rounds before it
+            // did, rather than at the bottom to what this one just did.
+            //
+            // The load is the same load either way and the arithmetic is the same arithmetic; what
+            // changes is what the world ends on. A flexure is a filter over the whole field, so its
+            // answer is a broad warp, and a broad warp laid on a landscape *after* the water has
+            // finished routing over it is a landscape whose rivers no longer run downhill: the
+            // shallow basins the bend makes have no outlet cut through them and the lake stage
+            // fills them. Measured on the five standard worlds at 512, the bend spent at the tail
+            // of the last round left 0.9 of a percentage point of extra land under lakes. Spent at
+            // the head instead, every bend the plate makes has a round of rivers after it to
+            // adjust to it, which is also the order the Earth does it in: a plate takes ten
+            // thousand years to answer a load and a river answers the plate as it moves.
+            //
+            // The first round's load is nothing, so its bend is nothing and no world is disturbed
+            // by having one.
+            var deflectedThisRound = 0.0
+            if (flexure != null) {
+                val surface = working.data
+                val uplifted = upliftedMetres
+                for (cell in surface.indices) {
+                    // Everything the rounds have done to the column, in metres of rock: what the
+                    // rivers cut away, less what the tectonics stacked on (which arrives
+                    // compensated), plus the spoil the walk is still holding off the terrain. That
+                    // last term matters more than it looks — the sediment is not laid on the rock
+                    // until the final round, so without it the plate would not feel a grain of the
+                    // debris a range sheds into its foreland until the world was finished, and a
+                    // foreland basin is that debris.
+                    val columnChangeMetres =
+                        (surface[cell] - reference[cell]) * metresPerFieldUnit +
+                            deflectionMetres[cell] -
+                            (if (uplifted.isEmpty()) 0f else uplifted[cell]) +
+                            (if (sediment.isEmpty()) 0f else sediment[cell] * metresPerFieldUnit)
+                    loadPascals[cell] = columnChangeMetres * loadDensity * gravity
+                }
+                flexure.deflectionMetres(loadPascals, loadPascals)
+                for (cell in surface.indices) {
+                    val bend = loadPascals[cell]
+                    surface[cell] += (deflectionMetres[cell] - bend) / metresPerFieldUnit
+                    deflectionMetres[cell] = bend
+                    // Summed as a magnitude, because the signed sum is zero by construction: the
+                    // filter drops the zero-frequency term, so a bend down somewhere is a bend up
+                    // somewhere else and the world's mean altitude does not move. That is also what
+                    // keeps the round's mass budget closing across this pass.
+                    deflectedThisRound += if (bend < 0f) -bend.toDouble() else bend.toDouble()
+                }
+            }
+
             log?.round = round
             // The shoreline moves as the land wears down, so it is found again each round rather
             // than fixed once. This is the same percentile the sea level stage will use — taken,
             // for all but the last few rounds, at the stand the sea was actually at while these
             // valleys were being cut. See [standBelowToday].
             val sea = SeaLevelStage.percentileCut(
-                working, provisionalSeaLevel, standBelowToday(config, round)
+                working, provisionalSeaLevel, config.scale, standBelowToday(config, round)
             )
             if (sea.landCellCount == 0) {
                 settle()
@@ -400,10 +545,17 @@ internal object HydraulicErosion {
             val ground = filled.data
             val surfaceOf = working.data
 
-            // `relative` is elevation measured from the shoreline in units of the land's range, so
-            // converting between the two needs that range. Everything below that is a height has to
-            // say which of the two it is in; see [settled].
-            val landRange = (working.max() - sea.shorelineHeight).coerceAtLeast(1e-6f)
+            // `relative` is elevation measured from the shoreline in units of the land's own half
+            // of the ruler, so converting between the two needs that half. Everything below that is
+            // a height has to say which of the two it is in; see [settled].
+            //
+            // Declared and not measured since S2. The height field carries absolute altitudes now,
+            // so the land's half of it is `highestLandMetres / reliefSpanMetres` on every seed and
+            // at every grid — where before it was the distance from the shoreline to whatever the
+            // tallest cell happened to be, which is 0.25 of the field on one world and 0.39 on the
+            // same world at a finer grid, and is what made a rate written in one unit and spent in
+            // the other depend on the cell size.
+            val landRange = config.scale.landHalfOfField.coerceAtLeast(1e-6f)
             val toRelative = 1f / landRange
 
             // Ground as the walk leaves it: the pre-round elevation plus everything this round has
@@ -899,7 +1051,7 @@ internal object HydraulicErosion {
             // erosion rather than part of it. It caught this.
             if (closing && erosion.outletIncision) {
                 repeat(CLOSING_BREACHES) {
-                    val after = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
+                    val after = SeaLevelStage.percentileCut(working, provisionalSeaLevel, config.scale)
                     if (after.landCellCount == 0) return@repeat
                     val spoilGround = after.relativeElevation
                     val spoilFilled = FlowRouting.fillDepressions(cellsAcross, cellsDown, after.isLand, spoilGround)
@@ -919,7 +1071,7 @@ internal object HydraulicErosion {
                         ),
                         after.isLand, spoilGround.data, spoilFilled.data, spoilFlow, spoilArea.data,
                         after.landCellCount.toFloat(),
-                        (working.max() - after.shorelineHeight).coerceAtLeast(1e-6f), working.data,
+                        config.scale.landHalfOfField.coerceAtLeast(1e-6f), working.data,
                         settled = null, load = null
                     )
                     incised += cut.moved
@@ -938,8 +1090,8 @@ internal object HydraulicErosion {
             // which is this pass's. See [openMouths].
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
-                    cellsAcross, cellsDown, working, provisionalSeaLevel, spoil, rates.pondDepth,
-                    config.seed, config.facetRouting
+                    cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
+                    rates.pondDepth, config.seed, config.facetRouting
                 )
                 incised += opened.removed
                 lost += opened.removed
@@ -970,6 +1122,8 @@ internal object HydraulicErosion {
                         // thermal sweeps only move material between neighbours, so they do not
                         // change the total and the comparison stays a comparison with what left.
                         fieldDrop = startingMass - totalMass(working.data) - totalMass(sediment),
+                        uplifted = upliftedThisRound,
+                        deflected = deflectedThisRound,
                         notched = notched,
                         notchCells = notchCells,
                         basins = notch?.count ?: 0,
@@ -1206,17 +1360,18 @@ internal object HydraulicErosion {
         cellsDown: Int,
         working: FloatField,
         provisionalSeaLevel: Float,
+        scale: WorldScale,
         spoil: FloatArray,
         pondDepth: Float,
         seed: Long,
         byFacet: Boolean
     ): Opened {
         val cellCount = cellsAcross * cellsDown
-        val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel)
+        val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel, scale)
         if (sea.landCellCount == 0) return Opened(0.0, 0)
         val isLand = sea.isLand
         val surfaceOf = working.data
-        val landRange = (working.max() - sea.shorelineHeight).coerceAtLeast(1e-6f)
+        val landRange = scale.landHalfOfField.coerceAtLeast(1e-6f)
         // Measured against the pond depth rather than against the delta's freeboard, though a
         // freeboard is what it is cutting through. `DepositionTest` holds that no deposition knob
         // may change a world with deposition switched off, and this pass runs either way; reading
@@ -1716,6 +1871,9 @@ internal object HydraulicErosion {
         for (value in values) sum += value.toDouble()
         return sum
     }
+
+    /** Millimetres in a metre, for the uplift rates this stage is handed in millimetres a year. */
+    private const val MILLIMETRES_PER_METRE = 1_000.0
 
     /** Length of a diagonal step, in cells, for every slope this file measures. */
     private const val DIAGONAL_STEP_CELLS = 1.41421356f

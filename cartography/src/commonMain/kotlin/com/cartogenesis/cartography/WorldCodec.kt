@@ -30,6 +30,12 @@ data class WorldLists(
      * already had this number subtracted out of it.
      */
     val shorelineHeight: Float,
+    /**
+     * How fast this world's ridges spread, in kilometres per million years — solved from the plate
+     * partition rather than declared, and so not derivable from the arrays either. See
+     * [com.cartogenesis.worldgen.pipeline.PlateStage.seafloorAgeOf].
+     */
+    val seafloorHalfSpreadingRateKmPerMyr: Double,
     val landCellCount: Int,
     val rivers: List<River>,
     val lakes: List<Lake>,
@@ -41,6 +47,7 @@ data class WorldLists(
         fun of(world: WorldMap): WorldLists = WorldLists(
             plates = world.plates.plates,
             shorelineHeight = world.sea.shorelineHeight,
+            seafloorHalfSpreadingRateKmPerMyr = world.plates.seafloorHalfSpreadingRateKmPerMyr,
             landCellCount = world.sea.landCellCount,
             rivers = world.rivers.rivers,
             lakes = world.rivers.lakes.lakes,
@@ -128,6 +135,15 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 9 because the crust became a thing the world carries. The plate stage now writes which crust
+     * each cell is made of and how fast the rock under it is still rising, the settings gained an
+     * `isostasy` section for the densities and the elastic thickness, and the height field itself
+     * changed meaning: it is an absolute altitude on the world's own ruler where it used to be
+     * renormalised to whatever the tallest cell of that particular world happened to be. A format-8
+     * file's heights would parse and mean something else, which is exactly the kind of silence
+     * refusing by version exists to prevent. S2 and W1 each took 8 on their own branch, so the two
+     * had to be told apart when they met and the solid earth's is 9.
+     *
      * 8 because the climate gained two sea-ice masks, one per season, and lost the two anchors of
      * the latitude curve the energy balance replaced: `climate.equatorTemperatureC` and
      * `climate.poleTemperatureC` are gone and `climate.globalMeanShiftC` stands in their place,
@@ -150,7 +166,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 8
+    const val FORMAT_VERSION = 9
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

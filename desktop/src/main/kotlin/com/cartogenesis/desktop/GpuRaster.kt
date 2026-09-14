@@ -521,7 +521,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             // the Kotlin's own arithmetic rather than recomputed here, so the two agree to the bit.
             const float SKY_BRIGHTNESS_TOTAL = 4.76000016;
             const float SKY_SHARE = 0.23500001;
-            const float ORDINARY_GROUND = 0.9318;
+            const float ORDINARY_GROUND = 0.9582;
             const float DARKEST = 0.45;
             const float BRIGHTEST = 1.35;
             const int HORIZON_BEARINGS = 8;

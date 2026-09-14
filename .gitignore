@@ -31,6 +31,7 @@ keystore.properties
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
 
-# Scratch probes a chunk writes to measure something once. Never part of the suite.
-desktop/src/test/kotlin/com/cartogenesis/desktop/SeedProbe*.kt
-worldgen/src/jvmTest/kotlin/com/cartogenesis/worldgen/SeedProbe*.kt
+# Throwaway probes. A chunk writes one to measure something or to regenerate a fixture, and it
+# is not part of the suite: every module, not just the desktop one, so a probe cannot be committed
+# from wherever it happened to be written.
+**/SeedProbe*.kt

@@ -81,6 +81,25 @@ class EarthLikenessControlTest {
         val flatComplaint = EarthLikeness.bimodalityComplaint("FLAT", flat)
         println("EARTH CONTROL flat world: $flatComplaint")
         assertTrue("a world of one elevation was not called unimodal", flatComplaint != null)
+
+        // And the sea-mode clause on the same two: Earth's own deep floor passes, and a world
+        // whose sea floor is a few hundred metres down — which is what a height field with no
+        // isostasy in it produces, and what this generator had before S2 — does not.
+        val earthSeaMode = EarthLikeness.seaModeComplaint("EARTH-TABLE", earth)
+        println("EARTH CONTROL Earth's sea mode: ${earth.seaModeMetres} m, $earthSeaMode")
+        assertTrue(
+            "the sea-mode clause rejects Earth's own band table: $earthSeaMode",
+            earthSeaMode == null
+        )
+        val shallow = EarthLikeness.hypsometryOfMetres(
+            DoubleArray(20_000) { if (it % 5 == 0) 400.0 else -400.0 }
+        )
+        val shallowComplaint = EarthLikeness.seaModeComplaint("SHALLOW", shallow)
+        println("EARTH CONTROL a world whose sea floor is 400 m down: $shallowComplaint")
+        assertTrue(
+            "a world whose sea floor sits 400 m below the waterline passed the sea-mode clause",
+            shallowComplaint != null
+        )
     }
 
     /**

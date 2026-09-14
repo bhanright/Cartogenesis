@@ -141,7 +141,7 @@ class GpuErosionTest {
 
         val stopped = runBlocking {
             val run = async(Dispatchers.Default) {
-                ErosionStage.apply(gpuConfig, uplift, gpu)
+                ErosionStage.apply(gpuConfig, uplift, null, gpu)
             }
             // Far enough in to be inside the hydraulic rounds, and well short of the whole run.
             delay(warmMs / 3)

@@ -156,9 +156,10 @@ class UnitsTest {
      * The control: a constant that keeps its own number does not move when the ruler does.
      *
      * `ErosionConfig.rate` is a share of the excess and `TectonicsConfig.mountainHeight` is a share
-     * of a field that is normalised afterwards; neither has a metre value and neither should move.
-     * They are here so the three tests above cannot pass vacuously — if the ruler were not
-     * actually reaching the constants, they would look exactly like these.
+     * of `TectonicsConfig.beltReliefMetres`, which is a metre figure of its own and not one of
+     * `WorldScale`'s; neither should move when the world's own ruler does. They are here so the
+     * three tests above cannot pass vacuously — if the ruler were not actually reaching the
+     * constants, they would look exactly like these.
      */
     @Test
     fun `a constant with no unit does not move when the ruler does`() {
@@ -177,23 +178,33 @@ class UnitsTest {
     }
 
     /**
-     * The declared ruler against the height field's own, measured.
+     * The declared ruler against the height field's own, as a residual in metres of sea level.
      *
-     * `WorldScale` declares two things that have to agree: the land's relief above the shoreline is
-     * `highestLandMetres`, and the raw height field's whole 0..1 spans `reliefSpanMetres`. They
-     * coincide exactly when the shoreline sits at `deepestOceanMetres / reliefSpanMetres` of the
-     * field — 0.625 at the stock figures — and the shoreline is a percentile of the *cells* rather
-     * than of the range, so it does not sit exactly there.
+     * `WorldScale` declares that the raw height field runs from `deepestOceanMetres` below the
+     * water to `highestLandMetres` above it, so the waterline stands at
+     * `WorldScale.shorelineFieldLevel` — 0.625 at the stock figures. Two stages work on that field
+     * before any shoreline exists, the thermal sweeps and the stream-power incision, so both spend
+     * the declared ruler; if the shoreline does not land where it is declared to, they are cutting
+     * a different world from the one the rest of the pipeline reads.
      *
-     * Two stages work on the raw field before any shoreline exists — the thermal sweeps and the
-     * stream-power incision — so both of them spend the declared ruler where the rest of the
-     * pipeline spends the measured one, and the difference between the two is a real limit of this
-     * chunk. It is measured here rather than assumed, and held inside a factor: closing it needs
-     * the height field to have an absolute vertical scale, which is what S2's uplift and isostasy
-     * give it.
+     * Until S2 it did not land there and could not. The field was renormalised to its own extremes
+     * and the shoreline was a percentile of the *cells*, so where it fell in the *range* was an
+     * output: 0.395, 0.437, 0.477 and 0.554 on these four seeds, which put the metres one field
+     * unit was worth at 10,228 to 17,370 against the 16,000 declared, and this test held the
+     * disagreement inside a factor of 1.7 rather than claiming there was none.
+     *
+     * Isostasy closed it. The plate stage builds the field out of altitudes — two crusts floating
+     * at their own levels — and the ocean-coverage slider chooses how much of the world is drawn as
+     * continental crust, so the percentile lands near the isostatic datum instead of wherever the
+     * histogram put it. The residual is quoted in metres rather than as a factor because a factor
+     * taken off the tallest cell says as much about whether a world happens to own a six-kilometre
+     * mountain as it does about the ruler; the old reading is printed beside it.
+     *
+     * `IsostasyTest` is where the residual is shown to open up again when the crust is drawn to the
+     * wrong target. Here it is a regression guard on the ruler.
      */
     @Test
-    fun `the declared ruler and the height field's own agree within a factor`() {
+    fun `the declared ruler and the height field's own agree`() {
         val worst = ArrayList<Pair<Long, Double>>()
         listOf(7L, 42L, 1234L, 99L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
@@ -203,24 +214,30 @@ class UnitsTest {
             val shoreline = world.sea.shorelineHeight
             val highest = world.erosion.height.data.max()
             val landRange = (highest - shoreline).toDouble()
-            // What one unit of the raw field is worth, measured off the land, against what
-            // `WorldScale` declares it to be worth.
+            // Where the cut landed against the level the two ends of `WorldScale` put the
+            // waterline at, in metres of sea level.
+            val residual = scale.altitudeAtField(shoreline).toDouble()
+            // And the reading this test took before the field had an absolute scale: what one unit
+            // of it is worth, measured off the land against what `WorldScale` declares.
             val measured = scale.highestLandMetres / landRange
-            val declared = scale.reliefSpanMetres.toDouble()
-            val ratio = measured / declared
-            worst.add(seed to ratio)
+            worst.add(seed to residual)
             println(
-                "UNITS ruler seed %-5d shoreline at %.3f of the field, land relief %.3f, %,.0f m per unit measured against %,.0f declared (x%.2f)"
-                    .format(seed, shoreline, landRange, measured, declared, ratio)
+                ("UNITS ruler seed %-5d shoreline at %.3f of the field against %.3f declared," +
+                    " %+,.0f m; land relief %.3f, %,.0f m per unit measured against %,.0f declared")
+                    .format(
+                        seed, shoreline, scale.shorelineFieldLevel, residual, landRange, measured,
+                        scale.reliefSpanMetres.toDouble()
+                    )
             )
         }
-        val furthest = worst.maxByOrNull { abs(kotlin.math.ln(it.second)) }!!
+        val furthest = worst.maxByOrNull { abs(it.second) }!!
         assertTrue(
-            "seed ${furthest.first}: the height field's measured ruler is ${"%.2f".format(furthest.second)}" +
-                " times the one WorldScale declares, outside the stated factor of" +
-                " $RULER_AGREEMENT_FACTOR — the thermal sweeps and the incision spend the declared" +
-                " one, so past this the world at one grid is not the world at another",
-            furthest.second in (1.0 / RULER_AGREEMENT_FACTOR)..RULER_AGREEMENT_FACTOR
+            "seed ${furthest.first}: the sea-level cut lands" +
+                " ${"%.0f".format(furthest.second)} m from the level WorldScale declares the" +
+                " shoreline at, outside the stated $SHORELINE_RESIDUAL_METRES m — the thermal" +
+                " sweeps and the incision spend the declared ruler, so past this the world they" +
+                " are cutting is not the world the rest of the pipeline is reading",
+            abs(furthest.second) <= SHORELINE_RESIDUAL_METRES
         )
     }
 
@@ -281,21 +298,20 @@ class UnitsTest {
 
     private companion object {
         /**
-         * How far the declared ruler and the measured one may sit apart.
+         * How far the sea-level cut may land from the level `WorldScale` declares the shoreline at,
+         * in metres.
          *
-         * A regression guard on a disagreement, not a claim that there is none. `WorldScale`'s two
-         * ends imply the shoreline sits at `deepestOceanMetres / reliefSpanMetres` of the height
-         * field — 0.625 — and it does not, because the shoreline is a percentile of the *cells*
-         * and where that lands in the *range* is an output. Measured on these four seeds at 512 it
-         * sits at 0.395, 0.437, 0.477 and 0.554, which puts the metres one field unit is worth at
-         * 10,228, 10,869, 17,370 and 15,377 against the 16,000 declared: 0.64x to 1.09x.
+         * A thousand. `IsostasyTest.SHORELINE_RESIDUAL_BAR_METRES` carries the same figure and
+         * the derivation, and is where it is shown to bite; in short, this generator's continents
+         * drown a tenth of their own crust where Earth's drown 29%, so the crust puts about half
+         * the world above the datum where the slider asks for 38 and the cut has to come up to
+         * meet it.
          *
-         * The bar is 1.7, which admits that spread with a little room and refuses a world where
-         * the two ends of `WorldScale` have stopped describing the field they are declared over —
-         * a land relief under a fifth of the range or over four fifths of it. Closing the gap is
-         * not a matter of declaring anything better; it needs a vertical scale that does not move
-         * with the sea level, which is S2's uplift and isostasy.
+         * Measured after S2 on these four seeds at 512: +459, +796, +455 and +428 m. Before it the
+         * question could not be asked in metres at all — the field was renormalised to its own
+         * extremes, so this test held a *ratio* inside a factor of 1.7 instead, and the same worlds
+         * read 0.64x to 1.09x of the declared ruler.
          */
-        const val RULER_AGREEMENT_FACTOR = 1.7
+        const val SHORELINE_RESIDUAL_METRES = 1_000.0
     }
 }

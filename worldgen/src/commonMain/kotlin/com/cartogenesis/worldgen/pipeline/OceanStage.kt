@@ -138,12 +138,18 @@ object OceanStage {
      */
     fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
         generateOcean(config, sea) {
+            // Nothing that does not suspend can reach an accelerator, so this is the reference
+            // solve by construction rather than by choice.
             solveStreamFunction(config, sea) { _, _, _, _, _, _ -> null }
         }
 
     /**
-     * The same circulation, optionally solving on [accelerator] when graphics acceleration is on.
-     * Inputs and units are those of [generate]; a declined solve uses the CPU reference.
+     * The same circulation, solved on [accelerator] when the reader has graphics acceleration on.
+     *
+     * Inputs, outputs and units are [generate]'s. The accelerator is asked only for the coarse
+     * stream function; the forcing that goes into it and the [streamToVelocity] that comes out of
+     * it are shared with the reference path, so the two differ in arithmetic and nothing else. A
+     * device that declines, or a reader who has left acceleration off, gets the reference solve.
      */
     suspend fun generate(
         config: WorldGenConfig,
@@ -151,12 +157,20 @@ object OceanStage {
         accelerator: OceanAccelerator?
     ): OceanResult = generateOcean(config, sea) {
         solveStreamFunction(config, sea) { across, down, water, forcing, passes, overRelaxation ->
+            // The one graphics switch the interface offers lives in the erosion section, and
+            // governs every stage that can leave the processor rather than erosion alone.
             if (config.erosion.acceleration == Acceleration.GPU) {
                 accelerator?.solve(across, down, water, forcing, passes, overRelaxation)
-            } else null
+            } else {
+                null
+            }
         }
     }
 
+    /**
+     * The stage's whole body, with only the stream-function solve left to the caller, so that the
+     * suspending and the non-suspending entry points cannot drift apart.
+     */
     private inline fun generateOcean(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -218,7 +232,14 @@ object OceanStage {
     private inline fun solveStreamFunction(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        accelerate: (Int, Int, BooleanArray, FloatArray, Int, Float) -> FloatArray?
+        accelerate: (
+            cellsAcross: Int,
+            cellsDown: Int,
+            isWater: BooleanArray,
+            forcing: FloatArray,
+            passes: Int,
+            overRelaxation: Float
+        ) -> FloatArray?
     ): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -278,6 +299,13 @@ object OceanStage {
         return interpolateStream(config, coarseAcross, coarseDown, coarseStream)
     }
 
+    /**
+     * The reference solve: [passes] red-black Gauss-Seidel over-relaxation passes over the coarse
+     * grid, starting from a stream function of zero and returning it row-major.
+     *
+     * Every accelerator is held to this answer within rounding. Land is pinned at zero, columns
+     * wrap and rows clamp.
+     */
     private fun solveOnCpu(
         coarseAcross: Int,
         coarseDown: Int,
@@ -331,6 +359,7 @@ object OceanStage {
         return coarseStream
     }
 
+    /** The coarse stream function bilinearly enlarged to one value per full-resolution cell. */
     private fun interpolateStream(
         config: WorldGenConfig,
         coarseAcross: Int,

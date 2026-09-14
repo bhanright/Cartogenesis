@@ -15,7 +15,7 @@
 <meta property="og:description" content="Build a world from the ground up. Terrain, rivers, climate and borders, shaped by geography from a seed — then a map you can pan, restyle, save and export.">
 <meta property="og:image" content="https://cartogenesis.com/img/natural.webp">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2315110f'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23121417'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
 <!-- The two faces the first screenful is set in. The other three are asked for by @font-face
      below and fetched when the reader gets to them. Fonts are fetched in CORS mode even from the
@@ -63,11 +63,13 @@
 
   :root{
     /* The dark scheme from ui/Theme.kt, value for value. Anything that is not
-       one of these is a mistake rather than a decision. */
-    --ink:#15110f;
-    --ink-raised:#1c1714;
-    --ink-sunk:#241d18;
-    --hairline:#3a2f28;
+       one of these is a mistake rather than a decision. The four charcoals are
+       one tone at four depths: red, green and blue in the proportion
+       1 : 1.116 : 1.268, scaled by 18, 25, 33 and 54. */
+    --ink:#121417;
+    --ink-raised:#191c20;
+    --ink-sunk:#21252a;
+    --hairline:#363c44;
     --bone:#e8dfd0;
     --bone-dim:#9c9187;
     --parchment:#f2e7cf;
@@ -347,7 +349,7 @@
         <picture>
           <source media="(max-width: 899px)" srcset="img/styles-stacked.webp" width="640" height="2137">
           <img src="img/styles.webp" width="1924" height="711" loading="lazy" decoding="async"
-               alt="The same square of a generated world drawn three times, labelled Atlas, Schoolroom and Natural.">
+               alt="The same square of a generated world drawn three times. Atlas colours the land by height and climate in muted greens and tans with a pale blue sea. Schoolroom colours it by height alone in bright greens and oranges. Natural uses satellite colours: dark green forest, ochre plains, rust ranges and a cobalt sea. Labelled Atlas, Schoolroom and Natural.">
         </picture>
       </div>
       <figcaption>
@@ -371,7 +373,7 @@
         <picture>
           <source media="(max-width: 899px)" srcset="img/layers-stacked.webp" width="480" height="2674">
           <img src="img/layers.webp" width="1926" height="667" loading="lazy" decoding="async"
-               alt="The same stretch of coast drawn four times, labelled Temperature, Ocean currents, Winds and Rainfall.">
+               alt="The same stretch of coast drawn four times. Temperature shades the land from orange in the lowlands to white on the peaks. Ocean currents draws small arrows over the sea. Winds draws larger arrows, blue eastward in the north and orange westward in the south. Rainfall shades the land from yellow where it is dry to green where it is wet. Labelled Temperature, Ocean currents, Winds and Rainfall.">
         </picture>
       </div>
       <figcaption>

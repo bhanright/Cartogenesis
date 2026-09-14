@@ -1,5 +1,7 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.ColorVision
+import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.test.Test
@@ -36,6 +38,13 @@ class SiteAssemblyTest {
             "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
             "Eighteen", "Nineteen", "Twenty"
         )
+
+        /**
+         * WCAG 2.1 AA for body text (1.4.3), the bar `SitePaletteContrastTest` holds the rest of
+         * the page to. The naming bands are held to it rather than to the large-text bar, because
+         * the line under a band's name is small text by any measure.
+         */
+        const val AA = 4.5
     }
 
     private val repoRoot: File
@@ -112,12 +121,18 @@ class SiteAssemblyTest {
             "the description page no longer points at /app/, so its launch button goes nowhere"
         )
 
-        // The hero is also the link preview image, so a scraper reads this exact file.
-        val hero = file("img/atlas.webp")
+        // The hero is also the link preview image, so a scraper reads this exact file — and reads
+        // it at the address the og:image names, which is why that is checked and not only the tag
+        // the page draws with.
+        val hero = file("img/natural.webp")
         val header = hero.asLatin1()
         assertTrue(
             header.startsWith("RIFF") && header.substring(8, 12) == "WEBP",
-            "img/atlas.webp is not a WebP file — the copy has been filtered as though it were text"
+            "img/natural.webp is not a WebP file — the copy has been filtered as though it were text"
+        )
+        assertTrue(
+            index.readText().contains("""og:image" content="https://cartogenesis.com/img/natural.webp"""),
+            "the link preview still points at a figure the page no longer shows"
         )
         assertEquals(
             1600 to 800, webpDimensions(hero),
@@ -126,19 +141,67 @@ class SiteAssemblyTest {
         )
     }
 
+    /**
+     * The tag a figure is published by, as the page writes it.
+     *
+     * Either the `<img>` a wide screen loads or the `<source>` a phone is handed instead: both
+     * carry the file's name and both state its shape, and which of the two a given figure appears
+     * in is the page's business rather than this guard's. Matching the whole tag rather than
+     * hunting for the file name is what lets the width, the height and the `alt` be read out of it.
+     */
+    private fun imageTag(page: String, file: String): String {
+        val quoted = Regex.escape(file)
+        return Regex("""<img\s+src="img/$quoted"[^>]*>""").find(page)?.value
+            ?: Regex("""<source[^>]*srcset="img/$quoted"[^>]*>""").find(page)?.value
+            ?: fail("the page has no <img> or <source> for img/$file")
+    }
+
+    private fun attribute(tag: String, name: String): String =
+        Regex("""$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
+            ?: fail("""$tag has no $name attribute""")
+
+    /**
+     * The panel names a strip's `alt` text promises, in order.
+     *
+     * The sentence ends "…, labelled A, B and C." — a shape rather than a word count, so that the
+     * list a reader who cannot see the figure is given and the list `SiteImagery` actually letters
+     * the bands with can be compared name for name. A panel dropped from either side moves one of
+     * the two lists and not the other.
+     */
+    private fun namesPromised(alt: String): List<String> {
+        val listed = alt.substringAfter("labelled ", "").substringBefore('.')
+        assertTrue(
+            listed.isNotEmpty(),
+            "a comparison strip's alt text has to end \"…, labelled A, B and C.\" so that what it " +
+                "promises can be compared with what is drawn; this one reads \"$alt\""
+        )
+        return listed.split(Regex(""",\s*|\s+and\s+""")).map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
     @Test
     fun `every figure the page shows was rendered, at the size the page reserves`() {
         // These names are the contract between SiteImagery.FIGURES and the page's img tags.
         // Renaming one side alone deploys a broken figure that nothing else would notice.
         val expected = mapOf(
-            "atlas.webp" to (1600 to 800)
+            "natural.webp" to (1600 to 800),
+            "styles.webp" to (1924 to 711),
+            "layers.webp" to (1926 to 667),
+            // The same panels stacked, which is what a phone is handed: one window wide, and as
+            // many finished panels tall as there are readings, with a hairline between each pair.
+            "styles-stacked.webp" to (640 to 2137),
+            "layers-stacked.webp" to (480 to 2674)
         )
         val page = file("index.html").readText()
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
-            assertTrue(
-                page.contains("img/$name"),
-                "img/$name was rendered and published, but the page never references it"
+            val tag = imageTag(page, name)
+            // Stated in the tag as well as rendered: the page reserves each figure's shape so the
+            // first screenful does not reflow as they load, and a reserved shape that is not the
+            // figure's shape reflows it twice over.
+            assertEquals(
+                size,
+                attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                "the page reserves a different shape for img/$name than the figure that was rendered"
             )
         }
 
@@ -148,6 +211,144 @@ class SiteAssemblyTest {
             "img/ holds something other than the figures the page shows — a contact sheet left " +
                 "by -Pcontact, or a figure the page has stopped asking for"
         )
+    }
+
+    /**
+     * That every variant of a comparison strip draws exactly the panels the page says it draws.
+     *
+     * A strip is one image, so a panel that stopped being rendered would not 404 and would not
+     * break the layout: the figure would simply arrive one panel short, with the page's prose and
+     * its `alt` text still promising three. And now that a phone is handed a second file, a panel
+     * could go missing from one variant alone and be invisible to anyone reviewing on the other.
+     *
+     * So both files are counted, each along its own axis — the wide one is *n* windows plus the
+     * hairlines between them, the stacked one is *n* finished panels plus the same hairlines — and
+     * both are held to the one list of names in the `alt`, which the two variants share because
+     * they are the same figure turned a different way round.
+     */
+    @Test
+    fun `each comparison strip draws the panels the page's alt text lists`() {
+        val page = file("index.html").readText()
+        val strips = SiteImagery.FIGURES.filter { it.panels.size > 1 }
+        assertTrue(
+            strips.isNotEmpty(),
+            "SiteImagery has no comparison strip left; the page's style and layer sections are " +
+                "about figures that are no longer rendered"
+        )
+
+        strips.forEach { figure ->
+            val alt = attribute(imageTag(page, figure.file), "alt")
+            assertEquals(
+                figure.panels.map { it.name }, namesPromised(alt),
+                "img/${figure.file} letters its bands ${figure.panels.joinToString { it.name }}, " +
+                    "and the page's alt text promises a reader ${namesPromised(alt)}"
+            )
+
+            // The window belongs to the figure and not to the panel, so the panels of a strip
+            // cannot be showing different ground. What they must not share is the reading: two
+            // panels drawing the same view in the same style would be a comparison of nothing.
+            assertEquals(
+                figure.panels.size,
+                figure.panels.map { it.view to it.style }.distinct().size,
+                "two panels of img/${figure.file} are the same reading of the same window"
+            )
+
+            assertEquals(
+                listOf(SiteImagery.Layout.ACROSS, SiteImagery.Layout.DOWN), figure.layouts,
+                "a comparison strip is published both ways round, or a phone is left scrolling " +
+                    "${figure.file} sideways"
+            )
+
+            figure.layouts.forEach { layout ->
+                val name = figure.fileFor(layout)
+                val drawn = webpDimensions(file("img/$name"))
+                assertEquals(
+                    figure.width(layout) to figure.height(layout), drawn,
+                    "img/$name is not the size ${figure.panels.size} panels of " +
+                        "${figure.window.width}x${figure.window.height} come to laid " +
+                        layout.name.lowercase()
+                )
+                // How many panels are in the file, counted off the picture rather than taken from
+                // the figure table: along the axis the panels run, a panel and a hairline each.
+                val along = if (layout == SiteImagery.Layout.ACROSS) drawn.first else drawn.second
+                val panel = if (layout == SiteImagery.Layout.ACROSS) figure.window.width
+                else figure.panelHeight
+                assertEquals(
+                    figure.panels.size,
+                    (along + SiteImagery.DIVIDER) / (panel + SiteImagery.DIVIDER),
+                    "img/$name measures $along along its panels, which is not " +
+                        "${figure.panels.size} panels' worth"
+                )
+                println(
+                    "SITE $name ${drawn.first}x${drawn.second}, ${figure.panels.size} panels of " +
+                        "${figure.window.width}x${figure.window.height} laid " +
+                        "${layout.name.lowercase()} at ${figure.window.x},${figure.window.y}: " +
+                        figure.panels.joinToString { it.name }
+                )
+            }
+        }
+    }
+
+    /**
+     * That a naming band's lettering is legible on its own tint, and that the tint is the page's.
+     *
+     * The bands are drawn into the figure, so nothing on the page measures them: they are pixels by
+     * the time a browser sees them, and `SitePaletteContrastTest` only ever sees CSS. A band is
+     * text a reader is asked to read, though, and it is the only text on this site that the page's
+     * own guard cannot reach — so it is measured here, by the same arithmetic and against the same
+     * bar, and the tint is checked against the custom property it claims to be so that the strips
+     * cannot quietly stop matching the page around them.
+     */
+    @Test
+    fun `every naming band is the page's own tint, and legible on it`() {
+        val page = file("index.html").readText()
+        val palette = Regex("""--([a-z-]+):\s*#([0-9a-fA-F]{6})\s*;""").findAll(page)
+            .associate { it.groupValues[1] to (0xFF000000.toInt() or it.groupValues[2].toInt(16)) }
+
+        SiteImagery.BandTint.entries.forEach { tint ->
+            fun fromPage(name: String) = palette[name]
+                ?: fail("a band is tinted --$name, and the page no longer defines that")
+            assertEquals(
+                fromPage(tint.groundName), tint.ground,
+                "${tint.name}'s ground is not the --${tint.groundName} the page sets"
+            )
+            assertEquals(
+                fromPage(tint.inkName), tint.ink,
+                "${tint.name}'s lettering is not the --${tint.inkName} the page sets"
+            )
+            val ratio = ColorVision.contrast(tint.ink, tint.ground)
+            assertTrue(
+                ratio >= AA,
+                "a band's --${tint.inkName} on --${tint.groundName} measures " +
+                    "${"%.2f".format(ratio)}:1, under the $AA:1 the rest of the page keeps"
+            )
+            println(
+                "SITE band ${tint.name}: --${tint.inkName} on --${tint.groundName} " +
+                    "${"%.2f".format(ratio)}:1"
+            )
+        }
+    }
+
+    /**
+     * That the Features list still counts the map styles the application offers.
+     *
+     * "Twelve for the map" is the same kind of sentence as the Themes row below it, and goes stale
+     * the same silent way. It matters more now that the page shows three of the twelve in a figure
+     * of their own: a reader who counts three and is told twelve should be told the truth.
+     */
+    @Test
+    fun `the Features list counts the map styles the application offers`() {
+        val page = file("index.html").readText()
+        val sentence = Regex("""<dt>Styles</dt><dd>([^<]*)</dd>""").find(page)?.groupValues?.get(1)
+            ?: fail("the Features list no longer has a Styles row")
+        val counted = NUMBER_WORDS.indexOf(sentence.substringBefore(' '))
+        assertEquals(
+            MapStyle.entries.size,
+            counted,
+            "the page opens the Styles row with \"${sentence.substringBefore(' ')}\" and the " +
+                "application offers ${MapStyle.entries.size} map styles"
+        )
+        println("SITE the Features list counts $counted map styles")
     }
 
     /**

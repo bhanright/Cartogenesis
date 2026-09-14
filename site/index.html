@@ -13,7 +13,7 @@
 <meta property="og:url" content="https://cartogenesis.com/">
 <meta property="og:title" content="Cartogenesis — Procedural World-Map Generator">
 <meta property="og:description" content="Build a world from the ground up. Terrain, rivers, climate and borders, shaped by geography from a seed — then a map you can pan, restyle, save and export.">
-<meta property="og:image" content="https://cartogenesis.com/img/atlas.webp">
+<meta property="og:image" content="https://cartogenesis.com/img/natural.webp">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2315110f'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
@@ -167,6 +167,24 @@
     margin:10px 0 0;
   }
 
+  /* ---------- comparison strips --------------------------------------------- */
+  /* One image, not a row of images. What these figures claim is that the panels
+     are the same ground read different ways, and a row of separate pictures is
+     no evidence of that — a strip cut from one window is, which is why the
+     panels, the hairlines between them and the naming bands are all drawn into
+     the file by SiteImagery rather than assembled here.
+
+     Two files, then, and not two layouts: a phone gets the same panels composed
+     one above the other, chosen by the <picture> below at the same 900px the
+     headline's line break uses. So there is no CSS here at all — nothing on
+     this page arranges a panel, and the wide strip and the stacked one cannot
+     drift apart, because neither of them is assembled by the page. */
+  .section-lede{margin:0 0 20px;color:var(--bone-dim);font-size:15px;max-width:64ch}
+  /* The same sentence after a figure rather than before it, so it takes its air
+     above instead of below. A rule on where it sits rather than a second class,
+     because it is the same kind of line doing the same job. */
+  figure+.section-lede{margin:20px 0 0}
+
   /* ---------- how a world is made ------------------------------------------- */
   /* The six cards from the earlier page, in this page's panel: William kept the words and the
      new dress (2026-09-12). The oxblood rule on the left is what tells a step of the pipeline
@@ -271,11 +289,11 @@
 
     <figure>
       <div class="plate">
-        <img src="img/atlas.webp" width="1600" height="800" fetchpriority="high"
-             alt="A generated world map: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
+        <img src="img/natural.webp" width="1600" height="800" fetchpriority="high"
+             alt="A generated world map in the Natural style: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
       </div>
       <figcaption>
-        Seed 718106 · 62% ocean · 14 plates · 2048 cells · Atlas style
+        Seed 718106 · 62% ocean · 14 plates · 2048 cells · Natural style
       </figcaption>
     </figure>
   </div>
@@ -312,6 +330,58 @@
         <p>Borders follow watersheds, rivers and coasts. Peoples spread through country that resembles their homeland, so cultures cross borders the way real ones do.</p>
       </div>
     </div>
+  </section>
+
+  <section id="styles">
+    <div class="section-head">
+      <h2>Realistic map styles</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      The same ground is drawn three ways, with colours that follow its height or its height and climate.
+    </p>
+
+    <figure>
+      <div class="plate">
+        <picture>
+          <source media="(max-width: 899px)" srcset="img/styles-stacked.webp" width="640" height="2137">
+          <img src="img/styles.webp" width="1924" height="711" loading="lazy" decoding="async"
+               alt="The same square of a generated world drawn three times, labelled Atlas, Schoolroom and Natural.">
+        </picture>
+      </div>
+      <figcaption>
+        Seed 718106 · 2048 cells · one 640 × 640 window at 1:1
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="layers">
+    <div class="section-head">
+      <h2>The data behind the map</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      These four views show the temperature, ocean currents, winds and rainfall the generator computes for the same stretch of coast.
+    </p>
+
+    <figure>
+      <div class="plate">
+        <picture>
+          <source media="(max-width: 899px)" srcset="img/layers-stacked.webp" width="480" height="2674">
+          <img src="img/layers.webp" width="1926" height="667" loading="lazy" decoding="async"
+               alt="The same stretch of coast drawn four times, labelled Temperature, Ocean currents, Winds and Rainfall.">
+        </picture>
+      </div>
+      <figcaption>
+        Seed 718106 · 2048 cells · one 480 × 600 window at 1:1
+      </figcaption>
+    </figure>
+
+    <p class="section-lede">
+      These figures show some of the map styles and views. More are available in the app.
+    </p>
   </section>
 
   <section>

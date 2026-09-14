@@ -1409,6 +1409,33 @@ nested crescent-shaped lakes down a hotspot cone on 718106's southern rift (terr
 successive fill levels, TODO). F6's five chromes and the colour-blind style reviewed from the
 gallery screenshots: each distinct and readable, the map unchanged under all of them.
 
+## cartogenesis.com
+
+The landing page has had three passes. The first two have no section here — they landed on
+`release/2.0` before this plan carried the site at all, and their record is their commit messages
+(`122d263`, `71eaf1c`, `b276585`): Site 1 dressed the page in the application's own identity and
+replaced its hand-made poster with figures rendered from the engine at assembly time, and Site 2
+tried four readings of one band and three annotated details and then took them back out, because
+"captions describing a map would only work if this was written by a human" (William, 2026-09-12).
+This section starts where the record does.
+
+### Site 3. Style and layer strips — Opus
+
+*"I would like to highlight the Atlas, Schoolroom, and Natural map modes in the screenshots on the
+website, grouped together by a title which evokes their nature as realism based map modes. Then I'd
+like to separately highlight the more data focused map layers with screenshots of temperature, ocean
+currents, winds, and rainfall."* On the format, a game's resolution comparison: *"an identical scene
+is displayed side-by-side and the kind of filter is noted in each one."* And, the same day: *"I would
+like to add a hero image drawn from Natural since the color is very pleasant to look at."*
+
+The word that decides the shape is *identical*. A row of separate figures on a page cannot carry it,
+so a figure in `SiteImagery` becomes one window and a list of panels, drawn into one file with the
+naming bands in it; the window belongs to the figure and not to the panel, so panels of a strip
+cannot be showing different ground. Captions stay William's: a band's second line is the style's own
+`MapStyle.detail` or the field's own KDoc, never copy written for the page. The bands are measured
+for contrast in `SiteAssemblyTest` because they are the only text on the site that a guard reading
+CSS cannot see.
+
 ## Realism audit II (2026-09-12)
 
 *William asked for a second audit of the climatology, geology, hydrology and presentation, "with a
@@ -1510,6 +1537,7 @@ guard reported, so the next chunk knows its baseline.
 | V3 Labels | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N2 Scale-free suite | | queued for 3.0 (REALISM_AUDIT.md) | | | |
+| Site 3 Style and layer strips | Opus | done, for 2.0.6 | 2026-09-14 | 965a00c + 1fca076 + ebc70c8 + bf99698 | a figure is one window and a list of panels, drawn into one file: `styles.webp` 1924x711, the same 640x640 window at (704, 64) in Atlas, Schoolroom and Natural, 238 KB; `layers.webp` 1926x667, the same 480x600 window at (200, 500) in Temperature, Ocean currents, Winds and Rainfall, 103 KB; the hero moves to `MapStyle.NATURAL` as `natural.webp`, same `BAND`, 122 KB against Atlas's 138 at the same quality. Windows chosen off contact sheets: the styles' holds a broken coast with islands, a snow-capped range, the river system and lakes above it and dry interior below, which is where climate-tinted styles part from height-tinted ones; the layers' is taller than wide because the westerly/trade boundary crosses its upper third (so Winds shows both) and because a taller panel carries a taller band, which is what keeps four second lines readable in a 1072px column. Bands: a ninth of the map above them, full width, flat tints from the page (`--ink-sunk`, `--hairline`, `--oxblood`, `--brass`), lettered in the site's own IBM Plex Sans out of `ui/.../composeResources/font`, which the Gradle task passes in and declares as an input; contrast parchment-on-sunk 13.53, parchment-on-hairline 10.58, parchment-on-oxblood 11.67, ink-on-brass 7.76, bar 4.5 by `ColorVision.contrast`. `--brass-dim` is a divider only - it pairs with nothing on this page at 4.5:1. Second lines are the code's own words (`MapStyle.detail`; `ClimateStage`/`OceanStage` field KDoc), one pair of sizes per strip brought down until the longest fits. Page: two sections between the pipeline cards and Features, each a title, one sentence and the figure, scrolling rather than shrinking below 960px. Guards: figure table with both strips, width/height read back out of the img tag, each strip's alt "..., labelled A, B and C" compared name for name with the bands and the file's own width against n windows plus n-1 hairlines, every band tint checked against the custom property it claims to be, `og:image` pinned to the hero, and "Twelve for the map" counted against `MapStyle.entries`. Three shown to bite (Schoolroom dropped from an alt; `--brass` moved one unit). `-Pcontact` also writes each figure at the page's column width as PNG. :desktop:test 67, :desktop:siteTest 13, all green. **On review** (William: desktop right, phones should stack) each strip is published a second time with the panels laid down - `styles-stacked.webp` 640x2137 246,124 B, `layers-stacked.webp` 480x2674 107,224 B - composed from the same panel list by the same code, chosen by `<picture>` at `max-width: 899px`, the breakpoint the headline already uses. Both scroller rules removed and nothing replaced them: at 900px the column is 852px and a band's name sets at 12.6px, so no width needs to scroll; there is no CSS on the page that arranges a panel. The tag reader looks in `<source srcset>` too, and the panel-name clause runs over every variant, each counted along its own axis. Figures now 809 KB published, but a reader fetches one variant. Titles and lines are William's own, sent verbatim: "Realistic map styles" / "The same ground is drawn three ways..." and "The data behind the map" / "These four views show the temperature, ocean currents, winds and rainfall...", plus a closing "These figures show some of the map styles and views. More are available in the app." |
 | Audit II Realism audit, literature-backed | Fable | done | 2026-09-12 | see log | REALISM_AUDIT.md: five structural absences (scale, coupled uplift/isostasy, prescribed atmosphere, rectangular planet, coast as a line) plus presentation and determinism findings; twenty-three chunks S/W/R/K/I/P/V/N/M with dependencies, effort, visual weight, rigour and GPU applicability; an Earth-likeness metric table (hypsometry, coastline fractal dimension, Hack and Horton, lake and island size laws, desert, ice, lake and wetland shares, reef limit, delta class mix); sources listed with what was read and what is cited from memory to be checked at dispatch |
 
 Suggested order. **D1 first, alone** — everything after it is cheaper once cross-platform

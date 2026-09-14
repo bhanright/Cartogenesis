@@ -9,6 +9,7 @@ import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 
 /**
  * What an exported map is written as.
@@ -124,23 +125,14 @@ interface Platform {
      */
     val accelerator: ErosionAccelerator?
 
+    /** Optional coarse ocean solver, governed by the same graphics acceleration preference. */
+    val oceanAccelerator: OceanAccelerator? get() = null
+
     val accelerationUnavailableBecause: String?
 
-    /**
-     * What the graphics device is actually doing here, for the line of small print under the
-     * switch. [device] is [accelerator]'s own name.
-     *
-     * The two front ends do not do the same amount on it, and one sentence for both would tell
-     * one of them a smaller truth than it is owed: the desktop draws the export raster on the
-     * device as well as running the erosion sweeps, while the browser's WGSL raster has not been
-     * written, so there it really is erosion alone. A sentence that says "erosion" everywhere understates
-     * the desktop; one that says "erosion and export rendering" everywhere is simply wrong in a
-     * browser. So the host answers, which is what this seam is for. The default is the desktop's,
-     * because a `Platform` that has not thought about the question is one with a real graphics API
-     * behind it.
-     */
+    /** Work offered by this host, for the small print below the graphics toggle. */
     fun acceleratedWork(device: String): String =
-        "Erosion and export rendering run on $device, many times faster."
+        "Erosion, ocean currents and export rendering run on $device."
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.

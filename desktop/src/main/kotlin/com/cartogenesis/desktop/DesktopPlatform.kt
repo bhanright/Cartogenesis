@@ -10,6 +10,7 @@ import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.Desktop
 import java.io.File
 import java.net.URI
@@ -119,10 +120,11 @@ class DesktopPlatform(
     // why, which is more use than a switch that silently does nothing.
     private val erosionProbe = GpuErosion.createOrNull()
 
-    // The export raster shares that device and the context it runs on. It is deliberately not
-    // behind the same switch: the erosion one is a promise about whether the world can be
-    // regenerated from its seed, and drawing pixels makes no such promise either way.
+    // All accelerators share one device and context.
     private val rasterProbe = GpuRaster.createOrNull()
+
+    private val oceanProbe = GpuOcean.createOrNull()
+    override val oceanAccelerator: OceanAccelerator? get() = oceanProbe.accelerator
 
     override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator
 
@@ -138,7 +140,10 @@ class DesktopPlatform(
         // not, or the window stops answering for the best part of a minute.
         val destination = chooseSaveFile(Exporter.defaultName(config, size, format)) ?: return null
         val result = withContext(Dispatchers.Default) {
-            Exporter.export(config, options, size, destination, format, rasterProbe.accelerator)
+            Exporter.export(
+                config, options, size, destination, format, rasterProbe.accelerator,
+                accelerator, oceanAccelerator
+            )
         }
         return ExportOutcome(result.file.name, result.millis, result.bytes)
     }
@@ -158,7 +163,7 @@ class DesktopPlatform(
     ): ExportOutcome? {
         val destination = chooseSaveFile(Exporter.defaultDataName(config, size, layer)) ?: return null
         val result = withContext(Dispatchers.Default) {
-            Exporter.exportData(config, size, destination, layer)
+            Exporter.exportData(config, size, destination, layer, accelerator, oceanAccelerator)
         }
         val sidecar = Exporter.sidecarNameFor(result.file.name)
         return ExportOutcome("${result.file.name} and $sidecar", result.millis, result.bytes)

@@ -21,6 +21,8 @@ class WebGpuErosion private constructor(
     private val label: String
 ) : ErosionAccelerator {
 
+    internal fun oceanAccelerator(): WebGpuOcean = WebGpuOcean(device, label)
+
     override val name: String get() = label
 
     override suspend fun erode(

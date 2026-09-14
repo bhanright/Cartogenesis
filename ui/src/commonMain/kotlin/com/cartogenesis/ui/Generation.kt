@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import kotlinx.coroutines.delay
 
 /**
@@ -54,10 +55,13 @@ internal object Generation {
         config: WorldGenConfig,
         previous: PartialWorld?,
         accelerator: ErosionAccelerator?,
+        oceanAccelerator: OceanAccelerator? = null,
         onStage: (GenerationStage) -> Unit
     ): WorldMap {
         letTheInterfaceDraw()
-        return WorldGenerationEngine.generate(config, previous, accelerator) { stage, _, _ ->
+        return WorldGenerationEngine.generate(
+            config, previous, accelerator, oceanAccelerator
+        ) { stage, _, _ ->
             onStage(stage)
             letTheInterfaceDraw()
         }

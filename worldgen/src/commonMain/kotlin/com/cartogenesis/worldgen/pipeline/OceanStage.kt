@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
@@ -135,7 +136,32 @@ object OceanStage {
      * the mean of the same row's open water. With `OceanConfig.enabled` off, every velocity and
      * every anomaly is zero and the temperature is the bare latitude profile.
      */
-    fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult {
+    fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
+        generateOcean(config, sea) {
+            solveStreamFunction(config, sea) { _, _, _, _, _, _ -> null }
+        }
+
+    /**
+     * The same circulation, optionally solving on [accelerator] when graphics acceleration is on.
+     * Inputs and units are those of [generate]; a declined solve uses the CPU reference.
+     */
+    suspend fun generate(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        accelerator: OceanAccelerator?
+    ): OceanResult = generateOcean(config, sea) {
+        solveStreamFunction(config, sea) { across, down, water, forcing, passes, overRelaxation ->
+            if (config.erosion.acceleration == Acceleration.GPU) {
+                accelerator?.solve(across, down, water, forcing, passes, overRelaxation)
+            } else null
+        }
+    }
+
+    private inline fun generateOcean(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        solve: () -> FloatField
+    ): OceanResult {
         val cellsAcross = config.width
         val cellsDown = config.height
         val oceanConfig = config.ocean
@@ -152,7 +178,7 @@ object OceanStage {
         fillBaseTemperature(config, sea, zonal, temperature)
         if (!oceanConfig.enabled) return OceanResult(velocityX, velocityY, temperature, anomaly)
 
-        val streamFunction = solveStreamFunction(config, sea)
+        val streamFunction = solve()
         streamToVelocity(config, sea, streamFunction, velocityX, velocityY)
         advectTemperature(config, sea, zonal, velocityX, velocityY, temperature)
         buildAnomaly(config, sea, temperature, anomaly)
@@ -189,7 +215,11 @@ object OceanStage {
      * Returns one value per full-resolution cell, in stream-function units — arbitrary, since
      * [streamToVelocity] normalises the gradients it takes from them.
      */
-    private fun solveStreamFunction(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+    private inline fun solveStreamFunction(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        accelerate: (Int, Int, BooleanArray, FloatArray, Int, Float) -> FloatArray?
+    ): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
         val oceanConfig = config.ocean
@@ -234,17 +264,37 @@ object OceanStage {
             }
         }
 
+        val overRelaxation =
+            oceanConfig.overRelaxation.coerceIn(MIN_OVER_RELAXATION, MAX_OVER_RELAXATION)
+        val accelerated = accelerate(
+            coarseAcross, coarseDown, coarseIsWater, curl,
+            oceanConfig.relaxationPasses, overRelaxation
+        )
+        val coarseStream = accelerated ?: solveOnCpu(
+            coarseAcross, coarseDown, coarseIsWater, curl,
+            oceanConfig.relaxationPasses, overRelaxation
+        )
+
+        return interpolateStream(config, coarseAcross, coarseDown, coarseStream)
+    }
+
+    private fun solveOnCpu(
+        coarseAcross: Int,
+        coarseDown: Int,
+        coarseIsWater: BooleanArray,
+        curl: FloatArray,
+        passes: Int,
+        overRelaxation: Float
+    ): FloatArray {
         val coarseStream = FloatArray(coarseAcross * coarseDown)
 
         // Red-black Gauss-Seidel with over-relaxation.
         //
         // Updating in place is what makes this Gauss-Seidel rather than Jacobi, and Gauss-Seidel
-        // is what makes over-relaxation legal: an omega above 1 applied to Jacobi diverges to NaN,
-        // which is exactly what the first version of this did. Colouring by (x + y) parity means
+        // is what makes over-relaxation legal: an omega above 1 applied to Jacobi diverges to NaN.
+        // Colouring by (x + y) parity on an even-width cylinder means
         // no two cells updated together are neighbours, so each colour can still run in parallel.
-        val overRelaxation =
-            oceanConfig.overRelaxation.coerceIn(MIN_OVER_RELAXATION, MAX_OVER_RELAXATION)
-        repeat(oceanConfig.relaxationPasses) {
+        repeat(passes) {
             for (colour in 0..1) {
                 parallelChunks(0, coarseDown) { startRow, endRow ->
                     for (coarseRow in startRow until endRow) {
@@ -278,6 +328,19 @@ object OceanStage {
             }
         }
 
+        return coarseStream
+    }
+
+    private fun interpolateStream(
+        config: WorldGenConfig,
+        coarseAcross: Int,
+        coarseDown: Int,
+        coarseStream: FloatArray
+    ): FloatField {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellsPerCoarseColumn = cellsAcross / coarseAcross
+        val cellsPerCoarseRow = cellsDown / coarseDown
         // Back up to full resolution, bilinearly.
         val streamFunction = FloatField(cellsAcross, cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->

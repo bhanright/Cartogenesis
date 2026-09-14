@@ -216,6 +216,10 @@ object GlaciationStage {
         val sheetLowering: Float = scale.reliefShareOfMetres(glaciation.sheetLoweringMetres)
         val sheetBasinDepth: Float = scale.reliefShareOfMetres(glaciation.sheetBasinDepthMetres)
 
+        /** How far above its bed the ice surface in a trough stands, in the same shares. */
+        val valleyIceThickness: Float =
+            scale.reliefShareOfMetres(glaciation.valleyIceThicknessMetres).coerceAtLeast(1e-6f)
+
         /** A valley glacier's cuts and spoil, in the same shares. */
         val deepening: Float = scale.reliefShareOfMetres(glaciation.deepeningMetres)
         val overDeepening: Float = scale.reliefShareOfMetres(glaciation.overDeepeningMetres)
@@ -577,7 +581,7 @@ object GlaciationStage {
             swath(
                 cellsAcross, cellsDown, cell, flowOf(cell, directions, glacier, cellsAcross, cellsDown),
                 valleyHalfWidth(carving, strength[cell]), glaciation.floorShare, bed,
-                isLand, relative, carved
+                carving.valleyIceThickness * strength[cell], isLand, relative, carved
             )
         }
 
@@ -596,7 +600,8 @@ object GlaciationStage {
             val depth = carving.cirqueDepth * maxOf(strength[cell], 0.5f)
             bowl(
                 cellsAcross, cellsDown, cell, carving.cirqueRadiusCells.coerceAtLeast(1f), glaciation.floorShare,
-                (relative[cell] - depth).coerceAtLeast(0f), isLand, relative, carved
+                (relative[cell] - depth).coerceAtLeast(0f),
+                carving.valleyIceThickness * maxOf(strength[cell], 0.5f), isLand, relative, carved
             )
         }
 
@@ -2023,6 +2028,11 @@ object GlaciationStage {
                 carved, maxCells, heap, kept
             )
             if (count < minCells || spent + count > budget) continue
+            // The same last check on the finished shape the valley basins get. The noise that
+            // nominates a blob has no bearing of its own, but a thresholded field can still leave
+            // a filament, and one measured 17 cells long and one wide on seed 7 at 1024: a line of
+            // water drawn along nothing, which is the artefact this whole stage keeps producing.
+            if (isStraightBar(kept, count, cellsAcross)) continue
             rimDistanceCells(cellsAcross, cellsDown, kept, count, blob, blobId, rimDistance)
             cells += cutBowl(
                 cellsAcross, cellsDown, kept, count, blob, blobId, depth, isLand, carved, rimDistance
@@ -2135,12 +2145,16 @@ object GlaciationStage {
     private fun unpackY(packed: Long): Float = Float.fromBits(packed.toInt())
 
     /**
-     * Lowers the line of cells *across* the flow toward [floorValue] on a parabola: flat over the
-     * middle [flatShare] of the half-width, climbing to the untouched ground at the rim.
+     * Lowers the line of cells *across* the flow toward [floorValue]: fully over the middle
+     * [flatShare] of the half-width and on a parabola out to the untouched ground at the rim, and
+     * only as far as the ice standing [iceThickness] over the bed actually reaches.
      *
      * One cell thick along the flow — [ALONG_REACH] either side of the perpendicular — so that what
      * a cell writes is its own cross-section and nothing of its neighbours'. Every glacier cell
      * stamps one, and consecutive stamps tile the trough between them.
+     *
+     * See [cutShare] for the second half-width, the one measured in height rather than in cells,
+     * and [GlaciationConfig.valleyIceThicknessMetres] for why it had to exist.
      */
     private fun swath(
         cellsAcross: Int,
@@ -2150,6 +2164,7 @@ object GlaciationStage {
         radius: Float,
         flatShare: Float,
         floorValue: Float,
+        iceThickness: Float,
         isLand: BooleanArray,
         original: FloatArray,
         carved: FloatArray
@@ -2175,15 +2190,45 @@ object GlaciationStage {
                 if (!isLand[cell]) continue
                 val here = original[cell]
                 if (here <= floorValue) continue
-                val target = if (across <= flat) {
-                    floorValue
-                } else {
-                    val acrossFraction = (across - flat) / wall
-                    floorValue + (here - floorValue) * acrossFraction * acrossFraction
-                }
+                val share = cutShare(across, flat, wall, here - floorValue, iceThickness)
+                val target = here - (here - floorValue) * share
                 if (target < carved[cell]) carved[cell] = target
             }
         }
+    }
+
+    /**
+     * How much of the way down to the bed a cell of a glacier's cross-section is taken, from zero
+     * to one.
+     *
+     * Two things share it and they multiply, because the ice has to be both *beside* a cell and
+     * *over* it to plane it:
+     *
+     *  - how far across the section the cell lies. One over the flat floor, then a parabola out to
+     *    nothing at the rim, which is the U.
+     *  - how deeply the cell is buried, as `1 - aboveTheBed / iceThickness`. The floor of the
+     *    valley is under the whole thickness and is planed; the shoulder is barely under the ice
+     *    and is barely touched; rock standing above the ice surface is not touched at all.
+     *
+     * The second is what was missing, and its absence is what made the slab the author found on
+     * 364673: the cut was decided by distance alone, so a cell of the section lying on a ridge a
+     * kilometre above the valley floor was planed down to the valley floor, and a hundred and
+     * fifty kilometres of cross-section came out at one height with a straight edge at the flow's
+     * own grid bearing. It also means the finished floor is never *exactly* level — a cell still
+     * standing `d` above the bed keeps `d^2 / iceThickness` of that — so the ground's own texture
+     * survives the planing instead of being replaced by a plate.
+     */
+    private fun cutShare(
+        across: Float,
+        flat: Float,
+        wall: Float,
+        aboveTheBed: Float,
+        iceThickness: Float
+    ): Float {
+        val underTheIce = (1f - aboveTheBed / iceThickness).coerceIn(0f, 1f)
+        if (across <= flat) return underTheIce
+        val towardTheRim = (across - flat) / wall
+        return underTheIce * (1f - towardTheRim * towardTheRim)
     }
 
     /**
@@ -2202,6 +2247,7 @@ object GlaciationStage {
         radius: Float,
         flatShare: Float,
         floorValue: Float,
+        iceThickness: Float,
         isLand: BooleanArray,
         original: FloatArray,
         carved: FloatArray
@@ -2223,16 +2269,14 @@ object GlaciationStage {
                 if (!isLand[cell]) continue
                 val here = original[cell]
                 if (here <= floorValue) continue
-                // Flat across the middle, then the parabola up to the rim. The flat is the whole
-                // difference between a U and a V, and it is not a cosmetic one: a floor that comes
-                // to a point one cell wide is a floor no over-deepened basin can hold water in,
-                // because [LakesConfig.minCells] asks for a body of water rather than a puddle.
-                val target = if (distance <= flat) {
-                    floorValue
-                } else {
-                    val outFraction = (distance - flat) / wall
-                    floorValue + (here - floorValue) * outFraction * outFraction
-                }
+                // Flat across the middle, then the parabola up to the rim, and all of it shared by
+                // how deeply the cell lies under the ice. The flat is the whole difference between
+                // a U and a V, and it is not a cosmetic one: a floor that comes to a point one cell
+                // wide is a floor no over-deepened basin can hold water in, because
+                // [LakesConfig.minLakeAreaKm2] asks for a body of water rather than a puddle. The
+                // burial share is why the headwall above a cirque survives it: see [cutShare].
+                val share = cutShare(distance, flat, wall, here - floorValue, iceThickness)
+                val target = here - (here - floorValue) * share
                 if (target < carved[cell]) carved[cell] = target
             }
         }

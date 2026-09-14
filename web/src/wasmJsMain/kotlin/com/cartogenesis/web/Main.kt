@@ -45,7 +45,11 @@ fun main() {
                 // a browser's device cannot be reached from an ordinary test.
                 publishSelfTest(runSelfTest(gpu.accelerator))
             }
-            platform = WebPlatform(gpu.accelerator, gpu.unavailableBecause)
+            platform = WebPlatform(
+                gpu.accelerator,
+                gpu.unavailableBecause,
+                gpu.accelerator?.let { WebGpuOcean.sharingDeviceWith(it) }
+            )
         }
 
         val ready = platform

@@ -10,6 +10,7 @@ import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RiverStage
@@ -58,7 +59,7 @@ fun interface GenerationProgress {
 /**
  * Runs the generation pipeline.
  *
- * Suspending only because of [ErosionAccelerator]: everything here is ordinary blocking work, but
+ * Suspending for [ErosionAccelerator] and [OceanAccelerator]: stages do ordinary blocking work, but
  * a GPU accelerator has to await its device and its results, so the one call that might do so
  * makes the whole chain suspend. Nothing suspends when generating on the CPU.
  *
@@ -107,6 +108,8 @@ object WorldGenerationEngine {
          * callback, which is what every caller means by it.
          */
         accelerator: ErosionAccelerator? = null,
+        /** Uses the same graphics acceleration preference as erosion; null keeps the CPU solve. */
+        oceanAccelerator: OceanAccelerator? = null,
         progress: GenerationProgress = NO_PROGRESS
     ): WorldMap {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
@@ -254,7 +257,7 @@ object WorldGenerationEngine {
                     it.config.climate == config.climate
             }
             ?.ocean
-            ?: OceanStage.generate(config, sea)
+            ?: OceanStage.generate(config, sea, oceanAccelerator)
 
         report(GenerationStage.CLIMATE)
         val climate = reusable

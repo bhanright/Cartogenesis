@@ -9,6 +9,7 @@ import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 
 /**
  * What an exported map is written as.
@@ -124,6 +125,15 @@ interface Platform {
      */
     val accelerator: ErosionAccelerator?
 
+    /**
+     * Where to solve the ocean's stream function, or null to leave it on the processor.
+     *
+     * Behind the same switch as [accelerator], and for the same reason: the gyres set the sea
+     * temperature, which sets the climate, so a solve that rounds differently is a different world
+     * in exactly the sense erosion's terrain is.
+     */
+    val oceanAccelerator: OceanAccelerator? get() = null
+
     val accelerationUnavailableBecause: String?
 
     /**
@@ -132,15 +142,15 @@ interface Platform {
      *
      * The two front ends do not do the same amount on it, and one sentence for both would tell
      * one of them a smaller truth than it is owed: the desktop draws the export raster on the
-     * device as well as running the erosion sweeps, while the browser's WGSL raster has not been
-     * written, so there it really is erosion alone. A sentence that says "erosion" everywhere understates
-     * the desktop; one that says "erosion and export rendering" everywhere is simply wrong in a
-     * browser. So the host answers, which is what this seam is for. The default is the desktop's,
+     * device as well as running the erosion sweeps and the current solve, while the browser's WGSL
+     * raster has not been written, so there it really is erosion and the currents alone. A sentence
+     * that names the raster everywhere is wrong in a browser; one that omits it understates the
+     * desktop. So the host answers, which is what this seam is for. The default is the desktop's,
      * because a `Platform` that has not thought about the question is one with a real graphics API
      * behind it.
      */
     fun acceleratedWork(device: String): String =
-        "Erosion and export rendering run on $device, many times faster."
+        "Erosion, ocean currents and export rendering run on $device, many times faster."
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.

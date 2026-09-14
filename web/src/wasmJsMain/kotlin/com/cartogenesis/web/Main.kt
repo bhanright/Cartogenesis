@@ -46,7 +46,9 @@ fun main() {
                 publishSelfTest(runSelfTest(gpu.accelerator))
             }
             platform = WebPlatform(
-                gpu.accelerator, gpu.unavailableBecause, gpu.accelerator?.oceanAccelerator()
+                gpu.accelerator,
+                gpu.unavailableBecause,
+                gpu.accelerator?.let { WebGpuOcean.sharingDeviceWith(it) }
             )
         }
 

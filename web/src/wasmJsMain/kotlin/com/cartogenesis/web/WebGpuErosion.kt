@@ -17,11 +17,9 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
  * in the save rather than relying on being regenerated from its seed.
  */
 class WebGpuErosion private constructor(
-    private val device: JsHandle,
+    internal val device: JsHandle,
     private val label: String
 ) : ErosionAccelerator {
-
-    internal fun oceanAccelerator(): WebGpuOcean = WebGpuOcean(device, label)
 
     override val name: String get() = label
 

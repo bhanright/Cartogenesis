@@ -2,8 +2,18 @@ package com.cartogenesis.web
 
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 
-/** Red-black relaxation on the same WebGPU device as erosion. */
-class WebGpuOcean internal constructor(
+/**
+ * Solves the coarse stream function on the browser's graphics device.
+ *
+ * The counterpart to the desktop's OpenGL path, and the same solve again: red-black Gauss-Seidel
+ * with over-relaxation, two compute passes per relaxation pass so that the second colour reads a
+ * first colour every work group has finished writing. The desktop writes GLSL and this writes
+ * WGSL; what they compute is the CPU reference's own arithmetic.
+ *
+ * As on the desktop, the arithmetic is not bit-for-bit the CPU's, which is why choosing this path
+ * makes a world carry its currents in the save instead of being regenerated from its seed.
+ */
+class WebGpuOcean private constructor(
     private val device: JsHandle,
     override val name: String
 ) : OceanAccelerator {
@@ -31,6 +41,18 @@ class WebGpuOcean internal constructor(
         if (result == null || isNullish(result)) return null
         return FloatArray(forcing.size) { getFloat(result, it) }
     }
+
+    companion object {
+        /**
+         * The ocean solver on the device erosion is already using.
+         *
+         * A browser hands out one device per request and a second request can be refused outright,
+         * so the two accelerators share one rather than each asking. It carries the same name,
+         * because it is the same card.
+         */
+        fun sharingDeviceWith(erosion: WebGpuErosion): WebGpuOcean =
+            WebGpuOcean(erosion.device, erosion.name)
+    }
 }
 
 @JsFun("(size) => new Uint32Array(size)")
@@ -41,7 +63,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
 
 /** Each compute-pass boundary makes the previous colour visible across all work groups. */
 @JsFun(
-    """(device, width, height, waterData, forcingData, passes, omega) => (async () => {
+    """(device, width, height, waterData, forcingData, passes, overRelaxation) => (async () => {
         if (device.__lost) return null;
         // Both storage types are 32-bit words; 16 squared is the baseline 256 invocations.
         const bytesPerCell = 4;
@@ -61,7 +83,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
         let scopesOpen = true;
         try {
             const source = `
-                struct Params { width: u32, height: u32, omega: f32, pad: u32 };
+                struct Params { width: u32, height: u32, overRelaxation: f32, padding: u32 };
                 @group(0) @binding(0) var<storage, read> water: array<u32>;
                 @group(0) @binding(1) var<storage, read> forcing: array<f32>;
                 @group(0) @binding(2) var<storage, read_write> stream: array<f32>;
@@ -79,10 +101,14 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
                     let west = (x + params.width - 1u) % params.width;
                     let north = u32(max(i32(y) - 1, 0));
                     let south = min(y + 1u, params.height - 1u);
-                    let sum = ((stream[y * params.width + east] + stream[y * params.width + west])
+                    // Grouped left to right, as the reference sums them: WGSL has no `precise`,
+                    // so this is as close as the browser can be held to the CPU's own order.
+                    let neighbourSum = ((stream[y * params.width + east]
+                        + stream[y * params.width + west])
                         + stream[north * params.width + x]) + stream[south * params.width + x];
-                    let relaxed = (sum - forcing[cell]) * 0.25;
-                    stream[cell] = stream[cell] + (relaxed - stream[cell]) * params.omega;
+                    let relaxed = (neighbourSum - forcing[cell]) * 0.25;
+                    let here = stream[cell];
+                    stream[cell] = here + (relaxed - here) * params.overRelaxation;
                 }
                 @compute @workgroup_size(16, 16)
                 fn red(@builtin(global_invocation_id) gid: vec3<u32>) { relax(gid, 0u); }
@@ -120,7 +146,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
             const params = buffer(16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
             const paramData = new ArrayBuffer(16);
             new Uint32Array(paramData, 0, 2).set([width, height]);
-            new Float32Array(paramData, 8, 1)[0] = omega;
+            new Float32Array(paramData, 8, 1)[0] = overRelaxation;
             device.queue.writeBuffer(params, 0, paramData);
             device.queue.writeBuffer(water, 0, waterData);
             device.queue.writeBuffer(forcing, 0, forcingData);
@@ -130,18 +156,29 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
                 {binding: 2, resource: {buffer: stream}},
                 {binding: 3, resource: {buffer: params}}
             ]});
-            const encoder = device.createCommandEncoder();
-            for (let iteration = 0; iteration < passes; iteration++) {
-                for (const pipeline of [pipelines.red, pipelines.black]) {
-                    const pass = encoder.beginComputePass();
-                    pass.setPipeline(pipeline);
-                    pass.setBindGroup(0, group);
-                    pass.dispatchWorkgroups(Math.ceil(width / workGroupSide), Math.ceil(height / workGroupSide));
-                    pass.end();
+            // Submitted in batches rather than as one command buffer of six thousand compute
+            // passes: submissions on a queue run in order, so the arithmetic is unchanged, and a
+            // command buffer that long is the kind a browser refuses or a watchdog kills.
+            const passesPerSubmit = 256;
+            const groupsAcross = Math.ceil(width / workGroupSide);
+            const groupsDown = Math.ceil(height / workGroupSide);
+            for (let done = 0; done < passes; done += passesPerSubmit) {
+                const encoder = device.createCommandEncoder();
+                const batch = Math.min(passesPerSubmit, passes - done);
+                for (let iteration = 0; iteration < batch; iteration++) {
+                    for (const pipeline of [pipelines.red, pipelines.black]) {
+                        const pass = encoder.beginComputePass();
+                        pass.setPipeline(pipeline);
+                        pass.setBindGroup(0, group);
+                        pass.dispatchWorkgroups(groupsAcross, groupsDown);
+                        pass.end();
+                    }
                 }
+                device.queue.submit([encoder.finish()]);
             }
-            encoder.copyBufferToBuffer(stream, 0, readback, 0, bytes);
-            device.queue.submit([encoder.finish()]);
+            const readbackEncoder = device.createCommandEncoder();
+            readbackEncoder.copyBufferToBuffer(stream, 0, readback, 0, bytes);
+            device.queue.submit([readbackEncoder.finish()]);
             await readback.mapAsync(GPUMapMode.READ);
             const result = new Float32Array(readback.getMappedRange().slice(0));
             readback.unmap();

@@ -1367,10 +1367,10 @@ And there should be another request for contact asking for features suggestions.
   map projections for the whole-world view and exports (P3, new: equirectangular as today,
   Equal Earth, Robinson, Winkel tripel, Mollweide, an orthographic hemisphere; each drawn per
   pixel on both raster paths under rule 8, with the graticule, the scale bar and the labels
-  following the projection) — and the full atlas with named continents, seas, bays, straits and
-  ranges (V3); 5.0 only if William names it. (William, 2026-09-15: "The physics and globe
-  projection stuff should be moved to the 4.0 release I think, and we should also add
-  additional map projections as options.")
+  following the projection); 5.0 the full atlas with named continents, seas, bays, straits and
+  ranges (V3). (William, 2026-09-15: "The physics and globe projection stuff should be moved
+  to the 4.0 release I think, and we should also add additional map projections as options",
+  then "move the full atlas project items to 5.0 release".)
 - **The ask**: beside F31's bug line in Notes, a second: "Have a feature in mind? Say so",
   linking to the repository's discussions or issues with a feature template and the same
   forwarded address.
@@ -2450,7 +2450,7 @@ guard reported, so the next chunk knows its baseline.
 | P3 Map projections as options | | queued for 4.0 with P1 and F27 (William, 2026-09-15) | 2026-09-15 | | Equal Earth, Robinson, Winkel tripel, Mollweide, orthographic beside the equirectangular; per pixel on both raster paths; graticule, scale bar and labels follow |
 | V1 Tints by climate and sky-model shading | | pulled forward as F13 on the 2.0.x line | | | |
 | V2 Generalisation, graticule and scale | | pulled forward as F14 on the 2.0.x line (projection and north arrow stay with P1) | | | |
-| V3 Labels | | queued for 4.0 (REALISM_AUDIT.md; William, 2026-09-12: the full atlas with named continents, seas, bays, straits and ranges targets 4.0, and the site says so) | | | |
+| V3 Labels | | queued for 5.0 (moved from 4.0 by William, 2026-09-15; REALISM_AUDIT.md; William, 2026-09-12: the full atlas with named continents, seas, bays, straits and ranges targets 4.0, and the site says so) | | | |
 | A11y Accessibility audit to WCAG 2.1 AA (the ADA's standard) | | queued last, after every planned chunk (William, 2026-09-14) | 2026-09-14 | | Section above: what is already guarded, what the audit adds, the document as the deliverable |
 | N1 Per-feature hashes | | queued for 3.0 (REALISM_AUDIT.md) | | | |
 | N2 Scale-free suite | | folded into S1 (2026-09-12): the suite is what S1 makes possible, so S1 delivers its first form | | | |

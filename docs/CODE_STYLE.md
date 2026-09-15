@@ -1,6 +1,6 @@
 # Code style
 
-Almost all of this code was written by agents, and it showed: single-letter names, dense
+Much of this code was written at speed, and it showed: single-letter names, dense
 arithmetic, and KDoc that carried a whole chunk's history — what was tried, what was reverted, what
 was measured on which seed — instead of the intent and the invariant. These are the rules the C2
 sweep applies to fix that, and the rules anything written after it follows. `REALISM_PLAN.md`
@@ -175,7 +175,7 @@ to a migration.
 
 ## Order of the sweep
 
-The shared model first — `WorldMap`, `WorldGenConfig`, the stage results — by one agent, because
+The shared model first — `WorldMap`, `WorldGenConfig`, the stage results — by one author, because
 those names reach every file. Then the pipeline stages, cartography, ui and the two launchers in
 parallel, each merged behind a fingerprint check. A stage file does not rename a shared-model
 property on its own; it lists the rename it wants and the model pass makes it.

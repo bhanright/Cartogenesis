@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a bug by email
+    url: mailto:bugreport@cartogenesis.com
+    about: For a bug report without a GitHub account.
+  - name: Suggest a feature by email
+    url: mailto:dev@cartogenesis.com
+    about: For a suggestion without a GitHub account.

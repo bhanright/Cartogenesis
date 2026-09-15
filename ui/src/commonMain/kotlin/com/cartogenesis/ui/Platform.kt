@@ -258,6 +258,36 @@ interface Platform {
 
     fun openLink(url: String) {}
 
+    /**
+     * Whether [copyToClipboard] puts anything anywhere.
+     *
+     * The same shape as [canOpenLinks] and for the same reason: a bug report's dialog says what
+     * was copied, and a host with no clipboard to copy to has to be able to make it say something
+     * else — see [BugReportDialog] — rather than claim a copy that never happened.
+     */
+    val canCopyToClipboard: Boolean get() = false
+
+    /**
+     * Puts [text] on the system clipboard. A no-op where [canCopyToClipboard] is false.
+     *
+     * AWT's clipboard on the desktop, `navigator.clipboard` in a browser. The one caller is the
+     * bug report, which is also why nothing here reads the clipboard: the application has no
+     * business knowing what a reader has copied.
+     */
+    fun copyToClipboard(text: String) {}
+
+    /**
+     * Which front end this is, in the word a bug report's form offers: "Desktop" or "Browser".
+     *
+     * A report of a browser's behaviour and a report of the desktop's are different reports — the
+     * ceiling on an export, the thread the generation runs on and the graphics API all differ —
+     * and it is the one fact about the host that the world in the window cannot supply.
+     *
+     * The desktop's answer is the default, as [acceleratedWork]'s and [graphicsApiPresent]'s are:
+     * a `Platform` that has not been asked this question is a real window on a real machine.
+     */
+    val hostName: String get() = "Desktop"
+
     /** Whether Settings can offer "Open folder" beside the library path. */
     val canRevealFolder: Boolean get() = false
 

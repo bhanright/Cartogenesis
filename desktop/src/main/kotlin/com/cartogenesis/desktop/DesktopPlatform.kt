@@ -12,6 +12,9 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.Desktop
+import java.awt.GraphicsEnvironment
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
@@ -82,6 +85,21 @@ class DesktopPlatform(
 
     override fun openLink(url: String) {
         runCatching { Desktop.getDesktop().browse(URI(url)) }
+    }
+
+    /**
+     * AWT's own clipboard, which exists on any desktop that has a display.
+     *
+     * Headless is the case that has to be asked about rather than assumed: the tests compose the
+     * whole interface offscreen and the site's figures are rendered by a JVM with no display at
+     * all, and `getSystemClipboard` throws there rather than returning nothing.
+     */
+    override val canCopyToClipboard: Boolean = !GraphicsEnvironment.isHeadless()
+
+    override fun copyToClipboard(text: String) {
+        runCatching {
+            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+        }
     }
 
     override val canRevealFolder: Boolean = Desktop.isDesktopSupported() &&

@@ -45,6 +45,9 @@ internal open class FakePlatform(
     val fetched = mutableListOf<String>()
 
     val links = mutableListOf<String>()
+
+    /** Everything the application has put on the clipboard, in order. */
+    val clipboard = mutableListOf<String>()
     val openedFolders = mutableListOf<String>()
     val libraryFolders = mutableListOf<String>()
     var quits: Int = 0
@@ -71,6 +74,12 @@ internal open class FakePlatform(
 
     override fun openLink(url: String) {
         links += url
+    }
+
+    override val canCopyToClipboard: Boolean = true
+
+    override fun copyToClipboard(text: String) {
+        clipboard += text
     }
 
     override val canRevealFolder: Boolean = true

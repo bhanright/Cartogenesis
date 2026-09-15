@@ -40,8 +40,15 @@ class MenusTest {
     }
 
     @Test
-    fun `Help offers the update check and About`() {
-        assertEquals(listOf(MenuCommand.CHECK_UPDATES, MenuCommand.ABOUT), Menus.help)
+    fun `Help offers the update check, the bug report and About`() {
+        assertEquals(
+            listOf(MenuCommand.CHECK_UPDATES, MenuCommand.REPORT_BUG, MenuCommand.ABOUT),
+            Menus.help
+        )
+        // A bug report is about the world on screen, and it is still offered with none: a reader
+        // reporting that nothing generates has no world to report and the most to say.
+        assertFalse(MenuCommand.REPORT_BUG.needsWorld)
+        assertNull(MenuCommand.REPORT_BUG.shortcut)
     }
 
     @Test

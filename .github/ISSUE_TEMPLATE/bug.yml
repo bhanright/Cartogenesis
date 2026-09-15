@@ -1,0 +1,78 @@
+name: Bug report
+description: Something the generator or the interface got wrong.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help ▸ Report a bug… in the application fills this form in from the world on screen, and
+        puts the same text on the clipboard.
+
+        Without a GitHub account, send the same details to bugreport@cartogenesis.com.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Help ▸ About Cartogenesis names it.
+      placeholder: 3.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Desktop
+        - Browser
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: Seed
+      description: The number in the panel's Seed field. Without it the world cannot be built again.
+    validations:
+      required: true
+  - type: input
+    id: resolution
+    attributes:
+      label: Working resolution
+      description: The grid the world was generated at, not the size of an export.
+      placeholder: 1024 × 1024
+    validations:
+      required: true
+  - type: input
+    id: ocean
+    attributes:
+      label: Ocean coverage
+      placeholder: 62%
+  - type: textarea
+    id: knobs
+    attributes:
+      label: Settings changed from their defaults
+      description: Every setting that is not where the application left it, with its value.
+      placeholder: Plates 18; Rain shadow 140%
+  - type: input
+    id: acceleration
+    attributes:
+      label: Graphics acceleration
+      description: On or off, and the device the panel names.
+      placeholder: On, NVIDIA GeForce RTX 4090
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Drag a picture in, or an export. A crop of the place it went wrong is enough.

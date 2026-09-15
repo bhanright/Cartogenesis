@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.captureToImage
@@ -183,6 +184,90 @@ class ChromeGalleryTest {
         println(
             "CHROME wrote twelve shots (window, menu, settings, about x three chromes) to $dir"
         )
+    }
+
+    /**
+     * Help, open, in both arrangements, with Report a bug… in it.
+     *
+     * The strip and the phone's single glyph draw the same [com.cartogenesis.ui.Menus.help], and
+     * the only way to see that they still do is to open both and look — a list that is drawn twice
+     * can lose an item on one side and go on passing every assertion made about the list itself.
+     * So both are opened, both are photographed, and both are asked for the new item by name.
+     *
+     * Each menu is captured from its own root, for the reason the twelve shots above are: a
+     * dropdown is a layer of its own, and a capture of the window does not contain it.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `Help offers the bug report in both arrangements`() {
+        val dir = File("build/screens").apply { mkdirs() }
+        val item = "Report a bug…"
+
+        var strip: Shot? = null
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
+            setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
+            waitForIdle()
+            onNodeWithText("Help").performClick()
+            waitForIdle()
+            strip = capture(topLayer(item))
+        }
+
+        var sheet: Shot? = null
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = TouchPlatform()
+            setContent {
+                CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            // The three menus fold into one glyph on a phone; its description is the only name it
+            // has. See `CompactMenuButton`.
+            onNodeWithContentDescription("Menu").performClick()
+            waitForIdle()
+            // Help is the last heading of the folded menu, well below a phone's fold, so the shot
+            // is taken with it scrolled into view — a picture of the top of the list would be a
+            // picture of the item not being there.
+            onNodeWithText(item).performScrollTo()
+            waitForIdle()
+            sheet = capture(topLayer(item))
+        }
+
+        val wide = strip ?: error("the Help menu never produced a frame")
+        val phone = sheet ?: error("the phone's menu never produced a frame")
+        File(dir, "f31-help-menu.png").writeBytes(wide.png)
+        File(dir, "f31-help-phone.png").writeBytes(phone.png)
+        println(
+            "CHROME wrote f31-help-menu.png (the strip's Help at ${WIDTH}x$HEIGHT) and " +
+                "f31-help-phone.png (the folded menu at ${PHONE_WIDTH}x$PHONE_HEIGHT) to " +
+                dir.absolutePath
+        )
+        assertTrue(wide.distinctColours > 3, "the Help menu photographed as a flat colour")
+        assertTrue(phone.distinctColours > 3, "the phone's menu photographed as a flat colour")
+    }
+
+    /**
+     * The layer a menu just opened, having checked that it opened and that [item] is in it.
+     *
+     * The count of roots is the only evidence available that a click landed on a menu title rather
+     * than on the band beside it: there is no second root until something opens one.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.topLayer(item: String): SemanticsNodeInteraction {
+        val roots = onAllNodes(isRoot()).fetchSemanticsNodes().size
+        assertEquals(2, roots, "the menu did not open: there is no layer over the window")
+        val layer = onAllNodes(isRoot())[roots - 1]
+        val words = mutableSetOf<String>()
+        fun walk(node: SemanticsNode) {
+            node.config.getOrNull(SemanticsProperties.Text)?.forEach { words += it.text }
+            node.children.forEach(::walk)
+        }
+        walk(layer.fetchSemanticsNode())
+        assertTrue(
+            words.contains(item),
+            "the menu that opened does not offer \"$item\"; it offers $words"
+        )
+        return layer
     }
 
     /**
@@ -580,7 +665,7 @@ class ChromeGalleryTest {
         return results.firstOrNull() ?: error("the node holds no text layout")
     }
 
-    private enum class Opened { NOTHING, MENU, SETTINGS, ABOUT }
+    private enum class Opened { NOTHING, MENU, HELP, SETTINGS, ABOUT }
 
     /**
      * The window in one chrome with one thing open, on a blank canvas.
@@ -606,6 +691,7 @@ class ChromeGalleryTest {
             when (opened) {
                 Opened.NOTHING -> Unit
                 Opened.MENU -> onNodeWithText("File").performClick()
+                Opened.HELP -> onNodeWithText("Help").performClick()
                 Opened.SETTINGS -> {
                     onNodeWithText("File").performClick()
                     waitForIdle()

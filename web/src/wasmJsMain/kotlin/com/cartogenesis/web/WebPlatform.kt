@@ -114,6 +114,16 @@ class WebPlatform(
         openInNewTab(url)
     }
 
+    /** "Browser", which is the word the bug form's platform dropdown offers. */
+    override val hostName: String = "Browser"
+
+    /** See [clipboardAvailable]: the modern call in a secure context, or the old one. */
+    override val canCopyToClipboard: Boolean = clipboardAvailable()
+
+    override fun copyToClipboard(text: String) {
+        copyTextToClipboard(text)
+    }
+
     /**
      * One `fetch`, made only when a reader asks for it.
      *

@@ -234,6 +234,10 @@ private fun Application(
     var updateOpen by remember { mutableStateOf(false) }
     /** Null while GitHub has not answered yet, which the dialog draws as "Asking GitHub…". */
     var updateStatus by remember { mutableStateOf<Updates.Status?>(null) }
+    /** The bug report Help built from the world on screen, while its dialog is up. */
+    var bugReport by remember { mutableStateOf<BugReport.Report?>(null) }
+    /** Whether the clipboard actually took it, which is what the dialog is allowed to claim. */
+    var bugReportCopied by remember { mutableStateOf(false) }
     var saveAs by remember { mutableStateOf(false) }
     /** The toolbar over the map, which View can put away for an uncluttered picture. */
     var toolbarVisible by remember { mutableStateOf(true) }
@@ -387,6 +391,26 @@ private fun Application(
             MenuCommand.CHECK_UPDATES -> {
                 updateOpen = true
                 scope.launch { runUpdateCheck() }
+            }
+
+            // The clipboard first, then the browser: a reader who lands on a login page, or whose
+            // host cannot open a link at all, still has the whole report to paste into a mail.
+            MenuCommand.REPORT_BUG -> {
+                val report = BugReport.of(
+                    version = BuildInfo.VERSION,
+                    host = platform.hostName,
+                    world = naming.title,
+                    config = config,
+                    options = options,
+                    acceleration = BugReport.accelerationLine(
+                        on = SettingsEffects.usesGraphicsAcceleration(config),
+                        device = accelerator?.name
+                    )
+                )
+                bugReportCopied = platform.canCopyToClipboard
+                if (platform.canCopyToClipboard) platform.copyToClipboard(report.text)
+                if (platform.canOpenLinks) platform.openLink(report.url)
+                bugReport = report
             }
 
             MenuCommand.ABOUT -> showAbout = true
@@ -564,6 +588,10 @@ private fun Application(
     if (showAbout) AboutDialog(platform) { showAbout = false }
 
     if (updateOpen) UpdateDialog(updateStatus, platform) { updateOpen = false }
+
+    bugReport?.let { report ->
+        BugReportDialog(report, bugReportCopied, platform) { bugReport = null }
+    }
 
     if (saveAs) {
         SaveAsDialog(

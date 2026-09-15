@@ -78,6 +78,7 @@ internal enum class MenuCommand(
     QUIT("Quit", Shortcut(Key.Q, label = "Ctrl+Q")),
     TOOLBAR("Toolbar over the map"),
     CHECK_UPDATES("Check for updates…"),
+    REPORT_BUG("Report a bug…"),
     ABOUT("About Cartogenesis");
 }
 
@@ -100,8 +101,16 @@ internal object Menus {
         if (platform.canQuit) add(MenuCommand.QUIT)
     }
 
-    /** Help: the two items that are about the application rather than about a world. */
-    val help: List<MenuCommand> = listOf(MenuCommand.CHECK_UPDATES, MenuCommand.ABOUT)
+    /**
+     * Help: the three items that are about the application rather than about a world.
+     *
+     * Report a bug is the one of the three that reads the world on screen, and it is still not a
+     * setting of one: what it sends is the recipe for the world a reader is looking at, which is
+     * the only thing that makes a report reproducible. About stays at the foot, where every Help
+     * menu has kept it.
+     */
+    val help: List<MenuCommand> =
+        listOf(MenuCommand.CHECK_UPDATES, MenuCommand.REPORT_BUG, MenuCommand.ABOUT)
 
     /** The chromes the View menu's Theme submenu offers: every one there is. */
     val themes: List<ThemeChoice> = ThemeChoice.entries

@@ -360,12 +360,15 @@ class SiteAssemblyTest {
     /**
      * That the Features list still counts the chromes the application actually offers.
      *
-     * "Seventeen for the window … from Nautical to Blacklight" is a sentence that goes stale the
-     * instant a chrome is added, and nothing else on the page or in the build would notice: the
-     * page would go on deploying, correct in every other respect, quietly one short. So the count
-     * is read back out of the page in words and compared with the enum, and so is the name the run
-     * of styled chromes ends at, which is the newest one and the one a reader is most likely to
-     * have come looking for.
+     * "Seventeen interface themes" is a sentence that goes stale the instant a chrome is added, and
+     * nothing else on the page or in the build would notice: the page would go on deploying,
+     * correct in every other respect, quietly one short. So the count is read back out of the page
+     * in words and compared with the enum.
+     *
+     * The sentence used to end "from Nautical to Blacklight" and was also checked against the
+     * newest chrome's name. The copy pass of 2026-09-15 took the run of names off — a list of
+     * seventeen themes is not what a reader is deciding between here — so there is no name left to
+     * check, and the count is the whole of the promise.
      */
     @Test
     fun `the Features list counts the chromes the application offers`() {
@@ -379,12 +382,103 @@ class SiteAssemblyTest {
             "the page opens the Themes row with \"${sentence.substringBefore(' ')}\" and the " +
                 "application offers ${ThemeChoice.entries.size} chromes"
         )
-        val newest = ThemeChoice.entries.last().label
+        println("SITE the Features list counts $counted chromes")
+    }
+
+    /**
+     * That the sizes the Features list quotes are the sizes the two builds actually allow.
+     *
+     * Every one of these is a number a reader plans around — how large an export they can ask for,
+     * what a phone will do, what a fresh world starts at — and every one of them is a constant in
+     * the code that a later chunk can move. The desktop's are read off the platform itself; the
+     * browser's cannot be, because that class compiles to wasm and this test is a JVM one, so its
+     * source is read instead, exactly as `WebDeploymentContractTest` reads it.
+     */
+    @Test
+    fun `the Features list quotes the sizes the code allows`() {
+        val page = file("index.html").readText()
+        fun row(term: String): String =
+            Regex("""<dt>$term</dt><dd>(.*?)</dd>""").find(page)?.groupValues?.get(1)
+                ?: fail("the Features list no longer has a $term row")
+
+        val desktop = DesktopPlatform()
+        val web = File(repoRoot, "web/src/wasmJsMain/kotlin/com/cartogenesis/web/WebPlatform.kt")
+            .readText()
+        fun webNumber(property: String): Int =
+            Regex("""$property[^\n]*?(\d+)""").find(web)?.groupValues?.get(1)?.toInt()
+                ?: fail("WebPlatform.kt no longer states $property")
+
+        val ceiling = desktop.exportCeiling(compact = false)
+        val phoneCeiling = Regex("""exportCeiling\(compact: Boolean\): Int = if \(compact\) (\d+)""")
+            .find(web)?.groupValues?.get(1)?.toInt()
+            ?: fail("WebPlatform.kt no longer caps a phone's export")
+
+        val exports = row("Export")
         assertTrue(
-            sentence.contains(newest),
-            "the page's run of styled chromes stops short of $newest: \"$sentence\""
+            exports.contains("$ceiling × $ceiling"),
+            "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
         )
-        println("SITE the Features list counts $counted chromes, ending at $newest")
+        assertTrue(
+            exports.contains("$phoneCeiling × $phoneCeiling"),
+            "the Export row does not quote the phone's cap of $phoneCeiling: \"$exports\""
+        )
+
+        val resolutions = row("Resolution")
+        assertTrue(
+            resolutions.contains("the browser starts at ${webNumber("override val defaultResolution")}"),
+            "the Resolution row does not say what the browser starts at: \"$resolutions\""
+        )
+        assertTrue(
+            resolutions.contains("the desktop app at ${desktop.defaultResolution}"),
+            "the Resolution row does not say what the desktop starts at: \"$resolutions\""
+        )
+        println(
+            "SITE the Features list quotes $ceiling as the ceiling, $phoneCeiling on a phone, " +
+                "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
+                "as the starting grids"
+        )
+    }
+
+    /**
+     * That both pages say how big the download is, and that they say what it measures.
+     *
+     * The figure used to be typed into each page by hand and had been left behind by two releases
+     * of a growing bundle. It is measured by the assembly now — the loader and the two wasm
+     * modules, gzipped, which is what a reader on any host this is served from actually waits for —
+     * and the only thing left that can go wrong is the two pages drifting apart, or the
+     * measurement drifting from the files. So both are read back and both are recomputed here.
+     */
+    @Test
+    fun `both pages quote the measured size of the download`() {
+        fun quoted(path: String): String =
+            Regex("""about (\d+\.\d)&nbsp;MB""").find(file(path).readText())?.groupValues?.get(1)
+                ?: fail("$path does not say how big the download is")
+
+        val onPage = quoted("index.html")
+        assertEquals(
+            onPage, quoted("app/index.html"),
+            "the landing page and the loading shell quote different download sizes"
+        )
+
+        val engine = File(site, "app").listFiles()
+            .orEmpty()
+            .filter { it.isFile && (it.extension == "wasm" || it.name == "cartogenesis.js") }
+        assertTrue(engine.size >= 2, "the published app has no loader and wasm to measure")
+        val compressed = engine.sumOf { source ->
+            val sink = java.io.ByteArrayOutputStream()
+            java.util.zip.GZIPOutputStream(sink).use { it.write(source.readBytes()) }
+            sink.size().toLong()
+        }
+        val tenths = (compressed * 10 + 512 * 1024) / (1024 * 1024)
+        val measured = "${tenths / 10}.${tenths % 10}"
+        assertEquals(
+            measured, onPage,
+            "the pages say $onPage MB and the published loader and wasm gzip to $measured MB"
+        )
+        println(
+            "SITE the download is $measured MB compressed (" +
+                engine.joinToString { "${it.name} ${it.length() / 1024} KB" } + ")"
+        )
     }
 
     /**

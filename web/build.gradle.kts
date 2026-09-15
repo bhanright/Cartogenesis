@@ -1,6 +1,8 @@
+import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.zip.GZIPOutputStream
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -79,6 +81,48 @@ val siteStamp: String by lazy {
 }
 
 val browserDistribution = tasks.named("wasmJsBrowserDistribution")
+
+// ---------------------------------------------------------------------------------------------
+// How big the download actually is
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The token both pages carry where the size of the download goes.
+ *
+ * Two pages quote it — the landing page's browser note and the loading shell a reader watches
+ * while it arrives — and a number typed into either goes stale the first time the bundle changes,
+ * silently and in the direction that matters (the figure only ever grows). So neither types one:
+ * the assembly measures the files it is about to publish and writes the same figure into both.
+ */
+val bundleSizePlaceholder = "__BUNDLE_MB__"
+
+/**
+ * The compressed size of the three files a visitor fetches to run the generator, in MB.
+ *
+ * Compressed, because that is what a reader waits for: every host this site is served from sends
+ * these gzipped or better, and the raw 13 MB is a number nobody experiences. Gzip at the default
+ * level is the measurement rather than brotli because it is the one every JDK can make — the live
+ * figure is a little smaller, so the page never promises a faster download than it delivers.
+ *
+ * The three files are the loader and the two wasm modules, which is what the shell's own progress
+ * bar counts; the bundled type faces are fetched by the application after it starts.
+ */
+fun engineDownloadMegabytes(appDirectory: File): String {
+    val engine = appDirectory.listFiles()
+        .orEmpty()
+        .filter { it.isFile && (it.extension == "wasm" || it.name == "cartogenesis.js") }
+    check(engine.size >= 2) {
+        "expected the loader and the wasm modules in ${appDirectory.absolutePath}, found " +
+            engine.joinToString { it.name }
+    }
+    val compressed = engine.sumOf { source ->
+        val sink = ByteArrayOutputStream()
+        GZIPOutputStream(sink).use { it.write(source.readBytes()) }
+        sink.size().toLong()
+    }
+    val tenthsOfAMegabyte = (compressed * 10 + 512 * 1024) / (1024 * 1024)
+    return "${tenthsOfAMegabyte / 10}.${tenthsOfAMegabyte % 10}"
+}
 
 /**
  * The five faces the landing page sets its type in, taken from the application's own resources.
@@ -251,6 +295,23 @@ tasks.register<Sync>("assembleSite") {
 
     doLast {
         val site = destinationDir
+
+        // What the download weighs, written into both pages that quote it, from one measurement of
+        // the tree that is about to be published.
+        val megabytes = engineDownloadMegabytes(File(site, "app"))
+        listOf("index.html", "app/index.html").forEach { path ->
+            val page = File(site, path)
+            val before = page.readText(Charsets.UTF_8)
+            // A page that has lost the token is a page that has stopped saying how big the
+            // download is, or has gone back to a number typed by hand. Both deploy quietly.
+            check(before.contains(bundleSizePlaceholder)) {
+                "$path no longer carries $bundleSizePlaceholder, so nothing measures the size " +
+                    "it tells a reader to expect"
+            }
+            page.writeText(before.replace(bundleSizePlaceholder, megabytes), Charsets.UTF_8)
+        }
+        logger.lifecycle("The generator is $megabytes MB compressed; both pages say so")
+
         val shell = File(site, "app/index.html")
         // A stamp left unreplaced means the scoped replacement above stopped matching — a rename
         // of the loader, or the src attribute reformatted. Silent otherwise, and the failure it

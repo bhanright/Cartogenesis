@@ -80,8 +80,11 @@
 <div id="boot">
   <h1>Cartogenesis</h1>
   <div id="bar"><i id="fill"></i></div>
-  <p id="msg">Fetching the engine…</p>
-  <p id="sub">First visit downloads about 4.4&nbsp;MB. It is cached afterwards.</p>
+  <p id="msg">Loading the map generator…</p>
+  <!-- __BUNDLE_MB__ is replaced at assembly with the compressed size of the three files below,
+       measured off the tree that is about to be published. The landing page carries the same
+       token, so the two pages cannot quote different numbers. -->
+  <p id="sub">The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB. Later visits use the cached copy.</p>
 </div>
 
 <script>

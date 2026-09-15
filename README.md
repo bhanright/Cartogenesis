@@ -247,7 +247,7 @@ was removed in T1; the reason is in [docs/REALISM_PLAN.md](docs/REALISM_PLAN.md)
 Built and verified against JDK 21, Kotlin 2.4.10, Gradle 9.7.1 and Compose Multiplatform 1.9.3.
 Any JDK 17 or newer should work; `:desktop` targets 17.
 
-The per-merge tier, which CI runs on every push:
+The per-merge tier, which `.github/workflows/ci.yml` runs on every push:
 
 ```bash
 ./gradlew :worldgen:jvmTest :worldgen:wasmJsNodeTest

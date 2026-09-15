@@ -2062,6 +2062,16 @@ section header now parallels Lemon Blueberry's, the chunk labels out); the F28 g
 the ledger's figures on the merged tree; cartography 54, ui 105 JVM and 105 wasm, desktop 67,
 siteTest 10, all green.
 
+### Release 3.0.1 (2026-09-15)
+
+Cut from `main` at 573aff7, tagged `v3.0.1`: F31 (Help ▸ Report a bug… with the seed, resolution,
+moved settings and device pre-filled; issue forms; bugreport@ and dev@ addresses), F32 (What comes
+next drawn from `ROADMAP.md`, the notice at the foot, the atlas card at 5.0), and the copy audit
+enacted on the page and in the window with every fact measured or read from the code (4.5 MB
+engine, 4096 export ceiling, 2048 on phones, nothing uploaded). ui 112 JVM and 112 wasm, desktop
+75, siteTest 18, all green; portable zip 97 MB, MSI 98 MB, web zip 5.5 MB; the packaged exe passes
+`--gpu-check`; the deploy served `cartogenesis.js?v=573aff7`. Saves from 3.0.0 open unchanged.
+
 ### Release 3.0.0 (2026-09-15)
 
 Cut from `main` at 0771099, tagged `v3.0.0`, the foundation release of the 3.0 line, shipped as

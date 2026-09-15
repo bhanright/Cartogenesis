@@ -266,7 +266,7 @@ class GpuErosionTest {
          * what is measured, because the question this asks is whether the kernel ran at all. A bar
          * set near the measured figure would instead be asking whether the machine was busy, which
          * is what the `gpuMs < cpuMs` this replaced was really asking, and why it failed for two
-         * agents on a box running four builds while the kernel was working perfectly.
+         * contributors on a machine running four builds while the kernel was working perfectly.
          */
         const val MIN_SWEEP_SPEED_UP = 5.0
     }

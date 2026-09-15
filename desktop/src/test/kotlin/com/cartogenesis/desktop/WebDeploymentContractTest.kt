@@ -8,7 +8,7 @@ import kotlin.test.fail
 /**
  * Pins the two things a deployed website reaches into the web build for.
  *
- * The deployed site (cartogenesis.com, and the older mirror) does not use the `index.html` the Gradle build emits — it replaces it
+ * The deployed site (cartogenesis.com) does not use the `index.html` the Gradle build emits — it replaces it
  * with its own shell, which shows a loading screen while 4.4 MB of compressed WebAssembly arrives.
  * That shell depends on two names in this repo, and breaking either one breaks the site *silently*:
  * the application still works perfectly, and the page around it never finds out.

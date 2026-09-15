@@ -185,7 +185,7 @@ class LittoralCoastTest {
      *
      * So both are asserted, each against Mandelbrot's 1.25 give or take Richardson's spread: the
      * ruler per seed and pooled, because it measures what it says it measures, and M1's box count
-     * pooled, because that is the figure the plan's table names and the orchestrator will want to
+     * pooled, because that is the figure the plan's table names and the reviewer will want to
      * compare. M1's *per-seed* clause on seed 7 is the one thing this chunk breaks, it is written up
      * in `TODO.md`, and the repair belongs to the instrument rather than to the coast.
      */

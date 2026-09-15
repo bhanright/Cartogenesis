@@ -364,7 +364,7 @@ internal fun HorizontalDivider(modifier: Modifier = Modifier) {
  *
  * The panel has six headings, and a divider written at each of the six call sites could not carry
  * what some chromes want there — Hallowed's hairline doubled in gold leaf, Baroque's double
- * hairline with a lozenge centred on each end, which is the rule the author's site draws in CSS.
+ * hairline with a lozenge centred on each end, which is the rule the site draws in CSS.
  * The point of putting the choice in [ChromeDetail] is that the six call sites do not change and
  * cannot disagree. A chrome that says nothing gets the plain hairline.
  */

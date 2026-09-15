@@ -357,7 +357,7 @@ derivation beside it, never to the generator's last output.
 
 ## 10. Priority table
 
-Effort: S small (a day of agent time), M (two to three), L (a week or more). Visual: 1–5 at
+Effort: S small (a day of work), M (two to three), L (a week or more). Visual: 1–5 at
 2048. Rigour: how much of the structural absence in section 0 it removes.
 
 | Chunk | Depends on | Effort | Visual | Rigour | GPU (rule 8) |

@@ -48,7 +48,7 @@ import org.jetbrains.compose.resources.Font
  * try to be: a whole window of Vellum's yellow paper pulled against a Natural map's greens and a
  * cobalt sea, so daylight is a modern atlas plate's off-white and after dark a neutral charcoal,
  * with bone text, brass for anything live and oxblood for anything that has gone wrong. The
- * author's site follows the dark scheme rather than the other way round — `site/index.html` mirrors
+ * site follows the dark scheme rather than the other way round — `site/index.html` mirrors
  * it value for value, and `SitePaletteContrastTest` fails if the two drift.
  *
  * Everything here is set **once**, as a Material `ColorScheme`, `Typography` and `Shapes`, so that
@@ -606,7 +606,7 @@ private val LightAtlas: ColorScheme = lightColorScheme(
 /**
  * After dark: a neutral charcoal, lit by brass.
  *
- * Bone, bone-dim, parchment, brass, brass-dim, oxblood and oxblood-lit are the author's website's,
+ * Bone, bone-dim, parchment, brass, brass-dim, oxblood and oxblood-lit are the site's,
  * exactly, mapped onto the Material roles rather than reinvented; brass is the only bright thing in
  * the room and so is the only accent, and oxblood carries anything that failed. The grounds were
  * the site's too until the charcoals of [InkDark] replaced them, and the site now follows this

@@ -139,8 +139,8 @@ rate below is written in those units and converted to whatever grid the world is
     them, biased toward ground no realm claims.
 
 The derivation behind each stage, and the measurements that shaped it, are in
-[REALISM_PLAN.md](REALISM_PLAN.md); what the generator holds by construction, and where it still
-deviates from Earth, is in [GEOGRAPHY.md](GEOGRAPHY.md).
+[REALISM_PLAN.md](docs/REALISM_PLAN.md); what the generator holds by construction, and where it still
+deviates from Earth, is in [GEOGRAPHY.md](docs/GEOGRAPHY.md).
 
 ## Styles
 
@@ -652,10 +652,10 @@ it.
 
 ## Where things are
 
-- [REALISM_PLAN.md](REALISM_PLAN.md), for the plan and its ledger: what each piece of work did,
+- [REALISM_PLAN.md](docs/REALISM_PLAN.md), for the plan and its ledger: what each piece of work did,
   measured, in the order it happened.
-- [GEOGRAPHY.md](GEOGRAPHY.md), for what the generator holds by construction and where it still
+- [GEOGRAPHY.md](docs/GEOGRAPHY.md), for what the generator holds by construction and where it still
   deviates from Earth.
-- [REALISM_AUDIT.md](REALISM_AUDIT.md), for the programme of work queued for the 3.0 line.
-- [CODE_STYLE.md](CODE_STYLE.md), for the naming and comment conventions the code follows.
-- [TODO.md](TODO.md), for issues found but not yet scheduled into a piece of work.
+- [REALISM_AUDIT.md](docs/REALISM_AUDIT.md), for the programme of work queued for the 3.0 line.
+- [CODE_STYLE.md](docs/CODE_STYLE.md), for the naming and comment conventions the code follows.
+- [TODO.md](docs/TODO.md), for issues found but not yet scheduled into a piece of work.

@@ -12,6 +12,6 @@ table disagree, so there is nothing to keep in step by hand.
 | 3.1 | Monsoon coasts, rain that reaches the interiors, and vegetation that follows the rain. |
 | 3.2 | Erosion that reads the climate, and river channels that start where they should. |
 | 3.3 | Ice sheets as bodies of ice, and waves and drift along the coasts. |
-| 3.x | A topographic map style with contour lines, and hydraulic erosion on the graphics card, so a larger world takes less of an afternoon. |
+| 3.x | A topographic map style with contour lines, and hydraulic erosion on the graphics card. |
 | 4.0 | The world as a sphere: physics in metres, a globe to turn, and a choice of map projections for the whole-world map and for exports. |
 | 5.0 | The full atlas: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. |

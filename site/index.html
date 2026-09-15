@@ -239,6 +239,9 @@
   a.panel{display:block;text-decoration:none;transition:border-color .15s,background-color .15s}
   a.panel:hover,a.panel:focus-visible{border-color:var(--brass);background:var(--ink-sunk)}
   .panel .go{display:block;margin-top:12px;font-family:var(--mono);font-size:12.5px;color:var(--brass)}
+  /* A link inside a note, which the whole-panel download card is not: the same brass the notices
+     use for theirs, so a reader can tell the two addresses in the bugs note from the prose. */
+  .panel p a{color:var(--brass)}
   .tag{
     font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
     border:1px solid var(--hairline);color:var(--bone-dim);padding:2px 7px;
@@ -425,7 +428,13 @@
 
       <div class="panel">
         <h3>The Atlas is a work in progress</h3>
-        <p>Today it lists a world's realms and landmarks, lets you rename them and place labels, and stops there. A full atlas is planned for a later release, targeting 4.0: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. Names you give now are kept with the world.</p>
+        <p>Today it lists a world's realms and landmarks, lets you rename them and place labels, and stops there. A full atlas is planned for a later release, targeting 5.0: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. Names you give now are kept with the world.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Bugs and suggestions</h3>
+        <p>Found something wrong? Report it with the seed and the working resolution. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=bug.yml">Open an issue</a>, or write to <a href="mailto:bugreport@cartogenesis.com">bugreport@cartogenesis.com</a>. Help ▸ Report a bug… in the app fills the form in for you.</p>
+        <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
       </div>
 
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
@@ -434,6 +443,23 @@
         <span class="go" id="release-line">Get the latest release ↗</span>
       </a>
     </div>
+  </section>
+
+  <section id="next">
+    <div class="section-head">
+      <h2>What comes next</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Planned releases and what each one brings. No dates: a release lands when its work is done.
+    </p>
+
+    <!-- The table below is drawn from ROADMAP.md by :web:assembleSite, which replaces this
+         comment; the repository's file is the one place the roadmap is written. The assembly
+         fails if the marker survives, and SiteAssemblyTest reads the built table back against the
+         file, so the page and the roadmap cannot come to say different things. -->
+    <!-- roadmap -->
   </section>
 
 </main>

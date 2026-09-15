@@ -275,4 +275,13 @@ tasks.withType<Test>().configureEach {
     inputs.files(rootProject.fileTree("site"))
         .withPropertyName("sitePagesReadByThePaletteContrastTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `SiteAssemblyTest` reads the roadmap the page is drawn from and checks that the issue forms
+    // the page links to exist. Same trap again: without these the task stays up to date when a
+    // release line moves or a form is renamed, and the cache hands back the previous pass.
+    inputs.files(
+        rootProject.files("ROADMAP.md"),
+        rootProject.fileTree(".github/ISSUE_TEMPLATE")
+    ).withPropertyName("roadmapAndIssueFormsReadByTheSiteAssemblyTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

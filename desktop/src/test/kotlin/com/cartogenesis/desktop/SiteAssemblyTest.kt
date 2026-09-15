@@ -387,6 +387,147 @@ class SiteAssemblyTest {
         println("SITE the Features list counts $counted chromes, ending at $newest")
     }
 
+    /**
+     * One row of `ROADMAP.md`: the release, what it brings, and whether it is the current one.
+     *
+     * Parsed here rather than shared with the build script, and deliberately: a guard that asked
+     * the build for its own answer would pass whatever the build did. These are two readers of one
+     * file, which is what makes the comparison below mean anything.
+     */
+    private class RoadmapRow(val release: String, val brings: String, val current: Boolean)
+
+    private val roadmap: List<RoadmapRow> by lazy {
+        val file = File(repoRoot, "ROADMAP.md")
+        assertTrue(file.isFile, "ROADMAP.md is missing; the page's roadmap is drawn from it")
+        val rows = file.readLines()
+            .map { it.trim() }
+            .filter { it.startsWith("|") && it.endsWith("|") }
+            .map { line -> line.trim('|').split('|').map { it.trim() } }
+            .filter { it.size == 2 }
+            .filterNot { it[0].equals("Release", ignoreCase = true) }
+            .filterNot { cells -> cells.all { it.isNotEmpty() && it.all { char -> char == '-' } } }
+            .map { (release, brings) ->
+                RoadmapRow(
+                    release = release.removeSuffix("(current)").trim(),
+                    brings = brings,
+                    current = release.contains("(current)")
+                )
+            }
+        assertTrue(rows.isNotEmpty(), "ROADMAP.md has no table rows")
+        rows
+    }
+
+    /** The `<dl class="spec">` inside the page's `id="next"` section, or a failure. */
+    private fun roadmapSection(page: String): String =
+        Regex("""<section id="next">(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the page has no \"What comes next\" section for the roadmap to be drawn in")
+
+    /**
+     * That the roadmap on the page is the roadmap in the file, row for row.
+     *
+     * Both directions, because each of them fails in its own silent way. A release in the file and
+     * not on the page is a plan nobody is told about; a release on the page and not in the file is
+     * a promise with nothing behind it, which is what a table written by hand into the page turns
+     * into the first time the plan moves. The current release is checked separately because it is
+     * the one thing on the table a reader reads as a statement of fact about the build they have.
+     */
+    @Test
+    fun `the roadmap on the page is the roadmap in the file`() {
+        val section = roadmapSection(file("index.html").readText())
+        val drawn = Regex("""<dt>(.*?)</dt><dd>(.*?)</dd>""").findAll(section)
+            .map { it.groupValues[1] to it.groupValues[2] }.toList()
+        assertTrue(drawn.isNotEmpty(), "the roadmap section has no table in it")
+
+        assertEquals(
+            roadmap.map { it.release },
+            drawn.map { it.first.substringBefore("<span").trim() },
+            "the releases on the page are not the releases ROADMAP.md lists, in its order"
+        )
+        assertEquals(
+            roadmap.map { it.brings },
+            drawn.map { it.second },
+            "a line on the page is not the line ROADMAP.md gives for that release"
+        )
+
+        val current = roadmap.single { it.current }
+        val marked = drawn.filter { it.first.contains("""<span class="tag">""") }
+        assertEquals(
+            1, marked.size,
+            "the page marks ${marked.size} releases as the current one: ${marked.map { it.first }}"
+        )
+        assertTrue(
+            marked.single().first.startsWith(current.release),
+            "the page marks ${marked.single().first} as current and ROADMAP.md marks " +
+                "${current.release}"
+        )
+        // No date on the table, by the plan: a date is a promise this roadmap does not make.
+        assertFalse(
+            Regex("""\b(20\d\d|January|February|March|April|May|June|July|August|September|October|November|December)\b""")
+                .containsMatchIn(section),
+            "the roadmap has grown a date"
+        )
+        println(
+            "SITE roadmap: " + roadmap.joinToString {
+                it.release + if (it.current) " (current)" else ""
+            }
+        )
+    }
+
+    /**
+     * That the Atlas note names the release ROADMAP.md gives the full atlas.
+     *
+     * The note said 4.0 until the atlas moved to 5.0, and nothing on the page or in the build would
+     * have noticed: it is a number in a sentence. So it is read back out of the sentence and
+     * compared with the release whose roadmap line is about the atlas.
+     */
+    @Test
+    fun `the Atlas note names the release the roadmap gives the full atlas`() {
+        val page = file("index.html").readText()
+        val atlasRelease = roadmap.last { it.brings.contains("atlas", ignoreCase = true) }.release
+        val note = Regex("""<h3>The Atlas is a work in progress</h3>\s*<p>([^<]*)</p>""")
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the Notes no longer carry the Atlas card")
+        assertTrue(
+            note.contains(atlasRelease),
+            "the Atlas note does not name $atlasRelease, which is the release ROADMAP.md gives " +
+                "the full atlas: \"$note\""
+        )
+        println("SITE the Atlas note targets $atlasRelease, as ROADMAP.md does")
+    }
+
+    /**
+     * That both ways of reporting something are on the page, with both addresses.
+     *
+     * The issue templates are the route that carries a seed; the two addresses are the route for a
+     * reader with no GitHub account, and they are the half that cannot be checked by clicking
+     * anything — a mail address with a typo in it fails silently for ever.
+     */
+    @Test
+    fun `the Notes offer both ways of reporting a bug and asking for a feature`() {
+        val page = file("index.html").readText()
+        listOf(
+            "Found something wrong? Report it with the seed and the working resolution.",
+            "Have a feature in mind? Say so.",
+            "mailto:bugreport@cartogenesis.com",
+            "mailto:dev@cartogenesis.com",
+            "template=bug.yml",
+            "template=feature.yml"
+        ).forEach {
+            assertTrue(page.contains(it), "the Notes no longer carry \"$it\"")
+        }
+
+        // And that the forms the two links ask for are in the repository, since GitHub silently
+        // opens a blank issue for a template that is not there.
+        listOf("bug.yml", "feature.yml", "config.yml").forEach {
+            assertTrue(
+                File(repoRoot, ".github/ISSUE_TEMPLATE/$it").isFile,
+                ".github/ISSUE_TEMPLATE/$it is missing, and the page links to it"
+            )
+        }
+        println("SITE the Notes carry both addresses and both issue forms")
+    }
+
     @Test
     fun `the five typefaces are published and none is fetched from anywhere else`() {
         val faces = listOf(

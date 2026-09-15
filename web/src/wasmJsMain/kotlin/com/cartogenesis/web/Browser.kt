@@ -100,6 +100,56 @@ internal external fun publishSelfTest(text: String)
 internal external fun openInNewTab(url: String)
 
 /**
+ * Whether this page has a way to put text on the clipboard.
+ *
+ * `navigator.clipboard` exists only in a secure context, which cartogenesis.com is and a page
+ * opened from a file is not, so the older `document.execCommand('copy')` is kept as the second
+ * answer rather than as a relic: between them they cover every browser this build runs in.
+ */
+@JsFun(
+    """() => {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) return true;
+            return !!document.execCommand;
+        } catch (e) { return false; }
+    }"""
+)
+internal external fun clipboardAvailable(): Boolean
+
+/**
+ * Puts [text] on the clipboard, by whichever of the two ways this browser has.
+ *
+ * The modern call returns a promise and this does not wait for it: the reader is told what was
+ * copied by a dialog that is already on screen, and a rejection — the tab lost focus, the
+ * permission was refused — leaves them with the same text in front of them to copy by hand. The
+ * fallback's textarea is put off the left edge rather than hidden, because a `display:none`
+ * element cannot be selected and the copy silently does nothing.
+ */
+@JsFun(
+    """(text) => {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (e) {}
+        try {
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.setAttribute('readonly', '');
+            area.style.position = 'fixed';
+            area.style.left = '-10000px';
+            document.body.appendChild(area);
+            area.select();
+            const copied = document.execCommand('copy');
+            document.body.removeChild(area);
+            return copied;
+        } catch (e) { return false; }
+    }"""
+)
+internal external fun copyTextToClipboard(text: String): Boolean
+
+/**
  * Whether this page is being pointed at with a fingertip rather than with a mouse.
  *
  * `(pointer: coarse)` is the media query for "the primary input has limited accuracy", which is a

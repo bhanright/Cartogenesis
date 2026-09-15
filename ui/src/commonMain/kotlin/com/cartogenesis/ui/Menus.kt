@@ -69,7 +69,10 @@ internal enum class MenuCommand(
     val shortcut: Shortcut? = null,
     val needsWorld: Boolean = false
 ) {
-    NEW_WORLD("New world", Shortcut(Key.N, label = "Ctrl+N")),
+    // "Random world" here and on the panel's button, because it is one action under two roofs:
+    // both roll a seed and build the world it names. A menu that called it something else would be
+    // a second name for the same thing.
+    NEW_WORLD("Random world", Shortcut(Key.N, label = "Ctrl+N")),
     OPEN_LIBRARY("Open library", Shortcut(Key.O, label = "Ctrl+O")),
     SAVE("Save", Shortcut(Key.S, label = "Ctrl+S"), needsWorld = true),
     SAVE_AS("Save as…", Shortcut(Key.S, shift = true, label = "Ctrl+Shift+S"), needsWorld = true),
@@ -78,6 +81,7 @@ internal enum class MenuCommand(
     QUIT("Quit", Shortcut(Key.Q, label = "Ctrl+Q")),
     TOOLBAR("Toolbar over the map"),
     CHECK_UPDATES("Check for updates…"),
+    REPORT_BUG("Report a bug…"),
     ABOUT("About Cartogenesis");
 }
 
@@ -100,8 +104,16 @@ internal object Menus {
         if (platform.canQuit) add(MenuCommand.QUIT)
     }
 
-    /** Help: the two items that are about the application rather than about a world. */
-    val help: List<MenuCommand> = listOf(MenuCommand.CHECK_UPDATES, MenuCommand.ABOUT)
+    /**
+     * Help: the three items that are about the application rather than about a world.
+     *
+     * Report a bug is the one of the three that reads the world on screen, and it is still not a
+     * setting of one: what it sends is the recipe for the world a reader is looking at, which is
+     * the only thing that makes a report reproducible. About stays at the foot, where every Help
+     * menu has kept it.
+     */
+    val help: List<MenuCommand> =
+        listOf(MenuCommand.CHECK_UPDATES, MenuCommand.REPORT_BUG, MenuCommand.ABOUT)
 
     /** The chromes the View menu's Theme submenu offers: every one there is. */
     val themes: List<ThemeChoice> = ThemeChoice.entries

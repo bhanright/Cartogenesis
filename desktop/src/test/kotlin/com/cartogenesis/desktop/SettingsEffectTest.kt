@@ -68,7 +68,7 @@ class SettingsEffectTest {
         // The format's own line of small print is the only text that differs between the two, and
         // it is what a reader actually sees, so it is what is asserted.
         assertTrue(headerSays(AppSettings(exportFormat = ExportFormat.WEBP), "quarter the size"))
-        assertTrue(headerSays(AppSettings(), "Lossless"))
+        assertTrue(headerSays(AppSettings(), "PNG keeps every pixel"))
     }
 
     /**

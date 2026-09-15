@@ -23,7 +23,9 @@ enum class MapView(val label: String) {
     RAINFALL("Rainfall"),
     SUMMER_RAINFALL("Rainfall, summer"),
     WINTER_RAINFALL("Rainfall, winter"),
-    PLATES("Plates"),
+    // "Tectonic plates" rather than "Plates", which in a list beside Rainfall and Winds reads as a
+    // count of something. The enum constant is the wire name and does not move; see CODE_STYLE.md.
+    PLATES("Tectonic plates"),
     CURRENTS("Ocean currents"),
     WIND("Winds"),
     NORMALS("Normal map");

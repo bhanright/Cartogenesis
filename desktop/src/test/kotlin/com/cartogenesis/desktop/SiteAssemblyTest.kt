@@ -360,12 +360,15 @@ class SiteAssemblyTest {
     /**
      * That the Features list still counts the chromes the application actually offers.
      *
-     * "Seventeen for the window … from Nautical to Blacklight" is a sentence that goes stale the
-     * instant a chrome is added, and nothing else on the page or in the build would notice: the
-     * page would go on deploying, correct in every other respect, quietly one short. So the count
-     * is read back out of the page in words and compared with the enum, and so is the name the run
-     * of styled chromes ends at, which is the newest one and the one a reader is most likely to
-     * have come looking for.
+     * "Seventeen interface themes" is a sentence that goes stale the instant a chrome is added, and
+     * nothing else on the page or in the build would notice: the page would go on deploying,
+     * correct in every other respect, quietly one short. So the count is read back out of the page
+     * in words and compared with the enum.
+     *
+     * The sentence used to end "from Nautical to Blacklight" and was also checked against the
+     * newest chrome's name. The copy pass of 2026-09-15 took the run of names off — a list of
+     * seventeen themes is not what a reader is deciding between here — so there is no name left to
+     * check, and the count is the whole of the promise.
      */
     @Test
     fun `the Features list counts the chromes the application offers`() {
@@ -379,12 +382,259 @@ class SiteAssemblyTest {
             "the page opens the Themes row with \"${sentence.substringBefore(' ')}\" and the " +
                 "application offers ${ThemeChoice.entries.size} chromes"
         )
-        val newest = ThemeChoice.entries.last().label
+        println("SITE the Features list counts $counted chromes")
+    }
+
+    /**
+     * That the sizes the Features list quotes are the sizes the two builds actually allow.
+     *
+     * Every one of these is a number a reader plans around — how large an export they can ask for,
+     * what a phone will do, what a fresh world starts at — and every one of them is a constant in
+     * the code that a later chunk can move. The desktop's are read off the platform itself; the
+     * browser's cannot be, because that class compiles to wasm and this test is a JVM one, so its
+     * source is read instead, exactly as `WebDeploymentContractTest` reads it.
+     */
+    @Test
+    fun `the Features list quotes the sizes the code allows`() {
+        val page = file("index.html").readText()
+        fun row(term: String): String =
+            Regex("""<dt>$term</dt><dd>(.*?)</dd>""").find(page)?.groupValues?.get(1)
+                ?: fail("the Features list no longer has a $term row")
+
+        val desktop = DesktopPlatform()
+        val web = File(repoRoot, "web/src/wasmJsMain/kotlin/com/cartogenesis/web/WebPlatform.kt")
+            .readText()
+        fun webNumber(property: String): Int =
+            Regex("""$property[^\n]*?(\d+)""").find(web)?.groupValues?.get(1)?.toInt()
+                ?: fail("WebPlatform.kt no longer states $property")
+
+        val ceiling = desktop.exportCeiling(compact = false)
+        val phoneCeiling = Regex("""exportCeiling\(compact: Boolean\): Int = if \(compact\) (\d+)""")
+            .find(web)?.groupValues?.get(1)?.toInt()
+            ?: fail("WebPlatform.kt no longer caps a phone's export")
+
+        val exports = row("Export")
         assertTrue(
-            sentence.contains(newest),
-            "the page's run of styled chromes stops short of $newest: \"$sentence\""
+            exports.contains("$ceiling × $ceiling"),
+            "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
         )
-        println("SITE the Features list counts $counted chromes, ending at $newest")
+        assertTrue(
+            exports.contains("$phoneCeiling × $phoneCeiling"),
+            "the Export row does not quote the phone's cap of $phoneCeiling: \"$exports\""
+        )
+
+        val resolutions = row("Resolution")
+        assertTrue(
+            resolutions.contains("the browser starts at ${webNumber("override val defaultResolution")}"),
+            "the Resolution row does not say what the browser starts at: \"$resolutions\""
+        )
+        assertTrue(
+            resolutions.contains("the desktop app at ${desktop.defaultResolution}"),
+            "the Resolution row does not say what the desktop starts at: \"$resolutions\""
+        )
+        println(
+            "SITE the Features list quotes $ceiling as the ceiling, $phoneCeiling on a phone, " +
+                "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
+                "as the starting grids"
+        )
+    }
+
+    /**
+     * That both pages say how big the download is, and that they say what it measures.
+     *
+     * The figure used to be typed into each page by hand and had been left behind by two releases
+     * of a growing bundle. It is measured by the assembly now — the loader and the two wasm
+     * modules, gzipped, which is what a reader on any host this is served from actually waits for —
+     * and the only thing left that can go wrong is the two pages drifting apart, or the
+     * measurement drifting from the files. So both are read back and both are recomputed here.
+     */
+    @Test
+    fun `both pages quote the measured size of the download`() {
+        fun quoted(path: String): String =
+            Regex("""about (\d+\.\d)&nbsp;MB""").find(file(path).readText())?.groupValues?.get(1)
+                ?: fail("$path does not say how big the download is")
+
+        val onPage = quoted("index.html")
+        assertEquals(
+            onPage, quoted("app/index.html"),
+            "the landing page and the loading shell quote different download sizes"
+        )
+
+        val engine = File(site, "app").listFiles()
+            .orEmpty()
+            .filter { it.isFile && (it.extension == "wasm" || it.name == "cartogenesis.js") }
+        assertTrue(engine.size >= 2, "the published app has no loader and wasm to measure")
+        val compressed = engine.sumOf { source ->
+            val sink = java.io.ByteArrayOutputStream()
+            java.util.zip.GZIPOutputStream(sink).use { it.write(source.readBytes()) }
+            sink.size().toLong()
+        }
+        val tenths = (compressed * 10 + 512 * 1024) / (1024 * 1024)
+        val measured = "${tenths / 10}.${tenths % 10}"
+        assertEquals(
+            measured, onPage,
+            "the pages say $onPage MB and the published loader and wasm gzip to $measured MB"
+        )
+        println(
+            "SITE the download is $measured MB compressed (" +
+                engine.joinToString { "${it.name} ${it.length() / 1024} KB" } + ")"
+        )
+    }
+
+    /**
+     * One row of `ROADMAP.md`: the release, what it brings, and whether it is the current one.
+     *
+     * Parsed here rather than shared with the build script, and deliberately: a guard that asked
+     * the build for its own answer would pass whatever the build did. These are two readers of one
+     * file, which is what makes the comparison below mean anything.
+     */
+    private class RoadmapRow(val release: String, val brings: String, val current: Boolean)
+
+    private val roadmap: List<RoadmapRow> by lazy {
+        val file = File(repoRoot, "ROADMAP.md")
+        assertTrue(file.isFile, "ROADMAP.md is missing; the page's roadmap is drawn from it")
+        val rows = file.readLines()
+            .map { it.trim() }
+            .filter { it.startsWith("|") && it.endsWith("|") }
+            .map { line -> line.trim('|').split('|').map { it.trim() } }
+            .filter { it.size == 2 }
+            .filterNot { it[0].equals("Release", ignoreCase = true) }
+            .filterNot { cells -> cells.all { it.isNotEmpty() && it.all { char -> char == '-' } } }
+            .map { (release, brings) ->
+                RoadmapRow(
+                    release = release.removeSuffix("(current)").trim(),
+                    brings = brings,
+                    current = release.contains("(current)")
+                )
+            }
+        assertTrue(rows.isNotEmpty(), "ROADMAP.md has no table rows")
+        rows
+    }
+
+    /** The `<dl class="spec">` inside the page's `id="next"` section, or a failure. */
+    private fun roadmapSection(page: String): String =
+        Regex("""<section id="next">(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the page has no \"What comes next\" section for the roadmap to be drawn in")
+
+    /**
+     * That the roadmap on the page is the roadmap in the file, row for row.
+     *
+     * Both directions, because each of them fails in its own silent way. A release in the file and
+     * not on the page is a plan nobody is told about; a release on the page and not in the file is
+     * a promise with nothing behind it, which is what a table written by hand into the page turns
+     * into the first time the plan moves. The current release is checked separately because it is
+     * the one thing on the table a reader reads as a statement of fact about the build they have.
+     */
+    @Test
+    fun `the roadmap on the page is the roadmap in the file`() {
+        val section = roadmapSection(file("index.html").readText())
+        val drawn = Regex("""<dt>(.*?)</dt><dd>(.*?)</dd>""").findAll(section)
+            .map { it.groupValues[1] to it.groupValues[2] }.toList()
+        assertTrue(drawn.isNotEmpty(), "the roadmap section has no table in it")
+
+        assertEquals(
+            roadmap.map { it.release },
+            drawn.map { it.first.substringBefore("<span").trim() },
+            "the releases on the page are not the releases ROADMAP.md lists, in its order"
+        )
+        assertEquals(
+            roadmap.map { it.brings },
+            drawn.map { it.second },
+            "a line on the page is not the line ROADMAP.md gives for that release"
+        )
+
+        val current = roadmap.single { it.current }
+        val marked = drawn.filter { it.first.contains("""<span class="tag">""") }
+        assertEquals(
+            1, marked.size,
+            "the page marks ${marked.size} releases as the current one: ${marked.map { it.first }}"
+        )
+        assertTrue(
+            marked.single().first.startsWith(current.release),
+            "the page marks ${marked.single().first} as current and ROADMAP.md marks " +
+                "${current.release}"
+        )
+        // No date on the table, by the plan: a date is a promise this roadmap does not make.
+        assertFalse(
+            Regex("""\b(20\d\d|January|February|March|April|May|June|July|August|September|October|November|December)\b""")
+                .containsMatchIn(section),
+            "the roadmap has grown a date"
+        )
+        println(
+            "SITE roadmap: " + roadmap.joinToString {
+                it.release + if (it.current) " (current)" else ""
+            }
+        )
+    }
+
+    /**
+     * That the Atlas note names the release ROADMAP.md gives the full atlas.
+     *
+     * The note said 4.0 until the atlas moved to 5.0, and nothing on the page or in the build would
+     * have noticed: it is a number in a sentence. So it is read back out of the sentence and
+     * compared with the release whose roadmap line is about the atlas.
+     */
+    @Test
+    fun `the Atlas note names the release the roadmap gives the full atlas`() {
+        val page = file("index.html").readText()
+        val atlasRelease = roadmap.last { it.brings.contains("atlas", ignoreCase = true) }.release
+        val note = Regex("""<h3>The Atlas is a work in progress</h3>\s*<p>([^<]*)</p>""")
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the Notes no longer carry the Atlas card")
+        assertTrue(
+            note.contains(atlasRelease),
+            "the Atlas note does not name $atlasRelease, which is the release ROADMAP.md gives " +
+                "the full atlas: \"$note\""
+        )
+        println("SITE the Atlas note targets $atlasRelease, as ROADMAP.md does")
+    }
+
+    /**
+     * That both ways of reporting something are on the page, with both addresses, in the band at
+     * the foot that exists to carry them.
+     *
+     * The issue templates are the route that carries a seed; the two addresses are the route for a
+     * reader with no GitHub account, and they are the half that cannot be checked by clicking
+     * anything — a mail address with a typo in it fails silently for ever.
+     *
+     * Read out of `id="report"` rather than out of the whole document, because these two lines
+     * were a card in the Notes grid until the page put them where a reader finishes reading. A
+     * guard that searched the whole page would have passed either way — including the way where
+     * the band is gone and the sentences survive in some other corner.
+     */
+    @Test
+    fun `the band at the foot offers both ways of reporting a bug and asking for a feature`() {
+        val page = file("index.html").readText()
+        val band = Regex("""<section id="report"[^>]*>(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the page has no band at the foot asking for bug reports and suggestions")
+        listOf(
+            "Found something wrong? Report it with the seed and the generation resolution.",
+            "Have a feature in mind? Say so.",
+            "mailto:bugreport@cartogenesis.com",
+            "mailto:dev@cartogenesis.com",
+            "template=bug.yml",
+            "template=feature.yml"
+        ).forEach {
+            assertTrue(band.contains(it), "the band at the foot no longer carries \"$it\"")
+        }
+
+        // Where it is, which is the whole of why it left the Notes grid: the page's closing word,
+        // under the roadmap and above the licence, rather than a fifth fact about the download.
+        val at = page.indexOf("""<section id="report"""")
+        assertTrue(at > page.indexOf("""<section id="next""""), "the band has moved above the roadmap")
+        assertTrue(at < page.indexOf("<footer"), "the band is no longer the last thing on the page")
+
+        // And that the forms the two links ask for are in the repository, since GitHub silently
+        // opens a blank issue for a template that is not there.
+        listOf("bug.yml", "feature.yml", "config.yml").forEach {
+            assertTrue(
+                File(repoRoot, ".github/ISSUE_TEMPLATE/$it").isFile,
+                ".github/ISSUE_TEMPLATE/$it is missing, and the page links to it"
+            )
+        }
+        println("SITE the band at the foot carries both addresses and both issue forms")
     }
 
     @Test

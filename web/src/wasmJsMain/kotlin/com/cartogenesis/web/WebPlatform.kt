@@ -64,8 +64,7 @@ class WebPlatform(
      * and the stream-function solve and nothing else. Saying otherwise here would be promising a
      * speed-up that does not exist.
      */
-    override fun acceleratedWork(device: String): String =
-        "Erosion and ocean currents run on $device, many times faster."
+    override val acceleratedWork: String = "erosion and ocean currents"
 
     /**
      * 2048 on a phone, 4096 otherwise.
@@ -112,6 +111,16 @@ class WebPlatform(
 
     override fun openLink(url: String) {
         openInNewTab(url)
+    }
+
+    /** "Browser", which is the word the bug form's platform dropdown offers. */
+    override val hostName: String = "Browser"
+
+    /** See [clipboardAvailable]: the modern call in a secure context, or the old one. */
+    override val canCopyToClipboard: Boolean = clipboardAvailable()
+
+    override fun copyToClipboard(text: String) {
+        copyTextToClipboard(text)
     }
 
     /**

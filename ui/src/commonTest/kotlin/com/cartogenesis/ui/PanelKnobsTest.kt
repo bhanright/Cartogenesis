@@ -436,8 +436,10 @@ class PanelKnobsTest {
         assertTrue(Exports.reachable(2048, 4096))
         assertTrue(Exports.reachable(4096, 4096))
         assertFalse(Exports.reachable(8192, 4096))
+        // And that the note says the size is waiting rather than refused: the ceiling is this
+        // build's memory, and a reader who is told only "no" has no idea whether to ask again.
         assertEquals(
-            "8192 needs more memory than this build can hold",
+            "8192 needs more memory than this build can hold; it waits for a later release",
             Exports.unreachableNote(8192)
         )
     }
@@ -577,14 +579,19 @@ class PanelKnobsTest {
      *
      * The reason it is offered is a program that will not open a WebP, and the chip has to name
      * WebP for that sentence to mean anything; a chip that reads as a third equally good option is
-     * a chip that misleads. What it costs — softer thin lines than WebP for a smaller file — is
-     * measured by `DataExportTest` and `ExportSmokeTest`, and the wording follows those numbers.
+     * a chip that misleads. What it costs — it softens rivers and borders more than WebP does, for
+     * a smaller file — is measured by `DataExportTest` and `ExportSmokeTest`, and the wording
+     * follows those numbers. The three notes are parallel sentences now, each opening with its own
+     * format's name, so the row is read as one choice rather than three opinions.
      */
     @Test
     fun `the JPEG chip says it is for compatibility, not for quality`() {
         val note = ExportFormat.JPEG.detail
         assertTrue("WebP" in note, note)
-        assertTrue("lines" in note, note)
+        assertTrue("softens" in note, note)
+        ExportFormat.entries.forEach {
+            assertTrue(it.detail.startsWith(it.label), "${it.label}'s note does not name it: ${it.detail}")
+        }
         assertEquals("jpg", ExportFormat.JPEG.extension)
         assertEquals(90, ExportFormat.JPEG_QUALITY)
     }

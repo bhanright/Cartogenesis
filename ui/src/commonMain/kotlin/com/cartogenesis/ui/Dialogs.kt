@@ -82,7 +82,7 @@ internal fun SettingsDialog(
                 }
 
                 SettingRow(
-                    "Working resolution",
+                    "Generation resolution",
                     "The grid a new world starts at. The world on screen keeps its own."
                 ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,7 +114,7 @@ internal fun SettingsDialog(
                         "Graphics acceleration at launch",
                         // The same sentence the header switch prints, from the same seam, so the
                         // dialog cannot end up claiming the device does more than the panel does.
-                        platform.accelerator?.let { platform.acceleratedWork(it.name) }
+                        platform.accelerator?.let { platform.accelerationOffered(it.name) }
                             ?: "Unavailable here: ${platform.accelerationUnavailableBecause}"
                     ) {
                         Toggle(
@@ -407,6 +407,92 @@ internal fun UpdateDialog(
             if (available != null && platform.canOpenLinks) {
                 TextButton(onClick = { platform.openLink(available.page) }) {
                     Text("Open the release page")
+                }
+            }
+        }
+    )
+}
+
+/**
+ * What Help ▸ Report a bug… did, and the report it did it with.
+ *
+ * The work is over by the time this is drawn — the text is on the clipboard and the browser has
+ * been sent to the form — so this dialog's whole job is to say so, and to show the report, which
+ * is the part a reader may want to take somewhere else. Three readers are served by the one panel:
+ * the one whose browser opened and who need only be told the fields are filled in, the one who has
+ * no GitHub account and wants [BugReport.ADDRESS], and the one on a host that cannot open a link
+ * at all, who is given the URL to carry across by hand.
+ *
+ * [copied] is what the platform actually managed, not what it was asked to do, so the sentence
+ * never claims a clipboard the host does not have.
+ */
+@Composable
+internal fun BugReportDialog(
+    report: BugReport.Report,
+    copied: Boolean,
+    platform: Platform,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Report a bug", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(
+                Modifier.widthIn(max = 520.dp).heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    when {
+                        copied && platform.canOpenLinks ->
+                            "The report below is on the clipboard, and a new issue has been " +
+                                "opened in the browser with the same details already in its fields."
+
+                        copied ->
+                            "The report below is on the clipboard. This build cannot open a " +
+                                "browser, so the address for a new issue is at the foot."
+
+                        platform.canOpenLinks ->
+                            "A new issue has been opened in the browser with these details " +
+                                "already in its fields. The clipboard could not be reached here, " +
+                                "so the report is below to copy by hand."
+
+                        else ->
+                            "The clipboard and the browser are both out of reach here, so the " +
+                                "report is below to copy by hand and the address for it is at " +
+                                "the foot."
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "Without a GitHub account, send it to ${BugReport.ADDRESS}.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                Text(
+                    report.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 14.dp)
+                )
+
+                // The address a host that cannot open a link is left with. Printed rather than
+                // offered as a button, exactly as the update dialog prints a release page.
+                if (!platform.canOpenLinks) {
+                    Text(
+                        report.url,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = {
+            if (platform.canOpenLinks) {
+                TextButton(onClick = { platform.openLink(report.url) }) {
+                    Text("Open the issue form")
                 }
             }
         }

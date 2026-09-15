@@ -437,16 +437,16 @@ class PhoneAtlasTest {
 
     private companion object {
         /**
-         * The header's Atlas button, and not the map style that is also called Atlas.
+         * The header's World atlas button, and not the map style that is also called Atlas.
          *
-         * The default style's name is Atlas and both toolbars print it — the wide one as a cell in
-         * the segmented row, the compact one on the style menu's button — so in either arrangement
-         * there are two nodes reading "Atlas" that do opposite things. What tells them apart is
-         * that one is a button and the other is not: Material gives every button `Role.Button`,
-         * while a cell on the strip is a bare clickable with no role, because a segmented key is a
-         * key rather than a row of buttons.
+         * The copy pass of 2026-09-15 gave the button its own words for exactly this reason — the
+         * default style's name is Atlas and both toolbars print it, so the two used to be the same
+         * word doing opposite things. The role is still asserted beside the text: Material gives
+         * every button `Role.Button`, while a cell on the style strip is a bare clickable with no
+         * role, and a guard that leaned on the wording alone would go quiet the next time the
+         * wording moved.
          */
-        val ATLAS_BUTTON = hasText("Atlas") and
+        val ATLAS_BUTTON = hasText("World atlas") and
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
 
         /**

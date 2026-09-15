@@ -1,6 +1,8 @@
+import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.zip.GZIPOutputStream
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -80,6 +82,48 @@ val siteStamp: String by lazy {
 
 val browserDistribution = tasks.named("wasmJsBrowserDistribution")
 
+// ---------------------------------------------------------------------------------------------
+// How big the download actually is
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The token both pages carry where the size of the download goes.
+ *
+ * Two pages quote it — the landing page's browser note and the loading shell a reader watches
+ * while it arrives — and a number typed into either goes stale the first time the bundle changes,
+ * silently and in the direction that matters (the figure only ever grows). So neither types one:
+ * the assembly measures the files it is about to publish and writes the same figure into both.
+ */
+val bundleSizePlaceholder = "__BUNDLE_MB__"
+
+/**
+ * The compressed size of the three files a visitor fetches to run the generator, in MB.
+ *
+ * Compressed, because that is what a reader waits for: every host this site is served from sends
+ * these gzipped or better, and the raw 13 MB is a number nobody experiences. Gzip at the default
+ * level is the measurement rather than brotli because it is the one every JDK can make — the live
+ * figure is a little smaller, so the page never promises a faster download than it delivers.
+ *
+ * The three files are the loader and the two wasm modules, which is what the shell's own progress
+ * bar counts; the bundled type faces are fetched by the application after it starts.
+ */
+fun engineDownloadMegabytes(appDirectory: File): String {
+    val engine = appDirectory.listFiles()
+        .orEmpty()
+        .filter { it.isFile && (it.extension == "wasm" || it.name == "cartogenesis.js") }
+    check(engine.size >= 2) {
+        "expected the loader and the wasm modules in ${appDirectory.absolutePath}, found " +
+            engine.joinToString { it.name }
+    }
+    val compressed = engine.sumOf { source ->
+        val sink = ByteArrayOutputStream()
+        GZIPOutputStream(sink).use { it.write(source.readBytes()) }
+        sink.size().toLong()
+    }
+    val tenthsOfAMegabyte = (compressed * 10 + 512 * 1024) / (1024 * 1024)
+    return "${tenthsOfAMegabyte / 10}.${tenthsOfAMegabyte % 10}"
+}
+
 /**
  * The five faces the landing page sets its type in, taken from the application's own resources.
  *
@@ -97,6 +141,79 @@ val siteFontFiles = listOf(
 
 /** Where `:desktop:renderSiteImagery` leaves the figures the page shows. */
 val siteImagery = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
+
+// ---------------------------------------------------------------------------------------------
+// The roadmap, drawn from the file rather than written on the page
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * `ROADMAP.md`: the one place the planned releases and what they bring are written down.
+ *
+ * The page carries a marker comment where its table goes and the assembly puts the table there, so
+ * the page cannot say a release the file does not and the file cannot plan a release the page
+ * never shows. `SiteAssemblyTest` reads both back and compares them row for row.
+ */
+val roadmapFile = rootProject.layout.projectDirectory.file("ROADMAP.md").asFile
+
+/** The comment in `site/index.html` the table replaces. */
+val roadmapMarker = "<!-- roadmap -->"
+
+/** One row of the file's table: which release, what it brings, and whether it is the current one. */
+class RoadmapRow(val release: String, val brings: String, val current: Boolean)
+
+/**
+ * The rows of the one Markdown table in [roadmapFile], in the order it lists them.
+ *
+ * The heading row and the `---` rule under it are dropped by their shape rather than by counting
+ * lines, so prose may be added above or below the table without moving anything. A release marked
+ * `(current)` is the release the site is describing; the marker is taken off the name and carried
+ * as [RoadmapRow.current], which is what the page draws a tag for.
+ */
+fun roadmapRows(): List<RoadmapRow> {
+    check(roadmapFile.isFile) { "ROADMAP.md is missing: the page's roadmap is drawn from it" }
+    val rows = roadmapFile.readLines()
+        .map { it.trim() }
+        .filter { it.startsWith("|") && it.endsWith("|") }
+        .map { line -> line.trim('|').split('|').map { it.trim() } }
+        .filter { it.size == 2 }
+        .filterNot { it[0].equals("Release", ignoreCase = true) }
+        .filterNot { cells -> cells.all { it.isNotEmpty() && it.all { char -> char == '-' } } }
+        .map { (release, brings) ->
+            RoadmapRow(
+                release = release.removeSuffix("(current)").trim(),
+                brings = brings,
+                current = release.contains("(current)")
+            )
+        }
+    check(rows.isNotEmpty()) { "ROADMAP.md has no table rows for the page to draw" }
+    check(rows.count { it.current } == 1) {
+        "ROADMAP.md marks ${rows.count { it.current }} releases as (current); exactly one is"
+    }
+    return rows
+}
+
+/** `&`, `<` and `>` as a browser must read them, for text that came out of a Markdown file. */
+fun asHtmlText(text: String): String =
+    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+/**
+ * The roadmap as the page's own Features list is written: a `spec` list, one row per release.
+ *
+ * No new style and no new class. The Features list above it is already a two-column list of a term
+ * and a sentence separated by hairlines, which is exactly what a roadmap is, and the current
+ * release is marked with the same `tag` the download card wears.
+ */
+fun roadmapTable(indent: String): String = buildString {
+    append(indent).append("""<dl class="spec">""")
+    roadmapRows().forEach { row ->
+        val mark = if (row.current) """<span class="tag">Current</span>""" else ""
+        appendLine()
+        append(indent).append("  <div><dt>").append(asHtmlText(row.release)).append(mark)
+            .append("</dt><dd>").append(asHtmlText(row.brings)).append("</dd></div>")
+    }
+    appendLine()
+    append(indent).append("</dl>")
+}
 
 /**
  * Assembles the whole of cartogenesis.com into `web/build/site`, ready to hand to a static host.
@@ -121,9 +238,21 @@ tasks.register<Sync>("assembleSite") {
 
     into(layout.buildDirectory.dir("site"))
 
+    // The roadmap the landing page draws: a change to it has to re-assemble the page, and Gradle
+    // cannot see a file read inside a copy action.
+    inputs.file(roadmapFile).withPropertyName("roadmapTheLandingPageDraws")
+
     from(rootProject.layout.projectDirectory.dir("site")) {
         // Documentation for whoever maintains the site, not part of the site.
         exclude("README.md")
+
+        // The landing page's "What comes next" table, put in where the page keeps its marker.
+        // A whole-line replacement, so the table takes the marker's own indentation with it.
+        filesMatching("index.html") {
+            filter { line ->
+                if (line.trim() == roadmapMarker) roadmapTable(line.substringBefore("<")) else line
+            }
+        }
 
         filesMatching("app/index.html") {
             filter { line ->
@@ -166,6 +295,23 @@ tasks.register<Sync>("assembleSite") {
 
     doLast {
         val site = destinationDir
+
+        // What the download weighs, written into both pages that quote it, from one measurement of
+        // the tree that is about to be published.
+        val megabytes = engineDownloadMegabytes(File(site, "app"))
+        listOf("index.html", "app/index.html").forEach { path ->
+            val page = File(site, path)
+            val before = page.readText(Charsets.UTF_8)
+            // A page that has lost the token is a page that has stopped saying how big the
+            // download is, or has gone back to a number typed by hand. Both deploy quietly.
+            check(before.contains(bundleSizePlaceholder)) {
+                "$path no longer carries $bundleSizePlaceholder, so nothing measures the size " +
+                    "it tells a reader to expect"
+            }
+            page.writeText(before.replace(bundleSizePlaceholder, megabytes), Charsets.UTF_8)
+        }
+        logger.lifecycle("The generator is $megabytes MB compressed; both pages say so")
+
         val shell = File(site, "app/index.html")
         // A stamp left unreplaced means the scoped replacement above stopped matching — a rename
         // of the loader, or the src attribute reformatted. Silent otherwise, and the failure it
@@ -174,6 +320,24 @@ tasks.register<Sync>("assembleSite") {
             "app/index.html still carries the loader placeholder. The replacement is scoped to " +
                 """src="cartogenesis.js?v=..."; check that attribute in site/app/index.html."""
         }
+        // A marker left behind means the roadmap was never drawn and the page deploys with a
+        // heading over nothing. Silent otherwise, exactly as the loader's stamp would be.
+        val assembledPage = File(site, "index.html").readText(Charsets.UTF_8)
+        check(!assembledPage.contains(roadmapMarker)) {
+            "index.html still carries $roadmapMarker, so the roadmap table was not substituted. " +
+                "The replacement matches the marker on a line of its own in site/index.html."
+        }
+        val releases = roadmapRows()
+        check(releases.all { assembledPage.contains(">${it.release}<") }) {
+            "the assembled page is missing a release ROADMAP.md names: " +
+                releases.map { it.release }.filterNot { assembledPage.contains(">$it<") }
+        }
+        logger.lifecycle(
+            "Roadmap drawn from ROADMAP.md: " + releases.joinToString {
+                it.release + if (it.current) " (current)" else ""
+            }
+        )
+
         // The page's weight is a thing the design has a target for, so the assembly reports it
         // rather than leaving it to be measured by hand. "Before the app" is what a reader who
         // never clicks Open pays: the page, its five faces and its figures, and nothing under

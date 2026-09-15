@@ -168,6 +168,12 @@
     font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--bone-dim);
     margin:10px 0 0;
   }
+  /* What the figure shows, in the page's own sans, above the seed and the numbers.
+     A caption that says something is a sentence; the mono line under it is data, and
+     setting a sentence in 11.5px mono asks a reader to read a printout. */
+  figcaption .say{
+    display:block;font-family:var(--sans);font-size:14px;line-height:1.5;margin-bottom:3px;
+  }
 
   /* ---------- comparison strips --------------------------------------------- */
   /* One image, not a row of images. What these figures claim is that the panels
@@ -239,11 +245,24 @@
   a.panel{display:block;text-decoration:none;transition:border-color .15s,background-color .15s}
   a.panel:hover,a.panel:focus-visible{border-color:var(--brass);background:var(--ink-sunk)}
   .panel .go{display:block;margin-top:12px;font-family:var(--mono);font-size:12.5px;color:var(--brass)}
+  /* A link inside a note, which the whole-panel download card is not: the same brass the notices
+     use for theirs, so a reader can tell the two addresses in the bugs note from the prose. */
+  .panel p a{color:var(--brass)}
   .tag{
     font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
     border:1px solid var(--hairline);color:var(--bone-dim);padding:2px 7px;
     white-space:nowrap;margin-left:10px;vertical-align:2px;
   }
+
+  /* ---------- the ask, at the foot --------------------------------------- */
+  /* Two lines of the same weight, side by side where there is room and stacked
+     where there is not, on the page's own ground rather than on a panel. The
+     breakpoint is the notes grid's, so the page has one place where two columns
+     become one and not two. */
+  .report{display:grid;gap:10px 40px;padding-bottom:8px}
+  @media (min-width:820px){.report{grid-template-columns:1fr 1fr}}
+  .report p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  .report a{color:var(--brass)}
 
   footer{
     margin-top:64px;border-top:1px solid var(--hairline);padding:24px 0 48px;
@@ -273,14 +292,14 @@
         <span class="line">from the ground up.</span>
       </h1>
       <p class="lede">
-        Terrain, rivers, climate and borders. A world shaped by geography, starting with a seed.
+        Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.
       </p>
 
       <div class="actions">
         <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
         <a class="btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Download for Windows (recommended)</a>
       </div>
-      <p class="trust">Free · Open source · Runs locally</p>
+      <p class="trust">Free and open source · Your maps stay on your device</p>
 
       <div class="notice" id="small-screen" hidden>
         <b>Works on phones.</b>
@@ -295,7 +314,8 @@
              alt="A generated world map in the Natural style: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
       </div>
       <figcaption>
-        Seed 718106 · 62% ocean · 14 plates · 2048 cells · Natural style
+        <span class="say">A generated world in the Natural style, with mountain ranges, river systems, lakes and islands.</span>
+        Seed 718106 · 62% ocean · 14 tectonic plates
       </figcaption>
     </figure>
   </div>
@@ -309,27 +329,27 @@
     <div class="steps">
       <div class="panel">
         <h3>Plates and mountains</h3>
-        <p>Drifting plates collide, and what they build depends on what meets: coastal ranges with volcanoes behind them, broad plateaus, island arcs, rift valleys that flood into chains of gulfs.</p>
+        <p>Moving tectonic plates form mountain ranges, volcanic arcs and broad plateaus. Where plates pull apart, rift valleys can fill with water.</p>
       </div>
       <div class="panel">
         <h3>Erosion</h3>
-        <p>Slopes collapse, rivers cut valleys and carry the debris down to floodplains, fans and deltas. Basins drain through the notches their overflow cuts.</p>
+        <p>Erosion reshapes the terrain. Slopes collapse, rivers carve valleys, and sediment builds floodplains, fans and deltas.</p>
       </div>
       <div class="panel">
         <h3>Seas and ice</h3>
-        <p>Continental shelves along the coasts; glaciers in cold mountains and scoured lake country under old ice sheets.</p>
+        <p>Continental shelves lie along the coasts. Glaciers shape cold mountains, and ice sheets leave behind basins and lakes.</p>
       </div>
       <div class="panel">
         <h3>Climate</h3>
-        <p>A warm season and a cold one, ocean currents, continental interiors, monsoons and rain shadows. Biomes follow the Köppen rules, so deserts sit where deserts sit.</p>
+        <p>Seasons, ocean currents and terrain shape temperature and rainfall. Climate zones decide where forests, grasslands and deserts form.</p>
       </div>
       <div class="panel">
         <h3>Rivers and lakes</h3>
-        <p>Water runs downhill to the sea or into lakes. Dry basins hold only the water their catchment can keep against evaporation, so an inland sea shrinks to a salt lake.</p>
+        <p>Water flows downhill into rivers, lakes and seas. In dry inland basins, evaporation can shrink a lake and leave salt behind.</p>
       </div>
       <div class="panel">
         <h3>Realms and peoples</h3>
-        <p>Borders follow watersheds, rivers and coasts. Peoples spread through country that resembles their homeland, so cultures cross borders the way real ones do.</p>
+        <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
       </div>
     </div>
   </section>
@@ -341,7 +361,7 @@
     </div>
 
     <p class="section-lede">
-      The same ground is drawn three ways, with colours that follow its height or its height and climate.
+      Compare the same landscape in Atlas, Schoolroom and Natural. Atlas combines elevation and climate colours, Schoolroom shows elevation, and Natural uses colours taken from satellite imagery.
     </p>
 
     <figure>
@@ -353,7 +373,8 @@
         </picture>
       </div>
       <figcaption>
-        Seed 718106 · 2048 cells · one 640 × 640 window at 1:1
+        <span class="say">The same region in Atlas, Schoolroom and Natural, at the same scale.</span>
+        Seed 718106
       </figcaption>
     </figure>
   </section>
@@ -365,7 +386,7 @@
     </div>
 
     <p class="section-lede">
-      These four views show the temperature, ocean currents, winds and rainfall the generator computes for the same stretch of coast.
+      The temperature, ocean currents, winds and rainfall calculated for the same coastline.
     </p>
 
     <figure>
@@ -377,12 +398,13 @@
         </picture>
       </div>
       <figcaption>
-        Seed 718106 · 2048 cells · one 480 × 600 window at 1:1
+        <span class="say">Four views of the same coastline: its temperature, currents, winds and rainfall.</span>
+        Seed 718106
       </figcaption>
     </figure>
 
     <p class="section-lede">
-      These figures show some of the map styles and views. More are available in the app.
+      More map styles and data views are in the generator.
     </p>
   </section>
 
@@ -393,14 +415,14 @@
     </div>
 
     <dl class="spec">
-      <div><dt>Views</dt><dd>Fifteen: the fantasy map, political and peoples, elevation, biomes, temperature and rainfall by season, plates, currents, winds.</dd></div>
-      <div><dt>Styles</dt><dd>Twelve for the map: atlas, vellum, ink wash, nautical chart, pen and ink, Mars, natural, and a colour-blind-safe palette.</dd></div>
-      <div><dt>Themes</dt><dd>Seventeen for the window: light, dark, high contrast, colour-blind, and styled sets from Nautical to Blacklight.</dd></div>
-      <div><dt>Editing</dt><dd>Every generated name and border can be overridden, and the overrides are kept with the world.</dd></div>
-      <div><dt>Saves</dt><dd>A save holds the finished world, and the same file opens in the browser and on the desktop.</dd></div>
-      <div><dt>Export</dt><dd>PNG, WebP or JPEG, up to 4096 × 4096; or the data behind the map: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends.</dd></div>
-      <div><dt>Resolution</dt><dd>512 to 4096 cells across; the browser starts at 512, the desktop app at 1024.</dd></div>
-      <div><dt>Acceleration</dt><dd>Optional, for erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
+      <div><dt>Views</dt><dd>Fifteen views, including political borders, peoples, elevation, biomes, seasonal temperature and rainfall, tectonic plates, ocean currents and winds.</dd></div>
+      <div><dt>Styles</dt><dd>Twelve map styles, including Atlas, Vellum, Ink wash, Nautical, Pen and ink, Mars, Natural and a colour-blind-safe palette.</dd></div>
+      <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and colour-blind options.</dd></div>
+      <div><dt>Editing</dt><dd>Edit generated names and borders. Your changes are saved with the world.</dd></div>
+      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
+      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, or the data behind the map: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. Up to 4096 × 4096 in the browser and on the desktop; phones are capped at 2048 × 2048.</dd></div>
+      <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
+      <div><dt>Acceleration</dt><dd>Optional graphics acceleration speeds up erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
     </dl>
   </section>
 
@@ -413,27 +435,56 @@
     <div class="practical">
       <div class="panel">
         <h3>Running it in a browser</h3>
-        <p>Recent Chrome, Edge, Firefox or Safari. The first visit downloads about 4.5&nbsp;MB and is cached after that; nothing you make is uploaded anywhere.</p>
-        <p>The optional graphics-card acceleration uses WebGPU where the browser offers it.</p>
+        <!-- __BUNDLE_MB__ is replaced by :web:assembleSite with the compressed size of the files
+             a visitor actually fetches to run the generator, measured off the assembled tree. The
+             loading shell carries the same token and therefore the same figure. -->
+        <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
+        <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>An export re-runs the whole pipeline at the size you ask for rather than enlarging what is on screen, so the detail is real; 4096 wants a few gigabytes, which is why the browser stops at 2048 on a phone.</p>
-        <p>WebP is about a quarter of PNG's size and softens thin rivers and borders very slightly. With a graphics card, a 1024 world takes about twenty seconds on a 2026 phone and 2048 about a minute and a half.</p>
+        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. Larger worlds take longer and use more memory. On phones, browser exports are capped at 2048 × 2048 to keep memory in bounds.</p>
+        <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 
       <div class="panel">
         <h3>The Atlas is a work in progress</h3>
-        <p>Today it lists a world's realms and landmarks, lets you rename them and place labels, and stops there. A full atlas is planned for a later release, targeting 4.0: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. Names you give now are kept with the world.</p>
+        <p>Today the Atlas lists a world's realms and landmarks and lets you rename them and place labels. Your changes are saved with the world. A later release, planned for 5.0, adds named continents, seas, bays, straits and ranges, with labels set out the way a printed atlas sets them.</p>
       </div>
 
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
         <h3>Desktop version<span class="tag">Windows</span></h3>
-        <p>Bigger worlds, more threads and no download before you start. Portable zip or installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time; choose “More info”, then “Run anyway”.</p>
+        <p>Generate larger worlds with a desktop app that uses every processor thread. Choose the portable zip or the installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time. If you trust the download, choose “More info”, then “Run anyway”.</p>
         <span class="go" id="release-line">Get the latest release ↗</span>
       </a>
     </div>
+  </section>
+
+  <section id="next">
+    <div class="section-head">
+      <h2>What comes next</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Planned releases and what each one brings. No dates: a release lands when its work is done.
+    </p>
+
+    <!-- The table below is drawn from ROADMAP.md by :web:assembleSite, which replaces this
+         comment; the repository's file is the one place the roadmap is written. The assembly
+         fails if the marker survives, and SiteAssemblyTest reads the built table back against the
+         file, so the page and the roadmap cannot come to say different things. -->
+    <!-- roadmap -->
+  </section>
+
+  <!-- The last thing on the page before the licence, and a band rather than a card: asking for a
+       bug report is not a note about the program, it is the page addressing the reader, and a
+       panel in a grid of four made it look like a fifth fact about the download. The footer's own
+       top rule is the hairline under it. -->
+  <section id="report" class="report">
+    <p>Found something wrong? Report it with the seed and the generation resolution. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=bug.yml">Open an issue</a>, or write to <a href="mailto:bugreport@cartogenesis.com">bugreport@cartogenesis.com</a>. Help ▸ Report a bug… in the app fills the form in for you.</p>
+    <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
   </section>
 
 </main>

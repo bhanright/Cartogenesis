@@ -541,8 +541,15 @@ internal object Exports {
         else -> SIZES.filter { it <= ceiling }.maxOrNull() ?: SIZES.min()
     }
 
-    /** Why a size is greyed out, in the small print, when someone reaches for it. */
-    fun unreachableNote(size: Int): String = "$size needs more memory than this build can hold"
+    /**
+     * Why a size is greyed out, in the small print, when someone reaches for it.
+     *
+     * A later release, not a refusal: the ceiling is this build's memory and not a decision about
+     * what a map should be, and the chip stays in the row so that the reader can see where it will
+     * be when it arrives.
+     */
+    fun unreachableNote(size: Int): String =
+        "$size needs more memory than this build can hold; it waits for a later release"
 }
 
 /**

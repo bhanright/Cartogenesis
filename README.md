@@ -192,7 +192,7 @@ save format version and the build. **Sea level is grey level 32768 on every worl
 than derived per world, because its job is to be typed into somebody else's program. There are
 32767 levels either side of the waterline, and the sidecar states a metres-per-level figure for
 each half, because the vertical range is two numbers rather than one: at the defaults a level above
-the waterline is 0.1831 m and one below it 0.3052 m, so white is +6,000 m and black is −10,000 m.
+the waterline is 0.1831 m and one below it 0.3052 m, so white is +6,000 m and black is -10,000 m.
 Land below the waterline is written as it is, not clamped — a basin the sea cannot reach drains out
 into a salt flat below sea level, which on seed 42 at 512 is 497 cells.
 

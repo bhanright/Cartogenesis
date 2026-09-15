@@ -1332,7 +1332,10 @@ to reproduce the bug".*
   version, platform (desktop or browser), seed, working resolution, ocean coverage and any knob
   moved from its default, graphics acceleration on or off and the device, what was expected,
   what happened, a screenshot — and a second route for people without an account: an address
-  at the domain (Cloudflare Email Routing forwards it) named on the site and in the app.
+  at the domain (Cloudflare Email Routing forwards it) named on the site and in the app:
+  William set up `bugreport@cartogenesis.com` for bug reports and issues and
+  `dev@cartogenesis.com` for feature requests and suggestions (2026-09-15); the Help item's
+  clipboard text and the site's bug line name the first, F32's suggestion line the second.
 - **Help ▸ Report a bug…**: a third Help item beside the two that exist. It opens the browser
   through `Platform.openLink` on the new-issue URL with the template's fields pre-filled from the
   world in the window — version, platform, seed, resolution, ocean share, every knob that is not
@@ -1372,8 +1375,8 @@ And there should be another request for contact asking for features suggestions.
   to the 4.0 release I think, and we should also add additional map projections as options",
   then "move the full atlas project items to 5.0 release".)
 - **The ask**: beside F31's bug line in Notes, a second: "Have a feature in mind? Say so",
-  linking to the repository's discussions or issues with a feature template and the same
-  forwarded address.
+  linking to the repository's discussions or issues with a feature template and
+  `dev@cartogenesis.com`.
 - The Notes card "The Atlas is a work in progress" says the full atlas is "targeting 4.0"; it says 5.0 from this chunk on, and the roadmap file is what it agrees with.
 - Small; one short agent with F31, after the weekly reset; no generator change.
 

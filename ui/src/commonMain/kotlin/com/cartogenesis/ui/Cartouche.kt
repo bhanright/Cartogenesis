@@ -5,9 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.cartogenesis.cartography.MapScale
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.worldgen.naming.NameForge
 import com.cartogenesis.worldgen.pipeline.Culture
-import kotlin.random.Random
 
 /**
  * What the map says about itself, in the corner of the sheet.
@@ -57,15 +55,11 @@ internal object Cartouches {
     /**
      * The world's own name, in the language of the people who hold most of it.
      *
-     * Every culture already carries a `nameSeed`, which is the seed of its phonetics — the thing
-     * that makes one people's names full of hard stops and its neighbour's full of sibilants. The
-     * name of the world is a bare word in the largest people's language, so a world of the Verrin
-     * peoples is called something a Verrin speaker could pronounce.
-     *
-     * Deterministic from the seed, as the spec asks: the language is chosen by cell count (ties to
-     * the lower id, so the answer cannot depend on list order), and the word is drawn from a
-     * generator seeded with the world seed alone. The same seed therefore always names the same
-     * world, and re-rendering, re-opening or re-styling it never renames it.
+     * Every culture already carries a `nameSeed`, which is the seed of its phonetics. The world's
+     * name is drawn from [WorldNames] by the world seed and the largest people's language
+     * together, so a world of the Verrin peoples and the same world held by another people are
+     * named differently, and the same seed and people are always named the same. Re-rendering,
+     * re-opening or re-styling a world never renames it.
      *
      * A world with no peoples at all — every hearth boxed in by ice, or `Realms` and cultures
      * turned right down — still gets a name, from a language derived from the seed itself. That is
@@ -77,15 +71,12 @@ internal object Cartouches {
         // multiplier and an odd offset so that neighbouring seeds do not land on the same
         // phonetics, and it is fixed because the name has to be the same every time.
         val language = languageSeed ?: (seed * LANGUAGE_MULTIPLIER + LANGUAGE_OFFSET)
-        return NameForge.styleFor(language).word(Random(seed), WORLD_NAME_SYLLABLES)
+        return WorldNames.pick(seed, language)
     }
 
     /** See [worldName]: the mixing that turns a world seed into a language seed. */
     private const val LANGUAGE_MULTIPLIER = 31L
     private const val LANGUAGE_OFFSET = 1_013L
-
-    /** A one-syllable world name reads as a typo, and [NameForge]'s own ceiling is three. */
-    private const val WORLD_NAME_SYLLABLES = 3
 
     /** `seed 59758 · 2048 × 2048`: which world, and how finely it was computed. */
     fun facts(seed: Long, width: Int, height: Int): String = "seed $seed · $width × $height"

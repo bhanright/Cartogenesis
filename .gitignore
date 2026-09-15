@@ -27,7 +27,7 @@ keystore.properties
 # left untracked, so a `git add -A` cannot sweep them in by accident.
 /HOSTING.md
 
-# Subagent worktrees. Each parallel chunk of REALISM_PLAN.md works in its own checkout here;
+# Worktrees for parallel chunks of docs/REALISM_PLAN.md, each in its own checkout here;
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
 

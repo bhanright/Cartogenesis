@@ -2045,6 +2045,21 @@ section header now parallels Lemon Blueberry's, the chunk labels out); the F28 g
 the ledger's figures on the merged tree; cartography 54, ui 105 JVM and 105 wasm, desktop 67,
 siteTest 10, all green.
 
+### Release 3.0.0 (2026-09-15)
+
+Cut from `main` at 0771099, tagged `v3.0.0`, the foundation release of the 3.0 line, shipped as
+William's decision of 2026-09-14 with the weekly usage at 92%: the remaining 3.0 scope (W2, W3,
+W4, S3, R1, I1, K1, P1) moves to 3.x, W2 and W3 first. In it: S1 (the ruler), S2 and S2b
+(isostasy, the review's four corrections), W1 (energy balance and sea ice), I2 (troughs and
+basins from the ground), G3 (currents on the GPU), F30 (the outline instrument and shore census),
+the C2 sweep, and the 2.0.x line forward-merged through 2.0.7. Full tier green at the F30 merge
+(worldgen 54 classes, cartography 11, desktop 20, siteTest 13); the styles strip's window
+re-picked for the 3.0 world (1c64278); portable zip 97 MB, MSI 98 MB, web zip 5.5 MB; the
+packaged exe passes `--gpu-check`; the deploy served `cartogenesis.js?v=0771099`. Save format
+10: 2.0.x saves do not open. Known remainders named in the notes: flat interior rainfall until
+W2/W3, lakes 0.52% and ice 5.10% of land against Earth's 1.48% and 10.1%, 59758's south-west
+shallow sea, the browser currents path untested on a device.
+
 ## Track M — the Earth-likeness yardstick (3.0)
 
 ### M1. Earth-likeness metric suite — Opus

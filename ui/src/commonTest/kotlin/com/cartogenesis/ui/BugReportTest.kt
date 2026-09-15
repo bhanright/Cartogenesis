@@ -67,7 +67,7 @@ class BugReportTest {
             "Platform: Desktop",
             "World: Ashenmoor",
             "Seed: 718106",
-            "Working resolution: 1024 × 1024",
+            "Generation resolution: 1024 × 1024",
             "Ocean coverage: 62%",
             "Graphics acceleration: On, a fake graphics card"
         ).forEach { line ->

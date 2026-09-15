@@ -811,7 +811,7 @@ private fun Application(
             cartouche = world?.let {
                 Cartouches.of(it, naming.title, generationMillis)
             },
-            prompt = "Pick a seed and settings, then Generate.",
+            prompt = "Keep the settings or change them, then press Generate.",
             // Compact only: with the sheet up, the banner along the map's top edge is a long way
             // from where the reader just pressed Generate. The same sentence, at the foot.
             progress = if (compact && busy) "${stage ?: "Generating"}…" else null,
@@ -836,7 +836,7 @@ private fun Application(
             headerKnobs = Arrangements.headerKnobs(platform),
             worldName = naming.name,
             platform = platform,
-            atlasLabel = if (screen == Screen.ATLAS) "Show map" else "Atlas",
+            atlasLabel = if (screen == Screen.ATLAS) "Show map" else "World atlas",
             libraryLabel = if (screen == Screen.LIBRARY) "Show map" else "Library",
             onWorldName = naming::rename,
             onConfig = { config = it },
@@ -1467,10 +1467,24 @@ private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
                     }
                 }
         )
-        OutlinedButton(onClick = { apply() }, enabled = !busy && changed, contentPadding = TIGHT) {
+        OutlinedButton(
+            onClick = { apply() },
+            enabled = !busy && changed,
+            contentPadding = TIGHT,
+            // Two letters beside a field of digits is a word that leans on where it is standing,
+            // which is fine for anyone who can see the field and no use at all to anyone being
+            // read the screen. The description says what pressing it does.
+            modifier = Modifier.semantics { contentDescription = "Generate with this seed" }
+        ) {
             Text("Go", maxLines = 1)
         }
     }
+    Text(
+        "The number a world grows from. The same seed always makes the same world.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp)
+    )
 }
 
 /**
@@ -1560,10 +1574,10 @@ private fun PanelHeader(
             enabled = !busy,
             contentPadding = TIGHT,
             modifier = Modifier.weight(1f)
-        ) { Text("New world", maxLines = 1) }
+        ) { Text("Random world", maxLines = 1) }
     }
 
-    Labelled("Working resolution", "${config.width} px") {
+    Labelled("Generation resolution", "${config.width} px") {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Knobs.RESOLUTIONS.forEach { size ->
                 FilterChip(
@@ -1825,8 +1839,10 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
  * What a machine with a graphics device can offer, or why it cannot.
  *
  * What the device is used for is the host's answer rather than this composable's: the desktop runs
- * the erosion sweeps and the export raster on it, a browser only the sweeps. See
- * [Platform.acceleratedWork].
+ * the erosion sweeps and the export raster on it, a browser only the sweeps. Both sentences are
+ * built from that one list — see [Platform.acceleratedWork], [accelerationRunning] and
+ * [accelerationOffered] — so the offer under an unused switch cannot promise more than the note
+ * under a used one claims.
  */
 @Composable
 private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
@@ -1834,8 +1850,8 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
     val note = when {
         device == null ->
             "Unavailable here: ${platform.accelerationUnavailableBecause}"
-        onGpu -> platform.acceleratedWork(device)
-        else -> "$device is available, and is many times faster at this."
+        onGpu -> platform.accelerationRunning(device)
+        else -> platform.accelerationOffered(device)
     }
     Text(
         note,
@@ -1926,7 +1942,7 @@ private fun OutputOptions(
     }
     if (!hasWorld) {
         Text(
-            "Generate a world first.",
+            "Generate a world to enable export.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -996,8 +996,8 @@ class ChromeGalleryTest {
          * headings, and every knob inside them. Both arrangements must show all of it.
          */
         val PANEL_CONTROLS = listOf(
-            "Seed", "Name", "Generate", "New world", "Working resolution", "Export",
-            "Library", "Atlas",
+            "Seed", "Name", "Generate", "Random world", "Generation resolution", "Export",
+            "Library", "World atlas",
             "World", "Ocean coverage",
             "Terrain", "Plates", "Mountain height", "Erosion strength",
             "Climate", "Seasonal tilt", "Rain shadow", "Ice sheets and glaciers",

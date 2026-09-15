@@ -64,8 +64,7 @@ class WebPlatform(
      * and the stream-function solve and nothing else. Saying otherwise here would be promising a
      * speed-up that does not exist.
      */
-    override fun acceleratedWork(device: String): String =
-        "Erosion and ocean currents run on $device, many times faster."
+    override val acceleratedWork: String = "erosion and ocean currents"
 
     /**
      * 2048 on a phone, 4096 otherwise.

@@ -601,7 +601,7 @@ class SiteAssemblyTest {
     fun `the Notes offer both ways of reporting a bug and asking for a feature`() {
         val page = file("index.html").readText()
         listOf(
-            "Found something wrong? Report it with the seed and the working resolution.",
+            "Found something wrong? Report it with the seed and the generation resolution.",
             "Have a feature in mind? Say so.",
             "mailto:bugreport@cartogenesis.com",
             "mailto:dev@cartogenesis.com",

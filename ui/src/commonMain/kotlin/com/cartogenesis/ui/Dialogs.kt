@@ -82,7 +82,7 @@ internal fun SettingsDialog(
                 }
 
                 SettingRow(
-                    "Working resolution",
+                    "Generation resolution",
                     "The grid a new world starts at. The world on screen keeps its own."
                 ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,7 +114,7 @@ internal fun SettingsDialog(
                         "Graphics acceleration at launch",
                         // The same sentence the header switch prints, from the same seam, so the
                         // dialog cannot end up claiming the device does more than the panel does.
-                        platform.accelerator?.let { platform.acceleratedWork(it.name) }
+                        platform.accelerator?.let { platform.accelerationOffered(it.name) }
                             ?: "Unavailable here: ${platform.accelerationUnavailableBecause}"
                     ) {
                         Toggle(

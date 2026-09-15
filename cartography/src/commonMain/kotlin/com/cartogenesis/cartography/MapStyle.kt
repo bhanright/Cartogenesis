@@ -118,7 +118,7 @@ enum class MapStyle(
 ) {
     ATLAS(
         label = "Atlas",
-        detail = "Modern hypsometric tints",
+        detail = "Colours show elevation and climate",
         oceanRamp = intArrayOf(
             0xFF0B2239.toInt(), 0xFF11395B.toInt(), 0xFF1B5479.toInt(),
             0xFF2B7398.toInt(), 0xFF57A5C4.toInt()
@@ -308,7 +308,7 @@ enum class MapStyle(
      */
     SCHOOLROOM(
         label = "Schoolroom",
-        detail = "Pull-down classroom wall map",
+        detail = "Colours show elevation",
         oceanRamp = intArrayOf(
             0xFF6FB6CE.toInt(), 0xFF7FC0D5.toInt(), 0xFF92CDDE.toInt(),
             0xFFA8D9E6.toInt(), 0xFFBFE5EE.toInt()
@@ -586,7 +586,7 @@ enum class MapStyle(
      */
     NATURAL(
         label = "Natural",
-        detail = "Satellite earth: saturated greens, ochre and rust, a cobalt sea",
+        detail = "Colours taken from satellite imagery",
         // Abyss first, and nine stops rather than the usual five, because of where this generator
         // actually asks to be painted. `relativeElevation` normalises the sea floor by its deepest
         // trench, so half of every ocean reads within a tenth of the surface: measured over the

@@ -103,7 +103,7 @@ internal object BugReport {
                 appendLine("Platform: $host")
                 appendLine("World: $world")
                 appendLine("Seed: $seed")
-                appendLine("Working resolution: $resolution")
+                appendLine("Generation resolution: $resolution")
                 appendLine("Ocean coverage: $ocean")
                 appendLine("Graphics acceleration: $acceleration")
                 appendLine("Settings changed from their defaults: ${settingsLine(changedSettings)}")

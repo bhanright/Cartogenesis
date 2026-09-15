@@ -30,13 +30,20 @@ import com.cartogenesis.worldgen.pipeline.OceanAccelerator
  * figures on every run.
  */
 enum class ExportFormat(val label: String, val extension: String, val detail: String) {
-    PNG("PNG", "png", "Lossless. Larger file, exact detail."),
-    WEBP("WebP", "webp", "About a quarter the size. Slightly softens rivers and borders."),
+    // Three sentences of the same shape, each saying what the format keeps and what it costs: the
+    // row is read as one choice, and a reader comparing three lines written three different ways
+    // is comparing the writing rather than the formats.
+    PNG("PNG", "png", "PNG keeps every pixel and makes the largest file."),
+    WEBP(
+        "WebP",
+        "webp",
+        "WebP is about a quarter the size and softens rivers and borders slightly."
+    ),
     JPEG(
         "JPEG",
         "jpg",
-        "For tools that will not open a WebP. Smaller than WebP here, and harder on thin " +
-            "lines: rivers and borders soften more."
+        "JPEG is for tools that will not open a WebP; it is smaller still and softens " +
+            "rivers and borders more."
     );
 
     companion object {
@@ -137,8 +144,11 @@ interface Platform {
     val accelerationUnavailableBecause: String?
 
     /**
-     * What the graphics device is actually doing here, for the line of small print under the
-     * switch. [device] is [accelerator]'s own name.
+     * What the graphics device is actually doing here, as a list that fits inside a sentence.
+     *
+     * The two sentences the interface prints from it — [accelerationRunning] under a switch that
+     * is on, [accelerationOffered] under one that is off — are built in shared code, so the offer
+     * cannot come to promise work the running note does not claim.
      *
      * The two front ends do not do the same amount on it, and one sentence for both would tell
      * one of them a smaller truth than it is owed: the desktop draws the export raster on the
@@ -149,8 +159,7 @@ interface Platform {
      * because a `Platform` that has not thought about the question is one with a real graphics API
      * behind it.
      */
-    fun acceleratedWork(device: String): String =
-        "Erosion, ocean currents and export rendering run on $device, many times faster."
+    val acceleratedWork: String get() = "erosion, ocean currents and export rendering"
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.
@@ -316,6 +325,27 @@ interface Platform {
      */
     suspend fun fetchText(url: String): String? = null
 }
+
+/**
+ * The small print under a graphics switch that is on: what is running on [device] rather than on
+ * the processor.
+ *
+ * Built from [Platform.acceleratedWork] rather than written out, so a host that does less on its
+ * device says less here without anyone having to remember that it should.
+ */
+internal fun Platform.accelerationRunning(device: String): String =
+    acceleratedWork.replaceFirstChar { it.uppercase() } + " run on $device, many times faster."
+
+/**
+ * The same under a switch that is off, and a different offer: not what is happening, but what
+ * could be, and against what.
+ *
+ * "Many times faster" is measured rather than hopeful — see the erosion benchmarks in
+ * REALISM_PLAN.md — and "than the processor" is the comparison it is faster *than*, which the
+ * sentence used to leave the reader to supply.
+ */
+internal fun Platform.accelerationOffered(device: String): String =
+    "$device can run $acceleratedWork, many times faster than the processor."
 
 /**
  * Somewhere durable to keep one string.

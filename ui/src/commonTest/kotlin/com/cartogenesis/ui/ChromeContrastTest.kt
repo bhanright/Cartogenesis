@@ -1019,15 +1019,18 @@ class ChromeContrastTest {
      */
     @Test
     fun `a heading is lettered rather than rewritten`() {
-        assertEquals("Working resolution", ChromeDetail.PLAIN.heading("Working resolution"))
+        assertEquals("Generation resolution", ChromeDetail.PLAIN.heading("Generation resolution"))
         assertEquals("TERRAIN", ThemeChoice.ALLIED.detail().heading("Terrain", panel = true))
         // Allied's capitals stop at the panel. That is what leaves it byte-identical.
-        assertEquals("Working resolution", ThemeChoice.ALLIED.detail().heading("Working resolution"))
+        assertEquals(
+            "Generation resolution",
+            ThemeChoice.ALLIED.detail().heading("Generation resolution")
+        )
         assertEquals("> TERRAIN", ThemeChoice.MATRIX.detail().heading("Terrain"))
         assertEquals("TERRAIN", ThemeChoice.HESSIAN.detail().heading("Terrain"))
         assertEquals(
-            "WORKING·RESOLUTION",
-            ThemeChoice.ROMAN.detail().heading("Working resolution")
+            "GENERATION·RESOLUTION",
+            ThemeChoice.ROMAN.detail().heading("Generation resolution")
         )
         assertEquals("TERRAIN", ThemeChoice.ROMAN.detail().heading("Terrain"))
         assertEquals("EXPORT", ThemeChoice.HITCHCOCK.detail().heading("Export"))

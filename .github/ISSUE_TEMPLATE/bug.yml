@@ -37,7 +37,7 @@ body:
   - type: input
     id: resolution
     attributes:
-      label: Working resolution
+      label: Generation resolution
       description: The grid the world was generated at, not the size of an export.
       placeholder: 1024 × 1024
     validations:

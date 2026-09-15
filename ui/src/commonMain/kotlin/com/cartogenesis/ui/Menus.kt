@@ -69,7 +69,10 @@ internal enum class MenuCommand(
     val shortcut: Shortcut? = null,
     val needsWorld: Boolean = false
 ) {
-    NEW_WORLD("New world", Shortcut(Key.N, label = "Ctrl+N")),
+    // "Random world" here and on the panel's button, because it is one action under two roofs:
+    // both roll a seed and build the world it names. A menu that called it something else would be
+    // a second name for the same thing.
+    NEW_WORLD("Random world", Shortcut(Key.N, label = "Ctrl+N")),
     OPEN_LIBRARY("Open library", Shortcut(Key.O, label = "Ctrl+O")),
     SAVE("Save", Shortcut(Key.S, label = "Ctrl+S"), needsWorld = true),
     SAVE_AS("Save as…", Shortcut(Key.S, shift = true, label = "Ctrl+Shift+S"), needsWorld = true),

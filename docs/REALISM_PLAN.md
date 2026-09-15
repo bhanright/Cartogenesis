@@ -1747,7 +1747,10 @@ files the running chunks are in.*
 - **Drop the absolute elevation pin in `DepositionTest`**: re-recorded nine times in two days; its
   structural cases and the off-equals-on-at-zero-rates identity are the guard.
 - **Remove the Kotlin/JS target** from `worldgen` and `cartography`: nothing consumes it since the
-  web build went Wasm, and it compiles in every build.
+  web build went Wasm, and it compiles in every build. It was also the one target that could not
+  agree with the others: JavaScript routes `sin`, `cos` and `pow` through `Math`, which differs from
+  the JVM in the last bit, and the FFT compounded that into measurably different worlds from the
+  same seed, while Wasm matches the JVM bit for bit.
 - **CI**: run the Wasm suite once; take the fingerprint from that run's output instead of a second
   `--rerun-tasks` pass, or drop the diff step and keep `WorldFingerprintTest` (0.4 s) as the local
   check.

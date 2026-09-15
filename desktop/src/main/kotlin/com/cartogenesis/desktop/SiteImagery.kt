@@ -121,15 +121,17 @@ object SiteImagery {
     /**
      * The window the three physical styles are compared in: square, 640 on a side.
      *
-     * The north-west quarter of the northern continent, chosen so that the three styles are asked
-     * the questions they answer differently. It holds a broken west coast with islands off it, a
-     * snow-capped range along the diagonal, the dendritic river system and lakes that drain the
-     * plateau above the range, volcanic cones on that plateau, and dry tan interior in the south —
-     * which is where the styles part company, because Atlas and Natural tint the ground by its
-     * climate as well as its height and Schoolroom tints it by height alone. Three styles agreeing
-     * about a green coast would prove nothing.
+     * The central continent of the 3.0 world, chosen so that the three styles are asked the
+     * questions they answer differently. It holds the north coast and the strait to its south,
+     * the grey range that crosses it, the rivers draining both flanks, and the dry tan interior
+     * on its eastern half — which is where the styles part company, because Atlas and Natural
+     * tint the ground by its climate as well as its height and Schoolroom tints it by height
+     * alone. Three styles agreeing about a green coast would prove nothing. The 2.0 line's window
+     * at (704, 64) sat over the same seed's old northern continent; the 3.0 pipeline redraws the
+     * seed, and that square is now mostly open sea, so the window was re-picked from the contact
+     * sheet before 3.0.0 shipped.
      */
-    val STYLES_WINDOW = Window(704, 64, 640, 640)
+    val STYLES_WINDOW = Window(660, 460, 640, 640)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall.

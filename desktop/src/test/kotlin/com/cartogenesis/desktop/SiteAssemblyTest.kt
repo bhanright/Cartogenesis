@@ -591,15 +591,24 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That both ways of reporting something are on the page, with both addresses.
+     * That both ways of reporting something are on the page, with both addresses, in the band at
+     * the foot that exists to carry them.
      *
      * The issue templates are the route that carries a seed; the two addresses are the route for a
      * reader with no GitHub account, and they are the half that cannot be checked by clicking
      * anything — a mail address with a typo in it fails silently for ever.
+     *
+     * Read out of `id="report"` rather than out of the whole document, because these two lines
+     * were a card in the Notes grid until the page put them where a reader finishes reading. A
+     * guard that searched the whole page would have passed either way — including the way where
+     * the band is gone and the sentences survive in some other corner.
      */
     @Test
-    fun `the Notes offer both ways of reporting a bug and asking for a feature`() {
+    fun `the band at the foot offers both ways of reporting a bug and asking for a feature`() {
         val page = file("index.html").readText()
+        val band = Regex("""<section id="report"[^>]*>(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the page has no band at the foot asking for bug reports and suggestions")
         listOf(
             "Found something wrong? Report it with the seed and the generation resolution.",
             "Have a feature in mind? Say so.",
@@ -608,8 +617,14 @@ class SiteAssemblyTest {
             "template=bug.yml",
             "template=feature.yml"
         ).forEach {
-            assertTrue(page.contains(it), "the Notes no longer carry \"$it\"")
+            assertTrue(band.contains(it), "the band at the foot no longer carries \"$it\"")
         }
+
+        // Where it is, which is the whole of why it left the Notes grid: the page's closing word,
+        // under the roadmap and above the licence, rather than a fifth fact about the download.
+        val at = page.indexOf("""<section id="report"""")
+        assertTrue(at > page.indexOf("""<section id="next""""), "the band has moved above the roadmap")
+        assertTrue(at < page.indexOf("<footer"), "the band is no longer the last thing on the page")
 
         // And that the forms the two links ask for are in the repository, since GitHub silently
         // opens a blank issue for a template that is not there.
@@ -619,7 +634,7 @@ class SiteAssemblyTest {
                 ".github/ISSUE_TEMPLATE/$it is missing, and the page links to it"
             )
         }
-        println("SITE the Notes carry both addresses and both issue forms")
+        println("SITE the band at the foot carries both addresses and both issue forms")
     }
 
     @Test

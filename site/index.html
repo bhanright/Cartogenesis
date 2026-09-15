@@ -254,6 +254,16 @@
     white-space:nowrap;margin-left:10px;vertical-align:2px;
   }
 
+  /* ---------- the ask, at the foot --------------------------------------- */
+  /* Two lines of the same weight, side by side where there is room and stacked
+     where there is not, on the page's own ground rather than on a panel. The
+     breakpoint is the notes grid's, so the page has one place where two columns
+     become one and not two. */
+  .report{display:grid;gap:10px 40px;padding-bottom:8px}
+  @media (min-width:820px){.report{grid-template-columns:1fr 1fr}}
+  .report p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  .report a{color:var(--brass)}
+
   footer{
     margin-top:64px;border-top:1px solid var(--hairline);padding:24px 0 48px;
     color:var(--bone-dim);font-size:13px;line-height:1.7;
@@ -443,12 +453,6 @@
         <p>Today the Atlas lists a world's realms and landmarks and lets you rename them and place labels. Your changes are saved with the world. A later release, planned for 5.0, adds named continents, seas, bays, straits and ranges, with labels set out the way a printed atlas sets them.</p>
       </div>
 
-      <div class="panel">
-        <h3>Bugs and suggestions</h3>
-        <p>Found something wrong? Report it with the seed and the generation resolution. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=bug.yml">Open an issue</a>, or write to <a href="mailto:bugreport@cartogenesis.com">bugreport@cartogenesis.com</a>. Help ▸ Report a bug… in the app fills the form in for you.</p>
-        <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
-      </div>
-
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
         <h3>Desktop version<span class="tag">Windows</span></h3>
         <p>Generate larger worlds with a desktop app that uses every processor thread. Choose the portable zip or the installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time. If you trust the download, choose “More info”, then “Run anyway”.</p>
@@ -472,6 +476,15 @@
          fails if the marker survives, and SiteAssemblyTest reads the built table back against the
          file, so the page and the roadmap cannot come to say different things. -->
     <!-- roadmap -->
+  </section>
+
+  <!-- The last thing on the page before the licence, and a band rather than a card: asking for a
+       bug report is not a note about the program, it is the page addressing the reader, and a
+       panel in a grid of four made it look like a fifth fact about the download. The footer's own
+       top rule is the hairline under it. -->
+  <section id="report" class="report">
+    <p>Found something wrong? Report it with the seed and the generation resolution. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=bug.yml">Open an issue</a>, or write to <a href="mailto:bugreport@cartogenesis.com">bugreport@cartogenesis.com</a>. Help ▸ Report a bug… in the app fills the form in for you.</p>
+    <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
   </section>
 
 </main>

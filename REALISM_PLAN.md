@@ -1374,6 +1374,7 @@ And there should be another request for contact asking for features suggestions.
 - **The ask**: beside F31's bug line in Notes, a second: "Have a feature in mind? Say so",
   linking to the repository's discussions or issues with a feature template and the same
   forwarded address.
+- The Notes card "The Atlas is a work in progress" says the full atlas is "targeting 4.0"; it says 5.0 from this chunk on, and the roadmap file is what it agrees with.
 - Small; one short agent with F31, after the weekly reset; no generator change.
 
 ### Site 2. cartogenesis.com in the app's own identity — Opus, on `release/2.0`

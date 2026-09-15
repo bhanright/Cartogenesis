@@ -87,3 +87,11 @@ jobs:
 
       - name: Compile and test
         run: ./gradlew :desktop:compileKotlin :desktop:test --console=plain
+
+      # C3: the interface's browser tests were run locally before merges and nowhere else, so a
+      # break in the wasm half of `:ui` reached main unseen. They run on Karma with a headless
+      # Chrome, which `ubuntu-latest` ships and points `CHROME_BIN` at, so the runner needs nothing
+      # installed. Its own step rather than joined to the one above: a Karma failure and a JVM
+      # failure read differently and should not share a line in the log.
+      - name: Interface tests (headless browser)
+        run: ./gradlew :ui:wasmJsTest --console=plain

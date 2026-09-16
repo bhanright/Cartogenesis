@@ -287,7 +287,10 @@ world and the platforms no longer need to agree bit for bit.
 
 produces a self-contained folder at `desktop/build/compose/binaries/main/app/Cartogenesis` with a
 bundled runtime; `./gradlew :desktop:packageMsi` builds the Windows installer, and `packageDeb` and
-`packageDmg` exist for the other platforms but only build on their own OS. Packaging needs
+`packageDmg` exist for the other platforms but only build on their own OS; the Debian packager
+also needs `fakeroot` installed. The desktop app, its tests and `packageDeb` were run on Ubuntu 24.04
+with the open-source graphics stack (nouveau, NVK, zink), where the GPU check found the card and the
+accelerated paths ran; no Linux download is published yet. Packaging needs
 `jpackage`, so point the build at a full JDK with `-PjdkHome=/path/to/jdk` or the `JPACKAGE_HOME`
 environment variable if your default runtime lacks it. The `-Xmx12g` from the application block is
 baked into the launcher, so a packaged build has the headroom a Gradle run has.

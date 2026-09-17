@@ -15,5 +15,5 @@ table disagree, so there is nothing to keep in step by hand.
 | 3.x | A topographic map style with contour lines, and hydraulic erosion on the graphics card. |
 | 4.0 | The world as a sphere: physics in metres, a globe to turn, and a choice of map projections for the whole-world map and for exports. |
 | 4.x | Graphics acceleration on a native WebGPU runtime, so the desktop runs the same kernels as the browser on Vulkan, Direct3D 12 or Metal. |
-| 4.x | Import a heightmap, from Wonderdraft or any greyscale image, as the terrain a world is generated from.
+| 4.x | Import a heightmap, from Wonderdraft or any greyscale image, as the terrain a world is generated from. |
 | 5.0 | The full atlas: named continents, seas, bays, straits and ranges, with labels set out the way a printed map sets them. |

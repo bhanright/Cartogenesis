@@ -39,7 +39,7 @@ import org.jetbrains.skia.Image
 /**
  * That the atlas on a phone can be got out of again.
  *
- * William opened it on his phone against 2.0.0 and could not close it: "it opens up an atlas menu
+ * The author opened it on his phone against 2.0.0 and could not close it: "it opens up an atlas menu
  * that becomes hidden by the top transparent menu screen and isn't navigable so it's impossible to
  * close". Both halves of that are one mistake. The compact arrangement draws the map's translucent
  * toolbar over whatever the pane is showing — which is right over a chart and is a lid over a page
@@ -52,7 +52,7 @@ import org.jetbrains.skia.Image
  * the map's toolbar is not drawn over the atlas. Against 2.0.0 the first fails because no such
  * button exists anywhere and the second fails because the strip is there.
  *
- * The third claim is the one William actually cared about: pressing the button gets you back.
+ * The third claim is the one the author actually cared about: pressing the button gets you back.
  */
 class PhoneAtlasTest {
 
@@ -82,7 +82,7 @@ class PhoneAtlasTest {
             waitForIdle()
 
             // The atlas is up, and the sheet has gone back down behind it — which is exactly the
-            // state William was stuck in.
+            // state the author was stuck in.
             assertTrue(
                 onAllNodesWithText("Atlas settings").fetchSemanticsNodes().isNotEmpty(),
                 "the Atlas button did not open the atlas"
@@ -107,7 +107,7 @@ class PhoneAtlasTest {
             assertEquals(
                 0,
                 strips.size,
-                "the map's toolbar is still drawn over the atlas, which is the lid William hit"
+                "the map's toolbar is still drawn over the atlas, which is the lid the author hit"
             )
 
             // And the drill-down, which is what the atlas does instead of a 320 dp list beside a

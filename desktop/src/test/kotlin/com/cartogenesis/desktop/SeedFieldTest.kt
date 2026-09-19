@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 /**
  * That typing a seed and then clicking somewhere else starts nothing.
  *
- * William, on 2.0.1: he would type a seed, click across to another setting, and a world would begin
+ * The author, on 2.0.1: he would type a seed, click across to another setting, and a world would begin
  * building at once — so the setting he had gone to change was locked out for the length of a
  * generation he had not asked for. The field applied its value on losing focus, and losing focus is
  * exactly what a reader does on their way to the next control. Enter and Go are asks; a click

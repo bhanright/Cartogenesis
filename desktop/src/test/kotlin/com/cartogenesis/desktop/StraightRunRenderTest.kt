@@ -34,7 +34,7 @@ import org.jetbrains.skia.ImageInfo
 class StraightRunRenderTest {
 
     private companion object {
-        /** William's own world at the size the bar was found at, and the author's own at export. */
+        /** The author's own world at the size the bar was found at, and the author's own at export. */
         const val AUTHORS_SEED = 298405L
         const val AUTHORS_SIDE = 1024
         const val EXPORT_SIDE = 2048

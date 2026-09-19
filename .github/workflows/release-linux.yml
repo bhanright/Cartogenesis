@@ -216,5 +216,5 @@ jobs:
         run: |
           set -euo pipefail
           ref='${{ inputs.ref || github.ref_name }}'
-          gh workflow run site.yml --ref "$ref" -f ref="$ref"
+          gh workflow run site.yml -R "$GITHUB_REPOSITORY" --ref "$ref" -f ref="$ref"
           echo "Asked the site workflow to deploy $ref. It rebuilds apt/ from every release's .deb and publishes it with the site."

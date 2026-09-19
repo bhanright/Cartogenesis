@@ -167,6 +167,20 @@ jobs:
           # with whatever the indexes were actually signed with.
           gpg --batch --armor --export "$APT_SIGNING_KEY_ID" > "$apt/key.asc"
 
+          # Cloudflare Pages refuses any file over 25 MiB and a package is around 90, so the pool
+          # is not uploaded: each package path the index names is redirected to the same file on
+          # its GitHub release, which apt follows. The checksums in the index are of that file's
+          # content, which is the same bytes, so verification still holds.
+          redirects=web/build/site/_redirects
+          echo "" >> "$redirects"
+          echo "# apt packages live on the releases; the signed index above names these paths." >> "$redirects"
+          for deb in "$apt"/pool/main/c/cartogenesis/cartogenesis_*_amd64.deb; do
+            name=$(basename "$deb")
+            version=${name#cartogenesis_}; version=${version%_amd64.deb}
+            echo "/apt/pool/main/c/cartogenesis/$name https://github.com/$GITHUB_REPOSITORY/releases/download/v$version/Cartogenesis-$version-linux-amd64.deb 302" >> "$redirects"
+          done
+          rm -rf "$apt/pool"
+
           # reprepro's working database and its input are not part of what a client reads, and
           # conf/distributions now holds the key id, which is not published.
           rm -rf "$apt/db" "$apt/lists" "$apt/conf"

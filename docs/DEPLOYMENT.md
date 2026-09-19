@@ -105,19 +105,7 @@ Two mechanics that are easy to get wrong:
 - **`reprepro` signs through `gpg-agent`, in its own process**, where nothing can hand it a
   passphrase. So the deploy allows loopback pinentry, makes one throwaway signature to put the
   passphrase in the agent's cache, and lets reprepro's own call find it there.
-- **`Limit: -1` in `conf/distributions`** keeps every version in the pool. reprepro's default keeps
-  one, and since the repository is rebuilt from scratch each time, that default would quietly leave
-  the pool holding only the newest release.
-
-`_headers` caches `/apt/pool/*` for a year and `/apt/dists/*` not at all: a package's URL carries
-its version and is those bytes for ever, while a cached index is a reader who cannot see the
-release that was just published.
-
-## Hosting it anywhere else
-
-Upload the contents of `web/build/dist/wasmJs/productionExecutable` to any static host; there is no
-server side to it.
-
+- **The pool is not uploaded.** Cloudflare Pages refuses files over 25 MiB and a package is about 90, so after reprepro writes the index the deploy deletes `pool/` and appends one `_redirects` rule per package, sending the pool path apt asks for to the same file on its GitHub release. apt follows the redirect and the index's checksums, being of the file's content, still verify. Each deploy keeps one version per package in the index, the newest, which is what apt installs; older versions stay on the release page.
 - Paths are relative, so hosting from a subfolder works unchanged.
 - The `.wasm` MIME type does not matter here: the build instantiates from a buffer rather than
   streaming.

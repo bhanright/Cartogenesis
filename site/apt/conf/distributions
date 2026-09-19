@@ -21,5 +21,4 @@ Suite: stable
 Architectures: amd64
 Components: main
 Description: Cartogenesis desktop builds for Debian and Ubuntu
-Limit: -1
 SignWith: __APT_SIGNING_KEY_ID__

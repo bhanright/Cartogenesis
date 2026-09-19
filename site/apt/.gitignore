@@ -1,0 +1,11 @@
+# Everything reprepro writes. The repository is rebuilt from scratch on every site deploy, from
+# the .deb on every published release, so none of it is a source file and none of it is committed
+# — see "The apt repository" in docs/DEPLOYMENT.md for why that was chosen over committing the
+# pool back to main.
+#
+# conf/distributions is the exception, and is tracked: it is the only part a person writes.
+dists/
+pool/
+db/
+lists/
+key.asc

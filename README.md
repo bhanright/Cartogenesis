@@ -10,8 +10,11 @@ Kotlin Multiplatform engine and a Compose Multiplatform interface.
 uploads nothing.
 
 **Download it** from the [latest release](https://github.com/bhanright/Cartogenesis/releases/latest):
-a portable Windows zip, an MSI installer, or the browser build as a zip for hosting yourself. The
-installer is not code-signed, so Windows SmartScreen warns before it runs.
+a portable Windows zip, an MSI installer, a Debian package and a portable Linux tarball, or the
+browser build as a zip for hosting yourself. Debian and Ubuntu can install and stay up to date from
+an apt repository on the site. The download bundles its own Java runtime; nothing needs to be
+installed first. [docs/INSTALL.md](docs/INSTALL.md) has the steps for each platform, including the
+three apt commands and what to do about the unsigned installer's SmartScreen warning.
 
 ## What you get
 
@@ -247,6 +250,19 @@ was removed in T1; the reason is in [docs/REALISM_PLAN.md](docs/REALISM_PLAN.md)
 Built and verified against JDK 21, Kotlin 2.4.10, Gradle 9.7.1 and Compose Multiplatform 1.9.3.
 Any JDK 17 or newer should work; `:desktop` targets 17.
 
+What a builder installs, beyond the JDK. Nothing here is needed to *run* a download: the packaged
+application bundles its own runtime, and a reader installing it needs none of this.
+
+| Platform | Beyond a JDK 21 | Needed for |
+| --- | --- | --- |
+| All | JDK 21, with `jpackage` — a full JDK, not a JRE or Android Studio's JetBrains Runtime | Everything; `jpackage` only for packaging |
+| Linux | `fakeroot` and `dpkg` (`sudo apt install fakeroot dpkg`) | `:desktop:packageDeb` |
+| Windows | The WiX toolset v3, on the path | `:desktop:packageMsi` |
+| macOS | Xcode's command-line tools (`xcode-select --install`) | `:desktop:packageDmg` |
+
+Each installer format only builds on its own operating system, so the table is a list of what each
+machine needs rather than what any one machine needs.
+
 The per-merge tier, which `.github/workflows/ci.yml` runs on every push:
 
 ```bash
@@ -290,7 +306,7 @@ bundled runtime; `./gradlew :desktop:packageMsi` builds the Windows installer, a
 `packageDmg` exist for the other platforms but only build on their own OS; the Debian packager
 also needs `fakeroot` installed. The desktop app, its tests and `packageDeb` were run on Ubuntu 24.04
 with the open-source graphics stack (nouveau, NVK, zink), where the GPU check found the card and the
-accelerated paths ran; no Linux download is published yet. Packaging needs
+accelerated paths ran; the proprietary NVIDIA driver is untested. Packaging needs
 `jpackage`, so point the build at a full JDK with `-PjdkHome=/path/to/jdk` or the `JPACKAGE_HOME`
 environment variable if your default runtime lacks it. The `-Xmx12g` from the application block is
 baked into the launcher, so a packaged build has the headroom a Gradle run has.
@@ -305,7 +321,16 @@ Cartogenesis.exe --gpu-check
 ```
 
 It prints the device it found, or why it found none, for the erosion sweeps and the export raster in
-turn, and exits without opening a window.
+turn, and exits without opening a window. Finding no device is an answer rather than a failure, and
+it exits cleanly either way, which is what `.github/workflows/release-linux.yml` relies on when it
+asks the same question of the packaged Linux build on a runner that has no graphics card.
+
+The Windows files and the release itself are made by hand from a Windows machine; the two Linux
+files are built and uploaded to that release by `.github/workflows/release-linux.yml` when the `v*`
+tag is pushed. It waits up to thirty minutes for the release to appear, so the order of the two does
+not matter. The apt repository the `.deb` is served from is rebuilt by the site deploy — see
+"The apt repository" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and
+[docs/INSTALL.md](docs/INSTALL.md) for the signing key's one-time setup.
 
 ## Save format
 

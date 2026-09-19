@@ -769,6 +769,155 @@ class SiteAssemblyTest {
         }
     }
 
+    /**
+     * The file names a release carries, with `<version>` where its number goes.
+     *
+     * One list in `site/downloads.txt`, read by the three documents below rather than copied into
+     * each of them. Every one of those three is a reader's first instruction — the page, the
+     * installation document and the notes on the release page itself — and a file name is the one
+     * thing in them that cannot be nearly right: a download link for a name the release does not
+     * carry is a 404 with no explanation on it.
+     */
+    private val releaseFileNames: Set<String> by lazy {
+        val file = File(repoRoot, "site/downloads.txt")
+        assertTrue(file.isFile, "site/downloads.txt is missing; it is the list of release files")
+        val names = file.readLines()
+            .map { it.substringBefore('#').trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        assertTrue(names.isNotEmpty(), "site/downloads.txt lists no files")
+        names
+    }
+
+    /** The `<section id="install">` of the assembled page, or a failure. */
+    private fun installSection(page: String): String =
+        Regex("""<section id="install">(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1)
+            ?: fail("the page has no \"Download and Installation\" section")
+
+    /** HTML as a reader sees it, so a name written `&lt;version&gt;` compares as `<version>`. */
+    private fun unescaped(html: String): String =
+        html.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+    /** Every `Cartogenesis-…` file name in a piece of text, as written. */
+    private fun fileNamesIn(text: String): List<String> =
+        Regex("""Cartogenesis-[A-Za-z0-9.<>-]*\.(?:zip|msi|deb|tar\.gz)""")
+            .findAll(unescaped(text)).map { it.value }.toList()
+
+    /**
+     * The apt source line, as a reader would paste it, out of the one command that carries it.
+     *
+     * Read as the whole line rather than looked for as a substring: what breaks a reader is a
+     * source line that differs from the documented one by a character — a codename, a path under
+     * `/etc/apt/keyrings`, a stray slash — and a substring search for "cartogenesis.com/apt"
+     * would pass on every one of those.
+     */
+    private fun aptSourceLine(text: String, where: String): String =
+        Regex(""""(deb \[signed-by=[^"]*)"""").find(unescaped(text))?.groupValues?.get(1)
+            ?: fail("$where no longer carries an apt source line of the form \"deb [signed-by=…] …\"")
+
+    @Test
+    fun `the page, the instructions and the notes template name only files a release carries`() {
+        val onPage = fileNamesIn(installSection(file("index.html").readText()))
+        assertTrue(onPage.isNotEmpty(), "the Download and Installation section names no files at all")
+
+        val sources = mapOf(
+            "the page's Download and Installation section" to onPage,
+            "docs/INSTALL.md" to fileNamesIn(File(repoRoot, "docs/INSTALL.md").readText()),
+            "docs/RELEASE_NOTES_TEMPLATE.md" to
+                fileNamesIn(File(repoRoot, "docs/RELEASE_NOTES_TEMPLATE.md").readText())
+        )
+        sources.forEach { (where, named) ->
+            assertTrue(named.isNotEmpty(), "$where names no release file")
+            val strangers = named.toSet() - releaseFileNames
+            assertTrue(
+                strangers.isEmpty(),
+                "$where offers " + strangers.joinToString() + ", which no release carries. " +
+                    "site/downloads.txt lists " + releaseFileNames.joinToString()
+            )
+        }
+
+        // And the other way round: a file added to a release that nothing tells a reader about is
+        // a download nobody finds. The page is the one held to it, since it is the page a reader
+        // arrives at.
+        val unmentioned = releaseFileNames - onPage.toSet()
+        assertTrue(
+            unmentioned.isEmpty(),
+            "a release carries " + unmentioned.joinToString() + " and the page's Download and " +
+                "Installation section never names it"
+        )
+        println("SITE the install section offers " + onPage.joinToString())
+    }
+
+    @Test
+    fun `the apt source line is the same on the page as in the instructions`() {
+        val page = file("index.html").readText()
+        val onPage = aptSourceLine(installSection(page), "the page's Linux card")
+        val documented =
+            aptSourceLine(File(repoRoot, "docs/INSTALL.md").readText(), "docs/INSTALL.md")
+        val inNotes = aptSourceLine(
+            File(repoRoot, "docs/RELEASE_NOTES_TEMPLATE.md").readText(),
+            "docs/RELEASE_NOTES_TEMPLATE.md"
+        )
+        assertEquals(documented, onPage, "the page and docs/INSTALL.md give different source lines")
+        assertEquals(
+            documented, inNotes,
+            "docs/RELEASE_NOTES_TEMPLATE.md gives a different source line from docs/INSTALL.md"
+        )
+
+        // The two ends of it that the rest of this chunk has to agree with: the key is published
+        // where the source line says it is, and the codename is the one reprepro builds.
+        assertTrue(
+            onPage.contains("https://cartogenesis.com/apt "),
+            "the source line no longer points at the repository on this site: \"$onPage\""
+        )
+        val codename = File(repoRoot, "site/apt/conf/distributions").readLines()
+            .firstNotNullOfOrNull { line ->
+                line.trim().removePrefix("Codename:").takeIf { it != line.trim() }?.trim()
+            } ?: fail("site/apt/conf/distributions declares no Codename")
+        assertTrue(
+            onPage.trimEnd().endsWith(" $codename main"),
+            "the source line asks for a distribution the repository does not build: it ends " +
+                "\"${onPage.takeLast(24)}\" and reprepro's codename is \"$codename\""
+        )
+        println("SITE the apt source line is \"$onPage\"")
+    }
+
+    /**
+     * That the download button names the platforms there are downloads for.
+     *
+     * It read "Download for Windows (recommended)" for as long as Windows was the only one, and a
+     * label like that survives a new platform perfectly happily: the button still works, and it
+     * still tells a Linux reader the program is not for them.
+     */
+    @Test
+    fun `the hero's download button names both desktop platforms`() {
+        val page = file("index.html").readText()
+        val label = Regex("""id="launch-desktop"[^>]*>([^<]*)<""").find(page)?.groupValues?.get(1)
+            ?: fail("the hero no longer has a download button")
+        listOf("Windows", "Linux").forEach {
+            assertTrue(
+                label.contains(it),
+                "the hero's download button reads \"$label\" and there is a $it download"
+            )
+        }
+
+        // Where the section sits, which is the decision rather than the fact that it exists: after
+        // what the program is and what it will not do, and before the roadmap, which answers a
+        // different question.
+        val at = page.indexOf("""<section id="install">""")
+        assertTrue(at > 0, "the page has no Download and Installation section")
+        assertTrue(
+            at > page.indexOf("""<section id="practical">"""),
+            "the Download and Installation section has moved above the Notes"
+        )
+        assertTrue(
+            at < page.indexOf("""<section id="next">"""),
+            "the Download and Installation section has moved below the roadmap"
+        )
+        println("SITE the hero's download button reads \"$label\"")
+    }
+
     @Test
     fun `the bundled interface fonts are published and the source map is not`() {
         val resources = File(site, "app/composeResources")

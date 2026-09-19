@@ -24,6 +24,11 @@ concurrency:
   group: site
   cancel-in-progress: false
 
+# Read-only: the apt step below asks the releases what packages they carry and downloads them.
+# Cloudflare is reached with its own API token, not with this one.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Build and upload
@@ -45,12 +50,129 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # ---------------------------------------------------------------------------------------
+      # The apt repository, rebuilt from scratch into the assembled tree, at /apt.
+      #
+      # Why here and not in the release workflow: a Cloudflare Pages upload publishes a whole
+      # tree, so whatever is not in web/build/site at this moment is not on cartogenesis.com a
+      # minute later. A site deploy that did not carry apt/ would take the repository off the
+      # domain until the next release. Building it here means every deployment carries a complete,
+      # current repository, whatever triggered it.
+      #
+      # Why from the releases and not from a committed pool: the pool has to accumulate across
+      # releases, and the two ways to do that are to commit site/apt back to main from a workflow
+      # or to rebuild it from every release's .deb each run. The second keeps generated files —
+      # signed indexes and 100 MB packages — out of git, and makes the releases the single source
+      # of truth for what the repository offers. docs/DEPLOYMENT.md carries the reasoning.
+      # ---------------------------------------------------------------------------------------
+      - name: Check the signing secrets
+        id: apt
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
+        run: |
+          missing=
+          [ -n "$APT_SIGNING_KEY" ] || missing="$missing APT_SIGNING_KEY"
+          [ -n "$APT_SIGNING_PASSPHRASE" ] || missing="$missing APT_SIGNING_PASSPHRASE"
+          [ -n "$APT_SIGNING_KEY_ID" ] || missing="$missing APT_SIGNING_KEY_ID"
+          if [ -n "$missing" ]; then
+            # Said loudly, because an unsigned or absent repository is exactly the kind of thing
+            # nobody notices until someone runs `apt update` — but not fatally, because the rest
+            # of the site is fine and deploying it is better than not.
+            echo "::error::The apt repository will not be built: repository secret(s)$missing are not set. docs/INSTALL.md walks through creating all three. The rest of the site deploys as usual; /apt will be missing from it."
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install reprepro
+        if: steps.apt.outputs.sign == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro
+
+      # gpg-agent has to be able to take the passphrase from this script rather than from a
+      # terminal, and reprepro calls gpg itself, in its own process, where nothing can hand it
+      # one. So loopback pinentry is allowed, the passphrase is cached by making one throwaway
+      # signature, and reprepro's own call finds the agent already holding it.
+      - name: Import the signing key
+        if: steps.apt.outputs.sign == 'true'
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf 'allow-loopback-pinentry\ndefault-cache-ttl 7200\nmax-cache-ttl 7200\n' > ~/.gnupg/gpg-agent.conf
+          printf 'pinentry-mode loopback\n' > ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+          printf '%s\n' "$APT_SIGNING_KEY" | gpg --batch --quiet --import
+          printf 'priming the agent' | gpg --batch --yes --quiet \
+            --pinentry-mode loopback --passphrase "$APT_SIGNING_PASSPHRASE" \
+            --local-user "$APT_SIGNING_KEY_ID" --detach-sign --output /dev/null
+          echo "Imported and signed with $APT_SIGNING_KEY_ID."
+
       # Assembles web/build/site, then checks the tree that is about to be uploaded: two .wasm
       # files and no third left over, the six bundled fonts, no source map, and a loader stamp
       # that is a commit rather than the placeholder. A bad tree deploys perfectly happily and is
       # only discovered by a visitor, so it is checked here rather than after.
       - name: Assemble the site
         run: ./gradlew :web:assembleSite :desktop:siteTest --no-daemon --console=plain
+
+      # Built into web/build/site *after* the assembly rather than into site/ before it, for a
+      # reason that is easy to miss: every :desktop: test task declares the whole of site/ as an
+      # input, so a pool of 100 MB packages dropped in there would be hashed by Gradle on every
+      # run. The assembled tree is nobody's input.
+      - name: Rebuild the apt repository from every release
+        if: steps.apt.outputs.sign == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
+        run: |
+          set -euo pipefail
+
+          # reprepro's basedir: the committed conf/, with the signing key's id put in, and
+          # nothing else. Everything under it from here on is reprepro's to write.
+          apt=web/build/site/apt
+          mkdir -p "$apt/conf"
+          sed "s/__APT_SIGNING_KEY_ID__/$APT_SIGNING_KEY_ID/" \
+            site/apt/conf/distributions > "$apt/conf/distributions"
+
+          mkdir -p packages
+          for tag in $(gh release list --limit 200 --exclude-drafts --json tagName -q '.[].tagName'); do
+            # Not every release has a Linux file — the ones from before this workflow existed do
+            # not — so a release with nothing matching is ordinary rather than an error.
+            gh release download "$tag" \
+              --pattern 'Cartogenesis-*-linux-amd64.deb' --dir packages --clobber || true
+          done
+
+          if ! ls packages/*.deb >/dev/null 2>&1; then
+            echo "::warning::No release carries a Linux .deb yet, so the apt repository would be empty. Publishing the site without /apt."
+            rm -rf "$apt"
+            exit 0
+          fi
+
+          # Oldest first, so reprepro records the versions in the order they were released and
+          # the newest is the one apt offers. `sort -V` reads the version out of the file name.
+          for deb in $(ls packages/*.deb | sort -V); do
+            echo "Adding $deb"
+            reprepro --basedir "$apt" includedeb stable "$deb"
+          done
+
+          # The public half, at the address the source line's signed-by points at. Exported from
+          # the key that was just imported rather than committed, so it cannot fall out of step
+          # with whatever the indexes were actually signed with.
+          gpg --batch --armor --export "$APT_SIGNING_KEY_ID" > "$apt/key.asc"
+
+          # reprepro's working database and its input are not part of what a client reads, and
+          # conf/distributions now holds the key id, which is not published.
+          rm -rf "$apt/db" "$apt/lists" "$apt/conf"
+
+          echo "--- what apt will serve ---"
+          find "$apt" -type f | sort
 
       - name: Report what will be uploaded
         run: |

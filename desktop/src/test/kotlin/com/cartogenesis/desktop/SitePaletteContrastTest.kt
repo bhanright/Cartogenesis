@@ -131,7 +131,12 @@ class SitePaletteContrastTest {
         check("panel call to action", "brass", "ink-raised", AA)
         check("platform tag", "bone-dim", "ink-raised", AA)
 
-        // On a sunk panel: what a hovered or focused secondary button and download card become.
+        // A file name inside a sentence takes the mono face and the panel's own ground.
+        check("file name in a note", "bone", "ink-raised", AA)
+
+        // On a sunk panel: the three apt commands a Linux reader copies, and what a hovered or
+        // focused secondary button and download card become.
+        check("command block", "bone", "ink-sunk", AA)
         check("secondary button, hovered", "brass", "ink-sunk", AA)
         check("download card heading, hovered", "parchment", "ink-sunk", AA)
         check("download card text, hovered", "bone-dim", "ink-sunk", AA)

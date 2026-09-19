@@ -1,0 +1,220 @@
+name: Linux release
+
+# Builds the Linux half of a release and puts it on the GitHub release the tag names: a Debian
+# package and a portable tarball, beside the Windows files.
+#
+# Why a workflow rather than a machine: the Debian packager only runs on Debian, and the
+# maintainer's machine is Windows. The Windows zip and MSI are still built and the release still
+# created by hand from that machine, so this job does not create the release — it waits for it.
+#
+# It does not deploy anything. The apt repository that serves the .deb is rebuilt by the site
+# deploy, which is the only thing that can publish it; the last job here asks for that deploy.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag to build and upload to'
+        required: false
+        default: ''
+
+# One at a time, and no cancelling: two tags in quick succession would otherwise race to upload
+# to their own releases through the same `gh` rate limit, and a cancelled run leaves a release
+# with one of its two files.
+concurrency:
+  group: release-linux
+  cancel-in-progress: false
+
+permissions:
+  # `gh release upload` writes to the release.
+  contents: write
+  # The last job asks the site workflow to run, which is an Actions write.
+  actions: write
+
+jobs:
+  build:
+    name: Build, check and upload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # jpackage shells out to `fakeroot` to build the .deb, and ubuntu-latest does not carry it.
+      # Without it the packaging task fails late, after the whole application has been built.
+      - name: Install the Debian packager's fakeroot
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot
+
+      # gradle.properties is the one place the version is declared, so the file names are read
+      # from it rather than from the tag. A tag that disagrees with it is worth saying out loud —
+      # it usually means the property was not bumped — but it is not worth failing a release for,
+      # since the release the files land on is chosen by the tag either way.
+      - name: Read the version
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^cartogenesisVersion=//p' gradle.properties | tr -d '[:space:]')
+          if [ -z "$version" ]; then
+            echo "::error::gradle.properties declares no cartogenesisVersion."
+            exit 1
+          fi
+          tag="${{ inputs.ref || github.ref_name }}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Version $version, going to release $tag."
+          if [ "$tag" != "v$version" ]; then
+            echo "::warning::The tag is $tag and gradle.properties says $version. The files will be named after the property."
+          fi
+
+      - name: Desktop tests
+        run: ./gradlew --no-daemon --console=plain :desktop:test
+
+      - name: Build the distributable and the Debian package
+        run: ./gradlew --no-daemon --console=plain :desktop:createDistributable :desktop:packageDeb
+
+      # The packaged runtime is not the runtime the tests ran on — jlink trims it — and the one
+      # thing that has actually broken in it before is GPU detection, which no test in the suite
+      # can reach. So the packaged launcher is asked, here, on the runner.
+      #
+      # A hosted runner has no graphics device, so "unavailable" is the expected answer and not a
+      # failure: what is being checked is that the launcher starts, loads LWJGL, reaches a verdict
+      # and exits cleanly. A non-zero exit would mean the trimmed runtime is short of something.
+      - name: Ask the packaged launcher about the GPU
+        run: |
+          launcher=desktop/build/compose/binaries/main/app/Cartogenesis/bin/Cartogenesis
+          if [ ! -x "$launcher" ]; then
+            echo "::error::No packaged launcher at $launcher."
+            exit 1
+          fi
+          # +e so the exit code can be read and explained rather than ending the step unlabelled.
+          set +e
+          "$launcher" --gpu-check
+          status=$?
+          set -e
+          echo "The launcher exited $status."
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The packaged launcher's --gpu-check exited $status. Finding no device is not an error; a non-zero exit here means the trimmed runtime is missing something the launcher needs."
+            exit "$status"
+          fi
+
+      # Two files, named the way the release page names them: the package a Debian or Ubuntu
+      # reader installs, and a tarball for everyone else. The .deb is found by pattern rather
+      # than by name because jpackage decides its own spelling from the package name and version.
+      - name: Name the two files
+        id: files
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          mkdir -p upload
+
+          # -print -quit rather than `| head -1`: head closes the pipe, find dies of SIGPIPE, and
+          # pipefail would turn a successful search into a failed step.
+          built=$(find desktop/build/compose/binaries/main/deb -name '*.deb' -print -quit)
+          if [ -z "$built" ]; then
+            echo "::error::packageDeb produced no .deb."
+            exit 1
+          fi
+          deb="Cartogenesis-$version-linux-amd64.deb"
+          cp "$built" "upload/$deb"
+
+          tarball="Cartogenesis-$version-linux-portable.tar.gz"
+          # -C so the archive holds one `Cartogenesis/` folder rather than the build path.
+          tar -czf "upload/$tarball" \
+            -C desktop/build/compose/binaries/main/app Cartogenesis
+
+          echo "deb=$deb" >> "$GITHUB_OUTPUT"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          ls -l upload
+
+      # The release itself is created by hand from the maintainer's machine, with the Windows zip
+      # and MSI on it, and that can happen minutes after the tag is pushed. Uploading to a release
+      # that does not exist yet fails, so wait for it rather than lose the run.
+      - name: Wait for the release to exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          tag='${{ steps.version.outputs.tag }}'
+          for attempt in $(seq 1 60); do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release $tag exists."
+              exit 0
+            fi
+            echo "No release $tag yet (attempt $attempt of 60); waiting 30 s."
+            sleep 30
+          done
+          echo "::error::Release $tag did not appear within 30 minutes. Create it and re-run this workflow from the Actions tab with the tag as its ref."
+          exit 1
+
+      - name: Upload both files to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='${{ steps.version.outputs.tag }}'
+          # --clobber so a re-run after a fixed build replaces the file rather than failing on it.
+          gh release upload "$tag" \
+            "upload/${{ steps.files.outputs.deb }}" \
+            "upload/${{ steps.files.outputs.tarball }}" \
+            --clobber
+          echo "Uploaded to $tag:"
+          gh release view "$tag" --json assets -q '.assets[].name'
+
+  publish-apt:
+    name: Publish the apt repository
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # The apt repository is rebuilt from every release's .deb by the site deploy, because a
+      # Cloudflare Pages upload publishes a whole tree: a site deployment that did not carry
+      # `apt/` would take the repository off cartogenesis.com until the next release. So the
+      # reprepro run lives in site.yml, beside the assembly, and this job's whole job is to ask
+      # for a deploy now that the new .deb is on the release.
+      #
+      # The site workflow also runs on the tag push itself, on its own, and that run starts
+      # before this one has anything to include. Its concurrency group is serial and uncancelled,
+      # so the run asked for here lands second and is the one the domain ends up serving.
+      - name: Check the signing secrets before asking for a deploy
+        id: secrets
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
+        run: |
+          set -uo pipefail
+          missing=
+          [ -n "$APT_SIGNING_KEY" ] || missing="$missing APT_SIGNING_KEY"
+          [ -n "$APT_SIGNING_PASSPHRASE" ] || missing="$missing APT_SIGNING_PASSPHRASE"
+          [ -n "$APT_SIGNING_KEY_ID" ] || missing="$missing APT_SIGNING_KEY_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::The apt repository cannot be signed: repository secret(s)$missing are not set. docs/INSTALL.md walks through creating them. The release files are already uploaded; only the apt route is affected."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Skipped rather than failed: the two files are on the release and a reader can install
+      # from them. An unsigned-repository release is a smaller thing to go wrong than a red
+      # release workflow that says the whole release failed.
+      - name: Ask the site to deploy, which rebuilds the repository
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref='${{ inputs.ref || github.ref_name }}'
+          gh workflow run site.yml --ref "$ref" -f ref="$ref"
+          echo "Asked the site workflow to deploy $ref. It rebuilds apt/ from every release's .deb and publishes it with the site."

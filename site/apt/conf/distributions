@@ -1,0 +1,25 @@
+# The one distribution the apt repository serves, as reprepro reads it.
+#
+# `Codename: stable` is what a reader types in the source line, and it never moves: a source line
+# that has been pasted into someone's /etc/apt/sources.list.d is not something this repository can
+# go back and edit. It is not a Debian suite name borrowed for the occasion — it is this
+# repository's one channel, and the packages in it are the released versions.
+#
+# `Limit: -1` keeps every version in the pool rather than only the newest. The pool has to
+# accumulate: an apt repository that silently dropped last release's package would break anyone
+# pinning a version, and the repository is rebuilt from scratch on every deploy, so the limit is
+# the only thing deciding what survives.
+#
+# `SignWith` is filled in by the site deploy from the APT_SIGNING_KEY_ID repository secret. The
+# key id is not written here because this file is public and the id is one of the three things
+# the maintainer sets up once; docs/INSTALL.md walks through creating all three.
+
+Origin: Cartogenesis
+Label: Cartogenesis
+Codename: stable
+Suite: stable
+Architectures: amd64
+Components: main
+Description: Cartogenesis desktop builds for Debian and Ubuntu
+Limit: -1
+SignWith: __APT_SIGNING_KEY_ID__

@@ -254,6 +254,27 @@
     white-space:nowrap;margin-left:10px;vertical-align:2px;
   }
 
+  /* ---------- download and installation ----------------------------------- */
+  /* The same panel as a note, in the same grid: installing is a fact about the program like the
+     others, and giving it a dress of its own would say it was a different kind of thing. What it
+     does need that a note does not is somewhere to put a command, because the Linux route is
+     three lines a reader copies rather than a sentence they read.
+
+     A file name inside a sentence is set in the mono face and nothing else — no ground, no
+     border. It is there to mark where the prose stops and a literal string starts, and a tinted
+     box around three words in a paragraph is a bigger interruption than the thing it marks. */
+  code{font-family:var(--mono);font-size:.92em;color:var(--bone)}
+  /* A block a reader copies: on the sunk ground rather than the panel's own, so the three lines
+     read as something handed over rather than as more of the paragraph above them. It scrolls
+     sideways instead of wrapping — a source line broken across two lines pastes as two commands,
+     and the second one is not a command. */
+  .cmd{
+    font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--bone);
+    background:var(--ink-sunk);border:1px solid var(--hairline);
+    margin:0 0 12px;padding:12px 14px;overflow-x:auto;white-space:pre;
+  }
+  .cmd code{font-size:inherit}
+
   /* ---------- the ask, at the foot --------------------------------------- */
   /* Two lines of the same weight, side by side where there is room and stacked
      where there is not, on the page's own ground rather than on a panel. The
@@ -297,7 +318,7 @@
 
       <div class="actions">
         <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
-        <a class="btn secondary" href="/releases/latest" id="launch-desktop" target="_blank" rel="noopener">Download for Windows (recommended)</a>
+        <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
       </div>
       <p class="trust">Free and open source · Your maps stay on your device</p>
 
@@ -454,9 +475,59 @@
       </div>
 
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
-        <h3>Desktop version<span class="tag">Windows</span></h3>
-        <p>Generate larger worlds with a desktop app that uses every processor thread. Choose the portable zip or the installer. The installer is unsigned, so Windows shows a SmartScreen warning the first time. If you trust the download, choose “More info”, then “Run anyway”.</p>
+        <h3>Desktop version<span class="tag">Windows · Linux</span></h3>
+        <p>Generate larger worlds with a desktop app that uses every processor thread. Download and Installation below says what each platform offers and how to install it; the steps live there rather than here, so there is one copy of them to keep true.</p>
         <span class="go" id="release-line">Get the latest release ↗</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Installing, after the Notes and before the roadmap: a reader who has read what the program
+       is and what it will and will not do is the reader ready to be told how to get it, and the
+       roadmap is the answer to a different question. One card per platform, Linux the fullest
+       because it is the one with variables in it — which package manager, which driver, where the
+       launcher lives.
+
+       Every file name here is checked against site/downloads.txt by SiteAssemblyTest, and the
+       source line below is checked word for word against the one in docs/INSTALL.md: a page that
+       names a file the release does not carry, or a source line that differs by a character from
+       the documented one, is a page that sends a reader somewhere that does not work. -->
+  <section id="install">
+    <div class="section-head">
+      <h2>Download and Installation</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Choose a download for Windows or Linux, or run Cartogenesis in the browser.
+    </p>
+
+    <div class="practical">
+      <div class="panel">
+        <h3>Windows</h3>
+        <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
+        <p><code>Cartogenesis-&lt;version&gt;-windows-portable.zip</code> and <code>Cartogenesis-&lt;version&gt;.msi</code> on the release page.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Linux<span class="tag">Debian · Ubuntu</span></h3>
+        <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
+        <pre class="cmd"><code>sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
+echo "deb [signed-by=/etc/apt/keyrings/cartogenesis.asc] https://cartogenesis.com/apt stable main" | sudo tee /etc/apt/sources.list.d/cartogenesis.list
+sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
+        <p><code>Cartogenesis-&lt;version&gt;-linux-amd64.deb</code> and <code>Cartogenesis-&lt;version&gt;-linux-portable.tar.gz</code> on the release page.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Browser</h3>
+        <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
+        <p><code>Cartogenesis-&lt;version&gt;-web.zip</code> on the release page.</p>
+      </div>
+
+      <a class="panel" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">
+        <h3>The release page</h3>
+        <p>Every file above, for the current release, with the notes saying what changed in it.</p>
+        <span class="go">Get the latest release ↗</span>
       </a>
     </div>
   </section>

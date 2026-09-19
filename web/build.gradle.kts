@@ -246,6 +246,19 @@ tasks.register<Sync>("assembleSite") {
         // Documentation for whoever maintains the site, not part of the site.
         exclude("README.md")
 
+        // Three files that are about the site rather than part of it: the list of release file
+        // names the page's Download and Installation section is checked against, the rule that
+        // keeps reprepro's output out of git, and reprepro's own configuration, which the site
+        // deploy reads from here and writes back with the signing key's id in it.
+        //
+        // Everything else under site/ is copied as it stands, folders this script has never heard
+        // of included. The apt repository itself is not among them: it is 100 MB of packages, and
+        // every :desktop: test task declares site/ as an input, so the deploy builds it straight
+        // into the assembled tree after this task has run. See docs/DEPLOYMENT.md.
+        exclude("downloads.txt")
+        exclude("apt/.gitignore")
+        exclude("apt/conf/**")
+
         // The landing page's "What comes next" table, put in where the page keeps its marker.
         // A whole-line replacement, so the table takes the marker's own indentation with it.
         filesMatching("index.html") {

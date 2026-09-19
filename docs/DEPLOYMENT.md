@@ -61,6 +61,58 @@ change if it moves.
 The host must serve `.wasm` as `application/wasm`, or the browser's streaming compiler refuses it.
 Compression is worth turning on.
 
+## The apt repository
+
+`cartogenesis.com/apt` is a signed Debian repository, so `apt install cartogenesis` and
+`apt upgrade` work on Debian, Ubuntu and their relatives. It is served by the same Pages project as
+the rest of the site, from `apt/` in the assembled tree. `docs/INSTALL.md` carries the three
+commands a reader runs and the one-time setup of the signing key.
+
+**The only committed part is `site/apt/conf/distributions`**, which is reprepro's configuration and
+the one part of this a person writes. `dists/`, `pool/` and `key.asc` are written by `reprepro`
+during the deploy, straight into `web/build/site/apt/` rather than into `site/` — every `:desktop:`
+test task declares the whole of `site/` as an input, and a pool of 100 MB packages dropped in there
+would be hashed by Gradle on every run. `site/apt/.gitignore` covers a local experiment that writes
+there anyway.
+
+**The pool is rebuilt from the releases on every deploy**, not committed back to `main` by a
+workflow. Both would make the pool accumulate across releases, and the choice went this way for
+three reasons. Generated files stay out of git, which matters more here than usual: a `.deb` is
+around 100 MB, and committing one per release would grow the repository by that much per release,
+for ever. The releases become the single source of truth for what the repository offers, so a file
+deleted from a release page disappears from apt on the next deploy rather than lingering. And a
+workflow that pushes to `main` is a workflow that can conflict with a human push, which is a failure
+mode nobody wants on release day. What it costs is a few minutes of downloading per deploy and a
+hard dependency on the releases staying where they are.
+
+**The rebuild runs in `site.yml`, not in `release-linux.yml`**, although the release workflow is
+what produces the `.deb`. A Cloudflare Pages Direct Upload publishes a *whole tree*: whatever is not
+in `web/build/site` at the moment of upload is not on the domain a minute later. A site deploy that
+did not carry `apt/` — a copy change, a hand-run from the Actions tab — would therefore take the
+repository off the site until the next release. Building it in the deploy means every deployment
+carries a complete, current repository, whatever triggered it. `release-linux.yml`'s last job
+exists only to ask for a deploy once the new `.deb` is on the release; the site workflow's
+concurrency group is serial and uncancelled, so that run lands after the one the tag push started
+and is the one the domain ends up serving.
+
+Three repository secrets sign it: `APT_SIGNING_KEY` (the armoured private key),
+`APT_SIGNING_PASSPHRASE` and `APT_SIGNING_KEY_ID`. If any is missing the deploy prints an error
+naming it and publishes the site without `/apt` rather than failing — a release with an unsigned
+repository is a smaller thing to go wrong than a release that does not publish.
+
+Two mechanics that are easy to get wrong:
+
+- **`reprepro` signs through `gpg-agent`, in its own process**, where nothing can hand it a
+  passphrase. So the deploy allows loopback pinentry, makes one throwaway signature to put the
+  passphrase in the agent's cache, and lets reprepro's own call find it there.
+- **`Limit: -1` in `conf/distributions`** keeps every version in the pool. reprepro's default keeps
+  one, and since the repository is rebuilt from scratch each time, that default would quietly leave
+  the pool holding only the newest release.
+
+`_headers` caches `/apt/pool/*` for a year and `/apt/dists/*` not at all: a package's URL carries
+its version and is those bytes for ever, while a cached index is a reader who cannot see the
+release that was just published.
+
 ## Hosting it anywhere else
 
 Upload the contents of `web/build/dist/wasmJs/productionExecutable` to any static host; there is no

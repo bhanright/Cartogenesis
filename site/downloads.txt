@@ -1,0 +1,22 @@
+# Every file a release carries, by name, with <version> where the release's own number goes.
+#
+# One list, read by three readers. SiteAssemblyTest holds cartogenesis.com's Download and
+# Installation section, docs/INSTALL.md and docs/RELEASE_NOTES_TEMPLATE.md to it, so a page that
+# offers a file the release does not carry, or a release note whose table has drifted from the
+# page, fails the build rather than a reader's download.
+#
+# It lives beside the page rather than in a build script because it is data about a release and
+# not a build rule, and it is excluded from the assembled site: it is the page's source, not part
+# of the page. A file renamed on the release page is renamed here, once, and the three documents
+# are checked against the new spelling.
+#
+# Lines beginning with # are comments; blank lines are ignored.
+
+# Built and uploaded by hand from the maintainer's Windows machine.
+Cartogenesis-<version>-windows-portable.zip
+Cartogenesis-<version>.msi
+Cartogenesis-<version>-web.zip
+
+# Built and uploaded by .github/workflows/release-linux.yml.
+Cartogenesis-<version>-linux-amd64.deb
+Cartogenesis-<version>-linux-portable.tar.gz

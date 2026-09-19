@@ -1,9 +1,11 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.FlowRouting
+import com.cartogenesis.worldgen.pipeline.PlateStage
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sqrt
@@ -348,4 +350,166 @@ internal object ScaleFree {
     /** How far a departure sits from one, on a log scale, so half and double rank alike. */
     fun departureRank(departure: Double): Double =
         if (departure <= 0.0) Double.MAX_VALUE else abs(ln(departure))
+
+    // --- Where the world is, rather than what it measures --------------------------------------
+    //
+    // Everything above compares whole-world statistics, and a statistic cannot tell one world from
+    // another that happens to weigh the same. That is why the suite passed for months while the
+    // same seed was a different world at every grid (REALISM_PLAN.md, F35): the plate seeds' rows
+    // were drawn with a bound that was not a power of two, so every plate sat at a different
+    // latitude at every size, and the statistics of a shuffled world are still a world's
+    // statistics. The three comparisons below ask where the land is instead.
+
+    /**
+     * How far the same plate's seed sits from itself between two grids, in cells of the coarser.
+     *
+     * A seed is drawn as a fraction of the grid and then rounded to a cell, so two grids may
+     * disagree by that rounding and by nothing else: one cell of the coarser grid is the whole of
+     * what is allowed.
+     *
+     * Taken from the draw rather than from a generated world, so the clause can reach 2048 — where
+     * a world is a minute and belongs to [ScaleFreeAuditTest]'s tier — for the price of fourteen
+     * pairs of numbers.
+     */
+    fun plateSeedDriftCoarseCells(coarse: WorldGenConfig, fine: WorldGenConfig): Double {
+        val coarsePlates = PlateStage.drawPlateSeeds(coarse).seeds
+        val finePlates = PlateStage.drawPlateSeeds(fine).seeds
+        require(coarsePlates.size == finePlates.size) {
+            "the same seed drew ${coarsePlates.size} plates at ${coarse.width} and" +
+                " ${finePlates.size} at ${fine.width}"
+        }
+        var worst = 0.0
+        coarsePlates.indices.forEach { plate ->
+            val columnShare = abs(
+                coarsePlates[plate].seedX.toDouble() / coarse.width -
+                    finePlates[plate].seedX.toDouble() / fine.width
+            )
+            val rowShare = abs(
+                coarsePlates[plate].seedY.toDouble() / coarse.height -
+                    finePlates[plate].seedY.toDouble() / fine.height
+            )
+            worst = maxOf(worst, columnShare * coarse.width, rowShare * coarse.height)
+        }
+        return worst
+    }
+
+    /**
+     * How the coarse grid's own cell at ([column], [row]) is addressed on the finer one.
+     *
+     * Nearest cell, not an average: an average of plate ids is meaningless and an average of a
+     * land mask is a coastline. The coarse cell's centre falls exactly between two fine centres
+     * when the grids are a power of two apart, and the tie is broken downward.
+     */
+    private fun nearestFineCell(column: Int, row: Int, coarse: WorldMap, fine: WorldMap): Int {
+        val fineColumn = ((column + 0.5) * fine.width / coarse.width).toInt()
+            .coerceIn(0, fine.width - 1)
+        val fineRow = ((row + 0.5) * fine.height / coarse.height).toInt()
+            .coerceIn(0, fine.height - 1)
+        return fineRow * fine.width + fineColumn
+    }
+
+    /**
+     * A share of cells that agreed, the share of the grid that was asked, and how deep into what
+     * was asked the worst disagreement lay — a boundary distance in coarse cells for the plates,
+     * and unused for the land mask.
+     */
+    class FieldAgreement(
+        val matchedShare: Double,
+        val comparedShare: Double,
+        val deepestMismatchCells: Double = 0.0
+    )
+
+    /**
+     * What share of the coarse grid's plate interiors carry the same plate at the finer grid.
+     *
+     * A cell whose nearest plate boundary is further than one coarse cell away is in a plate's
+     * interior, and a finer grid has nothing to say about it that the coarse grid has not said
+     * already: the partition is a Voronoi diagram of the same fourteen points, and the domain warp
+     * that bends its edges is sampled in map coordinates. So the interior is asserted at all of
+     * it, and the cells the boundary runs through — where the warp is resolved finely enough for
+     * an edge to fall the other side of a cell centre — are left out and their share reported,
+     * because that share is the honest size of what is not being asked.
+     */
+    fun plateFieldAgreement(coarse: WorldMap, fine: WorldMap): FieldAgreement {
+        val boundaryDistanceCells = coarse.plates.boundaryDistance.data
+        var compared = 0L
+        var matched = 0L
+        var deepestMismatch = 0.0
+        for (row in 0 until coarse.height) {
+            for (column in 0 until coarse.width) {
+                val cell = row * coarse.width + column
+                if (boundaryDistanceCells[cell] <= INTERIOR_MARGIN_CELLS) continue
+                compared++
+                if (coarse.plates.plateId[cell] ==
+                    fine.plates.plateId[nearestFineCell(column, row, coarse, fine)]
+                ) {
+                    matched++
+                } else {
+                    deepestMismatch =
+                        maxOf(deepestMismatch, boundaryDistanceCells[cell].toDouble())
+                }
+            }
+        }
+        val cellCount = (coarse.width * coarse.height).toDouble()
+        return FieldAgreement(
+            matchedShare = if (compared == 0L) 0.0 else matched.toDouble() / compared,
+            comparedShare = compared / cellCount,
+            deepestMismatchCells = deepestMismatch
+        )
+    }
+
+    /**
+     * A cell further than this from the nearest plate boundary is a plate's interior, in cells of
+     * the coarse grid.
+     *
+     * One cell, which is what the distance transform is quantised to: a cell the boundary runs
+     * through reads about half a cell and its neighbour about one.
+     */
+    const val INTERIOR_MARGIN_CELLS = 1.0f
+
+    /**
+     * What share of the coarse grid's cells are land at both grids, and the share of them the
+     * shore touches.
+     *
+     * Land or water is a threshold on a height field, and the coast passes that follow it — the
+     * littoral grading, the drowned valleys, the delta fans — move a shoreline by cells, so a
+     * shore drawn at 1024 lands within about one fine cell, half a coarse one, of the shore drawn
+     * at 512. Every coarse cell the shore touches can therefore differ legitimately, and none of
+     * the rest can. Both shares are returned and the caller holds the first against the second,
+     * rather than against a number chosen to fit.
+     */
+    fun landMaskAgreement(coarse: WorldMap, fine: WorldMap): FieldAgreement {
+        var matched = 0L
+        var shoreTouched = 0L
+        val cellCount = coarse.width * coarse.height
+        for (row in 0 until coarse.height) {
+            for (column in 0 until coarse.width) {
+                val cell = row * coarse.width + column
+                if (coarse.sea.isLand[cell] ==
+                    fine.sea.isLand[nearestFineCell(column, row, coarse, fine)]
+                ) matched++
+                if (touchesShore(coarse, column, row)) shoreTouched++
+            }
+        }
+        return FieldAgreement(
+            matchedShare = matched.toDouble() / cellCount,
+            comparedShare = shoreTouched.toDouble() / cellCount
+        )
+    }
+
+    /** Whether this cell or any of its eight neighbours is the other side of the waterline. */
+    private fun touchesShore(world: WorldMap, column: Int, row: Int): Boolean {
+        val here = world.sea.isLand[row * world.width + column]
+        for (rowStep in -1..1) {
+            val neighbourRow = row + rowStep
+            if (neighbourRow !in 0 until world.height) continue
+            for (columnStep in -1..1) {
+                val neighbourColumn = (column + columnStep + world.width) % world.width
+                if (world.sea.isLand[neighbourRow * world.width + neighbourColumn] != here) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
 }

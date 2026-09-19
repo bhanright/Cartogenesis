@@ -1,5 +1,25 @@
 # To do
 
+- **A cut basin's floor is a plate on 718106 at 1024, and the guard reports it rather than asserting
+  it.** F35 made the finer grids the same world as the 512 one instead of worlds of their own, so
+  `GlacialBasinShapeTest` is now looking at ground it had never seen: a 167-cell cut basin at
+  (488,25) with **78.4% of its floor within a metre of one height over 51 m of relief, against 54.9%
+  allowed** — 1.43 times the bar. It is the family I2 exists for, on a world I2 never measured, and
+  the bar it breaks is Salar de Uyuni's flatness, an Earth figure that ground rule 5 forbids moving
+  to fit a measurement. So the floor clause asserts every other basin on the four worlds and prints
+  this one with the bar beside it, and the finding is kept non-empty so it cannot go quiet. Whoever
+  opens it should find what planed that floor before deciding anything; I2's own diagnosis is about
+  a trough's cross-section at 2048 and does not transfer unexamined. REALISM_PLAN.md row I2b.
+  2026-09-19, F35.
+- **The largest lake in the land is 1.12 times the Caspian's share once the grids agree.** The same
+  cause: with the plate seeds resolution-free, `OutletResolutionTest`'s six worlds are the 512 world
+  at three sizes rather than six unrelated ones, and **59758 at 2048 reads 1.84 times the Caspian's
+  share of Earth's land**. Pooled over all six the figure is 1.12; over the five without it, 0.98.
+  The Caspian's share is an Earth figure, so the pool asserts the five and that one world is printed
+  with Earth's figure beside it and carried as a finding. Note the shape of it before diagnosing:
+  the 512 figures did not move at all (59758 1.55x, 42 0.67x, both as on main), so whatever this is,
+  it is something the finer grids resolve — which is the same sentence I2's trough needed, and may
+  or may not be the same mechanism. REALISM_PLAN.md row F37. 2026-09-19, F35.
 - **A shore is still a cell over the bar, and nobody has looked at it.** On the merged tree — S2b's
   flood repair included — `StraightRunTest`'s `report how straight every shore is` finds one body of
   standing water on six worlds outside the bar it derives: a 296-cell lake at (1075,1998) of 364673

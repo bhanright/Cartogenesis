@@ -21,7 +21,7 @@ here, because keeping a second copy of any of them is how a copy goes stale:
   Mono bold, is not copied: the page never asks for it.)
 - **Every picture**, under `img/`. There are no image files in this folder at all. They are
   rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 718106 at 2048
-  with William's settings, cut to fixed windows — so a release that changes what a coastline looks
+  with the author's settings, cut to fixed windows — so a release that changes what a coastline looks
   like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
   how to pick a new one.
 

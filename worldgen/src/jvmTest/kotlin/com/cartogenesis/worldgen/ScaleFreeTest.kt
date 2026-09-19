@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
@@ -16,28 +17,34 @@ import org.junit.Assert.assertTrue
  * rescaling function rather than of the world; now that a reach is a length in kilometres and a
  * depth is a number of metres, the scaling is arithmetic and what is worth asserting is the thing
  * the contracts were standing in for — that the world at one grid is the world at another.
+ *
+ * Since F35 it asks that last question twice: once of the statistics, which is what the class was
+ * built on, and once of the ground itself, because a world whose plates have all moved weighs the
+ * same as the world it replaced and the statistics said so for a month.
  */
 class ScaleFreeTest {
 
     @Test
-    fun `the same world at 512 and 1024 measures the same in physical units`() {
+    fun `the same world at 512 and 1024 measures the same and stands on the same ground`() {
         val complaints = ArrayList<String>()
         val findings = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val coarse = ScaleFree.measure(worldAt(seed, 512), "seed $seed")
-            val fine = ScaleFree.measure(worldAt(seed, 1024), "seed $seed")
+            val coarseWorld = worldAt(seed, 512)
+            val fineWorld = worldAt(seed, 1024)
+            val coarse = ScaleFree.measure(coarseWorld, "seed $seed")
+            val fine = ScaleFree.measure(fineWorld, "seed $seed")
             ScaleFree.print(coarse)
             ScaleFree.print(fine)
             val verdict = ScaleFree.compare(coarse, fine)
             complaints += verdict.complaints
             findings += verdict.findings
+            complaints += standOnTheSameGround(seed, coarseWorld, fineWorld)
         }
         findings.forEachIndexed { rank, finding ->
             println("SCALEFREE FINDING ${rank + 1}. $finding")
         }
         assertTrue(
-            "the world is not the same world at 512 and 1024 on a metric this generator was" +
-                " holding: ${complaints.joinToString("; ")}",
+            "the world is not the same world at 512 and 1024: ${complaints.joinToString("; ")}",
             complaints.isEmpty()
         )
         // The other half of the claim, and what stops the clause above passing because nothing was
@@ -50,15 +57,124 @@ class ScaleFreeTest {
         )
     }
 
+    /**
+     * The same seed puts its plates in the same places at 512, 1024 and 2048.
+     *
+     * The clause the suite above did not have, and the reason F35 went a month unnoticed: measured
+     * in shares of the land and kilometres of coast, a world whose plates have all moved is still a
+     * plausible world. The seeds are the first thing the pipeline draws and everything else stands
+     * on them, so if they agree across grids the worlds are the same world, and if they do not,
+     * nothing downstream can be.
+     */
+    @Test
+    fun `the same seed puts its plates in the same places at every grid`() {
+        val worst = HashMap<String, Double>()
+        SEEDS.forEach { seed ->
+            listOf(1024, 2048).forEach { fineSize ->
+                val drift = ScaleFree.plateSeedDriftCoarseCells(
+                    configAt(seed, 512), configAt(seed, fineSize)
+                )
+                println("SCALEFREE plate seeds  seed %d  512 against %d  worst drift %.3f cells"
+                    .format(seed, fineSize, drift))
+                if (drift > PLATE_SEED_DRIFT_COARSE_CELLS) {
+                    worst["seed $seed at 512 against $fineSize"] = drift
+                }
+            }
+        }
+        assertTrue(
+            "a plate seed sits at a different fraction of the grid at one size than at another," +
+                " so the same seed is a different world at each: ${worst.entries.joinToString(";" +
+                    " ") { "${it.key} moved by ${"%.1f".format(it.value)} coarse cells" }}",
+            worst.isEmpty()
+        )
+    }
+
+    /**
+     * The plates own the same ground, and the sea stands on the same coast, at 512 and at 1024.
+     *
+     * Where the clause above asks about fourteen points, these two ask about every cell: the
+     * partition each grid grew from those points, and the land mask the sea level and the coast
+     * passes left. Both are compared by taking the fine grid's nearest cell to each coarse cell —
+     * see [ScaleFree.plateFieldAgreement] and [ScaleFree.landMaskAgreement] for what each one
+     * excuses and why.
+     */
+    private fun standOnTheSameGround(
+        seed: Long,
+        coarse: WorldMap,
+        fine: WorldMap
+    ): List<String> {
+        val complaints = ArrayList<String>()
+
+        val plates = ScaleFree.plateFieldAgreement(coarse, fine)
+        println(
+            ("SCALEFREE plate field  seed %d  512 against 1024  %.5f of the interior agrees" +
+                "  (the interior is %.3f of the grid; the deepest disagreement sits %.2f" +
+                " cells from a boundary)")
+                .format(
+                    seed, plates.matchedShare, plates.comparedShare, plates.deepestMismatchCells
+                )
+        )
+        if (plates.matchedShare < PLATE_INTERIOR_AGREEMENT) {
+            complaints.add(
+                "seed $seed: ${"%.5f".format(plates.matchedShare)} of the plate interiors agree" +
+                    " between 512 and 1024, under the $PLATE_INTERIOR_AGREEMENT a warped" +
+                    " boundary is worth — a cell further than" +
+                    " ${ScaleFree.INTERIOR_MARGIN_CELLS} coarse cell from a boundary belongs to" +
+                    " the same plate at any grid"
+            )
+        }
+
+        val land = ScaleFree.landMaskAgreement(coarse, fine)
+        println(
+            ("SCALEFREE land mask    seed %d  512 against 1024  %.5f of the grid agrees" +
+                "  (the shore touches %.5f of it)")
+                .format(seed, land.matchedShare, land.comparedShare)
+        )
+        if (land.matchedShare < 1.0 - land.comparedShare) {
+            complaints.add(
+                "seed $seed: the land mask agrees on ${"%.5f".format(land.matchedShare)} of the" +
+                    " grid between 512 and 1024, where only the" +
+                    " ${"%.5f".format(land.comparedShare)} the shore touches may differ"
+            )
+        }
+        return complaints
+    }
+
     internal companion object {
         /** The standard seeds, which are `GeographyAuditTest`'s and `EarthLikenessTest`'s. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
 
-        fun worldAt(seed: Long, size: Int): com.cartogenesis.worldgen.model.WorldMap {
+        /**
+         * How far a plate seed may sit from itself between grids, in cells of the coarser one.
+         *
+         * One cell. The draw is a fraction and the only thing between it and a cell is the
+         * rounding, which cannot be worth more than the cell it rounds into.
+         */
+        const val PLATE_SEED_DRIFT_COARSE_CELLS = 1.0
+
+        /**
+         * What share of a plate's interior must carry the same plate at both grids.
+         *
+         * Not all of it, and here is the cell it is not. A seed may sit a coarse cell from where
+         * it sits at the other grid — the clause above allows exactly that, and it is the rounding
+         * of a fraction into a cell — so the bisector between two seeds may move by a cell too;
+         * and the domain warp that bends a Voronoi edge into a meander is a displacement of many
+         * cells, so wherever its gradient is steep that one cell of bisector is carried some way
+         * into the map. Measured, the deepest disagreement on the four seeds sits 2.83 coarse
+         * cells from a boundary and there are four of them in a quarter of a million interior
+         * cells (0.99996 to 1.00000): that is the thickness of a warped boundary, not a different
+         * partition. A thousandth of the interior is the bar, four hundred times the worst
+         * measured and three orders of magnitude off the 0.139 to 0.257 the generator scored
+         * before F35 — the two cases are nowhere near each other.
+         */
+        const val PLATE_INTERIOR_AGREEMENT = 0.999
+
+        fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            return WorldGenerationEngine.generateBlocking(
-                if (size == 512) base else base.atResolution(size, size)
-            )
+            return if (size == 512) base else base.atResolution(size, size)
         }
+
+        fun worldAt(seed: Long, size: Int): WorldMap =
+            WorldGenerationEngine.generateBlocking(configAt(seed, size))
     }
 }

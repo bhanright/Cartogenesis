@@ -88,7 +88,7 @@ class ClimateTintTest {
 
         /**
          * The single bare-earth figure a grassland had before the biome's band bounded the
-         * drought's lift. See [steppeBefore], and REALISM_PLAN.md, F13.
+         * drought's lift. See [steppeBefore], and docs/DESIGN_LEDGER.md, F13.
          */
         const val BEFORE_GRASSLAND_BARE = 0.15f
 
@@ -192,7 +192,7 @@ class ClimateTintTest {
      * where that difference lives: measured on the rendered pixels of Atlas, desert sits at 40
      * degrees, forest at 78, and a steppe belongs between them with room either side. Before the
      * biome's band bounded the drought's lift it measured 46, six degrees off the desert and
-     * thirty-two off the forest. See REALISM_PLAN.md, F13.
+     * thirty-two off the forest. See docs/DESIGN_LEDGER.md, F13.
      */
     @Test
     fun `a steppe is drawn between the forest and the desert`() {

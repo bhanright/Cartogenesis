@@ -9,7 +9,7 @@ import kotlin.math.hypot
  * The two ways a map can come out ruled, measured: a course that holds one bearing for cell after
  * cell, and the standing water such a course leaves behind it.
  *
- * William saw one on seed 298405 at 1024 and called it "this diagonal rectangle section of river"
+ * The author saw one on seed 298405 at 1024 and called it "this diagonal rectangle section of river"
  * — 53 cells laid along one diagonal with square ends, in a straight-walled trench. F15 diagnosed
  * it and left it: the trench is ordinary stream-power incision along a reach the plain
  * steepest-of-eight rule ran dead straight over an apron smooth at the cell scale, and the reach
@@ -33,7 +33,7 @@ internal object RuledLines {
     /**
      * How far a cell may lie from the line and still count as on it.
      *
-     * F15's own figure, from the body William pointed at: its 53 cells all sit within 1.2 cells of
+     * F15's own figure, from the body the author pointed at: its 53 cells all sit within 1.2 cells of
      * one line. A little over one cell rather than exactly one, because a bar laid on a diagonal is
      * a staircase and the staircase itself is half a cell wide either side of its own line.
      */

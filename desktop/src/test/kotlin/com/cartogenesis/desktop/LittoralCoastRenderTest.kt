@@ -32,14 +32,14 @@ import org.jetbrains.skia.SamplingMode
  * lowest ground behind it, and the window with the most shoreline and the highest. Both crops are
  * taken at the same place in both renders, so the pair can be laid side by side.
  *
- * 298405 at 1024 is the world William was looking at when he said every coastline was too jagged;
+ * 298405 at 1024 is the world the author was looking at when he said every coastline was too jagged;
  * 718106 at 2048 on his own settings — 62% ocean, fourteen plates, twelve realms — is the world
  * the export-scale reviews use. In `:desktop` and in the audit tier because the renderer lives
  * here and because four worlds, one of them at 2048, is not a per-merge cost.
  */
 class LittoralCoastRenderTest {
 
-    /** The world William was looking at when he said every coastline was too jagged. */
+    /** The world the author was looking at when he said every coastline was too jagged. */
     @Test
     fun `298405 at 1024, before and after the grading`() {
         val dir = File("build/f17-crops").apply { mkdirs() }

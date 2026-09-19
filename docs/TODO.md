@@ -9,7 +9,7 @@
   to fit a measurement. So the floor clause asserts every other basin on the four worlds and prints
   this one with the bar beside it, and the finding is kept non-empty so it cannot go quiet. Whoever
   opens it should find what planed that floor before deciding anything; I2's own diagnosis is about
-  a trough's cross-section at 2048 and does not transfer unexamined. REALISM_PLAN.md row I2b.
+  a trough's cross-section at 2048 and does not transfer unexamined. docs/DESIGN_LEDGER.md row I2b.
   2026-09-19, F35.
 - **The largest lake in the land is 1.12 times the Caspian's share once the grids agree.** The same
   cause: with the plate seeds resolution-free, `OutletResolutionTest`'s six worlds are the 512 world
@@ -19,7 +19,7 @@
   with Earth's figure beside it and carried as a finding. Note the shape of it before diagnosing:
   the 512 figures did not move at all (59758 1.55x, 42 0.67x, both as on main), so whatever this is,
   it is something the finer grids resolve — which is the same sentence I2's trough needed, and may
-  or may not be the same mechanism. REALISM_PLAN.md row F37. 2026-09-19, F35.
+  or may not be the same mechanism. docs/DESIGN_LEDGER.md row F37. 2026-09-19, F35.
 - **A shore is still a cell over the bar, and nobody has looked at it.** On the merged tree — S2b's
   flood repair included — `StraightRunTest`'s `report how straight every shore is` finds one body of
   standing water on six worlds outside the bar it derives: a 296-cell lake at (1075,1998) of 364673
@@ -416,7 +416,7 @@
   the shoreline by the height of the land within 187 km and takes Earth's 31%, because no height
   derivable from Earth lands on that share: the postglacial rise calls 59% of the shoreline
   depositional and a coastal plain's own gradient calls 1.9%. The quantity in the gap is lithology —
-  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which the plan's H3
+  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which H3, a queued lithology chunk
   would supply. Until then a world's depositional share is Earth's by construction rather than by
   measurement, and a world that genuinely had less low coast than Earth would not show it.
   2026-09-12.

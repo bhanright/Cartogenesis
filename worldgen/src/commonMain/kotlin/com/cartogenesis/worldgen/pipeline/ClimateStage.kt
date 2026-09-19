@@ -147,7 +147,7 @@ object ClimateStage {
      *
      * `AbsoluteRainfallTest` re-measures both figures on every audited seed, and they land within
      * a few hundred mm of the target on all of them — which is what "not a per-world fit" means in
-     * practice. See REALISM_PLAN.md, A4.
+     * practice. See docs/DESIGN_LEDGER.md, A4.
      */
     internal const val MM_SCALE = 52653f
 
@@ -163,7 +163,7 @@ object ClimateStage {
      * against meant "wetter than most land", a common condition, not "wettest coast on the
      * planet", a rare one. 1200mm is what the two calibration seeds' land actually called "wet
      * enough to be 1.0" under the old per-world rescale, expressed as a fixed figure instead.
-     * See REALISM_PLAN.md, A4.
+     * See docs/DESIGN_LEDGER.md, A4.
      */
     internal const val REFERENCE_MM = 1200f
 
@@ -228,7 +228,7 @@ object ClimateStage {
      * A fifth is where `GeographyAuditTest`'s desert-in-band guard clears its bar on every audited
      * seed, and it is a search rather than a derivation: the guard does not move monotonically
      * with the constant, because the cells at issue are a genuine compact rain-shadow region and
-     * not noise. A later chunk may find a cleaner justification. See REALISM_PLAN.md, A4, for the
+     * not noise. A later chunk may find a cleaner justification. See docs/DESIGN_LEDGER.md, A4, for the
      * figures at each value tried.
      */
     private const val KOPPEN_SUMMER_CONCENTRATED_MM = 32f
@@ -454,7 +454,7 @@ object ClimateStage {
      *
      * A poor rule — it cannot see rainfall, and an ice sheet is made of snow — but it is the world
      * this generator produced before the balance existed, so it is kept exactly as the control the
-     * balance is measured against. See REALISM_PLAN.md, H2.
+     * balance is measured against. See docs/DESIGN_LEDGER.md, H2.
      */
     private const val ANNUAL_MEAN_ICE_C = -8f
 
@@ -576,7 +576,7 @@ object ClimateStage {
      * machinery and nothing else: the same energy balance, the same maritime and current
      * anomalies, the same two seasonal marches. The alternative — a bare latitude-and-altitude
      * annual mean at or below zero — could not see rainfall at all, and rainfall is half of what
-     * decides where a glacier is. See REALISM_PLAN.md, H2, for the measured cost.
+     * decides where a glacier is. See docs/DESIGN_LEDGER.md, H2, for the measured cost.
      *
      * [globalCoolingC] is not a shift applied to the finished field. It goes in as a forcing — a
      * dimmer sun — and the model answers with a colder world of its own, ice and all, so the
@@ -889,7 +889,7 @@ object ClimateStage {
      *
      * Internal rather than private so `ContinentalityTest` measures the same field the stage
      * actually used instead of re-deriving it and risking the two drifting apart.
-     * See REALISM_PLAN.md, A2, G4 and W1.
+     * See docs/DESIGN_LEDGER.md, A2, G4 and W1.
      */
     internal fun waterDistance(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val cellsAcross = config.width
@@ -1282,7 +1282,7 @@ object ClimateStage {
      * subtropical high's own centre, which is the belt the deserts depend on. It is derived rather
      * than chosen: at a tilt of zero it is exactly 1 and every band is the number it always was,
      * which is what keeps `seasons = false` identical to the pre-seasons world down to the bit.
-     * See REALISM_PLAN.md, A1, for what the unsharpened version measured.
+     * See docs/DESIGN_LEDGER.md, A1, for what the unsharpened version measured.
      */
     private fun seasonalBandSharpness(tiltDegrees: Float, dryness: Float): Float {
         val annual = bandAnomaly(SUBTROPICAL_HIGH_DEGREES, dryness)
@@ -1601,7 +1601,7 @@ object ClimateStage {
      * histogram.
      *
      * [percentile] is a share of the land, 0..1. Returns 0 when there is nothing to measure.
-     * See REALISM_PLAN.md, A4.
+     * See docs/DESIGN_LEDGER.md, A4.
      */
     internal fun landPercentile(
         precipitation: FloatField,
@@ -1758,7 +1758,7 @@ object ClimateStage {
      * Reading the coldest and warmest month rather than the annual mean is what puts a
      * high-latitude west coast in the right group. Bergen is temperate at an 8 C annual mean
      * because its *coldest month* is about 2 C — a fact the annual mean cannot see and the coldest
-     * month states directly. See REALISM_PLAN.md, A5 and A6.
+     * month states directly. See docs/DESIGN_LEDGER.md, A5 and A6.
      *
      * ## The moisture table below the aridity line
      *
@@ -1780,7 +1780,7 @@ object ClimateStage {
      * Mediterranean and monsoon are decided on the *year's* lopsidedness rather than its size, but
      * each ratio carries a wetness floor in real millimetres ([MEDITERRANEAN_WINTER_FLOOR_MM],
      * [MEDITERRANEAN_SUMMER_CEILING_MM], [MONSOON_SUMMER_FLOOR_MM]) so that two nearly rainless
-     * seasons cannot qualify on their ratio alone. See REALISM_PLAN.md, A4.
+     * seasons cannot qualify on their ratio alone. See docs/DESIGN_LEDGER.md, A4.
      */
     private fun classify(
         cellsAcross: Int,
@@ -1909,7 +1909,7 @@ object ClimateStage {
      * a real amount of rain — comparable to [MEDITERRANEAN_WINTER_FLOOR_MM] and
      * [MONSOON_SUMMER_FLOOR_MM]'s own floors on the same ratios elsewhere in [classify] — before
      * the ratio is trusted to mean a genuine wet/dry pattern rather than "both seasons are dry and
-     * one is marginally less so." See REALISM_PLAN.md, A4, for what the ratio measures without it.
+     * one is marginally less so." See docs/DESIGN_LEDGER.md, A4, for what the ratio measures without it.
      *
      * Negative or small at cold temperatures by construction, not by a guard: at an annual mean of
      * -15 C the threshold is already below zero, so no rainfall total can read as arid there and

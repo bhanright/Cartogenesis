@@ -218,7 +218,7 @@ internal object LittoralGrading {
      *
      * The one bound that keeps this a pass about the fringe rather than a pass about the coastline.
      * A re-entrant whose floor lies within the postglacial rise of today's shoreline is ground that
-     * was dry at the low stand, was cut by running water and was then flooded — the fringe William's
+     * was dry at the low stand, was cut by running water and was then flooded — the fringe the author's
      * crops are about, and the fringe the sediment has had six thousand years to fill. A re-entrant
      * deeper than that is an embayment that was already an embayment: the Bristol Channel, the Bay
      * of Biscay, a flooded rift. Sediment does not fill those, and neither does this.

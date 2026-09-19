@@ -13,7 +13,7 @@ import kotlin.math.sqrt
  * *distance* has moved to [JumpFloodDistance], which has no metric error at all; what is left here
  * is [com.cartogenesis.worldgen.pipeline.PlateStage]'s plate assignment, where only the
  * nearest-seed *label* is read and the metric decides nothing anybody can see, and the control in
- * `JumpFloodDistanceTest` that shows the faceting guard has teeth. See REALISM_PLAN.md, G4.
+ * `JumpFloodDistanceTest` that shows the faceting guard has teeth. See docs/DESIGN_LEDGER.md, G4.
  */
 object DistanceTransform {
 

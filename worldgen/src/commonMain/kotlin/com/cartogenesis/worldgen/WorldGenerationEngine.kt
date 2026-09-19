@@ -234,7 +234,7 @@ object WorldGenerationEngine {
                 // On a still ocean, deliberately: the gyre solve is the expensive half of a
                 // climate and it is worth well under two per cent of the ice mask. The finished
                 // map's ice, which is what the reader sees, is classified from the real climate
-                // below and does see the currents. See REALISM_PLAN.md, H2, for both figures.
+                // below and does see the currents. See docs/DESIGN_LEDGER.md, H2, for both figures.
                 val provisional =
                     if (config.glaciation.enabled && config.climate.snowBalance &&
                         cut.landCellCount > 0

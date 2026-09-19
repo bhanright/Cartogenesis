@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  * derived is the drainage area per cell, and that is [FlowRouting.accumulate] — the engine's own
  * routine — run over the engine's own tree with a weight of one cell each.
  *
- * Earth's figures and their sources are in `REALISM_PLAN.md`, M1; each is repeated beside the
+ * Earth's figures and their sources are in `docs/DESIGN_LEDGER.md`, M1; each is repeated beside the
  * constant that holds it, because a bar without its derivation is a bar somebody moved.
  */
 internal object EarthLikeness {

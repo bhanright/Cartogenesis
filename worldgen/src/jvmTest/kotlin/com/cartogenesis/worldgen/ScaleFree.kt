@@ -355,7 +355,7 @@ internal object ScaleFree {
     //
     // Everything above compares whole-world statistics, and a statistic cannot tell one world from
     // another that happens to weigh the same. That is why the suite passed for months while the
-    // same seed was a different world at every grid (REALISM_PLAN.md, F35): the plate seeds' rows
+    // same seed was a different world at every grid (docs/DESIGN_LEDGER.md, F35): the plate seeds' rows
     // were drawn with a bound that was not a power of two, so every plate sat at a different
     // latitude at every size, and the statistics of a shuffled world are still a world's
     // statistics. The three comparisons below ask where the land is instead.

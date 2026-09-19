@@ -26,7 +26,7 @@ import org.junit.Test
  * because it turned out to be the trough's cross-section and not the basin anyone suspected. And
  * the *basins*, off [com.cartogenesis.worldgen.pipeline.GlacialMass.basinFloor]: their outlines,
  * which must not run straight along a grid bearing for longer than their own size explains, and
- * their floors, which must not pile their cells at one height. See REALISM_PLAN.md, I2.
+ * their floors, which must not pile their cells at one height. See docs/DESIGN_LEDGER.md, I2.
  */
 class GlacialBasinShapeTest {
 
@@ -172,7 +172,7 @@ class GlacialBasinShapeTest {
      * within a metre of one height over 51 m of relief, against 54.9% allowed — and the bar it
      * breaks is Salar de Uyuni's flatness, an Earth figure that ground rule 5 forbids moving to
      * fit a measurement. So it is printed with the bar beside it and carried as a finding until
-     * the chunk that repairs it lands. See REALISM_PLAN.md, row I2b, and TODO.md.
+     * the chunk that repairs it lands. See docs/DESIGN_LEDGER.md, row I2b, and TODO.md.
      */
     private fun isTheOpenFlatFloor(basin: Basin): Boolean =
         basin.seed == 718106L && basin.column == 488 && basin.row == 25

@@ -46,7 +46,7 @@ class OutletResolutionTest {
      * 1.12 times where the five without it average 0.98. The bar is Earth's own figure and ground
      * rule 5 forbids moving one to fit a measurement, so the world is left out of the pool, its
      * figure printed with Earth's beside it, and carried as a finding until the chunk that repairs
-     * it lands. See REALISM_PLAN.md, row F37, and TODO.md.
+     * it lands. See docs/DESIGN_LEDGER.md, row F37, and TODO.md.
      */
     private fun isTheOpenLargestLake(seed: Long, size: Int): Boolean =
         seed == 59758L && size == 2048

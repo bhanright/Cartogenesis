@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
  * *same ground*, and separate pictures in a row on a page are not evidence of that: a strip cut
  * from one window is. A strip with more than one panel is published twice, once [Layout.ACROSS] and
  * once [Layout.DOWN], because the shape that carries the comparison on a desktop does not fit a
- * phone. See REALISM_PLAN.md, Site 3, for what the page has asked for and when.
+ * phone. See docs/DESIGN_LEDGER.md, Site 3, for what the page has asked for and when.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
 object SiteImagery {
 
     /**
-     * William's world, and the settings he generates with: 62% ocean, fourteen plates, twelve
+     * The author's world, and the settings he generates with: 62% ocean, fourteen plates, twelve
      * realms asked for. (The generator settles on fourteen; the number in the panel is a target
      * that coastlines and watersheds are allowed to overrule.)
      */
@@ -210,7 +210,7 @@ object SiteImagery {
      * [name] is set in capitals in the band and is the word the page's `alt` text has to list;
      * [detail] is the line under it, and says what the reading *is*. Both are taken from what the
      * code already says — a style's own `detail`, a climate field's own KDoc — rather than written
-     * for the page, because the page's prose is William's to write and a caption that describes a
+     * for the page, because the page's prose is the author's to write and a caption that describes a
      * map only works when a person wrote it. [detail] may be empty where there is nothing factual
      * to add.
      */
@@ -226,7 +226,7 @@ object SiteImagery {
     /**
      * Which way a figure's panels are laid out.
      *
-     * A strip laid [ACROSS] is the comparison William asked for, and it is the wrong shape for a
+     * A strip laid [ACROSS] is the comparison the author asked for, and it is the wrong shape for a
      * phone: fitted to a 375px screen its bands come out five pixels tall, and left at its own size
      * it has to be scrolled sideways, which is a thing readers do not discover. So the same panels
      * are composed a second time [DOWN] and the page hands that file to a narrow screen. Two files
@@ -293,7 +293,7 @@ object SiteImagery {
      *
      * A list rather than a fixed set, because the page has carried other figures before and may
      * again — four readings of one band and three annotated details, for a day. See
-     * REALISM_PLAN.md, Site 2 and Site 3, for what was tried and what was kept.
+     * docs/DESIGN_LEDGER.md, Site 2 and Site 3, for what was tried and what was kept.
      *
      * The four data views ignore the style — their colours carry meaning, and a prettier ramp would
      * make them lie (see `MapView.styled`) — so `MapStyle.ATLAS` stands there as the renderer's own

@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * swing by the same amount — which is Ireland with Siberia's winter. Measured on the same world
  * and the same cells, so nothing but the blend differs.
  *
- * See REALISM_PLAN.md, W1; A2 wrote the version of this guard that had a knob in it.
+ * See docs/DESIGN_LEDGER.md, W1; A2 wrote the version of this guard that had a knob in it.
  */
 class ContinentalityTest {
 

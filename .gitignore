@@ -27,7 +27,7 @@ keystore.properties
 # left untracked, so a `git add -A` cannot sweep them in by accident.
 /HOSTING.md
 
-# Worktrees for parallel chunks of docs/REALISM_PLAN.md, each in its own checkout here;
+# Worktrees for parallel chunks of work, each in its own checkout here;
 # they are merged by branch and must never be committed as files.
 /.claude/worktrees/
 
@@ -35,3 +35,6 @@ keystore.properties
 # is not part of the suite: every module, not just the desktop one, so a probe cannot be committed
 # from wherever it happened to be written.
 **/SeedProbe*.kt
+
+# Working notes for the maintainer; not part of the repository.
+/notes/

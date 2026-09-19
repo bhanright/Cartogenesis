@@ -2,10 +2,9 @@
 
 *Written 2026-09-12 against `main` at the H2 merge (Tracks A–E, G4, H1, H2, H4 landed; H5, G1
 and H3 in flight). Read after `GEOGRAPHY.md`, which says what the generator holds by construction,
-and `REALISM_PLAN.md`, whose ledger says how each of those was measured. This document says what
+and `DESIGN_LEDGER.md`, which says how each of those was measured. This document says what
 is still missing, judged against the geoscience literature rather than against other fantasy
-generators, and turns the gaps into chunks in the plan's format. Its ambition is the one William
-stated: a level of rigour and natural believability not yet seen in fantasy map generation.*
+generators, and turns the gaps into numbered chunks. Its ambition is a level of rigour and natural believability not yet seen in fantasy map generation.*
 
 ## 0. The verdict in one page
 
@@ -298,7 +297,7 @@ is no graticule or scale because the world has no size.
   river weight by Strahler order with pruning at low zoom, contour interval by zoom, a graticule
   and scale bar from `WorldScale`, a north arrow that means something once P1 gives the map a
   projection. Visual: large at whole-world scale.
-- **V3 Labels** — the Wonderdraft-style system William described: feature detection (continents,
+- **V3 Labels** — the Wonderdraft-style system the author described: feature detection (continents,
   seas, bays, capes, straits, isthmuses, ranges, deserts, regions), naming from the peoples'
   languages, placement along curves with collision avoidance, overrides that survive saves. Three
   chunks (detect, name, place); the render check is the whole point.
@@ -352,7 +351,7 @@ threshold set from what the generator produced last week. A single `EarthLikenes
 | Delta class mix | all three Galloway classes present | Nienhuis 2020 |
 | Realm size distribution | heavy-tailed, not uniform | Zipf-like; report only |
 
-Reported always, asserted where the plan's rule 5 allows: a bar moves to Earth's figure with the
+Reported always, asserted where the measure-do-not-tune rule allows: a bar moves to Earth's figure with the
 derivation beside it, never to the generator's last output.
 
 ## 10. Priority table
@@ -390,7 +389,7 @@ Effort: S small (a day of work), M (two to three), L (a week or more). Visual: 1
 every solid-earth chunk needs and which turns the resolution contracts into a property; then two
 parallel lines, S2 → S3 → R1 → I1 on the solid earth and W1 → W2 → W3 → K1 → K2/K3 on the fluid
 one, with P1 slotted where it touches the fewest open files; V1 and R2 whenever the raster is
-free; V3 last, as William asked, once the features it names exist.
+free; V3 last, as the author asked, once the features it names exist.
 
 ## 11. Sources consulted for this audit
 

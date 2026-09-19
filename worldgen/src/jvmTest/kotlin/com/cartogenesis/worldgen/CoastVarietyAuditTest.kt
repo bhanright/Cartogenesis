@@ -13,7 +13,7 @@ import kotlin.time.measureTime
 /**
  * Where the cell-scale fringe on every coast comes from, octave by octave.
  *
- * Asserts nothing. F17 begins with a diagnosis — William's crops at 1024 show every coastline, low
+ * Asserts nothing. F17 begins with a diagnosis — the author's crops at 1024 show every coastline, low
  * or mountainous, sheltered or exposed, carrying the same saw-tooth — and M1's pooled box dimension
  * of 1.20 sits inside Earth's 1.2 to 1.3 band, so the pooled figure cannot be what is wrong. This
  * asks the two questions the pooled figure cannot: at which scale the roughness sits, and which

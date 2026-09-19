@@ -132,7 +132,7 @@ class DepositionTest {
      * to 6290. The cut itself has not moved: exactly 62% of the cells still lie below it, and the
      * shoreline the percentile chooses is the same shoreline; what changed is the lower stand the
      * hydraulic rounds grade to, and so the terrain the percentile is taken over. See
-     * REALISM_PLAN.md, S1.
+     * docs/DESIGN_LEDGER.md, S1.
      *
      * And at H5b, which moves the shoreline twice over and in both directions. The receiver
      * clamp changes how deep the incision may cut in a round — the cap it replaces was written in

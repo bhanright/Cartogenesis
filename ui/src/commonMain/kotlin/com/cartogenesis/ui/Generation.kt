@@ -18,7 +18,7 @@ import kotlinx.coroutines.delay
  * screen a frame later. In a browser it was worth nothing at all. There is one thread there — the
  * page, the generator and every repaint share it — so the ten reports land one after another with
  * no frame between them, and the whole generation is a single unbroken block of arithmetic during
- * which nothing is painted. William hit that on his phone at 2048: ninety-odd seconds, which he was
+ * which nothing is painted. the author hit that on his phone at 2048: ninety-odd seconds, which he was
  * happy with, and "it does hang for a bit when you first hit generate without any sign it's still
  * working", which he was not. It was not hanging. It had no way to say so.
  *

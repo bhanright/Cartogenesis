@@ -403,7 +403,7 @@ class PanelKnobsTest {
 
     /**
      * 8192 does not complete on this build: it exhausts a 10 GB heap inside the generator after
-     * about nineteen minutes, before a pixel of the map is drawn (REALISM_PLAN.md, G2). So the size that
+     * about nineteen minutes, before a pixel of the map is drawn (docs/DESIGN_LEDGER.md, G2). So the size that
      * reaches the platform can never be 8192 while the ceiling stands at 4096 — not from the
      * button, which is disabled, and not from a preference written by an older build, which is why
      * [Exports.clamp] and not the button is what this test asks.

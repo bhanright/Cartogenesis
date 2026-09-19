@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  * controls are the model with its two mechanisms taken away one at a time — the heat transport,
  * and the ice-albedo feedback — because a guard that has only ever been green proves nothing.
  *
- * See REALISM_PLAN.md, W1.
+ * See docs/DESIGN_LEDGER.md, W1.
  */
 class EnergyBalanceTest {
 

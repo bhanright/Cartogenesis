@@ -14,7 +14,7 @@ package com.cartogenesis.cartography
  * looked right at 2048 and twice too heavy at 1024 — the same country, the same rivers, half the
  * sheet, the same ink. A share gives the same picture at every size: two and a half pixels at 1024,
  * five at 2048, ten at 4096, and a map printed twice as large has rivers twice as wide, exactly as
- * a map printed twice as large has everything else. See REALISM_PLAN.md, F15.
+ * a map printed twice as large has everything else. See docs/DESIGN_LEDGER.md, F15.
  *
  * The hairline is the exception and stays in pixels, because it is not a width at all — it is the
  * finest mark a nib can leave, and on a bigger sheet the smallest channel is still the smallest

@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * That the map is drawn for the scale it is being seen at, and says what that scale is.
  *
  * Four claims, and each has a control that is what the renderer did before generalisation existed
- * or what a plausible shortcut would do instead. See REALISM_PLAN.md, F14.
+ * or what a plausible shortcut would do instead. See docs/DESIGN_LEDGER.md, F14.
  *
  *  - **The coast stays inside its own band.** Douglas-Peucker promises the simplified line never
  *    strays further from the original than the tolerance it was given. The control is decimation —

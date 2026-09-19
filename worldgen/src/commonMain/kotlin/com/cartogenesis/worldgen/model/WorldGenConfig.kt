@@ -49,7 +49,7 @@ data class WorldScale(
      *
      * This is the figure the climate has always used for the lapse rate, and choosing it as the one
      * ruler is why every temperature on the map is where it was. The 8 km the sea-level and erosion
-     * constants assumed was Everest, which is to say a summit; see `REALISM_PLAN.md`, S1.
+     * constants assumed was Everest, which is to say a summit; see `docs/DESIGN_LEDGER.md`, S1.
      */
     val highestLandMetres: Float = 6_000f,
     /**
@@ -495,7 +495,7 @@ data class TectonicsConfig(
      *
      * It is also what makes the continents drown, and *where* they drown. A platform floating at
      * 840 m with 700 m of spread on it everywhere puts a fifth of itself under water wherever the
-     * noise happens to dip, interior included, which is the flooded continent William named in
+     * noise happens to dip, interior included, which is the flooded continent the author named in
      * S2's third pass; with the spread falling to
      * [cratonReliefStandardDeviationMetres] inland the same fifth drowns at the rim, which is
      * where Earth's is. [continentalCrustSubmergedShare] carries what the model actually drowns
@@ -536,7 +536,7 @@ data class TectonicsConfig(
      * Spent through [cratonReachKm], so the two are the ends of one profile and there is no step
      * anywhere. It is what puts the drowning at the rim: a stationary field with the whole
      * continent's spread on it drowns the interior wherever the noise happens to dip, which is
-     * what S2's third pass drew and what William named as flooded continents. Earth's drowned
+     * what S2's third pass drew and what the author named as flooded continents. Earth's drowned
      * continental crust is its shelves.
      */
     val cratonReliefStandardDeviationMetres: Float = 550f,
@@ -578,7 +578,7 @@ data class TectonicsConfig(
      * the higher octaves by what the lower ones have already built.
      *
      * Without it every cell of land carried the same texture, because the base field is one
-     * stationary random surface with one amplitude per crust. William, looking at S2's third pass
+     * stationary random surface with one amplitude per crust. the author, looking at S2's third pass
      * at 2048: *"the entire land has a very rough texture it did not have before ... no map of
      * Earth at any scale I've seen has that appearance."* Measured on the five standard worlds,
      * the tree before S2 puts 65 m of cell-scale departure on the lowest quarter of its land and
@@ -770,7 +770,7 @@ data class TectonicsConfig(
      * it, and a cap of that size walls the habitable ground behind it into a single region, which
      * `CultureRealmTest` reads as one people holding too much of the world. A plateau that swells
      * and sags is not only better geography, it is the difference between one ice cap and several.
-     * See REALISM_PLAN.md, B2, for the figures at a fifth of the variation and at a half.
+     * See docs/DESIGN_LEDGER.md, B2, for the figures at a fifth of the variation and at a half.
      */
     val plateauAlongVariation: Float = 0.50f,
     /**
@@ -806,7 +806,7 @@ data class TectonicsConfig(
      * floor is not the plane it looks like, and every amplitude tried put a closed sub-basin below
      * the sea-level cut that the post-cut outlet cannot open. `RiftDepthTest` and
      * `RiftDepthAuditTest` are what is left of that — the measurements, without the change. See
-     * REALISM_PLAN.md, E7, for the figures.
+     * docs/DESIGN_LEDGER.md, E7, for the figures.
      */
     val riftDepth: Float = 0.25f,
     /** Half-width of the rift trough, in cells. */
@@ -1119,7 +1119,7 @@ data class TectonicsConfig(
  * had been renormalised to its own extremes, so "62% ocean" was a statement about the histogram
  * and not about the planet, the hypsometric curve came out as one peak straddling the shoreline,
  * and erosion could take four kilometres off a range without the range rising by a millimetre in
- * reply. See `REALISM_AUDIT.md` 1.2 and REALISM_PLAN.md, S2.
+ * reply. See `REALISM_AUDIT.md` 1.2 and docs/DESIGN_LEDGER.md, S2.
  */
 @Serializable
 data class IsostasyConfig(
@@ -1310,7 +1310,7 @@ data class IsostasyConfig(
      * *present* ice still holds down and the ground the *former* ice has already let go: the
      * rebound is the absence of a load rather than a load of its own. S2 takes the ice mask the
      * glaciation stage produces and gives it a thickness; I1 gives the sheet a Vialov profile and
-     * this reads it instead. See REALISM_PLAN.md, S2 and `REALISM_AUDIT.md` section 5.
+     * this reads it instead. See docs/DESIGN_LEDGER.md, S2 and `REALISM_AUDIT.md` section 5.
      */
     val iceLoad: Boolean = true,
     val iceDensity: Float = 917f,
@@ -1449,7 +1449,7 @@ data class SeaConfig(
      * from the water it removed, and ponds the channels crossing a drowned tract into exactly the
      * thin grid-bearing bars `GlaciationTest` exists to catch. With the cap the river mouths this
      * rule was written for are still rescued — the pockets a river ends in are a handful of cells,
-     * not an inland sea — and none of that follows. See REALISM_PLAN.md, H5, for the figures.
+     * not an inland sea — and none of that follows. See docs/DESIGN_LEDGER.md, H5, for the figures.
      *
      * At or below the cap, not above it, so a body exactly this size becomes a lake.
      *
@@ -2241,7 +2241,7 @@ data class GlaciationConfig(
      * world with 4,047 frozen cells, 92 of them in channelled country and not one glacier — so it
      * had no glacial lakes at all and the lake guard collapsed to zero. That is the correct answer
      * to "where are the glaciers today" and the wrong answer to "what does this landscape look
-     * like", and the distinction is what this setting is. See REALISM_PLAN.md, H2.
+     * like", and the distinction is what this setting is. See docs/DESIGN_LEDGER.md, H2.
      */
     val glacialMaximumC: Float = 6f,
     /**
@@ -2471,7 +2471,7 @@ data class GlaciationConfig(
      * shared by how deeply a cell is buried as well as by how far across it lies: the valley floor
      * is under the whole thickness and is planed, the shoulder is barely under the ice and is
      * barely touched, and rock standing above the ice surface is not touched at all. See
-     * REALISM_PLAN.md, I2.
+     * docs/DESIGN_LEDGER.md, I2.
      *
      * Six hundred metres is what a large valley glacier measures. Radio-echo sounding puts the
      * Aletsch at about 900 m at its thickest and 300 to 500 m over most of its length, and the
@@ -2888,7 +2888,7 @@ data class WorldGenConfig(
      * is still written as a count of cells, and carrying that count across a change of grid is
      * what this function is for. Writing the widths in kilometres instead would do exactly the
      * same arithmetic in a different place; it is a rename with no physics under it, and it is in
-     * `TODO.md` rather than here. See REALISM_PLAN.md, S1 and S2.
+     * `TODO.md` rather than here. See docs/DESIGN_LEDGER.md, S1 and S2.
      *
      *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur
      *    that softens the plate base. Left alone, a 4x larger grid makes both four times narrower

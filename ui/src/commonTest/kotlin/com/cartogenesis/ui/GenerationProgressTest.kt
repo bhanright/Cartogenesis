@@ -16,7 +16,7 @@ import kotlinx.coroutines.test.runTest
  * project had ran the engine on a thread of its own. In a browser there is one thread: pressing
  * Generate sets the busy state and then the first stage takes the thread and does not give it back
  * until the tenth has finished, so nothing the press changed is ever painted. From the outside that
- * is a page that has stopped answering — which is what William reported from his phone at 2048.
+ * is a page that has stopped answering — which is what the author reported from his phone at 2048.
  *
  * So the test does what a browser does. It runs the generation and a second coroutine on the *same*
  * dispatcher, and asks what that second coroutine — standing in for the frame the browser wants to

@@ -167,7 +167,7 @@ internal object CoastRoughness {
      *
      * [coastlineBoxCount] asks whether a box holds both land and water, which a box of one cell
      * never can, so M1's fit starts at four. The octave table has to reach the cell, because that
-     * is the scale William's crops are about. The smallest change that gets there: a box still
+     * is the scale the author's crops are about. The smallest change that gets there: a box still
      * tiles at its own size, but the test looks at the block one cell wider — the shoreline passes
      * through a box when there is land and water within a cell of it. At four cells and above the
      * extra row and column change the count by a percent or two and the two functions agree; at

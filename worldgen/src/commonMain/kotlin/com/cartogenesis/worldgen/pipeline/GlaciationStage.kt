@@ -102,7 +102,7 @@ internal data class GlacialMass(
  * The cruder mask this replaced — a provisional mean annual temperature at or below freezing —
  * cannot tell a snowy highland from a frozen desert and so froze every cold interior on the map.
  * That rule is still here, behind `ClimateConfig.snowBalance`, as the control the guard needs. See
- * REALISM_PLAN.md, H2.
+ * docs/DESIGN_LEDGER.md, H2.
  *
  * ### Two regimes, decided by relief
  *
@@ -154,7 +154,7 @@ internal data class GlacialMass(
  * runs dead straight for tens of cells; a union of three-by-three blocks has edges at 0 and 90
  * degrees; four-connected rings are Manhattan diamonds and their contours meet at 45. What that
  * drew was a level slab with a straight edge and, where a tributary's bar crossed the trunk's, a
- * cross. See REALISM_PLAN.md, I2.
+ * cross. See docs/DESIGN_LEDGER.md, I2.
  *
  * A basin's shape comes from the valley it sits in, so the ground is asked at every step: the
  * footprint is the *valley floor*, bounded by the height the valley walls stand at as well as by
@@ -291,7 +291,7 @@ object GlaciationStage {
         //    long way down its flanks.
         //  - otherwise the older rule: a provisional annual mean at or below
         //    [GlaciationConfig.freezingC], which called every cold place frozen whether or not
-        //    any snow ever reached it. See REALISM_PLAN.md, H2.
+        //    any snow ever reached it. See docs/DESIGN_LEDGER.md, H2.
         var frozenCount = 0
         val frozen = BooleanArray(cellCount)
         if (snowBalance != null) {
@@ -705,7 +705,7 @@ object GlaciationStage {
         // which lost its own sheet ten thousand years ago, is still coming back up at a centimetre
         // a year. The load is handed to the same flexure the hydraulic rounds use; what the map
         // shows of the rebound is the ground the *former* ice has already let go, since only the
-        // ice that is still here is weighed. See `IsostasyConfig.iceLoad` and REALISM_PLAN.md, S2.
+        // ice that is still here is weighed. See `IsostasyConfig.iceLoad` and docs/DESIGN_LEDGER.md, S2.
         val iceDepression = iceLoadDepression(config, frozen, isLand, carved)
 
         onBudget?.invoke(

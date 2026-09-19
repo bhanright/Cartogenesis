@@ -495,7 +495,7 @@ class LakeWaterBalanceTest {
      * parent every cell gets is whichever neighbour the wavefront happened to reach first, which
      * on ground the deposition fans left exactly flat is the lowest cell index — scan order. The
      * result is a river running due east or due south for tens of cells, several of them in
-     * parallel, which is what William saw at 2048.
+     * parallel, which is what the author saw at 2048.
      *
      * Measured as the share of a drawn river's steps that repeat the previous step's bearing.
      * Water does repeat itself — a river down a real slope holds its bearing about half the time —

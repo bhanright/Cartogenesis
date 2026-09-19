@@ -42,7 +42,7 @@ data class OceanResult(
  * passes to close a basin, where a few thousand on a small grid converge properly and cost far
  * less. The result is then interpolated back up.
  *
- * See REALISM_PLAN.md, G3 and H4.
+ * See docs/DESIGN_LEDGER.md, G3 and H4.
  */
 object OceanStage {
 
@@ -122,7 +122,7 @@ object OceanStage {
      * ice is. The gyre solve is the expensive half of that provisional climate and is worth well
      * under two per cent of the ice mask, so it is skipped there. The real ocean, currents and
      * all, is solved once as it always was, on the carved terrain, and the climate that classifies
-     * the map the reader sees is computed from it. See REALISM_PLAN.md, H2, for the measured cost
+     * the map the reader sees is computed from it. See docs/DESIGN_LEDGER.md, H2, for the measured cost
      * and the measured difference.
      */
     internal fun withoutCurrents(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =

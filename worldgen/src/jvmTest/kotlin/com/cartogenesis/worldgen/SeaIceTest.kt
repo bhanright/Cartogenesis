@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * The control for all three is `ClimateConfig.seaIce` off, which is the world before W1: a polar
  * ocean evaporating as freely as the tropics.
  *
- * See REALISM_PLAN.md, W1.
+ * See docs/DESIGN_LEDGER.md, W1.
  */
 class SeaIceTest {
 

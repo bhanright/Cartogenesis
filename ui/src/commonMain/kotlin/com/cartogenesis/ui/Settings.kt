@@ -48,7 +48,7 @@ data class AppSettings(
      * the processor's own die — and a wire name that disagrees with the property it carries is a
      * thing a reader has to hold in their head. Nothing is distributed, so it moves; the cost is
      * that a settings file written before this opens with the switch off, which is the default
-     * and is the safe end of it. See `CODE_STYLE.md`, "Serialised names".
+     * and is the safe end of it. See `docs/CONVENTIONS.md`, "Serialised names".
      */
     @SerialName("graphicsAccelerationAtLaunch")
     val graphicsAccelerationAtLaunch: Boolean = false,

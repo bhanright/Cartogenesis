@@ -80,7 +80,7 @@ data class LakeResult(
      * and no river is drawn over it, so a trunk carrying a whole catchment arrives as the widest
      * channel on the map, crosses as a one-pixel thread of standing water — a dotted line, where
      * the strip runs diagonally and the cells touch only at their corners — and leaves as the
-     * widest channel on the map again. That thread is what William saw between two thick rivers on
+     * widest channel on the map again. That thread is what the author saw between two thick rivers on
      * seed 298405 at 1024 (F15); the lake it belongs to is 61 cells sprawled over 27 by 18.
      *
      * So the tracer and the renderer stop at *open* water and run through the rest, which puts the
@@ -160,7 +160,7 @@ data class RiverResult(
  * lakes the fill implies against what their catchments can keep wet, accumulate rainfall downstream,
  * and trace the resulting channels to the coast — or to a lake with no way out of it.
  *
- * See REALISM_PLAN.md, E1 and E2, and GEOGRAPHY.md for what each rule is judged against.
+ * See docs/DESIGN_LEDGER.md, E1 and E2, and GEOGRAPHY.md for what each rule is judged against.
  */
 object RiverStage {
 
@@ -494,7 +494,7 @@ object RiverStage {
      * reads a gradient of exactly one nudge per cell pointing due east or due south, and beats
      * every diagonal because a diagonal's drop is divided by the root of two. The result is a
      * channel running dead straight from one shore of a lake to the other, and since every row of
-     * the lake does the same thing, several of them in parallel. See REALISM_PLAN.md, "Render
+     * the lake does the same thing, several of them in parallel. See docs/DESIGN_LEDGER.md, "Render
      * review after Track E", for the runs that were measured.
      *
      * None of that is a fact about the terrain — it is the fill's bookkeeping showing through — so

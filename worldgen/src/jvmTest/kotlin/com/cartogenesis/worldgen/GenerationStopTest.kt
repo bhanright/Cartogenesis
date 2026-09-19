@@ -22,7 +22,7 @@ import kotlinx.coroutines.withTimeout
  *
  * The pipeline is ordinary blocking arithmetic from end to end — the one `suspend` in it exists so
  * a WebGPU accelerator can await its device — so before F11 a cancelled coroutine went on computing
- * a world nobody wanted until the last landmark was placed. That is the whole of William's
+ * a world nobody wanted until the last landmark was placed. That is the whole of the author's
  * complaint: "sometimes I notice I wanted to change a setting and I don't want to wait for it to
  * finish". So each long loop now asks, between one round and the next, whether the generation is
  * still wanted.

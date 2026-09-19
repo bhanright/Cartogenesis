@@ -26,7 +26,7 @@ import org.junit.Test
  * because it turned out to be the trough's cross-section and not the basin anyone suspected. And
  * the *basins*, off [com.cartogenesis.worldgen.pipeline.GlacialMass.basinFloor]: their outlines,
  * which must not run straight along a grid bearing for longer than their own size explains, and
- * their floors, which must not pile their cells at one height. See REALISM_PLAN.md, I2.
+ * their floors, which must not pile their cells at one height. See docs/DESIGN_LEDGER.md, I2.
  */
 class GlacialBasinShapeTest {
 

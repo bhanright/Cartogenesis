@@ -19,7 +19,7 @@ import kotlin.math.sqrt
  * was falling. Siberia is colder than the Norwegian coast in every month and carries no ice sheet,
  * because almost no snow reaches it; Patagonia's snowline stands at about 1000 m and the Atacama's,
  * at the same latitude on the far side of a desert, at about 6000 m. A temperature threshold
- * cannot tell those two apart and calls every cold interior an ice cap — see REALISM_PLAN.md, H2,
+ * cannot tell those two apart and calls every cold interior an ice cap — see docs/DESIGN_LEDGER.md, H2,
  * for what that measured against Earth's own ice share.
  *
  * So: accumulation against ablation, per cell, out of the four seasonal fields the climate stage

@@ -396,7 +396,7 @@
   the shoreline by the height of the land within 187 km and takes Earth's 31%, because no height
   derivable from Earth lands on that share: the postglacial rise calls 59% of the shoreline
   depositional and a coastal plain's own gradient calls 1.9%. The quantity in the gap is lithology —
-  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which the plan's H3
+  Finland, the Canadian Shield and western Scotland are flat, ragged and rock — which H3, a queued lithology chunk
   would supply. Until then a world's depositional share is Earth's by construction rather than by
   measurement, and a world that genuinely had less low coast than Earth would not show it.
   2026-09-12.

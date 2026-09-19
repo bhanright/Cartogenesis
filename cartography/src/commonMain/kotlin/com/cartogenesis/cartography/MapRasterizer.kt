@@ -24,7 +24,7 @@ enum class MapView(val label: String) {
     SUMMER_RAINFALL("Rainfall, summer"),
     WINTER_RAINFALL("Rainfall, winter"),
     // "Tectonic plates" rather than "Plates", which in a list beside Rainfall and Winds reads as a
-    // count of something. The enum constant is the wire name and does not move; see CODE_STYLE.md.
+    // count of something. The enum constant is the wire name and does not move; see docs/CONVENTIONS.md.
     PLATES("Tectonic plates"),
     CURRENTS("Ocean currents"),
     WIND("Winds"),
@@ -758,7 +758,7 @@ object MapRasterizer {
      * past the coast, and the round cap that blends one cell-long segment into the next then adds
      * half a stroke on top of that. Under the five-pixel pen that preceded this the ink reached
      * about three pixels past the shoreline — a blob of river sitting on the open sea. See
-     * REALISM_PLAN.md, F15, for the per-seed figures.
+     * docs/DESIGN_LEDGER.md, F15, for the per-seed figures.
      *
      * A round cap centred half a stroke back from the shore, on the other hand, is tangent to it:
      * the last pixel of the stroke is the shoreline pixel and the sea takes over with no seam. So

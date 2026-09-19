@@ -149,7 +149,7 @@ class GroundTextureTest {
      * A plain is smooth at the cell and a range is not, and a stationary field cannot tell them
      * apart.
      *
-     * William, looking at S2's third pass at 2048: *"the entire land has a very rough texture it
+     * The author, looking at S2's third pass at 2048: *"the entire land has a very rough texture it
      * did not have before ... no map of Earth at any scale I've seen has that appearance."* The
      * base relief was one random surface with one amplitude per crust, so the finest thing the
      * grid could draw was as loud on a coastal plain as on a mountain front. Earth's is not:
@@ -235,7 +235,7 @@ class GroundTextureTest {
     /**
      * What a continent drowns is its rim, because that is where its crust is thin.
      *
-     * William, on the same render: *"still substantial flooded continents / inland seas."*
+     * The author, on the same render: *"still substantial flooded continents / inland seas."*
      * Isostasy drowns whatever continental crust stands below the datum, and with the crust one
      * thickness everywhere and one spread of relief on it, that is wherever the noise happens to
      * dip — the middle of a continent as readily as its edge. Earth's continental crust is

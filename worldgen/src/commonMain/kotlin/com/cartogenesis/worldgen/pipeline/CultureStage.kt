@@ -53,7 +53,7 @@ data class CultureResult(
  * its trunk river so the water can serve as a frontier; a people usually lives on both banks and
  * treats the river as its road, so the coarser partition is both cheaper and closer to right.
  *
- * See REALISM_PLAN.md, B3.
+ * See docs/DESIGN_LEDGER.md, B3.
  */
 object CultureStage {
 
@@ -216,7 +216,7 @@ object CultureStage {
      * capitals — and for the same reason. Left unweighted, every hearth crowds onto whichever
      * landmass has the best-scoring ground, which is nearly always the largest one; the few
      * hearths that land there then split it between too few competitors, and one of them swallows
-     * the rest. See REALISM_PLAN.md, B3, for what that measured.
+     * the rest. See docs/DESIGN_LEDGER.md, B3, for what that measured.
      */
     private fun chooseHearths(
         units: BasinUnits,

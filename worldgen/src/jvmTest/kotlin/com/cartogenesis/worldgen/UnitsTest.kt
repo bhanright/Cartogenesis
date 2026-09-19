@@ -26,7 +26,7 @@ import org.junit.Assert.assertTrue
  * as twice the cells. A constant that had quietly kept its own number would not move at all, which
  * is exactly what the second test below shows.
  *
- * See `REALISM_PLAN.md`, S1.
+ * See `docs/DESIGN_LEDGER.md`, S1.
  */
 class UnitsTest {
 

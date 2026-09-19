@@ -92,7 +92,7 @@ data class PlateResult(
      * the whole of what made "62% ocean" a statement about a histogram rather than about a planet:
      * with the field normalised, one tall massif pushed every other landform down the ramp, the
      * hypsometric curve came out as a single peak straddling the shoreline, and the same 120 m of
-     * sea-level fall was a different level on every seed. See [Isostasy] and REALISM_PLAN.md, S2.
+     * sea-level fall was a different level on every seed. See [Isostasy] and docs/DESIGN_LEDGER.md, S2.
      */
     val height: FloatField,
     /**
@@ -139,7 +139,7 @@ data class PlateResult(
      * exactly 1. That is what lets a consumer tell an Appalachian belt from an Alpine one without
      * measuring either, and it is why this is an *age* rather than an erodibility: what a shield,
      * a worn orogen and an active one should erode like is the lithology stage's question, not
-     * this one's. See REALISM_PLAN.md, H1 and H3.
+     * this one's. See docs/DESIGN_LEDGER.md, H1 and H3.
      */
     val crustAge: FloatField
 )
@@ -1156,7 +1156,7 @@ object PlateStage {
                             // The generator before the crust pairs: one belt profile for every
                             // convergent pair, whatever the crusts. Kept so `BoundaryPairTest`
                             // can measure the world that was replaced rather than take its word
-                            // for it. See REALISM_PLAN.md, B2.
+                            // for it. See docs/DESIGN_LEDGER.md, B2.
                             val broadFalloff = beltFalloff(distanceFromBoundary, beltReachCells * widthScale)
                             if (broadFalloff <= 0f && narrow <= 0f) continue
                             upliftHere = when (interaction.type) {
@@ -1204,7 +1204,7 @@ object PlateStage {
                         // a plateau edge from reading as a drawn curve. It was written to hide the
                         // octagonal facets a chamfer distance left on the widest plateaus and is
                         // kept as scenery now that the distance is Euclidean. See
-                        // REALISM_PLAN.md, G4.
+                        // docs/DESIGN_LEDGER.md, G4.
                         val edgeJitter = EDGE_JITTER_MIN + EDGE_JITTER_SPAN *
                             (0.5f + 0.5f * widthNoise.fbm(
                                 column * EDGE_JITTER_CYCLES / cellsAcross,
@@ -1319,7 +1319,7 @@ object PlateStage {
                                     // low end to drain to and sills to break it into reaches the
                                     // notch can finish. It is also what a filled sag looks like:
                                     // the Mississippi embayment and the Benue trough carry a river
-                                    // down the axis, not a chain of lakes. See REALISM_PLAN.md,
+                                    // down the axis, not a chain of lakes. See docs/DESIGN_LEDGER.md,
                                     // H5, for the lake this left at 2048 before it was added.
                                     -tectonics.riftDepth * tectonics.failedRiftFill * strength *
                                         roughness * alongRange *
@@ -1343,7 +1343,7 @@ object PlateStage {
                                         // height for the whole run of the boundary. Kept so
                                         // `RiftSegmentationTest` can measure the world that was
                                         // replaced rather than take its word for it. See
-                                        // REALISM_PLAN.md, E4.
+                                        // docs/DESIGN_LEDGER.md, E4.
                                         -tectonics.riftDepth * strength *
                                             plateauFalloff(
                                                 distanceFromBoundary,
@@ -1418,7 +1418,7 @@ object PlateStage {
                                         // where a rift stands on land, so it is deliberately
                                         // modest: a sill high enough to dam a half-graben for
                                         // twelve rounds of erosion leaves a lake the notch cannot
-                                        // drain. See REALISM_PLAN.md, E4, for what that measured.
+                                        // drain. See docs/DESIGN_LEDGER.md, E4, for what that measured.
                                         val sill = tectonics.riftSillHeight * strength *
                                             (1f - segment.taper) *
                                             beltFalloff(
@@ -1596,7 +1596,7 @@ object PlateStage {
      * low-amplitude harmonics of the rim radius, seeded from the world seed and this vent's own
      * index so that no two cones match without a shared [Random] or a hash order. Off reproduces
      * the single-sample, unmodulated stamp the guard measures its "before" against. See
-     * REALISM_PLAN.md, E3, for the eight-fold amplitudes at each grid.
+     * docs/DESIGN_LEDGER.md, E3, for the eight-fold amplitudes at each grid.
      */
     private fun stampSeamount(
         uplift: FloatField,
@@ -2099,7 +2099,7 @@ object PlateStage {
                 // draws let a segment come out much taller than it is wide, which is a knife-edge
                 // ridge. Where such a ridge crosses shallow sea it clears the surface as a strip
                 // of land a couple of cells wide with a strait either side, the exact failure
-                // `RibbonLandTest` exists to catch. See REALISM_PLAN.md, E4, for the ribbon that
+                // `RibbonLandTest` exists to catch. See docs/DESIGN_LEDGER.md, E4, for the ribbon that
                 // measured.
                 val shoulderVariation = tectonics.riftSegmentShoulderVariation
                 val shoulderSize = (1f + shoulderVariation * (2f * draw() - 1f)).coerceAtLeast(0.2f)

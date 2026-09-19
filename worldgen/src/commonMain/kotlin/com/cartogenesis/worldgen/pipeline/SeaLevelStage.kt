@@ -49,7 +49,7 @@ data class SeaLevelResult(
  *
  * The background — what each rule is modelling, what it was measured against, and what was tried
  * and reverted on the way — is in `GEOGRAPHY.md` and in [SeaConfig]'s own documentation. See
- * REALISM_PLAN.md, B1, B2, H5 and H5b.
+ * docs/DESIGN_LEDGER.md, B1, B2, H5 and H5b.
  */
 object SeaLevelStage {
 
@@ -113,7 +113,7 @@ object SeaLevelStage {
      * survives this merge and the ten does not, because it was read against a lowstand of the old
      * shallow depth. A pass that cuts more can only shorten the retreat, and the loop leaves early
      * when a pass finds nothing, so sixteen still bounds it.
-     * See REALISM_PLAN.md, H5b, S1 and F22, for the pass-by-pass figures.
+     * See docs/DESIGN_LEDGER.md, H5b, S1 and F22, for the pass-by-pass figures.
      */
     private const val MAX_POST_CUT_OUTLET_PASSES = 16
 
@@ -134,7 +134,7 @@ object SeaLevelStage {
      *
      * The hydraulic rounds call this once per round to find the base level they grade to, and
      * handing them a lower one is what lets a valley continue below today's shoreline. See
-     * [SeaConfig.lowstandMetres] and REALISM_PLAN.md, H5 and S1.
+     * [SeaConfig.lowstandMetres] and docs/DESIGN_LEDGER.md, H5 and S1.
      *
      * Named apart from [apply] rather than overloading it: a caller that wanted the whole stage
      * and reached the two-float form by accident would silently lose the enclosure rule, the
@@ -229,7 +229,7 @@ object SeaLevelStage {
      * it as the concentric bands around every landmass that S2's first pass was called out for.
      *
      * Shaping the shelf earlier, as a depression on oceanic crust before the percentile ran, was
-     * tried and reverted; see [SeaConfig] and REALISM_PLAN.md, B1.
+     * tried and reverted; see [SeaConfig] and docs/DESIGN_LEDGER.md, B1.
      */
     fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult =
         applyWithValleyBar(height, config, DrownedValleys.RESOLVED_SHARE_OF_A_CELL)
@@ -360,7 +360,7 @@ object SeaLevelStage {
      *
      * The cut itself stays where the percentile put it. Solving instead for the rank at which the
      * *ocean* covers what the slider asks for was written and reverted; see
-     * [SeaConfig.enclosedSeaMaxKm2], `GEOGRAPHY.md` and REALISM_PLAN.md, H5.
+     * [SeaConfig.enclosedSeaMaxKm2], `GEOGRAPHY.md` and docs/DESIGN_LEDGER.md, H5.
      */
     private fun markUnreachableWaterAsLand(
         base: SeaLevelResult,
@@ -466,7 +466,7 @@ object SeaLevelStage {
      * Deterministic and re-runnable: the pass reads only the height field and the config, so
      * `WorldGenerationEngine`'s stage reuse gets the same answer as a fresh generation.
      *
-     * See [SeaConfig.postCutOutlet], `GEOGRAPHY.md` and REALISM_PLAN.md, H5b, for what this was
+     * See [SeaConfig.postCutOutlet], `GEOGRAPHY.md` and docs/DESIGN_LEDGER.md, H5b, for what this was
      * measured to do.
      */
     private fun drainDrownedBasins(
@@ -557,7 +557,7 @@ object SeaLevelStage {
      * nature, in a lump of ocean floor at a near-uniform depth, and the bracketing bin has measured
      * as much as 5% of the map. A second pass over the few hundred cells of that one bin picks the
      * height that puts exactly the right number of cells below it, for one extra scan and an array
-     * a few thousand floats long. See REALISM_PLAN.md, B2.
+     * a few thousand floats long. See docs/DESIGN_LEDGER.md, B2.
      */
     private fun thresholdAtRank(height: FloatField, targetRank: Long): Float {
         val lowest = height.min()

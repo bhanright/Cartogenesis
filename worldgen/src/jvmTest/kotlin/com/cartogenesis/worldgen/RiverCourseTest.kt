@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * drawn courses covered 0.484 of the watercourses they stood for by length, and 0.408 over six
  * seeds at 2048, where 1.0 is the definition — a river *is* its own longest watercourse.
  *
- * The second is William's. A lake fills its basin to the spill, which at the ends of the basin
+ * The second is the author's. A lake fills its basin to the spill, which at the ends of the basin
  * covers the channel that feeds it; where that strip is one cell wide the tracer used to stop at
  * it and start again on the far side, and the map drew a whole catchment's trunk as a one-pixel
  * thread of standing water between two thick channels. See `LakeResult.openWater`.
@@ -220,7 +220,7 @@ class RiverCourseTest {
                 broken++
             }
             // A gap: narrow water with a drawn channel above it and a drawn channel below, and no
-            // line across. This is the thread William saw, counted.
+            // line across. This is the thread the author saw, counted.
             val fedByADrawnChannel = BooleanArray(cells)
             for (donor in 0 until cells) {
                 if (!drawn[donor]) continue

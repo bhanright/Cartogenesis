@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  *    once. On an abyssal plain the floor wanders either side of a level over a whole basin, so the
  *    same arithmetic draws a ragged nest of closed loops through the middle of open water, saying
  *    nothing and looking like a stain, which is what a render review found in an open basin at
- *    2048. Below [ABYSSAL_PLAIN_GRADIENT] the contour fades out. See REALISM_PLAN.md, F13.
+ *    2048. Below [ABYSSAL_PLAIN_GRADIENT] the contour fades out. See docs/DESIGN_LEDGER.md, F13.
  *
  * How fast the floor falls is measured over [slopeStencil] rather than between two neighbouring
  * cells, and that is the other half of the same fix: a generated sea floor is rough at cell scale,

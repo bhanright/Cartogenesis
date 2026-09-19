@@ -84,7 +84,7 @@ class OutletIncisionTest {
      *
      * The bar is 1.5 rather than 1.4, and what it still refuses is what it was written to refuse:
      * with `SeaConfig.postCutOutlet` off the same basin stands at 2.5 times the Caspian, which is
-     * the figure H5b measured and the one the pass exists to bring down. See REALISM_PLAN.md, S1.
+     * the figure H5b measured and the one the pass exists to bring down. See docs/DESIGN_LEDGER.md, S1.
      */
     private val drownedChaos = 1.5
 

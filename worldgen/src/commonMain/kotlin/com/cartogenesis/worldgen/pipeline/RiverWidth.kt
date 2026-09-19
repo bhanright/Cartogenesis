@@ -25,7 +25,7 @@ import kotlin.math.sqrt
  * whose rivers were sized by an older rule can be sized again from the flow the save already
  * carries, with no threshold to reconstruct.
  *
- * See REALISM_PLAN.md, F10.
+ * See docs/DESIGN_LEDGER.md, F10.
  */
 object RiverWidth {
 

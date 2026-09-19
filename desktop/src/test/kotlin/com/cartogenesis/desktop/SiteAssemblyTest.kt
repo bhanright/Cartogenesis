@@ -689,7 +689,7 @@ class SiteAssemblyTest {
         assertTrue(
             strangers.isEmpty(),
             "the page reaches out to " + strangers.joinToString() + "; only " +
-                allowed.joinToString() + " belong here. See ground rule 10 in REALISM_PLAN.md."
+                allowed.joinToString() + " belong here: this repository names only its own home."
         )
     }
 

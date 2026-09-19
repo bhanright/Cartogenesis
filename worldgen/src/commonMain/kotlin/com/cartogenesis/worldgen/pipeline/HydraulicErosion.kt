@@ -55,7 +55,7 @@ internal data class RoundMass(
      * is a hole in a river's bed: the next round's priority flood has to raise it, and along a
      * channel those raised cells line up into the thin grid-bearing bars `GlaciationTest`'s comb
      * measurement catches. Measured per mechanism because the plan asks for exactly one clamp to
-     * be added on evidence rather than four on suspicion. See REALISM_PLAN.md, H5b, for the
+     * be added on evidence rather than four on suspicion. See docs/DESIGN_LEDGER.md, H5b, for the
      * counts.
      *
      * Measured on the rock, which is the surface the next round's fill will route over: the spoil
@@ -331,7 +331,7 @@ internal object HydraulicErosion {
         // uplift stacks on it and springing back under what the rivers carry away. They are here
         // rather than in the plate stage because neither is a thing that happens once: a range
         // that is being pushed up while it is being cut down reaches a height where the two
-        // balance, and that balance is the whole of what S2 exists to model. See REALISM_PLAN.md,
+        // balance, and that balance is the whole of what S2 exists to model. See docs/DESIGN_LEDGER.md,
         // S2, and [Isostasy].
         val tectonics = config.tectonics
         val scale = config.scale
@@ -569,7 +569,7 @@ internal object HydraulicErosion {
             // number spent as a height one, and an alluvial dam could stand `1 / landRange` times
             // higher than the no-uphill rule allows — about four times, on the worlds measured.
             // The incision side had the same muddle and was closed first; this is the
-            // deposition half of it. See REALISM_PLAN.md, H5b and E6.
+            // deposition half of it. See docs/DESIGN_LEDGER.md, H5b and E6.
             val settled = if (carryingSediment) relative.copyOf() else relative
             if (carryingSediment) {
                 load.fill(0.0)
@@ -657,7 +657,7 @@ internal object HydraulicErosion {
             // feeding it — an alluvial dam, which is a real landform and which the deposition's
             // own no-uphill rule owns. So this is the only clamp in the file, and it is here on
             // the evidence rather than on suspicion. `ReceiverClampTest` prints the table; see
-            // REALISM_PLAN.md, H5b, for the counts.
+            // docs/DESIGN_LEDGER.md, H5b, for the counts.
             //
             // The bound is Braun and Willett's (2013, *Geomorphology* 180-181, 170-179 — the
             // FastScape scheme), and every landscape-evolution model since has carried it:
@@ -979,7 +979,7 @@ internal object HydraulicErosion {
                                 // A real fan slopes away from the river that built it and is
                                 // rough, so this one does too. The taper is a fraction of the rim
                                 // rather than a charge per cell; see [LAKE_FAN_SLOPE], and
-                                // REALISM_PLAN.md, E5, for the flat-floored lakes it replaced.
+                                // docs/DESIGN_LEDGER.md, E5, for the flat-floored lakes it replaced.
                                 levelOf = { candidate, stepsFromApex ->
                                     val depth = 2f * rates.pondDepth *
                                         (1f + LAKE_FAN_SLOPE * stepsFromApex / reachCells.coerceAtLeast(1)) *
@@ -1280,7 +1280,7 @@ internal object HydraulicErosion {
      * Charged against the fraction of the fan's rim and not against the cell, because a charge
      * per cell gives the same lake a different floor at every grid — which is the thing
      * the units exist to prevent. One and a half against a rim fraction reproduces the 512
-     * figure exactly and holds it at every grid. See REALISM_PLAN.md, E6, for the depths measured
+     * figure exactly and holds it at every grid. See docs/DESIGN_LEDGER.md, E6, for the depths measured
      * each way.
      */
     private const val LAKE_FAN_SLOPE = 1.5f
@@ -1642,7 +1642,7 @@ internal object HydraulicErosion {
      *
      * The measurement the receiver clamp is justified by, taken after each mechanism of a round
      * in turn so that the clamp could be put where the pits actually come from rather than
-     * everywhere a clamp might plausibly belong. See REALISM_PLAN.md, H5b. Judged against the round's own routing — the D8
+     * everywhere a clamp might plausibly belong. See docs/DESIGN_LEDGER.md, H5b. Judged against the round's own routing — the D8
      * receivers and the flow accumulation the fill produced when the round opened — because that
      * is the network the mechanisms were working on.
      *

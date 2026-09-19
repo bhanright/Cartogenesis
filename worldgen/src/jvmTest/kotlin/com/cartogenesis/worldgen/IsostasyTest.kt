@@ -36,7 +36,7 @@ import org.junit.Assert.assertTrue
  *    ground in front of it sinks under the sediment;
  *  - and ice holds its bed down.
  *
- * See REALISM_PLAN.md, S2, and [Isostasy].
+ * See docs/DESIGN_LEDGER.md, S2, and [Isostasy].
  */
 class IsostasyTest {
 

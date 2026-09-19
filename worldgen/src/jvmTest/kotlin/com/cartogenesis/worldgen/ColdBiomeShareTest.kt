@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * review caught by looking at the map rather than at the numbers. Two shares of land, printed per
  * seed and pooled, are the smallest thing that would have said so in a test.
  *
- * See REALISM_PLAN.md, W1.
+ * See docs/DESIGN_LEDGER.md, W1.
  */
 class ColdBiomeShareTest {
 

@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 /**
  * Not every coast is a ria.
  *
- * M1 measures the generator's coastline at 1.20 pooled, inside Earth's band, and William's crops at
+ * M1 measures the generator's coastline at 1.20 pooled, inside Earth's band, and the author's crops at
  * 1024 still showed every coast — low or mountainous, sheltered or exposed — carrying the same
  * cell-scale saw-tooth. Both are true because a pooled figure cannot see uniformity: Earth's 1.25
  * is Britain, and the same series has Norway above 1.5 and Australia at 1.13, while this generator
@@ -91,7 +91,7 @@ class LittoralCoastTest {
      * shows over one octave is the roughness it shows over the next. This generator's was not. The
      * coastline of release 2.0.2 measures 1.582 with a one-cell ruler against a two-cell one and
      * 1.260 from four cells to sixteen — an excess of 0.322 concentrated entirely in the finest
-     * octave, which is the tooth on every cell of every coast that William was looking at. A disc
+     * octave, which is the tooth on every cell of every coast that the author was looking at. A disc
      * drawn on the same grid reads 1.006 against 1.000, so the excess is the coast and not the ruler.
      *
      * Measured by length rather than by box count, deliberately. A box count at one cell can return

@@ -259,7 +259,7 @@ internal object FlowRouting {
      *
      * Also the whole rule when [flowDirections] is asked for it, because a guard that has only ever
      * been green proves nothing: the straight-bar census is run against this as well as against the
-     * facet's answer, and asserts that this one fails it. See `REALISM_PLAN.md`, F18.
+     * facet's answer, and asserts that this one fails it. See `docs/DESIGN_LEDGER.md`, F18.
      */
     private fun steepestNeighbourOf(
         width: Int,

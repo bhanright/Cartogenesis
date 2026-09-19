@@ -9,7 +9,7 @@ import kotlin.math.sqrt
  * unless a caller asks for it, and allocating it changes no world. It exists because the question
  * "which of the four things that lay sediment made *that* shape" could not be answered from the
  * finished map — a raft of new land looks the same whether a lake fan or a delta built it.
- * See REALISM_PLAN.md, E5.
+ * See docs/DESIGN_LEDGER.md, E5.
  */
 internal class DepositionLog(cells: Int) {
 
@@ -120,7 +120,7 @@ internal object DeltaFan {
     // asymmetric outline the hashed phases can produce, which was the hope — a set of phases that
     // comes out nearly mirror-symmetric is a lobe drawn with a compass by accident — so
     // `DeltaOutlineTest` sets its bar between the measured populations instead. See
-    // REALISM_PLAN.md, E5.
+    // docs/DESIGN_LEDGER.md, E5.
     private const val WOBBLE_WEIGHT_2 = 1.0f
     private const val WOBBLE_WEIGHT_3 = 0.7f
     private const val WOBBLE_WEIGHT_5 = 0.5f
@@ -359,7 +359,7 @@ internal object DeltaFan {
          * outermost cell is lower than the lobe on both sides of it, lower than the ground ahead,
          * and lower than the groove behind it, which is to say it is a pit. Without this check the
          * grooves made more flat ground than the slope they were cut into removed; see
-         * REALISM_PLAN.md, E5, for the four seeds' figures.
+         * docs/DESIGN_LEDGER.md, E5, for the four seeds' figures.
          *
          * So each ray is walked, one cell at a time, out to its own rim; if it meets anything that
          * is not open water, or runs off the pole, that distributary does not exist. What is left
@@ -606,7 +606,7 @@ internal inline fun growFan(
     // enclosed pocket, which is the thing the outlet notch exists to remove. Filling outward from
     // the apex instead makes "the lobe is a filled region" true by construction, and it is what a
     // delta does: it fills its accommodation space from the apex out, and where that space is deep
-    // it simply does not get as far. See REALISM_PLAN.md, E5, for what the two orders measured.
+    // it simply does not get as far. See docs/DESIGN_LEDGER.md, E5, for what the two orders measured.
     val count = scratch.admittedCount
     scratch.reset()
     for (rank in 0 until count) {
@@ -631,7 +631,7 @@ internal inline fun growFan(
         // direction is not monotone in distance: a cell five cells out where the rim is six stands
         // lower than a cell six cells out where the rim is twelve, so every bay in the outline puts
         // a dip in the plain behind it, and a dip with the lobe all round it is a cell with nowhere
-        // downhill — a delta with a rougher outline but a worse surface, and see REALISM_PLAN.md,
+        // downhill — a delta with a rougher outline but a worse surface, and see docs/DESIGN_LEDGER.md,
         // E5, for what that measured on the four guard seeds.
         // Graded to the full reach instead, the surface falls with distance from the apex
         // and nothing else, so every cell has a lower neighbour straight out from the mouth by

@@ -977,7 +977,7 @@ private fun Application(
 
                     Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
                         // Only over the map. The strip is translucent ink laid on a chart, and on a
-                        // page of text it is a lid: it hid the top of the atlas on William's phone
+                        // page of text it is a lid: it hid the top of the atlas on the author's phone
                         // and, since the header holding "Show map" is inside the sheet here, there
                         // was then nothing on screen that went back. The wide arrangement has
                         // always withheld it, and [PaneTopBar] is what the compact one shows
@@ -1141,7 +1141,7 @@ private const val DRAG_TO_SETTLE_PIXELS = 24f
  * the toolbar's one glyph, and the panel's header, which carries Atlas and Show map, is inside the
  * pull-up sheet. That is right while the map is on screen and wrong the moment it is not: the two
  * strips belong to the picture, so over a page of text they are noise, and the one along the top
- * edge is worse than noise. William found it on his phone against 2.0.0 — the atlas opened
+ * edge is worse than noise. the author found it on his phone against 2.0.0 — the atlas opened
  * underneath a translucent band, and the only button that would have closed it was behind a sheet
  * he had no reason to think held it.
  *
@@ -1426,7 +1426,7 @@ private fun LabelChip(label: MapLabel) {
  * Typed text is held locally and applied only on Enter or on the Go button, never on every
  * keystroke and never on losing focus: regenerating is expensive, applying as you type would
  * kick off a generation for each digit of a six-digit number, and applying on focus loss started
- * a world the moment the reader clicked elsewhere to change another setting (William, 2.0.1).
+ * a world the moment the reader clicked elsewhere to change another setting (the author, 2.0.1).
  */
 @Composable
 private fun SeedField(seed: Long, busy: Boolean, onSeed: (Long) -> Unit) {
@@ -1592,7 +1592,7 @@ private fun PanelHeader(
     }
 
     // What the two larger chips cost on the device this arrangement is drawn for, in seconds,
-    // measured on William's phone rather than guessed: 18-23 s at 1024 and 92.7 s at 2048, on a
+    // measured on the author's phone rather than guessed: 18-23 s at 1024 and 92.7 s at 2048, on a
     // 2026 Qualcomm handset with WebGPU on. The last clause is the honest part — a browser has one
     // thread, so a long stage is a page that stops answering, and a reader owed no explanation of
     // that concludes the tab has died. Compact only: a desktop is not what this is about, and the

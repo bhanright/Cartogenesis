@@ -24,7 +24,7 @@ import kotlin.math.sqrt
  * sediment; and an ice sheet holds its bed down until it melts, after which the bed comes back up
  * for ten thousand years.
  *
- * See `REALISM_AUDIT.md` 1.2 and REALISM_PLAN.md, S2. The equation and both derivations are
+ * See `REALISM_AUDIT.md` 1.2 and docs/DESIGN_LEDGER.md, S2. The equation and both derivations are
  * Turcotte & Schubert, *Geodynamics*, chapters 2 and 3.
  */
 internal object Isostasy {

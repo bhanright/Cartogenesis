@@ -175,7 +175,7 @@ internal object ClimateTint {
      * ground is nearly all there is.
      *
      * A single number per biome, with nothing bounding how far the index could take a cell, drew
-     * the interior of a continent as Sahara. See REALISM_PLAN.md, F13, for the figures, and
+     * the interior of a continent as Sahara. See docs/DESIGN_LEDGER.md, F13, for the figures, and
      * `ClimateTintTest`, which keeps that version as its control.
      */
     private val BARE_EARTH_LEAST = floatArrayOf(

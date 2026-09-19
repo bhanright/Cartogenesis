@@ -439,7 +439,7 @@ on one bearing — 40 to 160 km of watercourse without a bend at these grids —
 to 66/21/32/15/20 over the same five worlds. Hack's exponent moves at most 0.018 against a spread of
 0.032 across seeds and stays inside Earth's band; a third of the drawn river cells move, three
 quarters of them by a cell or two. See `StraightRunTest` and `StraightRunAuditTest`, and
-`REALISM_PLAN.md`, F18.
+`docs/DESIGN_LEDGER.md`, F18.
 
 **A lake is sized by its outlet, not by its basin.** Depression filling gives the router an outlet
 for every cell, and the routing then runs over the filled surface — which left the lip of a basin as
@@ -772,13 +772,13 @@ shaped, or a second erosion pass after the climate.
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 
-**The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
+**The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](DESIGN_LEDGER.md) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
 
 **The sea never drowns a glacial trough.** A fjord is a trough the sea has flooded, and flooding one means re-cutting the sea-level percentile, which moves every other coastline on the map. `GlaciationStage` therefore grades its marine troughs down to the waterline and carves the over-deepened basin on the sea floor beyond the mouth, leaving the shelf as a sill — fjord bathymetry without a fjord's coastline. The high-latitude coasts gain depth and islands, not the long narrow inlets of Norway.
 
 ## Fixed by this audit
 
-**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](REALISM_PLAN.md#a4-absolute-rainfall): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
+**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](DESIGN_LEDGER.md): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
 
 **Lakes.** A basin the priority-flood had to raise is now recognised as standing water: 25–47 lakes
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
@@ -982,7 +982,7 @@ there is no seasonal forcing for the energy balance to answer.
   zero. With that, placement is 100/99/100/98% across the four audited seeds, against 100/100/100/98%
   before. Desert *area* is still lower than it was — seed 42 at 512 falls from 5.1% of land to
   1.9% — because with the belt moving, fewer latitudes are dry in both halves of the year. That is
-  the right sign for the mechanism and a number for [A4](REALISM_PLAN.md#a4-absolute-rainfall)
+  the right sign for the mechanism and a number for [A4](DESIGN_LEDGER.md)
   to revisit when rainfall stops being normalised per world.
 
 Verified by `SeasonsTest`, which asserts the land/sea swing above and that a Mediterranean band of
@@ -1086,7 +1086,7 @@ A6 landed with that gated off by a provisional fix (an annual mean of at least 1
 temperate branch's desert case) rather than solved, and said so: the gate abolished cold deserts —
 the Gobi's annual mean is about 2°C, Patagonia's under 10 — and named the real fix as a Köppen B
 (arid) test on rainfall in mm against a temperature-dependent threshold. [A4 Absolute
-rainfall](REALISM_PLAN.md#a4-absolute-rainfall) is that test, and the 13°C gate is gone: B
+rainfall](DESIGN_LEDGER.md) is that test, and the 13°C gate is gone: B
 is now decided before any of Köppen's thermal groups run, exactly as real Köppen decides it, on
 `classify`'s own `koppenAridityThresholdMm` — `20 × annual-mean-°C` plus a seasonal-concentration
 term, with desert (BW) below half that threshold and steppe (BS) below it outright. The formula is
@@ -1263,7 +1263,7 @@ The result also carries an **age of crust** per cell — how long ago the ground
 built, in bands that cannot overlap, with cratonic country no epoch ever deformed at the far end.
 Measured on seeds 7, 42 and 1234, a third of the map is present-epoch belt, a fifth to a quarter
 belongs to each older epoch, and 12–23% of the land is cratonic. Nothing reads it yet; it is the
-field [H3 Lithology](REALISM_PLAN.md#h3-lithology) will erode by.
+field a later lithology chunk, listed on `ROADMAP.md`, will erode by.
 
 Verified by `TectonicHistoryTest`, which isolates a past epoch's uplift by differencing two worlds
 brought into one frame on the cells no epoch touched, and measures it by the same radial profile

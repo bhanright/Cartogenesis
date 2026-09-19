@@ -119,7 +119,7 @@ the generator is written in those units and converted to whatever grid the world
     toward land no realm claims.
 
 The derivation behind each stage, with the measurements that shaped it, is in
-[docs/REALISM_PLAN.md](docs/REALISM_PLAN.md); what the generator holds by construction, and where
+[docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md); what the generator holds by construction, and where
 it still deviates from Earth, is in [docs/GEOGRAPHY.md](docs/GEOGRAPHY.md).
 
 ## Map styles, views and colours
@@ -150,7 +150,7 @@ remains as a toggle in the Cartography section. Depth contours are drawn every 5
 and fade out on abyssal plains and where they would crowd.
 
 The derivations and measurements for the tints, the sky light and the contours are in
-[docs/REALISM_PLAN.md](docs/REALISM_PLAN.md) (F13).
+[docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md) (F13).
 
 ## Map scale, coordinates and detail
 
@@ -168,7 +168,7 @@ affect how the map is drawn without changing the generated world.
 
 All of these read the one declared width, `WorldScale.worldWidthKm`, and are drawn as geometry so
 they appear identically on screen and in a PNG. The measurements behind them are in
-[docs/GEOGRAPHY.md](docs/GEOGRAPHY.md) and [docs/REALISM_PLAN.md](docs/REALISM_PLAN.md) (F14).
+[docs/GEOGRAPHY.md](docs/GEOGRAPHY.md) and [docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md) (F14).
 
 ## Exports
 
@@ -243,7 +243,7 @@ where saves live, what export means, whether a graphics device exists.
 
 `:worldgen` targets **jvm** and **wasmJs**. The correctness suite lives in `commonTest` and runs on
 both; `DebugMapDump` stays JVM-only because it renders through `java.awt`. A third target, **js**,
-was removed in T1; the reason is in [docs/REALISM_PLAN.md](docs/REALISM_PLAN.md).
+was removed in T1; the reason is in [docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md).
 
 ## Building and testing
 
@@ -400,8 +400,8 @@ stale caches, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Documentation
 
-- [docs/REALISM_PLAN.md](docs/REALISM_PLAN.md): the plan and its ledger, what each piece of work
-  did, measured, in order.
+- [docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md): one row per piece of work, what each
+  changed and the figures it measured, in the order the work was planned.
 - [docs/GEOGRAPHY.md](docs/GEOGRAPHY.md): what the generator holds by construction and where it
   still deviates from Earth.
 - [docs/REALISM_AUDIT.md](docs/REALISM_AUDIT.md): the programme of work queued for the 3.x line.
@@ -409,7 +409,7 @@ stale caches, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
   machine and date beside each table.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): how the site is assembled and published, and what the
   loading shell depends on.
-- [docs/CODE_STYLE.md](docs/CODE_STYLE.md): naming and comment conventions.
+- [docs/CONVENTIONS.md](docs/CONVENTIONS.md): the naming and comment rules code here follows.
 - [docs/TODO.md](docs/TODO.md): issues found but not yet scheduled.
 - [ROADMAP.md](ROADMAP.md): planned releases and what each brings.
 

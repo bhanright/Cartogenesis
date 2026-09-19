@@ -92,7 +92,7 @@ data class PlateResult(
      * the whole of what made "62% ocean" a statement about a histogram rather than about a planet:
      * with the field normalised, one tall massif pushed every other landform down the ramp, the
      * hypsometric curve came out as a single peak straddling the shoreline, and the same 120 m of
-     * sea-level fall was a different level on every seed. See [Isostasy] and REALISM_PLAN.md, S2.
+     * sea-level fall was a different level on every seed. See [Isostasy] and docs/DESIGN_LEDGER.md, S2.
      */
     val height: FloatField,
     /**
@@ -139,7 +139,7 @@ data class PlateResult(
      * exactly 1. That is what lets a consumer tell an Appalachian belt from an Alpine one without
      * measuring either, and it is why this is an *age* rather than an erodibility: what a shield,
      * a worn orogen and an active one should erode like is the lithology stage's question, not
-     * this one's. See REALISM_PLAN.md, H1 and H3.
+     * this one's. See docs/DESIGN_LEDGER.md, H1 and H3.
      */
     val crustAge: FloatField
 )
@@ -1156,7 +1156,7 @@ object PlateStage {
                             // The generator before the crust pairs: one belt profile for every
                             // convergent pair, whatever the crusts. Kept so `BoundaryPairTest`
                             // can measure the world that was replaced rather than take its word
-                            // for it. See REALISM_PLAN.md, B2.
+                            // for it. See docs/DESIGN_LEDGER.md, B2.
                             val broadFalloff = beltFalloff(distanceFromBoundary, beltReachCells * widthScale)
                             if (broadFalloff <= 0f && narrow <= 0f) continue
                             upliftHere = when (interaction.type) {
@@ -1204,7 +1204,7 @@ object PlateStage {
                         // a plateau edge from reading as a drawn curve. It was written to hide the
                         // octagonal facets a chamfer distance left on the widest plateaus and is
                         // kept as scenery now that the distance is Euclidean. See
-                        // REALISM_PLAN.md, G4.
+                        // docs/DESIGN_LEDGER.md, G4.
                         val edgeJitter = EDGE_JITTER_MIN + EDGE_JITTER_SPAN *
                             (0.5f + 0.5f * widthNoise.fbm(
                                 column * EDGE_JITTER_CYCLES / cellsAcross,
@@ -1319,7 +1319,7 @@ object PlateStage {
                                     // low end to drain to and sills to break it into reaches the
                                     // notch can finish. It is also what a filled sag looks like:
                                     // the Mississippi embayment and the Benue trough carry a river
-                                    // down the axis, not a chain of lakes. See REALISM_PLAN.md,
+                                    // down the axis, not a chain of lakes. See docs/DESIGN_LEDGER.md,
                                     // H5, for the lake this left at 2048 before it was added.
                                     -tectonics.riftDepth * tectonics.failedRiftFill * strength *
                                         roughness * alongRange *
@@ -1343,7 +1343,7 @@ object PlateStage {
                                         // height for the whole run of the boundary. Kept so
                                         // `RiftSegmentationTest` can measure the world that was
                                         // replaced rather than take its word for it. See
-                                        // REALISM_PLAN.md, E4.
+                                        // docs/DESIGN_LEDGER.md, E4.
                                         -tectonics.riftDepth * strength *
                                             plateauFalloff(
                                                 distanceFromBoundary,
@@ -1418,7 +1418,7 @@ object PlateStage {
                                         // where a rift stands on land, so it is deliberately
                                         // modest: a sill high enough to dam a half-graben for
                                         // twelve rounds of erosion leaves a lake the notch cannot
-                                        // drain. See REALISM_PLAN.md, E4, for what that measured.
+                                        // drain. See docs/DESIGN_LEDGER.md, E4, for what that measured.
                                         val sill = tectonics.riftSillHeight * strength *
                                             (1f - segment.taper) *
                                             beltFalloff(
@@ -1596,7 +1596,7 @@ object PlateStage {
      * low-amplitude harmonics of the rim radius, seeded from the world seed and this vent's own
      * index so that no two cones match without a shared [Random] or a hash order. Off reproduces
      * the single-sample, unmodulated stamp the guard measures its "before" against. See
-     * REALISM_PLAN.md, E3, for the eight-fold amplitudes at each grid.
+     * docs/DESIGN_LEDGER.md, E3, for the eight-fold amplitudes at each grid.
      */
     private fun stampSeamount(
         uplift: FloatField,
@@ -1712,6 +1712,79 @@ object PlateStage {
     internal class DrawnPlates(val plates: List<Plate>, val plateId: IntArray)
 
     /**
+     * The order the crusts are handed out in, where each plate's seed sits, and the stream both
+     * came out of, so the caller can go on drawing from it.
+     *
+     * Separated from [drawPlates] so that a guard can ask where the seeds of a world land at a
+     * grid it has no time to generate; nothing else about a plate is settled here.
+     */
+    internal class PlateSeedDraw(
+        val shuffledOrder: MutableList<Int>,
+        val seeds: List<Plate>,
+        val random: Random
+    )
+
+    /**
+     * Where each plate's seed sits: drawn on the reference grid the world is defined on, and put
+     * on the working grid as a fraction of it.
+     *
+     * Drawn against the working grid instead — `nextInt(width)` and `nextInt(band)` — the column
+     * happened to hold, because Kotlin's `nextInt` takes the generator's top bits when the bound
+     * is a power of two and so lands at the same fraction of a 512-wide grid and of a 2048-wide
+     * one. The row's bound is the height less the pole margins and never a power of two, so it
+     * took the remainder of a division that changes with the bound: every plate sat at a different
+     * latitude at every size, and an export was a different world from the preview it came from
+     * (docs/DESIGN_LEDGER.md, F35).
+     *
+     * The repair is to stop asking the working grid where a seed may go. How many cells a world is
+     * cut into says nothing about where its plates are, so the draw is made once against
+     * [SEED_REFERENCE_CELLS] and the cell it names is then read as a fraction — which is what a
+     * finer grid resolves rather than redefines. The draws themselves are unchanged, in the same
+     * order and the same number, so the world the reference grid has always made is the world it
+     * still makes, and every other grid is now that same world drawn finer.
+     */
+    internal fun drawPlateSeeds(config: WorldGenConfig): PlateSeedDraw {
+        val width = config.width
+        val height = config.height
+        val random = Random(config.seed * 7919 + 13)
+        val plateCount = config.tectonics.plateCount.coerceAtLeast(2)
+        val shuffledOrder = MutableList(plateCount) { it }
+        shuffledOrder.shuffle(random)
+        val poleMarginRows = (SEED_REFERENCE_CELLS * SEED_POLE_MARGIN_SHARE).toInt()
+        val latitudeBandRows =
+            (SEED_REFERENCE_CELLS * SEED_LATITUDE_SPAN).toInt().coerceAtLeast(1)
+        val seeds = List(plateCount) { id ->
+            val angle = random.nextFloat() * 2f * PI.toFloat()
+            val columnOnReference = random.nextInt(SEED_REFERENCE_CELLS)
+            // Keeps plate seeds off the very edge, so polar rows belong to a real plate interior
+            // rather than to a seed sitting on the rim of the grid.
+            val rowOnReference = poleMarginRows + random.nextInt(latitudeBandRows)
+            Plate(
+                id = id,
+                seedX = onGrid(columnOnReference, width),
+                seedY = onGrid(rowOnReference, height),
+                driftX = cos(angle),
+                driftY = sin(angle),
+                type = PlateType.OCEANIC
+            )
+        }
+        return PlateSeedDraw(shuffledOrder, seeds, random)
+    }
+
+    /**
+     * The cell of a [cellsAcrossOrDown]-cell grid that holds the middle of reference cell
+     * [cellOnReference].
+     *
+     * The middle and not the near edge, so that a grid twice as fine puts the seed in one of the
+     * two cells the coarse one splits into rather than always in the first: a seed lands within
+     * half a reference cell of where the reference grid put it, at any grid, and on the reference
+     * grid itself it lands in exactly that cell.
+     */
+    private fun onGrid(cellOnReference: Int, cellsAcrossOrDown: Int): Int =
+        ((cellOnReference + 0.5f) / SEED_REFERENCE_CELLS * cellsAcrossOrDown)
+            .toInt().coerceIn(0, cellsAcrossOrDown - 1)
+
+    /**
      * The plates, their drifts, which of them are continental, and which cells each owns.
      *
      * The crusts are chosen last and by *area*, which is what makes the ocean-coverage slider a
@@ -1728,34 +1801,22 @@ object PlateStage {
      * means. The order is shuffled from the world's own stream, so which plates end up continental
      * is still the seed's business and not the geometry's.
      *
-     * Determinism: every draw below is taken for every plate whether or not it is used, in id
-     * order, and the shuffle runs on a list built in id order — never on a hash order.
+     * Determinism: every draw, here and in [drawPlateSeeds], is taken for every plate whether or
+     * not it is used, in id order, and the shuffle runs on a list built in id order — never on a
+     * hash order.
      */
     private fun drawPlates(config: WorldGenConfig): DrawnPlates {
         val tectonics = config.tectonics
         val width = config.width
         val height = config.height
-        val random = Random(config.seed * 7919 + 13)
         val plateCount = tectonics.plateCount.coerceAtLeast(2)
 
         // Seeds and drifts first, all oceanic for now: the assignment below reads neither the
         // types nor anything derived from them, so the partition is settled before the crusts are.
-        val order = MutableList(plateCount) { it }
-        order.shuffle(random)
-        val drawnSeeds = List(plateCount) { id ->
-            val angle = random.nextFloat() * 2f * PI.toFloat()
-            Plate(
-                id = id,
-                seedX = random.nextInt(width),
-                // Keeps plate seeds off the very edge, so polar rows belong to a real plate
-                // interior rather than to a seed sitting on the rim of the grid.
-                seedY = (height * SEED_POLE_MARGIN_SHARE).toInt() +
-                    random.nextInt((height * SEED_LATITUDE_SPAN).toInt().coerceAtLeast(1)),
-                driftX = cos(angle),
-                driftY = sin(angle),
-                type = PlateType.OCEANIC
-            )
-        }
+        val draw = drawPlateSeeds(config)
+        val order = draw.shuffledOrder
+        val drawnSeeds = draw.seeds
+        val random = draw.random
         val plateId = assignPlates(config, drawnSeeds)
 
         val cellsPerPlate = IntArray(plateCount)
@@ -2099,7 +2160,7 @@ object PlateStage {
                 // draws let a segment come out much taller than it is wide, which is a knife-edge
                 // ridge. Where such a ridge crosses shallow sea it clears the surface as a strip
                 // of land a couple of cells wide with a strait either side, the exact failure
-                // `RibbonLandTest` exists to catch. See REALISM_PLAN.md, E4, for the ribbon that
+                // `RibbonLandTest` exists to catch. See docs/DESIGN_LEDGER.md, E4, for the ribbon that
                 // measured.
                 val shoulderVariation = tectonics.riftSegmentShoulderVariation
                 val shoulderSize = (1f + shoulderVariation * (2f * draw() - 1f)).coerceAtLeast(0.2f)
@@ -2364,6 +2425,16 @@ object PlateStage {
      */
     private const val SEED_POLE_MARGIN_SHARE = 0.06f
     private const val SEED_LATITUDE_SPAN = 0.88f
+
+    /**
+     * The grid a plate seed's position is drawn against, whatever grid the world is generated on.
+     *
+     * `WorldGenConfig`'s own default, which is the grid every world in this project is defined at
+     * and the one `atResolution` refines from. A seed's place on the planet is a property of the
+     * seed, not of how finely the map is cut, so it is settled here once and read as a fraction
+     * everywhere else — see [drawPlateSeeds].
+     */
+    private const val SEED_REFERENCE_CELLS = 512
 
     /**
      * How far the domain warp may push a plate boundary, in belt half-widths, and how many times

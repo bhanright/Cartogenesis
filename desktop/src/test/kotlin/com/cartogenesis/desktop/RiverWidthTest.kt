@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 /**
  * Whether a river is drawn as wide as the water it carries.
  *
- * The complaint this answers is that every river looked alike (William, 2026-09-12). They did not
+ * The complaint this answers is that every river looked alike (the author, 2026-09-12). They did not
  * quite — the old rule raised the discharge to the 0.28 power and clamped the answer between half a
  * cell and 2.8 — but a thousandfold range of flow came out as one pixel beside three, which at a
  * glance is one pen. What a channel's width actually does is Leopold and Maddock's: it goes as the
@@ -40,7 +40,7 @@ class RiverWidthTest {
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
 
-        /** The seeds for the mouth: William's own, and the four the audit standardised on. */
+        /** The seeds for the mouth: the author's own, and the four the audit standardised on. */
         val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
 
         /**

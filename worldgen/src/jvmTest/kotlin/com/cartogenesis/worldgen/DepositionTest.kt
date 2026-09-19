@@ -132,7 +132,7 @@ class DepositionTest {
      * to 6290. The cut itself has not moved: exactly 62% of the cells still lie below it, and the
      * shoreline the percentile chooses is the same shoreline; what changed is the lower stand the
      * hydraulic rounds grade to, and so the terrain the percentile is taken over. See
-     * REALISM_PLAN.md, S1.
+     * docs/DESIGN_LEDGER.md, S1.
      *
      * And at H5b, which moves the shoreline twice over and in both directions. The receiver
      * clamp changes how deep the incision may cut in a round — the cap it replaces was written in
@@ -185,8 +185,15 @@ class DepositionTest {
      * carried over from any one side, because no side's number was read against the others'
      * terrain. The cut itself has not moved in any of them: exactly 62% of the cells still lie
      * below it, and the structural cases are untouched.
+     *
+     * And a sixteenth time at F35, by six cells, 6279 to 6273. This case runs at 128 and F35 moved
+     * every grid but the 512 the plate seeds are now drawn against: a seed that used to land at
+     * whatever fraction of 128 the row's bound happened to give now lands where the reference grid
+     * puts it, so the plates are in different places on a 128 world and the percentile falls
+     * through different ground. No knob moved and 512 is untouched, which is what
+     * `ScaleFreeTest`'s new clauses are there to say.
      */
-    private val startingPointLand = 6279
+    private val startingPointLand = 6273
 
     @Test
     fun `every round conserves mass`() {

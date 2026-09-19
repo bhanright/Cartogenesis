@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
  * `NationStage.describe` sizes all of its per-realm arrays by the capital list and then counts
  * cells straight into them, so a single cell holding an id past the end of that list is an
  * `ArrayIndexOutOfBoundsException` from `counts[owner]++` — a crash whose stack points at the
- * counting loop rather than at whichever step wrote the id. William hit exactly that shape on his
+ * counting loop rather than at whichever step wrote the id. the author hit exactly that shape on his
  * own world at 2048 after Track E landed; that case (`RealmIdRangeAuditTest`) moved to the audit
  * tier in T1, since it is the one expensive case here, but it is still run once before every
  * merge is accepted, just not by `jvmTest`.

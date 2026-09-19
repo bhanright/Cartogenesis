@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  * The plain steepest-of-eight rule cannot express a slope facing between two of its bearings, so
  * over ground that is a plane at the cell scale it takes the same step for cell after cell. Where a
  * real river crosses such an apron the stream power then cuts a ruled trench, the trench ponds
- * behind its own lip, and the map grows the diagonal rectangle William pointed at on seed 298405 at
+ * behind its own lip, and the map grows the diagonal rectangle the author pointed at on seed 298405 at
  * 1024. [com.cartogenesis.worldgen.pipeline.FlowRouting.flowDirections] now takes the direction
  * from the steepest triangular facet and draws the one receiver across it, so a course crossing an
  * apron follows the same slope without being ruled.
@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class StraightRunTest {
 
     private companion object {
-        /** William's own world, at the size he looks at it, where the bar was found. */
+        /** The author's own world, at the size he looks at it, where the bar was found. */
         const val AUTHORS_SEED = 298405L
         const val AUTHORS_SIDE = 1024
 
@@ -39,7 +39,7 @@ class StraightRunTest {
         const val CONTROL_SEED = 42L
 
         /**
-         * William's second world, at the one grid the ruled shores can be found on.
+         * The author's second world, at the one grid the ruled shores can be found on.
          *
          * A 2048 world is the better part of two minutes and it is not optional, for the reason
          * `GlacialBasinShapeTest` keeps one: the bodies the notch opened are three and seven
@@ -62,7 +62,7 @@ class StraightRunTest {
      * The census, on the five seeds F15 took it on.
      *
      * Measured on the merge base (7b38716, before any of this branch) at **1 / 0 / 0 / 0 / 0** on
-     * 298405 at 1024 and 7, 42, 1234, 99 at 512 — the one being William's own, 53 cells at
+     * 298405 at 1024 and 7, 42, 1234, 99 at 512 — the one being the author's own, 53 cells at
      * (503, 866), every cell within 1.06 of the line it runs 20.1 cells along. With the facet rule
      * and nothing else changed it read 0 / 0 / 0 / 0 / 0, which is what this asserts.
      *
@@ -118,7 +118,7 @@ class StraightRunTest {
      * F30: no shore is a ruled line either, which the census above could not see.
      *
      * The census asks whether a body of water is *itself* a bar — every cell within a cell and a bit
-     * of one line, twenty cells long — and that is a question about small bodies. William's seed
+     * of one line, twenty cells long — and that is a question about small bodies. the author's seed
      * 364673 at 2048 carried the same defect in a shape it could not read: two inland seas of three
      * and seven thousand cells, entirely ordinary in outline but for one dead-straight edge apiece,
      * 41 cells due north-south and 73 on the diagonal. Those edges are the outlet pass's own notch.
@@ -147,7 +147,7 @@ class StraightRunTest {
      *
      * Measured at 00b13fe, before S2b: **73 cells against 41.7 allowed, 1.75 times the bar**, on the
      * 7,297-cell inland sea at (2022,1449) of 364673 at 2048, and 41 against 34.2 (1.20 times) on
-     * the 3,314-cell one in William's own window — 72 and 41 of those cells standing above the
+     * the 3,314-cell one in the author's own window — 72 and 41 of those cells standing above the
      * waterline in the raw terrain before the outlet pass cut them, which is what said they were the
      * notch and not a shore. The other five seeds carried one to six bodies the bar binds apiece and
      * every one was inside it, 0.26 to 0.55 times, which is why the defect needed the author's own
@@ -157,7 +157,7 @@ class StraightRunTest {
      * the depression flood at its own level, which is the same flood this defect was traced to, and
      * the drowned basins the outlet pass was notching are not the basins it now finds: 364673 at 2048
      * offers sixteen measurable bodies instead of ten and neither inland sea is among the ones over
-     * the bar. The window William reported reads clean — no canal, no ruled shore, no dead-straight
+     * the bar. The window the author reported reads clean — no canal, no ruled shore, no dead-straight
      * line at x 1788. What is left over the bar anywhere is **1.07 times it**, a 296-cell lake at
      * (1075,1998) with a 20-cell run against 18.7 allowed, which is a different body with a different
      * story and is marginal where the old two were not.

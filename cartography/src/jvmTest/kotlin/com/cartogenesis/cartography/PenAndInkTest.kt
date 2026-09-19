@@ -89,7 +89,7 @@ class PenAndInkTest {
          *
          * A chunk that means to move them all re-records the lot and says so in its report; how
          * far a coastline actually moved is measured rather than hashed, in `LittoralCoastTest`
-         * and in `GEOGRAPHY.md`. See REALISM_PLAN.md, F9, F13, F14 and F17, for which chunk moved
+         * and in `GEOGRAPHY.md`. See docs/DESIGN_LEDGER.md, F9, F13, F14 and F17, for which chunk moved
          * what, and the 2.0.3 forward-merge row for the re-recording before this one.
          *
          * Re-recorded again for W1, which is the plainest case there is of the world moving under

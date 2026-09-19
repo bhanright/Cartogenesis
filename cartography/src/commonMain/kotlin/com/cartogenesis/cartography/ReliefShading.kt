@@ -27,7 +27,7 @@ import kotlin.math.sqrt
  * Mark's four-lamp oblique-weighted relief (1992, USGS Open-File Report 92-422) was written first
  * and measured worse than the lamp it replaced: four lamps inside a 135-degree arc leave a whole
  * quadrant with no direct light at all, so the far side of a cone came out darker than the single
- * lamp had left it. The dome above is what fixed it. See REALISM_PLAN.md, F13, for the figures.
+ * lamp had left it. The dome above is what fixed it. See docs/DESIGN_LEDGER.md, F13, for the figures.
  *
  * The single lamp is kept, exactly as it was, because a reader may prefer it — see
  * [RenderOptions.singleLamp]. Under it this file reproduces the older shading bit for bit.

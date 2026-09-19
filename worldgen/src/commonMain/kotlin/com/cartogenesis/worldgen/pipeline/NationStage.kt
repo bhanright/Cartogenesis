@@ -73,7 +73,7 @@ data class NationResult(
  * as unclaimed wilderness, and a pocket of one realm stranded inside another is given to whichever
  * neighbour surrounds it.
  *
- * See REALISM_PLAN.md, B2 and B3.
+ * See docs/DESIGN_LEDGER.md, B2 and B3.
  */
 object NationStage {
 

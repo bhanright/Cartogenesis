@@ -192,7 +192,7 @@ interface Platform {
      * Not a taste: 8192 does not complete. It exhausts a 10 GB heap inside the generator after
      * about nineteen minutes, before a single pixel of the map is drawn — so the chip for it is
      * offered disabled rather than removed, and any size above this one falls back to it. See
-     * REALISM_PLAN.md for the measurement. It is a value on the platform, and not a constant in the panel, so that the build
+     * docs/DESIGN_LEDGER.md for the measurement. It is a value on the platform, and not a constant in the panel, so that the build
      * which fixes the memory can raise the ceiling without the interface being touched: the export
      * row draws whatever this says.
      *
@@ -341,7 +341,7 @@ internal fun Platform.accelerationRunning(device: String): String =
  * could be, and against what.
  *
  * "Many times faster" is measured rather than hopeful — see the erosion benchmarks in
- * REALISM_PLAN.md — and "than the processor" is the comparison it is faster *than*, which the
+ * docs/DESIGN_LEDGER.md — and "than the processor" is the comparison it is faster *than*, which the
  * sentence used to leave the reader to supply.
  */
 internal fun Platform.accelerationOffered(device: String): String =

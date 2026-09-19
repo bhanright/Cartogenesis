@@ -595,7 +595,7 @@ class ChromeGalleryTest {
      *
      * F12 put a second line of chips under the first — Heightmap, Biomes, Realms — and three of
      * those words are longer than the two format chips the row was sized for, so at the desktop
-     * panel's 320 dp the last one ran out of room and "Realms" was drawn as "Real". William's own
+     * panel's 320 dp the last one ran out of room and "Realms" was drawn as "Real". the author's own
      * screenshot of 2.0.2 shows it, and so did F24's first capture of the new chrome; nobody had
      * noticed, because a truncated chip still looks like a chip.
      *

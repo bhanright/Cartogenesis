@@ -1487,6 +1487,14 @@ has been false for every export: a 4096 export was a different world from its 20
   commands (fetch the key, add the source line, install), the plain `.deb` the fallback; the
   path never moves once published. Debian and Ubuntu relatives only; an RPM repository is a
   later, separate item.
+- **The hero button** "Download for Windows (recommended)" becomes a download for both platforms
+  once a Linux file is on the release page (maintainer, 2026-09-19): the label says both, or the
+  button reads "Download" and the installation section below it names the platforms; copy by
+  the outside reviewer, approved by the maintainer. `SiteAssemblyTest` reads the label.
+- **Build prerequisites**: the README's building section gains one table, a row per platform,
+  of what a builder installs beyond a JDK 21: `fakeroot` and `dpkg` on Linux, the WiX toolset on
+  Windows, Xcode's command-line tools on macOS; the download itself bundles its runtime and
+  needs nothing installed, which the installation section says.
 - Depends on F35 landing first, so the first Linux release is not a different world at each size.
 
 ### T2. Import a heightmap as the terrain — 4.x

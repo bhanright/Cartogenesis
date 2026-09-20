@@ -123,10 +123,12 @@ object MoistureBudget {
      * Bare ground still returns something — evapotranspiration over the Sahara runs at roughly a
      * seventh of the humid tropics' — so the ramp starts at 0.15 rather than at zero.
      *
-     * The proxy is the previous lap's rain at the cell. It was stated as a proxy for W4's
-     * vegetation field while that field did not exist; [groundReturnShare] is the derivation that
-     * replaced it, and this stays as the control the swap was measured against. See
-     * `ClimateConfig.vegetationRecycling` and docs/DESIGN_LEDGER.md, W4.
+     * The proxy is the previous lap's rain at the cell. W4 built the field it was standing in for
+     * and offered [groundReturnShare] in its place, and **this is still what ships**: pooled over
+     * the four standard seeds the derivation puts the continental recycling ratio at 26.5% against
+     * this ramp's 32.7% and Earth's 30-45%, so the proxy is the one inside Earth's band. The
+     * reason the two differ is written out at `ClimateConfig.vegetationRecycling`, which is the
+     * control the figures were taken with. See docs/DESIGN_LEDGER.md, W4.
      */
     const val WETNESS_REFERENCE_MM = 500f
     const val BARE_GROUND_WETNESS = 0.15f
@@ -207,9 +209,10 @@ object MoistureBudget {
      *
      * [VegetationDensity.density] is Budyko's evaporative fraction — the share of the year's
      * available evaporative energy that the water supply actually meets — held down by the growing
-     * season. That share **is** the ground's return, which is why this is a derivation and not a
-     * second proxy: the quantity the march wants and the quantity the vegetation field computes
-     * are the same quantity, and the rainfall ramp above was standing in for it.
+     * season, and that share was expected to *be* the ground's return rather than a second proxy
+     * for it. It measured lower than [groundWetness] over most of these worlds' land and put the
+     * continental recycling ratio outside Earth's band, so it is the control and not the default;
+     * `ClimateConfig.vegetationRecycling` carries the figures and the diagnosis.
      *
      * [biotemperatureC] is Holdridge's biotemperature at the cell and [previousLapMm] the rain the
      * previous lap left there, in millimetres a year. Floored at [BARE_GROUND_WETNESS] for the

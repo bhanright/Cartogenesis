@@ -1774,12 +1774,25 @@ data class ClimateConfig(
      * energy the water supply meets *is* what the ground returns — so the proxy can be retired for
      * a derivation.
      *
-     * Off is the proxy, and which of the two ships is decided by measurement rather than by
-     * argument: the continental precipitation recycling ratio has to stay inside van der Ent and
-     * others' (2010) 30-45%, and `MoistureBudgetTest` prints it both ways. See
-     * docs/DESIGN_LEDGER.md, W4, for the two figures.
+     * **It is off, and the measurement is why.** Which of the two ships was decided by the
+     * continental precipitation recycling ratio and not by the argument above: pooled over the
+     * four standard seeds at 512 the derivation reads **26.5%** against the proxy's 32.7% and van
+     * der Ent and others' (2010) 30-45%, so the derived return is outside Earth's band and the
+     * proxy is inside it. A derivation that leaves a measured quantity outside Earth's figure is
+     * not an improvement on a proxy that leaves it inside, and lowering the band to admit it would
+     * be the thing the measure-do-not-tune rule exists to stop.
+     *
+     * What the gap says is that the two quantities are not the same quantity after all. Budyko's
+     * evaporative fraction is the share of a *year's* evaporative energy the water supply meets,
+     * and the march wants the share of a *parcel's* passage the ground under it can supply; over
+     * the dry and cold ground that covers most of these worlds the annual fraction is the smaller
+     * of the two, so the continents give less back and the ratio falls. Closing that is a change
+     * to what the march integrates rather than to which field it reads, and it is not this
+     * chunk's. On, `MoistureBudgetTest` re-measures both numbers on every audited seed, so the
+     * figures stay honest and the switch stays a control rather than dead code. See
+     * docs/DESIGN_LEDGER.md, W4.
      */
-    val vegetationRecycling: Boolean = true
+    val vegetationRecycling: Boolean = false
 )
 
 /**

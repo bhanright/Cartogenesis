@@ -201,6 +201,67 @@ class MoistureBudgetTest {
         )
     }
 
+    @Test
+    fun `the vegetation field does not return water as freely as the rainfall proxy`() {
+        // W4's one offered change to the march, and the measurement that turned it down. The
+        // ground's return is scaled by the previous lap's rain against Koppen's 500 mm steppe line
+        // - a proxy W3 stated as one, for a field that did not exist. W4 built the field and
+        // offered Budyko's evaporative fraction in its place, which is the share of the year's
+        // evaporative energy the water supply meets and so ought to have *been* the return rather
+        // than a stand-in for it.
+        //
+        // It is not what shipped. Which of the two ships was decided here and not by that
+        // argument: the ratio the derivation produces is 26.5% pooled, under van der Ent and
+        // others' (2010) 30-45%, while the proxy's is inside it. The clause therefore asserts the
+        // *proxy* against Earth's band and prints the derivation's figure as the finding, because
+        // moving the band to admit it is the thing the measure-do-not-tune rule exists to stop.
+        // The diagnosis is at `ClimateConfig.vegetationRecycling`; see docs/DESIGN_LEDGER.md, W4.
+        var proxyRain = 0.0
+        var proxyRecycled = 0.0
+        var derivedRain = 0.0
+        var derivedRecycled = 0.0
+        seeds.forEach { seed ->
+            val proxy = continentalRain(generate(seed) { it })
+            val derived = continentalRain(
+                generate(seed) { it.copy(climate = it.climate.copy(vegetationRecycling = true)) }
+            )
+            proxyRain += proxy.first
+            proxyRecycled += proxy.second
+            derivedRain += derived.first
+            derivedRecycled += derived.second
+            println(
+                ("RECYCLING seed %d: rainfall proxy %.1f%%, vegetation field %.1f%%; " +
+                    "continental rain %.0f against %.0f mm")
+                    .format(
+                        seed, 100.0 * proxy.second / proxy.first,
+                        100.0 * derived.second / derived.first, proxy.first, derived.first
+                    )
+            )
+        }
+        val proxyRatio = proxyRecycled / proxyRain
+        val derivedRatio = derivedRecycled / derivedRain
+        println(
+            ("RECYCLING pooled: rainfall proxy %.1f%%, vegetation field %.1f%%, against Earth's " +
+                "%.0f-%.0f%%; the field is the finding and the proxy is what ships")
+                .format(
+                    proxyRatio * 100, derivedRatio * 100,
+                    EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
+                )
+        )
+        assertTrue(
+            proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH,
+            ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
+                "%.2f to %.2f")
+                .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH)
+        )
+        assertTrue(
+            derivedRatio < proxyRatio,
+            ("the vegetation field now returns *more* water than the proxy (%.3f against %.3f), " +
+                "so the reason this switch is off has changed and the ledger row is stale")
+                .format(derivedRatio, proxyRatio)
+        )
+    }
+
     /** Total rain over land and the part of it whose water last came off land, both in mm. */
     private fun continentalRain(world: WorldMap): Pair<Double, Double> {
         val climate = ClimateStage.generateWithSeasonalMm(world.config, world.sea, world.ocean)

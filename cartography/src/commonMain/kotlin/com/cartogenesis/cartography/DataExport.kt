@@ -3,6 +3,7 @@ package com.cartogenesis.cartography
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.IceSheet
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.math.roundToInt
 
@@ -25,7 +26,8 @@ enum class DataLayer(
     HEIGHTMAP(
         "Heightmap",
         "heightmap",
-        "16-bit greyscale, sea level at 32768, with the metre scale in the JSON beside it."
+        "16-bit greyscale, sea level at 32768, with the metre scale in the JSON beside it. " +
+            "Where there is an ice sheet this is the top of the ice, not the bed under it."
     ),
     BIOMES(
         "Biomes",
@@ -95,11 +97,17 @@ object DataExports {
     /**
      * Bumped when a field in the sidecar changes meaning, so a reader's parser can tell.
      *
+     * 3 raised the heightmap's ceiling so the ice fits under it. The elevation field carries the
+     * ice sheet's surface since I1, which stands over the top of the land's own ruler, so
+     * `metresPerGreyLevel` is now that ruler times [heightmapCeilingRulers] and a new
+     * `heightmapCeilingMetres` states where white lands. A version-2 reader would put every cell
+     * 80% too low.
+     *
      * 2 gave the sea a depth of its own: a grey level below the waterline is worth
      * `metresPerGreyLevelBelowSeaLevel` rather than the land's `metresPerGreyLevel`, and
      * `maxAltitudeMetres` became `highestLandMetres` beside a new `deepestOceanMetres`.
      */
-    const val SIDECAR_VERSION = 2
+    const val SIDECAR_VERSION = 3
 
     /**
      * Where the shoreline-relative elevation of a cell lands in the sixteen-bit range.
@@ -113,14 +121,50 @@ object DataExports {
     /** The most a sixteen-bit sample can hold. */
     const val HIGHEST_GREY_LEVEL = 65535
 
-    fun greyLevelFor(relativeElevation: Float): Int =
-        (SEA_LEVEL_GREY_LEVEL + relativeElevation.coerceIn(-1f, 1f) * LEVELS_PER_SIDE)
+    /**
+     * How much taller than the land's own ruler the heightmap's top has to be, to fit the ice.
+     *
+     * The elevation field's contract is that `1` is `WorldScale.highestLandMetres` and that no
+     * cell need reach it. I1 broke the second half: the field now carries the ice sheet's
+     * *surface*, so a dome on high ground stands over the top of the land's half of the ruler —
+     * measured on the standard seeds at 512, the highest cell reads 1.1076, 1.1272, 0.9008 and
+     * 1.2368, and every cell over 1 on all four is ice-sheet biome. Clamped at 1, as this encoder
+     * did until now, those cells all came back as white and none of them round-tripped: seed 42's
+     * summit returned 0.1076 of the range from where it started, against a bar of one grey level.
+     *
+     * The factor is derived from the envelope guard rather than from those measurements, so that
+     * a world with more ice than any of them still fits: the highest surface the generator can
+     * produce is the highest ground plus the thickest ice it will draw, and that thickness is
+     * capped at [IceSheet.THICKEST_ICE_ON_EARTH_METRES], Bedmap2's deepest sounding. On the stock
+     * ruler that is 6,000 metres of land plus 4,776 of ice, or 1.796 rulers; a world configured
+     * with a shorter ruler gets a proportionally taller factor, which is why this is read off the
+     * world rather than written down as one number.
+     *
+     * The cost is precision, and it is small: a grey level goes from 0.183 m to 0.329 m, still a
+     * third of a metre over a range of ten kilometres, and the eight-bit control this is measured
+     * against is still forty times worse.
+     *
+     * What this is *not* is the right long-term answer. A heightmap is a terrain, and a terrain
+     * tool wants the ground: the bed, with the ice carried separately. That needs the ice
+     * thickness on the world, and today it leaves the glaciation stage as an observer — see
+     * `GlacialMass` — so nothing downstream of the pipeline can see it. Putting it on the model is
+     * a save-format change and belongs to whoever takes that on; the sidecar and the export chip
+     * both say plainly that what is written is the surface.
+     */
+    fun heightmapCeilingRulers(config: WorldGenConfig): Float =
+        1f + IceSheet.THICKEST_ICE_ON_EARTH_METRES / config.scale.highestLandMetres
+
+    fun greyLevelFor(relativeElevation: Float, ceilingRulers: Float): Int =
+        (
+            SEA_LEVEL_GREY_LEVEL +
+                (relativeElevation / ceilingRulers).coerceIn(-1f, 1f) * LEVELS_PER_SIDE
+            )
             .roundToInt()
             .coerceIn(0, HIGHEST_GREY_LEVEL)
 
     /** The inverse, which is the arithmetic a reader of the file has to do. */
-    fun relativeElevationFor(greyLevel: Int): Float =
-        (greyLevel - SEA_LEVEL_GREY_LEVEL).toFloat() / LEVELS_PER_SIDE
+    fun relativeElevationFor(greyLevel: Int, ceilingRulers: Float): Float =
+        (greyLevel - SEA_LEVEL_GREY_LEVEL).toFloat() / LEVELS_PER_SIDE * ceilingRulers
 
     /**
      * Metres of altitude one grey level above the sea-level grey is worth.
@@ -134,7 +178,7 @@ object DataExports {
      * states both, and both ends of the range, so a reader can convert either half.
      */
     fun metresPerGreyLevel(config: WorldGenConfig): Double =
-        config.scale.highestLandMetres.toDouble() / LEVELS_PER_SIDE
+        config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(config) / LEVELS_PER_SIDE
 
     /**
      * Metres of depth one grey level below the sea-level grey is worth.
@@ -194,7 +238,8 @@ object DataExports {
 
     private suspend fun heightmapPng(world: WorldMap, deflater: ZlibDeflater): ByteArray {
         val relative = world.sea.relativeElevation.data
-        val samples = IntArray(relative.size) { greyLevelFor(relative[it]) }
+        val ceilingRulers = heightmapCeilingRulers(world.config)
+        val samples = IntArray(relative.size) { greyLevelFor(relative[it], ceilingRulers) }
         return PngWriter.greyscale16(world.width, world.height, samples, deflater)
     }
 
@@ -297,6 +342,14 @@ object DataExports {
             metresPerLevel * (HIGHEST_GREY_LEVEL - SEA_LEVEL_GREY_LEVEL)
         )
         json.number("metresAtGreyLevel0", metresPerLevelBelow * (0 - SEA_LEVEL_GREY_LEVEL))
+        json.number(
+            "heightmapCeilingMetres",
+            config.scale.highestLandMetres.toDouble() * heightmapCeilingRulers(config)
+        )
+        json.text(
+            "heightmapCarries",
+            "the ice sheet's surface where there is one, not the bed beneath it"
+        )
         json.number("highestLandMetres", config.scale.highestLandMetres.toDouble())
         json.number("deepestOceanMetres", config.scale.deepestOceanMetres.toDouble())
         json.text(

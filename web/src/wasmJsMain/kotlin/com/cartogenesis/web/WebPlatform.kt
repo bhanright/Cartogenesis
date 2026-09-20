@@ -20,6 +20,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -34,7 +35,8 @@ import org.jetbrains.skia.Image
 class WebPlatform(
     override val accelerator: ErosionAccelerator?,
     override val accelerationUnavailableBecause: String?,
-    override val oceanAccelerator: OceanAccelerator? = null
+    override val oceanAccelerator: OceanAccelerator? = null,
+    override val iceAccelerator: IceSheetAccelerator? = null
 ) : Platform {
 
     // One thread, and generating blocks the page while it runs. 512 takes a few seconds
@@ -57,14 +59,14 @@ class WebPlatform(
     override val coarsePointer: Boolean = pointerIsCoarse()
 
     /**
-     * Erosion and the currents, and leaving the raster out is not a simplification.
+     * Erosion, the currents and the ice sheet, and leaving the raster out is not a simplification.
      *
      * The desktop draws the export raster on its device as well, through OpenGL compute; the WGSL
-     * port of that raster has not been written, so in a browser the device runs the erosion sweeps
-     * and the stream-function solve and nothing else. Saying otherwise here would be promising a
-     * speed-up that does not exist.
+     * port of that raster has not been written, so in a browser the device runs the erosion sweeps,
+     * the stream-function solve and the sheet's profile, and nothing else. Saying otherwise here
+     * would be promising a speed-up that does not exist.
      */
-    override val acceleratedWork: String = "erosion and ocean currents"
+    override val acceleratedWork: String = "erosion, ocean currents and the ice sheet"
 
     /**
      * 2048 on a phone, 4096 otherwise.
@@ -155,7 +157,10 @@ class WebPlatform(
         // the preview, so the detail is real.
         val exportConfig = config.atResolution(size, size)
         val world = WorldGenerationEngine.generate(
-            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
+            exportConfig,
+            accelerator = accelerator,
+            oceanAccelerator = oceanAccelerator,
+            iceAccelerator = iceAccelerator
         )
 
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
@@ -199,7 +204,10 @@ class WebPlatform(
 
         val exportConfig = config.atResolution(size, size)
         val world = WorldGenerationEngine.generate(
-            exportConfig, accelerator = accelerator, oceanAccelerator = oceanAccelerator
+            exportConfig,
+            accelerator = accelerator,
+            oceanAccelerator = oceanAccelerator,
+            iceAccelerator = iceAccelerator
         )
         val files = DataExports.write(world, layer, compressor, BuildInfo.VERSION)
 

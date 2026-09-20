@@ -1308,25 +1308,17 @@ data class IsostasyConfig(
      *
      * The map is drawn after the last deglaciation, so what it shows of that is the ground the
      * *present* ice still holds down and the ground the *former* ice has already let go: the
-     * rebound is the absence of a load rather than a load of its own. S2 takes the ice mask the
-     * glaciation stage produces and gives it a thickness; I1 gives the sheet a Vialov profile and
-     * this reads it instead. See docs/DESIGN_LEDGER.md, S2 and `REALISM_AUDIT.md` section 5.
+     * rebound is the absence of a load rather than a load of its own.
+     *
+     * The thickness the load is computed from is no longer a setting. S2 had only the glaciation
+     * stage's frozen *mask* to work from, so it gave the mask a flat two kilometres ramped over
+     * 400 km of margin and said so: the crudest thing that could be true of a sheet. I1 gave the
+     * sheet a profile — `IceSheet`, Vialov's, from Cuffey and Paterson's basal shear stress — and
+     * the load is now the ice that is actually standing there, so the two settings went rather
+     * than being left to disagree with it. See docs/DESIGN_LEDGER.md, S2 and I1.
      */
     val iceLoad: Boolean = true,
-    val iceDensity: Float = 917f,
-    /**
-     * How thick the ice is taken to be at the middle of a sheet, in metres, and how far in from
-     * its margin it reaches that thickness, in kilometres.
-     *
-     * Antarctica averages 2,126 m of ice and Greenland 1,673 (Fretwell et al. 2013; Morlighem et
-     * al. 2017), and both thin to nothing at the coast over a few hundred kilometres. Two
-     * thousand metres over a 400 km ramp is that, and it is deliberately the crudest thing that
-     * can be true: a sheet's real profile is a parabola in the distance from its margin (Vialov
-     * 1958) and drawing it is I1's, which this chunk exists to leave room for rather than to
-     * pre-empt.
-     */
-    val iceSheetThicknessMetres: Float = 2_000f,
-    val iceSheetMarginRampKm: Double = 400.0
+    val iceDensity: Float = 917f
 )
 
 /**
@@ -2319,6 +2311,17 @@ data class GlaciationConfig(
      */
     val reliefWindow: Float = 2f,
     /**
+     * Whether the relief window is an octagon rather than a square.
+     *
+     * F30's control, and it is a control rather than a taste. A sliding extremum over a *square*
+     * window makes a plateau round every summit whose edge is the square's own outline, so
+     * `channelled` - and with it the sheet mask, and with that every scour basin clipped to it -
+     * carried straight edges `2 * reliefWindow * valleyWidthCells` cells long at 0 and 90 degrees.
+     * Off is that world, which is what the outline clause is shown failing against; on is the
+     * octagon, whose longest facet is a fifth of it. See `GlaciationStage.localRelief`.
+     */
+    val reliefWindowOctagon: Boolean = true,
+    /**
      * The shortest channelled flow path that may become a trough, in kilometres.
      *
      * A catchment threshold alone cannot tell a glacier from a gully: twenty cells of upstream
@@ -2380,6 +2383,20 @@ data class GlaciationConfig(
      * which is the honest control for the scour's own guard.
      */
     val sheetScour: Boolean = true,
+    /**
+     * Whether the sheet's outlets cut troughs, and how much of a sheet one has to drain to be an
+     * outlet rather than a piece of its margin.
+     *
+     * An ice sheet's flow converges, because its surface is a dome, and where it meets a valley in
+     * the bed it is funnelled: a few per cent of a sheet's rim carries most of its discharge, and
+     * those are the places that end up as fjords. Jakobshavn Isbrae drains about 6.5% of the
+     * Greenland sheet (Rignot and Kanagaratnam, *Changes in the velocity structure of the Greenland
+     * ice sheet*, Science 311, 2006) and the twenty largest outlets between them drain roughly half
+     * of it, so a bar of 2% names the family without admitting every notch in the margin. Off is
+     * the control the fjord guard needs. See `GlaciationStage.cutOutletTroughs`.
+     */
+    val outletTroughs: Boolean = true,
+    val outletCatchment: Float = 0.02f,
     /**
      * How far sheet ice planes the ground down away from its basins, in metres.
      *

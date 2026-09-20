@@ -236,12 +236,35 @@ class RasterRecipe(
      * and for the opposite reason: it measures the country rather than the sheet.
      */
     val opennessStep: Int,
+    /**
+     * The median illumination over ordinary country, which every lit cell is divided by.
+     *
+     * Carried rather than copied into the shader, and that is the whole point of it being here.
+     * It is a *measurement* — see `ReliefShading.ORDINARY_GROUND` — so it moves whenever the
+     * ground does, and it has moved five times: 0.936, 0.9318, 0.9582, 0.9421, 0.9473. Every one
+     * of those was a change to a Kotlin constant that a second, identical constant in the GLSL had
+     * to be talked into following, and at I1 it was not: the shader kept 0.9582 through two
+     * re-derivations and `GpuRasterTest` found a third of the map two or three levels out. A
+     * number that is re-measured cannot be written down twice, so now it is written down once and
+     * handed over with the rest of the recipe.
+     */
+    val ordinaryGround: Float,
     val showLakes: Boolean,
     val showCoastline: Boolean,
     val showBorders: Boolean
 ) {
 
     companion object {
+
+        /**
+         * The shading's own median, for a caller that builds a recipe by hand rather than through
+         * [of] — `GpuRasterTest`'s synthetic world is the one there is.
+         *
+         * `ReliefShading` is internal to this module, so without this the one place outside it
+         * that needs the figure would have to write the number down again, which is the habit
+         * [ordinaryGround] exists to break.
+         */
+        val ORDINARY_GROUND: Float get() = ReliefShading.ordinaryGround
 
         /**
          * Describes what [MapRasterizer.rasterize] would draw, or null if this world and these
@@ -442,6 +465,7 @@ class RasterRecipe(
                 singleLamp = options.singleLamp,
                 slopeScale = ReliefShading.slopeScale(cellsAcross),
                 opennessStep = ReliefShading.opennessStep(cellsAcross),
+                ordinaryGround = ReliefShading.ordinaryGround,
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,
                 showBorders = borders

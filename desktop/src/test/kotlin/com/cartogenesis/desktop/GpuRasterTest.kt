@@ -305,6 +305,7 @@ class GpuRasterTest {
         singleLamp = false,
         slopeScale = 12f * (side / 512f),
         opennessStep = 2 * side / 512,
+        ordinaryGround = RasterRecipe.ORDINARY_GROUND,
         showLakes = false,
         showCoastline = true,
         showBorders = false

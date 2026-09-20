@@ -48,7 +48,8 @@ fun main() {
             platform = WebPlatform(
                 gpu.accelerator,
                 gpu.unavailableBecause,
-                gpu.accelerator?.let { WebGpuOcean.sharingDeviceWith(it) }
+                gpu.accelerator?.let { WebGpuOcean.sharingDeviceWith(it) },
+                gpu.accelerator?.let { WebGpuIceSheet.sharingDeviceWith(it) }
             )
         }
 

@@ -88,16 +88,16 @@ class GpuIceSheetTest {
         )
         assertTrue(sheetCells > 0, "the synthetic mask left no sheet to measure")
         assertTrue(
+            relative <= THICKNESS_PARITY,
             "the card's thickness is ${"%.4f".format(worstThickness)} m off the processor's," +
                 " ${"%.2e".format(relative)} of the thickest ice, over the" +
-                " ${"%.0e".format(THICKNESS_PARITY)} a float's own precision explains",
-            relative <= THICKNESS_PARITY
+                " ${"%.0e".format(THICKNESS_PARITY)} a float's own precision explains"
         )
         assertTrue(
+            disagreedShare <= FLOW_DISAGREEMENT,
             "${"%.4f".format(disagreedShare * 100)}% of the card's flow receivers differ from the" +
                 " processor's, over the ${"%.2f".format(FLOW_DISAGREEMENT * 100)}% two all but" +
-                " equally steep neighbours explain",
-            disagreedShare <= FLOW_DISAGREEMENT
+                " equally steep neighbours explain"
         )
     }
 

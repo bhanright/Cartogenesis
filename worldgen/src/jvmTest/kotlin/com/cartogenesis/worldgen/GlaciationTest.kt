@@ -378,6 +378,12 @@ class GlaciationTest {
         val before = bare.sea.relativeElevation.data
         val after = iced.sea.relativeElevation.data
 
+        // The bed, not the surface: see [sheetThicknessMetres]. Where there is no sheet the
+        // thickness is zero and this is the field itself, so the arithmetic is unchanged
+        // everywhere the guard used to be measuring rock in the first place.
+        val ice = sheetThicknessMetres(config, iced)
+        val metresPerFieldUnit = config.scale.highestLandMetres
+
         var coldFlat = 0
         var deep = 0
         var laid = 0
@@ -386,7 +392,7 @@ class GlaciationTest {
         for (i in 0 until w * h) {
             if (!flat[i] || !glaciatedZone(bare.climate.biome[i])) continue
             coldFlat++
-            val cut = before[i] - after[i]
+            val cut = before[i] - (after[i] - ice[i] / metresPerFieldUnit)
             sum += cut.toDouble()
             if (cut >= TROUGH_DEPTH) deep++
             if (cut <= -TILL) laid++
@@ -788,6 +794,30 @@ class GlaciationTest {
  * [GlaciationAuditTest] and both classes call this, so it is `internal` at file scope instead of
  * being duplicated.
  */
+/**
+ * How thick the ice sheet stands at every cell of [world], in metres, and zero where there is none.
+ *
+ * The stage's own tally, run again on the same ground the engine ran it on, exactly as
+ * [reportBudget] does. It is wanted because of what I1 did to the elevation field: the field now
+ * carries the ice sheet's *surface* where there is one, so a measurement made on that field is a
+ * measurement of the ice as much as of the rock. Subtracting this gives the bed back, which is
+ * what a guard about the shape of the ground has always meant. Top-level for [reportBudget]'s own
+ * reason: `GroundTextureTest` needs it too.
+ */
+internal fun sheetThicknessMetres(config: WorldGenConfig, world: WorldMap): FloatArray {
+    val sea = SeaLevelStage.apply(world.erosion.height, config)
+    val balance = if (config.climate.snowBalance) {
+        ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))
+    } else null
+    var thickness = FloatArray(config.width * config.height)
+    runBlocking {
+        GlaciationStage.apply(config, sea, balance, null) { mass ->
+            thickness = mass.iceThicknessMetres
+        }
+    }
+    return thickness
+}
+
 internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
     val sea = SeaLevelStage.apply(world.erosion.height, config)
     // The same provisional snow balance the engine hands the stage (H2), or null for the pre-H2

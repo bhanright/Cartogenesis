@@ -336,17 +336,19 @@ internal object ReliefShading {
      * lamp had it and lets only the relief move. `ReliefShadingTest` measures it at the haze it
      * derives and asserts this is that figure.
      *
-     * It was 0.936 until the 2.0.x line's routing came across and 0.9318 until S2's fourth pass.
-     * Nothing in this file changed either time; the ground did. The water is routed by the
-     * steepest triangular facet now, so twelve rounds of erosion cut different rock; and the base
-     * relief carries a texture proportional to the ground's own relief, so ordinary country is
-     * *smoother* than it was and catches more of the light — 0.9582 where it measured 0.9318 and
-     * 0.936 before that. Re-derived rather than argued with, because the figure is defined as that
+     * It was 0.936 until the 2.0.x line's routing came across, 0.9318 until S2's fourth pass and
+     * 0.9582 until I1. Nothing in this file changed any of those times; the ground did. The water
+     * is routed by the steepest triangular facet now, so twelve rounds of erosion cut different
+     * rock; the base relief carries a texture proportional to the ground's own relief, so ordinary
+     * country came out smoother and caught more of the light; and I1 wrote the ice sheet's own
+     * surface into the elevation field, which is a smooth dome with a kilometre-high flank round
+     * it, so the land of seed 234475 is a steeper place than it was and ordinary country is back
+     * down to 0.9421. Re-derived rather than argued with, because the figure is defined as that
      * median and for no other reason — and re-derived rather than absorbed into the drift bar,
-     * because leaving it stale would draw every map two and a half percent off the tone the lamp
+     * because leaving it stale would draw every map one and a half percent off the tone the lamp
      * set, which is the one thing this constant exists to hold still.
      */
-    private const val ORDINARY_GROUND = 0.9582f
+    private const val ORDINARY_GROUND = 0.9421f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import kotlinx.coroutines.delay
 
@@ -50,18 +51,20 @@ internal object Generation {
      *
      * [previous] is the world already on screen, so the engine can skip whatever the settings did
      * not change; [accelerator] is the graphics device, or the terrain a version-2 save carried;
-     * [oceanAccelerator] is the same device again, for the stream-function solve.
+     * [oceanAccelerator] is the same device again, for the stream-function solve, and
+     * [iceAccelerator] the same device once more, for the ice sheet's profile and its flow.
      */
     suspend fun run(
         config: WorldGenConfig,
         previous: PartialWorld?,
         accelerator: ErosionAccelerator?,
         oceanAccelerator: OceanAccelerator?,
+        iceAccelerator: IceSheetAccelerator? = null,
         onStage: (GenerationStage) -> Unit
     ): WorldMap {
         letTheInterfaceDraw()
         return WorldGenerationEngine.generate(
-            config, previous, accelerator, oceanAccelerator
+            config, previous, accelerator, oceanAccelerator, iceAccelerator
         ) { stage, _, _ ->
             onStage(stage)
             letTheInterfaceDraw()

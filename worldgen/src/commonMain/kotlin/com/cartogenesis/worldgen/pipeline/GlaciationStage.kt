@@ -839,11 +839,11 @@ object GlaciationStage {
      * Presses the crust down under the ice standing on it, in place, and reports the deepest bend.
      *
      * The thickness is [IceSheet]'s: the plastic profile, `sqrt` of the distance from the margin,
-     * with the basal shear stress Cuffey and Paterson measure. Until I1 it was a flat
-     * [IsostasyConfig.iceSheetThicknessMetres] ramped to nothing over
-     * [IsostasyConfig.iceSheetMarginRampKm] of margin — the crudest thing that could be true of a
-     * sheet, and deliberately so, because S2 had no profile to read. It has one now, so the two
-     * settings are gone and the load is the ice that is actually standing there. The consequence
+     * with the basal shear stress Cuffey and Paterson measure. Until I1 it was a flat two
+     * thousand metres ramped to nothing over four hundred kilometres of margin, both of them
+     * settings — the crudest thing that could be true of a sheet, and deliberately so, because S2
+     * had no profile to read. It has one now, so the two settings are gone and the load is the ice
+     * that is actually standing there. The consequence
      * the guard reads is Airy's: a sheet deep enough for the plate to have flattened out under it
      * depresses its bed by `iceDensity / mantleDensity` of its own thickness, 917 over 3,300,
      * which is 28%.

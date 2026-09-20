@@ -65,6 +65,20 @@
   this should start from the narrow one, which is a hundred lines and one guard away, and find out
   why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
   2026-09-14, F30.
+- **A sheet's margin is a one-cell cliff, and a small cap on a plain is a mesa.** Seen on the I1
+  render review, 718106 and 59758 at 2048 in Atlas and in Elevation. The plastic profile is
+  `sqrt(distance from the margin)`, whose slope at the margin is infinite, so on a grid six
+  kilometres to the cell the first cell in from the edge already stands three to four hundred
+  metres up and the ice ends in a step rather than in a wedge. On the big dome it is only the
+  outline that suffers; where the mask is a cap twenty or thirty cells across on flat lowland - and
+  718106's northern plains carry several - the whole cap is edge, and it reads as a white mesa
+  dropped on a green plain rather than as ice. Both are the equation telling the truth at a
+  resolution that cannot draw it: a real margin's taper is a kilometre or two wide, which is a
+  fifth of a cell here. Whoever opens it should look at the last cell rather than at the profile -
+  a margin cell's thickness is the mean of the profile over the ground the cell covers, not its
+  value at the cell's middle, and that integral is two thirds of the point value and falls to
+  nothing at the edge on its own. The guards do not see it because a one-cell rim is inside every
+  outline and hypsometry bar there is. 2026-09-19, I1.
 - **The sheet's scour is not lineated, though its flow is radial.** I1 gave the sheet a surface
   and a flow down it, and the flow is the dome's: 70-92% of the ice within 500 km of the summit
   flows outward, at a mean 35-66 degrees off radial, against the 50% and 90 degrees a bearing that
@@ -93,12 +107,6 @@
   all, which is the 2% `GlaciationConfig.outletCatchment` bar doing its job on a sheet whose flow
   does not converge anywhere; whether that bar is right wants measuring on more than four worlds.
   2026-09-19, I1.
-- **The ice sheet has no WGSL path, so the browser pays for its profile on the CPU.** Rule 8's seam
-  is cut and the desktop side of it is written - `IceSheetAccelerator`, `GpuIceSheet` and its parity
-  clause - but the browser's implementation is not, so `WebPlatform` offers no ice accelerator and
-  the browser falls back to `IceSheet`'s own code. What that costs is one jump flood and two
-  per-cell passes over the grid, which is tens of milliseconds at 2048 and is why it was not the
-  thing to finish first; the shape to copy is `WebGpuOcean`. 2026-09-19, I1.
 - **A trough is still stamped along a D8 path, and at 2048 you can just see it.** I2 stopped the
   cross-section planing ground that stands above the ice, which is what made the slab, but the
   cross-section is still laid one cell at a time along the flow path and a flow path still runs

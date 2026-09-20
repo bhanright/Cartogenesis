@@ -135,6 +135,16 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 11 because the ice sheet gained a profile and the two settings that guessed at one went.
+     * `isostasy.iceSheetThicknessMetres` and `isostasy.iceSheetMarginRampKm` said how thick a
+     * sheet was taken to be and over how far it thinned; I1 works the thickness out from Nye's and
+     * Vialov's plastic profile instead, so both keys are gone and `glaciation` gained
+     * `reliefWindowOctagon`, `outletTroughs` and `outletCatchment` in their place. A format-10
+     * file carries the two dead keys, which this build ignores, and carries none of the three new
+     * ones, which it would fill in with its own defaults: the world in the file would still draw,
+     * and the moment a reader changed a knob and asked for it again it would be carved by rules
+     * the file had never heard of. Rule 11 of docs/CONVENTIONS.md is what this is.
+     *
      * 10 because the ice gained a thickness. `glaciation.valleyIceThicknessMetres` is how far above
      * its bed the ice in a trough stands, and the carving shares its cut by how deeply a cell lies
      * under that as well as by how far across the section it lies — which is the whole of I2's fix
@@ -175,7 +185,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 10
+    const val FORMAT_VERSION = 11
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

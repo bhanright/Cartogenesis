@@ -301,15 +301,26 @@ class GroundTextureTest {
 
     /**
      * The median departure from a four-cell box mean, in metres, over the lowest and the highest
-     * quarter of the land by elevation.
+     * quarter of the land by elevation — of the *bed*, not of whatever is standing on it.
+     *
+     * Since I1 the elevation field carries the ice sheet's own surface where there is one, a dome
+     * two to four kilometres up. Read straight off the field, a sheet takes its own ground out of
+     * the lowest quarter and puts a kilometre-high wall round the edge of it, and neither is the
+     * tectonic texture rule's doing: the five standard seeds pooled read 65.8 m in the lowest
+     * quarter and 149.1 in the highest with the sheet in the field, and 65.1 and 122.7 with the
+     * surface write suppressed and nothing else changed. The bar records what `main` measures on
+     * the rock, so what is measured against it is the rock. See [sheetThicknessMetres].
      */
     private fun textureByElevation(world: WorldMap): Pair<Double, Double> {
         val cellsAcross = world.width
         val cellsDown = world.height
         val scale = world.config.scale
         val isLand = world.sea.isLand
+        val ice = sheetThicknessMetres(world.config, world)
         val metres = FloatArray(cellsAcross * cellsDown) {
-            if (isLand[it]) scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) else 0f
+            if (isLand[it]) {
+                scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) - ice[it]
+            } else 0f
         }
         val landWeight = FloatArray(cellsAcross * cellsDown) { if (isLand[it]) 1f else 0f }
         val radius = (FLANK_WINDOW_CELLS * cellsAcross / 512f).roundToInt().coerceAtLeast(1)

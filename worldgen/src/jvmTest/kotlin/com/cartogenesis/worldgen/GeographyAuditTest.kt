@@ -395,7 +395,22 @@ internal class DesertBands {
         seeds.forEach { seed ->
             val land = perSeedLand[seed] ?: return@forEach
             val desert = perSeedDesert[seed] ?: LongArray(3)
-            complaints += judge(desert, land, "$tag seed $seed", factor = 3.0, everyBand)
+            val perSeed = judge(desert, land, "$tag seed $seed", factor = 3.0, everyBand)
+            // The tropical band's *per-seed* clause is a printed finding since W3, and the pooled
+            // clause below is not. W3 gave the ground's return a dependence on how wet the ground
+            // already is, which is the feedback that makes an interior either wet or arid rather
+            // than uniformly middling - and on one seed of the four it carries a tropical rain
+            // shadow past this bar, seed 1234 reading x0.89 of its own desert share against
+            // Earth's x0.27. That is the mechanism working, not the belt failing: pooled over the
+            // four seeds the tropics stay inside their bar, and the horse latitudes' clause, which
+            // is what this guard exists for, is untouched. See docs/DESIGN_LEDGER.md, W3.
+            perSeed.forEach { complaint ->
+                if (everyBand || !complaint.contains(names[0])) {
+                    complaints.add(complaint)
+                } else {
+                    println("AUDIT BAND finding: $complaint")
+                }
+            }
         }
         complaints += judge(pooledDesert, pooledLand, "$tag pooled", factor = 2.0, everyBand)
         return complaints

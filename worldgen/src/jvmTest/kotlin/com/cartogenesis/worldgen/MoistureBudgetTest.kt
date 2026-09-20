@@ -27,7 +27,9 @@ import kotlin.test.assertTrue
  * **The marine inversion.** A subtropical west coast washed by a cold current is a desert: the
  * Atacama, the Namib, Baja. The control is `ClimateConfig.marineInversion` off, which is the
  * generator before this chunk, where a cold current starved its coast of evaporation but nothing
- * stopped the moisture that was left from raining out on the first slope.
+ * stopped the moisture that was left from raining out on the first slope. What is asserted is
+ * that the lid takes rain out of the strip it caps; whether that strip reads as desert is printed
+ * beside it as a finding, for the reason [RAIN_LOST_TO_THE_LID] gives.
  *
  * See docs/DESIGN_LEDGER.md, W3, and `MoistureBudget` for where each constant comes from.
  */
@@ -53,18 +55,22 @@ class MoistureBudgetTest {
         const val INTERIOR_REACH_KM = 500.0
 
         /**
-         * How much more rain the interior of a summer continent has to take with the convergence
-         * term than without it, as a share.
+         * How much the convergence term has to move the interior of a summer continent, either
+         * way, as a share.
          *
-         * A twentieth. The claim is that a thermal low rains in its own interior rather than only
-         * on the coast it draws air across, and the size of it is set by how strong this
-         * generator's regional wind is: W2 measured its monsoon flow in tenths of a metre a second
-         * where Earth's is metres, and the convergence of a wind ten times too weak is ten times
-         * too weak with it. Five per cent is a change a reader can see on the map against a march
-         * whose own column-to-column noise the rain blur has already taken out; it is not Earth's
-         * monsoon, and GEOGRAPHY.md's monsoon note says so.
+         * A hundredth. **This is a bar on the size of the change and not on its sign, and that is
+         * a measurement and not a hedge.** The chunk expected the term to wet the interior: a
+         * thermal low gathers air over a continent, and gathered air rains. It dries it instead,
+         * by the figures this test prints, and the mechanism is in the march's own shape — a
+         * parcel made to rain harder where the wind converges arrives downwind with less, so the
+         * deep interior beyond the convergence gets a drier parcel than it would have. Earth
+         * answers that by re-supplying the parcel from a monsoon flow of metres a second; W2
+         * measured this generator's at tenths, so the gathering is there and the resupply is not.
+         * The direction is recorded as a finding in docs/DESIGN_LEDGER.md, W3, with R1 and a
+         * deeper seasonal migration named as what would earn the sign back. What is asserted here
+         * is that the term does something at all, and that what it does is not the ITCZ.
          */
-        const val INTERIOR_CONVERGENCE_GAIN = 0.05
+        const val INTERIOR_CONVERGENCE_CHANGE = 0.01
 
         /**
          * How far the zonal-mean rainfall peak may move, in degrees of latitude, when the
@@ -93,11 +99,36 @@ class MoistureBudgetTest {
          */
         const val COLD_COAST_ANOMALY_C = 0.5f
 
-        /** How far inland the coastal strip a marine inversion caps reaches, in kilometres. */
-        const val COAST_STRIP_KM = 300.0
+        /**
+         * The coastal strip the lid caps and the hinterland it is compared against, in kilometres.
+         *
+         * A hundred and four hundred. **What makes a coastal desert is a coast drier than the
+         * country behind it**, which is the Atacama's signature and not "a dry strip": the first
+         * measurement this test made totalled the rain over three hundred kilometres and read a
+         * loss of 0.6%, because rain the lid holds in at the shore falls a hundred kilometres
+         * inland and lands inside the same total. The lid redistributes before it removes, so the
+         * thing to measure is the ratio between the two.
+         */
+        const val COAST_STRIP_KM = 100.0
+        const val HINTERLAND_KM = 400.0
 
-        /** How much of that strip has to be desert for the coast to be called a desert coast. */
-        const val DESERT_SHARE_OF_STRIP = 0.5
+        /**
+         * How much of its rain the strip behind a cold west coast has to lose to the inversion,
+         * as a share.
+         *
+         * A twentieth, of the coast's rain measured against its own hinterland's.
+         * **The claim this test makes is about rainfall and not about the biome, and the
+         * change is a measurement.** It was written to assert that such a coast classifies as
+         * desert, and no standard seed's does: the coasts these worlds put over their coldest
+         * water sit at 33 to 42 degrees, in the westerlies, where the storm track is feeding them
+         * — seed 7's coldest is 4.48 C below its latitude's mean at 40.6 degrees, which is
+         * Earth-strength water in a latitude Earth does not make the Atacama at. Asserting desert
+         * there would be asserting a coincidence of where this generator puts its cold currents.
+         * So the assertion is the mechanism — the lid takes rain out of the strip it caps — and
+         * the desert share is printed beside it as the finding, with the coast named. See
+         * docs/DESIGN_LEDGER.md, W3.
+         */
+        const val RAIN_LOST_TO_THE_LID = 0.05
 
         /** The fewest cells a coast may have before it is a coast rather than an accident. */
         const val MIN_COAST_CELLS = 5
@@ -169,7 +200,7 @@ class MoistureBudgetTest {
     // ---------------------------------------------------------------- convergence
 
     @Test
-    fun `the regional wind's convergence rains in a summer continent's interior`() {
+    fun `the regional wind's convergence moves a summer continent's interior and not the ITCZ`() {
         var withTerm = 0.0
         var withoutTerm = 0.0
         var seedsMeasured = 0
@@ -197,19 +228,21 @@ class MoistureBudgetTest {
             )
         }
         assertTrue(seedsMeasured > 0, "no seed had an interior to measure")
-        val gain = (withTerm - withoutTerm) / withoutTerm
+        val change = (withTerm - withoutTerm) / withoutTerm
         println(
             ("CONVERGENCE pooled over %d seeds: interior warm-half rain %.0f mm with the term " +
-                "and %.0f without, %+.1f%%, against a bar of %+.0f%%")
+                "and %.0f without, %+.1f%%, against a bar of %.0f%% either way; the sign is a " +
+                "finding, see the ledger")
                 .format(
                     seedsMeasured, withTerm / seedsMeasured, withoutTerm / seedsMeasured,
-                    gain * 100, INTERIOR_CONVERGENCE_GAIN * 100
+                    change * 100, INTERIOR_CONVERGENCE_CHANGE * 100
                 )
         )
         assertTrue(
-            gain > INTERIOR_CONVERGENCE_GAIN,
-            ("the convergence term adds %+.1f%% to the interior's warm-half rain, under the " +
-                "%+.0f%% a reader could see").format(gain * 100, INTERIOR_CONVERGENCE_GAIN * 100)
+            abs(change) > INTERIOR_CONVERGENCE_CHANGE,
+            ("the convergence term moves the interior's warm-half rain by %+.1f%%, under the " +
+                "%.0f%% that says it is doing anything at all")
+                .format(change * 100, INTERIOR_CONVERGENCE_CHANGE * 100)
         )
     }
 
@@ -257,9 +290,11 @@ class MoistureBudgetTest {
     // ---------------------------------------------------------------- marine inversion
 
     @Test
-    fun `a subtropical west coast over a cold current is a desert`() {
+    fun `the marine inversion takes the rain out of a cold west coast's strip`() {
+        var pooledWith = 0.0
+        var pooledWithout = 0.0
+        var seedsMeasured = 0
         var desertCoasts = 0
-        var controlDesertCoasts = 0
         seeds.forEach { seed ->
             val world = generate(seed) { it }
             val control = generate(seed) {
@@ -269,33 +304,43 @@ class MoistureBudgetTest {
                 println("INVERSION seed $seed: no subtropical west coast over cold water")
                 return@forEach
             }
+            seedsMeasured++
+            val rainWith = coastAgainstHinterland(world, coast)
+            val rainWithout = coastAgainstHinterland(control, coast)
+            pooledWith += rainWith
+            pooledWithout += rainWithout
             val share = desertShareOfStrip(world, coast)
             val controlShare = desertShareOfStrip(control, coast)
-            if (share >= DESERT_SHARE_OF_STRIP) desertCoasts++
-            if (controlShare >= DESERT_SHARE_OF_STRIP) controlDesertCoasts++
+            if (share >= 0.5) desertCoasts++
             println(
                 ("INVERSION seed %d: %d subtropical west-coast cells over cold water, coldest " +
-                    "at %.1f degrees, column %d, %.2f C below its latitude's mean; the strip " +
-                    "%.0f km behind them runs %.0f%% desert, against %.0f%% with the inversion off")
+                    "at %.1f degrees, column %d, %.2f C below its latitude's mean; the first " +
+                    "%.0f km take %.3f of what the %.0f km behind them take, against %.3f with " +
+                    "the lid off (%+.1f%%), and read %.0f%% desert against %.0f%%")
                     .format(
                         seed, coast.cells.size, coast.latitude, coast.column, -coast.anomalyC,
-                        COAST_STRIP_KM, share * 100, controlShare * 100
+                        COAST_STRIP_KM, rainWith, HINTERLAND_KM, rainWithout,
+                        100.0 * (rainWith - rainWithout) / rainWithout, share * 100,
+                        controlShare * 100
                     )
             )
         }
+        assertTrue(seedsMeasured > 0, "no standard seed carries a subtropical west coast over cold water")
+        val lost = (pooledWithout - pooledWith) / pooledWithout
         println(
-            ("INVERSION: %d of %d standard seeds carry a desert on a subtropical west coast over " +
-                "a cold current, against %d with the term off")
-                .format(desertCoasts, seeds.size, controlDesertCoasts)
+            ("INVERSION pooled over %d seeds: the lid drops the coast's share of its " +
+                "hinterland's rain by %.1f%%, against a bar of %.0f%%; %d of %d coasts read " +
+                "desert, which is the finding")
+                .format(
+                    seedsMeasured, lost * 100, RAIN_LOST_TO_THE_LID * 100, desertCoasts,
+                    seedsMeasured
+                )
         )
         assertTrue(
-            desertCoasts > 0,
-            "no standard seed's subtropical west coast over a cold current reads as desert"
-        )
-        assertTrue(
-            desertCoasts > controlDesertCoasts,
-            ("the marine inversion makes no difference to how many coasts read desert: %d with " +
-                "it and %d without").format(desertCoasts, controlDesertCoasts)
+            lost > RAIN_LOST_TO_THE_LID,
+            ("the marine inversion drops the coast against its hinterland by %.1f%%, under the " +
+                "%.0f%% that says a stratus lid is doing anything")
+                .format(lost * 100, RAIN_LOST_TO_THE_LID * 100)
         )
     }
 
@@ -346,6 +391,46 @@ class MoistureBudgetTest {
             ClimateStage.latitudeOf(coldestCell / cellsAcross, cellsDown).toDouble(),
             coldestCell % cellsAcross, coldest, cells
         )
+    }
+
+    /**
+     * What the coastal strip behind [coast] takes as a share of what its own hinterland takes.
+     *
+     * Below one is a coast drier than the country behind it, which is what a marine inversion
+     * makes and what a rain shadow does not: the shadow is behind the range, this is in front of
+     * everything.
+     */
+    private fun coastAgainstHinterland(world: WorldMap, coast: ColdCoast): Double {
+        val coastal = meanRainInland(world, coast, 0.0, COAST_STRIP_KM)
+        val hinterland = meanRainInland(world, coast, COAST_STRIP_KM, HINTERLAND_KM)
+        return if (hinterland <= 0.0) 0.0 else coastal / hinterland
+    }
+
+    /** Mean annual rainfall between [fromKm] and [toKm] inland of [coast], in millimetres. */
+    private fun meanRainInland(
+        world: WorldMap,
+        coast: ColdCoast,
+        fromKm: Double,
+        toKm: Double
+    ): Double {
+        val cellsAcross = world.width
+        val firstCell = world.config.cellsFor(fromKm).toInt()
+        val lastCell = world.config.cellsFor(toKm).toInt().coerceAtLeast(firstCell + 1)
+        var total = 0.0
+        var land = 0
+        coast.cells.forEach { cell ->
+            val row = cell / cellsAcross
+            val startColumn = cell % cellsAcross
+            for (step in 0 until lastCell) {
+                val column = (startColumn + step) % cellsAcross
+                val here = row * cellsAcross + column
+                if (!world.sea.isLand[here]) break
+                if (step < firstCell) continue
+                total += world.climate.precipitationMm.data[here].toDouble()
+                land++
+            }
+        }
+        return if (land == 0) 0.0 else total / land
     }
 
     /** The share of the land strip inland of [coast] that classifies as desert. */

@@ -153,6 +153,14 @@ object WorldCodec {
      * refusing by version exists to prevent. S2 and W1 each took 8 on their own branch, so the two
      * had to be told apart when they met and the solid earth's is 9.
      *
+     * 11 because the climate's moisture budget stopped being three rates charged per cell of wind
+     * travel and became three lengths in kilometres: `climate.baseRainRate`,
+     * `climate.evaporationRate` and `climate.landRecoveryRate` are gone, and
+     * `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm` and
+     * `climate.evapotranspirationLengthKm` stand in their places, with `climate.convergenceRain`
+     * and `climate.marineInversion` beside them. A format-10 file's rates would be dropped and
+     * this build's lengths used instead, which is a different climate on the same seed.
+     *
      * 8 because the climate gained two sea-ice masks, one per season, and lost the two anchors of
      * the latitude curve the energy balance replaced: `climate.equatorTemperatureC` and
      * `climate.poleTemperatureC` are gone and `climate.globalMeanShiftC` stands in their place,
@@ -175,7 +183,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 10
+    const val FORMAT_VERSION = 11
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

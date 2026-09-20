@@ -833,7 +833,7 @@ ratios of 0.27, 2.05 and 0.12. Measured on seeds 7/42/1234/99 at 512: **0.00** i
 every seed, 2.83/2.52/2.91/2.40 in the horse latitudes against Earth's 2.05, and 0.25/0.55/0.14/0.34
 poleward against Earth's 0.12. The first two are asserted, within a factor of two pooled and three
 per seed; the third is a deviation, recorded below. Shown to bite on a world with
-`landRecoveryRate` at zero, where the tropics go to 1.15/2.30/2.46/2.46 against Earth's 0.27.
+`evapotranspirationLengthKm` at zero, where the tropics go to 1.15/2.30/2.46/2.46 against Earth's 0.27.
 Desert covers about 4.6% of land without seasons and about 2% with them — see "The year has two
 halves" below for why, and for the third mechanism seasons made necessary.
 `DesertCauseTest` is the diagnostic that found the cause, attributing each desert cell to its belt,

@@ -135,7 +135,7 @@ object ClimateStage {
      * own percentile is what made an arid world and a lush one classify identically; this factor
      * is applied the same way to every seed, so an arid world reads as arid.
      *
-     * The march has no closed form linking `baseRainRate` and `orographicStrength` to a physical
+     * The march has no closed form linking `depletionLengthKm` and `orographicStrength` to a physical
      * rate — the moisture reservoir's steady state depends on evaporation, recovery, the belt
      * multiplier and however many cells of fetch a parcel has had, none of which reduces to an
      * algebraic expression. So the factor was found empirically, with it set to 1 and

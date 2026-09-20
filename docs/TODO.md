@@ -65,21 +65,21 @@
   this should start from the narrow one, which is a hundred lines and one guard away, and find out
   why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
   2026-09-14, F30.
-- **One glacial basin's floor sits exactly on Salar de Uyuni's flatness.** 364673's basin 0 at
-  (3,1786) at 2048, 583 cells: 29.5% of its floor lies within a metre of one height over 919 m of
-  relief, against the 29.4% `GlacialBasinShapeTest.allowedFlatShare` permits, which is 1.00 times
-  the bar. It has been sitting on that bar for as long as the bar has existed and read just inside
-  it until I1 gave the ice a margin that tapers. The mechanism is the flexure, not the carving: a
-  basin is cut into rock before the ice is weighed, and what the load then does to it is *tilt* it,
-  because subtracting a smooth bend from a floor makes the floor less level. A wedge margin is a
-  few hundred metres thinner at the edge than a cliff margin was, so it presses its bed down less,
-  so the tilt across this basin is weaker and its floor reads flatter by two parts in a thousand.
-  The bar is an Earth figure and ground rule 5 forbids moving it to fit a measurement, so the
-  clause prints this one basin with the figure beside it and asserts the rest; see
-  `isTheBasinTheMarginUntilted`, which also asserts that it stays over the bar, so the finding
-  cannot quietly close. Whoever opens it should ask whether a basin ought to be cut *after* the
-  load rather than before it - the order is the real question and it is older than I1.
-  2026-09-20, I1.
+- **Closed 2026-09-20 by W3.** *One glacial basin's floor sat exactly on Salar de Uyuni's
+  flatness.* 364673's great southern basin had been on that bar for as long as the bar existed and
+  went over it when I1 gave the ice a margin that tapers: 30.7% of its floor within a metre of one
+  height over 905 m of relief against 27.4% allowed, 1.12 times the bar. The mechanism was the
+  flexure and not the carving - a basin is cut into rock before the ice is weighed, and what the
+  load then does to it is *tilt* it, so a thinner margin presses its bed down less, the tilt is
+  weaker and the floor reads flatter. W3's moisture budget moved the rain that decides where the
+  ice is at all, and the basin came back inside with room to spare; the worst floor over every
+  audited seed is now seed 7's 45-cell basin at 13.3% against 100% allowed, 0.13 times the bar. The
+  exemption, the clause that kept it measured and the clause that kept it to one basin are all
+  gone, and `GlacialBasinShapeTest` asserts the floor claim over every basin on every seed again.
+  **The question the entry raised is still open and is not closed by this**: whether a basin ought
+  to be cut *after* the load rather than before it. The order is the real question, it is older
+  than I1, and nothing here has answered it - what has changed is that no measurement is currently
+  pressing on it. 2026-09-14, I1; closed 2026-09-20, W3.
 - **The sheet's scour is not lineated, though its flow is radial.** I1 gave the sheet a surface
   and a flow down it, and the flow is the dome's: 70-92% of the ice within 500 km of the summit
   flows outward, at a mean 35-66 degrees off radial, against the 50% and 90 degrees a bearing that

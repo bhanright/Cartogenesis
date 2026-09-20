@@ -116,7 +116,6 @@ class GlacialBasinShapeTest {
         var worstExcess = 0f
         var worst: Basin? = null
         val failures = ArrayList<String>()
-        val findings = ArrayList<String>()
         seeds.forEach { (seed, side) ->
             val basins = measure(seed, side).basins
             basins.forEach { basin ->
@@ -132,7 +131,7 @@ class GlacialBasinShapeTest {
                         "${"%.1f".format(basin.flattestShare * 100)}% of its floor within a metre " +
                         "of one height over ${"%.0f".format(basin.reliefMetres)} m of relief, " +
                         "against ${"%.1f".format(allowed * 100)}% allowed"
-                    if (isTheBasinTheMarginUntilted(basin)) findings += said else failures += said
+                    failures += said
                 }
             }
             println(
@@ -149,59 +148,22 @@ class GlacialBasinShapeTest {
                     "${"%.1f".format(allowedFlatShare(at.cells, at.reliefMetres) * 100)}% allowed " +
                     "(${"%.2f".format(worstExcess)} times the bar)"
         )
-        findings.forEach { println("I2 FLOOR FINDING (I1's margin, open): $it") }
+        // **W3 closed I1's open finding, which is what the clause it replaced asked for.** Seed
+        // 364673's great southern basin sat over Salar de Uyuni's flatness for as long as this bar
+        // existed — 30.7% of its floor within a metre of one height against 27.4% allowed on the
+        // I1 merge, 1.12 times the bar — and the mechanism was the flexure rather than the
+        // carving: a thinner margin presses its bed down less, so the tilt across the basin is
+        // weaker and its floor reads flatter. W3's moisture budget moved the rain that decides
+        // where the ice is at all, and on this tree that basin is inside the bar with room to
+        // spare: the worst floor over every audited seed is now seed 7's 45-cell basin at 13.3%
+        // against 100% allowed, 0.13 times the bar. So the exemption, the clause that kept it
+        // measured and the clause that kept it to one basin all go together, and the floor claim
+        // is an assertion over every basin on every seed again. See docs/DESIGN_LEDGER.md, W3.
         assertTrue(
             "a cut basin's floor is a plate at one level:\n" + failures.joinToString("\n"),
             failures.isEmpty()
         )
-        // What stops the clause above passing because the open case swallowed everything: the
-        // basin named in [isTheBasinTheMarginUntilted] is over the bar today and has to stay
-        // measured. If it comes back inside, the finding closes and so does this clause.
-        assertTrue(
-            "the basin I1's margin is open on is inside the bar now, so the finding should" +
-                " become an assertion again",
-            findings.isNotEmpty()
-        )
-        // And what stops the seed-wide key hiding a second defect behind the first: the finding is
-        // *one* basin. A second flat floor on the same seed is a new defect and fails here.
-        assertTrue(
-            "the finding covers ${findings.size} basins on that seed, not one — a seed-wide" +
-                " exemption must not grow to cover a defect it was never opened for:\n" +
-                findings.joinToString("\n"),
-            findings.size == 1
-        )
     }
-
-    /**
-     * Whether this is the one basin the floor clause reports rather than asserts.
-     *
-     * 364673's great southern basin, and it has been sitting on this bar for as long as the bar
-     * has existed. On the merged tree it is 671 cells with 30.7% of its floor within a metre of
-     * one height over 905 m of relief, against 27.4% allowed, which is 1.12 times the bar; on I1's
-     * own branch before W2 it was 583 cells, 29.5% against 29.4%, exactly 1.00 times.
-     *
-     * The mechanism is the flexure and not the carving. A basin is cut into rock, before the ice
-     * is weighed and long before the surface is written; what the load then does to it is tilt it,
-     * because a flexural bend is a smooth surface and subtracting a smooth tilt from a floor makes
-     * the floor less level. I1's margin is a wedge now rather than a cliff, so the ice at the edge
-     * of the southern sheet is a few hundred metres thinner than it was, so it presses its bed
-     * down less, so the tilt across this basin is weaker and its floor reads flatter. W2's winds
-     * then moved the rain that decides where the ice is at all, which is why the merged figure is
-     * further out than either side's. That is the physics being more honest, not the carving being
-     * worse — and the clause is *better* on this tree than on either parent, since the basin `main`
-     * carries at 1.45 times the bar, 718106's 167-cell plate at 79.6%, is gone: I2b's fix spends
-     * the paraboloid as a share of the ground and that seed's flattest floor now reads 11.8%.
-     *
-     * Keyed on the seed rather than on the anchor cell, which is the lesson of the merge: the
-     * predecessor of this function named (488,25) and its successor named (3,1786), and both went
-     * stale the moment the ground moved under them, turning a recorded finding into a false
-     * failure. [findingsAreOneBasin] is what stops a seed-wide key swallowing a second defect.
-     *
-     * The bar it crosses is Salar de Uyuni's flatness — an Earth figure, which ground rule 5
-     * forbids moving to fit a measurement — so it is printed with the figure beside it and carried
-     * as a finding. See docs/TODO.md and docs/DESIGN_LEDGER.md, row I1.
-     */
-    private fun isTheBasinTheMarginUntilted(basin: Basin): Boolean = basin.seed == 364673L
 
     /**
      * The largest patch of land, in cells, that may stand level to within a metre.

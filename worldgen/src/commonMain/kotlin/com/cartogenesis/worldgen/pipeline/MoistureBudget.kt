@@ -158,6 +158,22 @@ object MoistureBudget {
     const val INVERSION_REACH_KM = 500f
 
     /**
+     * **What this term does not do, measured.**
+     *
+     * It does not make a coastal desert. Pooled over the standard seeds it moves a cold west
+     * coast's share of its own hinterland's rain by 0.2%, with a suppression field whose
+     * warm-season peak over those coasts is 0.95 and none of whose cells stand above the lid - so
+     * the march reads a strong lid and rains anyway. The march is a reservoir and this is a
+     * multiplier on the rate it empties at: hold the rate down and the moisture stands higher,
+     * because the ground's return adds on the deficit, and `moisture x rate` comes back within a
+     * few cells. A coastal desert needs the water taken out of the column, not the rain rate held
+     * down, and that is a change to the march's shape rather than to this term. The term is kept
+     * because the diagnosis names what would make it bite and `MoistureBudgetTest` goes on
+     * measuring it. See docs/DESIGN_LEDGER.md, W3.
+     */
+    const val INVERSION_MEASURED_EFFECT = 0.002f
+
+    /**
      * How cold the water off a coast has to be, as a departure from the mean of its own latitude
      * in degrees Celsius, for the inversion above it to be at full strength.
      *

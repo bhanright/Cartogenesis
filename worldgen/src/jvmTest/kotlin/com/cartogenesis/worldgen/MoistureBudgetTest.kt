@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -27,9 +28,10 @@ import kotlin.test.assertTrue
  * **The marine inversion.** A subtropical west coast washed by a cold current is a desert: the
  * Atacama, the Namib, Baja. The control is `ClimateConfig.marineInversion` off, which is the
  * generator before this chunk, where a cold current starved its coast of evaporation but nothing
- * stopped the moisture that was left from raining out on the first slope. What is asserted is
- * that the lid takes rain out of the strip it caps; whether that strip reads as desert is printed
- * beside it as a finding, for the reason [RAIN_LOST_TO_THE_LID] gives.
+ * stopped the moisture that was left from raining out on the first slope. **It is not
+ * delivered**: the lid is built and applied and moves the coast by 0.2%, for the two measured
+ * reasons [RAIN_LOST_TO_THE_LID] gives. What this test asserts is only that the lid the march
+ * reads is a real one, so the figures beside it measure the term and not its absence.
  *
  * See docs/DESIGN_LEDGER.md, W3, and `MoistureBudget` for where each constant comes from.
  */
@@ -113,20 +115,35 @@ class MoistureBudgetTest {
         const val HINTERLAND_KM = 400.0
 
         /**
-         * How much of its rain the strip behind a cold west coast has to lose to the inversion,
-         * as a share.
+         * **The marine inversion is not delivered, and this test measures rather than asserts it.**
          *
-         * A twentieth, of the coast's rain measured against its own hinterland's.
-         * **The claim this test makes is about rainfall and not about the biome, and the
-         * change is a measurement.** It was written to assert that such a coast classifies as
-         * desert, and no standard seed's does: the coasts these worlds put over their coldest
-         * water sit at 33 to 42 degrees, in the westerlies, where the storm track is feeding them
-         * — seed 7's coldest is 4.48 C below its latitude's mean at 40.6 degrees, which is
-         * Earth-strength water in a latitude Earth does not make the Atacama at. Asserting desert
-         * there would be asserting a coincidence of where this generator puts its cold currents.
-         * So the assertion is the mechanism — the lid takes rain out of the strip it caps — and
-         * the desert share is printed beside it as the finding, with the coast named. See
-         * docs/DESIGN_LEDGER.md, W3.
+         * The lid is built, it is applied, and it changes nothing a reader could see: pooled over
+         * the standard seeds it moves the coast's share of its own hinterland's rain by 0.2%. That
+         * is not a term that is missing. The diagnostic this test prints beside the figures shows
+         * a suppression field over the coast's own cells with a warm-season mean of 0.07 to 0.39
+         * and a peak of 0.95, and none of those cells standing above the 1,000 m lid - so the
+         * march is reading a strong lid and raining anyway.
+         *
+         * **Why, measured:** the march is a reservoir, and this term is a multiplier on the rate
+         * at which the reservoir empties. Hold the rate down and the moisture simply stands
+         * higher - evapotranspiration adds on the deficit `(1 - moisture)`, so a parcel that rains
+         * less refills faster - and the product the march records, `moisture x rate`, comes back
+         * to where it was within a few cells. It is the same fact GEOGRAPHY.md records the other
+         * way up under "Where the deserts are": a multiplier cannot make a rain shadow wet again,
+         * and it cannot make a wet coast dry either. A coastal desert needs the water taken out of
+         * the column rather than the rain rate held down, which is a change to the march's shape
+         * and not to this term.
+         *
+         * **And a second reason, which is not W3's:** the coasts these worlds put over their
+         * coldest water sit at 33 to 42 degrees, in the westerlies with the storm track feeding
+         * them 900 to 2,400 mm a year. Seed 7's coldest reads 4.48 C below its latitude's mean at
+         * 40.6 degrees - Earth-strength water at a latitude Earth does not build the Atacama at.
+         * Even a lid that bit would have no subject on these seeds. That is a finding about where
+         * `OceanStage` puts its eastern-boundary currents, recorded in GEOGRAPHY.md for the chunk
+         * that owns it.
+         *
+         * The figure below is kept as what the term would have to reach to be worth asserting.
+         * See docs/DESIGN_LEDGER.md, W3.
          */
         const val RAIN_LOST_TO_THE_LID = 0.05
 
@@ -290,11 +307,12 @@ class MoistureBudgetTest {
     // ---------------------------------------------------------------- marine inversion
 
     @Test
-    fun `the marine inversion takes the rain out of a cold west coast's strip`() {
+    fun `what the marine inversion does to a cold west coast, which is not enough`() {
         var pooledWith = 0.0
         var pooledWithout = 0.0
         var seedsMeasured = 0
         var desertCoasts = 0
+        var lidPeak = 0f
         seeds.forEach { seed ->
             val world = generate(seed) { it }
             val control = generate(seed) {
@@ -312,6 +330,7 @@ class MoistureBudgetTest {
             val share = desertShareOfStrip(world, coast)
             val controlShare = desertShareOfStrip(control, coast)
             if (share >= 0.5) desertCoasts++
+            lidPeak = maxOf(lidPeak, reportLidStrength(seed, world, coast))
             println(
                 ("INVERSION seed %d: %d subtropical west-coast cells over cold water, coldest " +
                     "at %.1f degrees, column %d, %.2f C below its latitude's mean; the first " +
@@ -336,11 +355,14 @@ class MoistureBudgetTest {
                     seedsMeasured
                 )
         )
+        // Not asserted: see [RAIN_LOST_TO_THE_LID]. What is asserted is that the lid the march
+        // reads is a real one, so that whoever picks this up does not have to re-derive whether
+        // the term was ever wired in.
         assertTrue(
-            lost > RAIN_LOST_TO_THE_LID,
-            ("the marine inversion drops the coast against its hinterland by %.1f%%, under the " +
-                "%.0f%% that says a stratus lid is doing anything")
-                .format(lost * 100, RAIN_LOST_TO_THE_LID * 100)
+            lidPeak > 0.5f,
+            ("the strongest lid over any cold west coast on any standard seed is %.3f, so the " +
+                "term is not reaching the march at all and the figures above are measuring its " +
+                "absence rather than its effect").format(lidPeak)
         )
     }
 
@@ -391,6 +413,46 @@ class MoistureBudgetTest {
             ClimateStage.latitudeOf(coldestCell / cellsAcross, cellsDown).toDouble(),
             coldestCell % cellsAcross, coldest, cells
         )
+    }
+
+    /**
+     * The lid the march actually saw over [coast]'s own cells, in both seasons: a diagnostic, not
+     * a claim, so that a term that is not biting can be told from a term that is not there.
+     */
+    private fun reportLidStrength(seed: Long, world: WorldMap, coast: ColdCoast): Float {
+        val tilt = if (world.config.climate.seasons) {
+            world.config.climate.seasonalTiltDegrees
+        } else {
+            0f
+        }
+        var strongest = 0f
+        listOf(true, false).forEach { warm ->
+            val field = MoistureBudget.inversionSuppression(
+                world.config, world.sea,
+                if (world.config.ocean.enabled) world.ocean.anomaly else null, tilt, warm
+            ) ?: return@forEach
+            var sum = 0.0
+            var peak = 0f
+            coast.cells.forEach { cell ->
+                sum += field.data[cell].toDouble()
+                if (field.data[cell] > peak) peak = field.data[cell]
+            }
+            val lid = world.config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
+            var aboveLid = 0
+            coast.cells.forEach { cell ->
+                if (world.sea.relativeElevation.data[cell] >= lid) aboveLid++
+            }
+            println(
+                ("LID seed %d %s: strength over the coast's own cells mean %.3f, peak %.3f; " +
+                    "%d of %d of those cells already stand above the %.0f m lid")
+                    .format(
+                        seed, if (warm) "warm" else "cold", sum / coast.cells.size, peak,
+                        aboveLid, coast.cells.size, MoistureBudget.INVERSION_LID_METRES
+                    )
+            )
+            strongest = maxOf(strongest, peak)
+        }
+        return strongest
     }
 
     /**

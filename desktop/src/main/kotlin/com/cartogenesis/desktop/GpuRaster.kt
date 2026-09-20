@@ -3,7 +3,6 @@ package com.cartogenesis.desktop
 import com.cartogenesis.cartography.EngravingPlan
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RasterRecipe
-import com.cartogenesis.worldgen.pipeline.Biome
 import org.lwjgl.opengl.GL43C
 import org.lwjgl.system.MemoryUtil
 

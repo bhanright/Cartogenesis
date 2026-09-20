@@ -24,8 +24,12 @@ import com.cartogenesis.worldgen.pipeline.Biome
  *    classifier's own verdict on what grows at a cell, and each class shows a *range* of ground:
  *    see [bareEarthLeast] and [bareEarthMost]. The index is spent inside that range rather than on
  *    top of it, which is what keeps a dry grassland straw and a desert sand.
- *  - **[canopyClosure]**, also from the biome: how much of the ground is under closed woody cover,
- *    which is what makes a forest darker than the plain beside it rather than merely greener.
+ *  - **[canopyAt]**, the world's own vegetation density: how much of the ground is under closed
+ *    woody cover, which is what makes a forest darker than the plain beside it rather than merely
+ *    greener. This was one figure per biome until the world carried a density of its own, and a
+ *    figure per biome makes every biome boundary a step in the drawn ground however small the
+ *    difference in cover across it really is. See
+ *    [com.cartogenesis.worldgen.pipeline.VegetationDensity].
  *
  * And one more, from the temperature alone: **[coldness]**, which pales the ground toward the sheet
  * where nothing grows because of the cold rather than the drought.

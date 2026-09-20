@@ -9,6 +9,16 @@
   line in `ErosionStage`; it needs the provisional climate march S3 is chartered to add, and
   wiring half of it now would have been a change to every world on a chunk that was asked to
   change none. The accessor and its units are documented at the field. 2026-09-20, W4.
+- **The canopy darkening was sized for a step and is now spending its range on differences nobody
+  can see.** `ClimateTint.CANOPY_DARKENING` is a twelfth, derived when the canopy was one figure
+  per biome and the only question was whether a wood read as darker ground than the plain beside
+  it. The canopy is a continuous field now, so most of the range is spent on differences of a few
+  hundredths: across five worlds W4 measured about 30% of pixels moving between the table and the
+  field, by a mean of 1 channel of 255 and at worst 13-17. The step across a woodland boundary
+  fell from 0.682 to 0.044 in the *field*, which is the claim, and in the drawn ground that is
+  under a colour step. Whether a twelfth is still the right figure once the quantity under it is
+  continuous is a question for V1 and wants the derivation re-done against a picture rather than
+  the constant nudged. 2026-09-20, W4.
 - **Budyko's evaporative fraction is the wrong shape for the march's ground return, and the right
   shape is not known.** W4 offered `VegetationDensity.density` in place of
   `MoistureBudget.groundWetness`'s rainfall proxy and measured 26.5% continental recycling against

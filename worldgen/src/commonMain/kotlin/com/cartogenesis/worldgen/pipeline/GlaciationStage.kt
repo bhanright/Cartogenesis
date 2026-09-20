@@ -545,18 +545,34 @@ object GlaciationStage {
             IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
         val margin = IceSheet.marginDistanceKm(config, frozen)
         val marginDistanceKm = margin.distanceKm
+
+        // And which of that ice is a *sheet*. The profile is a sheet's and only a sheet's, so a
+        // frozen body smaller than [IceSheet.SMALLEST_SHEET_SQUARE_KM] is left as the frozen
+        // ground it was: no thickness, no surface, no load and no outlet. Measured on the whole
+        // frozen body rather than on the sheet regime's share of it, because what glaciology's
+        // definition is about is the mass of ice, not which part of it this stage is carving by
+        // which rule. See that constant for the render this clause was written from.
+        val smallestSheetCells = IceSheet.SMALLEST_SHEET_SQUARE_KM / config.squareKilometresPerCell
+        val sheetBody = BooleanArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            val body = field.id[cell]
+            if (body >= 0 && field.size[body] >= smallestSheetCells) sheetBody[cell] = true
+        }
+
         val accelerated = accelerator?.sheet(
-            cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheet,
+            cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheetBody,
             metresPerRootKm, config.scale.highestLandMetres,
-            config.cellHeightInCellWidths.toFloat()
+            config.cellHeightInCellWidths.toFloat(), config.cellWidthKm.toFloat()
         )
         val iceThicknessMetres = accelerated?.thicknessMetres
             ?: IceSheet.profile(
-                margin, relative, sheet, metresPerRootKm, config.scale.highestLandMetres
+                margin, relative, sheetBody, metresPerRootKm, config.scale.highestLandMetres,
+                config.cellWidthKm.toFloat()
             )
         val surfaceFlow = accelerated?.flowReceiver
             ?: IceSheet.flowReceivers(
-                cellsAcross, cellsDown, relative, iceThicknessMetres, sheet,
+                cellsAcross, cellsDown, relative, iceThicknessMetres, sheetBody,
                 config.scale.highestLandMetres, config.cellHeightInCellWidths.toFloat()
             )
 

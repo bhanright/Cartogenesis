@@ -35,7 +35,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
         onTheSheet: BooleanArray,
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
-        cellHeightInCellWidths: Float
+        cellHeightInCellWidths: Float,
+        cellWidthKm: Float
     ): IceSheetAccelerator.Sheet? {
         if (cellsAcross <= 0 || cellsDown <= 0) return null
         val cellCount = cellsAcross.toLong() * cellsDown
@@ -73,6 +74,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 GL43C.glUniform1f(
                     uniform(profileProgram, "uMetresPerFieldUnit"), metresPerFieldUnit
                 )
+                GL43C.glUniform1f(uniform(profileProgram, "uCellWidthKm"), cellWidthKm)
                 GL43C.glDispatchCompute(groupsAcross, groupsDown, 1)
                 // The flow pass reads thicknesses other work groups have just written.
                 GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
@@ -184,6 +186,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
             uniform int uHeight;
             uniform float uMetresPerRootKm;
             uniform float uMetresPerFieldUnit;
+            uniform float uCellWidthKm;
 
             void main() {
                 int x = int(gl_GlobalInvocationID.x);
@@ -192,8 +195,19 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 int cell = y * uWidth + x;
                 if (onTheSheet[cell] == 0u) { thickness[cell] = 0.0; return; }
 
-                float distance = marginKm[cell];
-                precise float profile = distance <= 0.0 ? 0.0 : uMetresPerRootKm * sqrt(distance);
+                // The mean of the plastic curve over the cell, not its value at the cell's
+                // middle: `IceSheet.profileMetres`, with the roots factored out as that function
+                // spells them, which is what keeps the two within a float's own precision.
+                float far = marginKm[cell];
+                precise float profile = 0.0;
+                if (far > 0.0) {
+                    float near = max(far - uCellWidthKm, 0.0);
+                    precise float rootFar = sqrt(far);
+                    precise float rootNear = sqrt(near);
+                    precise float mean =
+                        (near + rootNear * rootFar + far) / (rootNear + rootFar);
+                    profile = (2.0 / 3.0) * uMetresPerRootKm * mean;
+                }
                 int from = nearest[cell];
                 precise float marginBed =
                     from < 0 ? 0.0 : max(bed[from] * uMetresPerFieldUnit, 0.0);

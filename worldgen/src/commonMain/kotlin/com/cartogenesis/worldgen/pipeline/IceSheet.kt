@@ -38,9 +38,11 @@ import kotlin.math.sqrt
  * Checked against the two sheets there are. Greenland's divide stands about 400 km from the
  * nearest margin, which the profile puts at 2,982 m against a measured maximum near 3,000
  * (Morlighem et al. 2017). Antarctica's is about 1,000 km in, which the profile puts at 4,715 m
- * against Bedmap2's measured maximum of 4,776 (Fretwell et al. 2013). A small cap 50 km across
- * stands 745 m, which is an ice cap and not a sheet, and that is the profile doing the work rather
- * than a second rule for small ice.
+ * against Bedmap2's measured maximum of 4,776 (Fretwell et al. 2013).
+ *
+ * It is asked of sheets only. A body of ice under [SMALLEST_SHEET_SQUARE_KM] is an ice cap by
+ * glaciology's own definition and gets no profile at all — see that constant, and the render that
+ * made the case for it.
  *
  * ### The surface, and why it is the terrain
  *
@@ -141,9 +143,84 @@ object IceSheet {
         return Margin(distance, nearest)
     }
 
-    /** The plastic profile at one cell, in metres above the margin it is measured from. */
-    fun profileMetres(marginDistanceKm: Float, metresPerRootKilometre: Float): Float =
-        if (marginDistanceKm <= 0f) 0f else metresPerRootKilometre * sqrt(marginDistanceKm)
+    /**
+     * The smallest body of ice that is an ice *sheet*, in square kilometres.
+     *
+     * Fifty thousand is the figure glaciology uses, and it is a definition rather than a
+     * threshold somebody picked: a mass of land ice larger than about 50,000 km2 is an ice sheet
+     * and one smaller than it is an ice cap or an ice field (Cuffey and Paterson, 4th edn, §1.2;
+     * Benn and Evans, *Glaciers and Glaciation*, 2nd edn, §1.5). Earth keeps the two sides of it
+     * well apart: the sheets are Greenland at 1.71 million km2 and Antarctica at 13.9 million,
+     * and the largest caps that are *not* sheets are Severny Island's at 20,500 km2,
+     * Austfonna's at 8,100 and Vatnajokull's at 7,900.
+     *
+     * The line is here because the profile is a sheet's and only a sheet's. Nye's and Vialov's
+     * equation describes a body spreading under its own weight until the shear stress at its base
+     * everywhere reaches yield, which is what a sheet does and what a small cap on a plain does
+     * not; applied to one anyway it gives a few hundred metres of ice with a margin the grid
+     * cannot draw, and the render showed exactly that — a cream mesa with a one-cell cliff round
+     * it, dropped on a green plain. A body under the line keeps no thickness and nothing is
+     * written into the elevation field for it: it stays the frozen ground it was before this
+     * chunk, which is the honest answer, because a cap of that size *is* frozen ground and the
+     * map has never claimed to know how thick it is.
+     *
+     * An area rather than a radius in cells, so the same world at 512, 1024 and 2048 draws the
+     * same caps. What it comes to on the standard grids, at a world 12,000 km across: 91 cells at
+     * 512, 364 at 1024 and 1,458 at 2048 — a cap about 10, 19 and 38 cells across.
+     */
+    const val SMALLEST_SHEET_SQUARE_KM = 50_000.0
+
+    /**
+     * Two thirds, which is the mean of `sqrt(x)` over `0..x` as a share of `sqrt(x)` itself.
+     *
+     * Named because it is the whole of why a margin is no longer a cliff: see [profileMetres].
+     */
+    private const val MEAN_OF_A_ROOT_OVER_ITS_SPAN = 2f / 3f
+
+    /**
+     * The plastic profile over one cell, in metres above the margin it is measured from: the
+     * *mean* of `H(x)` across the ground the cell covers, not its value at the cell's middle.
+     *
+     * `H = k * sqrt(x)` has an infinite slope at `x = 0`, so a cell's middle is a bad place to
+     * ask it anything near the margin. Sampled there, the first cell of ice at 2048 on a world
+     * 12,000 km across stood `k * sqrt(5.86)` = 361 m up and the ice ended in a step; Earth's
+     * margins taper over a kilometre or two, which is a fifth of a cell here, so the step was the
+     * equation telling the truth at a resolution that cannot draw it.
+     *
+     * A cell covers a span of distances, not a point, and the height a map cell should carry is
+     * the mean over that span. The margin line — where the ice is nothing — lies half a cell
+     * outside the first cell of ice, since the distance field measures centre to centre and the
+     * last ice-free centre reads zero; so a cell reading [marginDistanceKm] covers
+     * `marginDistanceKm - cellWidthKm` to `marginDistanceKm` of distance from that line, floored
+     * at nothing. Over `x1..x2` the mean of `k * sqrt(x)` is
+     * `(2/3) * k * (x2^1.5 - x1^1.5) / (x2 - x1)`, which at the first cell is
+     * [MEAN_OF_A_ROOT_OVER_ITS_SPAN] of what the point sample gave — 241 m rather than 361 — and
+     * which falls to nothing as the margin line is approached rather than stepping to it. Far
+     * from the margin the two agree to a metre, because a root is very nearly straight there:
+     * three cells in it is 440 m against the point sample's 442.
+     *
+     * Written with the roots factored out rather than as that fraction, and the difference is not
+     * cosmetic. With `a = sqrt(x1)` and `b = sqrt(x2)` the quotient is `(b^3 - a^3) / (b^2 - a^2)`,
+     * whose common factor `(b - a)` cancels to leave `(a^2 + a*b + b^2) / (a + b)` — the same
+     * number with nothing subtracted. Spelt as the difference, five hundred kilometres in from a
+     * margin it takes two values near 11,000 to make one near 200, which throws away most of a
+     * float's precision: the parity clause measured the card 2.05e-6 of the thickest ice from the
+     * processor against a bar of a part in a million, and this is what it was measuring. The
+     * factored form is exact arithmetic on quantities of the size of the answer.
+     */
+    fun profileMetres(
+        marginDistanceKm: Float,
+        metresPerRootKilometre: Float,
+        cellWidthKm: Float
+    ): Float {
+        val far = marginDistanceKm
+        if (far <= 0f) return 0f
+        val near = (marginDistanceKm - cellWidthKm).coerceAtLeast(0f)
+        val rootFar = sqrt(far)
+        val rootNear = sqrt(near)
+        val mean = (near + rootNear * rootFar + far) / (rootNear + rootFar)
+        return MEAN_OF_A_ROOT_OVER_ITS_SPAN * metresPerRootKilometre * mean
+    }
 
     /**
      * How high the sheet's *surface* stands at one cell, in metres above the shoreline.
@@ -169,9 +246,11 @@ object IceSheet {
     fun surfaceMetres(
         marginBedMetres: Float,
         marginDistanceKm: Float,
-        metresPerRootKilometre: Float
+        metresPerRootKilometre: Float,
+        cellWidthKm: Float
     ): Float =
-        marginBedMetres.coerceAtLeast(0f) + profileMetres(marginDistanceKm, metresPerRootKilometre)
+        marginBedMetres.coerceAtLeast(0f) +
+            profileMetres(marginDistanceKm, metresPerRootKilometre, cellWidthKm)
 
     /**
      * How much colder the top of [thicknessMetres] of ice is than its bed, in degrees.
@@ -199,13 +278,15 @@ object IceSheet {
         bedRelative: FloatArray,
         onTheSheet: BooleanArray,
         metresPerRootKilometre: Float,
-        metresPerFieldUnit: Float
+        metresPerFieldUnit: Float,
+        cellWidthKm: Float
     ): FloatArray = FloatArray(bedRelative.size) { cell ->
         if (!onTheSheet[cell]) 0f else {
             val nearest = margin.nearestCell[cell]
             val marginBed = if (nearest < 0) 0f else bedRelative[nearest] * metresPerFieldUnit
-            val surface =
-                surfaceMetres(marginBed, margin.distanceKm[cell], metresPerRootKilometre)
+            val surface = surfaceMetres(
+                marginBed, margin.distanceKm[cell], metresPerRootKilometre, cellWidthKm
+            )
             (surface - bedRelative[cell] * metresPerFieldUnit).coerceAtLeast(0f)
         }
     }

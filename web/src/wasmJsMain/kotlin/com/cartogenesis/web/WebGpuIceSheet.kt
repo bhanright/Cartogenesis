@@ -33,7 +33,8 @@ class WebGpuIceSheet private constructor(
         onTheSheet: BooleanArray,
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
-        cellHeightInCellWidths: Float
+        cellHeightInCellWidths: Float,
+        cellWidthKm: Float
     ): IceSheetAccelerator.Sheet? {
         if (cellsAcross <= 0 || cellsDown <= 0) return null
         val cellCount = cellsAcross.toLong() * cellsDown
@@ -58,7 +59,7 @@ class WebGpuIceSheet private constructor(
         val result = awaitPromise(
             runIceSheet(
                 device, cellsAcross, cellsDown, margin, nearest, bed, sheetWords,
-                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths
+                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellWidthKm
             )
         )
         if (result == null || isNullish(result)) return null
@@ -115,7 +116,7 @@ private external fun receiverOf(result: JsHandle): JsHandle
  */
 @JsFun(
     """(device, width, height, marginData, nearestData, bedData, sheetData,
-         metresPerRootKm, metresPerFieldUnit, rowScale) => (async () => {
+         metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm) => (async () => {
         if (device.__lost) return null;
         // Every storage type here is a 32-bit word; 16 squared is the baseline 256 invocations.
         const bytesPerCell = 4;
@@ -135,18 +136,18 @@ private external fun receiverOf(result: JsHandle): JsHandle
         let scopesOpen = true;
         try {
             const source = `
-                // Five values and three words of padding: a struct in the uniform address space
-                // has to be a multiple of 16 bytes, and one that is not reads back as zeros
-                // rather than failing, which would make the width zero and the output untouched.
+                // Six values and two words of padding: a struct in the uniform address space has
+                // to be a multiple of 16 bytes, and one that is not reads back as zeros rather
+                // than failing, which would make the width zero and the output untouched.
                 struct Params {
                     width: u32,
                     height: u32,
                     metresPerRootKm: f32,
                     metresPerFieldUnit: f32,
                     rowScale: f32,
+                    cellWidthKm: f32,
                     pad0: f32,
                     pad1: f32,
-                    pad2: f32,
                 };
                 @group(0) @binding(0) var<storage, read> marginKm: array<f32>;
                 @group(0) @binding(1) var<storage, read> nearest: array<i32>;
@@ -168,9 +169,19 @@ private external fun receiverOf(result: JsHandle): JsHandle
                     let cell = y * params.width + x;
                     if (onTheSheet[cell] == 0u) { thickness[cell] = 0.0; return; }
 
-                    let distance = marginKm[cell];
+                    // The mean of the plastic curve over the cell, not its value at the cell's
+                    // middle: IceSheet.profileMetres, with the roots factored out as that
+                    // function spells them, which is what keeps a device within a float's own
+                    // precision of the processor instead of two decimal digits short of it.
+                    let far = marginKm[cell];
                     var rise = 0.0;
-                    if (distance > 0.0) { rise = params.metresPerRootKm * sqrt(distance); }
+                    if (far > 0.0) {
+                        let near = max(far - params.cellWidthKm, 0.0);
+                        let rootFar = sqrt(far);
+                        let rootNear = sqrt(near);
+                        let mean = (near + rootNear * rootFar + far) / (rootNear + rootFar);
+                        rise = (2.0 / 3.0) * params.metresPerRootKm * mean;
+                    }
                     let from = nearest[cell];
                     var marginBed = 0.0;
                     if (from >= 0) {
@@ -262,7 +273,9 @@ private external fun receiverOf(result: JsHandle): JsHandle
             const params = buffer(32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
             const paramData = new ArrayBuffer(32);
             new Uint32Array(paramData, 0, 2).set([width, height]);
-            new Float32Array(paramData, 8, 3).set([metresPerRootKm, metresPerFieldUnit, rowScale]);
+            new Float32Array(paramData, 8, 4).set(
+                [metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm]
+            );
             device.queue.writeBuffer(params, 0, paramData);
             device.queue.writeBuffer(margin, 0, marginData);
             device.queue.writeBuffer(nearest, 0, nearestData);
@@ -324,5 +337,6 @@ private external fun runIceSheet(
     sheet: JsHandle,
     metresPerRootKm: Float,
     metresPerFieldUnit: Float,
-    rowScale: Float
+    rowScale: Float,
+    cellWidthKm: Float
 ): JsHandle

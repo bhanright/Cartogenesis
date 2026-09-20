@@ -36,6 +36,12 @@ interface IceSheetAccelerator {
      * [cellsDown] cells and none of them is modified. The grid is the world's cylinder: columns
      * wrap east to west and rows stop at the poles.
      *
+     * [onTheSheet] is the ice that is a *sheet*, which is not all the frozen ground: a body under
+     * [IceSheet.SMALLEST_SHEET_SQUARE_KM] is an ice cap and the caller has already taken it out.
+     * [cellWidthKm] is how wide a cell is on the ground, and it is not a detail — the profile is
+     * the mean of the plastic curve over a cell, not its value at the cell's middle, which is the
+     * whole of why the ice does not end in a cliff. See [IceSheet.profileMetres].
+     *
      * Suspending for the reason the other two seams are: WebGPU hands back promises for its
      * device and for every buffer read, and Kotlin/Wasm cannot block on one.
      */
@@ -48,6 +54,7 @@ interface IceSheetAccelerator {
         onTheSheet: BooleanArray,
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
-        cellHeightInCellWidths: Float
+        cellHeightInCellWidths: Float,
+        cellWidthKm: Float
     ): Sheet?
 }

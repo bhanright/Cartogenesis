@@ -50,16 +50,18 @@ class GpuIceSheetTest {
             IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
         val metresPerFieldUnit = config.scale.highestLandMetres
         val rowScale = config.cellHeightInCellWidths.toFloat()
+        val cellWidthKm = config.cellWidthKm.toFloat()
 
-        val onTheProcessor =
-            IceSheet.profile(margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit)
+        val onTheProcessor = IceSheet.profile(
+            margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit, cellWidthKm
+        )
         val processorFlow = IceSheet.flowReceivers(
             cellsAcross, cellsDown, bed, onTheProcessor, onTheSheet, metresPerFieldUnit, rowScale
         )
         val onTheCard = runBlocking {
             accelerator!!.sheet(
                 cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, bed, onTheSheet,
-                metresPerRootKm, metresPerFieldUnit, rowScale
+                metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm
             )
         }
         assumeTrue(onTheCard != null, "the device declined the job")

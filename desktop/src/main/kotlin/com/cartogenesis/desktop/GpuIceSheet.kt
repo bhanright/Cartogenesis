@@ -36,7 +36,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
         cellHeightInCellWidths: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): IceSheetAccelerator.Sheet? {
         if (cellsAcross <= 0 || cellsDown <= 0) return null
         val cellCount = cellsAcross.toLong() * cellsDown
@@ -74,7 +74,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 GL43C.glUniform1f(
                     uniform(profileProgram, "uMetresPerFieldUnit"), metresPerFieldUnit
                 )
-                GL43C.glUniform1f(uniform(profileProgram, "uCellWidthKm"), cellWidthKm)
+                GL43C.glUniform1f(uniform(profileProgram, "uCellSpanKm"), cellSpanKm)
                 GL43C.glDispatchCompute(groupsAcross, groupsDown, 1)
                 // The flow pass reads thicknesses other work groups have just written.
                 GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
@@ -186,7 +186,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
             uniform int uHeight;
             uniform float uMetresPerRootKm;
             uniform float uMetresPerFieldUnit;
-            uniform float uCellWidthKm;
+            uniform float uCellSpanKm;
 
             void main() {
                 int x = int(gl_GlobalInvocationID.x);
@@ -201,7 +201,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 float far = marginKm[cell];
                 precise float profile = 0.0;
                 if (far > 0.0) {
-                    float near = max(far - uCellWidthKm, 0.0);
+                    float near = max(far - uCellSpanKm, 0.0);
                     precise float rootFar = sqrt(far);
                     precise float rootNear = sqrt(near);
                     precise float mean =

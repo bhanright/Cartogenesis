@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.IceSheet
 import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -50,10 +51,10 @@ class GpuIceSheetTest {
             IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
         val metresPerFieldUnit = config.scale.highestLandMetres
         val rowScale = config.cellHeightInCellWidths.toFloat()
-        val cellWidthKm = config.cellWidthKm.toFloat()
+        val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
 
         val onTheProcessor = IceSheet.profile(
-            margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit, cellWidthKm
+            margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit, cellSpanKm
         )
         val processorFlow = IceSheet.flowReceivers(
             cellsAcross, cellsDown, bed, onTheProcessor, onTheSheet, metresPerFieldUnit, rowScale
@@ -61,7 +62,7 @@ class GpuIceSheetTest {
         val onTheCard = runBlocking {
             accelerator!!.sheet(
                 cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, bed, onTheSheet,
-                metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm
+                metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm
             )
         }
         assumeTrue(onTheCard != null, "the device declined the job")

@@ -38,7 +38,7 @@ interface IceSheetAccelerator {
      *
      * [onTheSheet] is the ice that is a *sheet*, which is not all the frozen ground: a body under
      * [IceSheet.SMALLEST_SHEET_SQUARE_KM] is an ice cap and the caller has already taken it out.
-     * [cellWidthKm] is how wide a cell is on the ground, and it is not a detail — the profile is
+     * [cellSpanKm] is the side of the square with a cell's own area, and it is not a detail — the
      * the mean of the plastic curve over a cell, not its value at the cell's middle, which is the
      * whole of why the ice does not end in a cliff. See [IceSheet.profileMetres].
      *
@@ -55,6 +55,6 @@ interface IceSheetAccelerator {
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
         cellHeightInCellWidths: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): Sheet?
 }

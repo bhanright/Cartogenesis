@@ -148,20 +148,29 @@ class PenAndInkTest {
          * kilometre-high flank round it is steeper country than the bed was — and pen and ink moved
          * too, which it does when and only when the ground does. Nothing in this file's own
          * arithmetic changed.
+         *
+         * And once more inside I1, for the margin: the profile is the mean of the plastic curve
+         * over a cell now rather than its value at the cell's middle, and a body of ice too small
+         * to be a sheet gets no profile at all, so every sheet's edge stands a few hundred metres
+         * lower and the small caps are off the map altogether. All twelve moved together again.
+         * `ReliefShading.ORDINARY_GROUND` did *not* move with them this time - the median
+         * illumination over seed 234475's land reads 0.944 against the declared 0.9421, inside
+         * what `ReliefShadingTest` allows - because what the margin changed is the edge of the
+         * ice and not the slope of ordinary country.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1382243128,
-            MapStyle.VELLUM to 871759650,
-            MapStyle.INK_WASH to -1146591001,
-            MapStyle.NAUTICAL to -373953175,
-            MapStyle.MIDNIGHT to -358186623,
-            MapStyle.SCHOOLROOM to -1179380329,
-            MapStyle.VERDANT to 1721222477,
-            MapStyle.SCROLL to 1572606517,
-            MapStyle.PEN_AND_INK to -1790115411,
-            MapStyle.MARS to -965439927,
-            MapStyle.NATURAL to -79318583,
-            MapStyle.CLEAR to 567518474
+            MapStyle.ATLAS to 544935828,
+            MapStyle.VELLUM to 475670600,
+            MapStyle.INK_WASH to 2055536932,
+            MapStyle.NAUTICAL to -908959732,
+            MapStyle.MIDNIGHT to -1833019063,
+            MapStyle.SCHOOLROOM to -857950869,
+            MapStyle.VERDANT to 410739092,
+            MapStyle.SCROLL to -163548326,
+            MapStyle.PEN_AND_INK to -206054659,
+            MapStyle.MARS to -1160009856,
+            MapStyle.NATURAL to -1343491232,
+            MapStyle.CLEAR to -2050681917
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

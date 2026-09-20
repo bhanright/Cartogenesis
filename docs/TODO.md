@@ -65,20 +65,21 @@
   this should start from the narrow one, which is a hundred lines and one guard away, and find out
   why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
   2026-09-14, F30.
-- **A sheet's margin is a one-cell cliff, and a small cap on a plain is a mesa.** Seen on the I1
-  render review, 718106 and 59758 at 2048 in Atlas and in Elevation. The plastic profile is
-  `sqrt(distance from the margin)`, whose slope at the margin is infinite, so on a grid six
-  kilometres to the cell the first cell in from the edge already stands three to four hundred
-  metres up and the ice ends in a step rather than in a wedge. On the big dome it is only the
-  outline that suffers; where the mask is a cap twenty or thirty cells across on flat lowland - and
-  718106's northern plains carry several - the whole cap is edge, and it reads as a white mesa
-  dropped on a green plain rather than as ice. Both are the equation telling the truth at a
-  resolution that cannot draw it: a real margin's taper is a kilometre or two wide, which is a
-  fifth of a cell here. Whoever opens it should look at the last cell rather than at the profile -
-  a margin cell's thickness is the mean of the profile over the ground the cell covers, not its
-  value at the cell's middle, and that integral is two thirds of the point value and falls to
-  nothing at the edge on its own. The guards do not see it because a one-cell rim is inside every
-  outline and hypsometry bar there is. 2026-09-19, I1.
+- **One glacial basin's floor sits exactly on Salar de Uyuni's flatness.** 364673's basin 0 at
+  (3,1786) at 2048, 583 cells: 29.5% of its floor lies within a metre of one height over 919 m of
+  relief, against the 29.4% `GlacialBasinShapeTest.allowedFlatShare` permits, which is 1.00 times
+  the bar. It has been sitting on that bar for as long as the bar has existed and read just inside
+  it until I1 gave the ice a margin that tapers. The mechanism is the flexure, not the carving: a
+  basin is cut into rock before the ice is weighed, and what the load then does to it is *tilt* it,
+  because subtracting a smooth bend from a floor makes the floor less level. A wedge margin is a
+  few hundred metres thinner at the edge than a cliff margin was, so it presses its bed down less,
+  so the tilt across this basin is weaker and its floor reads flatter by two parts in a thousand.
+  The bar is an Earth figure and ground rule 5 forbids moving it to fit a measurement, so the
+  clause prints this one basin with the figure beside it and asserts the rest; see
+  `isTheBasinTheMarginUntilted`, which also asserts that it stays over the bar, so the finding
+  cannot quietly close. Whoever opens it should ask whether a basin ought to be cut *after* the
+  load rather than before it - the order is the real question and it is older than I1.
+  2026-09-20, I1.
 - **The sheet's scour is not lineated, though its flow is radial.** I1 gave the sheet a surface
   and a flow down it, and the flow is the dome's: 70-92% of the ice within 500 km of the summit
   flows outward, at a mean 35-66 degrees off radial, against the 50% and 90 degrees a bearing that

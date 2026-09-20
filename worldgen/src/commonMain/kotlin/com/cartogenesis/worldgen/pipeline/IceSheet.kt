@@ -191,8 +191,16 @@ object IceSheet {
      * the mean over that span. The margin line — where the ice is nothing — lies half a cell
      * outside the first cell of ice, since the distance field measures centre to centre and the
      * last ice-free centre reads zero; so a cell reading [marginDistanceKm] covers
-     * `marginDistanceKm - cellWidthKm` to `marginDistanceKm` of distance from that line, floored
-     * at nothing. Over `x1..x2` the mean of `k * sqrt(x)` is
+     * `marginDistanceKm - cellSpanKm` to `marginDistanceKm` of distance from that line, floored
+     * at nothing.
+     *
+     * [cellSpanKm] is the side of the square with a cell's own area, and not its width, because
+     * this is a distance measured in every direction at once. An equirectangular cell is twice as
+     * wide as it is tall — 5.86 km by 2.93 at 2048 on a world 12,000 km across — so the width
+     * over-smooths a margin running east and west by a factor of two, and the height
+     * under-smooths one running north and south by the same. The side of the equal-area square,
+     * 4.14 km there, is the one figure that is right on average whatever bearing the margin
+     * happens to lie along, and it is the figure a cell would have if the grid were square. Over `x1..x2` the mean of `k * sqrt(x)` is
      * `(2/3) * k * (x2^1.5 - x1^1.5) / (x2 - x1)`, which at the first cell is
      * [MEAN_OF_A_ROOT_OVER_ITS_SPAN] of what the point sample gave — 241 m rather than 361 — and
      * which falls to nothing as the margin line is approached rather than stepping to it. Far
@@ -211,11 +219,11 @@ object IceSheet {
     fun profileMetres(
         marginDistanceKm: Float,
         metresPerRootKilometre: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): Float {
         val far = marginDistanceKm
         if (far <= 0f) return 0f
-        val near = (marginDistanceKm - cellWidthKm).coerceAtLeast(0f)
+        val near = (marginDistanceKm - cellSpanKm).coerceAtLeast(0f)
         val rootFar = sqrt(far)
         val rootNear = sqrt(near)
         val mean = (near + rootNear * rootFar + far) / (rootNear + rootFar)
@@ -247,10 +255,10 @@ object IceSheet {
         marginBedMetres: Float,
         marginDistanceKm: Float,
         metresPerRootKilometre: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): Float =
         marginBedMetres.coerceAtLeast(0f) +
-            profileMetres(marginDistanceKm, metresPerRootKilometre, cellWidthKm)
+            profileMetres(marginDistanceKm, metresPerRootKilometre, cellSpanKm)
 
     /**
      * How much colder the top of [thicknessMetres] of ice is than its bed, in degrees.
@@ -279,13 +287,13 @@ object IceSheet {
         onTheSheet: BooleanArray,
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): FloatArray = FloatArray(bedRelative.size) { cell ->
         if (!onTheSheet[cell]) 0f else {
             val nearest = margin.nearestCell[cell]
             val marginBed = if (nearest < 0) 0f else bedRelative[nearest] * metresPerFieldUnit
             val surface = surfaceMetres(
-                marginBed, margin.distanceKm[cell], metresPerRootKilometre, cellWidthKm
+                marginBed, margin.distanceKm[cell], metresPerRootKilometre, cellSpanKm
             )
             (surface - bedRelative[cell] * metresPerFieldUnit).coerceAtLeast(0f)
         }

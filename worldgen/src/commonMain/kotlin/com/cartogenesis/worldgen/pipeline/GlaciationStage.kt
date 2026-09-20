@@ -560,15 +560,18 @@ object GlaciationStage {
             if (body >= 0 && field.size[body] >= smallestSheetCells) sheetBody[cell] = true
         }
 
+        // The side of the square with one cell's area, which is the span the profile is averaged
+        // over: see [IceSheet.profileMetres] for why it is not the cell's width.
+        val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
         val accelerated = accelerator?.sheet(
             cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheetBody,
             metresPerRootKm, config.scale.highestLandMetres,
-            config.cellHeightInCellWidths.toFloat(), config.cellWidthKm.toFloat()
+            config.cellHeightInCellWidths.toFloat(), cellSpanKm
         )
         val iceThicknessMetres = accelerated?.thicknessMetres
             ?: IceSheet.profile(
                 margin, relative, sheetBody, metresPerRootKm, config.scale.highestLandMetres,
-                config.cellWidthKm.toFloat()
+                cellSpanKm
             )
         val surfaceFlow = accelerated?.flowReceiver
             ?: IceSheet.flowReceivers(

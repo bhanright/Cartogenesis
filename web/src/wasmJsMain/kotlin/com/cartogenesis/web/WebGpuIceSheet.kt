@@ -34,7 +34,7 @@ class WebGpuIceSheet private constructor(
         metresPerRootKilometre: Float,
         metresPerFieldUnit: Float,
         cellHeightInCellWidths: Float,
-        cellWidthKm: Float
+        cellSpanKm: Float
     ): IceSheetAccelerator.Sheet? {
         if (cellsAcross <= 0 || cellsDown <= 0) return null
         val cellCount = cellsAcross.toLong() * cellsDown
@@ -59,7 +59,7 @@ class WebGpuIceSheet private constructor(
         val result = awaitPromise(
             runIceSheet(
                 device, cellsAcross, cellsDown, margin, nearest, bed, sheetWords,
-                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellWidthKm
+                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellSpanKm
             )
         )
         if (result == null || isNullish(result)) return null
@@ -116,7 +116,7 @@ private external fun receiverOf(result: JsHandle): JsHandle
  */
 @JsFun(
     """(device, width, height, marginData, nearestData, bedData, sheetData,
-         metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm) => (async () => {
+         metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm) => (async () => {
         if (device.__lost) return null;
         // Every storage type here is a 32-bit word; 16 squared is the baseline 256 invocations.
         const bytesPerCell = 4;
@@ -145,7 +145,7 @@ private external fun receiverOf(result: JsHandle): JsHandle
                     metresPerRootKm: f32,
                     metresPerFieldUnit: f32,
                     rowScale: f32,
-                    cellWidthKm: f32,
+                    cellSpanKm: f32,
                     pad0: f32,
                     pad1: f32,
                 };
@@ -176,7 +176,7 @@ private external fun receiverOf(result: JsHandle): JsHandle
                     let far = marginKm[cell];
                     var rise = 0.0;
                     if (far > 0.0) {
-                        let near = max(far - params.cellWidthKm, 0.0);
+                        let near = max(far - params.cellSpanKm, 0.0);
                         let rootFar = sqrt(far);
                         let rootNear = sqrt(near);
                         let mean = (near + rootNear * rootFar + far) / (rootNear + rootFar);
@@ -274,7 +274,7 @@ private external fun receiverOf(result: JsHandle): JsHandle
             const paramData = new ArrayBuffer(32);
             new Uint32Array(paramData, 0, 2).set([width, height]);
             new Float32Array(paramData, 8, 4).set(
-                [metresPerRootKm, metresPerFieldUnit, rowScale, cellWidthKm]
+                [metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm]
             );
             device.queue.writeBuffer(params, 0, paramData);
             device.queue.writeBuffer(margin, 0, marginData);
@@ -338,5 +338,5 @@ private external fun runIceSheet(
     metresPerRootKm: Float,
     metresPerFieldUnit: Float,
     rowScale: Float,
-    cellWidthKm: Float
+    cellSpanKm: Float
 ): JsHandle

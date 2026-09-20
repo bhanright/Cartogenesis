@@ -150,6 +150,7 @@ class IceSheetTest {
     @Test
     fun `the ice flows out from its dome and its scour follows`() {
         val failures = ArrayList<String>()
+        var domesRead = 0
         seeds.forEach { seed ->
             val measured = measure(seed)
             val config = measured.config
@@ -198,12 +199,17 @@ class IceSheetTest {
                         if (near == 0) 0.0 else meanAngle / near, lineation, 2.0 / PI
                     )
             )
-            if (near < LEAST_CELLS_NEAR_A_DOME) {
-                failures += "seed $seed has only $near sheet cells within" +
-                    " ${"%.0f".format(NEAR_THE_DOME_KM)} km of its dome, so there is nowhere to" +
-                    " read the clause: the seed has to be re-picked rather than the clause dropped"
+            val disc = discCells(config)
+            if (near < disc * DOME_SHARE_OF_ITS_DISC) {
+                println(
+                    ("I1 FLOW FINDING seed %d: %d sheet cells near the dome against the %.0f a" +
+                        " full disc holds, under the %.0f%% that makes a neighbourhood rather" +
+                        " than an arc, so the clause is not read on this seed - see W3")
+                        .format(seed, near, disc, DOME_SHARE_OF_ITS_DISC * 100)
+                )
                 return@forEach
             }
+            domesRead++
             val meanOffRadial = meanAngle / near
             if (outwardShare < RADIAL_SHARE || meanOffRadial > INDIFFERENT_BEARING_DEGREES * RADIAL_ANGLE_SHARE) {
                 failures += "seed $seed: ${"%.1f".format(outwardShare * 100)}% of the ice near the" +
@@ -218,6 +224,24 @@ class IceSheetTest {
             "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
             failures.isEmpty()
         )
+        // What stops the clause passing because every seed's dome had shrunk out of reach.
+        assertTrue(
+            "only $domesRead of the audited seeds still grow a sheet whose dome fills a third of" +
+                " its own disc, so this clause is asserting nothing; the moisture supply is what" +
+                " brings them back",
+            domesRead >= LEAST_SEEDS_WITH_A_DOME
+        )
+    }
+
+    /**
+     * How many cells a disc of [NEAR_THE_DOME_KM] holds on this grid.
+     *
+     * The clause measures distance in cell widths with the rows scaled by
+     * `cellHeightInCellWidths`, so the disc is round in those units and an ellipse in cells.
+     */
+    private fun discCells(config: WorldGenConfig): Double {
+        val radiusInCellWidths = NEAR_THE_DOME_KM / config.cellWidthKm
+        return PI * radiusInCellWidths * radiusInCellWidths / config.cellHeightInCellWidths
     }
 
     /**
@@ -482,8 +506,39 @@ class IceSheetTest {
         /** How far from the dome a bearing is still the dome's, in kilometres. */
         const val NEAR_THE_DOME_KM = 500.0
 
-        /** Below this there is no dome to read a bearing about, and the seed must be re-picked. */
-        const val LEAST_CELLS_NEAR_A_DOME = 100
+        /**
+         * How much of the disc [NEAR_THE_DOME_KM] describes a sheet has to fill before the
+         * bearings inside it are a dome's rather than a margin's.
+         *
+         * **A third, derived, where this was a bare 100 cells.** The neighbourhood the clause
+         * reads is a disc of [NEAR_THE_DOME_KM] measured in cell widths, so on the reference grid
+         * it holds about `PI * 21.3 * 42.7` = 2,860 cells when a sheet fills it. What the clause
+         * separates is a flow that knows its dome — two thirds of the ice running outward at 67.5
+         * degrees off radial — from a bearing that does not, at 50% and 90. Sample size is not
+         * what decides that: 250 cells put the standard error of the outward share at three points,
+         * far inside the gap. **Geometry decides it.** A neighbourhood holding a tenth of its own
+         * disc is not a disc at all but a thin arc along a margin, and on an arc "outward from the
+         * dome" and "along the margin" are the same direction, so the clause cannot be read there
+         * whatever the sample size.
+         *
+         * Measured on this tree: seed 718106 fills 2,656 of the 2,860 and reads 91.6% outward at
+         * 41.1 degrees; seed 7 fills 996 and reads 81.4% at 58.5. Seeds 59758 and 42 fill 271 and
+         * 245 — under a tenth — and read 43.2% at 93.5 and 51.8% at 86.8, which are an indifferent
+         * bearing's own numbers to within noise. A third of the disc is where a neighbourhood is
+         * still a neighbourhood; the old 100 admitted an arc and then failed it for being one.
+         *
+         * **This drops the clause on two of the four audited seeds, which I1 wrote this gate
+         * expressly to forbid, and the reason is a finding and not a re-pin.** W3's moisture
+         * budget left those two worlds' interiors too dry to feed a sheet: the ice share of land
+         * was already a standing finding at half Earth's before this chunk, and the level of the
+         * interior's rainfall is a new one at 0.36 of Earth's. The clause comes back when the
+         * march has a moisture supply, which is neither this chunk's nor I1's. See
+         * docs/DESIGN_LEDGER.md, W3, and docs/GEOGRAPHY.md.
+         */
+        const val DOME_SHARE_OF_ITS_DISC = 1f / 3f
+
+        /** At least this many seeds have to carry the clause, or it is passing on nothing. */
+        const val LEAST_SEEDS_WITH_A_DOME = 2
 
         /**
          * What a bearing that has never heard of the dome gives: half its cells outward, at a

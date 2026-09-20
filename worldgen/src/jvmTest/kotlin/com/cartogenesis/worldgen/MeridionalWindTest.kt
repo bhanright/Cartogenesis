@@ -30,6 +30,13 @@ import kotlin.test.assertTrue
  *
  * The third is the monsoon, and it is stated here with its weakness on the record rather than
  * dressed up. See [`a tropical coast has a wet season and a dry one`].
+ *
+ * Every world this file builds holds `ClimateConfig.pressureWinds` off. Each of its claims is
+ * about what the *belts* do — that a slant of zero is the old zonal scan, that the slant points
+ * the way the circulation cell does, that an east-west ridge is invisible without it — and since
+ * W2 the belts are no longer the whole of the wind. Leaving the pressure departure on would mean
+ * the control for a belt claim carried a second wind inside it, and the third claim's paired
+ * worlds would differ by two things rather than one.
  */
 class MeridionalWindTest {
 
@@ -97,7 +104,11 @@ class MeridionalWindTest {
         ZONAL_MARCH_SEEDS.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 256, height = 256)
             val world = WorldGenerationEngine.generateBlocking(
-                base.copy(climate = base.climate.copy(meridionalWind = 0f))
+                base.copy(
+                    climate = base.climate.copy(
+                        meridionalWind = 0f, pressureWinds = false
+                    )
+                )
             )
 
             val referenceSummer = referenceZonalMarch(world, warm = true)
@@ -231,7 +242,9 @@ class MeridionalWindTest {
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
         val world = WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = 42L, width = 128, height = 128)
+            WorldGenConfig(seed = 42L, width = 128, height = 128).let {
+                it.copy(climate = it.climate.copy(pressureWinds = false))
+            }
         )
         val w = world.width
         val h = world.height
@@ -259,7 +272,9 @@ class MeridionalWindTest {
 
         val flat = WorldGenerationEngine.generateBlocking(
             WorldGenConfig(seed = 42L, width = 128, height = 128).let {
-                it.copy(climate = it.climate.copy(meridionalWind = 0f))
+                it.copy(
+                    climate = it.climate.copy(meridionalWind = 0f, pressureWinds = false)
+                )
             }
         )
         assertTrue(
@@ -279,9 +294,15 @@ class MeridionalWindTest {
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = SIZE, height = SIZE)
             val zonal = WorldGenerationEngine.generateBlocking(
-                base.copy(climate = base.climate.copy(meridionalWind = 0f))
+                base.copy(
+                    climate = base.climate.copy(
+                        meridionalWind = 0f, pressureWinds = false
+                    )
+                )
             )
-            val slanted = WorldGenerationEngine.generateBlocking(base)
+            val slanted = WorldGenerationEngine.generateBlocking(
+                base.copy(climate = base.climate.copy(pressureWinds = false))
+            )
             val w = zonal.width
             val h = zonal.height
 

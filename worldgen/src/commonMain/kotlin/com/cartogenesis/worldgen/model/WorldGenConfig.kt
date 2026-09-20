@@ -1679,6 +1679,23 @@ data class ClimateConfig(
      */
     val meridionalWind: Float = 0.3f,
     /**
+     * Whether the wind carries the regional departure the pressure field drives, on top of the
+     * zonal-mean belts.
+     *
+     * On, each season's surface temperature is turned into a surface pressure anomaly and the
+     * wind that pressure drives — geostrophic away from the equator, down-gradient at it, turned
+     * across the isobars by the boundary layer's own friction — is added to the belts. That is
+     * what puts a thermal low over a summer continent and draws marine air onto its coasts, and a
+     * thermal high over a winter one that blows dry air back out to sea. See
+     * [com.cartogenesis.worldgen.pipeline.PressureWind].
+     *
+     * Off, the belts are the whole wind and every cell of a row blows the same way, which is the
+     * wind this generator had before the pressure field existed, arithmetic for arithmetic. It is
+     * the control the guards on this mechanism are measured against, and it is also what the
+     * ocean's gyres are forced by when it is off, down to the bit.
+     */
+    val pressureWinds: Boolean = true,
+    /**
      * How strongly a current's sea-surface temperature anomaly scales the moisture the march
      * picks up over that sea cell, per degree of anomaly.
      *

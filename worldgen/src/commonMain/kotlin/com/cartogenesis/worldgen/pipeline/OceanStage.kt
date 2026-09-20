@@ -224,6 +224,104 @@ object OceanStage {
     }
 
     /**
+     * Adds the curl of the *regional* wind stress to [curl], which arrives holding the belts'.
+     *
+     * The belts alone have no curl in the east-west direction — every longitude at a latitude is
+     * forced identically — so the gyres they spin are driven entirely by where the coastlines
+     * close them off. The pressure field breaks that: a thermal high sitting over one side of a
+     * basin drags the water under it one way and the air over the other side drags it the other,
+     * and the curl of that is a forcing the belts cannot supply. This is what makes the
+     * subtropical gyre's centre sit under the subtropical high rather than in the middle of
+     * whatever box the coastlines happen to make.
+     *
+     * The temperature the pressure is read off is the one [ClimateStage.buildTemperature] gives —
+     * the energy balance, the land-sea blend and the lapse rate, but **not** the current anomaly,
+     * which this stage has not computed yet and could not have: the currents cannot be forced by
+     * a wind that was forced by the currents. What is left out is the maritime-influence term,
+     * which is a few degrees on a coastal strip against the tens of degrees of land-sea contrast
+     * that make the pressure field, and it is left out here and stated rather than iterated.
+     *
+     * The annual wind, not a season's: a gyre turns over in years and integrates the wind over
+     * them, and the existing belt forcing is the annual mean too, so a seasonal stress would be
+     * two different quantities added together.
+     *
+     * With `ClimateConfig.pressureWinds` off this adds exactly zero and the forcing is the belt
+     * profile this stage has always used, bit for bit.
+     */
+    private fun addPressureCurl(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        coarseAcross: Int,
+        coarseDown: Int,
+        cellsPerCoarseColumn: Int,
+        cellsPerCoarseRow: Int,
+        curl: FloatArray
+    ) {
+        if (!config.climate.pressureWinds) return
+        val cellsAcross = config.width
+        val pressureHpa =
+            PressureWind.pressureAnomalyHpa(config, ClimateStage.buildTemperature(config, sea))
+        val wind = PressureWind.surfaceWind(config, sea, pressureHpa)
+
+        // The stress on the same scale the belt profile uses, whose peak of one is a belt at
+        // full strength: a wind of [PressureWind.BELT_SPEED_MPS] is a stress of one. A linear
+        // drag law rather than the quadratic one, because the belt profile it is added to is
+        // linear in its own amplitude and adding a square to a straight line would mean the sum
+        // was neither.
+        val stressEast = FloatArray(coarseAcross * coarseDown)
+        val stressSouth = FloatArray(coarseAcross * coarseDown)
+        for (coarseRow in 0 until coarseDown) {
+            for (coarseColumn in 0 until coarseAcross) {
+                var eastSum = 0.0
+                var southSum = 0.0
+                for (rowWithin in 0 until cellsPerCoarseRow) {
+                    for (columnWithin in 0 until cellsPerCoarseColumn) {
+                        val cell = (coarseRow * cellsPerCoarseRow + rowWithin) * cellsAcross +
+                            (coarseColumn * cellsPerCoarseColumn + columnWithin)
+                        eastSum += wind.eastwardMps[cell]
+                        southSum += wind.southwardMps[cell]
+                    }
+                }
+                val cellsInCoarse = (cellsPerCoarseRow * cellsPerCoarseColumn).toDouble()
+                val coarseCell = coarseRow * coarseAcross + coarseColumn
+                stressEast[coarseCell] =
+                    (eastSum / cellsInCoarse).toFloat() / PressureWind.BELT_SPEED_MPS
+                stressSouth[coarseCell] =
+                    (southSum / cellsInCoarse).toFloat() / PressureWind.BELT_SPEED_MPS
+            }
+        }
+
+        // Both axes in the frame the belt term above is written in, which is the map's own: x
+        // east, y *south*. Its `-d(stress)/dy` is that frame's curl with the meridional stress
+        // dropped, because the belts have none; this adds the meridional term and the regional
+        // part of the zonal one.
+        //
+        // The belt term above is a difference of the stress across the height of one coarse cell,
+        // with no length divided out of it — which is a curl multiplied through by that height,
+        // and a constant factor over the whole grid that [streamToVelocity] normalises away
+        // anyway. So this term is put on the same footing: a central difference, halved because
+        // it spans two coarse cells where the belt's spans one, and the east-west difference
+        // scaled by the coarse cell's own shape so that the two axes are the same length on the
+        // ground before they are subtracted.
+        val coarseShape = (config.scale.cellHeightKm(config.height) * cellsPerCoarseRow /
+            (config.scale.cellWidthKm(cellsAcross) * cellsPerCoarseColumn)).toFloat()
+        for (coarseRow in 0 until coarseDown) {
+            val rowNorth = (coarseRow - 1).coerceAtLeast(0)
+            val rowSouth = (coarseRow + 1).coerceAtMost(coarseDown - 1)
+            for (coarseColumn in 0 until coarseAcross) {
+                val columnEast = if (coarseColumn + 1 == coarseAcross) 0 else coarseColumn + 1
+                val columnWest = if (coarseColumn == 0) coarseAcross - 1 else coarseColumn - 1
+                val acrossTerm = (stressSouth[coarseRow * coarseAcross + columnEast] -
+                    stressSouth[coarseRow * coarseAcross + columnWest]) * 0.5f * coarseShape
+                val downTerm = (stressEast[rowSouth * coarseAcross + coarseColumn] -
+                    stressEast[rowNorth * coarseAcross + coarseColumn]) * 0.5f
+                curl[coarseRow * coarseAcross + coarseColumn] +=
+                    (acrossTerm - downTerm) * config.ocean.forcing
+            }
+        }
+    }
+
+    /**
      * Solves `∇²ψ = curl` on the coarse grid and interpolates ψ back to full resolution.
      *
      * Returns one value per full-resolution cell, in stream-function units — arbitrary, since
@@ -284,6 +382,9 @@ object OceanStage {
                 curl[coarseRow * coarseAcross + coarseColumn] = rowCurl
             }
         }
+        addPressureCurl(
+            config, sea, coarseAcross, coarseDown, cellsPerCoarseColumn, cellsPerCoarseRow, curl
+        )
 
         val overRelaxation =
             oceanConfig.overRelaxation.coerceIn(MIN_OVER_RELAXATION, MAX_OVER_RELAXATION)

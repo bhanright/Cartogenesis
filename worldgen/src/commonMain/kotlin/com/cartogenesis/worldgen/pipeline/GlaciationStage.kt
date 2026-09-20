@@ -29,6 +29,25 @@ internal data class GlacialMass(
      * own flexural parameter.
      */
     val iceDepressionMetres: Float,
+    /**
+     * The sheet's own thickness at every cell, in metres, and zero off the sheet regime — the
+     * Vialov profile [IceSheet] draws, which is what the load, the surface and the outlet cuts are
+     * all measured from. An observer for the guards; the pipeline reads the *surface* instead, off
+     * the elevation field.
+     */
+    val iceThicknessMetres: FloatArray,
+    /** How far each frozen cell stands from the ice margin, in kilometres: the profile's argument. */
+    val marginDistanceKm: FloatArray,
+    /** The sheet regime's own mask, so a guard can ask a question of the sheet and not of the ice. */
+    val onTheSheet: BooleanArray,
+    /** Which neighbour the ice flows to down its own surface, and -1 off the sheet. */
+    val sheetFlowReceiver: IntArray,
+    /** Cells whose elevation is the top of the ice rather than the rock. */
+    val iceSurfaceCells: Int,
+    /** Outlet glaciers found, cells their troughs cut, and the deepest cut, in metres. */
+    val outlets: Int,
+    val outletCells: Int,
+    val deepestOutletCutMetres: Float,
     val frozenCells: Int,
     /** Frozen cells with enough local relief for the ice to be channelled into a valley. */
     val channelledCells: Int,
@@ -250,8 +269,10 @@ object GlaciationStage {
          * The provisional snow balance, in millimetres of water equivalent a year, or null to fall
          * back to the plain temperature mask. See [ClimateStage.provisionalSnowBalance].
          */
-        snowBalance: FloatField? = null
-    ): SeaLevelResult = apply(config, sea, snowBalance, onBudget = null)
+        snowBalance: FloatField? = null,
+        /** Somewhere other than the CPU for the sheet's profile and surface flow; see rule 8. */
+        accelerator: IceSheetAccelerator? = null
+    ): SeaLevelResult = apply(config, sea, snowBalance, accelerator, onBudget = null)
 
     /**
      * @param onBudget handed this stage's mass tally on the way out. An observer, like erosion's:
@@ -261,6 +282,7 @@ object GlaciationStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         snowBalance: FloatField?,
+        accelerator: IceSheetAccelerator?,
         onBudget: ((GlacialMass) -> Unit)?
     ): SeaLevelResult {
         val carving = Carving(config)
@@ -349,7 +371,8 @@ object GlaciationStage {
         // have, while a headland standing over the sea does.
         stopIfAsked()
         val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt().coerceIn(2, 64)
-        val relief = localRelief(cellsAcross, cellsDown, relative, reliefRadius)
+        val relief =
+            localRelief(cellsAcross, cellsDown, relative, reliefRadius, glaciation.reliefWindowOctagon)
         // Straight, with nothing between the share and the field. `relative` is a cell's altitude
         // over `WorldScale.highestLandMetres` since S2, and `valleyRelief` is a depth in metres
         // over the same figure, so the two are already in one another's units. Before S2 the field
@@ -508,6 +531,35 @@ object GlaciationStage {
             }
         }
 
+        // The sheet as a body rather than a mask: how far each cell of the ice stands from the
+        // margin, how thick the plastic profile makes it there, and which way the *surface* of
+        // that profile falls. See [IceSheet] for the equation and its one constant.
+        //
+        // The distance is measured over the whole frozen body, because a sheet's margin is where
+        // the ice ends and not where this stage's own regime split falls; the thickness is kept
+        // only over the sheet regime, because ice confined between rock walls is a valley glacier
+        // with its own thickness ([GlaciationConfig.valleyIceThicknessMetres]) and is not a
+        // kilometre-thick plateau standing over the landscape.
+        stopIfAsked()
+        val metresPerRootKm =
+            IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
+        val margin = IceSheet.marginDistanceKm(config, frozen)
+        val marginDistanceKm = margin.distanceKm
+        val accelerated = accelerator?.sheet(
+            cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheet,
+            metresPerRootKm, config.scale.highestLandMetres,
+            config.cellHeightInCellWidths.toFloat()
+        )
+        val iceThicknessMetres = accelerated?.thicknessMetres
+            ?: IceSheet.profile(
+                margin, relative, sheet, metresPerRootKm, config.scale.highestLandMetres
+            )
+        val surfaceFlow = accelerated?.flowReceiver
+            ?: IceSheet.flowReceivers(
+                cellsAcross, cellsDown, relative, iceThicknessMetres, sheet,
+                config.scale.highestLandMetres, config.cellHeightInCellWidths.toFloat()
+            )
+
         // How much standing water this world's ice is allowed, in cells, and how small and how
         // large one body of it may be. All three are map fractions, so the same world at 512, 1024
         // and 2048 is offered the same lake country rather than four times as much of it each time
@@ -622,14 +674,24 @@ object GlaciationStage {
         val sheetBudget = (lakeBudget - basins.cells).coerceAtLeast(0)
         if (glaciation.sheetScour && sheetCells >= minBasinCells) {
             val tally = scour(
-                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, isLand, relative, carved,
+                config, glaciation, carving, cellsAcross, cellsDown, sheet, sheetCells, surfaceFlow,
+                isLand, relative, carved,
                 minBasinCells, maxBasinCells, sheetBudget, basinFloor, basins.basins
             )
             scourCells = tally.cells
             scourBasins = tally.basins
         }
 
-        if (glacierCells == 0 && scourCells == 0) return sea
+        // The outlets, and with them the fjords. After both sets of basins, because an outlet
+        // trough is a valley cross-section and has to be able to cut through ground the scour has
+        // already lowered rather than be undone by it.
+        stopIfAsked()
+        val outlets = cutOutletTroughs(
+            glaciation, carving, config.scale, cellsAcross, cellsDown, sheet, sheetCells,
+            surfaceFlow, iceThicknessMetres, directions, isLand, relative, carved
+        )
+
+        if (glacierCells == 0 && scourCells == 0 && outlets.cells == 0) return sea
 
         var excavated = 0.0
         for (cell in 0 until cellCount) {
@@ -706,11 +768,45 @@ object GlaciationStage {
         // a year. The load is handed to the same flexure the hydraulic rounds use; what the map
         // shows of the rebound is the ground the *former* ice has already let go, since only the
         // ice that is still here is weighed. See `IsostasyConfig.iceLoad` and docs/DESIGN_LEDGER.md, S2.
-        val iceDepression = iceLoadDepression(config, frozen, isLand, carved)
+        val iceDepression = iceLoadDepression(config, frozen, isLand, carved, iceThicknessMetres)
+
+        // And the ice itself, last of all: the surface the rest of the pipeline reads is the top
+        // of the sheet, not the rock under it.
+        //
+        // This is the whole of I1's climate claim and it needed no change to the climate. The
+        // elevation field is what `ClimateStage` reads an altitude off, what the renderer shades
+        // and what the Elevation view draws; where a sheet stands, the ground the air touches is
+        // its surface. Put the thickness on and the existing lapse rate makes the dome colder than
+        // its bed by [IceSheet.surfaceCoolingC] without being told that ice exists — which is the
+        // test that this is the right place for it. Greenland's summit is cold because it is three
+        // kilometres up.
+        //
+        // It goes on *after* the load, and the load is now applied in full rather than the share
+        // of it the surface used to be given. Before the thickness existed the bend had to be
+        // discounted by the ice's own profile, because a bed pressed down half a kilometre and
+        // then filled with the ice that pressed it has a surface that has not moved; with the ice
+        // actually here that discount would count the same ice twice. The two together are Airy's
+        // arithmetic done once: the bed sinks by 28% of the thickness and the surface stands 72%
+        // of it above where the bare ground was.
+        var iceSurfaceCells = 0
+        val metresPerFieldUnit = config.scale.highestLandMetres
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell] || iceThicknessMetres[cell] <= 0f) continue
+            carved[cell] += iceThicknessMetres[cell] / metresPerFieldUnit
+            iceSurfaceCells++
+        }
 
         onBudget?.invoke(
             GlacialMass(
                 iceDepressionMetres = iceDepression,
+                iceThicknessMetres = iceThicknessMetres,
+                marginDistanceKm = marginDistanceKm,
+                onTheSheet = sheet,
+                sheetFlowReceiver = surfaceFlow,
+                iceSurfaceCells = iceSurfaceCells,
+                outlets = outlets.outlets,
+                outletCells = outlets.cells,
+                deepestOutletCutMetres = outlets.deepestMetres,
                 frozenCells = frozenCount,
                 channelledCells = channelledCells,
                 glacierCells = glacierCells,
@@ -742,57 +838,47 @@ object GlaciationStage {
     /**
      * Presses the crust down under the ice standing on it, in place, and reports the deepest bend.
      *
-     * The sheet's thickness is the crudest thing that can be true of it: a flat
-     * [IsostasyConfig.iceSheetThicknessMetres] over the interior, ramped to nothing over
-     * [IsostasyConfig.iceSheetMarginRampKm] of its margin, from the Euclidean distance to the
-     * nearest ice-free cell. Antarctica averages 2,126 m and Greenland 1,673 and both thin to
-     * nothing at the coast, so the shape is right and the profile is not: a real sheet's surface
-     * goes as the square root of the distance from its margin (Vialov 1958), which is I1's to draw
-     * and this to read once it exists.
+     * The thickness is [IceSheet]'s: the plastic profile, `sqrt` of the distance from the margin,
+     * with the basal shear stress Cuffey and Paterson measure. Until I1 it was a flat
+     * [IsostasyConfig.iceSheetThicknessMetres] ramped to nothing over
+     * [IsostasyConfig.iceSheetMarginRampKm] of margin — the crudest thing that could be true of a
+     * sheet, and deliberately so, because S2 had no profile to read. It has one now, so the two
+     * settings are gone and the load is the ice that is actually standing there. The consequence
+     * the guard reads is Airy's: a sheet deep enough for the plate to have flattened out under it
+     * depresses its bed by `iceDensity / mantleDensity` of its own thickness, 917 over 3,300,
+     * which is 28%.
      *
      * The bend is spent on the shoreline-relative field this stage is already rewriting, since
      * that is what the rest of the pipeline reads and the erosion stage's own height field is two
      * stages upstream and must not be touched. It goes on water as well as land: a sheet grounded
      * below the waterline depresses the floor under it exactly as one on land does.
+     *
+     * All of the bend reaches the field, where before it was discounted by the ice's own profile.
+     * That discount existed because the ice was not on the map: a bed pressed down and then filled
+     * with the ice that pressed it has a surface that has not moved, and with only a mask to work
+     * from the only way to say so was to withhold the bend. The caller now adds the thickness
+     * itself, so withholding it too would sink the same sheet twice.
      */
     private fun iceLoadDepression(
         config: WorldGenConfig,
         frozen: BooleanArray,
         isLand: BooleanArray,
-        carved: FloatArray
+        carved: FloatArray,
+        iceThicknessMetres: FloatArray
     ): Float {
         val isostasy = config.isostasy
         if (!isostasy.enabled || !isostasy.flexure || !isostasy.iceLoad) return 0f
-        if (isostasy.iceSheetThicknessMetres <= 0f) return 0f
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         if (frozen.none { it }) return 0f
 
-        // How far each frozen cell stands from the nearest ice-free ground, in cells.
-        val distanceToEdge = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
-        val nearestEdge = IntArray(cellCount) { -1 }
-        for (cell in 0 until cellCount) {
-            if (!frozen[cell]) {
-                distanceToEdge[cell] = 0f
-                nearestEdge[cell] = cell
-            }
-        }
-        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToEdge, nearestEdge)
-
-        val rampCells = config.cellsFor(isostasy.iceSheetMarginRampKm).coerceAtLeast(1f)
         val load = FloatArray(cellCount)
-        // How much ice stands on each cell, as a share of a full sheet's thickness: nothing at the
-        // margin and all of it a ramp's width inside. Kept, because the same profile decides both
-        // how hard the ice presses and how much of the hollow it presses is filled by the ice
-        // itself. See [surfaceShareOfBend].
-        val iceShare = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
             if (!frozen[cell]) continue
-            val share = (distanceToEdge[cell] / rampCells).coerceAtMost(1f)
-            iceShare[cell] = share
-            val thickness = isostasy.iceSheetThicknessMetres * share
-            load[cell] = Isostasy.loadPascals(thickness, isostasy.iceDensity, isostasy.gravity)
+            load[cell] = Isostasy.loadPascals(
+                iceThicknessMetres[cell], isostasy.iceDensity, isostasy.gravity
+            )
         }
 
         Isostasy.Flexure(config).deflectionMetres(load, load)
@@ -841,27 +927,21 @@ object GlaciationStage {
         // cell is measured against the land's half of the ruler and a water cell against the sea's,
         // so each converts through its own.
         //
-        // How much of it reaches the *surface* is the other half, and it is not all of it. This
-        // field is a surface — the climate reads its altitude for a temperature, the rivers run
-        // down it, the renderer shades it — and where a sheet stands the surface is the top of the
-        // ice, not the rock underneath. A sheet presses its own bed down and then fills the hollow
-        // with itself, so the ground the air touches over the middle of a cap has not moved at
-        // all; at the margin, where the ice thins to nothing, there is nothing to fill it and the
-        // whole bend shows. That is the moat — the Baltic, and Agassiz along the Laurentide's rim.
-        // The share is one minus the ice's own thickness profile, which makes the applied bend
-        // continuous across the ice edge rather than stepping by half a kilometre at it.
-        //
-        // Measured on the five standard worlds at 512: with the whole bend spent on the surface,
-        // the cap's own bed reads several hundred metres lower, the biome stage reads that as
-        // warmer ground and the ice share of land falls from 8.0% to 6.2% against main's 9.6%,
-        // while the hollow under the cap ponds and the lake share of land climbs from 2.6% to
-        // 3.6%. Both are the same error: a bed read as a surface.
+        // All of it reaches the field, which is the change I1 makes here. Until the ice had a
+        // thickness this field was the only surface there was, so the bend under a cap had to be
+        // withheld in proportion to the ice standing on it: a bed pressed down and then filled
+        // with the ice that pressed it has a surface that has not moved, and a mask cannot say so
+        // any other way. What was measured then still holds — spending the whole bend on the
+        // surface with no ice on the map dropped the ice share of land from 8.0% to 6.2% and
+        // raised the lake share from 2.6% to 3.6%, because a bed was being read as a surface. The
+        // repair is to put the ice on the map rather than to hide the bend, and the caller now
+        // does: the bed goes down by all of this and the surface comes back up by the thickness.
         val scale = config.scale
         var deepest = 0f
         for (cell in 0 until cellCount) {
             val bend = load[cell]
             if (bend > deepest) deepest = bend
-            val surfaceBend = bend * (1f - iceShare[cell])
+            val surfaceBend = bend
             // Sub-metre bends are dropped, and not for speed. A flexure is a filter over the whole
             // grid, so its answer is non-zero in every cell of the map however far from the ice it
             // is — and "this cell was touched by the glaciation stage" is a question three guards
@@ -877,6 +957,138 @@ object GlaciationStage {
         }
         return deepest
     }
+
+    /** What the outlet troughs did, for the tally. */
+    private class OutletTally(val outlets: Int, val cells: Int, val deepestMetres: Float)
+
+    /**
+     * The troughs the sheet's outlets cut, which are the fjords before the sea reaches them.
+     *
+     * An ice sheet does not drain evenly round its rim. Its surface is a dome, so its flow
+     * converges, and where the converging ice meets a valley in the bed it is funnelled into it:
+     * the discharge that was spread over a hundred kilometres of sheet goes through one gap, and
+     * what comes out is a fast outlet glacier cutting a trough far deeper than the valley was.
+     * Jakobshavn drains 6.5% of Greenland through a gap a few kilometres wide; the Lambert drains
+     * a sixth of East Antarctica. That is why a fjord coast is deep, straight-walled and hung with
+     * tributary valleys, and why the fjords of Norway, Chile and the Antarctic Peninsula all sit
+     * where a former sheet's outlets were rather than evenly round the coast. K4 floods them; this
+     * cuts them.
+     *
+     * So: the sheet's own flow is accumulated down its surface, the cells where it *leaves* the
+     * sheet carry that whole discharge, and the ones carrying more than
+     * [GlaciationConfig.outletCatchment] of the sheet cut a trough down the bed's own valley from
+     * there. The cut is the valley regime's cross-section, unchanged — a graded U, bounded by the
+     * burial rule so rock standing above the ice surface is untouched — with the *sheet's* ice
+     * thickness in place of the valley glacier's, which is the whole difference between a valley
+     * and an outlet and is [IceSheet]'s figure rather than a constant of this stage's.
+     *
+     * The depth is [OUTLET_CUT_OF_ICE_THICKNESS] of that thickness. Sognefjord is 1,308 m deep and
+     * the Fennoscandian sheet stood 2-3 km over its head at the last maximum (Patton and others,
+     * *Deglaciation of the Eurasian ice sheet complex*, Quat. Sci. Rev. 169, 2017), which is a
+     * half; Skelton Inlet's 1,933 m under East Antarctic ice of about 3,500 m is the same figure
+     * again. It is a ratio taken off Earth's deepest fjords and the ice that cut them, not a knob.
+     */
+    private fun cutOutletTroughs(
+        glaciation: GlaciationConfig,
+        carving: Carving,
+        scale: com.cartogenesis.worldgen.model.WorldScale,
+        cellsAcross: Int,
+        cellsDown: Int,
+        sheet: BooleanArray,
+        sheetCells: Int,
+        surfaceFlow: IntArray,
+        iceThicknessMetres: FloatArray,
+        directions: IntArray,
+        isLand: BooleanArray,
+        relative: FloatArray,
+        carved: FloatArray
+    ): OutletTally {
+        if (!glaciation.outletTroughs || sheetCells <= 0) return OutletTally(0, 0, 0f)
+        val cellCount = cellsAcross * cellsDown
+
+        // The discharge, in cells of sheet drained. Accumulated down the *surface*, highest first,
+        // so every cell has its own load before it hands it on — the same reason the valley
+        // regime's ice is accumulated along `FlowRouting.drainageOrder` and not in index order.
+        val discharge = FloatArray(cellCount)
+        // And the thickest ice anywhere up its own flow line, which is the ice the outlet is
+        // *delivering*. The thickness at the outlet itself is the wrong figure and was measured
+        // being wrong: an outlet sits at the margin, where the profile is thin by construction, so
+        // reading it there says a trough is cut by the last few hundred metres of ice rather than
+        // by the sheet behind it. What is funnelled through the gap came from the interior.
+        val feeding = FloatArray(cellCount)
+        var sheetRank = 0
+        val bySurface = LongArray(sheetCells)
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell]) continue
+            discharge[cell] = 1f
+            feeding[cell] = iceThicknessMetres[cell]
+            bySurface[sheetRank++] = FlowRouting.encode(
+                relative[cell] + iceThicknessMetres[cell] / scale.highestLandMetres, cell
+            )
+        }
+        bySurface.sort()
+        for (rank in bySurface.indices.reversed()) {
+            val cell = FlowRouting.decodeIndex(bySurface[rank])
+            val receiver = surfaceFlow[cell]
+            if (receiver < 0 || !sheet[receiver]) continue
+            discharge[receiver] += discharge[cell]
+            if (feeding[cell] > feeding[receiver]) feeding[receiver] = feeding[cell]
+        }
+
+        val minDischarge = glaciation.outletCatchment * sheetCells
+        var outlets = 0
+        var cut = 0
+        var deepestMetres = 0f
+        for (cell in 0 until cellCount) {
+            if (!sheet[cell] || discharge[cell] < minDischarge) continue
+            val leaves = surfaceFlow[cell]
+            // An outlet is where the ice leaves the sheet. A cell whose surface still falls onto
+            // more sheet is in the middle of the flow, not at the end of it.
+            if (leaves >= 0 && sheet[leaves]) continue
+            outlets++
+            val deliveredMetres = feeding[cell]
+            val cutMetres = OUTLET_CUT_OF_ICE_THICKNESS * deliveredMetres
+            if (cutMetres > deepestMetres) deepestMetres = cutMetres
+            val depth = scale.reliefShareOfMetres(cutMetres)
+            val burial = scale.reliefShareOfMetres(deliveredMetres).coerceAtLeast(1e-6f)
+            // Down the bed's own valley from there, as far as the ice runs past its margin. The
+            // bed's network is the right one here and not the surface's: past the margin there is
+            // no sheet left to have a surface, and what the outlet glacier follows is the valley.
+            var walked = leaves
+            var steps = 0
+            while (walked >= 0 && isLand[walked] && steps <= carving.runOutCells) {
+                val bed = (relative[walked] - depth).coerceAtLeast(0f)
+                swath(
+                    cellsAcross, cellsDown, walked,
+                    flowOf(walked, directions, sheet, cellsAcross, cellsDown),
+                    valleyHalfWidth(carving, OUTLET_WIDTH_STRENGTH), glaciation.floorShare, bed,
+                    burial, isLand, relative, carved
+                )
+                cut++
+                walked = directions[walked]
+                steps++
+            }
+        }
+        return OutletTally(outlets, cut, deepestMetres)
+    }
+
+    /**
+     * How deep an outlet trough is cut, as a share of the ice thickness that cut it.
+     *
+     * Sognefjord's 1,308 m under 2-3 km of Fennoscandian ice, and Skelton Inlet's 1,933 m under
+     * about 3,500 m of East Antarctic ice: both a half. See [cutOutletTroughs].
+     */
+    private const val OUTLET_CUT_OF_ICE_THICKNESS = 0.5f
+
+    /**
+     * How wide an outlet trough is, on the valley regime's own half-width scale.
+     *
+     * A quarter, which through [valleyHalfWidth]'s square root is half the widest trough this
+     * stage cuts. An outlet glacier is a confined, fast stream of ice and its trough is narrow for
+     * its depth — Sognefjord is 205 km long and 4.5 km wide — where a valley glacier's fills the
+     * valley it found. The same function sets both so the two cannot drift apart.
+     */
+    private const val OUTLET_WIDTH_STRENGTH = 0.25f
 
     /** What the scour did, for the tally. */
     private class ScourTally(val cells: Int, val basins: Int)
@@ -1338,13 +1550,32 @@ object GlaciationStage {
      * so nothing around it can drain it, deepest in the middle and grading to nothing at the edge.
      *
      * The profile is a paraboloid in [rimDistance] — at a fraction `s` of the way in from the rim
-     * to the deepest point the cut is `1 - (1 - s)^2` of [depth]. A paraboloid is the one bowl
-     * whose area per unit of depth is constant, so no level of it holds more of the floor than any
-     * other and there is no plate in it to read as a slab; Hutchinson (*A Treatise on Limnology*,
-     * 1957) puts real lake basins at a volume development of 0.6 to 1.2 about the paraboloid's 1.0,
-     * so it is also the middle of what a lake basin does. The saucer this replaced took the full
-     * cut at every cell more than two cells inside the rim, which on a basin a hundred cells across
-     * is a dead-level floor over nineteen twentieths of its area.
+     * to the deepest point the cut takes `1 - (1 - s)^2` of the way down. A paraboloid is the one
+     * bowl whose area per unit of depth is constant, so no level of it holds more of the floor than
+     * any other and there is no plate in it to read as a slab; Hutchinson (*A Treatise on
+     * Limnology*, 1957) puts real lake basins at a volume development of 0.6 to 1.2 about the
+     * paraboloid's 1.0, so it is also the middle of what a lake basin does. The saucer this
+     * replaced took the full cut at every cell more than two cells inside the rim, which on a basin
+     * a hundred cells across is a dead-level floor over nineteen twentieths of its area.
+     *
+     * ### What the profile is a share *of*, and why that is the whole of I2b
+     *
+     * The first version of this spent the profile as a height: a cell's floor was `base - depth *
+     * profile` and nothing else, so the finished floor was a function of [rimDistance] alone and
+     * every cell at one distance from the rim stood at *exactly* one height. On a small basin
+     * there are very few distances: 718106's 167-cell basin at (488,25) at 1024 has four of them —
+     * 1, 1.414, 2 and 2.236 cells — so the floor came out as four terraces, the outermost holding
+     * 131 of the 167 cells, which is the 78.4% within a metre of one height that I2b was opened
+     * on. The ground it was cut out of had never been read at all.
+     *
+     * So the profile is spent as a *share of the ground*, which is the rule I2 had already written
+     * for the trough's cross-section next door and this had been missed out of: a cell is taken
+     * `profile` of the way from where it stands down to `base - depth`, and keeps `1 - profile` of
+     * its own relief. At the deepest point that is the level bowl exactly as before, so the basin
+     * is closed by construction on the same argument; at the rim the ground is left where it was;
+     * and nowhere is the answer a function of the distance field alone, so no two cells share a
+     * height unless the ground already did. A cell standing high above the basin's floor is also
+     * cut deeper than one standing on it, which is what ice does to a bump.
      *
      * @return how many cells the cut actually lowered.
      */
@@ -1381,9 +1612,14 @@ object GlaciationStage {
         var lowered = 0
         for (index in 0 until count) {
             val cell = cells[index]
+            val here = carved[cell]
             val towardTheRim = 1f - (rimDistance[cell] / deepestFromRim).coerceIn(0f, 1f)
-            val target = (base - depth * (1f - towardTheRim * towardTheRim)).coerceAtLeast(0f)
-            if (target < carved[cell]) {
+            // How much of the way from the ground as it stands down to the level bowl this cell is
+            // taken. One at the deepest point, nothing at the rim, and a paraboloid between: the
+            // same profile as before, spent as a *share of the ground* rather than as a height.
+            val excavated = 1f - towardTheRim * towardTheRim
+            val target = (here - excavated * ((here - base) + depth)).coerceAtLeast(0f)
+            if (target < here) {
                 carved[cell] = target
                 lowered++
             }
@@ -1719,57 +1955,192 @@ object GlaciationStage {
      * otherwise silently rescale every cut this stage makes.
      */
     /**
-     * The elevation range inside a square window of [radius] cells around every cell: relief, as
-     * the one measurement that separates ground a glacier is channelled by from ground it is not.
+     * The elevation range inside an octagonal window of about [radius] cells around every cell:
+     * relief, as the one measurement that separates ground a glacier is channelled by from ground
+     * it is not.
      *
      * Water counts at the waterline rather than at its own depth. A cliff standing over the sea is
      * relief and a shallow shelf beside a plain is not, and reading the sea floor would make every
      * coast look alpine.
      *
-     * Separable, and each pass is a monotonic-deque sliding window, so the cost is a constant per
-     * cell rather than the square of the radius — which matters, because at export resolution the
-     * window is fifty cells across and the naive form would be a second of wall clock on its own.
-     * East-west wraps, north-south clamps, exactly as the rest of the pipeline treats the grid.
+     * ### Why the window is not a square, which is F30's finding
+     *
+     * A sliding extremum does not change while the same summit stays inside the window, so the
+     * field it makes is a plateau around every summit and the plateau's *edge* is the set of cells
+     * where that summit leaves the window — which is the window's own outline, turned inside out.
+     * With a square window that outline is four straight lines `2 * radius` cells long, 53 at 1024
+     * and 105 at 2048, and `channelled` — this field against one threshold — inherits them whole.
+     * The sheet mask is what `channelled` leaves, so the sheet's own edges ran dead straight at 0
+     * and 90 degrees, and a scour basin clipped to that mask carried a ruled edge with it. That is
+     * why I2's outline guard reported the scour basins instead of asserting on them.
+     *
+     * The cure is the window TODO.md costed: an octagon, which is a square dilated by a diamond
+     * and so is still four separable passes' worth of arithmetic per extremum rather than the
+     * `radius^2` a disc would cost. Two of the passes run along the grid's diagonals, which on a
+     * cylinder is exactly a column pass on a sheared copy: the diagonal through `(x, y)` is the
+     * set `((x + y) mod width, y)`, one line per column and every line exactly as long as the map
+     * is tall, so there is no seam to special-case.
+     *
+     * The two radii are set so the octagon is as close to a circle as an octagon gets: a regular
+     * one, whose corner stands `sec(22.5 degrees)` = 1.0824 times its flat. Solving `square +
+     * 2 * diagonal` against `(square + diagonal) * sqrt(2)` for that ratio gives
+     * [OCTAGON_SQUARE_SHARE] and [OCTAGON_DIAGONAL_OVER_SQUARE]. What is left is a window whose
+     * furthest and nearest points differ by 8.2% instead of a square's 41%, and whose longest
+     * straight facet is `2 * radius * tan(22.5 degrees)` = 0.83 of the radius rather than twice it
+     * — a fifth of what it was. It is not a circle and it is not claimed to be; the residual facet
+     * is measured on the sheet mask's own outline in `GlacialBasinShapeTest`.
+     *
+     * Each pass is a monotonic-deque sliding window, so the cost is a constant per cell rather
+     * than the square of the radius. East-west wraps, north-south clamps, exactly as the rest of
+     * the pipeline treats the grid.
      */
-    private fun localRelief(cellsAcross: Int, cellsDown: Int, relative: FloatArray, radius: Int): FloatArray {
+    internal fun localRelief(
+        cellsAcross: Int,
+        cellsDown: Int,
+        relative: FloatArray,
+        radius: Int,
+        octagon: Boolean
+    ): FloatArray {
         val cellCount = cellsAcross * cellsDown
         val surface = FloatArray(cellCount) { relative[it].coerceAtLeast(0f) }
-        val span = 2 * radius + 1
-        val rowMin = FloatArray(cellCount)
-        val rowMax = FloatArray(cellCount)
-
-        val rowPad = FloatArray(cellsAcross + 2 * radius)
-        val deque = IntArray(maxOf(rowPad.size, cellsDown + 2 * radius))
-        for (row in 0 until cellsDown) {
-            val base = row * cellsAcross
-            for (index in rowPad.indices) {
-                var neighbourColumn = (index - radius) % cellsAcross
-                if (neighbourColumn < 0) neighbourColumn += cellsAcross
-                rowPad[index] = surface[base + neighbourColumn]
-            }
-            slide(rowPad, span, true, deque) { offset, value -> rowMax[base + offset] = value }
-            slide(rowPad, span, false, deque) { offset, value -> rowMin[base + offset] = value }
-        }
-
+        val squareRadius = if (octagon) (OCTAGON_SQUARE_SHARE * radius).toInt().coerceAtLeast(1) else radius
+        val diagonalRadius =
+            if (octagon) (OCTAGON_DIAGONAL_OVER_SQUARE * squareRadius).toInt().coerceAtLeast(1) else 0
+        val deque = IntArray(cellsAcross + cellsDown + 4 * (radius + 1))
+        // Three buffers, not four: the first pass's scratch is free again once the highest field
+        // has landed in the second, so the lowest is computed through the same one.
+        val scratch = FloatArray(cellCount)
+        val highest = octagonExtreme(
+            cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, true, deque,
+            scratch, FloatArray(cellCount)
+        )
+        val lowest = octagonExtreme(
+            cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, false, deque,
+            scratch, surface
+        )
         val out = FloatArray(cellCount)
-        val colPad = FloatArray(cellsDown + 2 * radius)
-        val colHi = FloatArray(cellsDown)
-        for (column in 0 until cellsAcross) {
-            for (index in colPad.indices) {
-                val clamped = (index - radius).coerceIn(0, cellsDown - 1)
-                colPad[index] = rowMax[clamped * cellsAcross + column]
-            }
-            slide(colPad, span, true, deque) { offset, value -> colHi[offset] = value }
-            for (index in colPad.indices) {
-                val clamped = (index - radius).coerceIn(0, cellsDown - 1)
-                colPad[index] = rowMin[clamped * cellsAcross + column]
-            }
-            slide(colPad, span, false, deque) { offset, value ->
-                out[offset * cellsAcross + column] = colHi[offset] - value
-            }
-        }
+        for (cell in 0 until cellCount) out[cell] = highest[cell] - lowest[cell]
         return out
     }
+
+    /**
+     * The largest (or smallest) value of [src] inside an octagon of [squareRadius] plus twice
+     * [diagonalRadius] cells about every cell, by four separable passes.
+     *
+     * Dilating by a square and then by a diamond is dilating by their Minkowski sum, which is the
+     * octagon; the order does not matter and neither pass ever sees the whole shape. [first] and
+     * [second] are scratch of the grid's own size, ping-ponged between the passes, and one of them
+     * is returned.
+     */
+    private fun octagonExtreme(
+        cellsAcross: Int,
+        cellsDown: Int,
+        src: FloatArray,
+        squareRadius: Int,
+        diagonalRadius: Int,
+        wantMax: Boolean,
+        deque: IntArray,
+        first: FloatArray,
+        second: FloatArray
+    ): FloatArray {
+        slideAcross(cellsAcross, cellsDown, src, first, squareRadius, wantMax, deque)
+        slideDown(cellsAcross, cellsDown, first, second, squareRadius, wantMax, deque)
+        // A diagonal radius of zero is the square window F30 found, kept as that finding's own
+        // control: see `GlaciationConfig.reliefWindowOctagon`.
+        if (diagonalRadius <= 0) return second
+        slideDiagonal(cellsAcross, cellsDown, second, first, diagonalRadius, wantMax, deque, true)
+        slideDiagonal(cellsAcross, cellsDown, first, second, diagonalRadius, wantMax, deque, false)
+        return second
+    }
+
+    /** One sliding extremum along each row, wrapping east to west. */
+    private fun slideAcross(
+        cellsAcross: Int,
+        cellsDown: Int,
+        src: FloatArray,
+        dst: FloatArray,
+        radius: Int,
+        wantMax: Boolean,
+        deque: IntArray
+    ) {
+        val pad = FloatArray(cellsAcross + 2 * radius)
+        for (row in 0 until cellsDown) {
+            val base = row * cellsAcross
+            for (index in pad.indices) {
+                var column = (index - radius) % cellsAcross
+                if (column < 0) column += cellsAcross
+                pad[index] = src[base + column]
+            }
+            slide(pad, 2 * radius + 1, wantMax, deque) { offset, value -> dst[base + offset] = value }
+        }
+    }
+
+    /** One sliding extremum down each column, clamping at the poles. */
+    private fun slideDown(
+        cellsAcross: Int,
+        cellsDown: Int,
+        src: FloatArray,
+        dst: FloatArray,
+        radius: Int,
+        wantMax: Boolean,
+        deque: IntArray
+    ) {
+        val pad = FloatArray(cellsDown + 2 * radius)
+        for (column in 0 until cellsAcross) {
+            for (index in pad.indices) {
+                val row = (index - radius).coerceIn(0, cellsDown - 1)
+                pad[index] = src[row * cellsAcross + column]
+            }
+            slide(pad, 2 * radius + 1, wantMax, deque) { offset, value ->
+                dst[offset * cellsAcross + column] = value
+            }
+        }
+    }
+
+    /**
+     * One sliding extremum along each diagonal: south-east if [downRight], south-west otherwise.
+     *
+     * A diagonal on a cylinder is a column of a sheared copy of the map, so there are exactly as
+     * many diagonals as there are columns and each is exactly as long as the map is tall. Rows are
+     * clamped at the poles, as [slideDown] clamps them, and columns wrap by construction.
+     */
+    private fun slideDiagonal(
+        cellsAcross: Int,
+        cellsDown: Int,
+        src: FloatArray,
+        dst: FloatArray,
+        radius: Int,
+        wantMax: Boolean,
+        deque: IntArray,
+        downRight: Boolean,
+        ) {
+        val pad = FloatArray(cellsDown + 2 * radius)
+        for (line in 0 until cellsAcross) {
+            for (index in pad.indices) {
+                val row = (index - radius).coerceIn(0, cellsDown - 1)
+                var column = (line + if (downRight) row else -row) % cellsAcross
+                if (column < 0) column += cellsAcross
+                pad[index] = src[row * cellsAcross + column]
+            }
+            slide(pad, 2 * radius + 1, wantMax, deque) { offset, value ->
+                var column = (line + if (downRight) offset else -offset) % cellsAcross
+                if (column < 0) column += cellsAcross
+                dst[offset * cellsAcross + column] = value
+            }
+        }
+    }
+
+    /**
+     * The square's share of an octagonal window's axis radius, and the diamond's share of the
+     * square's.
+     *
+     * A square of radius `a` dilated by a diamond of `k` diagonal steps reaches `a + 2k` along an
+     * axis and `(a + k) * sqrt(2)` along a diagonal. A regular octagon has the second over the
+     * first at `sec(22.5 degrees)` = 1.08239, which solves to `k = 0.4421 a` and an axis radius of
+     * `1.8842 a`. See [localRelief].
+     */
+    private const val OCTAGON_SQUARE_SHARE = 1f / 1.8842f
+    private const val OCTAGON_DIAGONAL_OVER_SQUARE = 0.4421f
 
     /**
      * One sliding-window extreme over [src], emitting `src.size - span + 1` values.
@@ -1832,6 +2203,8 @@ object GlaciationStage {
         cellsDown: Int,
         sheet: BooleanArray,
         sheetCells: Int,
+        /** Where the ice at each sheet cell flows to, down its own surface. See [IceSheet]. */
+        surfaceFlow: IntArray,
         isLand: BooleanArray,
         relative: FloatArray,
         carved: FloatArray,
@@ -1851,15 +2224,36 @@ object GlaciationStage {
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
+        //
+        // Streamlined along the ice's own flow, which is I1's. A sheet's bed is not hummocky in an
+        // isotropic way: it carries flutes, megaflutes and drumlin fields, all of them elongated
+        // along the direction the ice was moving, and the Laurentide's are the classic ones —
+        // Canada's drumlin swarms fan out from the ice divides because the ice did. The noise
+        // itself stays isotropic and periodic, which is what keeps the east-west seam continuous
+        // and keeps the grid out of it; what makes the pattern lineated is that each cell is given
+        // the *mean of the noise along its own flow line*, [STREAMLINE_CELLS] steps down the
+        // surface's steepest descent. Averaging along a direction stretches the features in it, so
+        // the lowering varies slowly along the flow and at the noise's own scale across it. The
+        // flow comes from the ice surface and the surface is radial about the dome, so the
+        // lineations are radial about the dome without anything having been told to draw a radius.
         val lowering = carving.sheetLowering
         if (lowering > 0f) {
             for (cell in 0 until cellCount) {
                 if (!sheet[cell]) continue
-                val column = (cell % cellsAcross).toFloat()
-                val row = (cell / cellsAcross).toFloat()
-                val neighbour = 0.5f + 0.5f * hummockNoise.fbm(
-                    column * hummockPeriod / cellsAcross, row * hummockPeriod / cellsDown, 3, hummockPeriod, hummockPeriod
-                )
+                var sum = 0f
+                var samples = 0
+                var walked = cell
+                while (samples <= STREAMLINE_CELLS && walked >= 0 && sheet[walked]) {
+                    val column = (walked % cellsAcross).toFloat()
+                    val row = (walked / cellsAcross).toFloat()
+                    sum += 0.5f + 0.5f * hummockNoise.fbm(
+                        column * hummockPeriod / cellsAcross, row * hummockPeriod / cellsDown,
+                        3, hummockPeriod, hummockPeriod
+                    )
+                    samples++
+                    walked = surfaceFlow[walked]
+                }
+                val neighbour = sum / samples
                 val target = (relative[cell] - lowering * (0.35f + 0.65f * neighbour)).coerceAtLeast(0f)
                 if (target < carved[cell]) carved[cell] = target
             }
@@ -2053,6 +2447,20 @@ object GlaciationStage {
      * on.
      */
     private const val SELECTION_HEADROOM = 2.5f
+
+    /**
+     * How many cells of its own flow line a sheet cell averages its hummock noise over.
+     *
+     * The elongation of the lineations, in cells, and it is a landform's figure rather than a
+     * knob: Earth's drumlins run 1-2 km long against 400-600 m wide and its megaflutes run tens of
+     * kilometres, so a length-to-width ratio between three and ten covers the family (Clark,
+     * Hughes and others, *Size and shape characteristics of drumlins*, Quat. Sci. Rev. 28, 2009,
+     * measure a mean elongation of 2.9 with a long tail past 10). The noise's own features are
+     * [GlaciationConfig.sheetBasinCycles] * 3 cycles across the map, which at 1024 is a few cells,
+     * so six cells of averaging puts the ratio in the middle of that range at every grid this
+     * program draws — and the ratio is what a reader sees, not the length.
+     */
+    private const val STREAMLINE_CELLS = 6
 
     /** The four orthogonal neighbours, wrapping east-west and stopping at the poles. */
     private inline fun forEachOrthogonal(

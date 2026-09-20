@@ -116,7 +116,6 @@ class GlacialBasinShapeTest {
         var worstExcess = 0f
         var worst: Basin? = null
         val failures = ArrayList<String>()
-        val findings = ArrayList<String>()
         seeds.forEach { (seed, side) ->
             val basins = measure(seed, side).basins
             basins.forEach { basin ->
@@ -127,12 +126,11 @@ class GlacialBasinShapeTest {
                     worst = basin
                 }
                 if (basin.flattestShare > allowed) {
-                    val said = "seed $seed basin ${basin.number} of ${basin.cells} cells at " +
+                    failures += "seed $seed basin ${basin.number} of ${basin.cells} cells at " +
                         "(${basin.column},${basin.row}): " +
                         "${"%.1f".format(basin.flattestShare * 100)}% of its floor within a metre " +
                         "of one height over ${"%.0f".format(basin.reliefMetres)} m of relief, " +
                         "against ${"%.1f".format(allowed * 100)}% allowed"
-                    if (isTheOpenFlatFloor(basin)) findings += said else failures += said
                 }
             }
             println(
@@ -149,33 +147,11 @@ class GlacialBasinShapeTest {
                     "${"%.1f".format(allowedFlatShare(at.cells, at.reliefMetres) * 100)}% allowed " +
                     "(${"%.2f".format(worstExcess)} times the bar)"
         )
-        findings.forEach { println("I2 FLOOR FINDING (I2b, open): $it") }
         assertTrue(
             "a cut basin's floor is a plate at one level:\n" + failures.joinToString("\n"),
             failures.isEmpty()
         )
-        // What stops the clause above passing because the open case swallowed everything: the
-        // basin named in [isTheOpenFlatFloor] is over the bar today and has to stay measured.
-        assertTrue(
-            "the basin I2b is open on is inside the bar now, so the finding should become an" +
-                " assertion again and I2b should close",
-            findings.isNotEmpty()
-        )
     }
-
-    /**
-     * Whether this is the one basin the floor clause reports rather than asserts.
-     *
-     * F35 made 1024 the same world as 512 instead of a different one, and this basin is ground the
-     * guard had never looked at: 718106's 1024 world used to be a world of its own. It is a real
-     * defect of the same family I2 exists for — 167 cells at (488,25) with 78.4% of its floor
-     * within a metre of one height over 51 m of relief, against 54.9% allowed — and the bar it
-     * breaks is Salar de Uyuni's flatness, an Earth figure that ground rule 5 forbids moving to
-     * fit a measurement. So it is printed with the bar beside it and carried as a finding until
-     * the chunk that repairs it lands. See docs/DESIGN_LEDGER.md, row I2b, and TODO.md.
-     */
-    private fun isTheOpenFlatFloor(basin: Basin): Boolean =
-        basin.seed == 718106L && basin.column == 488 && basin.row == 25
 
     /**
      * The largest patch of land, in cells, that may stand level to within a metre.
@@ -279,7 +255,7 @@ class GlacialBasinShapeTest {
         // it is measured from is untouched.
         var basins = emptyList<Basin>()
         runBlocking {
-            GlaciationStage.apply(config, sea, balance) { mass ->
+            GlaciationStage.apply(config, sea, balance, null) { mass ->
                 println(
                     "I2 TALLY seed $seed at $side: valley ${mass.basins}/${mass.basinCells} cells," +
                         " scour ${mass.scourBasins}/${mass.scourCells} cells," +

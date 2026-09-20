@@ -1,16 +1,5 @@
 # To do
 
-- **A cut basin's floor is a plate on 718106 at 1024, and the guard reports it rather than asserting
-  it.** F35 made the finer grids the same world as the 512 one instead of worlds of their own, so
-  `GlacialBasinShapeTest` is now looking at ground it had never seen: a 167-cell cut basin at
-  (488,25) with **78.4% of its floor within a metre of one height over 51 m of relief, against 54.9%
-  allowed** — 1.43 times the bar. It is the family I2 exists for, on a world I2 never measured, and
-  the bar it breaks is Salar de Uyuni's flatness, an Earth figure that ground rule 5 forbids moving
-  to fit a measurement. So the floor clause asserts every other basin on the four worlds and prints
-  this one with the bar beside it, and the finding is kept non-empty so it cannot go quiet. Whoever
-  opens it should find what planed that floor before deciding anything; I2's own diagnosis is about
-  a trough's cross-section at 2048 and does not transfer unexamined. docs/DESIGN_LEDGER.md row I2b.
-  2026-09-19, F35.
 - **The largest lake in the land is 1.12 times the Caspian's share once the grids agree.** The same
   cause: with the plate seeds resolution-free, `OutletResolutionTest`'s six worlds are the 512 world
   at three sizes rather than six unrelated ones, and **59758 at 2048 reads 1.84 times the Caspian's
@@ -76,19 +65,40 @@
   this should start from the narrow one, which is a hundred lines and one guard away, and find out
   why that pocket survives the enclosure rule's second pass. It is F15's and F18's own family.
   2026-09-14, F30.
-- **The sheet mask's own edges are straight, because local relief is measured in a square.**
-  `GlaciationStage.localRelief` takes the elevation range over a sliding window by two separable
-  passes of a running maximum and a running minimum, which makes the window a *square* of side
-  `2 * reliefWindow * valleyWidthCells + 1` — 53 cells at 1024, 105 at 2048. A sliding extremum does
-  not change while the same summit stays inside the window, so the field has plateaus with straight
-  edges at 0 and 90 degrees, and `channelled`, which is that field against one threshold, inherits
-  them; the sheet mask is what `channelled` leaves. A scour basin clipped to it therefore carries a
-  ruled edge: seed 7 at 1024 has a 49-cell basin with a 20-cell straight run along the vertical,
-  1.68 times what a shape that size explains. I2's outline guard reports the scour basins instead of
-  asserting on them for exactly this reason, so the assertion is not measuring a cause it cannot
-  fix. The cure is a window that is not a square: an octagon costs two more separable passes along
-  the diagonals and would halve the facet; a disc is O(r²) a cell and at r = 52 on a 2048 grid that
-  is 8,500 cells per cell over four million cells, which is not affordable. 2026-09-14, I2.
+- **The sheet's scour is not lineated, though its flow is radial.** I1 gave the sheet a surface
+  and a flow down it, and the flow is the dome's: 70-92% of the ice within 500 km of the summit
+  flows outward, at a mean 35-66 degrees off radial, against the 50% and 90 degrees a bearing that
+  has never heard of the dome gives. What has *not* followed is the scour. The hummocky lowering is
+  averaged along each cell's own flow line for six cells, which should stretch the features along
+  the flow and leave the field's gradient standing across it - and the gradient measures |cos| 0.74
+  to 0.79 against the flow on the four standard worlds at 512, *above* the 0.637 an isotropic field
+  gives, so if anything it is aligned with the flow rather than across it. Two candidate causes, and
+  neither is settled: a converging flow makes neighbouring lines share most of their samples a few
+  steps down, so the field varies as slowly across the flow as along it; and much of what gradient
+  is left belongs to the edge of the mask and to the `min` against the already-carved ground, which
+  have no bearing of their own. Whoever opens it should measure the lowering field's structure
+  tensor rather than its plain gradient, and should look at sampling the noise in a frame stretched
+  along the flow instead of averaging along it - the reason I1 did not is the east-west seam, which
+  a rotated periodic noise does not close. `IceSheetTest` prints the figure beside the isotropic
+  control and asserts only the radial half. 2026-09-19, I1.
+- **An outlet trough asks for a fjord and gets half of one.** I1's outlets cut in proportion to the
+  ice they are delivering, and on 718106 at 512 the deepest asks for 2,051 m, which is between
+  Sognefjord's 1,308 and Skelton Inlet's 1,933. What lands on the ground is 1,025 m, half of it, and
+  two of this stage's own rules take the difference: the cross-section only planes ground it is
+  actually under (`GlaciationStage.cutShare`'s burial term), and nothing is ever cut below the
+  waterline, because moving one cell of the sea-level percentile moves every other. Both are right
+  to, and the second is the one K4 exists to lift - a fjord is a trough the sea has *drowned*, and
+  until the sea can reach it the trough has to stop at the shoreline. The note is here so that K4
+  reads the figure rather than rediscovering it. Two of the four standard worlds grow no outlet at
+  all, which is the 2% `GlaciationConfig.outletCatchment` bar doing its job on a sheet whose flow
+  does not converge anywhere; whether that bar is right wants measuring on more than four worlds.
+  2026-09-19, I1.
+- **The ice sheet has no WGSL path, so the browser pays for its profile on the CPU.** Rule 8's seam
+  is cut and the desktop side of it is written - `IceSheetAccelerator`, `GpuIceSheet` and its parity
+  clause - but the browser's implementation is not, so `WebPlatform` offers no ice accelerator and
+  the browser falls back to `IceSheet`'s own code. What that costs is one jump flood and two
+  per-cell passes over the grid, which is tens of milliseconds at 2048 and is why it was not the
+  thing to finish first; the shape to copy is `WebGpuOcean`. 2026-09-19, I1.
 - **A trough is still stamped along a D8 path, and at 2048 you can just see it.** I2 stopped the
   cross-section planing ground that stands above the ice, which is what made the slab, but the
   cross-section is still laid one cell at a time along the flow path and a flow path still runs

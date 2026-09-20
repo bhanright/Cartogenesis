@@ -10,6 +10,7 @@ import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.NationStage
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -110,6 +111,8 @@ object WorldGenerationEngine {
         accelerator: ErosionAccelerator? = null,
         /** Uses the same graphics acceleration preference as erosion; null keeps the CPU solve. */
         oceanAccelerator: OceanAccelerator? = null,
+        /** The same preference again, for the ice sheet's profile and surface flow; see rule 8. */
+        iceAccelerator: IceSheetAccelerator? = null,
         progress: GenerationProgress = NO_PROGRESS
     ): WorldMap {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
@@ -243,7 +246,7 @@ object WorldGenerationEngine {
                             config, cut, OceanStage.withoutCurrents(config, cut)
                         )
                     } else null
-                GlaciationStage.apply(config, cut, provisional)
+                GlaciationStage.apply(config, cut, provisional, iceAccelerator)
             }
 
         report(GenerationStage.OCEAN)

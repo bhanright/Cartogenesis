@@ -795,7 +795,7 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
     val balance = if (config.climate.snowBalance) {
         ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))
     } else null
-    runBlocking { GlaciationStage.apply(config, sea, balance) { mass ->
+    runBlocking { GlaciationStage.apply(config, sea, balance, null) { mass ->
         println(
             "GLACIATION budget frozen=${mass.frozenCells}" +
                 " channelled=${mass.channelledCells} ice=${mass.glacierCells}" +

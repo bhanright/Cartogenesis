@@ -5,13 +5,18 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
+import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.Isostasy
+import com.cartogenesis.worldgen.pipeline.OceanStage
+import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
@@ -773,49 +778,66 @@ class IsostasyTest {
     }
 
     /**
-     * Ice holds its bed down, and what it holds down is the bed and not the surface.
+     * Ice holds its bed down, by Airy's share of its own thickness.
      *
-     * The same world with the ice load on and off. A sheet at its full thickness presses its bed
-     * down by `iceDensity / mantleDensity` of that thickness once the plate has flattened out —
-     * 28% of it, or 556 m at the stock two kilometres — and less at the margin, where the sheet is
-     * thinner and the plate is holding it up from both sides. That is a fact about the rock.
+     * The same world with the ice load on and off. Ice at 917 kg/m3 floating on mantle at 3,300
+     * displaces its own weight once the mantle has flowed, so a sheet standing `H` thick presses
+     * its bed down by `iceDensity / mantleDensity` of `H` - 27.8% of it, about a third, and the
+     * most directly observed number in this whole section: Greenland's bed lies below sea level
+     * over most of its interior for exactly this reason, and Scandinavia is still coming back up
+     * at a centimetre a year from a load that left ten thousand years ago.
      *
-     * The elevation field is not the rock. The climate stage reads its altitude for a temperature,
-     * the river stage runs water down it and the renderer shades it, so it is a *surface*, and
-     * over the middle of a cap the surface is the top of the ice. A sheet presses a hollow and
-     * then fills it with itself: the air touches the same height it did before. What moves is the
-     * ground round the edge, where the ice has thinned to nothing and there is nothing to fill the
-     * bend — the moat, which on Earth is the Baltic and the string of lakes along the Laurentide's
-     * rim.
+     * A plate does not let the whole of it through. The flexure spreads a load over a few
+     * flexural parameters - 67 km here - so a narrow load is held up by the rock beside it and
+     * only a load broad against that parameter reaches Airy's answer. The clause therefore asks
+     * for between [CAP_SHARE_OF_AIRY_FLOOR] of Airy and all of it, the floor being where a load
+     * has stopped being broad, and reads the ratio at the cell that sank furthest rather than
+     * pooling, because a sheet's margin is genuinely meant to sink less than its middle.
      *
-     * S2's second pass spent the whole bend on the surface, and both halves of the cost were
-     * measured on the five standard worlds at 512: the cap's own ground read several hundred
-     * metres lower, the biome stage read that as warmer, and the ice share of land fell from 8.0%
-     * to 6.2% against main's 9.6%, while the hollow under the cap ponded and the lake share of
-     * land rose from 2.6% to 3.6%.
+     * The thickness is `IceSheet`'s Vialov profile, read off the stage's own tally, and it cancels
+     * out of the comparison: both worlds carry the ice on the map, since the surface write is not
+     * an isostasy setting, so the difference between them is the bed's and the bed's only.
      *
-     * So this guard reads two things: the moat is there and is a real fraction of what a sheet of
-     * this thickness floats out at, and the middle of the cap has not moved.
+     * I1 restated this clause. S2's version asserted that the ground under the middle of a cap did
+     * *not* move, because with only a mask on the map the bend had to be withheld in proportion to
+     * the ice or the climate would read a bed as a surface. The ice is on the map now, so the bend
+     * is spent in full and the ground the reader sees is the top of it; the withheld-bend clause
+     * would now be asserting the opposite of the physics. What survives of it is the moat, which
+     * was always the half of it that was about the rock.
      */
     @Test
-    fun `ice holds its bed down, and the ice fills the hollow`() {
+    fun `ice holds its bed down by Airy's share of its own thickness`() {
         val seed = 7L
         val world = worldAt(seed)
         val without = WorldGenerationEngine.generateBlocking(
             world.config.copy(isostasy = world.config.isostasy.copy(iceLoad = false))
         )
-        val scale = world.config.scale
-        val frozen = BooleanArray(world.sea.isLand.size) {
-            world.climate.biome[it] == Biome.ICE_SHEET
+        val config = world.config
+        val scale = config.scale
+        // The profile, off the stage's own tally, run on the same ground the engine ran it on.
+        // The mask is struck on the provisional climate, which neither world's isostasy setting
+        // can reach, so one array describes both.
+        val sea = SeaLevelStage.apply(world.erosion.height, config)
+        val balance =
+            if (config.climate.snowBalance) {
+                ClimateStage.provisionalSnowBalance(
+                    config, sea, OceanStage.withoutCurrents(config, sea)
+                )
+            } else null
+        var thickness = FloatArray(0)
+        var onTheSheet = BooleanArray(0)
+        runBlocking {
+            GlaciationStage.apply(config, sea, balance, null) { mass ->
+                thickness = mass.iceThicknessMetres
+                onTheSheet = mass.onTheSheet
+            }
         }
-        // How far inside the ice each frozen cell stands, so that "under the cap" means under the
-        // full thickness of one. The taper is the ice's own thickness profile, which ramps over
-        // `iceSheetMarginRampKm`, so a cell half a ramp in is only half filled and is expected to
-        // show half the bend; the clause is about the interior, where the sheet is whole.
-        val insideCells = insideTheIce(world, frozen)
-        val rampCells = world.config.cellsFor(world.config.isostasy.iceSheetMarginRampKm)
+        val thickest = thickness.max()
+        val airyRatio = config.isostasy.iceDensity / config.isostasy.mantleDensity
+
         var deepestMoat = 0.0
         var deepestUnderIce = 0.0
+        var thicknessThere = 0f
         var interiorCells = 0
         var moved = 0
         for (cell in world.sea.relativeElevation.data.indices) {
@@ -824,40 +846,50 @@ class IsostasyTest {
             val there = scale.metresAboveShoreline(without.sea.relativeElevation.data[cell])
             val down = (there - here).toDouble()
             if (down > 1.0) moved++
-            if (frozen[cell]) {
-                if (insideCells[cell] < rampCells) continue
+            // The interior, where the sheet is at least half as thick as it gets: the margin is
+            // supposed to sink less, so reading the ratio there would measure the profile rather
+            // than the mantle.
+            if (onTheSheet[cell] && thickness[cell] >= thickest * INTERIOR_SHARE_OF_THICKEST) {
                 interiorCells++
-                if (down > deepestUnderIce) deepestUnderIce = down
-            } else if (down > deepestMoat) deepestMoat = down
+                if (down > deepestUnderIce) {
+                    deepestUnderIce = down
+                    thicknessThere = thickness[cell]
+                }
+            } else if (!onTheSheet[cell] && down > deepestMoat) {
+                deepestMoat = down
+            }
         }
-        val isostasy = world.config.isostasy
-        val airy = isostasy.iceSheetThicknessMetres * isostasy.iceDensity / isostasy.mantleDensity
+        val realised = if (thicknessThere > 0f) deepestUnderIce / thicknessThere else 0.0
         println(
-            ("ISOSTASY ice seed %d: %d cells pressed down, the moat deepest by %.0f m and the" +
-                " ground under the %d cells of cap interior by %.0f, against the %.0f m a sheet" +
-                " of this thickness floats out at")
-                .format(seed, moved, deepestMoat, interiorCells, deepestUnderIce, airy)
+            ("ISOSTASY ice seed %d: %d cells pressed down; the bed under the cap's %d interior" +
+                " cells deepest by %.0f m under %.0f m of ice, a ratio of %.3f against Airy's" +
+                " %.3f; the moat deepest by %.0f m against the %.0f m the thickest ice floats out")
+                .format(
+                    seed, moved, interiorCells, deepestUnderIce, thicknessThere, realised,
+                    airyRatio, deepestMoat, thickest * airyRatio
+                )
         )
         assertTrue("seed $seed carries no ice, so there is no load to weigh", moved > 0)
         assertTrue(
-            "seed $seed grows no sheet wide enough to have an interior — every frozen cell is" +
-                " within a margin ramp of open ground — so there is nowhere the clause below can" +
-                " be read, and the seed has to be re-picked rather than the clause dropped",
-            interiorCells > 0
+            "seed $seed grows no sheet with an interior half as thick as its thickest ice, so" +
+                " there is nowhere the clause below can be read, and the seed has to be re-picked" +
+                " rather than the clause dropped",
+            interiorCells > 0 && thicknessThere > 0f
+        )
+        assertTrue(
+            "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
+                " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
+                " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
+                " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
+                " of it a plate of this stiffness lets through",
+            realised in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
         )
         assertTrue(
             "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
-                " a fifth and the whole of the ${"%.0f".format(airy)} m" +
-                " `iceDensity / mantleDensity` of the sheet's own thickness comes to",
-            deepestMoat in (airy * MOAT_SHARE_OF_AIRY_FLOOR)..airy.toDouble()
-        )
-        assertTrue(
-            "the ground under the middle of the ice dropped ${"%.0f".format(deepestUnderIce)} m," +
-                " more than the" +
-                " ${"%.0f".format(airy * CAP_SHARE_OF_AIRY_CEILING)} m a cap is allowed to move:" +
-                " the bend is being spent on the surface rather than on the bed under it, which is" +
-                " what the climate stage then reads as warmer ground",
-            deepestUnderIce <= airy * CAP_SHARE_OF_AIRY_CEILING
+                " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
+                " thickest ice on this world floats out at",
+            deepestMoat in
+                (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()
         )
     }
 
@@ -1073,6 +1105,19 @@ class IsostasyTest {
          * where that sliver sits at this grid.
          */
         const val MOAT_SHARE_OF_AIRY_FLOOR = 0.2
-        const val CAP_SHARE_OF_AIRY_CEILING = 0.1
+
+        /**
+         * The least of Airy's ratio a plate of this stiffness may let through under a sheet.
+         *
+         * A load narrower than a flexural parameter is carried by the rock beside it and barely
+         * bends the plate at all; one several parameters across bends it by very nearly the whole
+         * Airy answer. Half is where a load has stopped being broad against the 67 km parameter
+         * this world's 30 km elastic thickness gives, which is a sheet a couple of hundred
+         * kilometres across - under that it is an ice cap rather than a sheet.
+         */
+        const val CAP_SHARE_OF_AIRY_FLOOR = 0.5
+
+        /** How thick, as a share of the thickest ice on the world, counts as a sheet's interior. */
+        const val INTERIOR_SHARE_OF_THICKEST = 0.5f
     }
 }

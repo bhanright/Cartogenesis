@@ -84,7 +84,13 @@ class DataExportTest {
         val relative = world.sea.relativeElevation.data
         // One grey level, in the units the field is held in. Anything at or under this is
         // quantisation and nothing else; anything over it is a value that was not carried.
-        val oneGreyLevel = 1.0 / DataExports.LEVELS_PER_SIDE
+        //
+        // A grey level is worth more of the field than it was, because the heightmap's ceiling now
+        // covers the ice standing on the ground as well as the ground: see
+        // [DataExports.heightmapCeilingRulers]. The bar follows the encoding rather than being
+        // restated, so it is still exactly one level and still forty times tighter than eight bits.
+        val ceilingRulers = DataExports.heightmapCeilingRulers(config)
+        val oneGreyLevel = ceilingRulers.toDouble() / DataExports.LEVELS_PER_SIDE
 
         var worst = 0.0
         var worstAt = 0
@@ -93,7 +99,9 @@ class DataExportTest {
             for (x in 0 until image.width) {
                 val i = y * image.width + x
                 val level = image.raster.getSample(x, y, 0)
-                val error = abs(DataExports.relativeElevationFor(level) - relative[i]).toDouble()
+                val error =
+                    abs(DataExports.relativeElevationFor(level, ceilingRulers) - relative[i])
+                        .toDouble()
                 if (error > worst) {
                     worst = error
                     worstAt = i
@@ -248,23 +256,35 @@ class DataExportTest {
         assertClose(scale.highestLandMetres.toDouble(), json.number("highestLandMetres"))
         assertClose(scale.deepestOceanMetres.toDouble(), json.number("deepestOceanMetres"))
         // And the figures a reader actually multiplies by: one grey level in metres on each side
-        // of the waterline, and where each end of the range lands. Whiteness must be the full
-        // declared altitude and blackness the full declared depth.
+        // of the waterline, and where each end of the range lands. Blackness must be the full
+        // declared depth; whiteness is the *heightmap's* ceiling, which since I1 is taller than
+        // the land's own ruler because the field carries the ice standing on the ground as well as
+        // the ground — see [DataExports.heightmapCeilingRulers]. A reader multiplying by
+        // `metresPerGreyLevel` gets metres either way, which is the whole job of the sidecar.
+        val ceilingMetres = json.number("heightmapCeilingMetres")
+        assertTrue(
+            ceilingMetres > scale.highestLandMetres.toDouble(),
+            "the heightmap's ceiling (${ceilingMetres}) has to clear the land's ruler" +
+                " (${scale.highestLandMetres}) or the ice standing on the ground will not fit"
+        )
         val metresPerLevel = json.number("metresPerGreyLevel")
         val metresPerLevelBelow = json.number("metresPerGreyLevelBelowSeaLevel")
+        // Stated against each other rather than against the formula restated here: what a reader
+        // relies on is that the two numbers in the file agree, and restating the arithmetic in the
+        // test only measures whether it was typed twice the same way.
         assertClose(
-            scale.highestLandMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
+            ceilingMetres / DataExports.LEVELS_PER_SIDE,
             metresPerLevel
         )
         assertClose(
             scale.deepestOceanMetres.toDouble() / DataExports.LEVELS_PER_SIDE,
             metresPerLevelBelow
         )
-        assertClose(
+        assertScaledFromPrinted(
             metresPerLevel * (65535 - DataExports.SEA_LEVEL_GREY_LEVEL),
             json.number("metresAtGreyLevel65535")
         )
-        assertClose(
+        assertScaledFromPrinted(
             metresPerLevelBelow * (0 - DataExports.SEA_LEVEL_GREY_LEVEL),
             json.number("metresAtGreyLevel0")
         )
@@ -731,6 +751,25 @@ class DataExportTest {
         }
 
     /** The sidecar prints six decimal places, so equality is to within half of the last one. */
+    /**
+     * The same, for a figure a reader gets by multiplying a *printed* one by 32,767 levels.
+     *
+     * The sidecar states six decimal places, so a value read out of the file carries up to half a
+     * millionth of slack before it is multiplied by anything, and 32,767 of those is 0.016 — which
+     * is larger than [assertClose]'s relative bar the moment the range is measured in kilometres.
+     * That is not a disagreement between the two numbers in the file, it is the file's own stated
+     * precision, so the bar is the file's own stated precision. Sixteen millimetres over a ten
+     * kilometre range is not a figure anybody importing a terrain can act on differently.
+     */
+    private fun assertScaledFromPrinted(expected: Double, found: Double) {
+        val slack = 0.5e-6 * DataExports.LEVELS_PER_SIDE
+        assertTrue(
+            abs(expected - found) <= slack,
+            "expected $expected, the sidecar says $found, past the $slack m the sidecar's own" +
+                " six decimal places allow"
+        )
+    }
+
     private fun assertClose(expected: Double, found: Double) {
         assertTrue(
             abs(expected - found) <= 1e-6 * maxOf(1.0, abs(expected)),

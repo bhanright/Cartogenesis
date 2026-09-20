@@ -9,6 +9,7 @@ import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 
 /**
@@ -141,6 +142,16 @@ interface Platform {
      */
     val oceanAccelerator: OceanAccelerator? get() = null
 
+    /**
+     * Where to draw the ice sheet's profile and the flow down its surface, or null to leave both
+     * on the processor.
+     *
+     * Behind the same switch as [accelerator], and with more riding on it than either of the
+     * others: the sheet's surface *is* the elevation the rest of the pipeline reads, so a profile
+     * that rounds differently is a different world in the plainest possible sense.
+     */
+    val iceAccelerator: IceSheetAccelerator? get() = null
+
     val accelerationUnavailableBecause: String?
 
     /**
@@ -159,7 +170,8 @@ interface Platform {
      * because a `Platform` that has not thought about the question is one with a real graphics API
      * behind it.
      */
-    val acceleratedWork: String get() = "erosion, ocean currents and export rendering"
+    val acceleratedWork: String get() =
+        "erosion, ocean currents, the ice sheet and export rendering"
 
     /**
      * Whether this host has a graphics API at all — OpenGL on the desktop, WebGPU in a browser.

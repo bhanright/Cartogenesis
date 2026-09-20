@@ -139,25 +139,51 @@ class PenAndInkTest {
          * anyway, which is the other half of the same evidence: the one style with no tint for the
          * shading to multiply moves when, and only when, the ground does.
          *
+         * And at I1, which is the plainest instance of the world moving under all twelve that this
+         * comment has yet recorded: the ice sheet is a body with a surface now, and that surface is
+         * written into the elevation field, so every world with ice on it stands two to four
+         * kilometres higher where the ice is and the renderer shades, tints and contours the top of
+         * the ice instead of the rock beneath it. [ReliefShading.ORDINARY_GROUND] moved with it,
+         * from 0.9582 to 0.9421, for the reason that constant's own comment gives — a dome with a
+         * kilometre-high flank round it is steeper country than the bed was — and pen and ink moved
+         * too, which it does when and only when the ground does. Nothing in this file's own
+         * arithmetic changed.
+         *
+         * And once more inside I1, for the margin: the profile is the mean of the plastic curve
+         * over a cell now rather than its value at the cell's middle, and a body of ice too small
+         * to be a sheet gets no profile at all, so every sheet's edge stands a few hundred metres
+         * lower and the small caps are off the map altogether. All twelve moved together again.
+         * `ReliefShading.ORDINARY_GROUND` did *not* move with them this time - the median
+         * illumination over seed 234475's land reads 0.944 against the declared 0.9421, inside
+         * what `ReliefShadingTest` allows - because what the margin changed is the edge of the
+         * ice and not the slope of ordinary country.
+         *
          * W2 moved all twelve again. The pressure wind changed the climate every style tints by,
          * and it reaches the *provisional* climate the glaciation stage carves from as well, so a
          * change to the air moved a little of the ground with it. Re-taken from this test own
          * PENINK fingerprints at 512 line, and taken only after the climate guards were settled:
          * a fingerprint recorded while a climate is still moving records nothing.
+         *
+         * And on the merge of I1 and W2, which is why neither side's numbers stand here. Each
+         * recorded twelve figures against its own world - I1's ice standing in the elevation
+         * field, W2's pressure wind reaching the provisional climate the glaciation stage carves
+         * from - and the merged world is neither, so all twelve are re-taken once more on this
+         * tree. `ReliefShading.ORDINARY_GROUND` is re-derived with them, from 0.9421, because
+         * both sides moved the land the median illumination is measured over.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1037627392,
-            MapStyle.VELLUM to 640840341,
-            MapStyle.INK_WASH to 1751117141,
-            MapStyle.NAUTICAL to 1433082392,
-            MapStyle.MIDNIGHT to 1010242824,
-            MapStyle.SCHOOLROOM to 898846430,
-            MapStyle.VERDANT to 1363611438,
-            MapStyle.SCROLL to 601342778,
-            MapStyle.PEN_AND_INK to -764404980,
-            MapStyle.MARS to -353345963,
-            MapStyle.NATURAL to 831931422,
-            MapStyle.CLEAR to 367763471
+            MapStyle.ATLAS to -269415166,
+            MapStyle.VELLUM to 1311379879,
+            MapStyle.INK_WASH to -1892023537,
+            MapStyle.NAUTICAL to 1548187320,
+            MapStyle.MIDNIGHT to -2098536139,
+            MapStyle.SCHOOLROOM to 1071893702,
+            MapStyle.VERDANT to 1276394304,
+            MapStyle.SCROLL to 1261284821,
+            MapStyle.PEN_AND_INK to -226801735,
+            MapStyle.MARS to -561583142,
+            MapStyle.NATURAL to -1889250184,
+            MapStyle.CLEAR to -1322375342
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

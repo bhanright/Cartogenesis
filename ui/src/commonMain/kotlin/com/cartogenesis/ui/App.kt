@@ -467,7 +467,10 @@ private fun Application(
                 // generator and the interface share one thread, so a stage name written here is
                 // invisible unless the thread is handed back to let a frame out. See that object
                 // for the whole of it.
-                Generation.run(config, reusable, accelerator, platform.oceanAccelerator) {
+                Generation.run(
+                    config, reusable, accelerator, platform.oceanAccelerator,
+                    platform.iceAccelerator
+                ) {
                     reached = it
                     stage = it.label
                 }

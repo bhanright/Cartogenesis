@@ -222,6 +222,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
         GL43C.glUniform1f(uniform("uSlopeScale"), recipe.slopeScale)
         GL43C.glUniform1i(uniform("uOpennessStep"), recipe.opennessStep)
+        GL43C.glUniform1f(uniform("uOrdinaryGround"), recipe.ordinaryGround)
         GL43C.glUniform1f(uniform("uBiomeWash"), recipe.biomeWash)
         GL43C.glUniform1f(uniform("uBiomeMuting"), recipe.biomeMuting)
         GL43C.glUniform1f(uniform("uClimateTint"), recipe.climateTint)
@@ -506,6 +507,15 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * The lighting model, copied out of ReliefShading.kt: one lamp in the north-west, or
              * four lamps and a sky. The same numbers on both sides — the two are one model in two
              * languages and have to be changed together, which GpuRasterTest is what catches.
+             *
+             * One figure is deliberately *not* copied, and the reason is worth reading before
+             * copying the next one. The median illumination over ordinary country is a measurement
+             * rather than a model constant: it is re-derived whenever the ground moves, and it has
+             * moved five times. Written down twice, it was twice left behind — at I1 the Kotlin
+             * went 0.9582 to 0.9421 and then to 0.9473 while this file kept 0.9582, and a third of
+             * every map came out two or three levels dark. It is `uOrdinaryGround` now, handed in
+             * with the recipe from the one constant that holds it. Anything else here that starts
+             * being re-measured should follow it out.
              */
             const float LAMP_EAST = -0.6;
             const float LAMP_SOUTH = -0.6;
@@ -521,7 +531,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             // the Kotlin's own arithmetic rather than recomputed here, so the two agree to the bit.
             const float SKY_BRIGHTNESS_TOTAL = 4.76000016;
             const float SKY_SHARE = 0.23500001;
-            const float ORDINARY_GROUND = 0.9582;
+            // Not a constant here: the median illumination over ordinary country is a
+            // measurement that moves whenever the ground does, so it is handed in with the recipe
+            // rather than written down a second time. See RasterRecipe.ordinaryGround.
+            uniform float uOrdinaryGround;
             const float DARKEST = 0.45;
             const float BRIGHTEST = 1.35;
             const int HORIZON_BEARINGS = 8;
@@ -672,7 +685,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 precise float sky = openness(x, y);
                 precise float illumination =
                     SKY_SHARE * sky + (1.0 - SKY_SHARE) * (direct / LAMP_HEIGHT);
-                return clamp(illumination / ORDINARY_GROUND, DARKEST, BRIGHTEST);
+                return clamp(illumination / uOrdinaryGround, DARKEST, BRIGHTEST);
             }
 
             /*

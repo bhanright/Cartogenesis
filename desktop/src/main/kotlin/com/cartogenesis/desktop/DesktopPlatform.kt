@@ -10,6 +10,7 @@ import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.Desktop
 import java.awt.GraphicsEnvironment
@@ -147,9 +148,15 @@ class DesktopPlatform(
     // on the card is a different world in the same sense erosion's terrain is.
     private val oceanProbe = GpuOcean.createOrNull()
 
+    // And the ice sheet's profile, on the same device and behind the same switch, because the
+    // sheet's surface is the elevation every stage after it reads.
+    private val iceProbe = GpuIceSheet.createOrNull()
+
     override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator
 
     override val oceanAccelerator: OceanAccelerator? get() = oceanProbe.accelerator
+
+    override val iceAccelerator: IceSheetAccelerator? get() = iceProbe.accelerator
 
     override val accelerationUnavailableBecause: String? get() = erosionProbe.unavailableBecause
 

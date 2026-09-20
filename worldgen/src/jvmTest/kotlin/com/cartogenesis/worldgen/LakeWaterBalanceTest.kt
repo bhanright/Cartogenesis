@@ -52,8 +52,22 @@ class LakeWaterBalanceTest {
     // 112 mm to 3,711 at 125 and the balance level came to rest a terrace higher, so it now keeps
     // 0.48 of its spill area where it kept 0.26 — a dry basin still, half empty and endorheic, but
     // no longer one that shows what the balance does. The bar has not moved with it.
+    //
+    // Re-picked once more on the merge of I1 with W2, by the same scan and the same criterion —
+    // the largest wet basin the balance leaves *full* — because the two chunks between them left
+    // seed 9's hollow no longer wet enough to overflow. I1 wrote the ice sheet's surface into the
+    // elevation field and W2 drove the surface winds off the pressure field, and the rain on that
+    // footprint came to 657 mm where it had been 662: enough to tip it from a lake at its spill to
+    // a closed one, endorheic with its surface 0.000380 below the spill and 774 of its 778 cells
+    // still wet. Neither chunk did it alone — the case passed on each branch and fails only on the
+    // two together — and it is not a defect in either, because a basin that close to the line is a
+    // basin the next climate change was always going to close. The scan over 1..48 on the merged
+    // terrain: seed 31, 1,832 cells at 653 mm, the whole of it still wet and sitting on its spill;
+    // seeds 33, 32 and 24 stay full at 569, 297 and 285 cells; seeds 9, 15 and 42 are the ones the
+    // balance now closes, at 99%, 94% and 66% of their footprints. Seed 31 is both the largest and
+    // the one that keeps the claim, so it is the sample.
     private val drySeed = 13L
-    private val wetSeed = 9L
+    private val wetSeed = 31L
 
     /**
      * Both worlds are generated with the outlet notch off, and that is not a convenience.

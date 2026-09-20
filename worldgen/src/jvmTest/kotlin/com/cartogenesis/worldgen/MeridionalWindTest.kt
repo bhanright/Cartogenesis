@@ -173,6 +173,7 @@ class MeridionalWindTest {
         val returnPerCell = cellWidthKm / cfg.evapotranspirationLengthKm
         val lidElevation =
             config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
+        val millimetresPerUnit = ClimateStage.millimetresPerMarchUnit(config)
         val inversion = MoistureBudget.inversionSuppression(
             config, world.sea,
             if (cfg.marineInversion && config.ocean.enabled) world.ocean.anomaly else null,
@@ -221,7 +222,7 @@ class MeridionalWindTest {
                         cfg, cellWidthKm, returnPerCell, moisture,
                         world.sea.relativeElevation.data[i], upwindElevation, band,
                         temperature.data[i],
-                        MoistureBudget.groundWetness(precip.data[i] * ClimateStage.MM_SCALE),
+                        MoistureBudget.groundWetness(precip.data[i] * millimetresPerUnit),
                         0f, inversion?.data?.get(i) ?: 0f, lidElevation
                     )
                     moisture = stepResult.moisture
@@ -233,7 +234,7 @@ class MeridionalWindTest {
         BoxBlur.apply(precip, radius = (w / 128).coerceAtLeast(1), passes = 2)
         for (i in precip.data.indices) {
             precip.data[i] =
-                (precip.data[i] * ClimateStage.MM_SCALE / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
+                (precip.data[i] * millimetresPerUnit / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
         }
         return precip
     }

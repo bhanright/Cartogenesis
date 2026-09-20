@@ -152,6 +152,35 @@ object ClimateStage {
     internal const val MM_SCALE = 52653f
 
     /**
+     * The grid [MM_SCALE] was calibrated on, in cells across.
+     *
+     * 512, the reference grid, whose cell is 23.4 km wide on a 12,000 km world.
+     */
+    private const val MM_SCALE_REFERENCE_CELLS_ACROSS = 512
+
+    /**
+     * Millimetres a year per unit of the march's raw output, on *this* grid.
+     *
+     * **[MM_SCALE] alone is a figure per cell, and rain is not a thing that happens per cell.**
+     * The march charges its rain over a cell of travel, so what one cell records is proportional
+     * to how wide that cell is: cut the same world into four times as many columns and each of
+     * them collects a quarter as much. A constant conversion therefore reported a 2048 world as
+     * four times drier than the same seed at 512 — 718106's interior read 101 mm a year at 2048
+     * against a figure in the hundreds at 512, and its whole land surface rendered as one flat
+     * sand colour in the bottom few per cent of the Rainfall view's ramp. That is the uniform pale
+     * interior the maintainer reported, and it was a unit and not a climate.
+     *
+     * The correction is a derivation and not a second calibration: annual rainfall at a place does
+     * not depend on how finely the map is cut, so the factor scales with the reference cell's
+     * width over this one's. On the reference grid it is exactly 1, so every figure ever measured
+     * at 512 stands unchanged. See docs/DESIGN_LEDGER.md, W3.
+     */
+    internal fun millimetresPerMarchUnit(config: WorldGenConfig): Float =
+        MM_SCALE * (
+            config.scale.cellWidthKm(MM_SCALE_REFERENCE_CELLS_ACROSS) / config.cellWidthKm
+            ).toFloat()
+
+    /**
      * What [ClimateResult.precipitation] treats as "as wet as it gets", in millimetres a year, for
      * the 0..1 fields its consumers expect — rendering, `CultureStage`'s climate distance,
      * `RiverStage`'s and `NationStage`'s runoff weighting, and `MeridionalWindTest`'s monsoon
@@ -810,11 +839,13 @@ object ClimateStage {
         val summerPrecipitationMm = FloatField(cellsAcross, cellsDown)
         val winterPrecipitationMm = FloatField(cellsAcross, cellsDown)
         val landOriginPrecipitationMm = FloatField(cellsAcross, cellsDown)
+        val millimetresPerUnit = millimetresPerMarchUnit(config)
         for (cell in 0 until cellsAcross * cellsDown) {
-            summerPrecipitationMm.data[cell] = summerRaw.data[cell] * MM_SCALE
-            winterPrecipitationMm.data[cell] = winterRaw.data[cell] * MM_SCALE
+            summerPrecipitationMm.data[cell] = summerRaw.data[cell] * millimetresPerUnit
+            winterPrecipitationMm.data[cell] = winterRaw.data[cell] * millimetresPerUnit
             landOriginPrecipitationMm.data[cell] =
-                (summerLandOrigin.data[cell] + winterLandOrigin.data[cell]) * 0.5f * MM_SCALE
+                (summerLandOrigin.data[cell] + winterLandOrigin.data[cell]) * 0.5f *
+                    millimetresPerUnit
         }
 
         return SeasonalFields(
@@ -1694,6 +1725,7 @@ object ClimateStage {
         val rowCount = lastRow - firstRow
         val cellWidthKm = config.cellWidthKm.toFloat()
         val lidElevation = config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
+        val millimetresPerUnit = millimetresPerMarchUnit(config)
 
         // The budget's four lengths, converted once into what one cell of travel does with them.
         val evaporationPerCell =
@@ -1822,7 +1854,8 @@ object ClimateStage {
                     // on it: the proxy for W4's vegetation, which does not exist yet. On the first
                     // lap it is bare, which is the same starting guess [INITIAL_MOISTURE] is and
                     // washes out over the laps the same way.
-                    val wetness = MoistureBudget.groundWetness(precipitation.data[cell] * MM_SCALE)
+                    val wetness =
+                        MoistureBudget.groundWetness(precipitation.data[cell] * millimetresPerUnit)
                     val marched = marchLandStep(
                         climateConfig, cellWidthKm, returnPerCell, columnBefore,
                         sea.relativeElevation.data[cell], upwindElevation, bandFactor,

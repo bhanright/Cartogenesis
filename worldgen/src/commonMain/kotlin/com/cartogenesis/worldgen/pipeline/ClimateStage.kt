@@ -1224,14 +1224,27 @@ object ClimateStage {
     /**
      * The most a wind may slant, in rows per cell of zonal travel.
      *
-     * Not a taste: the march's departure point is a bilinear blend of the arrival cell and *one*
-     * neighbour in the column behind it, so a slant above one row per cell would have the air
-     * arriving from beyond the neighbour the blend can see, and the blend would silently
-     * understate the distance travelled. A pressure wind blowing almost due north over a cell
-     * where the zonal components cancel can ask for far more than that, so it is clamped here,
-     * where the reason for the clamp is visible, rather than inside the march.
+     * A cap on the **length of the march's step**, and that is the only thing it can honestly be.
+     * The march advances one cell of *zonal* travel per step and charges that step one cell's
+     * worth of rain and one cell's worth of depletion. A slant of `s` makes the step
+     * `sqrt(cellWidth^2 + (s cellHeight)^2)` long on the ground, so a slant that carries the air
+     * much further than a cell has the march pricing a journey of many cells at the rate of one.
+     * Capping `s` at the cell's own aspect ratio holds the step at no more than `sqrt(2)` cells
+     * however the grid is shaped — 2.0 rows per cell on a square 512 by 512 grid whose cells are
+     * 23.4 km across and 11.7 km down, 1.0 on the 2:1 grid whose cells are square.
+     *
+     * Where the belt's zonal wind and the pressure field's have cancelled the ratio runs away, and
+     * this is what catches it. Two earlier forms are worth recording because each was wrong in a
+     * measurable direction. A flat cap of one row per cell bound on 71% of the cells between the
+     * equator and 10 degrees north — where the Coriolis force vanishes and the pressure wind runs
+     * straight down its own gradient — and cost those bands 8 to 9% of their rain by understating
+     * how far the air had come. Lifting the cap away entirely cost them 18% instead, by letting a
+     * single step reach hundreds of rows for one cell's worth of rain. See docs/DESIGN_LEDGER.md,
+     * W2.
      */
-    private const val MAX_SLANT_ROWS_PER_CELL = 1f
+    private fun maxSlantRowsPerCell(config: WorldGenConfig): Float =
+        (config.scale.cellWidthKm(config.width) / config.scale.cellHeightKm(config.height))
+            .toFloat()
 
     /**
      * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
@@ -1376,11 +1389,12 @@ object ClimateStage {
                 // ratio below runs away; the clamp is what keeps it inside the march's
                 // one-neighbour blend.
                 val eastwardSpeed = abs(eastward)
+                val maxSlant = maxSlantRowsPerCell(config)
                 meridional[cell] = if (eastwardSpeed == 0f) {
-                    if (southward >= 0f) MAX_SLANT_ROWS_PER_CELL else -MAX_SLANT_ROWS_PER_CELL
+                    if (southward >= 0f) maxSlant else -maxSlant
                 } else {
                     (southward / eastwardSpeed * cellWidthOverHeight)
-                        .coerceIn(-MAX_SLANT_ROWS_PER_CELL, MAX_SLANT_ROWS_PER_CELL)
+                        .coerceIn(-maxSlant, maxSlant)
                 }
             }
         }
@@ -1642,27 +1656,29 @@ object ClimateStage {
                     val bandFactor = bandOfRow[row]
 
                     // The upwind point, one cell back along the wind vector. The zonal part is a
-                    // whole cell; the meridional part is a fraction of a row, so the sample is a
-                    // blend of this row and the one the air drifted in from. A neighbour outside
-                    // this run is not sampled: that edge is a boundary between circulation cells,
-                    // and air does not cross it at the surface.
-                    // The slant at the arrival cell, not at the row: with a pressure field on the
-                    // map two cells of the same row need not have the air coming in at the same
-                    // angle, and that variation is most of what gives a continental interior a
-                    // rainfall that is not simply its distance from the upwind coast.
+                    // whole cell; the meridional part is however many rows the slant carries in
+                    // that cell of travel, which need not be less than one and near the equator
+                    // usually is not: there the Coriolis force vanishes, the pressure wind runs
+                    // straight down its own gradient, and a cell where the zonal winds have
+                    // nearly cancelled has air arriving from almost due north or south.
+                    //
+                    // So the departure row is a real number and the sample is a blend of the two
+                    // rows that bracket it, rather than of this row and the one next to it. For a
+                    // slant inside one row the two are the same arithmetic in the same order; past
+                    // it, the old form silently understated how far the air had come, which is a
+                    // moisture loss concentrated exactly where the slant saturated.
+                    //
+                    // The departure is held inside this run: that edge is a boundary between
+                    // circulation cells, and air does not cross it at the surface.
                     val slantRowsPerCell = wind.meridional[cell]
-                    val neighbourWithinRun =
-                        if (slantRowsPerCell > 0f) rowWithinRun - 1 else rowWithinRun + 1
-                    val blendFromNeighbour =
-                        if (slantRowsPerCell != 0f && neighbourWithinRun in 0 until rowCount) {
-                            abs(slantRowsPerCell)
-                        } else {
-                            0f
-                        }
-                    if (blendFromNeighbour != 0f) {
-                        moisture[rowWithinRun] = previousColumn[rowWithinRun] +
-                            (previousColumn[neighbourWithinRun] - previousColumn[rowWithinRun]) *
-                            blendFromNeighbour
+                    if (slantRowsPerCell != 0f) {
+                        val departureRow =
+                            (rowWithinRun - slantRowsPerCell).coerceIn(0f, (rowCount - 1).toFloat())
+                        val rowBefore = departureRow.toInt()
+                        val rowAfter = (rowBefore + 1).coerceAtMost(rowCount - 1)
+                        val shareOfAfter = departureRow - rowBefore
+                        moisture[rowWithinRun] = previousColumn[rowBefore] +
+                            (previousColumn[rowAfter] - previousColumn[rowBefore]) * shareOfAfter
                     }
 
                     if (!sea.isLand[cell]) {
@@ -1688,14 +1704,21 @@ object ClimateStage {
                     // Orographic lift is the climb the air made getting here, so it is measured
                     // from the same blended upwind point rather than from due upwind along the row
                     // — otherwise a range a slanting wind climbs obliquely would read as flat.
-                    val upwindOwnRow =
-                        sea.relativeElevation.data[row * cellsAcross + upwindColumn]
-                    val upwindElevation = if (blendFromNeighbour != 0f) {
-                        upwindOwnRow + (sea.relativeElevation.data[
-                            (firstRow + neighbourWithinRun) * cellsAcross + upwindColumn
-                        ] - upwindOwnRow) * blendFromNeighbour
+                    val slant = wind.meridional[cell]
+                    val upwindElevation = if (slant != 0f) {
+                        val departureRow =
+                            (rowWithinRun - slant).coerceIn(0f, (rowCount - 1).toFloat())
+                        val rowBefore = departureRow.toInt()
+                        val rowAfter = (rowBefore + 1).coerceAtMost(rowCount - 1)
+                        val shareOfAfter = departureRow - rowBefore
+                        val before = sea.relativeElevation.data[
+                            (firstRow + rowBefore) * cellsAcross + upwindColumn
+                        ]
+                        before + (sea.relativeElevation.data[
+                            (firstRow + rowAfter) * cellsAcross + upwindColumn
+                        ] - before) * shareOfAfter
                     } else {
-                        upwindOwnRow
+                        sea.relativeElevation.data[row * cellsAcross + upwindColumn]
                     }
                     val marched = marchLandStep(
                         climateConfig, moisture[rowWithinRun],

@@ -138,20 +138,26 @@ class PenAndInkTest {
          * over this same world's land and still finds 0.9582 — and pen and ink's record moved
          * anyway, which is the other half of the same evidence: the one style with no tint for the
          * shading to multiply moves when, and only when, the ground does.
+         *
+         * W2 moved all twelve again. The pressure wind changed the climate every style tints by,
+         * and it reaches the *provisional* climate the glaciation stage carves from as well, so a
+         * change to the air moved a little of the ground with it. Re-taken from this test own
+         * PENINK fingerprints at 512 line, and taken only after the climate guards were settled:
+         * a fingerprint recorded while a climate is still moving records nothing.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 552004496,
-            MapStyle.VELLUM to -289385690,
-            MapStyle.INK_WASH to 1866833523,
-            MapStyle.NAUTICAL to 1503364060,
-            MapStyle.MIDNIGHT to 1514803663,
-            MapStyle.SCHOOLROOM to 1803151843,
-            MapStyle.VERDANT to 1647567678,
-            MapStyle.SCROLL to -142278096,
-            MapStyle.PEN_AND_INK to -92338804,
-            MapStyle.MARS to -534967870,
-            MapStyle.NATURAL to 1686396603,
-            MapStyle.CLEAR to -1434907693
+            MapStyle.ATLAS to 1037627392,
+            MapStyle.VELLUM to 640840341,
+            MapStyle.INK_WASH to 1751117141,
+            MapStyle.NAUTICAL to 1433082392,
+            MapStyle.MIDNIGHT to 1010242824,
+            MapStyle.SCHOOLROOM to 898846430,
+            MapStyle.VERDANT to 1363611438,
+            MapStyle.SCROLL to 601342778,
+            MapStyle.PEN_AND_INK to -764404980,
+            MapStyle.MARS to -353345963,
+            MapStyle.NATURAL to 831931422,
+            MapStyle.CLEAR to 367763471
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

@@ -8,7 +8,6 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.worldgen.pipeline.ClimateStage
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -91,19 +90,44 @@ class PressureWindRenderTest {
      * interior cell is too.
      */
     private fun interiorWindow(world: WorldMap): Pair<Int, Int> {
-        val distance = ClimateStage.waterDistance(world.config, world.sea)
-        var deepest = 0
-        var deepestDistance = -1f
-        for (cell in 0 until world.width * world.height) {
-            if (!world.sea.isLand[cell]) continue
-            if (distance.data[cell] > deepestDistance) {
-                deepestDistance = distance.data[cell]
-                deepest = cell
+        // A breadth-first sweep out from every coast at once, counting cells rather than
+        // kilometres: this only has to pick a window, and the stage's own distance field is
+        // internal to the generator. Four-connected, wrapping east to west, and visited in index
+        // order, so the same world gives the same window every time.
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val distance = IntArray(cellsAcross * cellsDown) { -1 }
+        val queue = ArrayDeque<Int>()
+        for (cell in 0 until cellsAcross * cellsDown) {
+            if (!world.sea.isLand[cell]) {
+                distance[cell] = 0
+                queue.addLast(cell)
             }
         }
-        println(
-            "W2 RENDER interior crop at cell $deepest, ${deepestDistance.toInt()} cells from water"
-        )
+        var deepest = 0
+        var deepestDistance = 0
+        while (queue.isNotEmpty()) {
+            val cell = queue.removeFirst()
+            if (distance[cell] > deepestDistance) {
+                deepestDistance = distance[cell]
+                deepest = cell
+            }
+            val row = cell / cellsAcross
+            val column = cell % cellsAcross
+            val neighbours = intArrayOf(
+                row * cellsAcross + if (column + 1 == cellsAcross) 0 else column + 1,
+                row * cellsAcross + if (column == 0) cellsAcross - 1 else column - 1,
+                if (row > 0) (row - 1) * cellsAcross + column else cell,
+                if (row + 1 < cellsDown) (row + 1) * cellsAcross + column else cell
+            )
+            neighbours.forEach { neighbour ->
+                if (distance[neighbour] < 0) {
+                    distance[neighbour] = distance[cell] + 1
+                    queue.addLast(neighbour)
+                }
+            }
+        }
+        println("W2 RENDER interior crop at cell $deepest, $deepestDistance cells from water")
         return Pair(
             (deepest % world.width - cropWidth / 2).coerceIn(0, world.width - cropWidth),
             (deepest / world.width - cropHeight / 2).coerceIn(0, world.height - cropHeight)

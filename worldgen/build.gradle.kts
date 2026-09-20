@@ -129,7 +129,12 @@ val auditOnlyClasses = listOf(
     // F18: the network statistics, the moved-cell tally and the routing's own cost need every world
     // generated twice, once under each routing rule — ten worlds, a pair of them at 1024, and one
     // more at 2048 to be timed. The census that guards the chunk is in `StraightRunTest`.
-    "com.cartogenesis.worldgen.StraightRunAuditTest"
+    "com.cartogenesis.worldgen.StraightRunAuditTest",
+    // W2's diagnosis: eight worlds, each seed generated with the pressure wind and without it, for
+    // a printed table of where the permanent ice went and whether a belt boundary took it. It
+    // asserts nothing; the guards it was written to explain are in `PressureWindTest` and
+    // `SnowBalanceTest`.
+    "com.cartogenesis.worldgen.PressureWindIceTest"
 )
 
 tasks.named<Test>("jvmTest") {

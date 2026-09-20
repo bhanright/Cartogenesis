@@ -1033,6 +1033,13 @@ pressure, and surface pressure comes from temperature:
   sweep matches the direction its own wind blows. Both marches are the same lock-step wavefront as
   before, so the determinism the pipeline rests on is untouched; a belt with no reversed cell in it
   never runs the second sweep, which is why the control costs nothing.
+- **A step of the march is a step, however the wind slants.** The march advances one cell of zonal
+  travel and charges that step one cell of rain and one cell of depletion, so the slant is capped
+  at the cell own aspect ratio, which holds the step at no more than root two cells on any grid.
+  Capping it at a flat one row per cell instead bound on 71% of the cells within ten degrees of the
+  equator, where the Coriolis force vanishes and the wind runs down its own gradient, and cost
+  those bands 8-9% of their rain; taking the cap away entirely cost them 18%, by letting one step
+  reach hundreds of rows for one cell of rain.
 
 - **Direction is measured from the *thermal* equator, not the geographic one.** In summer the
   thermal equator migrates `seasonalTilt` degrees into the hemisphere, and a tropical row it has

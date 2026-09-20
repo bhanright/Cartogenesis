@@ -319,8 +319,10 @@ class PressureWindTest {
     @Test
     fun `the interior's rainfall spreads as widely as Earth's`() {
         val earthSpread = coefficientOfVariation(EARTH_INTERIOR_NORMALS_MM.map { it.toDouble() })
+        val earthMean = EARTH_INTERIOR_NORMALS_MM.map { it.toDouble() }.average()
         var pooledWith = 0.0
         var pooledWithout = 0.0
+        var pooledMean = 0.0
         var seedsMeasured = 0
         seeds.forEach { seed ->
             val world = generate(seed, pressureWinds = true)
@@ -330,10 +332,14 @@ class PressureWindTest {
             seedsMeasured++
             pooledWith += withPressure
             pooledWithout += withoutPressure
+            pooledMean += interiorRainMeanMm(world) ?: 0.0
             println(
                 ("INTERIOR RAIN seed %d: coefficient of variation %.3f with the pressure term, " +
-                    "%.3f without, against Earth's %.3f")
-                    .format(seed, withPressure, withoutPressure, earthSpread)
+                    "%.3f without, against Earth's %.3f; mean %.0f mm against Earth's %.0f")
+                    .format(
+                        seed, withPressure, withoutPressure, earthSpread,
+                        interiorRainMeanMm(world) ?: 0.0, earthMean
+                    )
             )
         }
         assertTrue(seedsMeasured > 0, "no seed had an interior to measure")
@@ -357,6 +363,20 @@ class PressureWindTest {
                 meanWith < earthSpread * INTERIOR_SPREAD_FACTOR,
             ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +
                 "Earth's %.3f").format(meanWith, INTERIOR_SPREAD_FACTOR, earthSpread)
+        )
+        // The level as well as the spread, which is W3's addition to this measurement: the
+        // complaint that started the chunk was about variation, and a uniformly pale interior may
+        // be uniformly dry rather than uniformly anything. Same table, same twenty-five places.
+        val interiorMean = pooledMean / seedsMeasured
+        println(
+            ("INTERIOR RAIN pooled mean %.0f mm against Earth's %.0f from the same normals, " +
+                "%.2f times it").format(interiorMean, earthMean, interiorMean / earthMean)
+        )
+        assertTrue(
+            interiorMean > earthMean / INTERIOR_SPREAD_FACTOR &&
+                interiorMean < earthMean * INTERIOR_SPREAD_FACTOR,
+            ("the interior takes %.0f mm a year, outside a factor of %.0f either side of Earth's " +
+                "%.0f").format(interiorMean, INTERIOR_SPREAD_FACTOR, earthMean)
         )
     }
 
@@ -529,6 +549,22 @@ class PressureWindTest {
         // A world whose land is all coast has no interior, and a handful of cells is not a spread.
         if (totals.size < 100) return null
         return coefficientOfVariation(totals)
+    }
+
+    /** Mean annual rainfall over the same deep interior land, in millimetres. */
+    private fun interiorRainMeanMm(world: WorldMap): Double? {
+        val distance = ClimateStage.waterDistance(world.config, world.sea)
+        val reachCells = world.config.cellsFor(INTERIOR_REACH_KM)
+        var total = 0.0
+        var cells = 0
+        for (cell in 0 until world.width * world.height) {
+            if (!world.sea.isLand[cell]) continue
+            if (distance.data[cell] < reachCells) continue
+            total += world.climate.precipitationMm.data[cell].toDouble()
+            cells++
+        }
+        if (cells < 100) return null
+        return total / cells
     }
 
     private fun coefficientOfVariation(values: List<Double>): Double {

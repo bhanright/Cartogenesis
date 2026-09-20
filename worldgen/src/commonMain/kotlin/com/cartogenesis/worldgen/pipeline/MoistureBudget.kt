@@ -47,25 +47,36 @@ object MoistureBudget {
      * Seven per cent a degree is the Clausius-Clapeyron relation near surface temperatures, the
      * same figure `ClimateConfig.currentMoisture` carries for the sea. A parcel over warmer ground
      * can hold proportionally more water before it condenses, so it travels proportionally further
-     * before it has emptied: the depletion length scales with the capacity, and a subtropical
-     * plain therefore carries moisture across itself where a subpolar one drops it at the first
-     * rise. Fifteen degrees is the planet's mean surface temperature, which is where the
-     * literature's continental length scales are a global average of.
+     * before it has emptied: warm land carries moisture across itself where cold land drops it at
+     * the first rise.
+     *
+     * **The reference is the warm end and not the middle, and that is a measurement and not a
+     * preference.** Thirty degrees is the warmest land surface the march ever sees, the top of
+     * `ClimateStage`'s own evaporative-warmth ramp, so the figure the literature quotes is the
+     * figure the tropics get and the relation only ever *shortens*. Referenced to the planetary
+     * mean of fifteen instead, the tropics took a length of 2,310 km — the exponential's 2.31 at
+     * 27 C — which halved their flat-land rain rate, and `GeographyAuditTest`'s desert-by-latitude
+     * guard failed on it: the 0-15 degree band went to x1.42 of its own land on seed 7 and x1.76
+     * on 1234 against Earth's x0.27, tropical interiors turning to desert for no reason but the
+     * reference temperature. The cold end is clamped at [MIN_CAPACITY_FACTOR] for the matching
+     * reason: `ClimateStage`'s cold cap is already Clausius-Clapeyron applied to the parcel's
+     * *stock*, and an unclamped exponential on the *rate* beside it would charge the same physics
+     * twice, thirty-four times over across the range the two of them span.
      */
     const val CAPACITY_PER_DEGREE_C = 0.07f
-    const val DEPLETION_REFERENCE_C = 15f
+    const val DEPLETION_REFERENCE_C = 30f
 
     /**
-     * How far the temperature term may stretch or shorten [FLAT_DEPLETION_LENGTH_KM].
+     * The least the temperature term may shorten [FLAT_DEPLETION_LENGTH_KM] by, and the most it
+     * may stretch it.
      *
-     * Half to two and a half, which the exponential reaches at -25 C and +28 C. Past those the
-     * relation is still true of the air but no longer the thing deciding the rain: below them
-     * `ClimateStage`'s cold cap has already taken the moisture away, above them the belt profile
-     * and the convergence term are doing the work. Clamping says so rather than letting one
-     * exponential run the whole model at its extremes.
+     * Half, and not at all. The exponential reaches a half at 20 C, so every land surface cooler
+     * than a warm-temperate summer empties over five hundred kilometres rather than a thousand,
+     * and nothing colder than that empties faster still, because the cold cap has the rest of the
+     * relation.
      */
     const val MIN_CAPACITY_FACTOR = 0.5f
-    const val MAX_CAPACITY_FACTOR = 2.5f
+    const val MAX_CAPACITY_FACTOR = 1f
 
     /**
      * The fetch over which an air mass crossing open water re-saturates, in kilometres.

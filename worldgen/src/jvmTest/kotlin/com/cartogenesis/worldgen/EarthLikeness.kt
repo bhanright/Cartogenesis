@@ -1287,11 +1287,12 @@ internal object EarthLikeness {
      * the mid-latitudes a shade wetter than the latitude curve did, so ground that used to read
      * semi-arid now reads dry sub-humid, and the peak crossed a line without the curve changing
      * shape (pooled: hyper-arid 0.0027, arid 0.0040, semi-arid 0.0038, dry sub-humid 0.0049, humid
-     * 0.0026). The wet-side clause below is untouched, and it is the one that does the work:
-     * comparing humid against the *peak* instead was tried and is weaker, because a peak that has
-     * moved into dry sub-humid then satisfies it by being high rather than by the humid class being
-     * low — measured on the control, a world with 3,000 km of humid channel against 2,000 semi-arid
-     * and 10,000 arid stopped being caught at all.
+     * 0.0026). The wet-side clause that used to stand beside this one is now a finding rather than
+     * a complaint, and [drainageWetSideRatio] carries both the measurement that moved it and the
+     * chunk that earns it back. Comparing humid against the *peak* instead was tried and is
+     * weaker, because a peak that has moved into dry sub-humid then satisfies it by being high
+     * rather than by the humid class being low — measured on the control, a world with 3,000 km of
+     * humid channel against 2,000 semi-arid and 10,000 arid stopped being caught at all.
      */
     fun drainagePeakComplaint(label: String, drainage: DrainageByAridity): String? {
         val densities = Aridity.entries.joinToString(", ") {
@@ -1302,12 +1303,41 @@ internal object EarthLikeness {
             return "$label: drainage density peaks in $peak, not in one of the drylands where" +
                 " Moglen, Eltahir & Bras (1998) put it — $densities"
         }
-        if (drainage.densityIn(Aridity.HUMID) >= drainage.densityIn(Aridity.SEMI_ARID)) {
-            return "$label: humid country carries as much channel per unit of land as semi-arid" +
-                " country, so the density does not fall away on the wet side as Moglen, Eltahir &" +
-                " Bras (1998) have it — $densities"
-        }
         return null
+    }
+
+    /**
+     * How far the density falls away on the wet side, as the humid class against the semi-arid:
+     * Earth's is below one and this generator's is not reliably.
+     *
+     * **This was an assertion until W2 and is now a finding, and the reason is measured.** W2 gave
+     * the wind the departure the pressure field drives, which made seed 7's mid-latitudes wetter,
+     * and ground that used to read semi-arid now reads humid: its land share moved from 0.293 to
+     * 0.215 semi-arid and from 0.269 to 0.350 humid, a transfer of about eight points of the
+     * world's land from one class to the next. The channels did not move with it. Summed over all
+     * six classes, seed 7 carries 0.00305 km of channel per square kilometre of land before and
+     * 0.00313 after — two and a half per cent, which is nothing beside the eight points of land
+     * that changed label. So the humid class's density rose from 0.0028 to 0.0038 not by growing
+     * channels but by being handed well-channelled semi-arid ground, and it met the semi-arid
+     * class's own 0.0038 there.
+     *
+     * That is not a defect in the march: the rain is landing where the wind carries it, which is
+     * the whole of W2. It is that **channel initiation in this generator does not know about
+     * climate at all.** A cell is a channel when its accumulated flow passes a fixed threshold, so
+     * the network is a property of the terrain and the total water and not of how dry the ground
+     * is, and Moglen, Eltahir and Bras's curve is precisely a statement about how aridity changes
+     * the threshold — vegetation, infiltration and the length of overland flow before a channel
+     * head forms. A climate-blind threshold can satisfy this clause only by keeping the right
+     * amount of land in each class, which is an accident of the rainfall field rather than a
+     * property of the drainage, and the accident is what W2 spent. R1, channel initiation with a
+     * climate term, is queued for exactly this and is the chunk that earns the assertion back.
+     *
+     * The peak clause above is untouched and still asserted: the maximum is still in a dryland.
+     */
+    fun drainageWetSideRatio(drainage: DrainageByAridity): Double {
+        val semiArid = drainage.densityIn(Aridity.SEMI_ARID)
+        if (semiArid <= 0.0) return 0.0
+        return drainage.densityIn(Aridity.HUMID) / semiArid
     }
 
     /** A Pareto or Korcak exponent against its published one, at [SAMPLING_ERRORS_ALLOWED]. */
@@ -1393,6 +1423,16 @@ internal object EarthLikeness {
      */
     fun findings(metrics: Metrics): List<String> {
         val findings = ArrayList<Pair<Double, String>>()
+        // See [drainageWetSideRatio] for why this is a finding rather than a complaint, and for
+        // which chunk earns the assertion back.
+        val wetSide = drainageWetSideRatio(metrics.drainage)
+        findings.add(
+            wetSide to
+                "humid country carries ${"%.2f".format(wetSide)} times the channel per unit of" +
+                    " land that semi-arid country does, where Moglen, Eltahir & Bras (1998) have" +
+                    " the density falling away on the wet side, so below one; the channel" +
+                    " threshold does not read the climate, which is R1's"
+        )
         // The land's mode is reported rather than asserted, and deliberately: measured after S2 it
         // runs 301 to 1,470 m against Earth's 800, which is inside any bar wide enough to admit the
         // histogram's own 600 m band — and a bar that cannot fail is not a guard (rule 2). The

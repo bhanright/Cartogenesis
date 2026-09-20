@@ -194,14 +194,15 @@ class LakeWaterBalanceTest {
         val off = world(wetSeed, waterBalance = false)
         val on = world(wetSeed, waterBalance = true)
 
-        // 650 mm, not the 700 this case was written with. The cut is how the case *finds* seed
-        // 99's wet basin, not what it measures, and W1's energy balance left that basin's
-        // footprint on 698 mm where it had been 730 — the same hollow at (356,247), 383 cells
-        // against 433, two millimetres the wrong side of the old line. The claim is unchanged and
-        // still carries: a catchment that can keep its basin wet leaves it at the brim, and the
-        // assertions below are the same ones. `basinOf` prints the five largest basins and their
-        // rainfall so the next chunk that moves the climate can re-read this in one run.
-        val basin = basinOf(off, 650f, Float.MAX_VALUE)
+        // 400 mm, not the 650 W1 left it at, and 700 before that. The cut is how the case
+        // *finds* the wet basin, not what it measures, and each chunk that moves the climate has
+        // had to re-read it — which is why `basinOf` prints the five largest basins and their
+        // rainfall. W3 gave the moisture budget lengths in kilometres instead of rates per cell,
+        // and the ground's own return now depends on how wet the ground already is, so an interior
+        // catchment keeps less of its rain: this basin reads 431 mm over 778 cells where it read
+        // 698 over 383. Nothing at 650 mm is large enough to measure any more, and the claim below
+        // is unchanged — a catchment that can keep its basin wet leaves it at the brim.
+        val basin = basinOf(off, 400f, Float.MAX_VALUE)
         assertTrue(basin.size >= 200, "seed $wetSeed has no large wet basin any more (${basin.size} cells)")
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()

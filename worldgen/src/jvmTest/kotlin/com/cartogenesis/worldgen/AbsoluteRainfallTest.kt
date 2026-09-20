@@ -148,10 +148,22 @@ class AbsoluteRainfallTest {
                 "lush config %.2f%% desert (%.2fx)".format(newLush, newRatio)
         )
 
+        // **Re-pinned by W3, and the shape of the clause changed with it.** This used to read
+        // `oldRatio < 1.5`, on the reasoning that a uniform rescale changes no percentile-relative
+        // comparison, so the old normalization had to flatten an arid world onto a lush one almost
+        // exactly. That reasoning held while rainfall responded linearly to the march's rate. W3's
+        // ground-wetness term makes it nonlinear: dry ground returns less water, so an arid world
+        // is arid in a different *shape* and not merely at a lower level, and no single rescale
+        // maps it onto a lush one any more. Measured here, the old normalization now reads 1.64x
+        // where absolute millimetres read 2.72x. So the clause is stated as what it was always
+        // for - that the old normalization hid most of the difference - as a ratio between the two
+        // measurements rather than as an absolute bar, and it bites at 0.60 of the way. See
+        // docs/DESIGN_LEDGER.md, W3.
         assertTrue(
-            oldRatio < 1.5f,
-            "the old per-world normalization should have flattened the arid/lush difference, but " +
-                "measured a %.2fx ratio (arid %.2f%%, lush %.2f%%)".format(oldRatio, oldArid, oldLush)
+            oldRatio < newRatio * 0.75f,
+            "the old per-world normalization should have hidden most of the arid/lush difference, " +
+                "but measured %.2fx against absolute millimetres' %.2fx (arid %.2f%%, lush %.2f%%)"
+                .format(oldRatio, newRatio, oldArid, oldLush)
         )
         assertTrue(
             newRatio >= 1.5f,

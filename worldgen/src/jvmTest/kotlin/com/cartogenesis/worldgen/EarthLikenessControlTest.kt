@@ -273,13 +273,20 @@ class EarthLikenessControlTest {
     }
 
     /**
-     * The two drainage-density clauses, one control each.
+     * The two halves of the drainage-density curve, one control each.
      *
      * Moglen, Eltahir and Bras (1998) put the maximum on the dry side and have it fall away on the
-     * wet, so the first control is a world with every kilometre of channel in the humid class —
-     * what a generator that cut channels wherever it rained would produce — and the second is one
-     * whose maximum is dry, as it should be, but whose humid country is nonetheless better drained
-     * than its semi-arid country, which is the fall-off missing.
+     * wet. The first control is a world with every kilometre of channel in the humid class — what
+     * a generator that cut channels wherever it rained would produce — and it is a control on an
+     * *assertion*: the peak clause has to refuse it.
+     *
+     * The second is a world whose maximum is dry, as it should be, but whose humid country is
+     * nonetheless better drained than its semi-arid, which is the fall-off missing. Since W2 that
+     * half is a finding rather than a complaint — see `EarthLikeness.drainageWetSideRatio` for the
+     * measurement that moved it — so what this controls is the number the finding reports rather
+     * than a refusal. The world is built to a known ratio, 3,000 km of humid channel against
+     * 2,000 semi-arid over equal land, so the finding must read exactly 1.5; a ratio taken upside
+     * down, or off the wrong pair of classes, would not.
      */
     @Test
     fun `the drainage-density clauses bite on a world whose channels are all in the wet`() {
@@ -303,19 +310,26 @@ class EarthLikenessControlTest {
         noFallOffChannelKm[EarthLikeness.Aridity.SEMI_ARID.ordinal] = 2_000.0
         noFallOffChannelKm[EarthLikeness.Aridity.HUMID.ordinal] = 3_000.0
         val noFallOff = EarthLikeness.DrainageByAridity(noFallOffChannelKm, landKm2)
-        val noFallOffComplaint = EarthLikeness.drainagePeakComplaint("NO-FALL-OFF", noFallOff)
+        val noFallOffRatio = EarthLikeness.drainageWetSideRatio(noFallOff)
         println(
-            "EARTH CONTROL a dry peak with no fall-off: peak ${noFallOff.peak()}" +
-                " — $noFallOffComplaint"
+            "EARTH CONTROL a dry peak with no fall-off: peak ${noFallOff.peak()}," +
+                " wet-side ratio ${"%.2f".format(noFallOffRatio)}"
         )
         assertTrue(
-            "the control's peak was meant to be dry so that the second clause is what bites," +
+            "the control's peak was meant to be dry so that the wet side is what this measures," +
                 " and it is ${noFallOff.peak()}",
             noFallOff.peak() == EarthLikeness.Aridity.ARID
         )
         assertTrue(
-            "the drainage-density bar accepted humid country better drained than semi-arid",
-            noFallOffComplaint != null
+            "the peak clause refused a world whose maximum is in a dryland, so it is no longer" +
+                " measuring the peak alone",
+            EarthLikeness.drainagePeakComplaint("NO-FALL-OFF", noFallOff) == null
+        )
+        assertTrue(
+            "a world built with 3,000 km of humid channel against 2,000 semi-arid over equal" +
+                " land reports a wet-side ratio of ${"%.4f".format(noFallOffRatio)}, not the 1.5" +
+                " it was laid out to have",
+            abs(noFallOffRatio - 1.5) < 1e-9
         )
     }
 }

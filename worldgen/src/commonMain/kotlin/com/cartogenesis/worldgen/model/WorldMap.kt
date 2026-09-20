@@ -59,6 +59,19 @@ data class WorldMap(
     /** Elevation relative to the shoreline: positive on land, negative at sea. */
     val relativeElevation: FloatField get() = sea.relativeElevation
 
+    /**
+     * How much living cover the ground carries, 0 on bare rock or ice to 1 under a closed forest,
+     * one entry per cell, row-major, and 0 at sea.
+     *
+     * Beside [relativeElevation] rather than reached through the climate stage because this is a
+     * property of the surface that stages outside the climate are meant to read. One does today —
+     * the map's canopy darkening — and the two that the field was built for do not yet: erosion
+     * should scale its erodibility by roughly `1 - 0.5 * density`, since a vegetated slope resists
+     * about twice as well as a bare one (Istanbulluoglu and Bras 2005). That is S3's and H3's, it
+     * needs the provisional climate march S3 is chartered to add, and TODO.md carries the entry.
+     */
+    val vegetationDensity: FloatField get() = climate.vegetationDensity
+
     fun isLand(x: Int, y: Int): Boolean = sea.isLand[y * width + x]
 
     /** Land as a share of the whole map, water included — not as a share of anything else. */

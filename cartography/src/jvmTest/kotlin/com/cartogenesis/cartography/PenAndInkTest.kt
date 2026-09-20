@@ -170,19 +170,29 @@ class PenAndInkTest {
          * from - and the merged world is neither, so all twelve are re-taken once more on this
          * tree. `ReliefShading.ORDINARY_GROUND` is re-derived with them, from 0.9421, because
          * both sides moved the land the median illumination is measured over.
+         *
+         * W4 moved **ten of the twelve**, and which two stood still is the record's own check on
+         * itself. The canopy the ground is darkened under stopped being one figure per biome and
+         * became the cell's own vegetation density, so every style whose `climateTint` is above
+         * zero draws different ground; `PEN_AND_INK` and `CLEAR` hold that lever at zero and their
+         * fingerprints are unchanged to the bit, 198761330 and -383169912, the same two numbers
+         * they carried before this chunk. Nothing else moved: W4 leaves the world itself alone -
+         * the biome, elevation and every climate field are identical - so `ORDINARY_GROUND` is not
+         * re-derived with them this time, because the land the median illumination is measured
+         * over did not move at all. Re-taken last, after the two module suites had settled.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -427464539,
-            MapStyle.VELLUM to 703604031,
-            MapStyle.INK_WASH to -202806120,
-            MapStyle.NAUTICAL to 7306085,
-            MapStyle.MIDNIGHT to 1557028392,
-            MapStyle.SCHOOLROOM to 1462363486,
-            MapStyle.VERDANT to -290058247,
-            MapStyle.SCROLL to 54729821,
+            MapStyle.ATLAS to -1713431387,
+            MapStyle.VELLUM to 95155827,
+            MapStyle.INK_WASH to -13737540,
+            MapStyle.NAUTICAL to 945604914,
+            MapStyle.MIDNIGHT to -1031141253,
+            MapStyle.SCHOOLROOM to 2062220447,
+            MapStyle.VERDANT to 1530694864,
+            MapStyle.SCROLL to 1561951766,
             MapStyle.PEN_AND_INK to 198761330,
-            MapStyle.MARS to 1765838586,
-            MapStyle.NATURAL to -1413961530,
+            MapStyle.MARS to -194731954,
+            MapStyle.NATURAL to 2122140708,
             MapStyle.CLEAR to -383169912
         )
 

@@ -157,13 +157,17 @@ class RasterRecipe(
     val precipitationRamp: IntArray,
     val biomeColors: IntArray,
     /**
-     * How much of each biome's ground is under a closed canopy, in [Biome] order.
+     * How much of each cell's ground is under a closed canopy, or null where nothing reads it.
      *
-     * The one thing about a cell's climate that is a property of its vegetation rather than of its
-     * weather, so it travels as a table indexed by the biome the device already has rather than as
-     * a third field the size of the map. See [ClimateTint].
+     * The world's own vegetation density, a field the size of the map rather than the table per
+     * biome it was until W4: a density is a continuous function of the water balance and the
+     * growing season, and a table could only give every cell of a biome the same answer. See
+     * [ClimateTint.canopyAt].
+     *
+     * It shares a device binding with [shoreDistance] — see the note there — and the two are never
+     * both present.
      */
-    val biomeCanopy: FloatArray,
+    val vegetation: FloatArray?,
     val paper: Int,
     val biomeWash: Float,
     val biomeMuting: Float,
@@ -202,6 +206,15 @@ class RasterRecipe(
      * the processor and uploaded rather than recomputed on the device, for the same reason the
      * colour tables are: a distance field solved twice would put the vignette's lines a pixel apart
      * and the two pictures would no longer be the same picture.
+     *
+     * **It shares a device binding with [vegetation].** A compute shader is guaranteed only
+     * sixteen shader-storage blocks by the OpenGL specification, `GpuRaster` declares sixteen, and
+     * a seventeenth would compile on this machine's driver and fail on the next reader's — which
+     * is a silent fall back to the processor for the rest of that reader's life. Both fields are
+     * one float a cell, and they are never both live: the shore distance is built only for a
+     * [lineArt] style, the vegetation only for a style whose [climateTint] is above zero, and the
+     * only line-art style sets that tint to zero. The `init` block below refuses a recipe that
+     * carries both rather than leaving the invariant as a remark.
      */
     val shoreDistance: FloatArray? = null,
     /**
@@ -254,6 +267,13 @@ class RasterRecipe(
     val showBorders: Boolean
 ) {
 
+    init {
+        require(vegetation == null || shoreDistance == null) {
+            "vegetation and shoreDistance share one device binding and cannot both be uploaded"
+        }
+    }
+
+
     companion object {
 
         /**
@@ -290,6 +310,7 @@ class RasterRecipe(
             var colorsA: IntArray? = null
             var indexB: IntArray? = null
             var colorsB: IntArray? = null
+            var vegetation: FloatArray? = null
 
             val viewId = when (view) {
                 MapView.FANTASY -> {
@@ -300,6 +321,7 @@ class RasterRecipe(
                     if (style.climateTint > 0f) {
                         scalarA = ClimateTint.drynessField(world)
                         scalarB = ClimateTint.coldnessField(world)
+                        vegetation = ClimateTint.canopyField(world)
                     }
                     RasterView.FANTASY
                 }
@@ -411,6 +433,7 @@ class RasterRecipe(
                 colorsA = colorsA,
                 indexB = indexB,
                 colorsB = colorsB,
+                vegetation = vegetation,
                 nation = nation,
                 lakeId = lakeId,
                 lakeSurface = lakeSurface,
@@ -426,7 +449,7 @@ class RasterRecipe(
                 temperatureRamp = MapPalette.temperatureRamp,
                 precipitationRamp = MapPalette.precipitationRamp,
                 biomeColors = IntArray(Biome.entries.size) { MapPalette.biome(Biome.entries[it]) },
-                biomeCanopy = ClimateTint.canopyTable(),
+
                 paper = style.paper,
                 biomeWash = style.biomeWash,
                 biomeMuting = style.biomeMuting,

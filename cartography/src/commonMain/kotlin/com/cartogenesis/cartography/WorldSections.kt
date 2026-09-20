@@ -246,6 +246,11 @@ internal object WorldSections {
             "climate.windMeridional", SectionType.F32,
             floats = world.climate.windMeridional.data
         ),
+        Section(
+            "climate.vegetationDensity", SectionType.F32,
+            floats = world.climate.vegetationDensity.data
+        ),
+        Section("climate.permafrost", SectionType.U8, bytes = world.climate.permafrost),
         Section("climate.biome", SectionType.U8, bytes = ByteArray(world.climate.biome.size) {
             world.climate.biome[it].ordinal.toByte()
         }),
@@ -293,7 +298,8 @@ internal object WorldSections {
             "climate.precipitation", "climate.summerPrecipitation", "climate.winterPrecipitation",
             "climate.precipitationMm",
             "climate.windDirection", "climate.windMeridional",
-            "climate.summerSeaIce", "climate.winterSeaIce", "climate.biome"
+            "climate.summerSeaIce", "climate.winterSeaIce", "climate.biome",
+            "climate.vegetationDensity", "climate.permafrost"
         ),
         GenerationStage.RIVERS to listOf(
             "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget",
@@ -488,6 +494,8 @@ internal object WorldSections {
                 precipitationMm = field("climate.precipitationMm"),
                 windDirection = ints("climate.windDirection"),
                 windMeridional = field("climate.windMeridional"),
+                vegetationDensity = field("climate.vegetationDensity"),
+                permafrost = bytes("climate.permafrost"),
                 summerSeaIce = BooleanArray(cells) { summerSeaIceBytes[it].toInt() != 0 },
                 winterSeaIce = BooleanArray(cells) { winterSeaIceBytes[it].toInt() != 0 },
                 biome = Array(cells) { i ->

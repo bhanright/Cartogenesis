@@ -99,11 +99,31 @@ internal object ClimateTint {
 
     fun bareEarthMost(biome: Biome): Float = BARE_EARTH_MOST[biome.ordinal]
 
-    /** How much of it is under a closed woody canopy. */
+    /**
+     * How much of the ground under this cell is closed woody canopy, 0 to 1.
+     *
+     * The world's own vegetation density, which is a continuous function of the water balance and
+     * the growing season rather than one figure for every cell of a biome — so a woodland thins
+     * into a steppe over fifty cells instead of at the one cell where the classifier changed its
+     * mind. See [com.cartogenesis.worldgen.pipeline.VegetationDensity].
+     *
+     * Falls back to [CANOPY_CLOSURE] where the world carries no field, which is
+     * `VegetationConfig.enabled` off: that is the picture before the field existed and is the
+     * control `ClimateTintTest` measures the graded boundary against.
+     */
+    fun canopyAt(world: WorldMap, cell: Int): Float =
+        if (world.config.vegetation.enabled) {
+            world.climate.vegetationDensity.data[cell]
+        } else {
+            CANOPY_CLOSURE[world.climate.biome[cell].ordinal]
+        }
+
+    /** The figure a biome alone would give, which is what [canopyAt] falls back to. */
     fun canopyClosure(biome: Biome): Float = CANOPY_CLOSURE[biome.ordinal]
 
-    /** The whole table, in [Biome] order, for a [RasterRecipe] to hand to a graphics device. */
-    fun canopyTable(): FloatArray = CANOPY_CLOSURE.copyOf()
+    /** [canopyAt] for every cell, for the same reason the colour tables are built on the processor. */
+    fun canopyField(world: WorldMap): FloatArray =
+        FloatArray(world.width * world.height) { canopyAt(world, it) }
 
     /** [drynessAt] for every cell, for the same reason the colour tables are built on the processor. */
     fun drynessField(world: WorldMap): FloatArray =
@@ -217,12 +237,18 @@ internal object ClimateTint {
     )
 
     /**
-     * How much of each vegetation is closed woody canopy.
+     * How much of each vegetation is closed woody canopy, **before** the world carried a density
+     * field of its own.
      *
      * The forestry convention: a closed forest is more than three fifths canopy cover and an open
      * one between a tenth and two fifths, so the rainforests sit at one, the seasonal and boreal
      * forests a little below, the savanna and the maquis in the open-forest band, and the grasslands
      * and deserts at nothing.
+     *
+     * Kept as the fallback [canopyAt] reads with `VegetationConfig.enabled` off, which is the
+     * control the graded-boundary guard is shown failing against: every cell of a biome takes the
+     * same figure here, so every biome boundary is a step in the drawn ground. See
+     * docs/DESIGN_LEDGER.md, W4.
      */
     private val CANOPY_CLOSURE = floatArrayOf(
         0f,    // OCEAN

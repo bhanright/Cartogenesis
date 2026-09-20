@@ -123,9 +123,10 @@ object MoistureBudget {
      * Bare ground still returns something — evapotranspiration over the Sahara runs at roughly a
      * seventh of the humid tropics' — so the ramp starts at 0.15 rather than at zero.
      *
-     * The proxy is the previous lap's rain at the cell, because W4's vegetation field does not
-     * exist yet and rain is what that field would mostly be a function of. It is stated as a proxy
-     * here and named as one at its use.
+     * The proxy is the previous lap's rain at the cell. It was stated as a proxy for W4's
+     * vegetation field while that field did not exist; [groundReturnShare] is the derivation that
+     * replaced it, and this stays as the control the swap was measured against. See
+     * `ClimateConfig.vegetationRecycling` and docs/DESIGN_LEDGER.md, W4.
      */
     const val WETNESS_REFERENCE_MM = 500f
     const val BARE_GROUND_WETNESS = 0.15f
@@ -199,6 +200,25 @@ object MoistureBudget {
     fun groundWetness(previousLapMm: Float): Float =
         BARE_GROUND_WETNESS + (1f - BARE_GROUND_WETNESS) *
             (previousLapMm / WETNESS_REFERENCE_MM).coerceIn(0f, 1f)
+
+    /**
+     * The same number derived rather than proxied: how freely the ground gives water back, 0..1,
+     * from the vegetation the previous lap's rain would grow on it.
+     *
+     * [VegetationDensity.density] is Budyko's evaporative fraction — the share of the year's
+     * available evaporative energy that the water supply actually meets — held down by the growing
+     * season. That share **is** the ground's return, which is why this is a derivation and not a
+     * second proxy: the quantity the march wants and the quantity the vegetation field computes
+     * are the same quantity, and the rainfall ramp above was standing in for it.
+     *
+     * [biotemperatureC] is Holdridge's biotemperature at the cell and [previousLapMm] the rain the
+     * previous lap left there, in millimetres a year. Floored at [BARE_GROUND_WETNESS] for the
+     * reason that constant gives: bare ground still returns something, roughly a seventh of the
+     * humid tropics', and a cell whose cover is nothing is not a cell that evaporates nothing.
+     */
+    fun groundReturnShare(biotemperatureC: Float, previousLapMm: Float): Float =
+        BARE_GROUND_WETNESS + (1f - BARE_GROUND_WETNESS) *
+            VegetationDensity.density(biotemperatureC, previousLapMm)
 
     /**
      * The share of an air column that converges into each cell over one cell of travel: the

@@ -111,7 +111,31 @@ data class ClimateResult(
      */
     val summerSeaIce: BooleanArray,
     val winterSeaIce: BooleanArray,
-    val biome: Array<Biome>
+    val biome: Array<Biome>,
+    /**
+     * How much living cover the ground carries, 0 on bare rock or ice to 1 under a closed forest,
+     * one entry per cell, row-major, and 0 at every sea cell.
+     *
+     * The continuous field [biome] is a partition of: see [VegetationDensity] for the two
+     * relations it is built from. Beside the classification rather than inside it — nothing in
+     * [ClimateStage.classify] reads this, and the sixteen names are what they were before it
+     * existed — because a name and a density answer different questions and the chunk that added
+     * this one was not asked to redraw the other.
+     *
+     * Read today by the map's tint, which takes its canopy from here instead of from a figure per
+     * biome. The consumers named and not yet built are S3 and H3, where a vegetated slope resists
+     * erosion roughly twice as well as a bare one (Istanbulluoglu and Bras 2005); see TODO.md.
+     */
+    val vegetationDensity: FloatField,
+    /**
+     * Where the ground is frozen the year round: one [VegetationDensity.Permafrost] ordinal a
+     * cell, row-major, and [VegetationDensity.Permafrost.NONE] at sea.
+     *
+     * A byte rather than a boolean because the two zones are different countries — continuous
+     * permafrost cannot root a tree and discontinuous permafrost carries the Siberian larch — and
+     * only the continuous zone caps [vegetationDensity].
+     */
+    val permafrost: ByteArray
 )
 
 /**
@@ -683,6 +707,20 @@ object ClimateStage {
             fields.summerSeaIce, snowBalance
         )
 
+        // The cover on the ground and the frozen ground under it, beside the classification and
+        // read by none of it. Built here rather than in a stage of its own because every field it
+        // needs is this stage's and a stage boundary would buy a save section, a reuse guard and a
+        // progress line for one pass over the grid. See [VegetationDensity], and
+        // `VegetationConfig.enabled` for the control the guards are shown failing against.
+        val vegetation = if (config.vegetation.enabled) {
+            VegetationDensity.field(
+                sea.isLand, temperature, summerTemperature, winterTemperature, precipitationMm,
+                permafrostEnabled = config.vegetation.permafrost
+            )
+        } else {
+            VegetationDensity.Field(FloatField(cellsAcross, cellsDown), ByteArray(cellCount))
+        }
+
         return Generated(
             result = ClimateResult(
                 temperature = temperature,
@@ -696,7 +734,9 @@ object ClimateStage {
                 windMeridional = FloatField(cellsAcross, cellsDown, fields.wind.meridional),
                 summerSeaIce = fields.summerSeaIce,
                 winterSeaIce = fields.winterSeaIce,
-                biome = biome
+                biome = biome,
+                vegetationDensity = vegetation.density,
+                permafrost = vegetation.permafrost
             ),
             summerPrecipitationMm = summerPrecipitationMm,
             winterPrecipitationMm = winterPrecipitationMm,
@@ -811,6 +851,23 @@ object ClimateStage {
             config, sea, seaSurfaceAnomalyC, tiltDegrees, warm = false
         )
 
+        // Holdridge's biotemperature, the growing season the ground's return is scaled by when
+        // `ClimateConfig.vegetationRecycling` is on. Built once for both marches because it is a
+        // property of the whole year rather than of a season, and null when the setting is off, so
+        // the march runs the proxy it ran before rather than the same arithmetic with a field in
+        // it. See [MoistureBudget.groundWetness] and [MoistureBudget.groundReturnShare].
+        val biotemperatureC = if (climateConfig.vegetationRecycling) {
+            FloatField(cellsAcross, cellsDown).also { field ->
+                for (cell in 0 until cellsAcross * cellsDown) {
+                    field.data[cell] = VegetationDensity.biotemperatureC(
+                        temperature.data[cell],
+                        summerTemperature.data[cell],
+                        winterTemperature.data[cell]
+                    )
+                }
+            }
+        } else null
+
         // Where each season's rain came from: the share of it whose water last evaporated from
         // land rather than from the sea. Measured, never read back by the march - see
         // docs/DESIGN_LEDGER.md, W3, and `MoistureRecyclingTest`.
@@ -823,12 +880,12 @@ object ClimateStage {
         val summerRaw = buildPrecipitation(
             config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce, summerWind.march,
             ocean, bands(cellsDown, climateConfig, warm = true),
-            summerConvergence, summerInversion, summerLandOrigin
+            summerConvergence, summerInversion, biotemperatureC, summerLandOrigin
         )
         val winterRaw = buildPrecipitation(
             config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce, winterWind.march,
             ocean, bands(cellsDown, climateConfig, warm = false),
-            winterConvergence, winterInversion, winterLandOrigin
+            winterConvergence, winterInversion, biotemperatureC, winterLandOrigin
         )
 
         // mm/year, by the one conversion factor the whole model uses. Unclamped: this is what
@@ -1607,6 +1664,8 @@ object ClimateStage {
         bandOfRow: FloatArray,
         convergencePerCell: FloatField?,
         inversionSuppression: FloatField?,
+        /** Holdridge's biotemperature per cell, or null when the ground's return is the proxy. */
+        biotemperatureC: FloatField?,
         landOriginPrecipitation: FloatField
     ): FloatField {
         val cellsAcross = config.width
@@ -1657,14 +1716,14 @@ object ClimateStage {
                 val beltDirection = wind.beltZonal[firstRow]
                 marchRun(
                     config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
-                    convergencePerCell, inversionSuppression,
+                    convergencePerCell, inversionSuppression, biotemperatureC,
                     precipitation, landOriginPrecipitation, sweepDirection = beltDirection,
                     firstRow = firstRow, lastRow = lastRow
                 )
                 if (runNeedsSecondSweep[run]) {
                     marchRun(
                         config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
-                        convergencePerCell, inversionSuppression,
+                        convergencePerCell, inversionSuppression, biotemperatureC,
                         reversed, reversedLandOrigin, sweepDirection = -beltDirection,
                         firstRow = firstRow, lastRow = lastRow
                     )
@@ -1714,6 +1773,7 @@ object ClimateStage {
         bandOfRow: FloatArray,
         convergencePerCell: FloatField?,
         inversionSuppression: FloatField?,
+        biotemperatureC: FloatField?,
         precipitation: FloatField,
         landOriginPrecipitation: FloatField,
         sweepDirection: Int,
@@ -1850,12 +1910,21 @@ object ClimateStage {
                     } else {
                         sea.relativeElevation.data[row * cellsAcross + upwindColumn]
                     }
-                    // How wet the ground under this cell is, from the rain the previous lap left
-                    // on it: the proxy for W4's vegetation, which does not exist yet. On the first
-                    // lap it is bare, which is the same starting guess [INITIAL_MOISTURE] is and
-                    // washes out over the laps the same way.
-                    val wetness =
-                        MoistureBudget.groundWetness(precipitation.data[cell] * millimetresPerUnit)
+                    // How freely the ground under this cell gives water back, from the rain the
+                    // previous lap left on it. Since W4 that is the cover the rain would grow -
+                    // Budyko's evaporative fraction, which is the share of the available energy
+                    // the water supply meets and so is the return itself - with the rainfall
+                    // proxy behind `ClimateConfig.vegetationRecycling` as the control. On the
+                    // first lap the ground is bare, which is the same starting guess
+                    // [INITIAL_MOISTURE] is and washes out over the laps the same way.
+                    val previousLapMm = precipitation.data[cell] * millimetresPerUnit
+                    val wetness = if (biotemperatureC != null) {
+                        MoistureBudget.groundReturnShare(
+                            biotemperatureC.data[cell], previousLapMm
+                        )
+                    } else {
+                        MoistureBudget.groundWetness(previousLapMm)
+                    }
                     val marched = marchLandStep(
                         climateConfig, cellWidthKm, returnPerCell, columnBefore,
                         sea.relativeElevation.data[cell], upwindElevation, bandFactor,

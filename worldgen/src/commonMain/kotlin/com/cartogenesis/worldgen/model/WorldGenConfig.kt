@@ -1761,7 +1761,55 @@ data class ClimateConfig(
      * the control `SnowBalanceTest` measures against, and the checksum in that test is the proof
      * that it is the old world bit for bit.
      */
-    val snowBalance: Boolean = true
+    val snowBalance: Boolean = true,
+    /**
+     * Whether the ground's return to the moisture march is scaled by the vegetation the previous
+     * lap's rain would grow, rather than by that rain against Koppen's steppe line.
+     *
+     * The march has to know how freely the ground under a parcel gives water back, and until W4
+     * there was no field that said so: `MoistureBudget.groundWetness` read the previous lap's
+     * rainfall against 500 mm and called itself a proxy for the field that did not exist yet. It
+     * exists now — `VegetationDensity` is the evaporative fraction of Budyko's own curve, which is
+     * the share of the available energy the water supply meets, and the share of the available
+     * energy the water supply meets *is* what the ground returns — so the proxy can be retired for
+     * a derivation.
+     *
+     * Off is the proxy, and which of the two ships is decided by measurement rather than by
+     * argument: the continental precipitation recycling ratio has to stay inside van der Ent and
+     * others' (2010) 30-45%, and `MoistureBudgetTest` prints it both ways. See
+     * docs/DESIGN_LEDGER.md, W4, for the two figures.
+     */
+    val vegetationRecycling: Boolean = true
+)
+
+/**
+ * The living cover on the ground and the frozen ground under it.
+ *
+ * Its own section rather than three more knobs on [ClimateConfig], because what it decides is a
+ * property of the surface rather than of the air: the same climate over rock and over soil carries
+ * different vegetation, and the consumers of this field — the tint now, erosion's erodibility
+ * later — are not climate consumers. See
+ * [com.cartogenesis.worldgen.pipeline.VegetationDensity].
+ */
+@Serializable
+data class VegetationConfig(
+    /**
+     * Whether the world carries a vegetation density field at all.
+     *
+     * Off leaves the field at zero everywhere and the drawing falls back to the per-biome canopy
+     * table it read before W4 — one figure for every cell of a biome, with the hard edge at each
+     * biome boundary that the field exists to remove. That is the control the tint guard and the
+     * two land-share guards are shown failing against.
+     */
+    val enabled: Boolean = true,
+    /**
+     * Whether perennially frozen ground is found and allowed to cap the cover above it.
+     *
+     * Off leaves every cell outside the permafrost zones, so the active layer never limits
+     * rooting and the coldest ground carries whatever its growing season and water balance allow.
+     * The control the permafrost share is reported against.
+     */
+    val permafrost: Boolean = true
 )
 
 @Serializable
@@ -2896,6 +2944,7 @@ data class WorldGenConfig(
     val sea: SeaConfig = SeaConfig(),
     val glaciation: GlaciationConfig = GlaciationConfig(),
     val climate: ClimateConfig = ClimateConfig(),
+    val vegetation: VegetationConfig = VegetationConfig(),
     val rivers: RiverConfig = RiverConfig(),
     val lakes: LakesConfig = LakesConfig(),
     val ocean: OceanConfig = OceanConfig(),

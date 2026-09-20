@@ -889,7 +889,7 @@ object MapRasterizer {
                             relative,
                             ClimateTint.drynessAt(world, cell),
                             ClimateTint.coldnessAt(world, cell),
-                            ClimateTint.canopyClosure(biome),
+                            ClimateTint.canopyAt(world, cell),
                             biome
                         )
                     }

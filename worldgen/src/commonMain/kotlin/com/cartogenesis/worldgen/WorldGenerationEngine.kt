@@ -264,7 +264,14 @@ object WorldGenerationEngine {
 
         report(GenerationStage.CLIMATE)
         val climate = reusable
-            ?.takeIf { it.ocean === ocean && it.config.climate == config.climate }
+            ?.takeIf {
+                it.ocean === ocean && it.config.climate == config.climate &&
+                    // The cover on the ground and the frozen ground under it are this stage's
+                    // fields: they are built from its own temperatures and rainfall and saved on
+                    // its result, so its section is not the only one it reads. See
+                    // `VegetationConfig` and rule 12 of docs/CONVENTIONS.md.
+                    it.config.vegetation == config.vegetation
+            }
             ?.climate
             ?: ClimateStage.generate(config, sea, ocean)
 

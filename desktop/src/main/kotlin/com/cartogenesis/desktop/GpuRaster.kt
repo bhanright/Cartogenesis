@@ -82,7 +82,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             recipe.colorsB?.let { bindInts(buffers, BINDING_COLORS_B, it) }
             recipe.lakeId?.let { bindInts(buffers, BINDING_LAKE_ID, it) }
             recipe.lakeSurface?.let { bindFloats(buffers, BINDING_LAKE_SURFACE, it) }
-            recipe.shoreDistance?.let { bindFloats(buffers, BINDING_SHORE, it) }
+            // One binding, two fields, never both: see `RasterRecipe.shoreDistance` for why there
+            // is no seventeenth block to give them one each.
+            recipe.shoreDistance?.let { bindFloats(buffers, BINDING_SCALAR_C, it) }
+            recipe.vegetation?.let { bindFloats(buffers, BINDING_SCALAR_C, it) }
             bindInts(buffers, BINDING_BIOME_COLORS, recipe.biomeColors)
 
             // The realm field is the same array as the political view's own, so it is uploaded once
@@ -230,7 +233,6 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uIsobathInterval"), recipe.isobathInterval)
         GL43C.glUniform1f(uniform("uIsobathFlattest"), recipe.isobathFlattestSlope)
         GL43C.glUniform1i(uniform("uIsobathStencil"), recipe.isobathSlopeStencil)
-        GL43C.glUniform1fv(uniform("uBiomeCanopy"), recipe.biomeCanopy)
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
@@ -338,16 +340,6 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
          */
         private const val TILE_PIXELS = 4 shl 20
 
-        /**
-         * How many entries the per-biome tables have.
-         *
-         * The canopy table travels as a uniform array rather than as a buffer, because it is
-         * sixteen floats and the device is already out of storage bindings; a uniform array's
-         * length has to be written into the source, so it is written from the enum itself and
-         * cannot fall behind it.
-         */
-        private val BIOME_SLOTS = Biome.entries.size
-
         private const val BINDING_ELEVATION = 0
         private const val BINDING_LAND = 1
         private const val BINDING_BIOME = 2
@@ -362,7 +354,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         private const val BINDING_BIOME_COLORS = 11
         private const val BINDING_LAKE_SURFACE = 12
         private const val BINDING_RAMPS = 13
-        private const val BINDING_SHORE = 14
+        private const val BINDING_SCALAR_C = 14
         private const val BINDING_OUTPUT = 15
 
         /**
@@ -402,7 +394,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             layout(std430, binding = 11) readonly buffer BiomeColors { uint biomeColors[]; };
             layout(std430, binding = 12) readonly buffer LakeSurface { float lakeSurface[]; };
             layout(std430, binding = 13) readonly buffer Ramps { uint ramps[]; };
-            layout(std430, binding = 14) readonly buffer Shore { float shoreDistance[]; };
+            // One float a cell, and which one depends on the style: a line-art style's distance
+            // to the nearest dry land, or a tinted style's vegetation density. See
+            // `RasterRecipe.shoreDistance`.
+            layout(std430, binding = 14) readonly buffer ScalarC { float scalarC[]; };
             layout(std430, binding = 15) writeonly buffer Output { uint pixels[]; };
 
             uniform int uWidth;
@@ -426,7 +421,6 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform float uIsobathInterval;
             uniform float uIsobathFlattest;
             uniform int uIsobathStencil;
-            uniform float uBiomeCanopy[$BIOME_SLOTS];
             uniform float uCoastlineStrength;
             uniform float uReliefStrength;
             uniform float uInkGain;
@@ -821,8 +815,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             /*
              * MapStyle.ground: the land ramp read at a height the drought has lifted, paled toward
              * the paper by the cold, darkened under a canopy, then washed with the biome's colour.
-             * The dryness and the coldness are per-cell fields worked out on the processor; the
-             * canopy is a table indexed by the biome this pixel already has.
+             * The dryness, the coldness and the canopy are all per-cell fields worked out on the
+             * processor; the canopy was a table indexed by this pixel's biome until the world
+             * started carrying a vegetation density of its own.
              */
             vec3 ground(int i, float relative, int biome) {
                 if (uClimateTint <= 0.0) {
@@ -833,7 +828,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     height + uClimateTint * scalarA[i] * ARID_RAMP_FLOOR * (1.0 - height);
                 vec3 colour = rampAt(RAMP_LAND, lifted);
                 colour = blend(colour, uPaper, uClimateTint * scalarB[i] * COLD_PALING);
-                colour = shade(colour, 1.0 - uClimateTint * uBiomeCanopy[biome] * CANOPY_DARKENING);
+                colour = shade(colour, 1.0 - uClimateTint * scalarC[i] * CANOPY_DARKENING);
                 return tint(colour, biome);
             }
 
@@ -975,12 +970,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     precise float shallowness = depth * 12.0;
                     colour = blend(uLake, uLakeDeep, clamp(shallowness, 0.0, 1.0));
                     if (engraveWater) {
-                        colour = blend(colour, uCoastline, lakeWaterInk(y, shoreDistance[i]));
+                        colour = blend(colour, uCoastline, lakeWaterInk(y, scalarC[i]));
                     }
                 } else {
                     colour = baseColour(x, y, i, land, relative);
                     if (engraveWater && !land) {
-                        colour = blend(colour, uCoastline, coastalWaterInk(shoreDistance[i]));
+                        colour = blend(colour, uCoastline, coastalWaterInk(scalarC[i]));
                     }
                     if (uHillshade != 0 && land) {
                         if (uLineArt != 0) {

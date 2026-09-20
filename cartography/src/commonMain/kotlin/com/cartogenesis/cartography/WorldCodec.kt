@@ -135,6 +135,16 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 12 because the ground gained a cover. The climate result now carries a vegetation density
+     * per cell and a permafrost zone per cell, saved as `climate.vegetationDensity` and
+     * `climate.permafrost`, and the settings gained a `vegetation` section for the two controls
+     * that switch them off; `climate.vegetationRecycling` is new beside them, and it changes the
+     * moisture march itself, so a format-11 file's climate is not this build's climate on the same
+     * seed. A format-11 save carries neither array, so the world in it would open with a cover of
+     * zero everywhere — every land cell drawn as bare ground — and with the recycling setting
+     * filled in from this build's default, which is a different rainfall from the one that was
+     * saved. Rule 11 of docs/CONVENTIONS.md is what this is.
+     *
      * 11 because the ice sheet gained a profile and the climate's moisture budget gained its
      * units. I1 and W3 took 11 on their own branches and met before either shipped, so one version
      * covers both changes rather than two covering one each; no format-11 file was ever written by
@@ -198,7 +208,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 11
+    const val FORMAT_VERSION = 12
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

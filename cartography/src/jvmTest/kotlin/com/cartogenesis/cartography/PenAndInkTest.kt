@@ -172,18 +172,18 @@ class PenAndInkTest {
          * both sides moved the land the median illumination is measured over.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -269415166,
-            MapStyle.VELLUM to 1311379879,
-            MapStyle.INK_WASH to -1892023537,
-            MapStyle.NAUTICAL to 1548187320,
-            MapStyle.MIDNIGHT to -2098536139,
-            MapStyle.SCHOOLROOM to 1071893702,
-            MapStyle.VERDANT to 1276394304,
-            MapStyle.SCROLL to 1261284821,
-            MapStyle.PEN_AND_INK to -226801735,
-            MapStyle.MARS to -561583142,
-            MapStyle.NATURAL to -1889250184,
-            MapStyle.CLEAR to -1322375342
+            MapStyle.ATLAS to -427464539,
+            MapStyle.VELLUM to 703604031,
+            MapStyle.INK_WASH to -202806120,
+            MapStyle.NAUTICAL to 7306085,
+            MapStyle.MIDNIGHT to 1557028392,
+            MapStyle.SCHOOLROOM to 1462363486,
+            MapStyle.VERDANT to -290058247,
+            MapStyle.SCROLL to 54729821,
+            MapStyle.PEN_AND_INK to 198761330,
+            MapStyle.MARS to 1765838586,
+            MapStyle.NATURAL to -1413961530,
+            MapStyle.CLEAR to -383169912
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

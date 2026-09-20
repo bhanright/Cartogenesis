@@ -275,7 +275,7 @@ class GpuRasterTest {
         temperatureRamp = RAMP,
         precipitationRamp = RAMP,
         biomeColors = RAMP,
-        biomeCanopy = FloatArray(RAMP.size),
+        vegetation = null,
         paper = 0xFFF2E4C6.toInt(),
         biomeWash = 0f,
         biomeMuting = 0f,

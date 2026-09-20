@@ -97,7 +97,10 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.StraightRunRenderTest",
     // The Natural style's review: the same two worlds at 2048 again, whole and in three details
     // each, to be held beside the photograph the palette was sampled off.
-    "com.cartogenesis.desktop.NaturalGalleryTest"
+    "com.cartogenesis.desktop.NaturalGalleryTest",
+    // W2's review: the same two worlds at 2048 with the pressure wind off and on, in the Winds,
+    // Rainfall and Fantasy views. Four worlds at 2048 for pictures only a person can judge.
+    "com.cartogenesis.desktop.PressureWindRenderTest"
 )
 
 /**

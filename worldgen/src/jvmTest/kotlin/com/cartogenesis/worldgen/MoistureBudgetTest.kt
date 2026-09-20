@@ -99,8 +99,8 @@ class MoistureBudgetTest {
         /** How much of that strip has to be desert for the coast to be called a desert coast. */
         const val DESERT_SHARE_OF_STRIP = 0.5
 
-        /** The fewest cells a coast segment may have before it is a coast rather than an accident. */
-        const val MIN_COAST_CELLS = 12
+        /** The fewest cells a coast may have before it is a coast rather than an accident. */
+        const val MIN_COAST_CELLS = 5
     }
 
     private fun generate(seed: Long, tune: (WorldGenConfig) -> WorldGenConfig): WorldMap {
@@ -229,21 +229,29 @@ class MoistureBudgetTest {
         return total / cells * ClimateStage.REFERENCE_MM
     }
 
-    /** Latitude of the wettest row of the map, taken over every cell: the ITCZ's rain band. */
+    /**
+     * Where the ITCZ's rain band sits, in degrees: the rainfall-weighted mean latitude inside the
+     * tropics.
+     *
+     * A centroid and not the wettest row. The wettest row is the argmax of a zonal sum over 512
+     * rows, so a hundredth of a per cent between two neighbours moves it by whole degrees, and it
+     * moved by 1.1 between two fields whose tropical band had not changed shape. The centroid is
+     * the same question asked of the whole band, and it moves only when the band does.
+     */
     private fun itczLatitude(world: WorldMap): Double {
-        var bestRow = 0
-        var best = -1.0
+        var weighted = 0.0
+        var total = 0.0
         for (row in 0 until world.height) {
-            var total = 0.0
+            val latitude = ClimateStage.latitudeOf(row, world.height).toDouble()
+            if (abs(latitude) > 30.0) continue
             for (column in 0 until world.width) {
-                total += world.climate.precipitationMm.data[row * world.width + column].toDouble()
-            }
-            if (total > best) {
-                best = total
-                bestRow = row
+                val rain =
+                    world.climate.precipitationMm.data[row * world.width + column].toDouble()
+                weighted += rain * latitude
+                total += rain
             }
         }
-        return ClimateStage.latitudeOf(bestRow, world.height).toDouble()
+        return if (total <= 0.0) 0.0 else weighted / total
     }
 
     // ---------------------------------------------------------------- marine inversion
@@ -266,12 +274,12 @@ class MoistureBudgetTest {
             if (share >= DESERT_SHARE_OF_STRIP) desertCoasts++
             if (controlShare >= DESERT_SHARE_OF_STRIP) controlDesertCoasts++
             println(
-                ("INVERSION seed %d: the west coast at %.1f degrees, column %d, over water " +
-                    "%.2f C below its latitude's mean, runs %.0f%% desert for %.0f km inland, " +
-                    "against %.0f%% with the inversion off")
+                ("INVERSION seed %d: %d subtropical west-coast cells over cold water, coldest " +
+                    "at %.1f degrees, column %d, %.2f C below its latitude's mean; the strip " +
+                    "%.0f km behind them runs %.0f%% desert, against %.0f%% with the inversion off")
                     .format(
-                        seed, coast.latitude, coast.column, -coast.anomalyC, share * 100,
-                        COAST_STRIP_KM, controlShare * 100
+                        seed, coast.cells.size, coast.latitude, coast.column, -coast.anomalyC,
+                        COAST_STRIP_KM, share * 100, controlShare * 100
                     )
             )
         }
@@ -291,64 +299,53 @@ class MoistureBudgetTest {
         )
     }
 
-    /** A west-facing coast segment and how cold the water off it is. */
+    /** The west-facing coast a world's cold water washes, and how cold that water is. */
     private class ColdCoast(
-        val row: Int,
-        val column: Int,
         val latitude: Double,
+        val column: Int,
         val anomalyC: Float,
         val cells: List<Int>
     )
 
     /**
-     * The subtropical west-facing coast whose water is coldest, on one world.
+     * Every subtropical west-facing coast cell whose water is colder than
+     * [COLD_COAST_ANOMALY_C], pooled, with the coldest of them named.
      *
-     * A run of rows at one longitude whose land has open sea immediately to its west: the shape a
-     * continent's western margin makes on this grid. Segments shorter than [MIN_COAST_CELLS] are
-     * inlets rather than coasts.
+     * Pooled rather than cut into segments: a coastline on this grid is rarely straight for a
+     * dozen rows at one longitude, and asking for one that is selected nothing on any standard
+     * seed. What makes a coastal desert is the water off it and the latitude it sits at, and
+     * neither is a claim about how straight the coast is.
      */
     private fun coldestWestCoast(world: WorldMap): ColdCoast? {
         val cellsAcross = world.width
         val cellsDown = world.height
-        var best: ColdCoast? = null
-        for (column in 0 until cellsAcross) {
-            val westOf = (column + cellsAcross - 1) % cellsAcross
-            var run = ArrayList<Int>()
-            var anomalySum = 0f
-            var runStartRow = 0
-            for (row in 0..cellsDown) {
-                val latitude =
-                    if (row < cellsDown) ClimateStage.latitudeOf(row, cellsDown) else 0f
-                val cell = if (row < cellsDown) row * cellsAcross + column else -1
-                val qualifies = row < cellsDown &&
-                    abs(latitude) >= COAST_EQUATORWARD_DEGREES &&
-                    abs(latitude) <= COAST_POLEWARD_DEGREES &&
-                    world.sea.isLand[cell] &&
-                    !world.sea.isLand[row * cellsAcross + westOf]
-                if (qualifies) {
-                    if (run.isEmpty()) runStartRow = row
-                    run.add(cell)
-                    anomalySum += world.ocean.anomaly.data[row * cellsAcross + westOf]
-                } else {
-                    if (run.size >= MIN_COAST_CELLS) {
-                        val meanAnomaly = anomalySum / run.size
-                        if (meanAnomaly <= -COLD_COAST_ANOMALY_C &&
-                            (best == null || meanAnomaly < best!!.anomalyC)
-                        ) {
-                            val middleRow = runStartRow + run.size / 2
-                            best = ColdCoast(
-                                middleRow, column,
-                                ClimateStage.latitudeOf(middleRow, cellsDown).toDouble(),
-                                meanAnomaly, run
-                            )
-                        }
-                    }
-                    run = ArrayList()
-                    anomalySum = 0f
+        val cells = ArrayList<Int>()
+        var coldest = 0f
+        var coldestCell = -1
+        var coldestOffshore = 0f
+        for (row in 0 until cellsDown) {
+            val latitude = abs(ClimateStage.latitudeOf(row, cellsDown))
+            if (latitude < COAST_EQUATORWARD_DEGREES || latitude > COAST_POLEWARD_DEGREES) continue
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                if (!world.sea.isLand[cell]) continue
+                val westOf = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
+                if (world.sea.isLand[westOf]) continue
+                val anomaly = world.ocean.anomaly.data[westOf]
+                if (anomaly > -COLD_COAST_ANOMALY_C) continue
+                cells.add(cell)
+                if (coldestCell < 0 || anomaly < coldestOffshore) {
+                    coldestOffshore = anomaly
+                    coldestCell = cell
+                    coldest = anomaly
                 }
             }
         }
-        return best
+        if (cells.size < MIN_COAST_CELLS) return null
+        return ColdCoast(
+            ClimateStage.latitudeOf(coldestCell / cellsAcross, cellsDown).toDouble(),
+            coldestCell % cellsAcross, coldest, cells
+        )
     }
 
     /** The share of the land strip inland of [coast] that classifies as desert. */

@@ -105,22 +105,23 @@ object MoistureBudget {
     /**
      * The e-folding distance over which land gives water back to the air above it, in kilometres.
      *
-     * Three thousand. This is the one constant of the four that is a calibration against an Earth
-     * figure rather than a measurement lifted from one, in the manner of `ClimateStage.MM_SCALE`:
-     * what the literature states is the *result*, van der Ent and others (2010) measuring the
+     * Fifteen hundred, the middle of van der Ent and Savenije's (2011) 500-2,000 km continental
+     * evaporation length scales, and the value inside that band at which the march reproduces the
+     * figure the literature states as the *result*: van der Ent and others (2010) measure the
      * continental precipitation recycling ratio — the share of rain over land whose water last
      * evaporated from land rather than from the sea — at about 40% globally and 30-45% continent
      * by continent, higher over the Amazon and the Congo. There is no closed form linking this
      * length to that ratio in a march whose moisture also depends on fetch, belt and cold cap, so
-     * the length was found by measuring the ratio on the calibration seed and is then re-measured
-     * on every audited seed by `MoistureRecyclingTest`, which is what makes it a property of the
-     * model rather than a per-world fit.
+     * the two ends of the band were measured: at 3,000 km the pooled ratio reads 20.3%, under
+     * Earth's, and at 1,500 it reads what `MoistureBudgetTest` prints, which is re-measured on
+     * every audited seed and is what makes this a property of the model rather than a per-world
+     * fit.
      *
      * The generator's own figure before this chunk was `landRecoveryRate` of 0.010 per cell,
      * 2,344 km on the reference grid — and, like the ocean's, four times shorter per kilometre at
      * 2048 than at 512, which is the resolution defect this chunk closes.
      */
-    const val EVAPOTRANSPIRATION_LENGTH_KM = 3_000f
+    const val EVAPOTRANSPIRATION_LENGTH_KM = 1_500f
 
     /**
      * Annual rainfall, in millimetres, at which the ground is wet enough to return water freely,

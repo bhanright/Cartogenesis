@@ -1651,7 +1651,7 @@ data class ClimateConfig(
      * Longer than [oceanEvaporationLengthKm], because land gives back less water than an ocean
      * does. Zero turns the return off entirely, which is the control that shows what it is for.
      */
-    val evapotranspirationLengthKm: Float = 3_000f,
+    val evapotranspirationLengthKm: Float = 1_500f,
     /**
      * Whether the regional wind's convergence makes rain and its divergence dries.
      *

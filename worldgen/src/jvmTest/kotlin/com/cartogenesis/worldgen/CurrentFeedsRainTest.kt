@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -52,6 +53,10 @@ class CurrentFeedsRainTest {
     @Test
     fun `currentMoisture = 0 reproduces the pre-H4 sea step bit for bit`() {
         val cfg = WorldGenConfig().climate.copy(currentMoisture = 0f)
+        // The two per-cell shares the step now takes as arguments rather than reading off a
+        // per-cell rate of its own, at the reference grid's 23.4 km cell. See W3.
+        val evaporationPerCell = 23.4375f / cfg.oceanEvaporationLengthKm
+        val seaRainPerCell = 23.4375f / (cfg.depletionLengthKm * MoistureBudget.SEA_DEPLETION_SHARE)
         val samples = listOf(
             Triple(0.0f, -5f, -4.0f),
             Triple(0.35f, 12f, 0.0f),
@@ -60,8 +65,12 @@ class CurrentFeedsRainTest {
             Triple(0.15f, -2f, 5.0f)
         )
         samples.forEach { (moisture, seaTemp, anomaly) ->
-            val withAnomaly = ClimateStage.marchSeaStep(cfg, moisture, seaTemp, anomaly)
-            val withoutAnomaly = ClimateStage.marchSeaStep(cfg, moisture, seaTemp, 0f)
+            val withAnomaly = ClimateStage.marchSeaStep(
+                cfg, evaporationPerCell, seaRainPerCell, moisture, seaTemp, anomaly
+            )
+            val withoutAnomaly = ClimateStage.marchSeaStep(
+                cfg, evaporationPerCell, seaRainPerCell, moisture, seaTemp, 0f
+            )
             // Bit for bit: raw bits, not merely "close enough".
             assertTrue(
                 withAnomaly.moisture.toRawBits() == withoutAnomaly.moisture.toRawBits() &&

@@ -1616,31 +1616,59 @@ data class ClimateConfig(
      * shadows; push it far above the base rate and mountains take essentially all the rain.
      */
     val orographicStrength: Float = 2.0f,
-    /** Baseline rainfall rate over flat land, per cell of travel. */
-    val baseRainRate: Float = 0.02f,
-    /** How fast air over ocean re-saturates. */
-    val evaporationRate: Float = 0.06f,
+    /**
+     * The e-folding distance over which an air mass rains itself out over flat, temperate land,
+     * in kilometres.
+     *
+     * A thousand, from the continental length scales of the atmospheric moisture cycle. A length
+     * on the ground and not a rate per cell, which is why it is not touched by [atResolution]: how
+     * many cells a world is cut into says nothing about how far air travels before it is dry. The
+     * march shortens it on a climb ([orographicStrength]) and lengthens it over warm ground, both
+     * in `MoistureBudget`, where the derivation sits beside the figure.
+     */
+    val depletionLengthKm: Float = 1_000f,
+    /** The fetch over which air crossing open water re-saturates, in kilometres. */
+    val oceanEvaporationLengthKm: Float = 400f,
     /**
      * How strongly the descending air of the horse latitudes suppresses rain, near 30 degrees.
      *
-     * This is what decides how much desert a world has, once [landRecoveryRate] has decided where
+     * This is what decides how much desert a world has, once [evapotranspirationLengthKm] has decided where
      * it sits. The two are close to independent: recovery governs whether a rain shadow stays a
      * desert far from the subtropics, this governs how arid the subtropics themselves get.
      */
     val subtropicalDryness: Float = 1.15f,
     /**
-     * How fast air over *land* re-moistens, as a share of the deficit per cell travelled.
+     * The e-folding distance over which land gives water back to the air above it, in kilometres.
      *
      * Land is not a desert simply for being downwind of a mountain. Forests and soil return water
      * to the air, and in the warm tropics a large share of the rain that falls is rain that fell
      * before and was given back — the Amazon recycles roughly a third of its own. Without that,
      * orographic depletion is permanent: air wrung out by one range stays wrung out for the rest
      * of the continent, and a rain shadow at the equator becomes a desert on the wettest row of
-     * the map.
+     * the map. How much of a continent's rain is rain returned this way is the continental
+     * recycling ratio, and it is what `MoistureRecyclingTest` measures against Earth's.
      *
-     * Smaller than [evaporationRate], because land gives back less water than an ocean does.
+     * Longer than [oceanEvaporationLengthKm], because land gives back less water than an ocean
+     * does. Zero turns the return off entirely, which is the control that shows what it is for.
      */
-    val landRecoveryRate: Float = 0.010f,
+    val evapotranspirationLengthKm: Float = 3_000f,
+    /**
+     * Whether the regional wind's convergence makes rain and its divergence dries.
+     *
+     * On. Off leaves the march reading the belt profile and the ground alone, which is the wind a
+     * bucket carried along a streamline gives: two parcels blown together by a thermal low cannot
+     * make each other rain. That is the control `MoistureConvergenceTest` measures the interior of
+     * a summer continent against.
+     */
+    val convergenceRain: Boolean = true,
+    /**
+     * Whether a cold sea puts a stratus lid on the air above a subtropical west coast.
+     *
+     * On. Off is the generator before the Atacama, the Namib and Baja had a mechanism: a cold
+     * current starved its coast of *evaporation*, which is `currentMoisture`, but nothing stopped
+     * what moisture there was from raining out on the first slope. See `MoistureBudget`.
+     */
+    val marineInversion: Boolean = true,
     /**
      * How far the thermal equator migrates toward the summer hemisphere, in degrees of latitude.
      *
@@ -2927,13 +2955,16 @@ data class WorldGenConfig(
      *    [TectonicsConfig.epochDriftCells] and [TectonicsConfig.beltAgeBlurCells] are more cells on
      *    a finer grid; `historyEpochs` and the three dimensionless ageing factors are not.
      *
-     * And one more, for a reason of the same shape. [ClimateConfig.baseRainRate] is charged per
-     * cell of wind travel, so a 4x wider grid depletes moisture four times over the same journey
-     * and parches every interior. It is not a physical rate — the moisture march has no closed
-     * form linking it to millimetres — and it is added to `orographicStrength * rise`, whose rise
-     * is a per-cell elevation in the same unitless field. Giving one of the pair a kilometre while
-     * the other keeps a bare ratio would read worse than leaving both; W3 in `REALISM_AUDIT.md`
-     * calibrates the moisture budget and is where the pair gets its units.
+     * The climate used to need a line here too, and no longer does. Its three moisture rates were
+     * charged per cell of wind travel, so a 4x wider grid depleted a parcel four times over the
+     * same journey; one of the three was divided by the scale factor here and the other two were
+     * not, so a finer grid re-saturated its oceans and re-moistened its interiors four times as
+     * fast per kilometre as a coarse one. All three are lengths in kilometres now
+     * ([ClimateConfig.depletionLengthKm], [ClimateConfig.oceanEvaporationLengthKm],
+     * [ClimateConfig.evapotranspirationLengthKm]) and are converted where the march reads them,
+     * so none of them is a function of the grid. [ClimateConfig.orographicStrength] stays a bare
+     * ratio because it already is one: it multiplies a rise per cell of travel, and the rise a
+     * range presents to the wind is the same total however many cells the climb is cut into.
      *
      * [scale] is not touched at all, and that is the point of it: how many cells a world is cut
      * into says nothing about how wide the world is, how high its land stands or how long a round
@@ -2960,8 +2991,7 @@ data class WorldGenConfig(
                 hotspotChainLengthCells = tectonics.hotspotChainLengthCells * scale,
                 hotspotSpacingCells = tectonics.hotspotSpacingCells * scale,
                 hotspotRadiusCells = tectonics.hotspotRadiusCells * scale
-            ),
-            climate = climate.copy(baseRainRate = climate.baseRainRate / scale)
+            )
         )
     }
 

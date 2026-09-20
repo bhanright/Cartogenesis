@@ -165,7 +165,7 @@ class GeographyAuditTest {
     /**
      * The control the per-band guard needs: a world whose land never gives its moisture back.
      *
-     * `ClimateConfig.landRecoveryRate` is the mechanism GEOGRAPHY.md's "Where the deserts are"
+     * `ClimateConfig.evapotranspirationLengthKm` is the mechanism GEOGRAPHY.md's "Where the deserts are"
      * credits with putting the desert in the horse latitudes at all. With it at zero, orographic
      * depletion is permanent — air wrung out by one range stays wrung out for the rest of the
      * continent — so a rain shadow becomes a desert wherever it happens to fall, including on the
@@ -178,7 +178,7 @@ class GeographyAuditTest {
         seeds.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             val world = WorldGenerationEngine.generateBlocking(
-                base.copy(climate = base.climate.copy(landRecoveryRate = 0f))
+                base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
             )
             for (i in 0 until world.width * world.height) {
                 if (!world.sea.isLand[i]) continue

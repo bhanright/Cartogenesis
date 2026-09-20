@@ -27,7 +27,7 @@ class ResolutionScalingTest {
     private val base = WorldGenConfig(seed = 1L, width = 512, height = 512)
 
     @Test
-    fun `the tectonics and the rain rate are still carried by hand`() {
+    fun `the tectonics are still carried by hand and the climate no longer is`() {
         val scaled = base.atResolution(2048, 2048)
 
         assertEquals(2048, scaled.width)
@@ -37,9 +37,14 @@ class ResolutionScalingTest {
         assertEquals(base.tectonics.collisionWidthCells * 4f, scaled.tectonics.collisionWidthCells)
         assertEquals(base.tectonics.epochDriftCells * 4f, scaled.tectonics.epochDriftCells)
         assertEquals(base.tectonics.hotspotSpacingCells * 4f, scaled.tectonics.hotspotSpacingCells)
-        // Charged per cell of wind travel, so a four-times-wider grid must charge a quarter as
-        // much or every interior parches.
-        assertEquals(base.climate.baseRainRate / 4f, scaled.climate.baseRainRate)
+        // The climate's moisture budget used to need a line here, and no longer does: its three
+        // rates are lengths in kilometres now and a length on the ground is not a function of how
+        // many cells the ground is cut into. See W3 in docs/DESIGN_LEDGER.md.
+        assertEquals(base.climate.depletionLengthKm, scaled.climate.depletionLengthKm)
+        assertEquals(base.climate.oceanEvaporationLengthKm, scaled.climate.oceanEvaporationLengthKm)
+        assertEquals(
+            base.climate.evapotranspirationLengthKm, scaled.climate.evapotranspirationLengthKm
+        )
     }
 
     @Test
@@ -95,6 +100,5 @@ class ResolutionScalingTest {
         // call was there in export, but the UI never made it.
         val scaled = base.atResolution(1024, 1024)
         assertTrue(scaled.tectonics.boundaryFalloffCells > base.tectonics.boundaryFalloffCells)
-        assertTrue(scaled.climate.baseRainRate < base.climate.baseRainRate)
     }
 }

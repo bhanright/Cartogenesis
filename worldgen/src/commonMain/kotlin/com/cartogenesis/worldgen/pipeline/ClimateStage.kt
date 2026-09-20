@@ -388,11 +388,13 @@ object ClimateStage {
     /**
      * Times each air mass goes round the cylinder.
      *
-     * Two. The first lap carries [INITIAL_MOISTURE] away and leaves every parcel holding what its
-     * fetch actually gives it; the last lap is the one recorded. A third would change nothing a
-     * parcel has not already forgotten.
+     * Three. The first carries [INITIAL_MOISTURE] away and leaves every parcel holding what its
+     * fetch actually gives it; the second leaves a rainfall on the ground for the third to read
+     * the soil's wetness off, which is what [MoistureBudget.groundWetness] needs and what no lap
+     * before it could supply; the last is the one recorded. Two laps was enough while the ground
+     * gave water back at a rate that did not depend on how wet it was.
      */
-    private const val MARCH_LAPS = 2
+    private const val MARCH_LAPS = 3
 
     /**
      * Temperature at which the evaporative-warmth ramp reaches zero, in degrees Celsius, and how
@@ -407,16 +409,6 @@ object ClimateStage {
 
     /** The most that ramp may reach, at roughly 46 C — hotter than any sea surface. */
     private const val MAX_WARMTH = 1.4f
-
-    /**
-     * How much harder open sea rains than flat land at the same moisture, given
-     * `ClimateConfig.baseRainRate` is the land figure.
-     *
-     * Four. Most of the world's rain falls on the ocean, and without this the march arrives at
-     * every windward coast holding far more water than an air mass that has crossed an ocean
-     * really does.
-     */
-    private const val SEA_RAIN_MULTIPLE = 4f
 
     /**
      * Temperature at which the cold cap on moisture bottoms out, in degrees Celsius, and how many
@@ -520,7 +512,13 @@ object ClimateStage {
     internal class Generated(
         val result: ClimateResult,
         val summerPrecipitationMm: FloatField,
-        val winterPrecipitationMm: FloatField
+        val winterPrecipitationMm: FloatField,
+        /**
+         * Annual rainfall whose water last evaporated from land rather than from the sea, in
+         * millimetres: the numerator of the continental recycling ratio. Measured rather than
+         * read, which is why it stops here rather than going on to [ClimateResult] and the save.
+         */
+        val landOriginPrecipitationMm: FloatField
     )
 
     /**
@@ -564,7 +562,8 @@ object ClimateStage {
         val winterPrecipitationMm: FloatField,
         val summerSeaIce: BooleanArray,
         val winterSeaIce: BooleanArray,
-        val wind: WindField
+        val wind: WindField,
+        val landOriginPrecipitationMm: FloatField
     )
 
     /**
@@ -671,7 +670,8 @@ object ClimateStage {
                 biome = biome
             ),
             summerPrecipitationMm = summerPrecipitationMm,
-            winterPrecipitationMm = winterPrecipitationMm
+            winterPrecipitationMm = winterPrecipitationMm,
+            landOriginPrecipitationMm = fields.landOriginPrecipitationMm
         )
     }
 
@@ -751,28 +751,55 @@ object ClimateStage {
             config, sea,
             buildWind(cellsAcross, cellsDown, tiltDegrees = 0f, warm = true, slantRowsPerCell),
             annualPressureHpa
+        ).march
+
+        // The two terms this stage hands the march that are properties of the season rather than
+        // of the parcel: where the regional wind gathers air, and where a cold sea has put a
+        // stratus lid on it. Both are null when their setting is off, so the march runs the
+        // arithmetic it ran before rather than the same arithmetic with a zero in it.
+        val summerWind = withPressureDeparture(
+            config, sea,
+            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
+            summerPressureHpa
         )
+        val winterWind = withPressureDeparture(
+            config, sea,
+            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
+            winterPressureHpa
+        )
+        val summerConvergence = if (climateConfig.convergenceRain) {
+            MoistureBudget.convergencePerCell(config, summerWind.departureMps)
+        } else null
+        val winterConvergence = if (climateConfig.convergenceRain) {
+            MoistureBudget.convergencePerCell(config, winterWind.departureMps)
+        } else null
+        val seaSurfaceAnomalyC =
+            if (climateConfig.marineInversion && config.ocean.enabled) ocean.anomaly else null
+        val summerInversion = MoistureBudget.inversionSuppression(
+            config, sea, seaSurfaceAnomalyC, tiltDegrees, warm = true
+        )
+        val winterInversion = MoistureBudget.inversionSuppression(
+            config, sea, seaSurfaceAnomalyC, tiltDegrees, warm = false
+        )
+
+        // Where each season's rain came from: the share of it whose water last evaporated from
+        // land rather than from the sea. Measured, never read back by the march - see
+        // docs/DESIGN_LEDGER.md, W3, and `MoistureRecyclingTest`.
+        val summerLandOrigin = FloatField(cellsAcross, cellsDown)
+        val winterLandOrigin = FloatField(cellsAcross, cellsDown)
 
         // Raw march output, in the model's own units — not yet mm, not yet clamped. Kept apart
         // from the mm fields below because [MM_SCALE] is the only place that unit conversion
         // happens, and nothing else should need to know what the march's native units are.
         val summerRaw = buildPrecipitation(
-            config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce,
-            withPressureDeparture(
-                config, sea,
-                buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
-                summerPressureHpa
-            ),
-            ocean, bands(cellsDown, climateConfig, warm = true)
+            config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce, summerWind.march,
+            ocean, bands(cellsDown, climateConfig, warm = true),
+            summerConvergence, summerInversion, summerLandOrigin
         )
         val winterRaw = buildPrecipitation(
-            config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce,
-            withPressureDeparture(
-                config, sea,
-                buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
-                winterPressureHpa
-            ),
-            ocean, bands(cellsDown, climateConfig, warm = false)
+            config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce, winterWind.march,
+            ocean, bands(cellsDown, climateConfig, warm = false),
+            winterConvergence, winterInversion, winterLandOrigin
         )
 
         // mm/year, by the one conversion factor the whole model uses. Unclamped: this is what
@@ -782,9 +809,12 @@ object ClimateStage {
         // leaves it identical to the single march it replaced.
         val summerPrecipitationMm = FloatField(cellsAcross, cellsDown)
         val winterPrecipitationMm = FloatField(cellsAcross, cellsDown)
+        val landOriginPrecipitationMm = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellsAcross * cellsDown) {
             summerPrecipitationMm.data[cell] = summerRaw.data[cell] * MM_SCALE
             winterPrecipitationMm.data[cell] = winterRaw.data[cell] * MM_SCALE
+            landOriginPrecipitationMm.data[cell] =
+                (summerLandOrigin.data[cell] + winterLandOrigin.data[cell]) * 0.5f * MM_SCALE
         }
 
         return SeasonalFields(
@@ -797,7 +827,8 @@ object ClimateStage {
             winterPrecipitationMm = winterPrecipitationMm,
             summerSeaIce = summerSeaIce,
             winterSeaIce = winterSeaIce,
-            wind = wind
+            wind = wind,
+            landOriginPrecipitationMm = landOriginPrecipitationMm
         )
     }
 
@@ -1326,10 +1357,24 @@ object ClimateStage {
         sea: SeaLevelResult,
         belts: WindField,
         pressureHpa: FloatField?
-    ): WindField {
-        if (pressureHpa == null) return belts
-        return marchWindOf(config, totalWindMps(config, sea, belts, pressureHpa), belts.beltZonal)
+    ): SeasonWind {
+        if (pressureHpa == null) return SeasonWind(belts, null)
+        val departure = PressureWind.surfaceWind(config, sea, pressureHpa)
+        return SeasonWind(
+            marchWindOf(config, totalWindMps(config, belts, departure), belts.beltZonal),
+            departure
+        )
     }
+
+    /**
+     * A season'''s wind as the march needs it: the pair the march reads, and the regional departure
+     * on its own.
+     *
+     * The departure is kept apart from the total because the convergence term reads it alone — see
+     * [MoistureBudget.convergencePerCell] for why the belts''' own convergence must not be counted a
+     * second time. Null when the pressure term is off.
+     */
+    private class SeasonWind(val march: WindField, val departureMps: PressureWind.Vectors?)
 
     /**
      * The belts and the pressure departure added together, in metres a second: the wind itself,
@@ -1342,13 +1387,11 @@ object ClimateStage {
      */
     private fun totalWindMps(
         config: WorldGenConfig,
-        sea: SeaLevelResult,
         belts: WindField,
-        pressureHpa: FloatField
+        departure: PressureWind.Vectors
     ): PressureWind.Vectors {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val departure = PressureWind.surfaceWind(config, sea, pressureHpa)
         val cellHeightOverWidth =
             (config.scale.cellHeightKm(cellsDown) / config.scale.cellWidthKm(cellsAcross)).toFloat()
         val eastward = FloatArray(cellsAcross * cellsDown)
@@ -1432,7 +1475,7 @@ object ClimateStage {
             // which is what the control has to be able to measure.
             FloatField(config.width, config.height)
         }
-        return totalWindMps(config, sea, belts, pressureHpa)
+        return totalWindMps(config, belts, PressureWind.surfaceWind(config, sea, pressureHpa))
     }
 
     /** The circulation belt each row sits in for a season, precomputed per row. */
@@ -1530,7 +1573,10 @@ object ClimateStage {
         seaIce: BooleanArray,
         wind: WindField,
         ocean: OceanResult,
-        bandOfRow: FloatArray
+        bandOfRow: FloatArray,
+        convergencePerCell: FloatField?,
+        inversionSuppression: FloatField?,
+        landOriginPrecipitation: FloatField
     ): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -1559,6 +1605,7 @@ object ClimateStage {
         // A run with no reversed cell in it never runs the second sweep at all, which is why
         // switching the pressure term off costs nothing and gives back the old field exactly.
         val reversed = FloatField(cellsAcross, cellsDown)
+        val reversedLandOrigin = FloatField(cellsAcross, cellsDown)
         val runNeedsSecondSweep = BooleanArray(runStartRows.size - 1)
         for (run in runNeedsSecondSweep.indices) {
             val beltDirection = wind.beltZonal[runStartRows[run]]
@@ -1579,18 +1626,21 @@ object ClimateStage {
                 val beltDirection = wind.beltZonal[firstRow]
                 marchRun(
                     config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
-                    precipitation, sweepDirection = beltDirection,
+                    convergencePerCell, inversionSuppression,
+                    precipitation, landOriginPrecipitation, sweepDirection = beltDirection,
                     firstRow = firstRow, lastRow = lastRow
                 )
                 if (runNeedsSecondSweep[run]) {
                     marchRun(
                         config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
-                        reversed, sweepDirection = -beltDirection,
+                        convergencePerCell, inversionSuppression,
+                        reversed, reversedLandOrigin, sweepDirection = -beltDirection,
                         firstRow = firstRow, lastRow = lastRow
                     )
                     for (cell in firstRow * cellsAcross until lastRow * cellsAcross) {
                         if (wind.zonal[cell] != beltDirection) {
                             precipitation.data[cell] = reversed.data[cell]
+                            landOriginPrecipitation.data[cell] = reversedLandOrigin.data[cell]
                         }
                     }
                 }
@@ -1600,13 +1650,26 @@ object ClimateStage {
         // Softens the march's column-by-column steps into weather. The radius grows with the grid
         // so that a world looks the same at every resolution rather than smoother at the coarse
         // ones: one cell at the reference width, two at twice it.
-        BoxBlur.apply(
-            precipitation,
-            radius = (config.width / RAIN_BLUR_REFERENCE_WIDTH).coerceAtLeast(1),
-            passes = BLUR_PASSES
-        )
+        val radius = (config.width / RAIN_BLUR_REFERENCE_WIDTH).coerceAtLeast(1)
+        BoxBlur.apply(precipitation, radius = radius, passes = BLUR_PASSES)
+        // The tracer is spread by the same kernel, so that a ratio taken between the two is a
+        // ratio between two fields that have been through the same arithmetic.
+        BoxBlur.apply(landOriginPrecipitation, radius = radius, passes = BLUR_PASSES)
         return precipitation
     }
+
+    /**
+     * What one cell of travel does with a length: the share of a kilometre figure a parcel spends
+     * crossing one cell, capped at all of it.
+     *
+     * The first-order form of the exponential rather than the exponential itself, because every
+     * one of these is a term added to or multiplied by others before anything is taken away, and
+     * the linear share is what "per cell of travel" meant when these were bare constants. What
+     * changes is that the figure above the line is now a length on the ground, so twice as fine a
+     * grid takes twice as many steps to cross the same country and arrives at the same place.
+     */
+    private fun shareOfLengthPerCell(cellWidthKm: Float, lengthKm: Float): Float =
+        if (lengthKm <= 0f) 0f else (cellWidthKm / lengthKm).coerceAtMost(1f)
 
     /** One circulation belt's worth of rows, marched together. See [buildPrecipitation]. */
     private fun marchRun(
@@ -1618,7 +1681,10 @@ object ClimateStage {
         wind: WindField,
         ocean: OceanResult,
         bandOfRow: FloatArray,
+        convergencePerCell: FloatField?,
+        inversionSuppression: FloatField?,
         precipitation: FloatField,
+        landOriginPrecipitation: FloatField,
         sweepDirection: Int,
         firstRow: Int,
         lastRow: Int
@@ -1626,13 +1692,32 @@ object ClimateStage {
         val cellsAcross = config.width
         val climateConfig = config.climate
         val rowCount = lastRow - firstRow
+        val cellWidthKm = config.cellWidthKm.toFloat()
+        val lidElevation = config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
 
-        // One air mass per row, as before — but now they trade moisture sideways as they go.
+        // The budget's four lengths, converted once into what one cell of travel does with them.
+        val evaporationPerCell =
+            shareOfLengthPerCell(cellWidthKm, climateConfig.oceanEvaporationLengthKm)
+        val seaRainPerCell = shareOfLengthPerCell(
+            cellWidthKm, climateConfig.depletionLengthKm * MoistureBudget.SEA_DEPLETION_SHARE
+        )
+        val flatRainPerCell = shareOfLengthPerCell(cellWidthKm, climateConfig.depletionLengthKm)
+        val returnPerCell =
+            shareOfLengthPerCell(cellWidthKm, climateConfig.evapotranspirationLengthKm)
+
+        // One air mass per row, as before — but now they trade moisture sideways as they go, and
+        // each of them carries two numbers rather than one. The second is how much of the water in
+        // it last came off land rather than off the sea: the tracer the continental recycling
+        // ratio is measured from. It rides along every step the column takes and is never a term
+        // in one, so taking the measurement away would leave the rainfall identical.
         val moisture = FloatArray(rowCount) { INITIAL_MOISTURE }
+        val landOriginMoisture = FloatArray(rowCount)
         val previousColumn = FloatArray(rowCount)
+        val previousColumnLandOrigin = FloatArray(rowCount)
 
-        // Two laps around the cylinder: the first seeds a realistic moisture state, the second is
-        // the one that gets recorded, so the arbitrary starting value washes out.
+        // Laps around the cylinder: the first two seed a realistic moisture state and leave a
+        // rainfall for the ground's wetness to be read off, the last is the one that gets
+        // recorded, so the arbitrary starting value washes out. See [MARCH_LAPS].
         for (lap in 0 until MARCH_LAPS) {
             val recording = lap == MARCH_LAPS - 1
             for (stepAlongWind in 0 until cellsAcross) {
@@ -1641,6 +1726,7 @@ object ClimateStage {
                 var upwindColumn = column - sweepDirection
                 upwindColumn = ((upwindColumn % cellsAcross) + cellsAcross) % cellsAcross
                 moisture.copyInto(previousColumn)
+                landOriginMoisture.copyInto(previousColumnLandOrigin)
 
                 for (rowWithinRun in 0 until rowCount) {
                     val row = firstRow + rowWithinRun
@@ -1679,11 +1765,17 @@ object ClimateStage {
                         val shareOfAfter = departureRow - rowBefore
                         moisture[rowWithinRun] = previousColumn[rowBefore] +
                             (previousColumn[rowAfter] - previousColumn[rowBefore]) * shareOfAfter
+                        landOriginMoisture[rowWithinRun] = previousColumnLandOrigin[rowBefore] +
+                            (previousColumnLandOrigin[rowAfter] -
+                                previousColumnLandOrigin[rowBefore]) * shareOfAfter
                     }
+
+                    val columnBefore = moisture[rowWithinRun]
+                    val landBefore = landOriginMoisture[rowWithinRun]
 
                     if (!sea.isLand[cell]) {
                         val marched = if (seaIce[cell]) {
-                            marchSeaIceStep(climateConfig, moisture[rowWithinRun])
+                            marchSeaIceStep(flatRainPerCell, columnBefore)
                         } else {
                             // Warm seas evaporate faster — and which seas are warm is a question
                             // about currents, not latitude. Taking the anomaly from the ocean
@@ -1692,11 +1784,17 @@ object ClimateStage {
                             val currentAnomalyC =
                                 if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f
                             marchSeaStep(
-                                climateConfig, moisture[rowWithinRun],
+                                climateConfig, evaporationPerCell, seaRainPerCell, columnBefore,
                                 seaSurface.data[cell] + currentAnomalyC, currentAnomalyC
                             )
                         }
                         moisture[rowWithinRun] = marched.moisture
+                        // Rain over the sea takes its share of both reservoirs with it; what
+                        // evaporates in the same step is the sea's own water, so the tracer is
+                        // diluted rather than added to. That is how a parcel that crossed a
+                        // continent forgets it once it is out over the ocean again.
+                        landOriginMoisture[rowWithinRun] =
+                            landBefore * (1f - marched.rainShareOfColumn)
                         if (recording) precipitation.data[cell] = marched.rain
                         continue
                     }
@@ -1720,20 +1818,53 @@ object ClimateStage {
                     } else {
                         sea.relativeElevation.data[row * cellsAcross + upwindColumn]
                     }
+                    // How wet the ground under this cell is, from the rain the previous lap left
+                    // on it: the proxy for W4's vegetation, which does not exist yet. On the first
+                    // lap it is bare, which is the same starting guess [INITIAL_MOISTURE] is and
+                    // washes out over the laps the same way.
+                    val wetness = MoistureBudget.groundWetness(precipitation.data[cell] * MM_SCALE)
                     val marched = marchLandStep(
-                        climateConfig, moisture[rowWithinRun],
+                        climateConfig, cellWidthKm, returnPerCell, columnBefore,
                         sea.relativeElevation.data[cell], upwindElevation, bandFactor,
-                        temperature.data[cell]
+                        temperature.data[cell], wetness,
+                        convergencePerCell?.data?.get(cell) ?: 0f,
+                        inversionSuppression?.data?.get(cell) ?: 0f,
+                        lidElevation
                     )
                     moisture[rowWithinRun] = marched.moisture
-                    if (recording) precipitation.data[cell] = marched.rain
+                    // The rain takes its share of both reservoirs, the ground's return is all of
+                    // it land water, and whatever the cold cap clipped afterwards it clipped from
+                    // both in proportion.
+                    val landAfterRain = landBefore * (1f - marched.rainShareOfColumn)
+                    val landRain = landBefore * marched.rainShareOfColumn
+                    val uncapped = columnBefore - marched.rain + marched.returned
+                    val capShare = if (uncapped > 0f) marched.moisture / uncapped else 0f
+                    landOriginMoisture[rowWithinRun] =
+                        ((landAfterRain + marched.returned) * capShare)
+                            .coerceIn(0f, marched.moisture)
+                    // Written on every lap, not only the recorded one: the next lap reads it back
+                    // as the ground's wetness.
+                    precipitation.data[cell] = marched.rain
+                    if (recording) landOriginPrecipitation.data[cell] = landRain
                 }
             }
         }
     }
 
-    /** What the march does to one cell's air mass and the rain it records: see [marchRun]. */
-    internal class MarchStep(val moisture: Float, val rain: Float)
+    /**
+     * What the march does to one cell's air mass and the rain it records: see [marchRun].
+     *
+     * [rainShareOfColumn] is that rain as a fraction of the column the step started with, which is
+     * what the land-origin tracer in [marchRun] needs to split the rain between water that came
+     * off the sea and water that came off the ground. [returned] is what the ground gave back in
+     * the same step, which is land water by definition and zero over water.
+     */
+    internal class MarchStep(
+        val moisture: Float,
+        val rain: Float,
+        val rainShareOfColumn: Float = 0f,
+        val returned: Float = 0f
+    )
 
     /**
      * How readily water leaves a surface at [temperatureC], as a ramp from 0 at [WARMTH_ZERO_C] to
@@ -1748,11 +1879,15 @@ object ClimateStage {
      * One cell of open sea: evaporation only.
      *
      * Takes the air mass's [incomingMoisture] as a fraction of saturation, the water's own
-     * [seaTemperatureC] in this season, and [currentAnomalyC] — how far that water departs from the mean of its
-     * own latitude, which is what makes a cold upwelling (Atacama, Namib, Baja) starve the coast
-     * it washes and a warm current (the Gulf Stream, Norway) feed it. Returns the moisture the air
-     * leaves with and the rain it dropped, both in the march's own units. At
+     * [seaTemperatureC] in this season, and [currentAnomalyC] — how far that water departs from
+     * the mean of its own latitude, which is what makes a cold upwelling (Atacama, Namib, Baja)
+     * starve the coast it washes and a warm current (the Gulf Stream, Norway) feed it. Returns the
+     * moisture the air leaves with and the rain it dropped, both in the march's own units. At
      * `ClimateConfig.currentMoisture` of zero the anomaly term is exactly 1 whatever the anomaly.
+     *
+     * [evaporationPerCell] and [seaRainPerCell] are `ClimateConfig.oceanEvaporationLengthKm` and a
+     * quarter of `ClimateConfig.depletionLengthKm` as shares of one cell of travel — see
+     * [shareOfLengthPerCell] and [MoistureBudget.SEA_DEPLETION_SHARE].
      *
      * Split out of [marchRun] so `MeridionalWindTest`'s from-scratch reference march can call the
      * identical physics the production march uses instead of restating it, and so the two cannot
@@ -1760,6 +1895,8 @@ object ClimateStage {
      */
     internal fun marchSeaStep(
         climateConfig: ClimateConfig,
+        evaporationPerCell: Float,
+        seaRainPerCell: Float,
         incomingMoisture: Float,
         seaTemperatureC: Float,
         currentAnomalyC: Float = 0f
@@ -1770,8 +1907,8 @@ object ClimateStage {
         // negative.
         val currentFactor = (1f + climateConfig.currentMoisture * currentAnomalyC).coerceAtLeast(0f)
         val moisture = incomingMoisture +
-            climateConfig.evaporationRate * warmth * currentFactor * (1f - incomingMoisture)
-        return MarchStep(moisture, moisture * climateConfig.baseRainRate * SEA_RAIN_MULTIPLE)
+            evaporationPerCell * warmth * currentFactor * (1f - incomingMoisture)
+        return MarchStep(moisture, moisture * seaRainPerCell, seaRainPerCell)
     }
 
     /**
@@ -1783,40 +1920,66 @@ object ClimateStage {
      * ocean is a desert, why the coast beside it is one too, and why an ice sheet at the pole
      * cannot feed itself indefinitely.
      *
-     * The open-water step keeps [SEA_RAIN_MULTIPLE]; this one does not, because that multiple is
-     * the convection warm water drives and ice drives none.
+     * It rains at [flatRainPerCell], the flat-land share and not open sea's four times it, because
+     * that multiple is the convection warm water drives and ice drives none.
      */
     internal fun marchSeaIceStep(
-        climateConfig: ClimateConfig,
+        flatRainPerCell: Float,
         incomingMoisture: Float
     ): MarchStep {
-        val rain = incomingMoisture * climateConfig.baseRainRate
-        return MarchStep(incomingMoisture - rain, rain)
+        val rain = incomingMoisture * flatRainPerCell
+        return MarchStep(incomingMoisture - rain, rain, flatRainPerCell)
     }
 
     /**
-     * One cell of land: orographic lift, rain, evapotranspiration recovery, the cold-air moisture
-     * cap.
+     * One cell of land: orographic lift, the regional wind's convergence, the marine inversion,
+     * rain, evapotranspiration recovery, the cold-air moisture cap.
      *
      * [incomingMoisture] is a fraction of saturation and [upwindElevation] is in
      * `SeaLevelResult.relativeElevation` units — the elevation the air last saw, the same row for
      * a zonal march and a blend of two rows once the wind carries a meridional component, so this
      * function does not need to know which. [bandFactor] is the circulation belt's multiplier on
-     * the rain rate. Returns the moisture the air leaves with and the rain it dropped. See
-     * [marchSeaStep] for why this is shared with `MeridionalWindTest` rather than restated there.
+     * the rain rate, [groundWetness] is how freely the surface under the parcel returns water,
+     * [convergencePerCell] is the share of the column the regional wind gathered into this cell
+     * over one cell of travel, and [inversionStrength] with [lidElevation] are the marine stratus
+     * lid and the height a parcel has to climb to escape it. Returns the moisture the air leaves
+     * with and the rain it dropped. See [marchSeaStep] for why this is shared with
+     * `MeridionalWindTest` rather than restated there.
      */
     internal fun marchLandStep(
         climateConfig: ClimateConfig,
+        cellWidthKm: Float,
+        returnPerCell: Float,
         incomingMoisture: Float,
         elevationHere: Float,
         upwindElevation: Float,
         bandFactor: Float,
-        landTemperatureC: Float
+        landTemperatureC: Float,
+        groundWetness: Float = 1f,
+        convergencePerCell: Float = 0f,
+        inversionStrength: Float = 0f,
+        lidElevation: Float = 0f
     ): MarchStep {
         // Orographic lift is the climb the air made getting here.
         val rise = (elevationHere - upwindElevation).coerceAtLeast(0f)
 
-        val rate = (climateConfig.baseRainRate + climateConfig.orographicStrength * rise) * bandFactor
+        // The depletion length is the flat-land one stretched by how much water the air over this
+        // ground can hold; the climb shortens it and the regional wind's convergence adds to what
+        // has to come out. The three meet as rates rather than as lengths because only the first
+        // of them is a property of the air alone.
+        val depletionLengthKm =
+            MoistureBudget.depletionLengthKm(climateConfig.depletionLengthKm, landTemperatureC)
+        val flatRate = shareOfLengthPerCell(cellWidthKm, depletionLengthKm)
+
+        // The marine inversion: under a stratus lid over cold water the parcel holds its rain in
+        // until the ground stands above the lid, which is why the Atacama is a coastal strip and
+        // the Andes behind it are not dry.
+        val aboveLid =
+            if (lidElevation <= 0f) 1f else (elevationHere / lidElevation).coerceIn(0f, 1f)
+        val lidFactor = 1f - inversionStrength * (1f - aboveLid)
+
+        val rate = ((flatRate + climateConfig.orographicStrength * rise + convergencePerCell) *
+            bandFactor * lidFactor).coerceAtLeast(0f)
         val rain = (incomingMoisture * rate).coerceAtMost(incomingMoisture)
         var moisture = incomingMoisture - rain
 
@@ -1825,16 +1988,24 @@ object ClimateStage {
         // descending subtropical air suppresses the convection that would return moisture to the
         // sky, while rising tropical air encourages it. Take the belt out of this term and every
         // latitude re-moistens alike, at which point deserts stop preferring the horse latitudes
-        // at all. See GEOGRAPHY.md, "Where the deserts are", for what that measures.
+        // at all. See GEOGRAPHY.md, "Where the deserts are", for what that measures. Scaled by
+        // the ground's own wetness too, because dry ground has nothing left to give: that is the
+        // feedback which makes a continental interior either wet or arid rather than uniformly
+        // middling, and it is what [MoistureBudget.EVAPOTRANSPIRATION_LENGTH_KM] is measured by.
         val warmth = evaporativeWarmth(landTemperatureC)
-        moisture += climateConfig.landRecoveryRate * warmth * bandFactor * (1f - moisture)
+        val returned = returnPerCell * warmth * bandFactor * groundWetness * (1f - moisture)
+        moisture += returned
 
         // Cold air simply holds less water.
         val coldCap = ((landTemperatureC - COLD_CAP_ZERO_C) / COLD_CAP_SPAN_C)
             .coerceIn(MIN_COLD_CAP, 1f)
         moisture = moisture.coerceAtMost(coldCap)
 
-        return MarchStep(moisture, rain)
+        return MarchStep(
+            moisture, rain,
+            if (incomingMoisture > 0f) rain / incomingMoisture else 0f,
+            returned
+        )
     }
 
     /**

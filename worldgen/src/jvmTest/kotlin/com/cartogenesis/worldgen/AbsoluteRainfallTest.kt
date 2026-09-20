@@ -126,10 +126,10 @@ class AbsoluteRainfallTest {
         val seed = 42L
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         val arid = base.copy(
-            climate = base.climate.copy(baseRainRate = base.climate.baseRainRate * 0.3f)
+            climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 0.3f)
         )
         val lush = base.copy(
-            climate = base.climate.copy(baseRainRate = base.climate.baseRainRate * 2.5f)
+            climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 2.5f)
         )
 
         val oldArid = oldNormalizedDesertShare(arid)

@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.abs
 import kotlin.test.Test
@@ -162,15 +163,31 @@ class MeridionalWindTest {
             config, world.sea, ClimateStage.zonalClimate(config, world.sea), temperature, season
         )
         val precip = FloatField(w, h)
+        // The budget's lengths as shares of one cell of travel, the same conversion the production
+        // march makes once at the top of its own run. See W3 in docs/DESIGN_LEDGER.md.
+        val cellWidthKm = config.cellWidthKm.toFloat()
+        val evaporationPerCell = cellWidthKm / cfg.oceanEvaporationLengthKm
+        val seaRainPerCell =
+            cellWidthKm / (cfg.depletionLengthKm * MoistureBudget.SEA_DEPLETION_SHARE)
+        val flatRainPerCell = cellWidthKm / cfg.depletionLengthKm
+        val returnPerCell = cellWidthKm / cfg.evapotranspirationLengthKm
+        val lidElevation =
+            config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
+        val inversion = MoistureBudget.inversionSuppression(
+            config, world.sea,
+            if (cfg.marineInversion && config.ocean.enabled) world.ocean.anomaly else null,
+            tilt, warm
+        )
 
         for (y in 0 until h) {
             val direction = zonalDirection(y, h, tilt, warm)
             val band = ClimateStage.seasonalBand(ClimateStage.latitudeOf(y, h), cfg, warm)
             var moisture = 0.5f
 
-            // Two laps around the cylinder, exactly as the production march does: the first seeds
-            // a realistic moisture state and only the second is recorded.
-            for (lap in 0 until 2) {
+            // Three laps around the cylinder, exactly as the production march does: the first two
+            // seed a realistic moisture state and a rainfall for the ground's wetness to be read
+            // off, and only the last is recorded.
+            for (lap in 0 until 3) {
                 for (step in 0 until w) {
                     val x = if (direction > 0) step else w - 1 - step
                     val i = y * w + x
@@ -185,14 +202,15 @@ class MeridionalWindTest {
                         val frozen =
                             if (warm) world.climate.summerSeaIce[i] else world.climate.winterSeaIce[i]
                         val stepResult = if (frozen) {
-                            ClimateStage.marchSeaIceStep(cfg, moisture)
+                            ClimateStage.marchSeaIceStep(flatRainPerCell, moisture)
                         } else {
                             ClimateStage.marchSeaStep(
-                                cfg, moisture, seaSurface.data[i] + currentAnomaly, currentAnomaly
+                                cfg, evaporationPerCell, seaRainPerCell, moisture,
+                                seaSurface.data[i] + currentAnomaly, currentAnomaly
                             )
                         }
                         moisture = stepResult.moisture
-                        if (lap == 1) precip.data[i] = stepResult.rain
+                        if (lap == 2) precip.data[i] = stepResult.rain
                         continue
                     }
 
@@ -200,11 +218,14 @@ class MeridionalWindTest {
                     upwindX = ((upwindX % w) + w) % w
                     val upwindElevation = world.sea.relativeElevation.data[y * w + upwindX]
                     val stepResult = ClimateStage.marchLandStep(
-                        cfg, moisture, world.sea.relativeElevation.data[i], upwindElevation, band,
-                        temperature.data[i]
+                        cfg, cellWidthKm, returnPerCell, moisture,
+                        world.sea.relativeElevation.data[i], upwindElevation, band,
+                        temperature.data[i],
+                        MoistureBudget.groundWetness(precip.data[i] * ClimateStage.MM_SCALE),
+                        0f, inversion?.data?.get(i) ?: 0f, lidElevation
                     )
                     moisture = stepResult.moisture
-                    if (lap == 1) precip.data[i] = stepResult.rain
+                    precip.data[i] = stepResult.rain
                 }
             }
         }

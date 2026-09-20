@@ -77,8 +77,13 @@ class W4RenderDump {
                 write(rasterOf(before, options), window, "$seed-$side-$view", "before")
                 write(rasterOf(after, options), window, "$seed-$side-$view", "after")
             }
-            // The new view has no "before": there is no field to draw before the chunk.
-            write(vegetationImage(after), window, "$seed-$side-vegetation", "after")
+            // The new view has no "before": there is no field to draw before the chunk. Two crops
+            // of it, because the two things it carries live in different places: the graded
+            // boundary is in the same window the tint crops use, and the permafrost is at the top
+            // and bottom of the map where that window never lands.
+            val field = vegetationImage(after)
+            write(field, window, "$seed-$side-vegetation", "after")
+            write(field, frozenGroundWindow(after), "$seed-$side-permafrost", "after")
         }
     }
 
@@ -151,6 +156,33 @@ class W4RenderDump {
         return Window(x, y, side)
     }
 
+    /** And a window on the tile holding the most continuous permafrost, chosen the same way. */
+    private fun frozenGroundWindow(world: WorldMap): Window {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val tileSide = cellsAcross / TILES_ACROSS
+        val counts = IntArray(TILES_ACROSS * TILES_ACROSS)
+        for (cell in 0 until cellsAcross * cellsDown) {
+            if (!world.sea.isLand[cell]) continue
+            if (VegetationDensity.Permafrost.ofOrdinal(world.climate.permafrost[cell].toInt()) !=
+                VegetationDensity.Permafrost.CONTINUOUS
+            ) {
+                continue
+            }
+            counts[(cell / cellsAcross / tileSide) * TILES_ACROSS +
+                (cell % cellsAcross) / tileSide]++
+        }
+        var best = 0
+        for (tile in counts.indices) if (counts[tile] > counts[best]) best = tile
+        val side = CROP_SIDE.coerceAtMost(minOf(cellsAcross, cellsDown))
+        val x = ((best % TILES_ACROSS) * tileSide + tileSide / 2 - side / 2)
+            .coerceIn(0, cellsAcross - side)
+        val y = ((best / TILES_ACROSS) * tileSide + tileSide / 2 - side / 2)
+            .coerceIn(0, cellsDown - side)
+        println("W4 CROP: ${counts[best]} continuous-permafrost cells in the chosen tile, window $x,$y")
+        return Window(x, y, side)
+    }
+
     private fun rasterOf(world: WorldMap, options: RenderOptions): BufferedImage {
         val pixels = MapRasterizer.rasterize(world, options)
         val image = BufferedImage(world.width, world.height, BufferedImage.TYPE_INT_RGB)
@@ -159,32 +191,39 @@ class W4RenderDump {
     }
 
     /**
-     * The field itself: straw at nothing through olive to a deep green at a closed canopy, with
-     * the permafrost zones ruled over it in blue — every fourth row under continuous permafrost
-     * and every eighth under discontinuous, so the mask reads as a mask rather than as a colour
-     * the density could have produced on its own.
+     * The field itself: straw at nothing through olive to a deep green at a closed canopy, washed
+     * with a cold blue where the ground is frozen the year round — hard over the continuous zone,
+     * a fifth of the way over the discontinuous one.
+     *
+     * A wash and not a ruling. The first version of this drew every fourth row blue, which is the
+     * honest way to show a mask over a colour and is invisible in a half-size picture of a 2048
+     * world, since halving averages three unruled rows into every ruled one. The wash survives
+     * both scales, and blue is a colour the density ramp itself never reaches, so nothing in the
+     * picture is ambiguous about which of the two it came from.
      */
     private fun vegetationImage(world: WorldMap): BufferedImage {
         val image = BufferedImage(world.width, world.height, BufferedImage.TYPE_INT_RGB)
         for (cell in 0 until world.width * world.height) {
-            val row = cell / world.width
             val colour = if (!world.sea.isLand[cell]) {
                 0x101820
             } else {
                 val density = world.climate.vegetationDensity.data[cell].coerceIn(0f, 1f)
-                val red = (214 * (1f - density) + 24 * density).toInt()
-                val green = (198 * (1f - density) + 92 * density).toInt()
-                val blue = (150 * (1f - density) + 38 * density).toInt()
+                var red = 214 * (1f - density) + 24 * density
+                var green = 198 * (1f - density) + 92 * density
+                var blue = 150 * (1f - density) + 38 * density
                 val zone =
                     VegetationDensity.Permafrost.ofOrdinal(world.climate.permafrost[cell].toInt())
-                val ruled = when (zone) {
-                    VegetationDensity.Permafrost.CONTINUOUS -> row % 4 == 0
-                    VegetationDensity.Permafrost.DISCONTINUOUS -> row % 8 == 0
-                    VegetationDensity.Permafrost.NONE -> false
+                val frozen = when (zone) {
+                    VegetationDensity.Permafrost.CONTINUOUS -> 0.55f
+                    VegetationDensity.Permafrost.DISCONTINUOUS -> 0.22f
+                    VegetationDensity.Permafrost.NONE -> 0f
                 }
-                if (ruled) 0x5AA9E6 else (red shl 16) or (green shl 8) or blue
+                red += (90 - red) * frozen
+                green += (169 - green) * frozen
+                blue += (230 - blue) * frozen
+                (red.toInt() shl 16) or (green.toInt() shl 8) or blue.toInt()
             }
-            image.setRGB(cell % world.width, row, colour)
+            image.setRGB(cell % world.width, cell / world.width, colour)
         }
         return image
     }

@@ -234,10 +234,20 @@ Bras 2005). Permafrost as a modifier where the annual mean is below −2 °C.
   subtropical continent, summer onshore flow on its equatorward and eastern coasts (the monsoon on
   the right coast), winter offshore flow; shown failing with the pressure term off. Visual: large
   (wet coasts move to where they belong). GPU: per-cell gradient work, behind the seam (rule 8).
-- **W3 Moisture budget calibrated** — depletion length, recycling and residence set from the
-  literature figures above; marine-inversion suppression on cold-current coasts; optional
-  Smith–Barstad local term at 4096. Guard: continental recycling ratio measured at 30–40%; a
-  subtropical west coast with a cold current becomes desert. Visual: medium.
+- **W3 Moisture budget calibrated** — *landed 2026-09-20; see the ledger row for the figures.*
+  The depletion length, the ocean's evaporation fetch and the ground's return are lengths in
+  kilometres rather than rates per cell, so `atResolution` no longer touches the climate at all;
+  the recycling ratio is measured at 32.7% against Earth's 30–45%; a convergence term reads the
+  divergence of the regional wind. Three things this line got wrong, each measured rather than
+  argued. **The paragraph above says the constants "were tuned by picture" and misses the larger
+  fault**: the conversion to millimetres was itself charged per cell, so every world above 512
+  reported a quarter of its own rainfall and the Rainfall view of a 2048 export was one flat
+  colour. That was the whole of the visible complaint and it was a unit. **The marine inversion is
+  not delivered**: a multiplier on the rain rate cannot dry a coast in a reservoir march, for the
+  same reason GEOGRAPHY.md records that one cannot wet a rain shadow. **The convergence term dries
+  the interior rather than wetting it**, because a parcel made to rain earlier arrives downwind
+  with less and this generator's monsoon has no strength to re-supply it. The Smith–Barstad local
+  term was not attempted. Visual: large, and not where this line expected it.
 - **W4 Vegetation density and permafrost** — a 0–1 vegetation field from Holdridge, permafrost
   mask; both saved; H3 and S3 read vegetation for erodibility. Visual: small alone, structural.
 

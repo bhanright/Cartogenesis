@@ -1,5 +1,47 @@
 # To do
 
+- **Erosion does not read the vegetation, and the field it would read is sitting there.** W4 saved
+  a 0-1 vegetation density on `ClimateResult.vegetationDensity` and wired exactly one consumer, the
+  map's canopy darkening. The consumers the field was built for are S3 and H3: a vegetated slope
+  resists erosion roughly twice as well as a bare one (Istanbulluoglu and Bras 2005), so the
+  erodibility `K` should be scaled by something like `1 - halfOfIt * density`. Nothing of that is
+  wired, deliberately - erosion runs three stages *before* the climate does, so this is not one
+  line in `ErosionStage`; it needs the provisional climate march S3 is chartered to add, and
+  wiring half of it now would have been a change to every world on a chunk that was asked to
+  change none. The accessor and its units are documented at the field. 2026-09-20, W4.
+- **Budyko's evaporative fraction is the wrong shape for the march's ground return, and the right
+  shape is not known.** W4 offered `VegetationDensity.density` in place of
+  `MoistureBudget.groundWetness`'s rainfall proxy and measured 26.5% continental recycling against
+  the proxy's 32.7% and Earth's 30-45%, so the proxy stayed. The diagnosis is that the two are
+  different integrals: Budyko's fraction is the share of a *year's* evaporative energy the water
+  supply meets, and the march wants the share of a *parcel's* passage the ground under it can
+  supply in the hours it takes to cross a cell. Over dry and cold ground the annual figure is the
+  smaller, which is why the continents give less back. What would close it is a return written on
+  the parcel's own timescale - soil moisture with a store and a drawdown, rather than a ratio - and
+  that is a change to what the march integrates rather than to which field it reads. The switch is
+  `ClimateConfig.vegetationRecycling` and `MoistureBudgetTest` re-measures both numbers on every
+  audited seed, so whoever opens this starts from figures rather than from this paragraph.
+  2026-09-20, W4.
+- **Permafrost covers 2.10 times Earth's share of the land, and it is the tundra entry wearing a
+  second hat.** Pooled over seeds 7/42/1234/99 at 512 the permafrost zones take 35.7% of ice-free
+  land against Earth's 17% (Zhang and others 1999), running 7.7 to 59.9% by seed. The mask is a
+  threshold on the annual mean and this map's land stands 1200-1700 m above its own sea against
+  Earth's 840, so a lapse rate of 6.5 C/km takes three to five degrees off nearly every land cell -
+  the same cause GEOGRAPHY.md records for half the land being tundra, and the same fix, which is
+  S2's hypsometry. Nothing in the permafrost model should be moved for it: the cold end of each
+  published band is already taken. What would settle that it is the hypsometry and not the
+  thresholds is re-measuring this share on a world whose land hypsometry has been brought to
+  Earth's, which cannot be done until there is one. 2026-09-20, W4.
+- **Koppen calls some of the continuous-permafrost ground forest, and nobody has decided whether it
+  should.** `VegetationDensityTest` measures the disagreement between the two classifications of
+  the same cell and holds it under a quarter of the zone; the density caps those cells at two
+  fifths so anything reading the *field* is answered, but the Biomes view still draws taiga over
+  ground whose active layer is too shallow to root one. Teaching `classify` to read the mask is a
+  one-line change and a redesign of the cold end of the classifier at the same time, which is why
+  W4 reported the figure instead of making it. Whoever opens it should decide against Earth first:
+  the Siberian larch forests stand on *discontinuous* permafrost, so the question is only about the
+  continuous zone and is narrower than it looks. 2026-09-20, W4.
+
 - **The largest lake in the land is 1.12 times the Caspian's share once the grids agree.** The same
   cause: with the plate seeds resolution-free, `OutletResolutionTest`'s six worlds are the 512 world
   at three sizes rather than six unrelated ones, and **59758 at 2048 reads 1.84 times the Caspian's

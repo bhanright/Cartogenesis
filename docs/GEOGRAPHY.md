@@ -536,6 +536,36 @@ spill-level area holds water at balance, against 100% with the balance switched 
 author's world at 1024 the lake count falls 82 to 67 and the lake share of land 1.15% to 0.91%,
 with ten endorheic basins and 132 playa cells.
 
+**The ground carries a cover, and it is a field rather than a name.** Koppen's classifier gives a
+cell one of sixteen names, and a name is a step: two cells either side of the 500 mm steppe line
+are painted as different countries although their vegetation differs by a few per cent. Beside it
+the world now carries a vegetation density, 0 on bare rock to 1 under a closed canopy, built from
+two published relations and no fitted curve. The water half is Budyko's (1974) evaporative
+fraction, the share of the year's available evaporative energy that the rainfall actually meets,
+evaluated at Holdridge's own PET ratio; Eagleson's (1982) ecohydrological equilibrium is why a
+plant cover tracks it, since a canopy grows until it is transpiring everything the climate will
+give it and no further. The season half is Holdridge's (1967) biotemperature, the year's twelve
+monthly means with everything below freezing and above 30 C thrown away, ramped from nothing at a
+biotemperature of zero to all of it at his subpolar-to-boreal line of 3 C. The product is the
+density. Checked against Whittaker's (1975) diagram at the centre of nine of his boxes, it puts
+every forest above three fifths, every open woodland and grassland between a third and three
+fifths, tundra at 0.21 and a subtropical desert at 0.07. Pooled over seeds 7/42/1234/99 at 512,
+31.1% of land reads under a tenth — bare, sparsely vegetated or under ice — against Earth's 26%
+from the MODIS IGBP census's barren and snow-and-ice classes, and 23.4% of ice-free land reads at
+or above a closed canopy against FAO's 31% forest share. The drawn map reads the field for its
+canopy darkening, so a woodland edge is now graded over tens of cells: across the open-to-wooded
+boundaries of the gallery world the mean step in canopy falls from 0.68, which was the per-biome
+table's, to 0.044.
+
+**Frozen ground, in two zones rather than one.** Where the mean annual air temperature is at or
+below -8 C the permafrost is continuous and where it is at or below -2 C it is discontinuous or
+sporadic, the cold end of the bands Brown and others (1997) and Zhang and others (1999) map. Only
+the continuous zone caps the cover, at two fifths: its active layer is a few tens of centimetres to
+about a metre deep and a tree cannot root in that, which is why the continuous zone is tundra and
+dwarf scrub however long its summer runs. The discontinuous zone caps nothing, deliberately — the
+Siberian larch forests stand on discontinuous permafrost over most of their range, and a mask that
+stopped forest wherever any permafrost was found would delete them.
+
 **Realms of uneven size, and no world empire.** Realms are built from drainage catchments, so a
 border falls on a watershed or on a trunk river because there is nowhere else for it to fall. How
 much each realm takes is a draw with a long tail, which is what stops a world reading as a dozen
@@ -653,6 +683,36 @@ belts are where they should be and the tree line is not. What puts them there is
 map's land stands 1200–1700 m above its own sea against Earth's 840, and a lapse rate of 6 °C/km
 takes three to five degrees off nearly every land cell. `ColdBiomeShareTest` prints both shares per
 seed and pooled and asserts only the boreal one; the hypsometry is `TODO.md`'s.
+
+**Twice Earth's share of the land is over permafrost, for the reason half of it is tundra.**
+Pooled over seeds 7/42/1234/99 at 512 the permafrost zones cover 35.7% of ice-free land against
+Earth's 17% — Zhang and others' (1999) 22.79 million km2 of Northern Hemisphere permafrost against
+a global ice-free land area of about 134 million — and by seed it runs 7.7, 35.6, 41.3 and 59.9%.
+This is the tundra deviation above, arriving at a second measurement: the mask is a threshold on
+the annual mean, this map's land stands 1200-1700 m above its own sea against Earth's 840, and a
+lapse rate of 6.5 C/km takes three to five degrees off nearly every land cell. The bar was not
+moved to admit it — the guard is a factor of three either way, which 2.10 is inside — and taking
+the *cold* end of each published band (-8 and -2 rather than -6 and -1) is the one thing the
+permafrost model itself does about it. The hypsometry is `TODO.md`'s, as it is for the tundra.
+
+**Nothing on the map reaches a vegetation density of 1.** Budyko's curve approaches its energy
+limit rather than meeting it, so a closed canopy reads 0.87 to 0.93 and only a superhumid climate
+with an order of magnitude more rain than evaporative demand would read higher. The field is a 0-1
+field by construction and correctly never saturates; what this costs is that the drawn canopy
+darkening never reaches its own full twelfth. Recorded rather than rescaled, because a normalising
+factor chosen to make the wettest cell read 1 is a per-world fit and is the thing A4 took out of
+the rainfall.
+
+**The moisture march's ground return is still a proxy, and W4 measured the derivation that would
+have replaced it.** `MoistureBudget.groundWetness` scales the ground's return by the previous lap's
+rain against Koppen's 500 mm steppe line, which W3 stated as a proxy for the vegetation field. The
+field exists now and Budyko's evaporative fraction ought to *be* that return rather than stand in
+for it — but measured, it puts the continental recycling ratio at 26.5% pooled against the proxy's
+32.7% and van der Ent and others' (2010) 30-45%, so the derivation falls outside Earth's band and
+the proxy does not. The proxy ships. The two differ because Budyko's fraction is a share of a
+*year's* evaporative energy and the march wants a share of a *parcel's* passage; over the dry and
+cold ground that covers most of these worlds the annual figure is the smaller of the two. It is
+kept as `ClimateConfig.vegetationRecycling` so the figures are re-measured on every audited seed.
 
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
 0.073% of the surface: a body of unreachable water larger than that is a piece of the sea walled off
@@ -827,7 +887,7 @@ dry. Getting them there took two mechanisms rather than a tuned constant.
   moisture — remove that scaling and every latitude re-moistens alike, at which point deserts stop
   preferring the subtropics at all. Measured: placement falls from 90% to 34%.
 
-**Land gives moisture back, and W3 measured how much of the rain that is.** The share of rain over land whose water last evaporated from land rather than from the sea is the continental precipitation recycling ratio, and van der Ent and others (2010) put Earth's at about 40% globally, 30-45% continent by continent and higher over the Amazon and the Congo. The march has given water back since the belts did, but nothing asked how much of the rain was that water: the answer read zero by construction, because no parcel carried where its moisture had come from. Each parcel now carries a second number that no term in the budget reads, and pooled over seeds 7/42/1234/99 at 512 the ratio reads 32.7% — 27.3, 45.4, 35.1 and 34.7 by seed — against 0.0% exactly with the ground's return switched off, which is the control. The return is an e-folding length of 1,500 km, the middle of van der Ent and Savenije's (2011) 500-2,000 km continental length scales; at 3,000 km the ratio read 20.3%, under Earth's, and the measurement chose between two figures the literature allows. It is scaled by how wet the ground already is, a proxy for the vegetation W4 will bring: dry ground has less to give, which is the feedback that makes an interior either wet or arid rather than uniformly middling.
+**Land gives moisture back, and W3 measured how much of the rain that is.** The share of rain over land whose water last evaporated from land rather than from the sea is the continental precipitation recycling ratio, and van der Ent and others (2010) put Earth's at about 40% globally, 30-45% continent by continent and higher over the Amazon and the Congo. The march has given water back since the belts did, but nothing asked how much of the rain was that water: the answer read zero by construction, because no parcel carried where its moisture had come from. Each parcel now carries a second number that no term in the budget reads, and pooled over seeds 7/42/1234/99 at 512 the ratio reads 32.7% — 27.3, 45.4, 35.1 and 34.7 by seed — against 0.0% exactly with the ground's return switched off, which is the control. The return is an e-folding length of 1,500 km, the middle of van der Ent and Savenije's (2011) 500-2,000 km continental length scales; at 3,000 km the ratio read 20.3%, under Earth's, and the measurement chose between two figures the literature allows. It is scaled by how wet the ground already is, a proxy for the vegetation field, which W4 built and measured against this ramp without displacing it (see the deviation above): dry ground has less to give, which is the feedback that makes an interior either wet or arid rather than uniformly middling.
 
 Verified by `GeographyAuditTest`, by bands since H5b. The old measure asked what share of a world's
 desert *cells* fell between 15 and 45 degrees, which counts desert against desert — so the answer

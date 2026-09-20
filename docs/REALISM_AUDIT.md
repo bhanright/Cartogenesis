@@ -220,7 +220,10 @@ marine-inversion term.
 precipitation × PET) and Whittaker's diagram are alternatives that read potential evaporation,
 which the stage now has; the practical gain is finer steppe/savanna/woodland boundaries and a
 vegetation density field that S3 and H3 can read (vegetation halves erodibility; Istanbulluoglu &
-Bras 2005). Permafrost as a modifier where the annual mean is below −2 °C.
+Bras 2005). Permafrost as a modifier where the annual mean is below −2 °C. *Both clauses are
+corrected by what landed: the practical gain was not finer boundaries — the classification did not
+move — and −2 °C is the sporadic zone's outer limit rather than the line at which frozen ground
+stops a forest. See 4.3.*
 
 ### 4.3 Proposed chunks
 - **W1 Energy balance and sea ice** — 1-D EBM per season with ice-albedo feedback and heat-capacity
@@ -248,8 +251,25 @@ Bras 2005). Permafrost as a modifier where the annual mean is below −2 °C.
   the interior rather than wetting it**, because a parcel made to rain earlier arrives downwind
   with less and this generator's monsoon has no strength to re-supply it. The Smith–Barstad local
   term was not attempted. Visual: large, and not where this line expected it.
-- **W4 Vegetation density and permafrost** — a 0–1 vegetation field from Holdridge, permafrost
-  mask; both saved; H3 and S3 read vegetation for erodibility. Visual: small alone, structural.
+- **W4 Vegetation density and permafrost** — *landed 2026-09-20; see the ledger row for the
+  figures.* A 0–1 density a cell and a permafrost zone a cell, both saved at format 12, built from
+  Budyko's (1974) evaporative fraction at Holdridge's (1967) PET ratio times a growing season ramped
+  off his biotemperature. The tint reads the field instead of a figure per biome, on the processor
+  and on the graphics device, and a steppe-to-woodland boundary's mean step in canopy falls from
+  0.68 to 0.044. **The line above says "permafrost as a modifier where the annual mean is below
+  −2 °C" and that is half a model**: −2 is the *outer* limit of the sporadic zone, where forest
+  still grows on Siberian larch, and the zone that caps a cover is the continuous one below −8. Two
+  zones landed, and only the colder caps. **What the chunk was asked for and did not deliver is the
+  "finer steppe/savanna/woodland boundaries"**: the field sits beside the Koppen classification and
+  no name moved, because a name and a density answer different questions and redrawing the
+  classifier was not measured. **What it measured and turned down**: W3's ground-return proxy,
+  offered Budyko's fraction as the derivation it was standing in for, kept the proxy — the
+  derivation puts continental recycling at 26.5% against Earth's 30–45% and the proxy's 32.7%.
+  Permafrost reads 2.10× Earth's share of land, which is the tundra deviation arriving a second
+  time and is a printed finding rather than a lowered bar. H3 and S3 still have the accessor and
+  the TODO entry and nothing is wired. Visual: small, and smaller than "small alone, structural"
+  expected — the canopy darkening is a twelfth, so what a reader sees is the *edge* softening and
+  not the colour changing.
 
 ## 5. Cryosphere
 
@@ -377,7 +397,7 @@ Effort: S small (a day of work), M (two to three), L (a week or more). Visual: 1
 | W1 Energy balance, sea ice | — | M | 3 | 4 | none |
 | W2 Pressure winds | W1 | M | 4 | 4 | seam |
 | W3 Moisture calibrated | W2 | S | 3 | 3 | none |
-| W4 Vegetation, permafrost | W1 | S | 2 | 2 | none |
+| W4 Vegetation, permafrost | W1 | S | 2 | 2 | declined, 0.039% of a 2048 world |
 | R1 Channel initiation | S1 | M | 3 | 3 | none |
 | R2 Rivers drawn as rivers | — | M | 5 | 2 | raster |
 | R3 Wetlands | W3 | S | 3 | 2 | none |

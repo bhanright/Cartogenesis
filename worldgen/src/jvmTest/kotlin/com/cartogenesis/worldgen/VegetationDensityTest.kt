@@ -114,6 +114,19 @@ class VegetationDensityTest {
         const val PER_SEED_FLOOR = 0.1f
 
         /**
+         * How much of the continuous-permafrost zone Koppen may call forest before the classifier
+         * would have to be taught about the mask.
+         *
+         * A quarter. Below it the disagreement is the ordinary margin between two classifications
+         * of the same ground - Koppen's D group asks about a coldest month and this mask asks
+         * about an annual mean, and no two thresholds on different statistics agree cell for cell.
+         * Above it the biome view would be drawing a forest over ground that cannot root one often
+         * enough for a reader to notice, and that is a redesign of `classify` rather than a
+         * finding.
+         */
+        const val MOST_OF_A_ZONE = 0.25f
+
+        /**
          * The four worlds, generated once for every clause here.
          *
          * In the companion and not in the class, because JUnit builds a fresh instance for each
@@ -290,6 +303,60 @@ class VegetationDensityTest {
             share >= EARTH_PERMAFROST_SHARE / EARTH_FACTOR,
             "pooled permafrost share $share is less than a $EARTH_FACTOR-th of Earth's " +
                 "$EARTH_PERMAFROST_SHARE"
+        )
+    }
+
+    @Test
+    fun `where the permafrost mask and Koppen disagree, and by how much`() {
+        // The one place the two classifications could be made to read each other, measured rather
+        // than wired. Continuous permafrost thaws a few tens of centimetres a summer and a tree
+        // cannot root in that, so a cell the mask calls continuous and Koppen calls closed forest
+        // is a disagreement a reader could see: the biome view would draw taiga where no taiga can
+        // stand. The chunk was asked to report the size of it and not to redraw the classifier, so
+        // this asserts only that the disagreement is small enough for that to have been the right
+        // call, and prints the figure either way.
+        //
+        // The density already answers the disagreement for anything that reads *it*: the cap holds
+        // those cells to two fifths whatever name they carry. What no cap can do is change the
+        // name, and changing the name is `classify`'s business.
+        val forests = setOf(
+            Biome.TAIGA, Biome.TEMPERATE_FOREST, Biome.TEMPERATE_RAINFOREST,
+            Biome.TROPICAL_SEASONAL_FOREST, Biome.TROPICAL_RAINFOREST, Biome.MONSOON_FOREST
+        )
+        var continuous = 0L
+        var forestOverContinuous = 0L
+        SEEDS.forEach { seed ->
+            val world = WORLDS.getValue(seed)
+            var seedContinuous = 0L
+            var seedForest = 0L
+            for (cell in world.sea.isLand.indices) {
+                if (!world.sea.isLand[cell]) continue
+                if (VegetationDensity.Permafrost.ofOrdinal(world.climate.permafrost[cell].toInt()) !=
+                    VegetationDensity.Permafrost.CONTINUOUS
+                ) {
+                    continue
+                }
+                seedContinuous++
+                if (world.climate.biome[cell] in forests) seedForest++
+            }
+            continuous += seedContinuous
+            forestOverContinuous += seedForest
+            println(
+                "PERMAFROST seed %d: %d cells of continuous permafrost, %d of them (%.1f%%) classed forest"
+                    .format(seed, seedContinuous, seedForest, seedForest * 100f / seedContinuous)
+            )
+        }
+        val disagreement = forestOverContinuous.toFloat() / continuous
+        println(
+            ("PERMAFROST pooled: %.1f%% of continuous-permafrost land is classed as forest by " +
+                "Koppen, which the density caps at %.1f and the classifier does not see")
+                .format(disagreement * 100, VegetationDensity.PERMAFROST_CANOPY_CEILING)
+        )
+        assertTrue(
+            disagreement < MOST_OF_A_ZONE,
+            ("Koppen calls %.1f%% of the continuous-permafrost land forest, which is too much of " +
+                "it to leave as a finding: the classifier would have to read the mask")
+                .format(disagreement * 100)
         )
     }
 

@@ -1963,13 +1963,12 @@ object ClimateStage {
         // Orographic lift is the climb the air made getting here.
         val rise = (elevationHere - upwindElevation).coerceAtLeast(0f)
 
-        // The depletion length is the flat-land one stretched by how much water the air over this
-        // ground can hold; the climb shortens it and the regional wind's convergence adds to what
-        // has to come out. The three meet as rates rather than as lengths because only the first
-        // of them is a property of the air alone.
-        val depletionLengthKm =
-            MoistureBudget.depletionLengthKm(climateConfig.depletionLengthKm, landTemperatureC)
-        val flatRate = shareOfLengthPerCell(cellWidthKm, depletionLengthKm)
+        // The climb shortens the depletion length and the regional wind's convergence adds to
+        // what has to come out; the two meet the flat-land rate as rates rather than as lengths,
+        // because neither of them is a property of the air alone. What the air itself holds is the
+        // cold cap below, which is where this march keeps Clausius-Clapeyron — see
+        // [MoistureBudget]'s note on why there is no second capacity term here.
+        val flatRate = shareOfLengthPerCell(cellWidthKm, climateConfig.depletionLengthKm)
 
         // The marine inversion: under a stratus lid over cold water the parcel holds its rain in
         // until the ground stands above the lid, which is why the Atacama is a coastal strip and
@@ -1996,7 +1995,9 @@ object ClimateStage {
         val returned = returnPerCell * warmth * bandFactor * groundWetness * (1f - moisture)
         moisture += returned
 
-        // Cold air simply holds less water.
+        // Cold air simply holds less water. This ramp is the whole of Clausius-Clapeyron in this
+        // march — see [MoistureBudget], which records what happened when W3 put a second capacity
+        // term on the rain rate beside it.
         val coldCap = ((landTemperatureC - COLD_CAP_ZERO_C) / COLD_CAP_SPAN_C)
             .coerceIn(MIN_COLD_CAP, 1f)
         moisture = moisture.coerceAtMost(coldCap)

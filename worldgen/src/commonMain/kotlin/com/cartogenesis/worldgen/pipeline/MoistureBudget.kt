@@ -41,42 +41,32 @@ object MoistureBudget {
     const val FLAT_DEPLETION_LENGTH_KM = 1_000f
 
     /**
-     * Fractional change in an air column's saturation capacity per degree Celsius, and the
-     * temperature [FLAT_DEPLETION_LENGTH_KM] is quoted at.
+     * **There is no temperature term on the depletion length, and the absence is a measurement.**
      *
-     * Seven per cent a degree is the Clausius-Clapeyron relation near surface temperatures, the
-     * same figure `ClimateConfig.currentMoisture` carries for the sea. A parcel over warmer ground
-     * can hold proportionally more water before it condenses, so it travels proportionally further
-     * before it has emptied: warm land carries moisture across itself where cold land drops it at
-     * the first rise.
+     * The chunk set out to add one: a warm surface holds more water before it condenses, so a
+     * parcel over warm ground should travel further before it has emptied, at Clausius-Clapeyron's
+     * seven per cent a degree. Written as a factor on the length and referenced to the planet's
+     * mean surface temperature of 15 C, it gave the tropics a length of 2,310 km — the
+     * exponential's 2.31 at 27 C — which halved their flat-land rain rate, and
+     * `GeographyAuditTest`'s desert-by-latitude guard failed on it: the 0-15 degree band went to
+     * x1.42 of its own land on seed 7 and x1.76 on 1234 against Earth's x0.27, tropical interiors
+     * turning to desert for no reason but the reference temperature. Moving the reference to the
+     * warm end cleared three seeds of the four and is not done here, because there is no figure in
+     * the literature that says the continental length scales were measured over 30 C ground; a
+     * reference chosen to clear a guard is a tuned constant wearing a derivation.
      *
-     * **The reference is the warm end and not the middle, and that is a measurement and not a
-     * preference.** Thirty degrees is the warmest land surface the march ever sees, the top of
-     * `ClimateStage`'s own evaporative-warmth ramp, so the figure the literature quotes is the
-     * figure the tropics get and the relation only ever *shortens*. Referenced to the planetary
-     * mean of fifteen instead, the tropics took a length of 2,310 km — the exponential's 2.31 at
-     * 27 C — which halved their flat-land rain rate, and `GeographyAuditTest`'s desert-by-latitude
-     * guard failed on it: the 0-15 degree band went to x1.42 of its own land on seed 7 and x1.76
-     * on 1234 against Earth's x0.27, tropical interiors turning to desert for no reason but the
-     * reference temperature. The cold end is clamped at [MIN_CAPACITY_FACTOR] for the matching
-     * reason: `ClimateStage`'s cold cap is already Clausius-Clapeyron applied to the parcel's
-     * *stock*, and an unclamped exponential on the *rate* beside it would charge the same physics
-     * twice, thirty-four times over across the range the two of them span.
+     * What the failure actually showed is that the term was already in the march twice.
+     * `ClimateStage`'s cold cap *is* Clausius-Clapeyron, applied to the parcel's stock: it holds
+     * moisture to a ramp from 0.15 at -25 C to all of it at +20 C, a factor of 6.7 across the
+     * range, against the relation's own factor of 34 for saturation vapour pressure between -20 C
+     * and +30 C. The march carries moisture as a fraction of saturation, so a capacity factor on
+     * the *rate* beside a capacity ramp on the *stock* charges one piece of physics to the parcel
+     * twice over, and the tropics paid it. The modulation W3 was asked for therefore stays where
+     * the generator already had it, named at the cold cap and pointed at from here, and the
+     * depletion length over land is [FLAT_DEPLETION_LENGTH_KM] shortened by the climb and nothing
+     * else. Deriving the cold cap from Clausius-Clapeyron instead of from a straight ramp is a
+     * real chunk of work and is not this one's. See docs/DESIGN_LEDGER.md, W3.
      */
-    const val CAPACITY_PER_DEGREE_C = 0.07f
-    const val DEPLETION_REFERENCE_C = 30f
-
-    /**
-     * The least the temperature term may shorten [FLAT_DEPLETION_LENGTH_KM] by, and the most it
-     * may stretch it.
-     *
-     * Half, and not at all. The exponential reaches a half at 20 C, so every land surface cooler
-     * than a warm-temperate summer empties over five hundred kilometres rather than a thousand,
-     * and nothing colder than that empties faster still, because the cold cap has the rest of the
-     * relation.
-     */
-    const val MIN_CAPACITY_FACTOR = 0.5f
-    const val MAX_CAPACITY_FACTOR = 1f
 
     /**
      * The fetch over which an air mass crossing open water re-saturates, in kilometres.
@@ -182,20 +172,6 @@ object MoistureBudget {
     /** Where the subtropical stratus decks sit, in degrees from the thermal equator. */
     private const val INVERSION_CENTRE_DEGREES = 25f
     private const val INVERSION_WIDTH_DEGREES = 15f
-
-    /**
-     * The depletion length over land at one cell, in kilometres: [FLAT_DEPLETION_LENGTH_KM]
-     * stretched by the air's own saturation capacity at [landTemperatureC].
-     *
-     * Orographic lift is the other modulation and is not here, because it is a rain *rate* added
-     * to this one's reciprocal rather than a factor on the length — see
-     * `ClimateStage.marchLandStep`, where the two meet.
-     */
-    fun depletionLengthKm(flatLengthKm: Float, landTemperatureC: Float): Float {
-        val capacity = exp((CAPACITY_PER_DEGREE_C * (landTemperatureC - DEPLETION_REFERENCE_C)))
-            .coerceIn(MIN_CAPACITY_FACTOR, MAX_CAPACITY_FACTOR)
-        return flatLengthKm * capacity
-    }
 
     /**
      * How wet the ground under a parcel is, 0..1, from the rain the previous lap of the march left

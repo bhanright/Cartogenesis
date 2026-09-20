@@ -132,6 +132,17 @@ class IncrementalReuseTest {
             "seasons" to base.copy(climate = base.climate.copy(seasons = false)),
             // The slant of the wind belts is the same section again, and the same cross-stage
             // question: it changes the wind, and the ocean stage is driven by the wind.
+            // W4: the cover on the ground and the frozen ground under it are the climate stage's
+            // own fields, so its section is not the only one that stage reads.
+            "vegetation" to base.copy(
+                vegetation = base.vegetation.copy(enabled = false)
+            ),
+            "permafrost" to base.copy(
+                vegetation = base.vegetation.copy(permafrost = false)
+            ),
+            "vegetationRecycling" to base.copy(
+                climate = base.climate.copy(vegetationRecycling = false)
+            ),
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
             ),
@@ -314,7 +325,9 @@ class IncrementalReuseTest {
                 windMeridional = field(world.climate.windMeridional),
                 summerSeaIce = world.climate.summerSeaIce.copyOf(),
                 winterSeaIce = world.climate.winterSeaIce.copyOf(),
-                biome = world.climate.biome.copyOf()
+                biome = world.climate.biome.copyOf(),
+                vegetationDensity = field(world.climate.vegetationDensity),
+                permafrost = world.climate.permafrost.copyOf()
             ),
             rivers = RiverResult(
                 filledElevation = field(world.rivers.filledElevation),
@@ -393,6 +406,8 @@ class IncrementalReuseTest {
             "climate=${sum(world.climate.temperature.data)},${sum(world.climate.precipitation.data)}",
             // The seasonal fields separately: they are what a seasonal setting moves, and a
             // checksum of the annual mean alone would be blind to a season going stale.
+            "vegetation=${sum(world.climate.vegetationDensity.data)}," +
+                "${world.climate.permafrost.sumOf { it.toInt() }}",
             "seasons=${sum(world.climate.summerTemperature.data)}," +
                 "${sum(world.climate.winterTemperature.data)}," +
                 "${sum(world.climate.summerPrecipitation.data)}," +

@@ -8,10 +8,10 @@ table disagree, so there is nothing to keep in step by hand.
 
 | Release | What it brings |
 | --- | --- |
-| 3.0.0 (current) | The realism audit: the plates, the seas, the air and the water measured against Earth and corrected where they were wrong. |
-| 3.1 | Monsoon coasts, rain that reaches the interiors, and vegetation that follows the rain. |
+| 3.0.0 | The realism audit: the plates, the seas, the air and the water measured against Earth and corrected where they were wrong. |
+| 3.1.0 (current) | Monsoon coasts, rain that reaches the interiors, vegetation that follows the rain, and ice sheets with the shape and weight of ice. |
 | 3.2 | Erosion that reads the climate, and river channels that start where they should. |
-| 3.3 | Ice sheets as bodies of ice, and waves and drift along the coasts. |
+| 3.3 | Waves and drift along the coasts. |
 | 3.x | A topographic map style with contour lines, hydraulic erosion on the graphics card, and a choice of planet size. |
 | 4.0 | The world as a sphere: physics in metres, a globe to turn, and a choice of map projections for the whole-world map and for exports. |
 | 4.x | Graphics acceleration on a native WebGPU runtime, so the desktop runs the same kernels as the browser on Vulkan, Direct3D 12 or Metal. |

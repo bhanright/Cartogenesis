@@ -727,12 +727,30 @@ object ClimateStage {
         val summerSeaIce = seaIceMask(config, sea, ocean, warmHalfSeaSurface)
         val winterSeaIce = seaIceMask(config, sea, ocean, coldHalfSeaSurface)
 
+        // A pressure field per season, and a third for the annual wind. The annual one is built
+        // from the annual temperature rather than averaged from the other two, which is the same
+        // field: the anomaly is linear in temperature and the wind is linear in the anomaly, so
+        // the wind from the mean pressure and the mean of the two winds are one answer, and this
+        // is the cheaper way to get it. Null when the pressure term is off, which is what makes
+        // that setting a control rather than a near-miss.
+        val pressureWinds = climateConfig.pressureWinds
+        val annualPressureHpa =
+            if (pressureWinds) PressureWind.pressureAnomalyHpa(config, temperature) else null
+        val summerPressureHpa = if (pressureWinds) {
+            PressureWind.pressureAnomalyHpa(config, warmHalfTemperature)
+        } else null
+        val winterPressureHpa = if (pressureWinds) {
+            PressureWind.pressureAnomalyHpa(config, coldHalfTemperature)
+        } else null
+
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
         // which live only as long as the march does.
         val slantRowsPerCell = climateConfig.meridionalWind
-        val wind = buildWind(
-            cellsAcross, cellsDown, tiltDegrees = 0f, warm = true, slantRowsPerCell
+        val wind = withPressureDeparture(
+            config, sea,
+            buildWind(cellsAcross, cellsDown, tiltDegrees = 0f, warm = true, slantRowsPerCell),
+            annualPressureHpa
         )
 
         // Raw march output, in the model's own units — not yet mm, not yet clamped. Kept apart
@@ -740,12 +758,20 @@ object ClimateStage {
         // happens, and nothing else should need to know what the march's native units are.
         val summerRaw = buildPrecipitation(
             config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce,
-            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
+            withPressureDeparture(
+                config, sea,
+                buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
+                summerPressureHpa
+            ),
             ocean, bands(cellsDown, climateConfig, warm = true)
         )
         val winterRaw = buildPrecipitation(
             config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce,
-            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
+            withPressureDeparture(
+                config, sea,
+                buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
+                winterPressureHpa
+            ),
             ocean, bands(cellsDown, climateConfig, warm = false)
         )
 
@@ -1178,8 +1204,47 @@ object ClimateStage {
         return field
     }
 
-    /** The prevailing wind as a vector: a zonal direction of ±1, and a slant in rows per cell. */
-    private class WindField(val zonal: IntArray, val meridional: FloatArray)
+    /**
+     * The prevailing wind as a vector: a zonal direction of ±1 and a slant in rows per cell, both
+     * per cell, plus the belt's own zonal direction per row.
+     *
+     * The belt direction is kept beside the cell-by-cell one because the two answer different
+     * questions. [zonal] is which way the air over *this cell* is moving, which is what the march
+     * follows and what the wind view draws. [beltZonal] is which way the *circulation cell* that
+     * row belongs to moves, which is what partitions the map into the runs the march sweeps — and
+     * that partition has to be a property of the row, not of the cell, or the wavefront would have
+     * no direction to sweep in.
+     */
+    private class WindField(
+        val zonal: IntArray,
+        val meridional: FloatArray,
+        val beltZonal: IntArray
+    )
+
+    /**
+     * The most a wind may slant, in rows per cell of zonal travel.
+     *
+     * A cap on the **length of the march's step**, and that is the only thing it can honestly be.
+     * The march advances one cell of *zonal* travel per step and charges that step one cell's
+     * worth of rain and one cell's worth of depletion. A slant of `s` makes the step
+     * `sqrt(cellWidth^2 + (s cellHeight)^2)` long on the ground, so a slant that carries the air
+     * much further than a cell has the march pricing a journey of many cells at the rate of one.
+     * Capping `s` at the cell's own aspect ratio holds the step at no more than `sqrt(2)` cells
+     * however the grid is shaped — 2.0 rows per cell on a square 512 by 512 grid whose cells are
+     * 23.4 km across and 11.7 km down, 1.0 on the 2:1 grid whose cells are square.
+     *
+     * Where the belt's zonal wind and the pressure field's have cancelled the ratio runs away, and
+     * this is what catches it. Two earlier forms are worth recording because each was wrong in a
+     * measurable direction. A flat cap of one row per cell bound on 71% of the cells between the
+     * equator and 10 degrees north — where the Coriolis force vanishes and the pressure wind runs
+     * straight down its own gradient — and cost those bands 8 to 9% of their rain by understating
+     * how far the air had come. Lifting the cap away entirely cost them 18% instead, by letting a
+     * single step reach hundreds of rows for one cell's worth of rain. See docs/DESIGN_LEDGER.md,
+     * W2.
+     */
+    private fun maxSlantRowsPerCell(config: WorldGenConfig): Float =
+        (config.scale.cellWidthKm(config.width) / config.scale.cellHeightKm(config.height))
+            .toFloat()
 
     /**
      * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
@@ -1208,6 +1273,7 @@ object ClimateStage {
     ): WindField {
         val zonal = IntArray(cellsAcross * cellsDown)
         val meridional = FloatArray(cellsAcross * cellsDown)
+        val beltZonal = IntArray(cellsDown)
         for (row in 0 until cellsDown) {
             val latitude = latitudeOf(row, cellsDown)
             // Which way "poleward" points for this row, as a step in map coordinates: rows grow
@@ -1233,12 +1299,140 @@ object ClimateStage {
                 // The polar cell's, back down toward it.
                 else -> -outward
             } * slantRowsPerCell
+            beltZonal[row] = zonalDirection
             for (column in 0 until cellsAcross) {
                 zonal[row * cellsAcross + column] = zonalDirection
                 meridional[row * cellsAcross + column] = slant
             }
         }
-        return WindField(zonal, meridional)
+        return WindField(zonal, meridional, beltZonal)
+    }
+
+    /**
+     * The belts of [buildWind] with the pressure field's regional departure added to them.
+     *
+     * The belts stay the zonal mean and this is what the map's own land and sea do to it, so the
+     * sum is a wind and not a second opinion. Both halves are put into metres a second to be
+     * added — the belts through [PressureWind.BELT_SPEED_MPS], which is the one number a belt
+     * never needed until something had to be added to it — and the total is converted straight
+     * back into the pair the march reads, a zonal direction and a slant in rows.
+     *
+     * Passing a null [pressureHpa] returns [belts] untouched, which is how
+     * `ClimateConfig.pressureWinds = false` reproduces the old wind exactly rather than
+     * approximately: the arithmetic below is not merely skipped in its effect, it is not run.
+     */
+    private fun withPressureDeparture(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        belts: WindField,
+        pressureHpa: FloatField?
+    ): WindField {
+        if (pressureHpa == null) return belts
+        return marchWindOf(config, totalWindMps(config, sea, belts, pressureHpa), belts.beltZonal)
+    }
+
+    /**
+     * The belts and the pressure departure added together, in metres a second: the wind itself,
+     * before it is squeezed back into the direction-and-slant pair the march reads.
+     *
+     * Separate from [marchWindOf] because a guard that asks which way the wind blows onto a coast
+     * wants a vector with a speed in it, and the pair the march reads has thrown the speed away.
+     * Both come from this one function, so the guard and the march cannot be measuring different
+     * winds.
+     */
+    private fun totalWindMps(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        belts: WindField,
+        pressureHpa: FloatField
+    ): PressureWind.Vectors {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val departure = PressureWind.surfaceWind(config, sea, pressureHpa)
+        val cellHeightOverWidth =
+            (config.scale.cellHeightKm(cellsDown) / config.scale.cellWidthKm(cellsAcross)).toFloat()
+        val eastward = FloatArray(cellsAcross * cellsDown)
+        val southward = FloatArray(cellsAcross * cellsDown)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (cell in startRow * cellsAcross until endRow * cellsAcross) {
+                eastward[cell] = belts.zonal[cell] * PressureWind.BELT_SPEED_MPS +
+                    departure.eastwardMps[cell]
+                southward[cell] = belts.meridional[cell] * PressureWind.BELT_SPEED_MPS *
+                    cellHeightOverWidth + departure.southwardMps[cell]
+            }
+        }
+        return PressureWind.Vectors(eastward, southward)
+    }
+
+    /** A wind in metres a second as the march reads it: a zonal direction and a slant in rows. */
+    private fun marchWindOf(
+        config: WorldGenConfig,
+        wind: PressureWind.Vectors,
+        beltZonal: IntArray
+    ): WindField {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+
+        // A slant is rows per cell of zonal travel and a wind is metres a second in each
+        // direction, and the two are the same ratio only on a grid whose cells are square.
+        val cellWidthOverHeight =
+            (config.scale.cellWidthKm(cellsAcross) / config.scale.cellHeightKm(cellsDown)).toFloat()
+
+        val zonal = IntArray(cellsAcross * cellsDown)
+        val meridional = FloatArray(cellsAcross * cellsDown)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (cell in startRow * cellsAcross until endRow * cellsAcross) {
+                val eastward = wind.eastwardMps[cell]
+                val southward = wind.southwardMps[cell]
+                zonal[cell] = if (eastward >= 0f) 1 else -1
+                // Where the belt's zonal wind and the pressure's have all but cancelled, the
+                // ratio below runs away; the clamp is what keeps it inside the march's
+                // one-neighbour blend.
+                val eastwardSpeed = abs(eastward)
+                val maxSlant = maxSlantRowsPerCell(config)
+                meridional[cell] = if (eastwardSpeed == 0f) {
+                    if (southward >= 0f) maxSlant else -maxSlant
+                } else {
+                    (southward / eastwardSpeed * cellWidthOverHeight)
+                        .coerceIn(-maxSlant, maxSlant)
+                }
+            }
+        }
+        return WindField(zonal, meridional, beltZonal)
+    }
+
+    /**
+     * The surface wind of one season over a finished world, in metres a second, eastward and
+     * southward - the field `PressureWindTest` measures against its coastlines.
+     *
+     * Rebuilt rather than stored: only the annual wind is saved, and a guard that read the annual
+     * wind would be asking a question about the year when the question is about July. Everything
+     * it rebuilds from is either in the world already (the annual temperature) or is a pure
+     * function of the configuration and the land mask, so the field it returns is the one the
+     * season's march actually followed.
+     */
+    internal fun seasonalSurfaceWindMps(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        annualTemperature: FloatField,
+        season: Season
+    ): PressureWind.Vectors {
+        val climateConfig = config.climate
+        val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
+        val warm = season == Season.WARM_HALF || season == Season.SUMMER
+        val belts = buildWind(
+            config.width, config.height, tiltDegrees, warm, climateConfig.meridionalWind
+        )
+        val pressureHpa = if (climateConfig.pressureWinds) {
+            PressureWind.pressureAnomalyHpa(
+                config, halfYearTemperature(config, sea, annualTemperature, season)
+            )
+        } else {
+            // A flat field drives no wind at all, so this is the belts alone in metres a second,
+            // which is what the control has to be able to measure.
+            FloatField(config.width, config.height)
+        }
+        return totalWindMps(config, sea, belts, pressureHpa)
     }
 
     /** The circulation belt each row sits in for a season, precomputed per row. */
@@ -1342,25 +1536,64 @@ object ClimateStage {
         val cellsDown = config.height
         val precipitation = FloatField(cellsAcross, cellsDown)
 
-        // Where each run of same-direction rows begins. Built by scanning, so it is the same list
-        // on every platform and in every thread.
+        // Where each run of same-direction rows begins. Built by scanning the *belt* direction, so
+        // it is the same list on every platform and in every thread, and so it does not move when
+        // the pressure field reverses the wind over one continent: a run is a circulation cell,
+        // and a circulation cell is a property of the latitude.
         val runStartRows = ArrayList<Int>()
         for (row in 0 until cellsDown) {
-            if (row == 0 ||
-                wind.zonal[row * cellsAcross] != wind.zonal[(row - 1) * cellsAcross]
-            ) {
-                runStartRows.add(row)
-            }
+            if (row == 0 || wind.beltZonal[row] != wind.beltZonal[row - 1]) runStartRows.add(row)
         }
         runStartRows.add(cellsDown)
 
+        // The second sweep, and why there is one. A wavefront has to sweep one way, and until the
+        // pressure field existed one way was all a run ever needed: every cell of a belt blew the
+        // same way. A thermal low reverses the zonal wind over part of a belt — that reversal *is*
+        // the monsoon — and the air arriving at a reversed cell comes from the column the sweep
+        // has not reached yet. So each run is marched twice, once each way, and every cell records
+        // the march whose sweep matches the direction its own wind actually blows. Two marches,
+        // each of them the same lock-step wavefront as before, rather than one march with an
+        // order-dependent scan: the arrangement the whole pipeline's determinism rests on is
+        // untouched.
+        //
+        // A run with no reversed cell in it never runs the second sweep at all, which is why
+        // switching the pressure term off costs nothing and gives back the old field exactly.
+        val reversed = FloatField(cellsAcross, cellsDown)
+        val runNeedsSecondSweep = BooleanArray(runStartRows.size - 1)
+        for (run in runNeedsSecondSweep.indices) {
+            val beltDirection = wind.beltZonal[runStartRows[run]]
+            var anyReversed = false
+            for (cell in runStartRows[run] * cellsAcross until runStartRows[run + 1] * cellsAcross) {
+                if (wind.zonal[cell] != beltDirection) {
+                    anyReversed = true
+                    break
+                }
+            }
+            runNeedsSecondSweep[run] = anyReversed
+        }
+
         parallelChunks(0, runStartRows.size - 1) { firstRun, lastRun ->
             for (run in firstRun until lastRun) {
+                val firstRow = runStartRows[run]
+                val lastRow = runStartRows[run + 1]
+                val beltDirection = wind.beltZonal[firstRow]
                 marchRun(
                     config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
-                    precipitation,
-                    firstRow = runStartRows[run], lastRow = runStartRows[run + 1]
+                    precipitation, sweepDirection = beltDirection,
+                    firstRow = firstRow, lastRow = lastRow
                 )
+                if (runNeedsSecondSweep[run]) {
+                    marchRun(
+                        config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
+                        reversed, sweepDirection = -beltDirection,
+                        firstRow = firstRow, lastRow = lastRow
+                    )
+                    for (cell in firstRow * cellsAcross until lastRow * cellsAcross) {
+                        if (wind.zonal[cell] != beltDirection) {
+                            precipitation.data[cell] = reversed.data[cell]
+                        }
+                    }
+                }
             }
         }
 
@@ -1386,13 +1619,13 @@ object ClimateStage {
         ocean: OceanResult,
         bandOfRow: FloatArray,
         precipitation: FloatField,
+        sweepDirection: Int,
         firstRow: Int,
         lastRow: Int
     ) {
         val cellsAcross = config.width
         val climateConfig = config.climate
         val rowCount = lastRow - firstRow
-        val zonalDirection = wind.zonal[firstRow * cellsAcross]
 
         // One air mass per row, as before — but now they trade moisture sideways as they go.
         val moisture = FloatArray(rowCount) { INITIAL_MOISTURE }
@@ -1404,8 +1637,8 @@ object ClimateStage {
             val recording = lap == MARCH_LAPS - 1
             for (stepAlongWind in 0 until cellsAcross) {
                 val column =
-                    if (zonalDirection > 0) stepAlongWind else cellsAcross - 1 - stepAlongWind
-                var upwindColumn = column - zonalDirection
+                    if (sweepDirection > 0) stepAlongWind else cellsAcross - 1 - stepAlongWind
+                var upwindColumn = column - sweepDirection
                 upwindColumn = ((upwindColumn % cellsAcross) + cellsAcross) % cellsAcross
                 moisture.copyInto(previousColumn)
 
@@ -1423,23 +1656,29 @@ object ClimateStage {
                     val bandFactor = bandOfRow[row]
 
                     // The upwind point, one cell back along the wind vector. The zonal part is a
-                    // whole cell; the meridional part is a fraction of a row, so the sample is a
-                    // blend of this row and the one the air drifted in from. A neighbour outside
-                    // this run is not sampled: that edge is a boundary between circulation cells,
-                    // and air does not cross it at the surface.
-                    val slantRowsPerCell = wind.meridional[row * cellsAcross]
-                    val neighbourWithinRun =
-                        if (slantRowsPerCell > 0f) rowWithinRun - 1 else rowWithinRun + 1
-                    val blendFromNeighbour =
-                        if (slantRowsPerCell != 0f && neighbourWithinRun in 0 until rowCount) {
-                            abs(slantRowsPerCell)
-                        } else {
-                            0f
-                        }
-                    if (blendFromNeighbour != 0f) {
-                        moisture[rowWithinRun] = previousColumn[rowWithinRun] +
-                            (previousColumn[neighbourWithinRun] - previousColumn[rowWithinRun]) *
-                            blendFromNeighbour
+                    // whole cell; the meridional part is however many rows the slant carries in
+                    // that cell of travel, which need not be less than one and near the equator
+                    // usually is not: there the Coriolis force vanishes, the pressure wind runs
+                    // straight down its own gradient, and a cell where the zonal winds have
+                    // nearly cancelled has air arriving from almost due north or south.
+                    //
+                    // So the departure row is a real number and the sample is a blend of the two
+                    // rows that bracket it, rather than of this row and the one next to it. For a
+                    // slant inside one row the two are the same arithmetic in the same order; past
+                    // it, the old form silently understated how far the air had come, which is a
+                    // moisture loss concentrated exactly where the slant saturated.
+                    //
+                    // The departure is held inside this run: that edge is a boundary between
+                    // circulation cells, and air does not cross it at the surface.
+                    val slantRowsPerCell = wind.meridional[cell]
+                    if (slantRowsPerCell != 0f) {
+                        val departureRow =
+                            (rowWithinRun - slantRowsPerCell).coerceIn(0f, (rowCount - 1).toFloat())
+                        val rowBefore = departureRow.toInt()
+                        val rowAfter = (rowBefore + 1).coerceAtMost(rowCount - 1)
+                        val shareOfAfter = departureRow - rowBefore
+                        moisture[rowWithinRun] = previousColumn[rowBefore] +
+                            (previousColumn[rowAfter] - previousColumn[rowBefore]) * shareOfAfter
                     }
 
                     if (!sea.isLand[cell]) {
@@ -1465,14 +1704,21 @@ object ClimateStage {
                     // Orographic lift is the climb the air made getting here, so it is measured
                     // from the same blended upwind point rather than from due upwind along the row
                     // — otherwise a range a slanting wind climbs obliquely would read as flat.
-                    val upwindOwnRow =
-                        sea.relativeElevation.data[row * cellsAcross + upwindColumn]
-                    val upwindElevation = if (blendFromNeighbour != 0f) {
-                        upwindOwnRow + (sea.relativeElevation.data[
-                            (firstRow + neighbourWithinRun) * cellsAcross + upwindColumn
-                        ] - upwindOwnRow) * blendFromNeighbour
+                    val slant = wind.meridional[cell]
+                    val upwindElevation = if (slant != 0f) {
+                        val departureRow =
+                            (rowWithinRun - slant).coerceIn(0f, (rowCount - 1).toFloat())
+                        val rowBefore = departureRow.toInt()
+                        val rowAfter = (rowBefore + 1).coerceAtMost(rowCount - 1)
+                        val shareOfAfter = departureRow - rowBefore
+                        val before = sea.relativeElevation.data[
+                            (firstRow + rowBefore) * cellsAcross + upwindColumn
+                        ]
+                        before + (sea.relativeElevation.data[
+                            (firstRow + rowAfter) * cellsAcross + upwindColumn
+                        ] - before) * shareOfAfter
                     } else {
-                        upwindOwnRow
+                        sea.relativeElevation.data[row * cellsAcross + upwindColumn]
                     }
                     val marched = marchLandStep(
                         climateConfig, moisture[rowWithinRun],

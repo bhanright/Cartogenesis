@@ -772,7 +772,9 @@ shaped, or a second erosion pass after the climate.
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 
-**The monsoon lands on the wrong coast.** The wind slants across the latitude lines — see "Which way the wind blows" below — and the trades do reverse over the year in the deep tropics. But the thermal equator migrates only `seasonalTilt` degrees, ten, which is the zonal-mean figure rather than the twenty-five or thirty a heated continent manages, so the summer ITCZ sits at ten degrees and most tropical land is poleward of it. The onshore summer flow therefore arrives on coasts whose sea lies *poleward*, not on the equatorward-facing coast the Indian monsoon belongs to. [A4 Absolute rainfall](DESIGN_LEDGER.md) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds. Letting the thermal equator run further over land than over sea, which would put the monsoon on the correct coast, is not yet planned.
+**The monsoon reaches the right coast, but not yet with Earth's force.** The belts are the zonal mean of the wind, and a zonal mean has no monsoon in it: averaging every longitude at a latitude together is exactly what throws the monsoon away. [W2 Pressure-driven surface winds](DESIGN_LEDGER.md) added the departure — a surface pressure anomaly from each season's temperature, and the wind that pressure drives — so a summer continent is a thermal low that draws marine air onto its equatorward and eastern coasts and a winter continent is a high that blows dry air back off them. Measured on the equatorward and eastern coasts of the two standard seeds that carry a subtropical continent holding more than a twentieth of their land, pooled over 4,566 coast cells: the warm half blows onshore at +0.38 m/s and the cold half offshore at -0.36, where with the pressure term off the same coasts take +0.72 in summer and +0.40 in winter — onshore in both halves, which is the failure this note used to record. `PressureWindTest` asserts the pair and shows the control failing. What is *not* fixed is the strength: Earth's summer monsoon flow is metres a second and this is tenths, because the belts still carry the zonal mean at full strength underneath and the thermal equator still migrates only `seasonalTilt` degrees, ten, rather than the twenty-five or thirty a heated continent manages. Deepening the migration over land is still not planned. [A4 Absolute rainfall](DESIGN_LEDGER.md) closed the other half of this note — rainfall was normalized and clamped at 1, and tropical coasts sat against that clamp in the warm season (measured at 0.94-1.00 across five seeds), so the wet half of a monsoon year had no room left to get wetter. `precipitationMm` has no such clamp, and re-measured on A3's own seed (26) with the plan's original claim — summer beating winter 3x over a contiguous region of at least 2% of land — the region now covers 4.07% of land, up from 2.93% under the clamp: the claim holds.
+
+**The sea-ice edge is still close to a line of latitude.** W1 recorded that the pack's edge runs dead straight across an ocean, because the energy balance is a band model with no longitude in it and the only thing that could bend the edge — the current anomaly under it — was a fifth of Earth's. W2 parked the finding on the hope that a regional wind would bend it, and it does not. Measured on the four standard seeds at 512, the cold-season edge's latitude varies across the basin by 17.1, 3.8, 14.8 and 22.7 degrees with the pressure wind and by 17.2, 3.9, 15.2 and 22.7 without it: the wind moved it by four tenths of a degree at most. That is not because the currents held still — the new wind stress moved the current anomaly by 0.30 to 0.66 C on average over the whole sea — but because the ice edge is decided by the sea surface temperature, and the sea surface temperature is the band model's, with the anomaly a small correction on top of it. Earth's Arctic winter edge runs from about 44 N in the Sea of Okhotsk to about 75 N off Norway, 31 degrees of spread (Fetterer and others, *Sea Ice Index*, NSIDC), so the seeds sit between an eighth and three quarters of Earth's. Bending it further is a question about the ocean's heat transport, not about the wind.
 
 **The sea never drowns a glacial trough.** A fjord is a trough the sea has flooded, and flooding one means re-cutting the sea-level percentile, which moves every other coastline on the map. `GlaciationStage` therefore grades its marine troughs down to the waterline and carves the over-deepened basin on the sea floor beyond the mouth, leaving the shelf as a sill — fjord bathymetry without a fjord's coastline. The high-latitude coasts gain depth and islands, not the long narrow inlets of Norway.
 
@@ -998,6 +1000,46 @@ spiral in toward the thermal equator, the westerlies carry poleward toward the p
 polar easterlies run back down. `ClimateConfig.meridionalWind` is how far that leg carries the air
 across the latitude lines per cell of zonal travel — 0.3 rows, so the air crosses a row every three
 or four cells.
+
+But the belts are only the *zonal mean* of the wind, and since
+[W2](DESIGN_LEDGER.md) they are not the whole of it. The regional departure comes from surface
+pressure, and surface pressure comes from temperature:
+
+- **A warm column is a low and a cold one is a high.** Each season's surface temperature is taken
+  as a departure from the mean of its own row and turned into hectopascals by the hydrostatic
+  relation for a heated column — 2.484 hPa per degree, which is the standard atmosphere's surface
+  pressure times `ln(1013.25 / 500)` over 288.15 K, with 500 hPa the level of non-divergence. So a
+  summer continent is a thermal low, a winter one a thermal high, and a sea chilled by a cold
+  current on the east side of a basin carries a ridge, which is where Earth keeps its subtropical
+  highs.
+- **The anomaly is smoothed at the Rossby radius before it drives anything**, 970 km — `N H / f`
+  with a stratification of 1.0e-2, a tropopause at 10 km and `f` at 45 degrees. Below that scale a
+  pressure anomaly cannot hold itself up against the flow that drains it, so a bay warmer than the
+  cape beside it does not get a weather system of its own. The radius is a length on the ground, so
+  the same world smooths over the same distance at every grid.
+- **The wind is the pressure gradient balanced against Coriolis and friction**, `f = 2 omega sin(phi)`
+  for a planet with Earth's rotation period. Away from the equator that is the geostrophic wind,
+  along the isobars with low pressure on the left in the northern hemisphere, turned toward the low
+  by the boundary layer's own drag: 25 degrees over sea and 40 over land, the middle of Holton and
+  Hakim's observed 10-20 and 25-45. **At the equator there is no special case**: the balance keeps
+  a friction term in its denominator, so where `f` goes to zero the wind simply runs straight down
+  the gradient, which is what tropical surface air actually does.
+- **The two are added, and removing the pressure term gives back the old wind exactly.**
+  `ClimateConfig.pressureWinds` off is the belts alone, arithmetic for arithmetic, and it is the
+  control every guard on this mechanism is measured against.
+- **The march now needs two sweeps.** A thermal low reverses the zonal wind over part of a belt,
+  and the air arriving at a reversed cell comes from the column the wavefront has not reached yet.
+  So each circulation belt is marched twice, once each way, and every cell records the march whose
+  sweep matches the direction its own wind blows. Both marches are the same lock-step wavefront as
+  before, so the determinism the pipeline rests on is untouched; a belt with no reversed cell in it
+  never runs the second sweep, which is why the control costs nothing.
+- **A step of the march is a step, however the wind slants.** The march advances one cell of zonal
+  travel and charges that step one cell of rain and one cell of depletion, so the slant is capped
+  at the cell own aspect ratio, which holds the step at no more than root two cells on any grid.
+  Capping it at a flat one row per cell instead bound on 71% of the cells within ten degrees of the
+  equator, where the Coriolis force vanishes and the wind runs down its own gradient, and cost
+  those bands 8-9% of their rain; taking the cap away entirely cost them 18%, by letting one step
+  reach hundreds of rows for one cell of rain.
 
 - **Direction is measured from the *thermal* equator, not the geographic one.** In summer the
   thermal equator migrates `seasonalTilt` degrees into the hemisphere, and a tropical row it has

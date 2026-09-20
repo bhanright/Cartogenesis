@@ -157,20 +157,33 @@ class PenAndInkTest {
          * illumination over seed 234475's land reads 0.944 against the declared 0.9421, inside
          * what `ReliefShadingTest` allows - because what the margin changed is the edge of the
          * ice and not the slope of ordinary country.
+         *
+         * W2 moved all twelve again. The pressure wind changed the climate every style tints by,
+         * and it reaches the *provisional* climate the glaciation stage carves from as well, so a
+         * change to the air moved a little of the ground with it. Re-taken from this test own
+         * PENINK fingerprints at 512 line, and taken only after the climate guards were settled:
+         * a fingerprint recorded while a climate is still moving records nothing.
+         *
+         * And on the merge of I1 and W2, which is why neither side's numbers stand here. Each
+         * recorded twelve figures against its own world - I1's ice standing in the elevation
+         * field, W2's pressure wind reaching the provisional climate the glaciation stage carves
+         * from - and the merged world is neither, so all twelve are re-taken once more on this
+         * tree. `ReliefShading.ORDINARY_GROUND` is re-derived with them, from 0.9421, because
+         * both sides moved the land the median illumination is measured over.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 544935828,
-            MapStyle.VELLUM to 475670600,
-            MapStyle.INK_WASH to 2055536932,
-            MapStyle.NAUTICAL to -908959732,
-            MapStyle.MIDNIGHT to -1833019063,
-            MapStyle.SCHOOLROOM to -857950869,
-            MapStyle.VERDANT to 410739092,
-            MapStyle.SCROLL to -163548326,
-            MapStyle.PEN_AND_INK to -206054659,
-            MapStyle.MARS to -1160009856,
-            MapStyle.NATURAL to -1343491232,
-            MapStyle.CLEAR to -2050681917
+            MapStyle.ATLAS to -269415166,
+            MapStyle.VELLUM to 1311379879,
+            MapStyle.INK_WASH to -1892023537,
+            MapStyle.NAUTICAL to 1548187320,
+            MapStyle.MIDNIGHT to -2098536139,
+            MapStyle.SCHOOLROOM to 1071893702,
+            MapStyle.VERDANT to 1276394304,
+            MapStyle.SCROLL to 1261284821,
+            MapStyle.PEN_AND_INK to -226801735,
+            MapStyle.MARS to -561583142,
+            MapStyle.NATURAL to -1889250184,
+            MapStyle.CLEAR to -1322375342
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

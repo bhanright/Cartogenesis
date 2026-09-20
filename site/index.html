@@ -255,25 +255,50 @@
   }
 
   /* ---------- download and installation ----------------------------------- */
-  /* The same panel as a note, in the same grid: installing is a fact about the program like the
-     others, and giving it a dress of its own would say it was a different kind of thing. What it
-     does need that a note does not is somewhere to put a command, because the Linux route is
-     three lines a reader copies rather than a sentence they read.
+  /* A ledger rather than a grid of cards. Four panels in two columns left the Windows and
+     browser boxes mostly empty beside the Linux one, because the row takes the tallest panel's
+     height and Linux carries three lines of command that the others do not. Rows on the page's
+     own ground take each platform's own height and no more: the name in the left column, what
+     to do in the right, a hairline between one platform and the next.
 
      A file name inside a sentence is set in the mono face and nothing else — no ground, no
      border. It is there to mark where the prose stops and a literal string starts, and a tinted
      box around three words in a paragraph is a bigger interruption than the thing it marks. */
   code{font-family:var(--mono);font-size:.92em;color:var(--bone)}
-  /* A block a reader copies: on the sunk ground rather than the panel's own, so the three lines
+  .ledger{border-top:1px solid var(--hairline);margin:0 0 28px}
+  .ledger .row{
+    display:grid;grid-template-columns:minmax(0,1fr);gap:6px 32px;
+    padding:20px 0;border-bottom:1px solid var(--hairline);min-width:0;
+  }
+  @media (min-width:700px){.ledger .row{grid-template-columns:160px minmax(0,1fr)}}
+  .ledger h3{
+    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
+    margin:0;color:var(--parchment);
+  }
+  .ledger h3 .tag{display:inline-block;margin:6px 0 0;vertical-align:0}
+  @media (min-width:700px){.ledger h3 .tag{display:block;margin:8px 0 0;width:max-content}}
+  .ledger .what{min-width:0}
+  .ledger .what p{margin:0 0 10px;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  .ledger .what p:last-child{margin-bottom:0}
+  /* The files themselves, on one line under the instruction, in the mono face and dimmer than
+     the prose: a reader looking for the name finds it in the same place on every row. */
+  .ledger .files{font-family:var(--mono);font-size:12.5px;color:var(--bone-dim);line-height:1.7}
+  .ledger .files code{color:var(--bone);font-size:inherit}
+  /* A block a reader copies: on the sunk ground rather than the page's own, so the three lines
      read as something handed over rather than as more of the paragraph above them. It scrolls
      sideways instead of wrapping — a source line broken across two lines pastes as two commands,
-     and the second one is not a command. */
+     and the second one is not a command. min-width:0 on the row is what lets it scroll rather
+     than push the column wide. */
   .cmd{
     font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--bone);
     background:var(--ink-sunk);border:1px solid var(--hairline);
-    margin:0 0 12px;padding:12px 14px;overflow-x:auto;white-space:pre;
+    margin:10px 0 12px;padding:12px 14px;overflow-x:auto;white-space:pre;
   }
   .cmd code{font-size:inherit}
+  /* The release page, once, as the button the hero's download button leads to rather than as a
+     fifth fact in the list. */
+  .ledger-actions{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ledger-actions .note{font-size:14px;color:var(--bone-dim);margin:0}
 
   /* ---------- the ask, at the foot --------------------------------------- */
   /* Two lines of the same weight, side by side where there is room and stacked
@@ -502,33 +527,38 @@
       Choose a download for Windows or Linux, or run Cartogenesis in the browser.
     </p>
 
-    <div class="practical">
-      <div class="panel">
+    <div class="ledger">
+      <div class="row">
         <h3>Windows</h3>
-        <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
-        <p><code>Cartogenesis-&lt;version&gt;-windows-portable.zip</code> and <code>Cartogenesis-&lt;version&gt;.msi</code> on the release page.</p>
+        <div class="what">
+          <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
+          <p class="files"><code>Cartogenesis-&lt;version&gt;-windows-portable.zip</code> · <code>Cartogenesis-&lt;version&gt;.msi</code></p>
+        </div>
       </div>
 
-      <div class="panel">
+      <div class="row">
         <h3>Linux<span class="tag">Debian · Ubuntu</span></h3>
-        <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
-        <pre class="cmd"><code>sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
+        <div class="what">
+          <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
+          <pre class="cmd"><code>sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
 echo "deb [signed-by=/etc/apt/keyrings/cartogenesis.asc] https://cartogenesis.com/apt stable main" | sudo tee /etc/apt/sources.list.d/cartogenesis.list
 sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
-        <p><code>Cartogenesis-&lt;version&gt;-linux-amd64.deb</code> and <code>Cartogenesis-&lt;version&gt;-linux-portable.tar.gz</code> on the release page.</p>
+          <p class="files"><code>Cartogenesis-&lt;version&gt;-linux-amd64.deb</code> · <code>Cartogenesis-&lt;version&gt;-linux-portable.tar.gz</code></p>
+        </div>
       </div>
 
-      <div class="panel">
+      <div class="row">
         <h3>Browser</h3>
-        <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
-        <p><code>Cartogenesis-&lt;version&gt;-web.zip</code> on the release page.</p>
+        <div class="what">
+          <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
+          <p class="files"><code>Cartogenesis-&lt;version&gt;-web.zip</code></p>
+        </div>
       </div>
+    </div>
 
-      <a class="panel" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">
-        <h3>The release page</h3>
-        <p>Every file above, for the current release, with the notes saying what changed in it.</p>
-        <span class="go">Get the latest release ↗</span>
-      </a>
+    <div class="ledger-actions">
+      <a class="btn secondary" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">Get the latest release ↗</a>
+      <p class="note">Every file above, for the current release, with the notes saying what changed in it.</p>
     </div>
   </section>
 

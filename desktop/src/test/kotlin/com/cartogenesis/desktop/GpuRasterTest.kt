@@ -44,13 +44,24 @@ class GpuRasterTest {
         /**
          * How far a colour channel may drift, at the 99.9th percentile and at worst.
          *
-         * Measured on seed 42 at 1024 over all fifteen views in all nine styles: the 99.9th
-         * percentile is 0 in every one of them, and the worst single channel anywhere is 2. A
-         * wrong ramp, a wrong style lever or a missing pass moves whole regions by tens, so these
-         * bounds separate the arithmetic that cannot agree from the mistakes that matter.
+         * The percentile is the measured figure: on seed 42 at 1024 over all fifteen views in all
+         * twelve styles it is 0 everywhere, so one is a bar a wrong ramp, a wrong style lever or
+         * a missing pass cannot pass, since any of those moves whole regions by tens.
+         *
+         * The worst single channel is bounded by the recipe rather than by a measurement. Both
+         * arithmetics truncate a channel to an integer at every stage a pixel passes - the ground
+         * mixed off its ramp, the climate tint, the relief light, then each overlay blended over
+         * it - and a truncation is where two arithmetics that agree to a part in a million can
+         * still land either side of an integer, by one. A flip of one passes through every later
+         * blend undiminished at most, so the worst drift a channel can carry is the number of
+         * truncations it passes, which on the fantasy view is the three passes of colour and the
+         * two overlays a coastal border cell takes: five. What is measured is two, on Mars, and
+         * was two over the nine styles this bound was first taken from; a chunk that adds a stage
+         * to the recipe raises this by one and says so.
          */
         const val MAX_PERCENTILE_DRIFT = 1
-        const val MAX_WORST_DRIFT = 2
+        const val TRUNCATIONS_A_CHANNEL_PASSES = 5
+        const val MAX_WORST_DRIFT = TRUNCATIONS_A_CHANNEL_PASSES
 
         /** Seed 42 at 1024, the world the export guards already use. Generated once for them all. */
         val CONFIG = WorldGenConfig(seed = 42L, width = 1024, height = 1024)

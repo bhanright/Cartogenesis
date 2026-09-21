@@ -10,7 +10,15 @@ import kotlinx.coroutines.ensureActive
 
 data class ErosionResult(
     /** Height after erosion, one entry per cell, row-major, in the 0..1 range uplift produced. */
-    val height: FloatField
+    val height: FloatField,
+    /**
+     * Whether an accelerator did the thermal sweeps, as opposed to looking at the job and
+     * declining it, which is a normal outcome the processor then covers with the same answer.
+     * The two are indistinguishable from the height alone, and the guard that asks whether the
+     * card ran at all reads this rather than timing the two against each other on a shared
+     * machine. Not saved: it is a fact about one run, not about the world.
+     */
+    val sweptOnDevice: Boolean = false
 )
 
 /**
@@ -124,7 +132,8 @@ object ErosionStage {
                 receiverClamp
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
-            }
+            },
+            sweptOnDevice = weathered.sweptOnDevice
         )
     }
 
@@ -159,7 +168,9 @@ object ErosionStage {
                 erosion.rate
             )
             if (accelerated != null) {
-                return ErosionResult(FloatField(config.width, config.height, accelerated))
+                return ErosionResult(
+                    FloatField(config.width, config.height, accelerated), sweptOnDevice = true
+                )
             }
         }
         return thermalSweep(config, height, skipSettled = true, sweeps = sweeps)

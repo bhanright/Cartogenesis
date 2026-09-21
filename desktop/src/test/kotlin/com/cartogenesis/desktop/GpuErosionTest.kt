@@ -60,9 +60,15 @@ class GpuErosionTest {
         }
         erodeBlocking(gpuConfig, uplift, gpu)
         val onGpu: FloatArray
+        val gpuResult: com.cartogenesis.worldgen.pipeline.ErosionResult
         val stageGpuMs = measureTimeMillis {
-            onGpu = erodeBlocking(gpuConfig, uplift, gpu).height.data
+            gpuResult = erodeBlocking(gpuConfig, uplift, gpu)
+            onGpu = gpuResult.height.data
         }
+        // The question the speed clause below used to stand in for, asked directly: the card did
+        // the sweeps rather than looking at them and declining, which the processor would have
+        // covered with the same answer.
+        assertTrue(gpuResult.sweptOnDevice, "the accelerator declined the sweeps and the processor did them")
         println(
             "GPU whole stage ${stageGpuMs}ms vs CPU ${stageCpuMs}ms: " +
                 "${"%.1f".format(stageCpuMs.toDouble() / stageGpuMs)}x, " +
@@ -258,16 +264,16 @@ class GpuErosionTest {
         const val TIMED_RUNS = 3
 
         /**
-         * The least speed-up on the sweeps alone that still means the card did the work.
+         * The least speed-up on the sweeps alone that is still a speed-up.
          *
-         * The sweeps are a pure stencil over independent cells - the case graphics hardware is
-         * best at - and measure tens of times faster than the processor on this device, so five
-         * leaves the better part of an order of magnitude of room. It is deliberately far below
-         * what is measured, because the question this asks is whether the kernel ran at all. A bar
-         * set near the measured figure would instead be asking whether the machine was busy, which
-         * is what the `gpuMs < cpuMs` this replaced was really asking, and why it failed for two
-         * contributors on a machine running four builds while the kernel was working perfectly.
+         * Whether the card did the work at all is no longer this clause's question:
+         * `ErosionResult.sweptOnDevice` answers it. What is left to guard is that the kernel is
+         * not slower than the processor it replaces, and one is the only figure that question
+         * has. The bar this replaced was five, chosen as far below the tens of times measured on
+         * this device; it still raced, at 4.9 against 5.0, in a full tier with the browser and
+         * the other GPU tests on the same machine, because a shared machine can slow both sides
+         * unequally. Under that load the quickest of three runs still read nearly five times.
          */
-        const val MIN_SWEEP_SPEED_UP = 5.0
+        const val MIN_SWEEP_SPEED_UP = 1.0
     }
 }

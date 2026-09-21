@@ -1,5 +1,23 @@
 # To do
 
+- **The audit tier has crashed the Java virtual machine twice on one machine, and it is the
+  machine.** Running the tier on 2026-09-21 killed the test worker 180 seconds in with
+  `EXCEPTION_ACCESS_VIOLATION` inside `jvm.dll`, on the exception-throw path, under
+  `LandmarkStage.generate`'s `sortByDescending` — which reads as a comparator raising Tim sort's
+  broken-contract error, and `NationStage.habitability` does end in `coerceIn(0f, 1f)`, which
+  passes a not-a-number straight through because every comparison against one is false. It is not
+  that. The same class was rerun on the same commit with the same three worlds and went green
+  through the generation, failing only on the assertion it was already failing on; and forty
+  minutes later a second `EXCEPTION_ACCESS_VIOLATION` in `jvm.dll` took out the build daemon's
+  **C2 compiler thread** while it was compiling Kotlin, which shares nothing with the generator at
+  all. Two access violations inside the virtual machine, in two processes, doing two unrelated
+  jobs, neither reproducible, is a machine and not a program. Recorded rather than fixed, and
+  recorded rather than dropped, for two reasons: a nightly tier that dies at its first class
+  reports every later class as never having run, which is most of what "chronically red with a
+  rotating cast" looked like from outside; and a machine whose virtual machine faults in the
+  optimiser can also finish a run with numbers that are quietly wrong, so a figure measured here
+  alone is worth less than one a second machine has seen. If it ever reproduces on the build
+  runner, the habitability path above is where to start. 2026-09-21, T3.
 - **A lake's outflow can be discarded as a headwater stub.** A cell whose only upstream water is a
   lake's open water has no channel above it, so `RiverStage.traceRivers` treats it as a head; and
   where the lake sits within a few cells of the trunk, the course from that head is shorter than

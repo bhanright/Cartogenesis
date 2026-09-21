@@ -148,7 +148,7 @@
   So the cover is counted once in the calibration and once again in the multiplier, and denudation
   off an active belt falls from **0.271 to 0.189 mm/yr** (`IsostasyTest`'s own instrument, pooled
   over five seeds), which asks 0.69 mm/yr of a collision uplift rate the setting carries 0.77 of.
-  That one number is why five cases in five classes that are green on the pre-S3 commit are red
+  That one number is why seven cases in seven classes that are green on the pre-S3 commit are red
   here: the collision uplift rate no longer matches the derivation it was set from
   (`IsostasyTest`, the defect stated directly); the deepest outlet trough the ice asks for over
   four worlds is 750 m where it was 1255, 0.57 of Sognefjord against 0.96 (`IceSheetTest`); the
@@ -159,7 +159,11 @@
   (`OutletIncisionTest`); and the gallery world's alpine country grew from 1,244 cells to 1,596 as
   more high ground survived the rounds, so its canopy - which is nearly nothing either way, a mean
   of 0.005 - now varies by 0.017 against a floor of 0.02 where it varied by 0.021
-  (`VegetationTintTest`, marginal before and tipped by this). The cure is the one the runoff weight already uses and is two lines:
+  (`VegetationTintTest`, marginal before and tipped by this); seed 13's dry basin holds 47% of its
+  spill area against a bar of 45%, a deeper basin surviving where a third more rock used to come
+  out of it (`LakeWaterBalanceTest`); and the flat-routing potential leaves 2 ruled runs over
+  raised ground against its staircase control's 1, where the clause asks for no more than the
+  control (`FlatCourseTest`, a count small enough that a terrain this much changed moves it). The cure is the one the runoff weight already uses and is two lines:
   divide the shielding by its own mean over land, so the land's mean erodibility is unchanged and
   what the term carries is the *relative* half between bare ground and closed canopy, which is all
   the paper claims. It was left undone on purpose - it is a change to S3's design rather than to

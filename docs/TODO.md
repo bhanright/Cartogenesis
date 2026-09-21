@@ -1,5 +1,16 @@
 # To do
 
+- **A lake's outflow can be discarded as a headwater stub.** A cell whose only upstream water is a
+  lake's open water has no channel above it, so `RiverStage.traceRivers` treats it as a head; and
+  where the lake sits within a few cells of the trunk, the course from that head is shorter than
+  `RiverConfig.minLengthCells` — eight — and is dropped with the scratchy headwater stubs the rule
+  exists to suppress. The lake's outflow then carries no line at all. Found on seed 7 at 512 after
+  I3 moved the ice and so the ground under it: cell 191210, one cell of narrow water at the
+  outflow end of a twelve-cell lake, with the lake above it and a drawn trunk one cell below; the
+  other three audited seeds have none. The length rule is about a headwater scratch and a lake's
+  outflow is not one — everything the lake drains comes down it — so the fix is to exempt a head
+  fed by open water rather than to lower the bar. One cell on one seed, so it is a note; it wants
+  the river guards and the twelve records re-taken with it. 2026-09-21, I3.
 - **The sheet's surface envelope measures straight lines, not distances through the ice.** I3 made
   the surface the lower envelope of the plastic profiles rising from every margin point, which is
   the yield condition's own solution and is what took the facets and the ruling off the flank. The

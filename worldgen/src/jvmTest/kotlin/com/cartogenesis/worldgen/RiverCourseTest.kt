@@ -221,9 +221,27 @@ class RiverCourseTest {
             }
             // A gap: narrow water with a drawn channel above it and a drawn channel below, and no
             // line across. This is the thread the author saw, counted.
+            //
+            // A drawn *channel*, and I3 is why that word is now enforced rather than assumed. The
+            // donor used to be asked only whether it was drawn, and a lake's open water is drawn —
+            // it is the mouth a course ends on, added to the path and then stopped at. So a cell
+            // taking its water straight out of a lake counted as having a drawn channel above it
+            // when what is above it is the lake.
+            //
+            // I3's ice moved seed 7's ground and produced one: cell 191210, the single cell of
+            // narrow water at the outflow end of a twelve-cell lake, with the lake's open water
+            // above it and the trunk one cell below. No channel feeds it at all — its three donors
+            // are two cells of open water and one carrying 0.88 of the source threshold's flow — so
+            // nothing upstream has been severed, and there is no thread of standing water between
+            // two thick channels, which is the whole of what this clause is about. What there is
+            // instead is a lake's outflow that carries no line, because a cell with no channel
+            // above it is a head, and the course from this head to the trunk it joins is two cells
+            // against `RiverConfig.minLengthCells`' eight, so the tracer discards it as a stub.
+            // That is a real artefact and a different one; it is in docs/TODO.md with these
+            // figures. The other three seeds have no such cell.
             val fedByADrawnChannel = BooleanArray(cells)
             for (donor in 0 until cells) {
-                if (!drawn[donor]) continue
+                if (!drawn[donor] || !network.isChannel[donor]) continue
                 val below = world.rivers.flowTarget[donor]
                 if (below >= 0) fedByADrawnChannel[below] = true
             }

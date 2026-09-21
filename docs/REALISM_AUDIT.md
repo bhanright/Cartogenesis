@@ -117,7 +117,9 @@ that carry the river, rivers stopping at lake shores.
 accumulation crosses a constant. That threshold makes drainage density fall with steepness and
 rise with rainfall, which is why humid uplands are finely dissected and arid plains are not
 (Moglen, Eltahir & Bras 1998 find density maximal in semi-arid climates). The generator's constant
-threshold gives one density everywhere.
+threshold gives one density everywhere. *Two clauses of that are corrected by what landed: the
+generator's old threshold did not give one density everywhere, and "rise with rainfall" is only
+half of Moglen's curve — see 2.3.*
 
 **Network form.** Natural networks obey Hack's law `L ∝ A^h` with h ≈ 0.5–0.6 and Horton's
 bifurcation ratio 3–5 (Horton 1945; Rodríguez-Iturbe & Rinaldo 1997). D8 on a smooth surface
@@ -135,9 +137,22 @@ Springs and oases where an aquifer meets a desert surface. Neither exists; the f
 overlay from fields that exist, the second needs lithology.
 
 ### 2.3 Proposed chunks
-- **R1 Channel initiation and drainage density** — A·S² threshold with a climate term; guards:
-  drainage density vs aridity follows the Moglen curve's shape; Hack exponent 0.5–0.65 and
-  Horton R_b 3–5 on every standard seed. Visual: medium at 2048. GPU: none.
+- **R1 Channel initiation and drainage density** — *landed 2026-09-21; see the ledger row for the
+  figures.* A·S² threshold in square kilometres, the area weighted by the cell's rainfall against
+  Earth's land mean and the threshold by the plant cover, with `maxRivers` and `minLengthCells`
+  retired and the drawing left one rule in kilometres. All four guards are asserted on every seed at
+  512 and at 2048: the density peaks in a dryland and falls on the wet side, which is W2's open
+  finding earned back; Hack's exponent is a clause again and its scale dependence is down from nine
+  hundredths to four; Horton's ratio holds without the support-threshold allowance; and the drawn
+  courses cover exactly what they stand for. **Three things this line did not foresee.** The
+  exponent is 1.65 and not 2 — `A·S²` is Dietrich et al.'s landsliding threshold and Montgomery and
+  Dietrich's own steepland fit is `A ∝ S^-1.65`, so quoting the first for the second would be citing
+  one regime's paper for another's law. The climate term is *not* mostly the runoff weight: a weight
+  on the area can only push cells over a fixed bar, so the threshold's cover term is what makes the
+  curve turn over, and with it off the peak is in humid country on every seed. And **the paragraph
+  above is wrong that the constant threshold "gives one density everywhere"**: it gave a density
+  that tracked the terrain's slope, which correlates with rain, so the old network was *denser* in
+  humid country, not uniform. Visual: medium at 2048. GPU: declined at 0.20% of a 2048 world.
 - **R2 Rivers drawn as rivers** — width from discharge, braided reaches above the Leopold–Wolman
   slope, meander geometry below cell scale at export, floodplain width from deposition. Guard:
   none needed beyond the picture; visual: large on exports.

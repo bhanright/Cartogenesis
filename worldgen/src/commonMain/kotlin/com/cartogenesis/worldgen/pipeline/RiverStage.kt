@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.math.sqrt
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -165,12 +166,6 @@ data class RiverResult(
 object RiverStage {
 
     /**
-     * The smallest total runoff a source may be asked to carry, so that a world with almost no
-     * rain on it still draws the few channels it has rather than every land cell at once.
-     */
-    internal const val MIN_SOURCE_FLOW = 1e-4f
-
-    /**
      * Runoff a cell contributes over and above its own rainfall.
      *
      * A floor rather than a physical term: an arid upland still gathers a trickle from snowmelt
@@ -214,9 +209,13 @@ object RiverStage {
 
         val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm)
         val flow = accumulateFlow(cellsAcross, cellsDown, sea, climate, filled, flowTarget)
-        val rivers = traceRivers(config, sea, flow, flowTarget, lakes)
+        val isChannel = ChannelInitiation.channelMask(
+            config, sea.isLand, sea.landCellCount, sea.relativeElevation, filled, flowTarget,
+            climate
+        ) { lakes.isOpenWater(it) }
+        val rivers = traceRivers(config, sea, flow, flowTarget, lakes, isChannel)
 
-        return RiverResult(filled, flow.accumulation, flowTarget, rivers, lakes)
+        return RiverResult(filled, flow, flowTarget, rivers, lakes)
     }
 
     /**
@@ -451,13 +450,6 @@ object RiverStage {
     )
 
     /**
-     * @param totalRunoff sum of the per-cell rainfall *inputs*. Not the sum of the accumulation
-     *   field — that counts every cell's water again at each downstream cell, which would inflate
-     *   any threshold derived from it by roughly the mean flow-path length.
-     */
-    private class FlowResult(val accumulation: FloatField, val totalRunoff: Float)
-
-    /**
      * Runoff a single cell contributes, from its rainfall on the 0..1 scale. See [RUNOFF_FLOOR]
      * for why an arid cell still contributes something.
      *
@@ -473,16 +465,59 @@ object RiverStage {
         climate: ClimateResult,
         filled: FloatField,
         flowTarget: IntArray
-    ): FlowResult {
-        var totalRunoff = 0f
-        val accumulation = FlowRouting.accumulate(
-            cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
-        ) { cell ->
-            val weight = runoffWeight(climate.precipitation.data[cell])
-            totalRunoff += weight
-            weight
+    ): FloatField = FlowRouting.accumulate(
+        cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
+    ) { cell -> runoffWeight(climate.precipitation.data[cell]) }
+
+    /**
+     * Whether a headwater is a lake's outflow rather than a scratch on a hillside: some neighbour
+     * of it is open water that drains into it.
+     *
+     * The exemption `RiverConfig.shortestDrawnCourseKm` names. A cell whose only upstream water is
+     * a lake has no channel above it and so is a head like any other, and where the lake sits a few
+     * cells from the trunk its course is shorter than the drawing asks for — but everything the
+     * lake drains comes down it, so a short one is a great river and not a rill. I3's finisher found
+     * the case on seed 7 at 512: cell 191210, one cell of narrow water at the outflow end of a
+     * twelve-cell lake, with a drawn trunk one cell below and no line between them.
+     *
+     * Asked of the neighbours rather than of the flow targets, because the lake's own cells are
+     * re-pointed at the water inside an endorheic basin and a brim-full lake's outlet cell drains
+     * *to* this one: either way the water above a true outflow is beside it.
+     */
+    private fun drainsALake(
+        cellsAcross: Int,
+        cellsDown: Int,
+        head: Int,
+        flowTarget: IntArray,
+        lakes: LakeResult
+    ): Boolean {
+        var found = false
+        FlowRouting.forEachNeighbour(
+            cellsAcross, cellsDown, head % cellsAcross, head / cellsAcross
+        ) { neighbour ->
+            if (lakes.isOpenWater(neighbour) && flowTarget[neighbour] == head) found = true
         }
-        return FlowResult(accumulation, totalRunoff)
+        return found
+    }
+
+    /** The ground one D8 step covers, in kilometres, on a grid whose cells are not square. */
+    private fun stepKilometres(
+        from: Int,
+        to: Int,
+        cellsAcross: Int,
+        cellWidthKm: Float,
+        cellHeightKm: Float,
+        diagonalKm: Float
+    ): Float {
+        var columnStep = (to % cellsAcross) - (from % cellsAcross)
+        if (columnStep > cellsAcross / 2) columnStep -= cellsAcross
+        if (columnStep < -cellsAcross / 2) columnStep += cellsAcross
+        val rowStep = (to / cellsAcross) - (from / cellsAcross)
+        return when {
+            columnStep != 0 && rowStep != 0 -> diagonalKm
+            columnStep != 0 -> cellWidthKm
+            else -> cellHeightKm
+        }
     }
 
     /**
@@ -517,13 +552,22 @@ object RiverStage {
      * by flow and the trunk is split between a course that starts in the wrong place and a
      * "tributary" that is really the river's own upper half. M1 measured the drawn courses at 0.484
      * of the watercourses they stand for at 512 and 0.408 at 2048, where 1.0 is the definition.
+     *
+     * [isChannel] is [ChannelInitiation]'s, and since R1 the network is every reach the ground can
+     * cut a channel in rather than every reach carrying a share of the world's runoff. What is left
+     * here of the drawing is one rule and it is cartographic: a course shorter than
+     * `RiverConfig.shortestDrawnCourseKm` is not given a line of its own. There is no cap on the
+     * number of courses; a count of courses was a limit on the drawing masquerading as a fact about
+     * the world, and at four hundred it drew half of a 2048 world's watercourses and nearly all of
+     * a 512 one's.
      */
     private fun traceRivers(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        flow: FlowResult,
+        flow: FloatField,
         flowTarget: IntArray,
-        lakes: LakeResult
+        lakes: LakeResult,
+        isChannel: BooleanArray
     ): List<River> {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -531,17 +575,10 @@ object RiverStage {
         val riverConfig = config.rivers
         if (sea.landCellCount == 0) return emptyList()
 
-        val accumulation = flow.accumulation
-        // sourceFlowShare is expressed against the whole world's runoff, so river density stays
-        // consistent as resolution or sea level changes.
-        val sourceFlow =
-            (flow.totalRunoff * riverConfig.sourceFlowShare).coerceAtLeast(MIN_SOURCE_FLOW)
-
-        // Open water is not channel. A playa is: it is dry ground most of the year and the river
-        // across it is a real one.
-        val isChannel = BooleanArray(cellCount) { cell ->
-            sea.isLand[cell] && !lakes.isOpenWater(cell) && accumulation.data[cell] >= sourceFlow
-        }
+        val accumulation = flow
+        val cellWidthKm = config.cellWidthKm.toFloat()
+        val cellHeightKm = config.cellHeightKm.toFloat()
+        val diagonalKm = sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
 
         val hasUpstream = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -550,7 +587,9 @@ object RiverStage {
             if (target >= 0 && isChannel[target]) hasUpstream[target] = true
         }
 
-        val courseBelow = lengthsToTheWater(cellCount, isChannel, flowTarget)
+        val courseBelowKm = kilometresToTheWater(
+            cellCount, cellsAcross, isChannel, flowTarget, cellWidthKm, cellHeightKm, diagonalKm
+        )
 
         // Headwaters, the farthest from the water first, so a river claims its own longest
         // watercourse before any tributary can take part of it.
@@ -558,16 +597,15 @@ object RiverStage {
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) sourceCount++
         }
-        // The length of the course below a head in the high half of the key and the cell index in
-        // the low half, so one sort puts the farthest head last and ties fall to the lower cell
-        // index on every platform. A count of cells is never negative, so it sorts in the same
-        // order as its values — unlike FlowRouting.encode, which carries elevations.
+        // The kilometres below a head packed above the cell index, through the same encoding
+        // every other ordering in this pipeline uses, so one sort puts the farthest head last and
+        // ties fall to the lower cell index on every platform.
         val sourcesByCourseLength = LongArray(sourceCount)
         var written = 0
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) {
                 sourcesByCourseLength[written++] =
-                    (courseBelow[cell].toLong() shl 32) or cell.toLong()
+                    FlowRouting.encode(courseBelowKm[cell], cell)
             }
         }
         sourcesByCourseLength.sort()
@@ -576,7 +614,6 @@ object RiverStage {
         val rivers = ArrayList<River>()
 
         for (rank in sourcesByCourseLength.indices.reversed()) {
-            if (rivers.size >= riverConfig.maxRivers) break
             val source = FlowRouting.decodeIndex(sourcesByCourseLength[rank])
 
             val path = ArrayList<Int>()
@@ -600,7 +637,16 @@ object RiverStage {
                 current = next
             }
 
-            if (path.size < riverConfig.minLengthCells) {
+            var courseKm = 0f
+            for (step in 0 until path.size - 1) {
+                courseKm += stepKilometres(
+                    path[step], path[step + 1], cellsAcross, cellWidthKm, cellHeightKm, diagonalKm
+                )
+            }
+            if (courseKm < riverConfig.shortestDrawnCourseKm && !drainsALake(
+                    cellsAcross, cellsDown, source, flowTarget, lakes
+                )
+            ) {
                 // Release only the cells this trace claimed, never a trunk it merely touched.
                 for (step in 0 until claimedByThisRiver) claimed[path[step]] = false
                 continue
@@ -615,34 +661,56 @@ object RiverStage {
     }
 
     /**
-     * How many channel cells lie between each channel cell and the water it ends at, itself
-     * included: the length of the watercourse below it.
+     * How far it is from each channel cell to the water it ends at, in kilometres: the length of
+     * the watercourse below it.
+     *
+     * **Kilometres and not cells, and the difference is not cosmetic.** This world is twice as wide
+     * as it is tall on a square grid, so a cell is half as tall as it is wide — 23.4 km across and
+     * 11.7 down at 512 — and a course of six cells running north is shorter ground than a course of
+     * five running east. Ranked by cells, the tracer would hand the map's longest course to the
+     * branch with the most *steps* in it, and where the shorter-in-cells branch was longer in
+     * kilometres the length rule below would then drop the one it had preferred and draw the other.
+     * Seed 7 at 512 had one: a six-cell head whose course was 58 km, under the hundred the drawing
+     * asks for, releasing its claim to a five-cell head of 117 km. Measured on the ground there is
+     * no such case, because the two rules are then asking the same question.
      *
      * The flow targets are a forest — every cell has one receiver, strictly lower on the filled
-     * surface — so the answer for a cell is one more than the answer for its receiver, and the
+     * surface — so the answer for a cell is its own step plus the answer for its receiver, and the
      * whole field falls out of one memoised walk per unvisited cell. The walk is bounded by the
-     * grid for the same reason the trace below is: a routing bug that made a ring would otherwise
+     * grid for the same reason the trace above is: a routing bug that made a ring would otherwise
      * hang the generator rather than draw something odd.
      */
-    private fun lengthsToTheWater(
+    private fun kilometresToTheWater(
         cellCount: Int,
+        cellsAcross: Int,
         isChannel: BooleanArray,
-        flowTarget: IntArray
-    ): IntArray {
-        val below = IntArray(cellCount)
+        flowTarget: IntArray,
+        cellWidthKm: Float,
+        cellHeightKm: Float,
+        diagonalKm: Float
+    ): FloatArray {
+        val below = FloatArray(cellCount)
         val walked = ArrayList<Int>()
         for (start in 0 until cellCount) {
-            if (!isChannel[start] || below[start] != 0) continue
+            if (!isChannel[start] || below[start] != 0f) continue
             walked.clear()
             var cell = start
-            while (cell >= 0 && isChannel[cell] && below[cell] == 0 && walked.size < cellCount) {
+            while (cell >= 0 && isChannel[cell] && below[cell] == 0f && walked.size < cellCount) {
                 walked.add(cell)
                 cell = flowTarget[cell]
             }
-            var length = if (cell >= 0 && isChannel[cell]) below[cell] else 0
+            var kilometres = if (cell >= 0 && isChannel[cell]) below[cell] else 0f
             for (k in walked.indices.reversed()) {
-                length++
-                below[walked[k]] = length
+                val here = walked[k]
+                val next = if (k + 1 < walked.size) walked[k + 1] else cell
+                kilometres += if (next < 0) {
+                    cellHeightKm
+                } else {
+                    stepKilometres(
+                        here, next, cellsAcross, cellWidthKm, cellHeightKm, diagonalKm
+                    )
+                }
+                below[here] = kilometres
             }
         }
         return below

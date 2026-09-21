@@ -29,28 +29,6 @@
   on that machine should be treated as settled until the nightly runner has agreed with it.** If
   any of the three index errors ever reproduces on the runner, the habitability path above is
   where to start on the first of them. 2026-09-21, T3.
-- **Hack's exponent falls by nine hundredths between 512 and 2048, because the channel network is
-  thresholded in cells and not in ground.** The Earth-likeness suite fitted Hack's law over the
-  *drawn* basins until T3, and at 2048 that read 0.324-0.433 on the six audited seeds — outside
-  Earth's 0.5-0.6 on every one of them, which is what had the nightly tier red. Most of that was
-  the drawn sample: `RiverConfig.maxRivers` caps the map at four hundred courses whatever the grid,
-  so at 2048 the fit was over 313-350 basins covering 0.506 of the watercourses they stand for,
-  and it was measuring the cap. Fitting instead over the terrain's own routed network — every land
-  cell draining at least the support area, ~100,000 reaches a seed — puts the same worlds at
-  0.444-0.485, pooled 0.465, five of six inside the band. What that exposed is the part that is
-  not the cap: over the *same* routed network the four standard seeds read 0.527-0.565 at 512,
-  pooled 0.552, against 0.444-0.485 at 2048, pooled 0.465. The same generator, the same
-  measurement, nine hundredths apart. Both ends of the fit are counted in cells:
-  `EarthLikeness.CHANNEL_SUPPORT_CELLS`'s sixteen and `SMALLEST_HACK_CATCHMENT_CELLS`'s hundred
-  are 4,400 and 27,500 km2 at 512 and 275 and 1,700 at 2048, so the finer grid's fit runs over two
-  extra decades of small basins the coarse one never sees, and the smallest of those are not
-  basins but hillslopes — a cell is a channel here when a fixed count of cells drains through it
-  and nothing else, there being no channel-initiation criterion at all. So the clause is a finding
-  with the figure printed on every seed, and **R1, channel initiation in physical units, is the
-  chunk that earns the assertion back**, the same chunk the drainage-density wet side is waiting
-  on. The obvious cure — make both thresholds areas — was not taken here because the support area
-  is also what Horton's bifurcation ratios are ordered over and those are asserted and passing, and
-  a chunk about a red tier is not the place to re-derive a green one. 2026-09-21, T3.
 - **A ring of standing water is not a measurement that tells graded aggradation from flat.** E6's
   discriminating guard counted water lying in a circular band inside a window the author had
   cropped by eye round seed 718106's southern rift, where reverting the `headroom` unit muddle by
@@ -75,17 +53,6 @@
   with any centre at all is the obvious candidate, and the author's crescents are on record as
   scoring nothing against the mouth, so it wants the fitted centre compared against the mouth and
   a bar derived from the difference. 2026-09-21, T3.
-- **A lake's outflow can be discarded as a headwater stub.** A cell whose only upstream water is a
-  lake's open water has no channel above it, so `RiverStage.traceRivers` treats it as a head; and
-  where the lake sits within a few cells of the trunk, the course from that head is shorter than
-  `RiverConfig.minLengthCells` — eight — and is dropped with the scratchy headwater stubs the rule
-  exists to suppress. The lake's outflow then carries no line at all. Found on seed 7 at 512 after
-  I3 moved the ice and so the ground under it: cell 191210, one cell of narrow water at the
-  outflow end of a twelve-cell lake, with the lake above it and a drawn trunk one cell below; the
-  other three audited seeds have none. The length rule is about a headwater scratch and a lake's
-  outflow is not one — everything the lake drains comes down it — so the fix is to exempt a head
-  fed by open water rather than to lower the bar. One cell on one seed, so it is a note; it wants
-  the river guards and the twelve records re-taken with it. 2026-09-21, I3.
 - **The sheet's surface envelope measures straight lines, not distances through the ice.** I3 made
   the surface the lower envelope of the plastic profiles rising from every margin point, which is
   the yield condition's own solution and is what took the facets and the ruling off the flank. The
@@ -730,12 +697,6 @@
   units, because inventing a unit for a knob nobody spends is worse than leaving it plain, and not
   deleted, because deciding what a realm should pay for a climb is a change to the realm stage.
   2026-09-13, S1.
-- **`RiverConfig.maxRivers` is a count of courses, so the drawn network thins on a finer grid.**
-  Four hundred courses at 512 and four hundred at 2048, over sixteen times the cells: the map draws
-  a smaller share of its own network the further in it is generated. `ScaleFree` measures drainage
-  density off the terrain's channel network rather than the drawn one for exactly this reason, and
-  says so. The cure is a cap that is an area or a share rather than a count, and it belongs with
-  R2's rivers-drawn-as-rivers. 2026-09-13, S1.
 - **A drawn river begins at its biggest headwater, not at its farthest.** `RiverStage.traceRivers`
   sorts channel heads by the flow each already carries and traces the largest first, so the course a
   `River` holds runs from that head to the mouth and the longest watercourse in the same catchment
@@ -751,7 +712,49 @@
   trunk. The repair is in the tracing: rank the heads by the length of the path below them rather
   than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
 
+- **Moglen's wet side flattens as the grid is refined.** R1's criterion has humid country carrying
+  0.73 of the semi-arid drainage density pooled at 512 and 0.79 at 2048, and per seed the narrowing
+  is larger than the pooled figure suggests: 1234 reads 0.81 at 512 and 0.97 at 2048, seed 7 0.80
+  and 0.92. Every seed still turns the curve over, so the clause holds at both grids, but the margin
+  is thinner where the grid is finer and the direction is consistent. The cause is in the criterion:
+  it reads the gradient to a cell's own receiver, a finer grid resolves the steep ground orographic
+  rain falls on, and the wet side therefore gains more from refinement than the dry does. Worth a
+  measurement at 4096 before deciding whether it converges or keeps going. 2026-09-21, R1.
+- **`EarthLikeness.strahlerStreamOrders` still walks the height order.** R1 moved the
+  longest-flow-path walk onto `FlowRouting.drainageOrder` after the height order was shown to lose
+  length on long paths — the drawn courses read 1.10 to 1.30 of the watercourse they lie on at 2048,
+  which cannot happen. Strahler's ordering has the same shape of walk over the same tree and the
+  same exposure, and it was left alone because Horton's ratios are asserted and passing and a chunk
+  should not move a green bar in passing. What it would cost is one sort; what it might move is the
+  bifurcation ratio, which would then want its own measurement of before and after. 2026-09-21, R1.
+
 ## Done
+
+- **A lake's outflow could be discarded as a headwater stub** (2026-09-21, R1) — the course from a
+  head fed only by a lake's open water was measured against `RiverConfig.minLengthCells`' eight, and
+  an outflow within a few cells of its trunk was dropped with the scratchy headwater scratches the
+  rule existed to suppress. Both halves of that are gone: the length rule is a hundred kilometres of
+  ground rather than eight cells, and a cell below a lake outlet carries the whole lake's
+  runoff-weighted catchment, which clears the channel-head threshold by orders of magnitude. What is
+  left of the old note is that the criterion is still about the water and not about where it came
+  from; `RiverCourseTest`'s `gaps` clause counts what is left.
+
+- **`RiverConfig.maxRivers` was a count of courses, so the drawn network thinned on a finer grid**
+  (2026-09-21, R1) — four hundred courses at 512 and four hundred at 2048 over sixteen times the
+  cells, so the map drew a smaller share of its own network the further in it was generated: 0.484
+  of the watercourses it stood for at 512 against 0.408 to 0.506 at 2048. The cap is gone rather
+  than re-expressed as an area, because what it was for — keeping a wet world from becoming a
+  thicket — is the renderer's job and the renderer already does it by Töpfer and Pillewizer's root
+  law. `minLengthCells` went with it, replaced by `shortestDrawnCourseKm`.
+
+- **Hack's exponent fell by nine hundredths between 512 and 2048, because the channel network was
+  thresholded in cells and not in ground** (2026-09-21, R1) — T3 measured it and named R1; R1 made
+  both ends of the fit areas of ground (`EarthLikeness.CHANNEL_SUPPORT_KM2` and
+  `SMALLEST_HACK_CATCHMENT_KM2`) and moved the fit onto the network the generator itself initiates.
+  The exponent is a clause again in `EarthLikeness.complaints`. The cure T3 declined — making the
+  support area an area — turned out not to move Horton's ratios out of Horton's band, which is why
+  it could be taken here: the same pair of thresholds read as ground gives 4.52 to 4.69 at the
+  finer of them.
 
 - **The generator's ocean was nearly all shallow** (2026-09-13, S2) — the oceanic hypsometric mode
   sat at about -390 m against Earth's -3,700, because the height field was renormalised to its own
@@ -1103,11 +1106,16 @@
 
 ## Open
 
-- **Habitability reads the river default, not the river setting.** `NationStage.drawableRiverFlow`
-  pins `RiverConfig.sourceFlowShare`'s default rather than reading the setting, so a world whose river
-  slider has been moved builds its habitability against a different river density than the map
-  draws. Found by the C2 sweep, named and documented, not fixed (a behaviour change wants its own
-  guard). 2026-09-12.
+- **Habitability decides which cells are on a river by a rule the map no longer draws by.**
+  `NationStage.drawableRiverFlow` counts a cell as riverine where its accumulated runoff passes
+  0.0006 of the world's own total, which was `RiverConfig.sourceFlowShare`'s default until R1
+  retired it. The map now draws a channel where the ground can cut one, so the two answers part
+  company — most visibly on a bare steep hillside, which carries a channel and has never been a
+  place to live. Whether habitability should read the channel mask instead is a question about what
+  a settlement wants from water (discharge it can drink and float a boat on) rather than about the
+  drawing, and answering it moves every realm on every map, so it wants its own measurement and its
+  own guard. The older half of this entry stands too: the figure is a constant and not the setting,
+  so it was already not what a moved slider drew. 2026-09-12, restated 2026-09-21 at R1.
 - **Realm governments are decided by cell counts, not areas.** `Atlas.government`'s empire and
   free-city bars count cells, so the same world exported at a finer grid promotes every realm: the
   `minCells` class of defect again. Express them as shares of the land and pin with the resolution

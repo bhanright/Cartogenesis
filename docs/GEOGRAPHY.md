@@ -26,6 +26,56 @@ headwaters — channel cells with no upstream channel — which by definition si
 `RiverEndingsTest` follows the whole drainage and finds no breaks. Depression filling guarantees
 every land cell has a downhill path out.
 
+**A channel begins where the ground can cut one.** A cell carries a channel where its
+runoff-weighted drainage area times its gradient to the power 1.65 clears a threshold in square
+kilometres, and everything downstream of such a cell carries one too, because discharge only grows.
+That is Montgomery and Dietrich's criterion (1988, 1989; Dietrich et al. 1993) and the exponent is
+their own fit over their steepland channel heads, `A ∝ S^-1.65`; the `A·S²` that gets quoted more
+often is Dietrich et al.'s landsliding threshold, a different way for a hollow to become a channel.
+The threshold is theirs too: five hectares of support area at a head gradient of 0.4 gives 0.011
+km², and their arid lowland sites — three square kilometres at a gradient near 0.05 — give 0.021,
+twice as much rather than two hundred times, which is the finding those papers are about.
+
+Two terms make it a criterion rather than a number. The area is weighted by the cell's runoff
+against Earth's mean over land, 715 mm a year, with the river stage's own 150 mm floor on it, so a
+wet hillside reaches the threshold on less ground. And the threshold is multiplied by the plant
+cover the ground carries, up to two hundredfold under a closed canopy, which is the universal
+soil-loss equation's cover factor (1.0 bare, 0.005 forested) read as a resistance. The gradient is
+the **true ground's**, never the routing surface's: the depression fill and the potential laid
+across the flats it makes are bookkeeping that let a receiver be chosen, and a flat's true gradient
+is zero, which is why a reach crossing one initiates nothing of its own and is carried by the
+downstream rule instead. Ground that never thaws — where Thornthwaite's demand is exactly zero —
+starts no channel, though a river rising in a warmer catchment still runs across it.
+
+Everything in that rule is a length, an area or a dimensionless gradient, so it means the same thing
+at every grid. What it replaced meant three different things: a channel was drawn where the
+accumulated runoff passed a share of the world's own total, the drawing was capped at four hundred
+courses, and a course under eight cells was dropped — a share, a count of courses and a count of
+cells, each of which describes different ground at 512 and at 2048. The one rule left about the
+drawing is cartographic and says so: a course shorter than a hundred kilometres is not given a line
+of its own, and a lake's outflow is exempt, because everything the lake drains comes down it and
+its length is the lake's business rather than the channel's.
+
+What the criterion cannot do at these grids is place an individual channel head. A cell is 275 km²
+at 512 and 17 at 2048, and a humid channel head's support area is one to ten hectares — far below
+one cell either way — so in wet country the area side of the inequality is settled before it is
+asked and the gradient and the cover decide. What it can resolve is the aridity dependence: the
+threshold reaches 0.6 km² under a closed canopy against 0.013 on bare ground, and a dry lowland's
+support area runs to square kilometres, which spans cells at 2048.
+
+**Drainage density peaks in dry country.** Langbein and Schumm (1958) and Moglen, Eltahir and Bras
+(1998) put the maximum of channel length per unit of land at low to intermediate effective
+precipitation, with a fall-off on both sides: more rain makes more runoff, and more rain also grows
+the cover that holds a hillside together, and above semi-arid country the second wins. Only the
+second can make a curve turn over — a runoff weight on the area can push cells over a fixed bar and
+can never bring one back — so the cover term is what this claim rests on. Measured over the network
+the criterion initiates, pooled on seeds 7/42/1234/99 at 512, the density is 0.0527, 0.0499, 0.0436,
+0.0375 and 0.0316 km per km² across hyper-arid, arid, semi-arid, dry sub-humid and humid country,
+and pooled on six seeds at 2048 it is 0.0741, 0.0674, 0.0602, 0.0508 and 0.0475. The peak is in a
+dryland on every seed at both grids and humid country carries 0.73 of the semi-arid density at 512
+and 0.79 at 2048. With the cover term off the same worlds peak in humid country and the ratio is
+1.05 to 1.15, which is the control.
+
 **A river runs from its farthest source.** A course is traced from the headwater with the longest
 way down to the water rather than from the one already carrying the most, so what the map calls a
 river holds the whole of the longest watercourse in its catchment and every other branch is drawn

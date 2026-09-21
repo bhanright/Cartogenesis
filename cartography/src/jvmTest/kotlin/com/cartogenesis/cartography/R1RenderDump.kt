@@ -22,10 +22,19 @@ import kotlin.test.Test
  * person.
  *
  * **The control is the cover term**, `RiverConfig.coverRaisesChannelHead`, which is the same
- * control the drainage-density guard is shown failing against. It is not the rule R1 replaced —
- * that rule is gone, and a picture of it has to come from a build at the branch point — but it is
- * the half of this criterion that carries the climate, and turning it off is what makes every
- * country dissect alike again.
+ * control `ChannelInitiationControlTest` shows the drainage-density clauses failing against. It is
+ * not the rule R1 replaced — that rule is gone, and a picture of it has to come from a build at the
+ * branch point — but it is the half of this criterion that carries the climate, and turning it off
+ * is what makes every country dissect alike again.
+ *
+ * **What this harness does not yet show, measured rather than suspected.** The view it renders —
+ * `MapView.FANTASY` in the Atlas style — carries no river ink: the two pictures of a world whose
+ * channel network differs by a factor of two in cells and whose drawn courses differ by half differ
+ * by **zero pixels**, on all three crops, and `PenAndInkTest`'s twelve recorded fingerprints are
+ * unchanged to the bit across R1 for the same reason. So the numbers printed below are the
+ * measurement and the pictures are relief and coast only. Whichever view draws the rivers is what
+ * this harness should ask for, and until it does the eye has not been shown the thing the chunk
+ * changed.
  */
 class R1RenderDump {
 

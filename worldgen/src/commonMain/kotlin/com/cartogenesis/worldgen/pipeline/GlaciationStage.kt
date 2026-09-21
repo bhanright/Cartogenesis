@@ -552,7 +552,9 @@ object GlaciationStage {
         val margin = IceSheet.marginDistanceKm(
             config, frozen, relative, config.scale.highestLandMetres, metresPerRootKm, cellSpanKm
         )
-        val marginDistanceKm = margin.distanceKm
+        // The geometric one for the tally, since what reads it asks how big a body of ice is;
+        // the profile's own argument stays inside [IceSheet.Margin]. See that class.
+        val marginDistanceKm = margin.nearestMarginKm
 
         // And which of that ice is a *sheet*. The profile is a sheet's and only a sheet's, so a
         // frozen body smaller than [IceSheet.SMALLEST_SHEET_SQUARE_KM] is left as the frozen
@@ -569,7 +571,7 @@ object GlaciationStage {
         }
 
         val accelerated = accelerator?.sheet(
-            cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheetBody,
+            cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, relative, sheetBody,
             metresPerRootKm, config.scale.highestLandMetres,
             config.cellHeightInCellWidths.toFloat(), cellSpanKm
         )

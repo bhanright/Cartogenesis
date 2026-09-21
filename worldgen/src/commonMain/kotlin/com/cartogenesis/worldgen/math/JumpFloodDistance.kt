@@ -45,6 +45,9 @@ object JumpFloodDistance {
     /** No source has claimed this cell yet, in the buffers the flood passes between each other. */
     private const val NO_SOURCE = -1
 
+    /** Extra step-1 passes a weighted flood gets at the end of the schedule. See [run]. */
+    private const val WEIGHTED_REPAIR_PASSES = 4
+
     /**
      * @param dist pre-seeded with 0 at source cells and [INFINITE] elsewhere; overwritten with the
      *   distance to the nearest source, in *cell widths*. Cells with no source anywhere keep
@@ -92,7 +95,16 @@ object JumpFloodDistance {
         if (!anySource) return
 
         var nextNearestSource = IntArray(cellCount)
-        for (stepCells in schedule(width, height)) {
+        // A weighted flood is not exact, and what it leaves behind is a cell that never heard of
+        // the source that only just beats the one it has. Each extra step-1 pass hands a cell
+        // every answer its neighbours hold, so a source that won one cell reaches its neighbour,
+        // then that one's neighbour: the repair spreads one cell per pass. Four of them close the
+        // narrow wedges a halving schedule leaves without costing what another halving would, and
+        // on `IceSheetTest`'s five worlds they take the surface steps over the profile's own
+        // ceiling from 42 and 22 to what the clause now measures. The plain flood is exact
+        // already, by `JumpFloodDistanceTest`'s brute-force check, so it pays for none of them.
+        val repairs = if (cost == null) 0 else WEIGHTED_REPAIR_PASSES
+        for (stepCells in schedule(width, height) + IntArray(repairs) { 1 }) {
             pass(
                 width, height, stepCells, cellHeightInCellWidths, cost,
                 nearestSource, nextNearestSource

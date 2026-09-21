@@ -102,8 +102,21 @@ object IceSheet {
                 (iceDensityKgPerM3.toDouble() * gravityMPerS2)
         ).toFloat()
 
-    /** Which margin each frozen cell's dome rises from, and how far off it is, in kilometres. */
-    class Margin(val distanceKm: FloatArray, val nearestCell: IntArray)
+    /**
+     * Which margin each frozen cell's dome rises from, how far off it is, and how far off the
+     * *nearest* margin is, all in kilometres.
+     *
+     * The two distances are not the same quantity and are not interchangeable. [distanceKm] is the
+     * profile's argument: how far the cell stands from the margin whose profile reaches it lowest,
+     * which is the one the surface is measured from. [nearestMarginKm] is the geometric one, how
+     * far the ice edge is in a straight line, and it is what a reader means by a sheet's
+     * half-width; every guard that asks how big a body of ice is asks that one.
+     */
+    class Margin(
+        val distanceKm: FloatArray,
+        val nearestCell: IntArray,
+        val nearestMarginKm: FloatArray
+    )
 
     /**
      * Which margin cell each frozen cell's surface is measured from, and how far away it is in
@@ -198,6 +211,24 @@ object IceSheet {
             }
         }
         val kilometresPerCellWidth = config.cellWidthKm.toFloat()
+
+        // The plain flood first, over the same sources, which answers the geometric question:
+        // how far is the edge of the ice. Nothing about the surface is read off it — the envelope
+        // below is what the profile is measured over — but it is what a sheet's half-width means,
+        // and the envelope's own distance is not that, since the margin governing a cell may be
+        // twice as far off as the nearest one and on the far side of a strait.
+        val nearestMargin = distance.copyOf()
+        val nearestMarginCell = nearest.copyOf()
+        JumpFloodDistance.run(
+            config.width, config.height, nearestMargin, nearestMarginCell,
+            config.cellHeightInCellWidths
+        )
+        for (cell in 0 until cellCount) {
+            nearestMargin[cell] =
+                if (!frozen[cell] || nearestMargin[cell] >= JumpFloodDistance.INFINITE) 0f
+                else nearestMargin[cell] * kilometresPerCellWidth
+        }
+
         JumpFloodDistance.run(
             config.width, config.height, distance, nearest, config.cellHeightInCellWidths
         ) { source, squaredCellWidths ->
@@ -219,7 +250,7 @@ object IceSheet {
                 else distance[cell] * kilometresPerCellWidth
             if (!frozen[cell]) nearest[cell] = cell
         }
-        return Margin(distance, nearest)
+        return Margin(distance, nearest, nearestMargin)
     }
 
     /**

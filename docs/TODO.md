@@ -1,23 +1,33 @@
 # To do
 
-- **The audit tier has crashed the Java virtual machine twice on one machine, and it is the
-  machine.** Running the tier on 2026-09-21 killed the test worker 180 seconds in with
-  `EXCEPTION_ACCESS_VIOLATION` inside `jvm.dll`, on the exception-throw path, under
-  `LandmarkStage.generate`'s `sortByDescending` — which reads as a comparator raising Tim sort's
-  broken-contract error, and `NationStage.habitability` does end in `coerceIn(0f, 1f)`, which
-  passes a not-a-number straight through because every comparison against one is false. It is not
-  that. The same class was rerun on the same commit with the same three worlds and went green
-  through the generation, failing only on the assertion it was already failing on; and forty
-  minutes later a second `EXCEPTION_ACCESS_VIOLATION` in `jvm.dll` took out the build daemon's
-  **C2 compiler thread** while it was compiling Kotlin, which shares nothing with the generator at
-  all. Two access violations inside the virtual machine, in two processes, doing two unrelated
-  jobs, neither reproducible, is a machine and not a program. Recorded rather than fixed, and
-  recorded rather than dropped, for two reasons: a nightly tier that dies at its first class
-  reports every later class as never having run, which is most of what "chronically red with a
-  rotating cast" looked like from outside; and a machine whose virtual machine faults in the
-  optimiser can also finish a run with numbers that are quietly wrong, so a figure measured here
-  alone is worth less than one a second machine has seen. If it ever reproduces on the build
-  runner, the habitability path above is where to start. 2026-09-21, T3.
+- **The audit tier cannot be finished on the machine T3 ran it on, and the fault is the machine.**
+  Three `EXCEPTION_ACCESS_VIOLATION`s inside `jvm.dll` in one day, 2026-09-21, in three processes
+  doing three unrelated jobs. The first killed the test worker 180 seconds into the tier, on the
+  exception-throw path under `LandmarkStage.generate`'s `sortByDescending` — which reads as a
+  comparator raising Tim sort's broken-contract error, and `NationStage.habitability` does end in
+  `coerceIn(0f, 1f)`, which passes a not-a-number straight through because every comparison against
+  one is false. It is not that: the same class was rerun on the same commit with the same three
+  worlds and went through the generation, failing only on the assertion it was already failing on.
+  The second took out the build daemon's **C2 compiler thread** while it was compiling Kotlin,
+  which shares nothing with the generator. The third, at the byte-for-byte same address as the
+  first (`jvm.dll+0x820c2a`), killed the worker again after `ScaleFreeAuditTest`, so the five
+  classes after it alphabetically — the snow balance, the stage profile, the straight-run network,
+  the tectonic history and W1's renders — never ran at all and reported nothing.
+  In the same run three classes threw index errors from three different stages with values no
+  program produces: `PlateStage.classifyBoundaries` read plate 2,055 out of fourteen,
+  `SeaLevelStage.markUnreachableWaterAsLand` cell 2,048 out of 790, and `FlowRouting.drainageOrder`
+  went exactly one past the end of a 1,593,836-cell array. A plate id of 2,055 among fourteen
+  plates is not arithmetic going wrong, it is a word of memory that changed; and the same machine
+  is faulting in the optimiser. Treated as one fault with one cause.
+  Recorded rather than fixed, and recorded rather than dropped, for three reasons: a tier that
+  dies at a class reports every later class as never having run, which is most of what
+  "chronically red with a rotating cast" looks like from outside; the reds that are real are
+  invisible underneath it; and a machine whose virtual machine faults in the optimiser can also
+  finish a run with numbers that are quietly wrong, so a figure measured there alone is worth less
+  than one a second machine has seen. **Nothing in this chunk's ledger row that was measured only
+  on that machine should be treated as settled until the nightly runner has agreed with it.** If
+  any of the three index errors ever reproduces on the runner, the habitability path above is
+  where to start on the first of them. 2026-09-21, T3.
 - **A lake's outflow can be discarded as a headwater stub.** A cell whose only upstream water is a
   lake's open water has no channel above it, so `RiverStage.traceRivers` treats it as a head; and
   where the lake sits within a few cells of the trunk, the course from that head is shorter than

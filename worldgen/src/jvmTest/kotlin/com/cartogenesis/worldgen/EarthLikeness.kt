@@ -1554,6 +1554,10 @@ internal object EarthLikeness {
             // support-area network is climate-blind and its peak was asserted and passing before
             // R1, so R1 must not have moved it.
             drainagePeakComplaint(label, metrics.drainageFullNetwork),
+            // R1's own two, over the network its criterion initiates. Per seed, because every seed
+            // meets them at both grids.
+            drainagePeakComplaint(label, metrics.drainageInitiatedNetwork),
+            drainageWetSideComplaint(label, metrics.drainageInitiatedNetwork),
             drawnCoverageComplaint(label, metrics.drawnShareOfMainStem),
             // Asserted since S2 gave the height field an absolute vertical scale. Before that the
             // curve was a single peak straddling the shoreline on every seed and both clauses were
@@ -1584,12 +1588,6 @@ internal object EarthLikeness {
             // pass took that relief away on purpose, so the pooled dimension came down from 1.149
             // to 1.129 and seed 99 to 1.092. The trade is in `TODO.md`.
             coastlineComplaint(label, metrics.coastline)?.let { complaints.add(it) }
-            // R1's own two, over the network the criterion initiates, and pooled — see
-            // [drainagePeakComplaint] for what one world's aridity classes can and cannot say.
-            drainagePeakComplaint(label, metrics.drainageInitiatedNetwork)
-                ?.let { complaints.add(it) }
-            drainageWetSideComplaint(label, metrics.drainageInitiatedNetwork)
-                ?.let { complaints.add(it) }
         }
         return complaints
     }
@@ -1674,17 +1672,18 @@ internal object EarthLikeness {
      * tie-break and not the result. Dry against wet is the result, and it is what these two clauses
      * hold.
      *
-     * **Read over two networks since R1, and asserted differently over each.** Over the
-     * support-area network — T3's instrument, which is climate-blind — it stays a per-seed clause,
-     * because it was asserted and passing there before R1 and a chunk must not break a green bar.
-     * Over the network R1's criterion initiates it is pooled, and the reason is what the paragraph
-     * below already says about these classes: the dry classes run within a tenth of one another, so
-     * which of them comes top is the tie-break and not the result, and on one world a class is one
-     * or two regions of one continent rather than a population of countries. Measured over the
-     * initiated network, the peak lands in a dryland on all four standard seeds at 512 and on four
-     * of the six audited seeds at 2048, and pooled in the semi-arid class at both grids; seed 1234
-     * at 2048 is the one that does not, by a tenth. The figures are in docs/DESIGN_LEDGER.md, R1,
-     * and the fall-off's flattening with resolution is in `TODO.md`.
+     * **Read over two networks since R1, and asserted on both.** Over the support-area network —
+     * T3's instrument, which is climate-blind — it stays where T3 left it, because it was asserted
+     * and passing there before R1 and a chunk must not break a green bar. Over the network R1's
+     * criterion initiates it is the new clause, and it is the one that means something about
+     * climate, because that network is the only one of the two whose head moves with the rain and
+     * the cover. Both hold on every seed at 512 and at 2048; the figures are in
+     * docs/DESIGN_LEDGER.md, R1.
+     *
+     * Which dryland the maximum lands in moved when the criterion did, and the paragraph below
+     * says why that is not the result: over the initiated network it is hyper-arid on most seeds
+     * and semi-arid or arid on the rest, and the dry classes run within a fifth of one another.
+     * Dry against wet is the result, and [drainageWetSideComplaint] is the other half of it.
      *
      * The peak clause listed three classes until W1 and now lists four, which is UNEP's own list:
      * dry sub-humid, from an aridity index of 0.5 to 0.65, is a dryland, and leaving it out was an
@@ -1737,10 +1736,19 @@ internal object EarthLikeness {
      * property of the drainage, and the accident is what W2 spent. R1, channel initiation with a
      * climate term, is queued for exactly this and is the chunk that earns the assertion back.
      *
-     * **Asserted since R1, over the network the criterion initiates, and pooled.** The criterion
-     * reads the climate now — the area is weighted by the runoff and the threshold by the cover —
-     * and the curve turns over. See [drainagePeakComplaint] for why both of R1's clauses are pooled
-     * and what one world can say about an aridity class.
+     * **Asserted since R1, over the network the criterion initiates, and on every seed.** The
+     * criterion reads the climate now — the area is weighted by the runoff and the threshold by the
+     * cover — and the curve turns over on every seed at both grids: 0.58 to 0.81 over the four
+     * standard seeds at 512, pooled 0.73, and 0.54 to 0.97 over the six audited seeds at 2048,
+     * pooled 0.79.
+     *
+     * The margin narrows as the grid is refined and that is worth watching rather than hiding: seed
+     * 1234 reads 0.81 at 512 and 0.97 at 2048. A finer grid resolves the steep ground that
+     * orographic rain falls on, and this criterion reads the gradient, so the wet side gains more
+     * from refinement than the dry. It is in `TODO.md` with the figures.
+     *
+     * `ChannelInitiationControlTest` is the control: with `RiverConfig.coverRaisesChannelHead` off,
+     * the ratio is 1.05 to 1.15 and this clause bites on every seed.
      */
     fun drainageWetSideRatio(drainage: DrainageByAridity): Double {
         val semiArid = drainage.densityIn(Aridity.SEMI_ARID)

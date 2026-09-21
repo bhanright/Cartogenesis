@@ -3,7 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.RiverConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.pow
+import kotlin.math.ln
 import kotlin.math.sqrt
 
 /**
@@ -53,27 +53,26 @@ object ChannelInitiation {
     const val CHANNEL_HEAD_AREA_SLOPE_SQUARED_KM2 = 0.008f
 
     /**
-     * How much higher the critical shear stress is under a closed canopy than over bare ground.
+     * How much more resistant to erosion a closed canopy makes the ground than bare soil, as a
+     * factor on the threshold.
      *
-     * Tables of permissible shear stress for channel linings put bare fine-grained soil at a few
-     * pascals and an established grass or root-reinforced surface at fifty to a hundred, a factor
-     * of twenty to fifty; Istanbulluoglu and Bras (2005) work the same effect through a landscape
-     * model and find vegetation moves channel-head support areas by about an order of magnitude.
-     * Ten is the low end of the first and the middle of the second, so it is the figure that claims
-     * least.
-     */
-    const val COVER_CRITICAL_SHEAR_GAIN = 10f
-
-    /**
-     * The power the critical shear stress enters the support-area threshold at.
+     * Two hundred, and it is the universal soil-loss equation's cover-management factor read
+     * backwards. `C` in that equation is 1.0 on bare tilled soil and 0.005 or less under a closed
+     * forest canopy (Wischmeier & Smith 1978), which is the same statement as "the same rainfall
+     * erodes two hundred times less" — and a surface two hundred times harder to erode needs two
+     * hundred times the area-slope product before running water can cut a head in it. Five
+     * thousandths is the *conservative* end of the published range; a tenth of that is quoted for
+     * undisturbed rainforest, and this takes the smaller claim.
      *
-     * Five thirds, from the threshold-of-motion derivation Montgomery and Dietrich (1994) state:
-     * overland flow of depth `h` on a gradient `S` exerts `rho g h S`, Manning gives `h` from the
-     * unit discharge as the three-fifths power, and solving `A S^2 = C` for the area at which the
-     * shear first reaches `tau_c` leaves `C` proportional to `tau_c^(5/3)` and inversely
-     * proportional to the runoff.
+     * **This is the one number here that Montgomery and Dietrich's field range does not settle**,
+     * and it is worth saying so. Their humid steepland heads and their arid lowland ones give
+     * nearly the same `A x S^2` — which is what [CHANNEL_HEAD_AREA_SLOPE_SQUARED_KM2] is — but the
+     * two site classes differ in relief and in cover at the same time, so a product that agrees
+     * across them constrains neither term on its own. Moglen, Eltahir and Bras (1998) require the
+     * cover term to be the larger of the two above semi-arid country, or their curve does not turn
+     * over; the soil-loss equation is where the size of it comes from.
      */
-    const val CRITICAL_SHEAR_EXPONENT = 5.0 / 3.0
+    const val CLOSED_CANOPY_RESISTANCE_GAIN = 200.0
 
     /**
      * The rainfall the runoff weight is measured against, in millimetres a year: Earth's mean over
@@ -98,18 +97,19 @@ object ChannelInitiation {
     const val DRIEST_RUNOFF_SHARE_OF_EARTH_MEAN = 0.02f
 
     /**
-     * How much the threshold is multiplied by over ground carrying [vegetationDensity] of cover.
+     * How much the threshold is multiplied by over ground carrying [vegetationDensity] of cover:
+     * one over bare ground and [CLOSED_CANOPY_RESISTANCE_GAIN] under a closed canopy.
      *
-     * One over bare ground and [COVER_CRITICAL_SHEAR_GAIN] to the [CRITICAL_SHEAR_EXPONENT] — about
-     * forty-six — under a closed canopy. That is the span Moglen, Eltahir and Bras's curve needs to
-     * turn over: between semi-arid and humid country this generator's cover roughly doubles while
-     * its rainfall roughly triples, so a threshold that rose only with the cover itself would never
-     * catch the rain, and the five-thirds power is why it does.
+     * Exponential in the cover between those two ends, which is the shape the soil-loss literature
+     * measures rather than a convenience: Elwell and Stocking (1976) fit soil loss against
+     * percentage cover as a decaying exponential, and the USLE's own cover-management table is that
+     * curve tabulated. A linear interpolation between the same two ends would put nine tenths of
+     * the resistance in the last tenth of the canopy, which is the opposite of what a grass sward
+     * does — the first thirty per cent of cover is where most of the protection is.
      */
     fun coverFactor(vegetationDensity: Float): Float {
         val cover = vegetationDensity.coerceIn(0f, 1f)
-        val shearGain = 1f + (COVER_CRITICAL_SHEAR_GAIN - 1f) * cover
-        return shearGain.toDouble().pow(CRITICAL_SHEAR_EXPONENT).toFloat()
+        return kotlin.math.exp(ln(CLOSED_CANOPY_RESISTANCE_GAIN) * cover).toFloat()
     }
 
     /** A cell's runoff as a share of Earth's mean over land, floored — see the two constants. */
@@ -183,10 +183,11 @@ object ChannelInitiation {
         landCellCount: Int,
         filled: FloatField,
         flowTarget: IntArray,
-        precipitationMm: FloatField,
-        vegetationDensity: FloatField,
+        climate: ClimateResult,
         isOpenWater: (Int) -> Boolean
     ): BooleanArray {
+        val precipitationMm = climate.precipitationMm
+        val vegetationDensity = climate.vegetationDensity
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
@@ -201,6 +202,7 @@ object ChannelInitiation {
 
         for (cell in 0 until cellCount) {
             if (!isLand[cell] || isOpenWater(cell)) continue
+            if (neverThaws(config, climate, cell)) continue
             channel[cell] = isChannelHead(
                 areaKm2.data[cell], gradient[cell], vegetationDensity.data[cell], config.rivers
             )
@@ -228,8 +230,31 @@ object ChannelInitiation {
      */
     fun channelMaskOf(world: com.cartogenesis.worldgen.model.WorldMap): BooleanArray = channelMask(
         world.config, world.sea.isLand, world.sea.landCellCount, world.rivers.filledElevation,
-        world.rivers.flowTarget, world.climate.precipitationMm, world.climate.vegetationDensity
+        world.rivers.flowTarget, world.climate
     ) { world.rivers.lakes.isOpenWater(it) }
+
+    /**
+     * Ground that never thaws, and so never starts a channel of its own.
+     *
+     * Thornthwaite's demand is exactly zero where neither season rises above freezing, which is the
+     * same test `EarthLikeness` files as its FROZEN class and the same arithmetic the lake water
+     * balance runs. Such a cell is under perennial snow or ice or is a polar desert on frozen
+     * ground: water does not run over it in any season, so nothing there cuts a head. What crosses
+     * it from warmer ground upstream is still a channel — the downstream rule in [channelMask]
+     * carries it — which is the Lena and the Yenisey, rivers that rise where the summer thaws and
+     * run on over ground that does not.
+     *
+     * A head rule and not a mask over the network, for exactly that reason, and it is why the
+     * drainage densities this criterion produces can be read as a curve against aridity at all:
+     * without it the coldest country came out as the most finely dissected on the map, on cells
+     * where no water runs.
+     */
+    fun neverThaws(config: WorldGenConfig, climate: ClimateResult, cell: Int): Boolean =
+        LakeWaterBalance.potentialEvaporationMm(
+            climate.summerTemperature.data[cell],
+            climate.winterTemperature.data[cell],
+            config.lakes.evaporationScale
+        ) <= 0f
 
     /**
      * The dimensionless drop from each land cell to the cell it drains into: metres of fall over

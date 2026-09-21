@@ -210,8 +210,7 @@ object RiverStage {
         val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm)
         val flow = accumulateFlow(cellsAcross, cellsDown, sea, climate, filled, flowTarget)
         val isChannel = ChannelInitiation.channelMask(
-            config, sea.isLand, sea.landCellCount, filled, flowTarget,
-            climate.precipitationMm, climate.vegetationDensity
+            config, sea.isLand, sea.landCellCount, filled, flowTarget, climate
         ) { lakes.isOpenWater(it) }
         val rivers = traceRivers(config, sea, flow, flowTarget, lakes, isChannel)
 

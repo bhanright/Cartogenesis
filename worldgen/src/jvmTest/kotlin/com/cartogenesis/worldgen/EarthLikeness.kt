@@ -256,6 +256,7 @@ internal object EarthLikeness {
         val hortonDrawnRivers: StreamOrders,
         val drainage: DrainageByAridity,
         val drainageFullNetwork: DrainageByAridity,
+        val channelHead: ChannelHeadByAridity,
         val lakeSizes: SizeDistribution,
         val islandSizes: SizeDistribution,
         val iceCells: Long,
@@ -296,7 +297,14 @@ internal object EarthLikeness {
             world.sea.landCellCount
         )
         val longestPathKm = longestFlowPathKilometres(world, byHeight, squareKilometresPerCell)
-        val reaches = reachSample(world, catchmentCells.data, longestPathKm, squareKilometresPerCell)
+        val initiated = ChannelInitiation.channelMaskOf(world)
+        // The same walk restricted to the cells that carry a channel, which is the denominator the
+        // coverage share needs: see [ReachSample.add].
+        val longestChannelKm =
+            longestFlowPathKilometres(world, byHeight, squareKilometresPerCell, initiated)
+        val reaches = reachSample(
+            world, catchmentCells.data, longestPathKm, longestChannelKm, squareKilometresPerCell
+        )
         val hack = fitLine(reaches.mainStem.map { it.first }, reaches.mainStem.map { it.second })
         val hackDrawnCourse =
             fitLine(reaches.drawnCourse.map { it.first }, reaches.drawnCourse.map { it.second })
@@ -307,7 +315,7 @@ internal object EarthLikeness {
         // ordering are both read off this — off the drawn courses until T3, off a support-area
         // mask until R1, and off the stage's own criterion now, which is the only one of the three
         // that knows about the climate and the only one that is the same network at every grid.
-        val fullNetwork = ChannelInitiation.channelMaskOf(world)
+        val fullNetwork = initiated
         val hackFullNetwork = hackOverChannelNetwork(
             fullNetwork, catchmentCells.data, longestPathKm, squareKilometresPerCell
         )
@@ -385,6 +393,7 @@ internal object EarthLikeness {
             hortonDrawnRivers = hortonDrawnRivers,
             drainage = drainage,
             drainageFullNetwork = drainageFullNetwork,
+            channelHead = ChannelHeadByAridity.of(world, aridity),
             lakeSizes = SizeDistribution.of(lakeAreas),
             islandSizes = SizeDistribution.of(islandAreas),
             iceCells = iceCells,
@@ -592,10 +601,15 @@ internal object EarthLikeness {
      * longest of the paths that reach the cell. Walked lowest-last over the height order the engine
      * routes water in, so a cell's own answer is final before it is handed downstream.
      */
+    /**
+     * [within], when given, restricts the walk to the cells it marks: a cell outside it starts a
+     * fresh path of zero rather than extending the one above it.
+     */
     private fun longestFlowPathKilometres(
         world: WorldMap,
         byHeight: IntArray,
-        squareKilometresPerCell: Double
+        squareKilometresPerCell: Double,
+        within: BooleanArray? = null
     ): DoubleArray {
         val cellsAcross = world.width
         val cellWidthKm = sqrt(squareKilometresPerCell * cellAspect(world))
@@ -603,8 +617,10 @@ internal object EarthLikeness {
         val longestKm = DoubleArray(cellsAcross * world.height)
         for (rank in byHeight.indices.reversed()) {
             val cell = byHeight[rank]
+            if (within != null && !within[cell]) continue
             val receiver = world.rivers.flowTarget[cell]
             if (receiver < 0 || !world.sea.isLand[receiver]) continue
+            if (within != null && !within[receiver]) continue
             val throughHere = longestKm[cell] +
                 stepKilometres(cell, receiver, cellsAcross, cellWidthKm, cellHeightKm)
             if (throughHere > longestKm[receiver]) longestKm[receiver] = throughHere
@@ -641,11 +657,35 @@ internal object EarthLikeness {
         val drawnShareOfMainStem: Double
             get() = if (mainStemKilometres <= 0.0) 0.0 else drawnKilometres / mainStemKilometres
 
-        fun add(catchmentKm2: Double, mainStemKm: Double, drawnKm: Double) {
+        /**
+         * Two things separate the coverage share from the two fits, and both are about what 1.0
+         * is supposed to mean.
+         *
+         * Hack's `L` runs to the **drainage divide**, over hillslope as well as channel, which is
+         * what [mainStem] pairs and what his exponent is defined over. A drawn course begins at a
+         * channel head, so measured against that it can never reach 1.0 and never could — the
+         * shortfall was the hillslope above every head, not a missing line. The coverage share
+         * therefore reads [longestChannelKm], the longest watercourse arriving at the outlet over
+         * the cells that carry a channel, and against that 1.0 is exactly the claim: a river is its
+         * own longest watercourse.
+         *
+         * And [countTowardCoverage] keeps to the courses that end on the sea or on a lake. A course
+         * ending on another river is a tributary: it stops where the trunk was already drawn, and
+         * the longest watercourse arriving at that junction very often comes up the *trunk* rather
+         * than up the tributary. `RiverCourseTest` draws the same line for the same reason.
+         */
+        fun add(
+            catchmentKm2: Double,
+            mainStemKm: Double,
+            drawnKm: Double,
+            longestChannelKm: Double,
+            countTowardCoverage: Boolean
+        ) {
             mainStem.add(ln(catchmentKm2) to ln(mainStemKm))
             drawnCourse.add(ln(catchmentKm2) to ln(drawnKm))
+            if (!countTowardCoverage) return
             drawnKilometres += drawnKm
-            mainStemKilometres += mainStemKm
+            mainStemKilometres += longestChannelKm
         }
     }
 
@@ -653,6 +693,7 @@ internal object EarthLikeness {
         world: WorldMap,
         catchmentCells: FloatArray,
         longestPathKm: DoubleArray,
+        longestChannelKm: DoubleArray,
         squareKilometresPerCell: Double
     ): ReachSample {
         val cellsAcross = world.width
@@ -673,7 +714,12 @@ internal object EarthLikeness {
                 )
             }
             if (mainStemKm <= 0.0 || drawnKm <= 0.0) return@forEach
-            sample.add(catchmentKm2, mainStemKm, drawnKm)
+            val last = river.cells[river.cells.size - 1]
+            val endsInWater = !world.sea.isLand[last] || world.rivers.lakes.isLake(last)
+            sample.add(
+                catchmentKm2, mainStemKm, drawnKm, longestChannelKm[outlet],
+                endsInWater && longestChannelKm[outlet] > 0.0
+            )
         }
         return sample
     }
@@ -909,6 +955,71 @@ internal object EarthLikeness {
      */
     internal enum class Aridity { FROZEN, HYPER_ARID, ARID, SEMI_ARID, DRY_SUBHUMID, HUMID }
 
+    /**
+     * What the channel-head criterion reads in each aridity class: the cover, the threshold the
+     * cover sets, and the runoff-weighted area a cell of that class brings to it.
+     *
+     * The mechanism printed rather than argued. Moglen, Eltahir and Bras's curve turns over because
+     * two terms pull opposite ways as a country gets wetter — more runoff on the left of the
+     * inequality, more root strength on the right — and a density that comes out in the wrong class
+     * is one of those two winning by the wrong margin. Without these three lines there is no way to
+     * tell which.
+     */
+    internal class ChannelHeadByAridity(
+        private val coverSum: DoubleArray,
+        private val thresholdKm2Sum: DoubleArray,
+        private val areaKm2Sum: DoubleArray,
+        private val cells: LongArray
+    ) {
+        fun meanCover(aridity: Aridity): Double = mean(coverSum, aridity)
+        fun meanThresholdKm2(aridity: Aridity): Double = mean(thresholdKm2Sum, aridity)
+        fun meanAreaKm2(aridity: Aridity): Double = mean(areaKm2Sum, aridity)
+
+        private fun mean(sums: DoubleArray, aridity: Aridity): Double {
+            val count = cells[aridity.ordinal]
+            return if (count == 0L) 0.0 else sums[aridity.ordinal] / count
+        }
+
+        operator fun plus(other: ChannelHeadByAridity) = ChannelHeadByAridity(
+            DoubleArray(coverSum.size) { coverSum[it] + other.coverSum[it] },
+            DoubleArray(thresholdKm2Sum.size) { thresholdKm2Sum[it] + other.thresholdKm2Sum[it] },
+            DoubleArray(areaKm2Sum.size) { areaKm2Sum[it] + other.areaKm2Sum[it] },
+            LongArray(cells.size) { cells[it] + other.cells[it] }
+        )
+
+        companion object {
+            fun of(world: WorldMap, aridity: Array<Aridity?>): ChannelHeadByAridity {
+                val classes = Aridity.entries.size
+                val cover = DoubleArray(classes)
+                val threshold = DoubleArray(classes)
+                val area = DoubleArray(classes)
+                val cells = LongArray(classes)
+                val areaKm2 = ChannelInitiation.runoffWeightedAreaKm2(
+                    world.width, world.height, world.sea.isLand, world.sea.landCellCount,
+                    world.rivers.filledElevation, world.rivers.flowTarget,
+                    world.climate.precipitationMm,
+                    world.config.scale.squareKilometresPerCell(world.width, world.height)
+                )
+                val riverConfig = world.config.rivers
+                for (cell in aridity.indices) {
+                    val here = aridity[cell] ?: continue
+                    val density = world.climate.vegetationDensity.data[cell]
+                    cover[here.ordinal] += density.toDouble()
+                    threshold[here.ordinal] +=
+                        riverConfig.channelHeadAreaSlopeSquaredKm2.toDouble() *
+                            if (riverConfig.coverRaisesChannelHead) {
+                                ChannelInitiation.coverFactor(density).toDouble()
+                            } else {
+                                1.0
+                            }
+                    area[here.ordinal] += areaKm2.data[cell].toDouble()
+                    cells[here.ordinal]++
+                }
+                return ChannelHeadByAridity(cover, threshold, area, cells)
+            }
+        }
+    }
+
     /** Channel length and land area in each aridity class, which is drainage density per class. */
     internal class DrainageByAridity(
         val channelKilometres: DoubleArray,
@@ -1128,6 +1239,7 @@ internal object EarthLikeness {
         private var hortonDrawnRivers: StreamOrders? = null
         private var drainage: DrainageByAridity? = null
         private var drainageFullNetwork: DrainageByAridity? = null
+        private var channelHead: ChannelHeadByAridity? = null
         private var iceCells = 0L
         private var lakeCells = 0L
         private var landCells = 0L
@@ -1175,6 +1287,7 @@ internal object EarthLikeness {
             drainage = drainage?.plus(metrics.drainage) ?: metrics.drainage
             drainageFullNetwork = drainageFullNetwork?.plus(metrics.drainageFullNetwork)
                 ?: metrics.drainageFullNetwork
+            channelHead = channelHead?.plus(metrics.channelHead) ?: metrics.channelHead
             iceCells += metrics.iceCells
             lakeCells += metrics.lakeCells
             landCells += metrics.landCells
@@ -1207,6 +1320,10 @@ internal object EarthLikeness {
             ),
             drainageFullNetwork = drainageFullNetwork ?: DrainageByAridity(
                 DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
+            ),
+            channelHead = channelHead ?: ChannelHeadByAridity(
+                DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size),
+                DoubleArray(Aridity.entries.size), LongArray(Aridity.entries.size)
             ),
             lakeSizes = SizeDistribution.of(lakeAreas),
             islandSizes = SizeDistribution.of(islandAreas),
@@ -1286,6 +1403,22 @@ internal object EarthLikeness {
                 "${it.name}:${"%.4f".format(metrics.drainageFullNetwork.densityIn(it))}"
             },
             "-", "Moglen, Eltahir & Bras 1998")
+        line(label, "channelHeadCoverByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.3f".format(metrics.channelHead.meanCover(it))}"
+            },
+            "-", "Istanbulluoglu & Bras 2005")
+        line(label, "channelHeadThresholdKm2ByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.4f".format(metrics.channelHead.meanThresholdKm2(it))}"
+            },
+            "%.4f".format(metrics.channelHead.meanThresholdKm2(Aridity.HYPER_ARID)),
+            "Montgomery & Dietrich 1988")
+        line(label, "runoffWeightedAreaKm2ByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.0f".format(metrics.channelHead.meanAreaKm2(it))}"
+            },
+            "-", "Montgomery & Dietrich 1988")
         line(label, "drainageDensityPeak", metrics.drainage.peak()?.name ?: "none",
             "SEMI_ARID", "Moglen, Eltahir & Bras 1998")
         line(label, "drainageDensityKmPerKm2",
@@ -1573,14 +1706,15 @@ internal object EarthLikeness {
      * falls under `RiverConfig.shortestDrawnCourseKm` is not drawn at all, which is a watercourse
      * the map really does not have.
      *
-     * Four fifths is the bar, and it is the second of those two spent once: a hundred kilometres
-     * is the shortest drawn course, a basin at [SMALLEST_HACK_CATCHMENT_KM2] carries a main stem of
-     * a few hundred, and a fifth is the most that rule can take off a sample floored at that size.
-     * What it refuses is the rule R1 removed: `RiverConfig.maxRivers` capped the drawing at four
-     * hundred courses whatever the grid, and the share it left was 0.484 at 512 and 0.408 to 0.506
-     * at 2048 — falling with the grid, which is the signature of a cap being measured.
+     * Nine tenths is the bar: one tenth of slack for those two, against a sample whose basins are
+     * floored at [SMALLEST_HACK_CATCHMENT_KM2] and whose watercourses therefore run to hundreds of
+     * kilometres, so the hundred-kilometre rule can only reach the smallest of them. What it
+     * refuses is the rule R1 removed: `RiverConfig.maxRivers` capped the drawing at four hundred
+     * courses whatever the grid, and the share that left was 0.484 at 512 and 0.408 to 0.506 at
+     * 2048 — falling with the grid, which is the signature of a cap being measured rather than a
+     * drainage.
      */
-    const val DRAWN_COVERAGE_BAR = 0.80
+    const val DRAWN_COVERAGE_BAR = 0.90
 
     fun drawnCoverageComplaint(label: String, drawnShareOfMainStem: Double): String? {
         if (drawnShareOfMainStem >= DRAWN_COVERAGE_BAR) return null

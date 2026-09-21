@@ -32,6 +32,36 @@ jobs:
       - name: Audit tier
         run: ./gradlew audit --console=plain
 
+      # T3: a red tier is only useful if it can be read. The badge in `README.md` says whether
+      # last night passed; this says what failed, on the run's own summary page, so a red is a
+      # line of text rather than a download. Read from the JUnit XML the Test tasks always write
+      # (`build/test-results/audit/`) rather than from the console log, because that is the one
+      # place the class and case names are structured; `if: always()` because the interesting
+      # case is the one where the step above failed.
+      - name: What failed
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET
+
+          failed, cases, suites = [], 0, 0
+          for path in sorted(glob.glob("*/build/test-results/audit/*.xml")):
+              suites += 1
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  cases += 1
+                  if case.find("failure") is not None or case.find("error") is not None:
+                      failed.append("%s.%s" % (case.get("classname", "?"), case.get("name", "?")))
+
+          print("## Audit tier")
+          if not suites:
+              print("No test results were written: the tier did not get as far as running.")
+          elif failed:
+              print("**%d of %d cases red** in %d classes: %s"
+                    % (len(failed), cases, suites, "; ".join(failed)))
+          else:
+              print("All %d cases green in %d classes." % (cases, suites))
+          PY
+
       - name: Upload audit reports and renders
         if: always()
         uses: actions/upload-artifact@v4

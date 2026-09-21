@@ -1,6 +1,7 @@
 # Cartogenesis
 
 [![CI](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml)
+[![Nightly audit](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml)
 
 Cartogenesis generates fantasy world maps from a seed. It models plate tectonics, erosion, climate
 and drainage, then adds realms, peoples and landmarks. The desktop and browser versions share a

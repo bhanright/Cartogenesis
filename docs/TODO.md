@@ -129,6 +129,24 @@
   raster); keeping the world's fields resident in graphics memory between stages, or generating in
   tiles, is what would let an export outgrow the heap. Whether 8192 completes in 24 GB wants
   measuring first. 2026-09-20.
+- **The vegetation shielding counts the cover twice, and it has taken a third of the world's
+  erosion away.** S3 scales the incision by `1 - 0.5 * density`, which is Istanbulluoglu and Bras's
+  measured factor, and spends it against a `bedrockErodibilityPerYear` that already carries Stock
+  and Montgomery's and Lague's figures for real bedrock rivers - rivers that ran through forests.
+  So the cover is counted once in the calibration and once again in the multiplier, and denudation
+  off an active belt falls from **0.271 to 0.183 mm/yr** (`IsostasyTest`'s own instrument, pooled
+  over five seeds). That one number is why seven cases in six classes that are green on the
+  pre-S3 commit are red: the collision uplift rate no longer matches the derivation it was set
+  from, 718106 keeps a lake past the Caspian's share because the notch has lost the water to cut
+  it out, its ice sheet stands 2511 m where it stood 1941, the deepest outlet trough asked for
+  over four worlds fell from 1255 m to 346, seed 43's rift lost two of its three land bridges, and
+  the plains read rougher than the bar. The cure is the one the runoff weight already uses and is
+  two lines: divide the shielding by its own mean over land, so the land's mean erodibility is
+  unchanged and what the term carries is the *relative* half between bare ground and closed
+  canopy, which is all the paper claims. It was left undone on purpose - it is a change to S3's
+  design rather than to its implementation, and the figures above are what the decision wants.
+  Whether `ErosionConfig.collisionUpliftMmPerYear` is then re-derived is a second question and
+  S2's. 2026-09-21, S3.
 - ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
   by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
   `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`

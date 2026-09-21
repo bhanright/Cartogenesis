@@ -291,23 +291,13 @@ internal object HydraulicErosion {
      */
     internal class Weather(
         /**
-         * Rainfall as a weight on the flow accumulation, normalised so that the mean over land is
-         * exactly 1.
+         * What each land cell contributes to the water below it, in millimetres a year and not yet
+         * normalised: annual rainfall, held at or above the floor in [provisionalWeather].
          *
-         * The normalisation is not cosmetic and must not be simplified away. The accumulation is
-         * a sum of these weights over a catchment, and the stage divides that sum by the land's
-         * cell count to get a share — in [cut] and in the transport capacity both. With a mean of
-         * 1 the land's total weight *is* its cell count, so both divisions keep meaning "this
-         * cell's share of the land's water" and [Rates.incisionCoefficient] keeps the calibration
-         * it was derived with. Drop the normalisation and the divisor would have to become the
-         * summed rainfall in two places at once, and `E = K A^m S^n` would be being spent against
-         * a differently scaled A than the one it was fitted to.
-         *
-         * It is also what makes a uniform-rain world come out bit for bit as it did before there
-         * was any rain in the stage at all: flat rainfall normalises to all ones, which is the
-         * weight the accumulation used to be handed.
+         * The stage never routes this directly. [normaliseOverLand] divides it by its own mean
+         * over the land each round routes on, and the quotient is what weights the accumulation.
          */
-        val runoff: FloatArray,
+        val rainfallMm: FloatArray,
         /** Plant cover, 0 for bare ground and 1 for closed canopy. See [VEGETATION_SHIELDING]. */
         val vegetationDensity: FloatArray
     )
@@ -336,14 +326,14 @@ internal object HydraulicErosion {
         val cut = SeaLevelStage.percentileCut(
             terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
-        val runoff = FloatArray(cellCount)
-        if (cut.landCellCount == 0) return Weather(runoff, FloatArray(cellCount))
+        val rainfall = FloatArray(cellCount)
+        if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount))
 
         val climate =
             ClimateStage.generateWithSeasonalMm(
                 config, cut, OceanStage.withoutCurrents(config, cut)
             ).result
-        val rainfallMm = climate.precipitationMm.data
+        val annualMm = climate.precipitationMm.data
 
         // A floor and not a physical term, and deliberately the river stage's own: below it a
         // desert range would contribute nothing at all to the water leaving it, and the channel
@@ -351,22 +341,60 @@ internal object HydraulicErosion {
         // a share of `ClimateStage.REFERENCE_MM`, which is the scale its rainfall is normalised
         // against, so the same figure in millimetres is that share times the reference.
         val floorMm = RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM
-        var summed = 0.0
         for (cell in 0 until cellCount) {
             if (!cut.isLand[cell]) continue
-            val rain = if (rainfallMm[cell] > floorMm) rainfallMm[cell] else floorMm
-            runoff[cell] = rain
-            summed += rain.toDouble()
-        }
-        val meanOverLand = (summed / cut.landCellCount).toFloat()
-        if (meanOverLand > 0f) {
-            for (cell in 0 until cellCount) runoff[cell] /= meanOverLand
+            rainfall[cell] = if (annualMm[cell] > floorMm) annualMm[cell] else floorMm
         }
 
         // Zero everywhere when the vegetation section is switched off, because that is the field
         // the climate stage hands back then — and a density of zero is a shielding factor of one,
         // so switching the cover off leaves the incision exactly as bare rock's.
-        return Weather(runoff, climate.vegetationDensity.data)
+        return Weather(rainfall, climate.vegetationDensity.data)
+    }
+
+    /**
+     * Divides a rainfall field by its own mean over [isLand], into [weights].
+     *
+     * This is the whole of what makes the stage's arithmetic keep working, and it must not be
+     * simplified away. The accumulation sums these weights over a catchment and the stage divides
+     * that sum by the land's cell count to get a share — in [cut] and in the transport capacity
+     * both. With a mean of exactly 1 the land's total weight *is* its cell count, so both
+     * divisions go on meaning "this cell's share of the land's water" and
+     * [Rates.incisionCoefficient] keeps the calibration it was derived with. Without it the
+     * divisor would have to become the summed rainfall in two places at once, and `E = K A^m S^n`
+     * would be spent against a differently scaled A than the one it was fitted to.
+     *
+     * Taken again every round, over that round's own land mask rather than the march's, because
+     * the shoreline moves as the land wears down and the sea rises up the valleys: a mean taken
+     * once would be the mean of a coastline that no longer exists, and the land the round routes
+     * on would carry a mean a little off 1.
+     *
+     * What the scheme is, said plainly: **relative climatic forcing**. It redistributes the
+     * world's water across the land and cannot change how much there is, so a world made uniformly
+     * wetter or drier erodes exactly as it did — the division cancels it. That is deliberate,
+     * since the incision coefficient was fitted at one total and nothing here re-fits it, but it
+     * does mean this stage answers where the rain falls and not how much. And the weight is
+     * rainfall standing in for runoff: what actually reaches a channel is rainfall less what the
+     * plants breathe out and the ground takes in, delivered in floods rather than evenly, and none
+     * of those three is modelled here.
+     *
+     * With the feed off the field is all ones, whose mean is one, so every weight comes back as
+     * exactly the 1f the accumulation used to be handed and the old world is reproduced to the bit.
+     */
+    private fun normaliseOverLand(
+        rainfallMm: FloatArray,
+        isLand: BooleanArray,
+        landCellCount: Int,
+        weights: FloatArray
+    ) {
+        var summed = 0.0
+        for (cell in rainfallMm.indices) if (isLand[cell]) summed += rainfallMm[cell].toDouble()
+        val mean = (summed / landCellCount).toFloat()
+        if (mean <= 0f) {
+            weights.fill(0f)
+            return
+        }
+        for (cell in rainfallMm.indices) weights[cell] = rainfallMm[cell] / mean
     }
 
     /**
@@ -436,10 +464,13 @@ internal object HydraulicErosion {
         val opening =
             if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
             else Weather(FloatArray(cellsAcross * cellsDown) { 1f }, FloatArray(cellsAcross * cellsDown))
-        // Held as the two arrays rather than as the pair, because the accumulation reads one of
-        // them once per land cell per round and a field load there is not free.
-        var runoff = opening.runoff
+        // Held as the arrays rather than as the pair, because the accumulation reads one of them
+        // once per land cell per round and a field load there is not free.
+        var rainfallMm = opening.rainfallMm
         var vegetationDensity = opening.vegetationDensity
+        // Filled at the top of every round by [normaliseOverLand], once that round's shoreline is
+        // known. Allocated here so the rounds share it.
+        val runoff = FloatArray(cellsAcross * cellsDown)
 
         // The solid earth's two answers to what the water is doing, both of them off by default
         // and both switched by their own setting so a guard can measure the world without them.
@@ -562,7 +593,7 @@ internal object HydraulicErosion {
             // top was given.
             if (round == refreshAtRound) {
                 val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round)
-                runoff = refreshed.runoff
+                rainfallMm = refreshed.rainfallMm
                 vegetationDensity = refreshed.vegetationDensity
             }
 
@@ -651,6 +682,9 @@ internal object HydraulicErosion {
                 settle()
                 return working
             }
+            // This round's shoreline is now known, so the weights are taken against this round's
+            // land. See [normaliseOverLand] for why that is where the mean has to come from.
+            normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
 
             val filled = FlowRouting.fillDepressions(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation
@@ -1420,10 +1454,18 @@ internal object HydraulicErosion {
      * catchment to the same storms is about half its bare equivalent's. So a half, spent linearly
      * in the cover: bare ground cuts at the full rate and closed canopy at half it.
      *
-     * Only the hillslope cut in [cut] reads it. The outlet notch and the distributary grooves cut
-     * through a sill of the river's own spoil and through a delta lobe's freeboard — loose,
-     * saturated, days-old material with nothing growing on it — so a canopy term there would be
-     * shielding ground that has no cover to shield it.
+     * A chosen approximation, and worth saying so: Istanbulluoglu and Bras do not halve an
+     * erodibility. Their model partitions the flow's shear stress between the plants and the bed
+     * and raises the threshold the bed fails at with the cohesion the roots add, which is a
+     * different shape of law with its own parameters. A half spent linearly in the cover is the
+     * effect their results carry, at the resolution this stage works to, and not their formula.
+     *
+     * Only the ordinary stream-power cut in [cut] reads it, which is every hillslope and channel
+     * cell of every round. The outlet notch and the distributary grooves do not, and the reason is
+     * not that the ground there is bare: a notch is a spill's base-level fall, spent over a fixed
+     * reach to grade a sill down to the water it drains to, rather than a cell deciding how much
+     * of itself the water passing over it takes away. An erodibility multiplier belongs to the
+     * second and has nothing to scale in the first.
      */
     private const val VEGETATION_SHIELDING = 0.5f
 
@@ -1524,7 +1566,7 @@ internal object HydraulicErosion {
         seed: Long,
         byFacet: Boolean,
         overPotential: Boolean,
-        /** The rounds' own rainfall weights; see [Weather.runoff]. */
+        /** The rounds' own rainfall weights; see [normaliseOverLand]. */
         runoff: FloatArray
     ): Opened {
         val cellCount = cellsAcross * cellsDown
@@ -1875,7 +1917,7 @@ internal object HydraulicErosion {
     ): Float {
         val distance = if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
         val slope = drop / distance * cellsAcross
-        // The land's water and not its area: [Weather.runoff] carries a mean of one over the
+        // The land's water and not its area: [normaliseOverLand] carries a mean of one over the
         // land, so dividing the weighted accumulation by the land's cell count still gives this
         // cell's share of everything that falls on the map.
         val share = area.data[cell] / landCells

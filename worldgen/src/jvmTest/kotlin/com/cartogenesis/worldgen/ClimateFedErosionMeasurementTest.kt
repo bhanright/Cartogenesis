@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
@@ -31,55 +32,76 @@ class ClimateFedErosionMeasurementTest {
      *
      * This is the refresh question. If the rain the rounds would have cut with at the end is much
      * the same rain they cut with at the start, one march at the top is the whole of it; if not,
-     * the stage owes a second march at the midpoint. Measured as a root-mean-square change in the
-     * flow weight over the land both terrains agree is land, and the weight's mean over land is
-     * one by construction, so the figure reads directly as a share.
+     * the stage owes a second march at the midpoint.
+     *
+     * Measured on the terrain the *fed* rounds leave as well as on the uniform-rain terrain, and
+     * that matters: a world cut by rain-weighted discharge is not the world flat rain leaves, so
+     * asking a uniform-rain terrain how far its rainfall has drifted answers a question about a
+     * landscape this stage no longer produces. Both are printed. The field compared is the weight
+     * the rounds actually route with - the march's rainfall over its own mean across that
+     * terrain's land, which is what `normaliseOverLand` does inside the stage - so its mean is one
+     * by construction and the root-mean-square change reads directly as a share of it.
      */
     @Test
     fun `report how far the rainfall drifts across the rounds`() {
         for (seed in longArrayOf(7L, 42L, 1234L)) {
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+            drift(WorldGenConfig(seed = seed, width = 512, height = 512))
+        }
+        // And once at an export grid, because the march's answer is a field over a grid and the
+        // question is whether the drift is a property of the world or of the resolution.
+        drift(WorldGenConfig(seed = 42L, width = 512, height = 512).atResolution(2048, 2048))
+    }
 
-            // The terrain the first round is handed: the uplift with the opening thermal budget
-            // spent on it, which is what `HydraulicErosion.apply` receives.
-            val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
-            // And the terrain the last round leaves, cut the way the stage cut before it could
-            // see the weather — the honest "after" for a question about what the cutting did.
-            val flatRain = config.copy(erosion = config.erosion.copy(climateFeed = false))
-            val carved = erodeBlocking(flatRain, uplift).height
+    private fun drift(config: WorldGenConfig) {
+        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
-            // And the ground halfway down, which is what the second march is taken on. Six rounds
-            // of the twelve rather than the twelfth round's own terrain: the lowstand schedule is
-            // written against the configured round count, so a six-round world's sea stands a
-            // little differently, and this is the midpoint to within that.
+        // The terrain the first round is handed: the uplift with the opening thermal budget spent
+        // on it, which is what `HydraulicErosion.apply` receives.
+        val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
+        val flatRain = config.copy(erosion = config.erosion.copy(climateFeed = false))
+
+        for ((label, rounds) in listOf("fed" to config, "flat" to flatRain)) {
+            val carved = erodeBlocking(rounds, uplift).height
+            // The ground halfway down, which is what the second march is taken on. Six of the
+            // twelve rather than the twelfth round's own terrain: the lowstand schedule is written
+            // against the configured round count, so a six-round world's sea stands a little
+            // differently, and this is the midpoint to within that.
             val halfway = erodeBlocking(
-                flatRain.copy(erosion = flatRain.erosion.copy(hydraulicRounds = 6)), uplift
+                rounds.copy(erosion = rounds.erosion.copy(hydraulicRounds = 6)), uplift
             ).height
 
-            val atTheTop = HydraulicErosion.provisionalWeather(config, weathered, config.seaLevel)
-            val atTheMiddle = HydraulicErosion.provisionalWeather(config, halfway, config.seaLevel)
-            val atTheEnd = HydraulicErosion.provisionalWeather(config, carved, config.seaLevel)
-
+            val atTheTop = weightsOver(config, weathered)
+            val atTheMiddle = weightsOver(config, halfway)
+            val atTheEnd = weightsOver(config, carved)
             val topLand =
                 SeaLevelStage.percentileCut(weathered, config.seaLevel, config.scale).isLand
             val middleLand =
                 SeaLevelStage.percentileCut(halfway, config.seaLevel, config.scale).isLand
-            val endLand =
-                SeaLevelStage.percentileCut(carved, config.seaLevel, config.scale).isLand
+            val endLand = SeaLevelStage.percentileCut(carved, config.seaLevel, config.scale).isLand
             val shared = BooleanArray(topLand.size) {
                 topLand[it] && middleLand[it] && endLand[it]
             }
             println(
-                "S3 RAIN DRIFT seed=%d  top to end %.1f%%, middle to end %.1f%%, over %d cells"
-                    .format(
-                        seed,
-                        drift(atTheTop.runoff, atTheEnd.runoff, shared) * 100,
-                        drift(atTheMiddle.runoff, atTheEnd.runoff, shared) * 100,
-                        shared.count { it }
-                    )
+                ("S3 RAIN DRIFT seed=%d at %d, rounds run %s: top to end %.1f%%, middle to end " +
+                    "%.1f%%, of the land mean, over %d cells").format(
+                    config.seed, config.width, label,
+                    drift(atTheTop, atTheEnd, shared) * 100,
+                    drift(atTheMiddle, atTheEnd, shared) * 100,
+                    shared.count { it }
+                )
             )
         }
+    }
+
+    /** The weights a round over [terrain] would route with: rainfall over its own land mean. */
+    private fun weightsOver(config: WorldGenConfig, terrain: FloatField): FloatArray {
+        val cut = SeaLevelStage.percentileCut(terrain, config.seaLevel, config.scale)
+        val rainfall =
+            HydraulicErosion.provisionalWeather(config, terrain, config.seaLevel).rainfallMm
+        var summed = 0.0
+        for (cell in rainfall.indices) if (cut.isLand[cell]) summed += rainfall[cell].toDouble()
+        val mean = (summed / cut.landCellCount).toFloat()
+        return FloatArray(rainfall.size) { rainfall[it] / mean }
     }
 
     /** Root-mean-square difference between two flow-weight fields over the cells both call land. */
@@ -136,28 +158,31 @@ class ClimateFedErosionMeasurementTest {
     }
 
     /**
-     * The march's share of the erosion stage, which is the share it is worth taking to a device.
+     * What the provisional climate costs against a whole generation, which is the share it would
+     * be worth taking to a device.
      *
-     * Printed at the two grids the cost of a climate was last measured at. Rule 8 — a new per-cell
-     * pass is specified with a GPU path from the start — is declined for this one, and this is the
-     * figure it is declined on: the moisture march is a lock-step wavefront across the wind, which
-     * is a sequential dependency a card cannot widen, and it is a low single-digit share of a
-     * generation besides.
+     * The *whole* provisional path and not the moisture march alone: the timed call is
+     * `provisionalWeather`, which takes the sea-level percentile, solves the still ocean, runs the
+     * seasonal marches, classifies the biomes and builds the vegetation density. All of that has
+     * to happen before a round can cut, so all of it is the cost. Rule 8 — a new per-cell pass is
+     * specified with a GPU path from the start — is declined for it on this figure: the moisture
+     * march is a lock-step wavefront across the wind, a sequential dependency a card cannot widen.
      */
     @Test
-    fun `report the march's share of the erosion stage`() {
+    fun `report the provisional climate's share of a generation`() {
         for (cells in intArrayOf(512, 1024)) {
             val config = WorldGenConfig(seed = 42L, width = cells, height = cells)
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
             val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
 
-            val marchMs = measureTimeMillis {
+            val pathMs = measureTimeMillis {
                 HydraulicErosion.provisionalWeather(config, weathered, config.seaLevel)
             }
             val worldMs = measureTimeMillis { WorldGenerationEngine.generateBlocking(config) }
             println(
-                "S3 MARCH COST %d: one march %d ms, two %d ms, of a %d ms generation, %.1f%%"
-                    .format(cells, marchMs, marchMs * 2, worldMs, marchMs * 200.0 / worldMs)
+                ("S3 MARCH COST %d: one provisional climate %d ms, the two the stage runs %d ms, " +
+                    "of a %d ms generation, %.1f%%")
+                    .format(cells, pathMs, pathMs * 2, worldMs, pathMs * 200.0 / worldMs)
             )
         }
     }

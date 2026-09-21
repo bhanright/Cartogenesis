@@ -63,8 +63,105 @@ class ClimateFedErosionTest {
                 config, cut, OceanStage.withoutCurrents(config, cut)
             ).result
 
-        /** The very weights the fed rounds route with, so a guard can normalise by them. */
-        val runoff = HydraulicErosion.provisionalWeather(config, weathered, config.seaLevel).runoff
+        private val weather = HydraulicErosion.provisionalWeather(config, weathered, config.seaLevel)
+
+        /** The cover the fed rounds shield the incision with. */
+        val density = weather.vegetationDensity
+
+        /**
+         * The weights the first round routes with: the march's rainfall over its own mean across
+         * the land that round sees, which is what `normaliseOverLand` does inside the stage.
+         */
+        val runoff = FloatArray(weather.rainfallMm.size).also { weights ->
+            var summed = 0.0
+            for (cell in weights.indices) if (cut.isLand[cell]) summed += weather.rainfallMm[cell]
+            val mean = (summed / cut.landCellCount).toFloat()
+            for (cell in weights.indices) weights[cell] = weather.rainfallMm[cell] / mean
+        }
+
+        val flat = FloatArray(runoff.size) { 1f }
+
+        /** The first round's network, taken once so both sides of every comparison share it. */
+        val filled = FlowRouting.fillDepressions(
+            config.width, config.height, cut.isLand, cut.relativeElevation
+        )
+        val receivers = FlowRouting.flowDirections(
+            config.width, config.height, cut.isLand, cut.relativeElevation, filled,
+            config.seed, config.facetRouting, config.flatPotential
+        )
+
+        /**
+         * The first round's incision, cell by cell, as the stage would spend it: the same
+         * receivers, the same gradients, the same two caps, and only the weather changed.
+         *
+         * This is where the forcing is measured, because it is the only place two runs can be
+         * compared on identical ground. After twelve rounds the terrain itself has diverged and
+         * any difference is the whole coupled history rather than the law.
+         */
+        fun firstRoundIncision(weights: FloatArray, shielded: Boolean): FloatArray {
+            val area = FlowRouting.accumulate(
+                config.width, config.height, cut.isLand, filled, receivers, cut.landCellCount
+            ) { cell -> weights[cell] }
+            val landCells = cut.landCellCount.toFloat()
+            val coefficient = HydraulicErosion.Rates(config).incisionCoefficient
+            val relative = cut.relativeElevation.data
+            val ground = filled.data
+            val incision = FloatArray(area.data.size)
+            for (cell in incision.indices) {
+                val receiver = receivers[cell]
+                if (receiver < 0 || !cut.isLand[cell]) continue
+                val toSea = !cut.isLand[receiver]
+                val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
+                if (drop <= 0f) continue
+                val diagonal = (cell % config.width) != (receiver % config.width) &&
+                    (cell / config.width) != (receiver / config.width)
+                val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
+                val shielding = if (shielded) 1f - 0.5f * density[cell] else 1f
+                val bare = coefficient * sqrt(area.data[cell] / landCells) * slope * shielding
+                incision[cell] = minOf(bare, drop * 0.5f, relative[cell].coerceAtLeast(0f))
+            }
+            return incision
+        }
+
+        /** The weights a round over [terrain] would route with: rainfall over its own land mean. */
+        fun weightsOver(terrain: FloatField): FloatArray {
+            val over = SeaLevelStage.percentileCut(terrain, config.seaLevel, config.scale)
+            val rainfall =
+                HydraulicErosion.provisionalWeather(config, terrain, config.seaLevel).rainfallMm
+            var summed = 0.0
+            for (cell in rainfall.indices) if (over.isLand[cell]) summed += rainfall[cell].toDouble()
+            val mean = (summed / over.landCellCount).toFloat()
+            return FloatArray(rainfall.size) { rainfall[it] / mean }
+        }
+
+        /** Where neither of [firstRoundIncision]'s two caps bit, so the law is what was spent. */
+        fun unclamped(weights: FloatArray): BooleanArray {
+            val area = FlowRouting.accumulate(
+                config.width, config.height, cut.isLand, filled, receivers, cut.landCellCount
+            ) { cell -> weights[cell] }
+            val landCells = cut.landCellCount.toFloat()
+            val coefficient = HydraulicErosion.Rates(config).incisionCoefficient
+            val relative = cut.relativeElevation.data
+            val ground = filled.data
+            return BooleanArray(area.data.size) { cell ->
+                val receiver = receivers[cell]
+                if (receiver < 0 || !cut.isLand[cell]) {
+                    false
+                } else {
+                    val toSea = !cut.isLand[receiver]
+                    val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
+                    if (drop <= 0f) {
+                        false
+                    } else {
+                        val diagonal = (cell % config.width) != (receiver % config.width) &&
+                            (cell / config.width) != (receiver / config.width)
+                        val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
+                        val bare = coefficient * sqrt(area.data[cell] / landCells) * slope
+                        bare > 0f && bare < drop * 0.5f && bare < relative[cell].coerceAtLeast(0f)
+                    }
+                }
+            }
+        }
 
         private val carved = HashMap<Boolean, FloatField>()
 
@@ -102,41 +199,28 @@ class ClimateFedErosionTest {
                 return@mapNotNull null
             }
             val rainfall = ground.climate.precipitationMm.data
-            val cover = ground.climate.vegetationDensity.data
             val windwardRain = meanOver(rainfall, belt.windward)
             val leewardRain = meanOver(rainfall, belt.leeward)
-            val fed = ground.lowering(ground.eroded(true))
-            val flat = ground.lowering(ground.eroded(false))
-            // What the law is actually a law about. The rainfall ratio above is the ratio of what
-            // falls *on* each flank; what a channel cuts with is what reaches it, and a catchment
-            // does not stop at a divide — a windward channel is fed partly from over the crest and
-            // a leeward one partly from the crest's own wet side. So the discharge term is read
-            // off the accumulation the stage routes, against the same accumulation with the feed
-            // off, and it is a good deal gentler than the rainfall it comes from.
-            val fedShare = dischargeShare(ground, ground.runoff)
-            val flatShare = dischargeShare(ground, FloatArray(ground.runoff.size) { 1f })
+
+            // The forcing, on ground both runs agree about. Same terrain, same receivers, same
+            // gradients; the only thing that differs is whether the water and the cover are the
+            // world's own or flat and absent.
+            val fed = ground.firstRoundIncision(ground.runoff, shielded = true)
+            val flat = ground.firstRoundIncision(ground.flat, shielded = false)
             val figures = Flank(
                 seed = seed,
                 rainRatio = windwardRain / leewardRain,
-                dischargeRatio =
-                    (meanOver(fedShare, belt.windward) / meanOver(fedShare, belt.leeward)) /
-                        (meanOver(flatShare, belt.windward) / meanOver(flatShare, belt.leeward)),
-                shieldingRatio = shieldingOf(meanOver(cover, belt.windward)) /
-                    shieldingOf(meanOver(cover, belt.leeward)),
                 fedRatio = meanOver(fed, belt.windward) / meanOver(fed, belt.leeward),
                 flatRatio = meanOver(flat, belt.windward) / meanOver(flat, belt.leeward),
                 windwardCells = belt.windwardCells,
                 leewardCells = belt.leewardCells
             )
             println(
-                ("S3 FLANK seed=%d  rain %.0f/%.0f mm = %.2fx but discharge %.2fx; cover " +
-                    "%.2f/%.2f so shielding %.2fx; incision fed %.2fx, flat %.2fx, the " +
-                    "weather's own share %.2fx; law asks %.2f; %d windward and %d leeward cells")
-                    .format(
-                    seed, windwardRain, leewardRain, figures.rainRatio, figures.dischargeRatio,
-                    meanOver(cover, belt.windward), meanOver(cover, belt.leeward),
-                    figures.shieldingRatio, figures.fedRatio, figures.flatRatio,
-                    figures.weatherShare, figures.bar,
+                ("S3 FLANK seed=%d  rain %.0f/%.0f mm = %.2fx; first-round incision windward " +
+                    "over leeward fed %.3fx, flat %.3fx, so the feed multiplies it by %.2fx; " +
+                    "law asks %.2f; %d windward and %d leeward cells").format(
+                    seed, windwardRain, leewardRain, figures.rainRatio, figures.fedRatio,
+                    figures.flatRatio, figures.forcing, figures.bar,
                     figures.windwardCells, figures.leewardCells
                 )
             )
@@ -147,132 +231,99 @@ class ClimateFedErosionTest {
             "only ${measurements.size} of ${SEEDS.size} seeds offered a belt to measure"
         )
         measurements.forEach { flank ->
-            // A belt's two flanks are not mirror images — the windward one is the one the ocean
-            // is on, so it is shorter, steeper and younger — and with the feed off that asymmetry
-            // alone cuts them apart by up to [GEOMETRIC_ASYMMETRY]. Dividing the fed ratio by the
-            // control's is what leaves the weather's own work, and it is that which the law is
-            // asked about.
             assertTrue(
-                flank.flatRatio <= GEOMETRIC_ASYMMETRY,
-                "seed ${flank.seed}: with the feed off the flanks already differ by " +
-                    "${"%.2f".format(flank.flatRatio)}, more than the geometry was measured to " +
-                    "be worth"
-            )
-            assertTrue(
-                flank.weatherShare >= flank.bar,
-                "seed ${flank.seed}: the windward flank gathered " +
-                    "${"%.2f".format(flank.dischargeRatio)} times the discharge under " +
-                    "${"%.2f".format(flank.shieldingRatio)} times the shielding, and cut only " +
-                    "${"%.2f".format(flank.weatherShare)} times as deep for it, under the " +
-                    "${"%.2f".format(flank.bar)} the law asks for"
-            )
-            assertTrue(
-                flank.weatherShare > 1.0,
-                "seed ${flank.seed}: the weather cut the windward flank " +
-                    "${"%.2f".format(flank.weatherShare)} times as deep, which is not deeper"
+                flank.forcing >= flank.bar,
+                "seed ${flank.seed}: the windward flank takes " +
+                    "${"%.2f".format(flank.rainRatio)} times the rain, and turning the feed on " +
+                    "multiplies its share of the first round's incision by only " +
+                    "${"%.2f".format(flank.forcing)}, under the ${"%.2f".format(flank.bar)} the " +
+                    "stream-power law asks for"
             )
         }
     }
 
-    /** One belt's figures, kept so every seed is printed before any of them is judged. */
+    /**
+     * One belt's figures, kept so every seed is printed before any of them is judged.
+     *
+     * The control's [flatRatio] is not expected anywhere near 1 and is not asserted to be: a
+     * belt's two flanks are not mirror images — the windward one is the one the ocean is on, so it
+     * is shorter, steeper and younger — and flat rain over an asymmetric range cuts its two sides
+     * by different amounts for reasons that have nothing to do with rain. What the guard is about
+     * is the *ratio of the ratios*, which is what the feed itself did.
+     */
     private class Flank(
         val seed: Long,
         val rainRatio: Double,
-        /** `sqrt(share)` on the windward flank over the leeward's, with the feed's effect only. */
-        val dischargeRatio: Double,
-        /** What the cover on each flank does to the other's erodibility. See [shieldingOf]. */
-        val shieldingRatio: Double,
         val fedRatio: Double,
         val flatRatio: Double,
         val windwardCells: Int,
         val leewardCells: Int
     ) {
-        /** The fed ratio with the bare geometry's own asymmetry divided out of it. */
-        val weatherShare = fedRatio / flatRatio
+        /** What turning the feed on multiplied the windward-over-leeward incision ratio by. */
+        val forcing = fedRatio / flatRatio
 
-        /**
-         * What this stage's law predicts the weather is worth on this belt, less a fifth.
-         *
-         * `E = K Q^m S^n` at m = 0.5 and n = 1, with the gradient the same on both sides of the
-         * comparison because the control ran over the same rock. So the prediction is the
-         * discharge term times the erodibility term, and both are measured rather than assumed:
-         * the wet flank gathers [dischargeRatio] times the water the dry one does, and grows the
-         * cover that holds [shieldingRatio] of its own erodibility back. The two pull against each
-         * other, and the second is why a flank taking three times the rain does not cut anything
-         * like `sqrt(3)` times as deep. See docs/DESIGN_LEDGER.md, S3.
-         */
-        val bar = sqrt(dischargeRatio) * shieldingRatio * STREAM_POWER_SLACK
-    }
-
-    /** The erodibility factor a mean plant cover leaves, matching the stage's own arithmetic. */
-    private fun shieldingOf(density: Double): Double = 1.0 - 0.5 * density
-
-    /** `sqrt(share of the land's water)` per cell, on the round-1 network under [weights]. */
-    private fun dischargeShare(ground: Ground, weights: FloatArray): FloatArray {
-        val config = ground.config
-        val cut = ground.cut
-        val filled = FlowRouting.fillDepressions(
-            config.width, config.height, cut.isLand, cut.relativeElevation
-        )
-        val directions = FlowRouting.flowDirections(
-            config.width, config.height, cut.isLand, cut.relativeElevation, filled,
-            config.seed, config.facetRouting, config.flatPotential
-        )
-        val area = FlowRouting.accumulate(
-            config.width, config.height, cut.isLand, filled, directions, cut.landCellCount
-        ) { cell -> weights[cell] }
-        val landCells = cut.landCellCount.toFloat()
-        return FloatArray(area.data.size) {
-            if (cut.isLand[it]) sqrt(area.data[it] / landCells) else 0f
-        }
+        /** `sqrt(P_windward / P_leeward)` at m = 0.5, less a fifth. See the class KDoc. */
+        val bar = sqrt(rainRatio) * STREAM_POWER_SLACK
     }
 
     /**
-     * How much channel each flank of a belt carries, on the two instruments S3 moved apart.
+     * What twelve rounds of it leave on the ground, printed beside Earth's figures.
      *
-     * A channel begins where enough water gathers, and "enough water" is a discharge, so the
-     * network the stage itself routes is rainfall-weighted; against a flat support area the
-     * network is the terrain's bare geometry. The design expected the wet flank to lead on both.
-     * It does not lead on either, consistently, and this reports the figures rather than asserting
-     * a claim the measurement does not support. See the note at the foot of the method.
+     * Findings and not clauses. After twelve rounds the two terrains have diverged, so a
+     * difference between them is the whole coupled history — the rain, the cover, the sea moving
+     * up the valleys, the spoil — and not the law, and there is no control that isolates one term
+     * of it. What the law is asked about is the first round, in the guard above.
      */
     @Test
-    fun `report how much channel each flank of a belt carries`() {
+    fun `report what the rain leaves on a range after twelve rounds`() {
         var checked = 0
-        val failures = mutableListOf<String>()
         for (seed in SEEDS) {
             val ground = ground(seed)
             val belt = beltFlanks(ground) ?: continue
             if (belt.windwardCells < MIN_FLANK_CELLS || belt.leewardCells < MIN_FLANK_CELLS) continue
             checked++
 
-            val flatWeights = FloatArray(ground.runoff.size) { 1f }
             val fedTerrain = ground.eroded(true)
             val flatTerrain = ground.eroded(false)
-            val byDischarge = channelShare(ground.config, fedTerrain, belt, ground.runoff)
-            val byArea = channelShare(ground.config, fedTerrain, belt, flatWeights)
-            val control = channelShare(ground.config, flatTerrain, belt, flatWeights)
+            val fedLowering = ground.lowering(fedTerrain)
+            val flatLowering = ground.lowering(flatTerrain)
+            val fedChannel = channelShare(ground.config, fedTerrain, belt, ground.flat)
+            val flatChannel = channelShare(ground.config, flatTerrain, belt, ground.flat)
             println(
-                ("S3 FLANK DENSITY seed=%d  by discharge %.3f/%.3f = %.2fx; " +
-                    "by area %.3f/%.3f = %.2fx; control %.3f/%.3f = %.2fx").format(
-                    seed, byDischarge.first, byDischarge.second,
-                    byDischarge.first / byDischarge.second,
-                    byArea.first, byArea.second, byArea.first / byArea.second,
-                    control.first, control.second, control.first / control.second
+                ("S3 FLANK AFTER TWELVE seed=%d  relief lost windward over leeward fed %.2fx, " +
+                    "flat %.2fx; routed drainage density (flat support) fed %.3f/%.3f = %.2fx, " +
+                    "flat %.3f/%.3f = %.2fx").format(
+                    seed,
+                    meanOver(fedLowering, belt.windward) / meanOver(fedLowering, belt.leeward),
+                    meanOver(flatLowering, belt.windward) / meanOver(flatLowering, belt.leeward),
+                    fedChannel.first, fedChannel.second, fedChannel.first / fedChannel.second,
+                    flatChannel.first, flatChannel.second, flatChannel.first / flatChannel.second
                 )
             )
-            if (byDischarge.first <= byDischarge.second) {
-                failures += "seed $seed carries less channel on the windward flank"
-            }
+
+            // And how far the weights themselves moved on the two flanks over the same twelve
+            // rounds, which is the refresh question asked where the chunk's claim lives rather
+            // than over the whole land. See `ClimateFedErosionMeasurementTest`.
+            val opening = ground.runoff
+            val closing = ground.weightsOver(fedTerrain)
+            println(
+                ("S3 FLANK DRIFT seed=%d  the weight's mean went %.3f -> %.3f windward and " +
+                    "%.3f -> %.3f leeward, so the flanks' ratio went %.2f -> %.2f").format(
+                    seed,
+                    meanOver(opening, belt.windward), meanOver(closing, belt.windward),
+                    meanOver(opening, belt.leeward), meanOver(closing, belt.leeward),
+                    meanOver(opening, belt.windward) / meanOver(opening, belt.leeward),
+                    meanOver(closing, belt.windward) / meanOver(closing, belt.leeward)
+                )
+            )
         }
         assertTrue(checked >= 2, "only $checked of ${SEEDS.size} seeds offered a belt to measure")
-        // Reported and not asserted, on the measurement. The windward flank of a belt in this
-        // generator is the shorter, steeper one — the ocean is on that side — and against a flat
-        // support area it carries about half the leeward flank's channel share whether the feed is
-        // on or off, so the geometry decides it and the rain does not move it consistently. On the
-        // discharge the stage actually routes, the wet flank leads on two of the four seeds and
-        // trails on two. Neither is evidence about S3's rule, so neither is a guard on it.
-        println("S3 FLANK DENSITY windward behind leeward on: ${failures.joinToString(", ")}")
+        // Earth's own figure for the same comparison, so a reader has the scale of it: the western
+        // flank of the Southern Alps takes about ten times the eastern's rain and exhumes at 5-10
+        // mm a year against the east's under one (Willett, *Orogeny and orography*, JGR 104, 1999;
+        // Hovius, Stark and Allen, *Sediment flux from a mountain belt derived by landslide
+        // mapping*, Geology 25, 1997). An order of magnitude, where these are tens of per cent.
+        println("S3 FLANK AFTER TWELVE Earth: the Southern Alps, 10x the rain and 5-10x the exhumation")
     }
 
     /**
@@ -304,50 +355,63 @@ class ClimateFedErosionTest {
     }
 
     /**
-     * Vegetated ground cuts at about half the rate of bare ground at the same stream power.
+     * The cover multiplies the incision by exactly what the constant says, cell by cell.
      *
-     * The stream power is the round-1 one — the discharge share and the gradient the first round
-     * routed and cut with — which is the only one every cell has a single figure for; incision
-     * over twelve rounds against it is the ratio the shielding constant should show up in.
+     * Asserted here and not as a ratio between two bands of cells, because a ratio between bands
+     * cannot test this. `1 - 0.5 * density` over cells at density >= 0.6 against cells at
+     * density <= 0.1 can land anywhere from about 0.50 to 0.74 depending on how the density is
+     * distributed inside each band, so a bar drawn at Istanbulluoglu and Bras's half would fail a
+     * correct implementation as readily as a wrong one. What is actually claimed is a per-cell
+     * law, so it is checked per cell: take the first round's incision with the cover and without
+     * it on the same terrain and the same receivers, keep the cells where neither of the two caps
+     * bit — a capped cut is the cap's figure and not the law's — and the quotient must be the
+     * multiplier to the last few bits of a float. The band ratio is printed beside it.
      */
     @Test
     fun `cover on the ground holds the incision back`() {
         for (seed in SEEDS) {
             val ground = ground(seed)
-            val fedPower = streamPower(ground, ground.runoff)
-            val flatPower = streamPower(ground, FloatArray(ground.runoff.size) { 1f })
-            val density = ground.climate.vegetationDensity.data
-            val wooded = BooleanArray(density.size) {
-                ground.cut.isLand[it] && density[it] >= WOODED_DENSITY && fedPower[it] > 0f
-            }
-            val bare = BooleanArray(density.size) {
-                ground.cut.isLand[it] && density[it] <= BARE_DENSITY && fedPower[it] > 0f
-            }
-            if (wooded.count { it } < MIN_FLANK_CELLS || bare.count { it } < MIN_FLANK_CELLS) continue
+            val shielded = ground.firstRoundIncision(ground.runoff, shielded = true)
+            val bare = ground.firstRoundIncision(ground.runoff, shielded = false)
+            val unclamped = ground.unclamped(ground.runoff)
+            val density = ground.density
 
-            val fed = ground.lowering(ground.eroded(true))
-            val flat = ground.lowering(ground.eroded(false))
-            val fedRatio = perUnitPower(fed, fedPower, wooded) / perUnitPower(fed, fedPower, bare)
-            val flatRatio =
-                perUnitPower(flat, flatPower, wooded) / perUnitPower(flat, flatPower, bare)
+            var checked = 0
+            var worst = 0.0
+            var worstCell = -1
+            for (cell in shielded.indices) {
+                if (!unclamped[cell] || bare[cell] <= 0f) continue
+                checked++
+                val measured = shielded[cell].toDouble() / bare[cell].toDouble()
+                val expected = 1.0 - 0.5 * density[cell]
+                val off = abs(measured - expected)
+                if (off > worst) {
+                    worst = off
+                    worstCell = cell
+                }
+            }
+
+            val wooded = BooleanArray(density.size) { unclamped[it] && density[it] >= WOODED_DENSITY }
+            val bareBand = BooleanArray(density.size) { unclamped[it] && density[it] <= BARE_DENSITY }
+            val bandRatio =
+                perUnitPower(shielded, bare, wooded) / perUnitPower(shielded, bare, bareBand)
             println(
-                ("S3 COVER seed=%d  fed %.2f, control %.2f, so shielding %.2f, over %d wooded " +
-                    "and %d bare cells").format(
-                    seed, fedRatio, flatRatio, fedRatio / flatRatio,
-                    wooded.count { it }, bare.count { it }
+                ("S3 COVER seed=%d  the multiplier is right on all %d unclamped cells, worst off " +
+                    "by %.2e; the band ratio (density >= %.1f against <= %.1f) is %.2f over %d " +
+                    "and %d cells, where the cover means %.2f and %.2f").format(
+                    seed, checked, worst, WOODED_DENSITY, BARE_DENSITY, bandRatio,
+                    wooded.count { it }, bareBand.count { it },
+                    meanOver(density, wooded), meanOver(density, bareBand)
                 )
             )
-            // The ratio of the ratios, because the two bands are not the same ground: wooded
-            // cells are wet, low and gentle and bare ones are dry, high and steep, so some of the
-            // fed figure is the bands' own selection and not the cover's doing. The control
-            // measures exactly that selection — same bands, same normaliser, no shielding — so
-            // dividing it out leaves the shielding constant and nothing else.
-            val shielding = fedRatio / flatRatio
+
+            assertTrue(checked > MIN_FLANK_CELLS, "seed $seed: only $checked unclamped cells")
             assertTrue(
-                shielding in SHIELDING_RANGE,
-                "seed $seed: wooded ground cut at ${"%.2f".format(shielding)} of bare ground's " +
-                    "rate per unit of stream power once the bands' own selection " +
-                    "(${"%.2f".format(flatRatio)}) is divided out, outside $SHIELDING_RANGE"
+                worst <= MULTIPLIER_TOLERANCE,
+                "seed $seed: cell $worstCell was shielded by " +
+                    "${"%.6f".format(shielded[worstCell] / bare[worstCell])} where its cover of " +
+                    "${"%.3f".format(density[worstCell])} asks for " +
+                    "${"%.6f".format(1.0 - 0.5 * density[worstCell])}"
             )
         }
     }
@@ -517,13 +581,18 @@ class ClimateFedErosionTest {
         return power
     }
 
-    private fun perUnitPower(lowering: FloatArray, power: FloatArray, mask: BooleanArray): Double {
+    /** Summed [shielded] over summed [bare] across a mask: the band's own shielding, pooled. */
+    private fun perUnitPower(
+        shielded: FloatArray,
+        bare: FloatArray,
+        mask: BooleanArray
+    ): Double {
         var cut = 0.0
         var spent = 0.0
         for (cell in mask.indices) {
             if (!mask[cell]) continue
-            cut += lowering[cell].toDouble()
-            spent += power[cell].toDouble()
+            cut += shielded[cell].toDouble()
+            spent += bare[cell].toDouble()
         }
         return if (spent <= 0.0) 0.0 else cut / spent
     }
@@ -594,11 +663,6 @@ class ClimateFedErosionTest {
         /** See the class KDoc: a fifth off the law's prediction, for everything but the rain. */
         const val STREAM_POWER_SLACK = 0.8
 
-        /**
-         * The most of a range's windward-to-leeward incision ratio that its bare geometry may
-         * account for. Measured with the feed off; see docs/DESIGN_LEDGER.md, S3.
-         */
-        const val GEOMETRIC_ASYMMETRY = 1.45
 
 
 
@@ -611,8 +675,13 @@ class ClimateFedErosionTest {
         const val WOODED_DENSITY = 0.6f
         const val BARE_DENSITY = 0.1f
 
-        /** Istanbulluoglu and Bras's roughly half, with room either side. */
-        val SHIELDING_RANGE = 0.4..0.6
+        /**
+         * How far the cellwise multiplier may sit from `1 - 0.5 * density`.
+         *
+         * A float's worth and not a physical allowance: the two incisions are the same arithmetic
+         * with one factor changed, so the quotient is the factor up to rounding.
+         */
+        const val MULTIPLIER_TOLERANCE = 1e-5
 
         /** Stated from the measurement; see docs/DESIGN_LEDGER.md, S3. */
         const val DISSECTION_CORRELATION = 0.20

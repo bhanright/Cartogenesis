@@ -35,11 +35,12 @@ class I3RenderDump {
         const val SIDE = 1024
 
         /** The crop, in cells, and the factor it is blown up by. */
-        const val CROP_SIDE = 170
+        const val CROP_SIDE = 180
         const val CROP_ZOOM = 3
 
-        /** How many coarse tiles across the map is cut into when the window is chosen. */
-        const val TILES_ACROSS = 8
+        /** Its north-west corner, in cells. */
+        const val FLANK_X = 320
+        const val FLANK_Y = 760
 
         /** Anything this much of the map's height thick is ice rather than a carving. */
         const val ICE_FIELD_UNITS = 0.01f
@@ -61,7 +62,7 @@ class I3RenderDump {
             )
         }
         val ice = iceField(before, after)
-        val window = icyFlankWindow(after, ice)
+        val window = reportedFlank()
         report(after, ice)
 
         val atlas = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
@@ -131,34 +132,16 @@ class I3RenderDump {
     private class Window(val x: Int, val y: Int, val side: Int)
 
     /**
-     * The tile of the map holding the most ice standing next to open ground or water — the flank,
-     * which is where the report is about and where a profile measured from a margin can go wrong.
+     * The flank the defect was reported on: the west side of the southern sheet, where it comes
+     * down to two lakes.
      *
-     * Chosen by count rather than by eye, so the same window comes back on any machine.
+     * Pinned rather than chosen by a count, because the window has to be the same one before and
+     * after or the two pictures are not a comparison. The figures are cells on the 1024 grid and
+     * they were read off the whole-map render, not off the field.
      */
-    private fun icyFlankWindow(world: WorldMap, ice: FloatArray): Window {
-        val across = world.width
-        val down = world.height
-        val tileSide = across / TILES_ACROSS
-        val counts = IntArray(TILES_ACROSS * TILES_ACROSS)
-        for (cell in ice.indices) {
-            if (ice[cell] < ICE_FIELD_UNITS) continue
-            val column = cell % across
-            val row = cell / across
-            if (column == 0 || column == across - 1 || row == 0 || row == down - 1) continue
-            val edge = ice[cell - 1] < ICE_FIELD_UNITS || ice[cell + 1] < ICE_FIELD_UNITS ||
-                ice[cell - across] < ICE_FIELD_UNITS || ice[cell + across] < ICE_FIELD_UNITS
-            if (edge) counts[(row / tileSide) * TILES_ACROSS + column / tileSide]++
-        }
-        var best = 0
-        for (tile in counts.indices) if (counts[tile] > counts[best]) best = tile
-        val side = CROP_SIDE.coerceAtMost(minOf(across, down))
-        val x = ((best % TILES_ACROSS) * tileSide + tileSide / 2 - side / 2)
-            .coerceIn(0, across - side)
-        val y = ((best / TILES_ACROSS) * tileSide + tileSide / 2 - side / 2)
-            .coerceIn(0, down - side)
-        println("I3 CROP: ${counts[best]} margin cells in the chosen tile, window $x,$y")
-        return Window(x, y, side)
+    private fun reportedFlank(): Window {
+        println("I3 CROP: window $FLANK_X,$FLANK_Y of $CROP_SIDE cells at ${CROP_ZOOM}x")
+        return Window(FLANK_X, FLANK_Y, CROP_SIDE)
     }
 
     private fun rasterOf(world: WorldMap, options: RenderOptions): BufferedImage {

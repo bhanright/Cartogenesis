@@ -2352,7 +2352,7 @@ object ClimateStage {
                 // tundra rather than as an ice cap. The annual-mean rule beside it is the control
                 // its guard needs.
                 val underIce = if (snowBalance != null) {
-                    snowBalance.data[cell] > 0f
+                    SnowBalance.isGlaciated(snowBalance.data[cell])
                 } else {
                     annualC < ANNUAL_MEAN_ICE_C
                 }

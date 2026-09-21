@@ -308,9 +308,11 @@ object GlaciationStage {
         // Where the ice is. Two rules, and which one applies is `ClimateConfig.snowBalance`:
         //
         //  - the balance, when the engine has run a provisional climate and handed one over. A
-        //    cell is frozen where a year's snow outlasts a year's melt, so a cold dry interior is
-        //    bare ground with no glacier to carve it and a wet maritime highland carries ice a
-        //    long way down its flanks.
+        //    cell is frozen where a year's snow outlasts a year's melt *by an amount that means
+        //    something* — see [SnowBalance.isGlaciated], and I3 in docs/DESIGN_LEDGER.md for the
+        //    comb of one-cell ice walls that the bare sign of the difference was drawing over a
+        //    polar desert. A cold dry interior is bare ground with no glacier to carve it and a
+        //    wet maritime highland carries ice a long way down its flanks.
         //  - otherwise the older rule: a provisional annual mean at or below
         //    [GlaciationConfig.freezingC], which called every cold place frozen whether or not
         //    any snow ever reached it. See docs/DESIGN_LEDGER.md, H2.
@@ -318,7 +320,7 @@ object GlaciationStage {
         val frozen = BooleanArray(cellCount)
         if (snowBalance != null) {
             for (cell in 0 until cellCount) {
-                if (isLand[cell] && snowBalance.data[cell] > 0f) {
+                if (isLand[cell] && SnowBalance.isGlaciated(snowBalance.data[cell])) {
                     frozen[cell] = true
                     frozenCount++
                 }
@@ -544,7 +546,12 @@ object GlaciationStage {
         stopIfAsked()
         val metresPerRootKm =
             IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
-        val margin = IceSheet.marginDistanceKm(config, frozen)
+        // The side of the square with one cell's area, which is the span the profile is averaged
+        // over: see [IceSheet.profileMetres] for why it is not the cell's width.
+        val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
+        val margin = IceSheet.marginDistanceKm(
+            config, frozen, relative, config.scale.highestLandMetres, metresPerRootKm, cellSpanKm
+        )
         val marginDistanceKm = margin.distanceKm
 
         // And which of that ice is a *sheet*. The profile is a sheet's and only a sheet's, so a
@@ -561,9 +568,6 @@ object GlaciationStage {
             if (body >= 0 && field.size[body] >= smallestSheetCells) sheetBody[cell] = true
         }
 
-        // The side of the square with one cell's area, which is the span the profile is averaged
-        // over: see [IceSheet.profileMetres] for why it is not the cell's width.
-        val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
         val accelerated = accelerator?.sheet(
             cellsAcross, cellsDown, marginDistanceKm, margin.nearestCell, relative, sheetBody,
             metresPerRootKm, config.scale.highestLandMetres,

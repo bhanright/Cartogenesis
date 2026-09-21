@@ -100,6 +100,40 @@ object SnowBalance {
     /** Day-to-day standard deviation of temperature about a seasonal mean, in C. */
     internal const val PDD_SIGMA_C = 4.5f
 
+    /**
+     * The smallest yearly balance that means anything, in millimetres of water equivalent.
+     *
+     * A hundredth of a millimetre a year: a centimetre of water in a thousand years, which no
+     * reading of the word glacier admits. It exists because the balance is a *difference* and the
+     * sign of a difference that has cancelled is arithmetic and not weather.
+     *
+     * Both sides of the subtraction are sums of quantities of the order of a thousand
+     * millimetres, and a float carries about seven decimal digits, so where accumulation and
+     * ablation cancel the residue left behind is of the order of five ten-thousandths of a
+     * millimetre — and its sign is whatever the last bits happened to do. A polar desert is
+     * exactly that case: nothing falls and nothing melts, so the two are each a rounding away
+     * from nothing and the answer flips from cell to cell. [field] measured a tenth of a million
+     * square kilometres of one world's ground at a balance under a thousandth of a millimetre,
+     * with both signs present in every row of it.
+     *
+     * The floor is twenty times the largest residue that cancellation can leave, so it cannot be
+     * crossed by rounding; and it is two thousand times *below* the accumulation that sustains
+     * Earth's driest ice, the 21-23 mm a year measured at Vostok and Dome A on the East Antarctic
+     * plateau, so it cannot take ground away from any sheet the world is entitled to. What it
+     * refuses is the ground where the model has no answer at all.
+     */
+    const val SMALLEST_MEANINGFUL_BALANCE_MM = 0.01f
+
+    /**
+     * Whether a cell's yearly balance means it carries glacier ice.
+     *
+     * One predicate for the two readers there are — the biome classification and the glaciation
+     * stage's frozen mask — because the two disagreeing about where the ice is would put an ice
+     * sheet's colour on ground the ice never carved, and because the floor below is the kind of
+     * rule that gets applied in one place and forgotten in the other.
+     */
+    fun isGlaciated(balanceMm: Float): Boolean = balanceMm > SMALLEST_MEANINGFUL_BALANCE_MM
+
     /** At or below this seasonal mean, all of the season's precipitation falls as snow. */
     internal const val SNOW_ALL_C = -1f
 

@@ -46,12 +46,14 @@ class GpuIceSheetTest {
             row < cellsDown / 3 || row > cellsDown * 2 / 3
         }
         val onTheSheet = BooleanArray(cellCount) { frozen[it] && random.nextFloat() > 0.05f }
-        val margin = IceSheet.marginDistanceKm(config, frozen)
         val metresPerRootKm =
             IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
         val metresPerFieldUnit = config.scale.highestLandMetres
         val rowScale = config.cellHeightInCellWidths.toFloat()
         val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
+        val margin = IceSheet.marginDistanceKm(
+            config, frozen, bed, metresPerFieldUnit, metresPerRootKm, cellSpanKm
+        )
 
         val onTheProcessor = IceSheet.profile(
             margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit, cellSpanKm

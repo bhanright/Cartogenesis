@@ -102,12 +102,13 @@ object IceSheet {
                 (iceDensityKgPerM3.toDouble() * gravityMPerS2)
         ).toFloat()
 
-    /** Where each frozen cell's nearest margin is, and how far off, in kilometres. */
+    /** Which margin each frozen cell's dome rises from, and how far off it is, in kilometres. */
     class Margin(val distanceKm: FloatArray, val nearestCell: IntArray)
 
     /**
-     * How far each frozen cell stands from the nearest ice-free ground, in kilometres, and which
-     * cell that is.
+     * Which margin cell each frozen cell's surface is measured from, and how far away it is in
+     * kilometres — the margin whose profile reaches the cell *lowest*, which is not always the
+     * nearest one.
      *
      * By [JumpFloodDistance] rather than a chamfer transform, so the contours are circles and the
      * margin the profile is measured from is the real one; and with the grid's own row scale, so
@@ -115,10 +116,52 @@ object IceSheet {
      * cells, which on a map twice as wide as it is tall made a sheet twice as thick northward as
      * eastward for no reason but the grid.
      *
-     * The nearest cell is carried as well as the distance because the profile is a *surface* and a
-     * surface has to start somewhere: see [surfaceMetres].
+     * ### Why the lowest and not the nearest
+     *
+     * The surface is the margin's own elevation plus the profile ([surfaceMetres]), and until I3
+     * that elevation was read off the *nearest* margin cell. A nearest-cell lookup is a piecewise
+     * constant field: every cell of a sheet that shares one nearest margin reads exactly one
+     * datum, and the boundary between two such regions is a Voronoi edge, across which the datum
+     * steps by however much the ground at the two margin cells differs. On seed 878210 at 1024
+     * that step reached 1,965 m between two neighbouring cells and averaged 40.9 m over every
+     * east-west pair on the ice — as much as the dome's own fall across the same cell. What it
+     * drew is the defect it was reported as: a sheet in flat facets with hard edges, and, where
+     * the margin runs east and west so that each column takes a margin cell of its own, a flank
+     * ruled in vertical stripes one cell wide.
+     *
+     * The plastic condition says which margin is the right one. Ice yields until
+     * `|grad S| = tau0 / (rho g H)`, and the surface satisfying that with `S = z` along a margin
+     * of varying height is the *lower envelope* of the profiles rising from every margin point:
+     *
+     * ```
+     * S(x) = min over margin cells m of ( z_m + k * sqrt(distance from x to m) )
+     * ```
+     *
+     * which is that equation's viscosity solution and not a smoothing of anything. Differentiate
+     * one branch: `|grad S| = k^2 / (2 (S - z_m))`, which with `k^2 = 2 tau0 / (rho g)` is the
+     * yield condition itself. It is continuous wherever the branches are, a minimum of continuous
+     * functions being continuous; where two branches meet the surface has a crease rather than a
+     * step, and a crease between two margins is an ice divide, which is what that ground really
+     * carries. Over a level margin every branch shares one datum and the envelope is exactly the
+     * nearest-margin answer it replaces.
+     *
+     * So the flood is run over the plastic cost instead of over the distance: each cell takes the
+     * margin that puts the lowest surface over it and reports how far off that margin is, which
+     * [profileMetres] turns into the height above it. A weighted flood is not exact the way the
+     * plain one is — see [JumpFloodDistance.run] — and what it can leave behind is a cell whose
+     * surface is a little too high, which is why `IceSheetTest` measures the finished surface for
+     * steps rather than taking the flood's word for it.
      */
-    fun marginDistanceKm(config: WorldGenConfig, frozen: BooleanArray): Margin {
+    fun marginDistanceKm(
+        config: WorldGenConfig,
+        frozen: BooleanArray,
+        /** The shoreline-relative ground the margins stand on. */
+        bedRelative: FloatArray,
+        /** What one unit of [bedRelative] is worth in metres. */
+        metresPerFieldUnit: Float,
+        metresPerRootKilometre: Float,
+        cellSpanKm: Float
+    ): Margin {
         val cellCount = config.width * config.height
         val distance = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
         val nearest = IntArray(cellCount) { -1 }
@@ -128,10 +171,17 @@ object IceSheet {
                 nearest[cell] = cell
             }
         }
+        val kilometresPerCellWidth = config.cellWidthKm.toFloat()
         JumpFloodDistance.run(
             config.width, config.height, distance, nearest, config.cellHeightInCellWidths
-        )
-        val kilometresPerCellWidth = config.cellWidthKm.toFloat()
+        ) { source, squaredCellWidths ->
+            // The surface this margin would put over the cell, in metres: the ground it stands on,
+            // floored at the waterline as [surfaceMetres] floors it, plus the profile over the
+            // distance. Compared as a height and not as a distance, which is the whole change.
+            val km = sqrt(squaredCellWidths).toFloat() * kilometresPerCellWidth
+            val datum = (bedRelative[source] * metresPerFieldUnit).coerceAtLeast(0f)
+            (datum + profileMetres(km, metresPerRootKilometre, cellSpanKm)).toDouble()
+        }
         for (cell in 0 until cellCount) {
             // A world entirely under ice has no margin to measure from, and the flood leaves its
             // sentinel behind rather than an answer. Zero is the honest reading of "no margin

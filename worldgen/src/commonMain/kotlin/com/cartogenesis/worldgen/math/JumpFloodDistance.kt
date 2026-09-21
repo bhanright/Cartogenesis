@@ -53,6 +53,16 @@ object JumpFloodDistance {
      * @param label pre-seeded with a source id at source cells and -1 elsewhere; overwritten with
      *   the id of the nearest source. The id is whatever the caller seeded — a cell index, a plate
      *   id — and is carried, not recomputed.
+     * @param cost what each cell is really looking for the nearest of, given a candidate source
+     *   and the squared distance to it in cell widths; null, the default, is the distance itself
+     *   and the flood is the plain Euclidean one described above. A cost that *adds* something to
+     *   the source — a height the source stands at, a head start it was given — makes this an
+     *   additively weighted flood, whose regions are no longer Voronoi cells and whose winner at a
+     *   cell need not be the source nearest it. `dist` and `label` still come back measured to and
+     *   named after the winner. Such a flood is not exact the way the plain one is: the schedule
+     *   can miss a source whose cost only just wins, and what that leaves is a cell whose answer is
+     *   a little too large rather than one that is wrong about which source exists. See
+     *   `IceSheet.marginDistanceKm` for the case it was added for.
      * @param cellHeightInCellWidths how tall a row is as a fraction of how wide a column is —
      *   `cellHeightKm / cellWidthKm`, a half on this project's grids. At 1 the flood measures in
      *   cells and every figure is exactly what it was before the parameter existed; below 1 a step
@@ -64,7 +74,8 @@ object JumpFloodDistance {
         height: Int,
         dist: FloatArray,
         label: IntArray,
-        cellHeightInCellWidths: Double = 1.0
+        cellHeightInCellWidths: Double = 1.0,
+        cost: ((Int, Double) -> Double)? = null
     ) {
         val cellCount = width * height
         if (cellCount == 0) return
@@ -83,7 +94,7 @@ object JumpFloodDistance {
         var nextNearestSource = IntArray(cellCount)
         for (stepCells in schedule(width, height)) {
             pass(
-                width, height, stepCells, cellHeightInCellWidths,
+                width, height, stepCells, cellHeightInCellWidths, cost,
                 nearestSource, nextNearestSource
             )
             val previous = nearestSource
@@ -137,6 +148,7 @@ object JumpFloodDistance {
         height: Int,
         stepCells: Int,
         cellHeightInCellWidths: Double,
+        cost: ((Int, Double) -> Double)?,
         nearestSource: IntArray,
         nextNearestSource: IntArray
     ) {
@@ -149,7 +161,9 @@ object JumpFloodDistance {
                     var best = nearestSource[cell]
                     var bestSquared =
                         if (best < 0) Double.MAX_VALUE
-                        else squaredDistance(width, column, row, best, cellHeightInCellWidths)
+                        else keyOf(
+                            width, column, row, best, cellHeightInCellWidths, cost
+                        )
                     for (rowStep in -1..1) {
                         val neighbourRow = row + rowStep * stepCells
                         if (neighbourRow < 0 || neighbourRow >= height) continue
@@ -160,8 +174,8 @@ object JumpFloodDistance {
                             if (neighbourColumn < 0) neighbourColumn += width
                             val candidate = nearestSource[neighbourRowStart + neighbourColumn]
                             if (candidate < 0) continue
-                            val candidateSquared = squaredDistance(
-                                width, column, row, candidate, cellHeightInCellWidths
+                            val candidateSquared = keyOf(
+                                width, column, row, candidate, cellHeightInCellWidths, cost
                             )
                             // Ties to the lower cell index: two sources exactly as far away is
                             // common on a grid, and which one wins decides the label.
@@ -177,6 +191,23 @@ object JumpFloodDistance {
                 }
             }
         }
+    }
+
+    /**
+     * What one candidate is worth at a cell: the squared distance to it, or what [cost] makes of
+     * that, so the two kinds of flood differ in one expression rather than in two copies of the
+     * pass.
+     */
+    private inline fun keyOf(
+        width: Int,
+        column: Int,
+        row: Int,
+        source: Int,
+        cellHeightInCellWidths: Double,
+        noinline cost: ((Int, Double) -> Double)?
+    ): Double {
+        val squared = squaredDistance(width, column, row, source, cellHeightInCellWidths)
+        return if (cost == null) squared else cost(source, squared)
     }
 
     /**

@@ -229,12 +229,14 @@ internal object EarthLikeness {
         val hypsometry: Hypsometry,
         val coastline: BoxCount,
         val hack: LineFit,
+        val hackFullNetwork: LineFit,
         val hackDrawnCourse: LineFit,
         val drawnKilometres: Double,
         val mainStemKilometres: Double,
         val horton: List<StreamOrders>,
         val hortonDrawnRivers: StreamOrders,
         val drainage: DrainageByAridity,
+        val drainageFullNetwork: DrainageByAridity,
         val lakeSizes: SizeDistribution,
         val islandSizes: SizeDistribution,
         val iceCells: Long,
@@ -280,6 +282,15 @@ internal object EarthLikeness {
         val hackDrawnCourse =
             fitLine(reaches.drawnCourse.map { it.first }, reaches.drawnCourse.map { it.second })
 
+        // The terrain's own channel network, at the finer of the two support areas Horton's
+        // ratios are taken over. Hack's exponent and the drainage-density ordering are both read
+        // off this rather than off the drawn courses: see [hackOverChannelNetwork].
+        val fullNetwork =
+            supportAreaChannelMask(world, catchmentCells.data, CHANNEL_SUPPORT_CELLS.min())
+        val hackFullNetwork = hackOverChannelNetwork(
+            fullNetwork, catchmentCells.data, longestPathKm, squareKilometresPerCell
+        )
+
         val horton = CHANNEL_SUPPORT_CELLS.map { support ->
             strahlerStreamOrders(
                 supportAreaChannelMask(world, catchmentCells.data, support),
@@ -288,7 +299,17 @@ internal object EarthLikeness {
         }
         val hortonDrawnRivers =
             strahlerStreamOrders(drawnChannelMask(world), world.rivers.flowTarget, byHeight)
-        val drainage = drainageDensityByAridity(world, squareKilometresPerCell)
+        val aridity = aridityByCell(world)
+        val landByAridity = landAreaByAridity(aridity, squareKilometresPerCell)
+        val drainage = DrainageByAridity(
+            drawnChannelKilometresByAridity(world, aridity, squareKilometresPerCell), landByAridity
+        )
+        val drainageFullNetwork = DrainageByAridity(
+            routedChannelKilometresByAridity(
+                world, fullNetwork, aridity, squareKilometresPerCell
+            ),
+            landByAridity
+        )
 
         val lakeAreas = world.rivers.lakes.lakes
             .map { it.cellCount * squareKilometresPerCell }
@@ -322,12 +343,14 @@ internal object EarthLikeness {
             hypsometry = hypsometry,
             coastline = coastline,
             hack = hack,
+            hackFullNetwork = hackFullNetwork.fit(),
             hackDrawnCourse = hackDrawnCourse,
             drawnKilometres = reaches.drawnKilometres,
             mainStemKilometres = reaches.mainStemKilometres,
             horton = horton,
             hortonDrawnRivers = hortonDrawnRivers,
             drainage = drainage,
+            drainageFullNetwork = drainageFullNetwork,
             lakeSizes = SizeDistribution.of(lakeAreas),
             islandSizes = SizeDistribution.of(islandAreas),
             iceCells = iceCells,
@@ -335,7 +358,7 @@ internal object EarthLikeness {
             landCells = world.sea.landCellCount.toLong(),
             realmRankSizeSlope = realmRankSizeSlope(world)
         )
-        pool?.add(metrics, reaches, lakeAreas, islandAreas)
+        pool?.add(metrics, reaches, hackFullNetwork, lakeAreas, islandAreas)
         return metrics
     }
 
@@ -622,6 +645,42 @@ internal object EarthLikeness {
     }
 
     /**
+     * Hack's law over the terrain's own channel network: every channel cell as a basin outlet.
+     *
+     * **This is the sample the suite's Hack clause reads, and the drawn one beside it is a
+     * finding.** [reachSample] takes its basins from `world.rivers.rivers`, which is what the map
+     * draws, and `RiverConfig.maxRivers` caps that at four hundred courses however many cells the
+     * grid has — so the drawn sample thins as the grid is refined (`TODO.md`, S1) and what it
+     * measures at 2048 is the cap rather than the drainage. The terrain's network does not thin:
+     * it is every land cell draining at least [CHANNEL_SUPPORT_CELLS]'s smaller support area, the
+     * same mask Horton's ratios are ordered over and the way a network is extracted from any
+     * digital elevation model, and it grows with the grid the way the ground does.
+     *
+     * The pairing is Hack's own — catchment area against the longest watercourse arriving at the
+     * cell — and the floor is [SMALLEST_HACK_CATCHMENT_CELLS], for the reason written there. The
+     * basins are nested, because every channel cell is inside its own trunk's; that is true of
+     * Hack's Shenandoah sample too, where a tributary's basin sits inside the river's, and it is
+     * what makes the fit span the four decades of area the exponent is defined over.
+     */
+    private fun hackOverChannelNetwork(
+        channel: BooleanArray,
+        catchmentCells: FloatArray,
+        longestPathKm: DoubleArray,
+        squareKilometresPerCell: Double
+    ): LineAccumulator {
+        val fit = LineAccumulator()
+        for (cell in channel.indices) {
+            if (!channel[cell]) continue
+            val catchment = catchmentCells[cell].toDouble()
+            if (catchment < SMALLEST_HACK_CATCHMENT_CELLS) continue
+            val mainStemKm = longestPathKm[cell]
+            if (mainStemKm <= 0.0) continue
+            fit.add(ln(catchment * squareKilometresPerCell), ln(mainStemKm))
+        }
+        return fit
+    }
+
+    /**
      * How far along a traced course the reach's own ground goes, as an index into its cells, or -1.
      *
      * A trace stops one cell *past* itself: at the sea or the lake it empties into, or at the first
@@ -853,17 +912,9 @@ internal object EarthLikeness {
         else -> Aridity.HUMID
     }
 
-    private fun drainageDensityByAridity(
-        world: WorldMap,
-        squareKilometresPerCell: Double
-    ): DrainageByAridity {
-        val cellsAcross = world.width
-        val cellWidthKm = sqrt(squareKilometresPerCell * cellAspect(world))
-        val cellHeightKm = squareKilometresPerCell / cellWidthKm
-        val classes = Aridity.entries.size
-        val channelKm = DoubleArray(classes)
-        val landKm2 = DoubleArray(classes)
-        val aridity = arrayOfNulls<Aridity>(cellsAcross * world.height)
+    /** Every land cell's aridity class, with the sea left null. */
+    private fun aridityByCell(world: WorldMap): Array<Aridity?> {
+        val aridity = arrayOfNulls<Aridity>(world.width * world.height)
         for (cell in aridity.indices) {
             if (!world.sea.isLand[cell]) continue
             val potentialEvaporation = LakeWaterBalance.potentialEvaporationMm(
@@ -871,10 +922,32 @@ internal object EarthLikeness {
                 world.climate.winterTemperature.data[cell],
                 world.config.lakes.evaporationScale
             )
-            val here = aridityOf(world.climate.precipitationMm.data[cell], potentialEvaporation)
-            aridity[cell] = here
-            landKm2[here.ordinal] += squareKilometresPerCell
+            aridity[cell] =
+                aridityOf(world.climate.precipitationMm.data[cell], potentialEvaporation)
         }
+        return aridity
+    }
+
+    /** How much land each aridity class holds, in square kilometres: a density's denominator. */
+    private fun landAreaByAridity(
+        aridity: Array<Aridity?>,
+        squareKilometresPerCell: Double
+    ): DoubleArray {
+        val landKm2 = DoubleArray(Aridity.entries.size)
+        aridity.forEach { here -> if (here != null) landKm2[here.ordinal] += squareKilometresPerCell }
+        return landKm2
+    }
+
+    /** The drawn courses' length in each aridity class, step by traced step. */
+    private fun drawnChannelKilometresByAridity(
+        world: WorldMap,
+        aridity: Array<Aridity?>,
+        squareKilometresPerCell: Double
+    ): DoubleArray {
+        val cellsAcross = world.width
+        val cellWidthKm = sqrt(squareKilometresPerCell * cellAspect(world))
+        val cellHeightKm = squareKilometresPerCell / cellWidthKm
+        val channelKm = DoubleArray(Aridity.entries.size)
         world.rivers.rivers.forEach { river ->
             for (step in 0 until river.cells.size - 1) {
                 val from = river.cells[step]
@@ -884,7 +957,36 @@ internal object EarthLikeness {
                 )
             }
         }
-        return DrainageByAridity(channelKm, landKm2)
+        return channelKm
+    }
+
+    /**
+     * The routed network's length in each aridity class: one D8 step per channel cell.
+     *
+     * The same swap of sample as [hackOverChannelNetwork], for the same reason — the drawn courses
+     * are capped at a count and so measure less of a finer grid's drainage than of a coarse one's,
+     * while the support-area mask is the terrain's own network at every resolution. A cell's step
+     * is charged to the class the cell itself is in, which is where that length of channel lies.
+     */
+    private fun routedChannelKilometresByAridity(
+        world: WorldMap,
+        channel: BooleanArray,
+        aridity: Array<Aridity?>,
+        squareKilometresPerCell: Double
+    ): DoubleArray {
+        val cellsAcross = world.width
+        val cellWidthKm = sqrt(squareKilometresPerCell * cellAspect(world))
+        val cellHeightKm = squareKilometresPerCell / cellWidthKm
+        val channelKm = DoubleArray(Aridity.entries.size)
+        for (cell in channel.indices) {
+            if (!channel[cell]) continue
+            val here = aridity[cell] ?: continue
+            val receiver = world.rivers.flowTarget[cell]
+            if (receiver < 0) continue
+            channelKm[here.ordinal] +=
+                stepKilometres(cell, receiver, cellsAcross, cellWidthKm, cellHeightKm)
+        }
+        return channelKm
     }
 
     // ------------------------------------------------------------------ size distributions
@@ -978,6 +1080,7 @@ internal object EarthLikeness {
      */
     internal class Pool {
         private val hackPoints = ArrayList<Pair<Double, Double>>()
+        private val hackFullNetwork = LineAccumulator()
         private val hackDrawnPoints = ArrayList<Pair<Double, Double>>()
         private val lakeAreas = ArrayList<Double>()
         private val islandAreas = ArrayList<Double>()
@@ -986,6 +1089,7 @@ internal object EarthLikeness {
         private var horton: List<StreamOrders>? = null
         private var hortonDrawnRivers: StreamOrders? = null
         private var drainage: DrainageByAridity? = null
+        private var drainageFullNetwork: DrainageByAridity? = null
         private var iceCells = 0L
         private var lakeCells = 0L
         private var landCells = 0L
@@ -1006,12 +1110,14 @@ internal object EarthLikeness {
         fun add(
             metrics: Metrics,
             reaches: ReachSample,
+            fullNetworkHack: LineAccumulator,
             lakes: List<Double>,
             islands: List<Double>
         ) {
             worlds++
             squareKilometresPerCell = metrics.squareKilometresPerCell
             hackPoints.addAll(reaches.mainStem)
+            hackFullNetwork += fullNetworkHack
             hackDrawnPoints.addAll(reaches.drawnCourse)
             drawnKilometres += reaches.drawnKilometres
             mainStemKilometres += reaches.mainStemKilometres
@@ -1029,6 +1135,8 @@ internal object EarthLikeness {
             hortonDrawnRivers =
                 hortonDrawnRivers?.plus(metrics.hortonDrawnRivers) ?: metrics.hortonDrawnRivers
             drainage = drainage?.plus(metrics.drainage) ?: metrics.drainage
+            drainageFullNetwork = drainageFullNetwork?.plus(metrics.drainageFullNetwork)
+                ?: metrics.drainageFullNetwork
             iceCells += metrics.iceCells
             lakeCells += metrics.lakeCells
             landCells += metrics.landCells
@@ -1049,6 +1157,7 @@ internal object EarthLikeness {
             ),
             coastline = coastline ?: BoxCount(COASTLINE_BOX_SIZES, LongArray(COASTLINE_BOX_SIZES.size)),
             hack = fitLine(hackPoints.map { it.first }, hackPoints.map { it.second }),
+            hackFullNetwork = hackFullNetwork.fit(),
             hackDrawnCourse =
                 fitLine(hackDrawnPoints.map { it.first }, hackDrawnPoints.map { it.second }),
             drawnKilometres = drawnKilometres,
@@ -1056,6 +1165,9 @@ internal object EarthLikeness {
             horton = horton ?: CHANNEL_SUPPORT_CELLS.map { StreamOrders(LongArray(0)) },
             hortonDrawnRivers = hortonDrawnRivers ?: StreamOrders(LongArray(0)),
             drainage = drainage ?: DrainageByAridity(
+                DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
+            ),
+            drainageFullNetwork = drainageFullNetwork ?: DrainageByAridity(
                 DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
             ),
             lakeSizes = SizeDistribution.of(lakeAreas),
@@ -1099,6 +1211,11 @@ internal object EarthLikeness {
                 "${metrics.coastline.boxSizes[it]}:${metrics.coastline.boxes[it]}"
             },
             "-", "Mandelbrot 1967")
+        // The asserted fit first, then the two drawn ones it is asserted instead of.
+        line(label, "hackExponentFullNetwork", "%.3f".format(metrics.hackFullNetwork.slope),
+            "$EARTH_HACK_EXPONENT_LOW-$EARTH_HACK_EXPONENT_HIGH", "Hack 1957; Rigon et al. 1996")
+        line(label, "hackCellsFullNetwork", metrics.hackFullNetwork.points.toString(), "-",
+            "Hack 1957")
         line(label, "hackExponent", "%.3f".format(metrics.hack.slope),
             "$EARTH_HACK_EXPONENT_LOW-$EARTH_HACK_EXPONENT_HIGH", "Hack 1957; Rigon et al. 1996")
         line(label, "hackExponentDrawnCourse", "%.3f".format(metrics.hackDrawnCourse.slope),
@@ -1122,6 +1239,14 @@ internal object EarthLikeness {
             "$EARTH_BIFURCATION_RATIO_LOW-$EARTH_BIFURCATION_RATIO_HIGH", "Strahler 1953")
         line(label, "streamsByStrahlerOrderDrawnRivers", metrics.hortonDrawnRivers.perOrder(), "-",
             "Horton 1945")
+        line(label, "drainageDensityPeakFullNetwork",
+            metrics.drainageFullNetwork.peak()?.name ?: "none",
+            "SEMI_ARID", "Moglen, Eltahir & Bras 1998")
+        line(label, "drainageDensityKmPerKm2FullNetwork",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.4f".format(metrics.drainageFullNetwork.densityIn(it))}"
+            },
+            "-", "Moglen, Eltahir & Bras 1998")
         line(label, "drainageDensityPeak", metrics.drainage.peak()?.name ?: "none",
             "SEMI_ARID", "Moglen, Eltahir & Bras 1998")
         line(label, "drainageDensityKmPerKm2",
@@ -1197,9 +1322,15 @@ internal object EarthLikeness {
     fun complaints(metrics: Metrics, oneWorld: Boolean): List<String> {
         val label = metrics.label
         val complaints = listOfNotNull(
-            hackComplaint(label, metrics.hack),
+            // Both of these read the terrain's own channel network and not the drawn courses,
+            // which the 2048 tier is what exposed: `RiverConfig.maxRivers` caps the drawn network
+            // at a count of courses, so the finer the grid the smaller the share of its own
+            // drainage the map draws, and a clause over the drawn sample was measuring the cap.
+            // See [hackOverChannelNetwork] and [routedChannelKilometresByAridity]; the drawn
+            // figures and what they cover stand beside these in [print] and [findings].
+            hackComplaint(label, metrics.hackFullNetwork),
             bifurcationComplaint(label, metrics.horton[0]),
-            drainagePeakComplaint(label, metrics.drainage),
+            drainagePeakComplaint(label, metrics.drainageFullNetwork),
             // Asserted since S2 gave the height field an absolute vertical scale. Before that the
             // curve was a single peak straddling the shoreline on every seed and both clauses were
             // findings; the world they were findings about is what `IsostasyTest` runs as its
@@ -1252,7 +1383,7 @@ internal object EarthLikeness {
             return null
         }
         return "$label: Hack's exponent is ${"%.3f".format(hack.slope)} over ${hack.points}" +
-            " basins, outside $EARTH_HACK_EXPONENT_LOW-$EARTH_HACK_EXPONENT_HIGH +/-" +
+            " reaches, outside $EARTH_HACK_EXPONENT_LOW-$EARTH_HACK_EXPONENT_HIGH +/-" +
             " $HACK_EXPONENT_TOLERANCE (Hack 1957; Rigon et al. 1996)"
     }
 
@@ -1425,13 +1556,15 @@ internal object EarthLikeness {
         val findings = ArrayList<Pair<Double, String>>()
         // See [drainageWetSideRatio] for why this is a finding rather than a complaint, and for
         // which chunk earns the assertion back.
-        val wetSide = drainageWetSideRatio(metrics.drainage)
+        val wetSide = drainageWetSideRatio(metrics.drainageFullNetwork)
         findings.add(
             wetSide to
                 "humid country carries ${"%.2f".format(wetSide)} times the channel per unit of" +
-                    " land that semi-arid country does, where Moglen, Eltahir & Bras (1998) have" +
-                    " the density falling away on the wet side, so below one; the channel" +
-                    " threshold does not read the climate, which is R1's"
+                    " land that semi-arid country does over the terrain's own network, and" +
+                    " ${"%.2f".format(drainageWetSideRatio(metrics.drainage))} over the drawn" +
+                    " courses, where Moglen, Eltahir & Bras (1998) have the density falling away" +
+                    " on the wet side, so below one; the channel threshold does not read the" +
+                    " climate, which is R1's"
         )
         // The land's mode is reported rather than asserted, and deliberately: measured after S2 it
         // runs 301 to 1,470 m against Earth's 800, which is inside any bar wide enough to admit the
@@ -1479,10 +1612,11 @@ internal object EarthLikeness {
                 "the courses the map draws cover ${"%.3f".format(drawnShare)} of the watercourses" +
                     " they stand for, where a river is its own longest watercourse and the share" +
                     " is 1.0; over the same basins Hack's exponent is" +
-                    " ${"%.3f".format(metrics.hackDrawnCourse.slope)} drawn against" +
-                    " ${"%.3f".format(metrics.hack.slope)} on the terrain (x${
-                        "%.2f".format(drawnShare)
-                    })"
+                    " ${"%.3f".format(metrics.hackDrawnCourse.slope)} drawn and" +
+                    " ${"%.3f".format(metrics.hack.slope)} over their main stems, against" +
+                    " ${"%.3f".format(metrics.hackFullNetwork.slope)} over the" +
+                    " ${metrics.hackFullNetwork.points} cells of the terrain's own network," +
+                    " which is the fit the clause reads (x${"%.2f".format(drawnShare)})"
         )
         findings.add(
             metrics.iceShareOfLand / EARTH_ICE_SHARE_OF_LAND to
@@ -1512,6 +1646,50 @@ internal object EarthLikeness {
 
     /** Least squares of y against x, and how many points went into it. */
     internal class LineFit(val slope: Double, val intercept: Double, val points: Int)
+
+    /**
+     * The same least-squares fit taken from running sums rather than from a list of points.
+     *
+     * [fitLine]'s lists are the right shape for a few hundred lakes or a few hundred drawn basins.
+     * The full-network Hack sample is a few hundred thousand cells in one world at 2048 and six
+     * worlds pool into one fit, and five running sums determine that slope exactly as well as a
+     * list of pairs would, for none of the memory.
+     */
+    internal class LineAccumulator {
+        private var points = 0
+        private var sumX = 0.0
+        private var sumY = 0.0
+        private var sumXX = 0.0
+        private var sumXY = 0.0
+
+        fun add(x: Double, y: Double) {
+            points++
+            sumX += x
+            sumY += y
+            sumXX += x * x
+            sumXY += x * y
+        }
+
+        operator fun plusAssign(other: LineAccumulator) {
+            points += other.points
+            sumX += other.sumX
+            sumY += other.sumY
+            sumXX += other.sumXX
+            sumXY += other.sumXY
+        }
+
+        /** The same degenerate-variance floor [fitLine] uses, and for the reason written there. */
+        fun fit(): LineFit {
+            if (points < 2) return LineFit(0.0, 0.0, points)
+            val meanX = sumX / points
+            val meanY = sumY / points
+            val variance = sumXX - points * meanX * meanX
+            val covariance = sumXY - points * meanX * meanY
+            if (variance <= 1e-12 * points * (meanX * meanX + 1.0)) return LineFit(0.0, meanY, points)
+            val slope = covariance / variance
+            return LineFit(slope, meanY - slope * meanX, points)
+        }
+    }
 
     fun fitLine(x: List<Double>, y: List<Double>): LineFit {
         if (x.size < 2) return LineFit(0.0, 0.0, x.size)

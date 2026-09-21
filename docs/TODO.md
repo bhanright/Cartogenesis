@@ -28,6 +28,30 @@
   on that machine should be treated as settled until the nightly runner has agreed with it.** If
   any of the three index errors ever reproduces on the runner, the habitability path above is
   where to start on the first of them. 2026-09-21, T3.
+- **A ring of standing water is not a measurement that tells graded aggradation from flat.** E6's
+  discriminating guard counted water lying in a circular band inside a window the author had
+  cropped by eye round seed 718106's southern rift, where reverting the `headroom` unit muddle by
+  hand had put 563 cells of it and closing the muddle none. F35 moved every world above 512 and the
+  crop stopped pointing at the rift: by 2026-09-14 it held no standing water at all in any of the
+  three worlds the case generates, so its own control read nothing against nothing and the case
+  failed on the clause that says so. T3 replaced the written-down window with a finder — the
+  window of the same size holding the most ringed standing water on the ungraded world — and that
+  did what it was meant to for the two clauses with a control: the ungraded valley now holds
+  **1,218** cells of standing water against **1,118** with no deposition at all, and the graded one
+  **957**, so the claim underneath the shape is measured again. It did not rescue the ring count.
+  In the found window, `[896,144,1051,394]` at 2048, the ungraded world holds **275** cells of
+  ringed water and the graded world holds **275**, and they are **the same 275 cells** — so what
+  the detector points at is a curved lake both settings make, which is the false positive
+  `BayHeadDeltaTest` already records over the whole world at 1024, where every long curved lake
+  fits a circular band well enough to be counted as one. Searching the map for ringed water walks
+  into it by construction, because the ringest body on a map is whichever lake happens to be most
+  crescent-shaped. A window found by what the artefact leaves *and only on the world that has it*
+  would be a window fitted to the answer, so the count is printed with its overlap beside it and
+  nothing is asserted on it. What would earn the clause back is a measurement of the shape that a
+  natural lake cannot satisfy — concentricity with the aggrading channel's own outlet rather than
+  with any centre at all is the obvious candidate, and the author's crescents are on record as
+  scoring nothing against the mouth, so it wants the fitted centre compared against the mouth and
+  a bar derived from the difference. 2026-09-21, T3.
 - **A lake's outflow can be discarded as a headwater stub.** A cell whose only upstream water is a
   lake's open water has no channel above it, so `RiverStage.traceRivers` treats it as a head; and
   where the lake sits within a few cells of the trunk, the course from that head is shorter than

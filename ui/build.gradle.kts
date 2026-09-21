@@ -31,16 +31,11 @@ kotlin {
         browser {
             testTask {
                 useMocha {
-                    // Mocha's own default is two seconds, which is a figure about a unit test and
-                    // not about this suite: `GenerationProgressTest` runs a whole generation of a
-                    // 128-cell world in the browser to ask whether the interface gets the thread
-                    // back between stages. Most of that generation's cost does not shrink with the
-                    // grid — the energy balance solves 240 bands through 360 steps of twenty years
-                    // however small the map is — so the world is small and the wait is not. The
-                    // hosted runner measured that generation at 69 s, so the sixty seconds this
-                    // once allowed was the arithmetic being cut off and not a hang being caught.
-                    // The test carries its own derived limit (three times the measured cost); this
-                    // one only has to stand above it. See TODO.md for the cost itself.
+                    // This figure reaches the Node runner only. The browser tests run through
+                    // Karma, which reads mocha's timeout from `karma.config.d/mocha-timeout.js`
+                    // beside this file and nowhere else; the sixty seconds once set here never
+                    // applied to them, and the two-second default it left in place is what cut
+                    // `GenerationProgressTest` off on the hosted runner. See that file.
                     timeout = "300s"
                 }
             }

@@ -177,7 +177,7 @@ object RiverStage {
      * and the odd storm, and without it a desert range contributes exactly nothing and the river
      * that leaves it disappears at its head.
      */
-    private const val RUNOFF_FLOOR = 0.05f
+    internal const val RUNOFF_FLOOR = 0.05f
 
     /**
      * Every land cell's water and the channels it makes: the depression-filled surface, the D8

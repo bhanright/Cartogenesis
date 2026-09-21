@@ -135,6 +135,16 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 13 because the rivers learned where the rain falls. `erosion.climateFeed` is new, and with
+     * it the hydraulic rounds weight their flow accumulation by a provisional rainfall and hold
+     * their incision back by the plant cover under it, so the terrain a seed produces is not the
+     * terrain the same seed produced before. A format-12 file has no such key and would open with
+     * this build's default, which is on: the heights in the file would still draw, and the moment
+     * a reader moved a knob and asked for the world again it would be re-cut by a rule the world
+     * in the file was never cut by. Worse than the usual case of that, because the key's default
+     * is the *new* behaviour rather than the old one, so nothing about the reopened world would
+     * look wrong enough to notice. Rule 11 of docs/CONVENTIONS.md is what this is.
+     *
      * 12 because the ground gained a cover. The climate result now carries a vegetation density
      * per cell and a permafrost zone per cell, saved as `climate.vegetationDensity` and
      * `climate.permafrost`, and the settings gained a `vegetation` section for the two controls
@@ -208,7 +218,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 12
+    const val FORMAT_VERSION = 13
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

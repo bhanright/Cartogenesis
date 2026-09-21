@@ -190,7 +190,18 @@ object WorldGenerationEngine {
                     // enclosed-water rule both happen after erosion, and re-running twelve
                     // hydraulic rounds because someone moved a shelf slider would undo the whole
                     // point of this chain.
-                    it.config.sea.lowstandMetres == config.sea.lowstandMetres
+                    it.config.sea.lowstandMetres == config.sea.lowstandMetres &&
+                    // And since S3 the rounds cut with the rain. The provisional march erosion
+                    // runs is a whole climate stage over a still ocean, so it reads the climate
+                    // section as the real one does and the ocean section through
+                    // `OceanStage.withoutCurrents`, which copies that section with its gyres
+                    // switched off; the cover it weighs the incision by comes from the vegetation
+                    // section. All three only when the feed is on — with it off the rounds see
+                    // flat rain and bare ground, and moving a rainfall slider must not re-cut
+                    // twelve rounds' worth of valleys that could not have heard it.
+                    (!config.erosion.climateFeed || it.config.climate == config.climate) &&
+                    (!config.erosion.climateFeed || it.config.ocean == config.ocean) &&
+                    (!config.erosion.climateFeed || it.config.vegetation == config.vegetation)
             }
             ?.erosion
             ?: ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator)

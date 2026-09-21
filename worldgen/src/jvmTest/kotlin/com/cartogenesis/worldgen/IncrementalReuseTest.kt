@@ -88,6 +88,11 @@ class IncrementalReuseTest {
                 tectonics = base.tectonics.copy(historyEpochs = 1)
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
+            // S3: the rounds cut with a provisional climate, so switching that feed off changes
+            // every valley on the map — and, the other way about, leaving it on makes erosion
+            // depend on three sections that used to be decided after it ran. The guard above this
+            // one is conditioned on the flag, so this case is what shows the flag itself is seen.
+            "climateFeed" to base.copy(erosion = base.erosion.copy(climateFeed = false)),
             "facetRouting" to base.copy(facetRouting = false),
             "flatPotential" to base.copy(flatPotential = false),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),

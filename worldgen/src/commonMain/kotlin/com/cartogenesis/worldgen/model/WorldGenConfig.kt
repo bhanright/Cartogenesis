@@ -2019,6 +2019,25 @@ data class ErosionConfig(
      */
     val bedrockErodibilityPerYear: Float = 1e-6f,
     /**
+     * Whether the hydraulic rounds cut with the rain that actually falls, and are held back by
+     * what grows on the ground.
+     *
+     * On, the stage solves a provisional climate over the weathered uplift before the first round
+     * and keeps two fields from it: rainfall, which weights the flow accumulation so that
+     * discharge is `Q = P * A` instead of the catchment alone, and plant cover, which resists the
+     * incision. What that buys is a rain shadow you can read off the terrain with the rain turned
+     * off — deep, close-set valleys on a range's windward flank and a smooth leeward one — rather
+     * than dissection that follows nothing but the geometry of the divides.
+     *
+     * Off, every land cell contributes the same water and nothing shields it, which is what this
+     * stage did before it could see the weather and is the control every guard of the feature is
+     * shown failing against. The world it produces is the old one bit for bit.
+     *
+     * The price is that erosion now depends on the climate, ocean and vegetation sections as well
+     * as its own; see `WorldGenerationEngine`'s reuse guard, which takes all three when this is on.
+     */
+    val climateFeed: Boolean = true,
+    /**
      * Whether rivers put material back down as well as taking it away.
      *
      * Off, the hydraulic pass is detachment-limited: everything it cuts leaves the model, no delta

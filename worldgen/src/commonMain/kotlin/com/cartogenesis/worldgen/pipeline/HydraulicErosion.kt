@@ -328,11 +328,13 @@ internal object HydraulicErosion {
     internal fun provisionalWeather(
         config: WorldGenConfig,
         terrain: FloatField,
-        provisionalSeaLevel: Float
+        provisionalSeaLevel: Float,
+        /** Which round is about to cut with this, so the march sees the sea that round sees. */
+        round: Int = 0
     ): Weather {
         val cellCount = config.width * config.height
         val cut = SeaLevelStage.percentileCut(
-            terrain, provisionalSeaLevel, config.scale, standBelowToday(config, 0)
+            terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
         val runoff = FloatArray(cellCount)
         if (cut.landCellCount == 0) return Weather(runoff, FloatArray(cellCount))
@@ -414,19 +416,28 @@ internal object HydraulicErosion {
         val cellsDown = config.height
         var working = height.copy()
 
-        // The sky the rounds work under, solved once on the terrain the thermal sweeps left and
-        // held for all twelve. Once rather than per round because the rainfall barely moves as the
-        // valleys deepen — the belts are set by the latitude, the coastlines and the ranges'
-        // bulk, none of which a round changes much — and the march is not free. See
-        // docs/DESIGN_LEDGER.md, S3, for the measured drift over a whole generation.
+        // The sky the rounds work under, solved on the terrain the thermal sweeps left and taken
+        // again halfway through.
+        //
+        // Twice and not once, on measurement. A single march at the top was the cheaper design and
+        // it was tried: the rainfall the last round would have cut with differs from the rainfall
+        // the first round cut with by a third of the land's mean, because twelve rounds take
+        // enough off a range to change how much lift it forces out of the wind crossing it. A
+        // third is too much to hold fixed. Twice and not per round because a march is not free and
+        // the drift is not where the value is — the rain shadow's *place* is set by the coastlines
+        // and the belts, which no round moves. See docs/DESIGN_LEDGER.md, S3, for the drift
+        // figures and the cost.
         //
         // Switched off, the weights are all ones and the cover is nothing, which is the world this
         // stage cut before it could see the weather, to the last bit.
-        val weather =
+        val refreshAtRound =
+            if (erosion.climateFeed && erosion.hydraulicRounds > 1) erosion.hydraulicRounds / 2
+            else -1
+        var weather =
             if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
             else Weather(FloatArray(cellsAcross * cellsDown) { 1f }, FloatArray(cellsAcross * cellsDown))
-        val runoff = weather.runoff
-        val vegetationDensity = weather.vegetationDensity
+        var runoff = weather.runoff
+        var vegetationDensity = weather.vegetationDensity
 
         // The solid earth's two answers to what the water is doing, both of them off by default
         // and both switched by their own setting so a guard can measure the world without them.
@@ -543,6 +554,15 @@ internal object HydraulicErosion {
             // back — on a browser, where that is the only way the press ever arrives at all.
             currentCoroutineContext().ensureActive()
             standAside()
+
+            // Halfway down, the sky is asked again — against the ground as the rounds have left
+            // it and the sea as this round will take it, which is the same pair the march at the
+            // top was given.
+            if (round == refreshAtRound) {
+                weather = provisionalWeather(config, working, provisionalSeaLevel, round)
+                runoff = weather.runoff
+                vegetationDensity = weather.vegetationDensity
+            }
 
             // The rock rises first, before the water is routed over it: a round is a span of time,
             // and what the rivers of that span work on is the ground the tectonics of that span

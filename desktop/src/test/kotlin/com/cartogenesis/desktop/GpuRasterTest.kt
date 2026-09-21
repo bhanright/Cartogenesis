@@ -55,9 +55,10 @@ class GpuRasterTest {
          * still land either side of an integer, by one. A flip of one passes through every later
          * blend undiminished at most, so the worst drift a channel can carry is the number of
          * truncations it passes, which on the fantasy view is the three passes of colour and the
-         * two overlays a coastal border cell takes: five. What is measured is two, on Mars, and
-         * was two over the nine styles this bound was first taken from; a chunk that adds a stage
-         * to the recipe raises this by one and says so.
+         * two overlays a coastal border cell takes: five. What is measured over all twelve styles and
+         * fifteen views is two (the winter temperature view in Vellum), as it was over the nine
+         * styles the old bound of 2 was taken from; a chunk that adds a stage to the recipe raises
+         * this by one and says so.
          */
         const val MAX_PERCENTILE_DRIFT = 1
         const val TRUNCATIONS_A_CHANNEL_PASSES = 5

@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.FlatRouting
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.RiverResult
 import kotlin.test.Test
@@ -353,10 +354,25 @@ class StraightRunTest {
         val filledField =
             FlowRouting.fillDepressions(cellsAcross, cellsDown, world.sea.isLand, ground)
         val routed = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed
+            cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed,
+            world.config.facetRouting, world.config.flatPotential
         )
         val filled = filledField.data
         val trueGround = ground.data
+        // The surface the receiver has to be lower on. Across a flat the fill raised that is the
+        // potential F30b lays and not the fill's staircase: a receiver may stand higher on the fill
+        // than the cell draining into it and the network is still a forest, because the potential
+        // is what every step descends. `FlatCourseTest` walks that forest off every flat.
+        val routingSurface =
+            if (world.config.flatPotential) {
+                FlatRouting.surfaceOf(
+                    cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed
+                ).heights
+            } else {
+                DoubleArray(filled.size) {
+                    (if (world.sea.isLand[it]) filled[it] else trueGround[it]).toDouble()
+                }
+            }
         val lastRow = cellsDown - 1
         var uphill = 0
         var strandedInland = 0
@@ -397,9 +413,7 @@ class StraightRunTest {
                 }
                 continue
             }
-            val there =
-                if (world.sea.isLand[receiver]) filled[receiver] else trueGround[receiver]
-            if (there >= filled[cell]) uphill++
+            if (routingSurface[receiver] >= routingSurface[cell]) uphill++
         }
         assertEquals(0, uphill, "$label: $uphill cells drain into a cell no lower than themselves")
         assertEquals(

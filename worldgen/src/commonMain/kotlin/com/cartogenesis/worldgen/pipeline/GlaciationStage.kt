@@ -347,7 +347,8 @@ object GlaciationStage {
             sea.relativeElevation,
             filled,
             config.seed,
-            config.facetRouting
+            config.facetRouting,
+            config.flatPotential
         )
         val order =
             FlowRouting.drainageOrder(cellsAcross, cellsDown, isLand, directions, sea.landCellCount)

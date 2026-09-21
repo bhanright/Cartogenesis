@@ -192,8 +192,14 @@ class DepositionTest {
      * puts it, so the plates are in different places on a 128 world and the percentile falls
      * through different ground. No knob moved and 512 is untouched, which is what
      * `ScaleFreeTest`'s new clauses are there to say.
+     *
+     * And a seventeenth at F30b, by three cells, 6273 to 6270. Water crossing a flat the fill
+     * raised now follows a potential rather than the flood's staircase, in every one of the twelve
+     * rounds, so where the incision cuts across a flat moved and the percentile fell through
+     * slightly different ground. Nothing else in the round changed; the mass budget below reads
+     * exactly as before.
      */
-    private val startingPointLand = 6273
+    private val startingPointLand = 6270
 
     @Test
     fun `every round conserves mass`() {

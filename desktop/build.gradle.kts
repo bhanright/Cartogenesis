@@ -232,9 +232,12 @@ compose.desktop {
             ?: System.getProperty("java.home")
 
         // The whole point of the desktop build: generation at export resolutions needs gigabytes,
-        // which is exactly what Android could not give it. 4096 wants roughly 2GB, 8192 four times
-        // that, and the FFT buffers are transient spikes on top.
-        jvmArgs += listOf("-Xmx12g")
+        // which is exactly what Android could not give it. 4096 wants roughly 4GB, 8192 four times
+        // that, and the FFT buffers are transient spikes on top. The heap is a share of the
+        // machine's memory rather than a fixed figure, so a 32GB machine offers 24GB to an export
+        // and an 8GB one still runs 4096 inside its 6GB; a fixed 12GB was the wall an 8192 export
+        // hit on a machine that had twice that to give.
+        jvmArgs += listOf("-XX:MaxRAMPercentage=75")
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)

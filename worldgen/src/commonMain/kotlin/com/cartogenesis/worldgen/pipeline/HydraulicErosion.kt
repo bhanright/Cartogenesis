@@ -530,7 +530,7 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.facetRouting
+                config.seed, config.facetRouting, config.flatPotential
             )
             // Uniform rain: every land cell contributes the same, so accumulation is simply the
             // number of cells upstream.
@@ -1058,7 +1058,7 @@ internal object HydraulicErosion {
                     val spoilFlow =
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
-                            config.seed, config.facetRouting
+                            config.seed, config.facetRouting, config.flatPotential
                         )
                     val spoilArea = FlowRouting.accumulate(
                         cellsAcross, cellsDown, after.isLand, spoilFilled, spoilFlow, after.landCellCount
@@ -1091,7 +1091,7 @@ internal object HydraulicErosion {
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
-                    rates.pondDepth, config.seed, config.facetRouting
+                    rates.pondDepth, config.seed, config.facetRouting, config.flatPotential
                 )
                 incised += opened.removed
                 lost += opened.removed
@@ -1364,7 +1364,8 @@ internal object HydraulicErosion {
         spoil: FloatArray,
         pondDepth: Float,
         seed: Long,
-        byFacet: Boolean
+        byFacet: Boolean,
+        overPotential: Boolean
     ): Opened {
         val cellCount = cellsAcross * cellsDown
         val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel, scale)
@@ -1385,7 +1386,7 @@ internal object HydraulicErosion {
         val filled =
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, byFacet
+            cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, byFacet, overPotential
         )
         val area = FlowRouting.accumulate(
             cellsAcross, cellsDown, isLand, filled, flow, sea.landCellCount

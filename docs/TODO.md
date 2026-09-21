@@ -1,5 +1,12 @@
 # To do
 
+- **An export is bounded by the heap, and the graphics card has memory of its own.** The packaged
+  application's heap is a share of the machine's memory (three quarters), which lifts the fixed
+  12 GB wall an 8192 export hit, but the fields of an 8192 world still all live on the heap at once.
+  The device already holds a field for the length of a stage (erosion, the ice, the ocean, the
+  raster); keeping the world's fields resident in graphics memory between stages, or generating in
+  tiles, is what would let an export outgrow the heap. Whether 8192 completes in 24 GB wants
+  measuring first. 2026-09-20.
 - **Erosion does not read the vegetation, and the field it would read is sitting there.** W4 saved
   a 0-1 vegetation density on `ClimateResult.vegetationDensity` and wired exactly one consumer, the
   map's canopy darkening. The consumers the field was built for are S3 and H3: a vegetated slope
@@ -96,7 +103,7 @@
   channel and not a body of water, and the sea mask has no such rule. `StraightRunTest`'s
   `report how straight every shore is` is the instrument, and prints the figure every run.
   2026-09-14, F30.
-- **The ruled course over a filled basin is still there, and buying it costs Earth figures.** Also
+- **Closed 2026-09-20 by F30b.** *The ruled course over a filled basin is still there, and buying it costs Earth figures.* Neither of the two fixes F30 measured is what landed: the flats keep their staircase on the filled field, and the routing alone reads a potential laid across each flat, so no level, lake or outlet walk moved and no Earth-derived guard was paid. `FlatRouting` and the F30b row carry the figures: 76 to 44 ruled runs over raised ground on 718106 at 2048. What follows is the entry as it stood. Also
   measured at 00b13fe, before S2b; the flats and their staircase are exactly as they were, so the
   mechanism stands even though the two bodies it was measured on have gone. F30
   measured what it takes to stop the depression fill's flats routing water dead straight everywhere,

@@ -180,20 +180,32 @@ class PenAndInkTest {
          * the biome, elevation and every climate field are identical - so `ORDINARY_GROUND` is not
          * re-derived with them this time, because the land the median illumination is measured
          * over did not move at all. Re-taken last, after the two module suites had settled.
+         *
+         * F30b moved all twelve. Water crossing a flat the depression fill raised follows a
+         * potential rather than the flood's staircase, in every routing pass a world makes, so the
+         * incision cut different ground in every hydraulic round and the world this test draws is
+         * a different world by a little everywhere a flat lies: `DepositionTest`'s land count at
+         * 128 moved by three cells. Every style draws that land, `PEN_AND_INK` and `CLEAR`
+         * included this time, since what moved is the ground and not the tint.
+         * `ReliefShading.ORDINARY_GROUND` is *not* re-derived: `ReliefShadingTest` measures the
+         * median illumination over seed 234475's land on this tree and still finds the recorded
+         * figure, because a river's course across a flat moved the land by cells here and there
+         * and not the roughness of ordinary country. Re-taken last, after the two module suites
+         * had settled.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to -1713431387,
-            MapStyle.VELLUM to 95155827,
-            MapStyle.INK_WASH to -13737540,
-            MapStyle.NAUTICAL to 945604914,
-            MapStyle.MIDNIGHT to -1031141253,
-            MapStyle.SCHOOLROOM to 2062220447,
-            MapStyle.VERDANT to 1530694864,
-            MapStyle.SCROLL to 1561951766,
-            MapStyle.PEN_AND_INK to 198761330,
-            MapStyle.MARS to -194731954,
-            MapStyle.NATURAL to 2122140708,
-            MapStyle.CLEAR to -383169912
+            MapStyle.ATLAS to 1178305157,
+            MapStyle.VELLUM to 1573194873,
+            MapStyle.INK_WASH to 986781351,
+            MapStyle.NAUTICAL to -11440400,
+            MapStyle.MIDNIGHT to 49319419,
+            MapStyle.SCHOOLROOM to 931339151,
+            MapStyle.VERDANT to -1139404607,
+            MapStyle.SCROLL to 322368808,
+            MapStyle.PEN_AND_INK to 169087720,
+            MapStyle.MARS to 1377312259,
+            MapStyle.NATURAL to 293926130,
+            MapStyle.CLEAR to 1750138349
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

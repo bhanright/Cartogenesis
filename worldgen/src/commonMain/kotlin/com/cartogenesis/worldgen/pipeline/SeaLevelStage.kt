@@ -502,7 +502,8 @@ object SeaLevelStage {
                 relativeElevation,
                 filled,
                 config.seed,
-                config.facetRouting
+                config.facetRouting,
+                config.flatPotential
             )
             val catchmentArea = FlowRouting.accumulate(
                 cellsAcross, cellsDown, isLand, filled, flowDirections, current.landCellCount

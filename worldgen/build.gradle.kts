@@ -89,6 +89,9 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.ErosionConvergenceTest",
     "com.cartogenesis.worldgen.GlaciationAuditTest",
     "com.cartogenesis.worldgen.RealmIdRangeAuditTest",
+    // F30b's discriminating case: 718106 at 2048 twice, once over the potential and once over the
+    // fill's staircase. Its invariants and cost run at 512 and stay in `FlatCourseTest`.
+    "com.cartogenesis.worldgen.FlatCourseAuditTest",
     // H1's cost report: sixteen runs of the tectonic stage at 1024 and 2048, reported rather than
     // asserted. Its guards run at 512 and stay in `TectonicHistoryTest`.
     "com.cartogenesis.worldgen.TectonicHistoryAuditTest",

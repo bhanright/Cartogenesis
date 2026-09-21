@@ -179,6 +179,7 @@ object WorldGenerationEngine {
                     // Water is routed twelve times over in this stage, and how it is routed
                     // is a top-level setting rather than one of `erosion`'s own.
                     it.config.facetRouting == config.facetRouting &&
+                    it.config.flatPotential == config.flatPotential &&
                     // Hydraulic erosion routes water against a provisional shoreline, so where the
                     // sea sits changes what gets carved. Guarding on `erosion` alone reused a
                     // stale height field whenever sea level moved.
@@ -202,6 +203,7 @@ object WorldGenerationEngine {
                     // The post-cut outlet pass and the ice both route water; see the
                     // erosion guard above.
                     it.config.facetRouting == config.facetRouting &&
+                    it.config.flatPotential == config.flatPotential &&
                     // The continental shelf is a post-percentile remap of the ocean floor, not a
                     // tectonics setting, so a shelf-only change must not reuse a stale sea stage.
                     it.config.sea == config.sea &&
@@ -283,6 +285,7 @@ object WorldGenerationEngine {
                     // The drawn network is the routing's own answer; see the erosion
                     // guard above.
                     it.config.facetRouting == config.facetRouting &&
+                    it.config.flatPotential == config.flatPotential &&
                     // Lakes come out of the same depression fill and live on the river result, so
                     // a lake setting is a river setting as far as reuse is concerned.
                     it.config.lakes == config.lakes

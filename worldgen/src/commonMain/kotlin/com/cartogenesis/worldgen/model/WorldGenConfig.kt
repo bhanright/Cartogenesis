@@ -2942,6 +2942,14 @@ data class WorldGenConfig(
      */
     val facetRouting: Boolean = true,
     /**
+     * Whether water crossing a flat the depression fill raised follows a potential laid across the
+     * flat rather than the fill's own staircase. Top level for the same reason as [facetRouting]:
+     * it is the same rule in every stage that routes water. Off is the staircase, kept as the
+     * control the ruled-run census over raised ground is measured against; see
+     * [com.cartogenesis.worldgen.pipeline.FlatRouting].
+     */
+    val flatPotential: Boolean = true,
+    /**
      * Fraction of the world covered by ocean, 0..1.
      *
      * Read twice since S2, and the two readings are the point of the chunk. The plate stage draws

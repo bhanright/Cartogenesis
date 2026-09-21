@@ -78,10 +78,12 @@ almost free, because a biome map is large flat regions and that is what deflate 
 
 Machine as above. Date not recorded when measured; moved here from the README on 2026-09-15.
 
-The interface offers 2048, 4096 and 8192, and the 8192 chip is drawn disabled. It exhausts a 10 GB
-heap inside the generator after about nineteen minutes, before a single pixel is drawn: the fields
+The interface offers 2048, 4096 and 8192, and the 8192 chip is drawn disabled. It exhausted a 10 GB
+heap inside the generator after about nineteen minutes, before a single pixel was drawn: the fields
 for a world that size need roughly 9 GB before the FFT's and erosion's own transient buffers are
-added on top.
+added on top. The packaged application's heap is now three quarters of the machine's memory rather
+than a fixed 12 GB, so a 32 GB machine offers 24 GB to an export; whether 8192 completes inside
+that has not been measured.
 
 Rendering is not the constraint. The graphics device rasters 8192 in 1.4 seconds with no world in
 memory at all. Raising the ceiling therefore means generating in tiles or on disk, not building a

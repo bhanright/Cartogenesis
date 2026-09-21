@@ -159,6 +159,9 @@ internal object FlowRouting {
      *
      * @param byFacet false for the plain steepest-of-eight rule this replaced, which is the control
      *   the straight-bar census is measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.facetRouting].
+     * @param overPotential false to route the fill's flats over its own staircase rather than over
+     *   the potential [FlatRouting] lays, the control the ruled-run census over raised ground is
+     *   measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.flatPotential].
      */
     fun flowDirections(
         width: Int,
@@ -167,10 +170,15 @@ internal object FlowRouting {
         elevation: FloatField,
         filled: FloatField,
         seed: Long,
-        byFacet: Boolean = true
+        byFacet: Boolean = true,
+        overPotential: Boolean = true
     ): IntArray {
         val receiver = IntArray(width * height) { -1 }
-        val routingSurface = filled.data
+        // The filled field, except across the flats the fill raised, where it is the potential
+        // [FlatRouting] lays: see there for why a staircase cannot be routed across without a ruler.
+        val routingSurface =
+            if (overPotential) FlatRouting.surfaceOf(width, height, isLand, elevation, filled, seed).heights
+            else DoubleArray(width * height) { (if (isLand[it]) filled.data[it] else elevation.data[it]).toDouble() }
         val trueGround = elevation.data
         for (row in 0 until height) {
             for (column in 0 until width) {
@@ -184,10 +192,10 @@ internal object FlowRouting {
                     continue
                 }
 
-                var steepestFacetSlope = 0f
+                var steepestFacetSlope = 0.0
                 var facetCardinal = -1
                 var facetDiagonal = -1
-                var diagonalShare = 0f
+                var diagonalShare = 0.0
 
                 for (side in CARDINAL_COLUMN_STEP.indices) {
                     val cardinalColumnStep = CARDINAL_COLUMN_STEP[side]
@@ -195,9 +203,7 @@ internal object FlowRouting {
                     val cardinal =
                         neighbourAt(width, height, column + cardinalColumnStep, row + cardinalRowStep)
                     if (cardinal < 0) continue
-                    // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-                    val cardinalDrop = here -
-                        if (isLand[cardinal]) routingSurface[cardinal] else trueGround[cardinal]
+                    val cardinalDrop = here - routingSurface[cardinal]
 
                     for (turn in -1..1 step 2) {
                         val diagonalColumnStep =
@@ -207,8 +213,7 @@ internal object FlowRouting {
                             width, height, column + diagonalColumnStep, row + diagonalRowStep
                         )
                         if (diagonal < 0) continue
-                        val diagonalFall = here -
-                            if (isLand[diagonal]) routingSurface[diagonal] else trueGround[diagonal]
+                        val diagonalFall = here - routingSurface[diagonal]
                         val diagonalSlope = diagonalFall / DIAGONAL_STEP_CELLS
                         // Tarboton's two components: the fall to the cardinal, and the further fall
                         // from the cardinal on to the diagonal. Both over one cell, since the
@@ -219,17 +224,17 @@ internal object FlowRouting {
                         // left by: to the cardinal when the diagonal is no lower than the cardinal,
                         // and to the diagonal when the cardinal is not downhill at all or the
                         // further fall on to the diagonal is the larger of the two.
-                        val clampedToTheCardinal = cardinalDrop > 0f && outwardFall <= 0f
+                        val clampedToTheCardinal = cardinalDrop > 0.0 && outwardFall <= 0.0
                         val facetSlope = if (clampedToTheCardinal) {
                             cardinalDrop
-                        } else if (cardinalDrop <= 0f || outwardFall >= cardinalDrop) {
+                        } else if (cardinalDrop <= 0.0 || outwardFall >= cardinalDrop) {
                             diagonalSlope
                         } else {
                             sqrt(cardinalDrop * cardinalDrop + outwardFall * outwardFall)
                         }
                         val shareTowardTheDiagonal = when {
-                            clampedToTheCardinal -> 0f
-                            cardinalDrop <= 0f || outwardFall >= cardinalDrop -> 1f
+                            clampedToTheCardinal -> 0.0
+                            cardinalDrop <= 0.0 || outwardFall >= cardinalDrop -> 1.0
                             else -> outwardFall / cardinalDrop
                         }
                         if (facetSlope > steepestFacetSlope) {
@@ -242,9 +247,9 @@ internal object FlowRouting {
                 }
 
                 receiver[cell] = when {
-                    steepestFacetSlope <= 0f -> -1
-                    diagonalShare <= 0f -> facetCardinal
-                    diagonalShare >= 1f -> facetDiagonal
+                    steepestFacetSlope <= 0.0 -> -1
+                    diagonalShare <= 0.0 -> facetCardinal
+                    diagonalShare >= 1.0 -> facetDiagonal
                     subGridDraw(column, row, seed) < diagonalShare -> facetDiagonal
                     else -> facetCardinal
                 }
@@ -266,16 +271,16 @@ internal object FlowRouting {
         height: Int,
         isLand: BooleanArray,
         trueGround: FloatArray,
-        routingSurface: FloatArray,
+        routingSurface: DoubleArray,
         column: Int,
         row: Int
     ): Int {
         var steepest = -1
-        var steepestDrop = 0f
+        var steepestDrop = 0.0
         val here = routingSurface[row * width + column]
         forEachNeighbourWithDistance(width, height, column, row) { neighbour, distance ->
-            // Ocean neighbours use the true elevation, so coastal cells drain to the sea.
-            val there = if (isLand[neighbour]) routingSurface[neighbour] else trueGround[neighbour]
+            // Ocean cells carry their true elevation on the surface, so coastal cells drain to sea.
+            val there = routingSurface[neighbour]
             val drop = (here - there) / distance
             if (drop > steepestDrop) {
                 steepestDrop = drop
@@ -298,8 +303,8 @@ internal object FlowRouting {
      * scrambled cell by cell — which matters more than the wander itself, because everything below
      * this reads that network: the basins, their spills, and the sills the outlet pass has to cut.
      */
-    private fun subGridDraw(column: Int, row: Int, seed: Long): Float =
-        (seededNoise(column, row, seed xor SUB_GRID_DRAW_SALT) + 1f) * 0.5f
+    private fun subGridDraw(column: Int, row: Int, seed: Long): Double =
+        ((seededNoise(column, row, seed xor SUB_GRID_DRAW_SALT) + 1f) * 0.5f).toDouble()
 
     private const val SUB_GRID_DRAW_SALT = 0x5f3a91c7_2b64d8e3L
 
@@ -422,10 +427,12 @@ internal object FlowRouting {
             if (isLand[cell]) accumulation.data[cell] = weightOf(cell)
         }
 
-        val order = heightOrder(width, height, isLand, filled, landCellCount)
-        // Highest first, so a cell's own total is final before it passes water downstream.
-        for (rank in order.indices.reversed()) {
-            val cell = order[rank]
+        // Sources first and mouths last, read off the network itself rather than off the filled
+        // field: across a flat the routing follows [FlatRouting]'s potential and not the fill's
+        // staircase, so a receiver is no longer always lower on the fill than the cell draining
+        // into it, and a walk ordered by height would pass water to a cell it had already emptied.
+        val order = drainageOrder(width, height, isLand, flowTarget, landCellCount)
+        for (cell in order) {
             val receiver = flowTarget[cell]
             if (receiver >= 0 && isLand[receiver]) {
                 accumulation.data[receiver] += accumulation.data[cell]

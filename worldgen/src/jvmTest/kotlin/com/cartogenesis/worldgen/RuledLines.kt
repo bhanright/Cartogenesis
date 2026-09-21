@@ -86,7 +86,27 @@ internal object RuledLines {
      * manage only where they are confined. Counted over the drawn courses alone, since those are
      * what a reader sees, and only where both ends of a step are drawn channel rather than lake.
      */
-    fun ruledRunsOf(world: WorldMap, atLeast: Int = RULED_RUN_CELLS): Int {
+    fun ruledRunsOf(
+        world: WorldMap,
+        atLeast: Int = RULED_RUN_CELLS,
+        over: (Int) -> Boolean = { true }
+    ): Int = ruledRunListOf(world, atLeast, over).size
+
+    /** One run the census counted: where it starts, which way it goes, how many steps it holds. */
+    class RuledRun(val startCell: Int, val cellsAcross: Int, val east: Int, val south: Int, val length: Int) {
+        override fun toString(): String =
+            "run of $length from (${startCell % cellsAcross},${startCell / cellsAcross}) bearing ($east,$south)"
+    }
+
+    /**
+     * The runs [ruledRunsOf] counts, one entry each. [over] restricts the count to runs every cell of
+     * which satisfies it, so a census can be taken over one kind of ground alone.
+     */
+    fun ruledRunListOf(
+        world: WorldMap,
+        atLeast: Int = RULED_RUN_CELLS,
+        over: (Int) -> Boolean = { true }
+    ): List<RuledRun> {
         val cellsAcross = world.width
         val drawn = BooleanArray(cellsAcross * world.height)
         world.rivers.rivers.forEach { river ->
@@ -95,17 +115,24 @@ internal object RuledLines {
             }
         }
 
-        var ruled = 0
+        val ruled = ArrayList<RuledRun>()
         world.rivers.rivers.forEach { river ->
             var run = 1
+            var runStart = -1
             var lastEast = OFF_THE_COMPASS
             var lastSouth = OFF_THE_COMPASS
+            fun close() {
+                if (run >= atLeast && runStart >= 0) {
+                    ruled.add(RuledRun(runStart, cellsAcross, lastEast, lastSouth, run))
+                }
+            }
             for (step in 0 until river.cells.size - 1) {
                 val from = river.cells[step]
                 val to = river.cells[step + 1]
-                if (!drawn[from] || !drawn[to]) {
-                    if (run >= atLeast) ruled++
+                if (!drawn[from] || !drawn[to] || !over(from) || !over(to)) {
+                    close()
                     run = 1
+                    runStart = -1
                     lastEast = OFF_THE_COMPASS
                     lastSouth = OFF_THE_COMPASS
                     continue
@@ -117,13 +144,14 @@ internal object RuledLines {
                 if (east == lastEast && south == lastSouth) {
                     run++
                 } else {
-                    if (run >= atLeast) ruled++
+                    close()
                     run = 1
+                    runStart = from
                 }
                 lastEast = east
                 lastSouth = south
             }
-            if (run >= atLeast) ruled++
+            close()
         }
         return ruled
     }

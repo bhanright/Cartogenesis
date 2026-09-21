@@ -57,7 +57,8 @@ class BayHeadDeltaAuditTest {
         // The window is chosen on the ungraded world, which is the one the artefact is in. Choosing
         // it on the graded world would be choosing the window with the least to find in it.
         val wasRings = ringedWaterMask(was)
-        val window = densestWindow(was, wasRings)
+        val wasStanding = BooleanArray(was.width * was.height) { was.rivers.lakes.isLake(it) }
+        val window = densestWindow(was, wasRings, wasStanding)
         val nowRings = ringedWaterMask(now)
 
         val wasRingCells = window.count(was) { wasRings[it] }
@@ -127,11 +128,18 @@ class BayHeadDeltaAuditTest {
             return n
         }
 
+        /** How many marked cells lie inside this window, off a [summedArea] table. */
+        fun sum(summed: IntArray, w: Int): Int {
+            val stride = w + 1
+            return summed[bottom * stride + right] - summed[top * stride + right] -
+                summed[bottom * stride + left] + summed[top * stride + left]
+        }
+
         override fun toString() = "[$left,$top,$right,$bottom]"
     }
 
     /**
-     * Where a window of the author's own size holds the most of [wanted], on a coarse lattice.
+     * Where a window of the author's own size holds the most ringed standing water.
      *
      * The sweep `NaturalGalleryTest` and `DebugMapDump` use for their crops: the window only has
      * to be a good one, not the best one, and it is chosen off the world's own fields so the same
@@ -142,7 +150,7 @@ class BayHeadDeltaAuditTest {
      * a stride through the count could step over all of them. It can afford to: the counts come
      * off a summed-area table taken once over the mask, so a window costs four reads however big
      * it is, rather than its own area.
-     */
+     *
      * Scored on the ringed water first and on all the standing water second. The second is not
      * only a tie-break: where the ungraded world has no ring anywhere, every window scores nothing
      * on the first and the window still has to be a valley, because the two clauses that do have a

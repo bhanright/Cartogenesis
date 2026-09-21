@@ -853,14 +853,53 @@ Earth's third of them. Measured against a fixed height instead, the postglacial 
 the shoreline depositional and a coastal plain's own gradient calls 1.9% of it depositional; Earth's
 31% sits between and no height derivable from Earth lands on it.
 
+**A rain shadow is now cut as a rain shadow, at about half the strength the rainfall alone would
+suggest.** This used to read that erosion could not see the weather at all: the hydraulic rounds ran
+three stages before the climate and worked to flat rain, so a leeward slope wore down exactly as
+fast as the windward one above it and the dissection of a range followed nothing but the geometry of
+its divides. [S3 Erosion reads the climate](DESIGN_LEDGER.md) closed the circle the way H2 closed
+glaciation's: a provisional climate march runs on the weathered uplift before the first round and
+again at the midpoint, and the flow accumulation carries each cell's own rainfall, so discharge is
+`Q = P * A` and the stream-power law is spent against the water rather than against the catchment.
+What is *not* Earth's figure is the strength. Measured on the largest convergent belt of each of the
+four standard seeds at 512, windward flank against leeward: the windward side takes 2.33 to 4.77
+times the rain, and the channels on it gather only **1.43 to 1.81 times the discharge**, because a
+catchment does not stop at a divide — a windward channel is fed partly from over the crest, and the
+leeward flank's longer rivers gather the crest's wet side on their way down. The incision follows
+the discharge and not the rainfall, at **1.11 to 1.32 times the leeward flank's** once the belt's own
+geometric asymmetry (measured with the feed switched off, 0.88 to 1.28) is divided out. Earth's
+comparison is the Southern Alps of New Zealand, where the western flank takes about ten times the
+eastern's rain and exhumes at 5-10 mm a year against the east's under one (Willett 1999; Hovius,
+Stark and Allen 1997) — an order of magnitude where this is tens of per cent. Two of the three
+reasons are recorded elsewhere on this page: the interior is drier than Earth's by nearly three, so
+the rainfall contrast a range can make is smaller to begin with, and the vegetation the wet flank
+grows holds 0.88 to 0.95 of its own erodibility back against the dry flank's, which is a real term
+pulling the other way rather than an error. The third is the divide-crossing catchment above, and
+that is a fact about ranges rather than about this model. `ErosionConfig.climateFeed` is the control.
+
+**A wet flank is not more finely divided than a dry one.** The companion claim to the one above,
+and the measurement does not support it. Against a fixed support area — the network's bare geometry
+— the windward flank of the belt on every one of the four standard seeds carries about **0.35 to
+0.48** of the leeward flank's share of channel cells, and it carries **0.41 to 0.47** of it with the
+climate feed switched off as well, so the ordering is the belt's shape and not the rain: the
+windward side is the one the ocean is on, which makes it the shorter and steeper side, with less
+room behind it for a network to branch in. On the discharge the stage actually routes, the wet flank
+leads on two of the four seeds (1.08 and 1.82) and trails on two (0.88 and 0.44). Neither instrument
+gives a consistent sign, so `ClimateFedErosionTest` prints the figures and asserts nothing about
+them. What dissection *does* follow is rainfall over the land as a whole rather than across one
+belt: Spearman's rank correlation between a cell's rainfall and how far it fell over the twelve
+rounds reads **+0.230 to +0.296** over the four seeds, against **+0.087 to +0.137** with the feed off.
+
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut
-down through its rim, which is why it is still there. The hydraulic pass cannot tell the difference,
-because it runs before there is a climate and works to uniform rain — the same circle that makes
-erosion's rainfall flat in the first place. So a desert basin is drained on the same terms as a wet
-one, and the standing water a dry basin keeps is decided afterwards, by the water balance, out of
-whatever rim survived. Breaking that would mean either a rainfall field before the terrain is
-shaped, or a second erosion pass after the climate.
+down through its rim, which is why it is still there. Since S3 the hydraulic pass can tell part of
+the difference — the accumulation the outlet notch and the closing breach read is discharge now, so
+a desert basin's rim is cut by a desert's water — but only part, because the runoff a cell
+contributes is floored at 60 mm a year (`RiverStage.RUNOFF_FLOOR` of `ClimateStage.REFERENCE_MM`) so
+that an arid upland still feeds the channel leaving it, and a basin below that floor is drained on
+the same terms as one at it. How much lake survives in dry country as a result was not re-measured
+by S3; the standing water a dry basin keeps is still decided afterwards, by the water balance, out
+of whatever rim survived.
 
 **Some river segments still run uphill on the raw surface.** Routing uses depression-filled elevation, but where a river crosses filled basins it is strictly flowing across ground that does not slope downhill on the original surface. Last measured 2026-08-23 at 12–14% of drawn segments, down from 13–20% before lakes were introduced. What remains is shallow filled ground below `LakesConfig.minDepth` — flats raised by a hair rather than basins deep enough to hold water.
 

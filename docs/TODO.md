@@ -129,15 +129,15 @@
   raster); keeping the world's fields resident in graphics memory between stages, or generating in
   tiles, is what would let an export outgrow the heap. Whether 8192 completes in 24 GB wants
   measuring first. 2026-09-20.
-- **Erosion does not read the vegetation, and the field it would read is sitting there.** W4 saved
-  a 0-1 vegetation density on `ClimateResult.vegetationDensity` and wired exactly one consumer, the
-  map's canopy darkening. The consumers the field was built for are S3 and H3: a vegetated slope
-  resists erosion roughly twice as well as a bare one (Istanbulluoglu and Bras 2005), so the
-  erodibility `K` should be scaled by something like `1 - halfOfIt * density`. Nothing of that is
-  wired, deliberately - erosion runs three stages *before* the climate does, so this is not one
-  line in `ErosionStage`; it needs the provisional climate march S3 is chartered to add, and
-  wiring half of it now would have been a change to every world on a chunk that was asked to
-  change none. The accessor and its units are documented at the field. 2026-09-20, W4.
+- ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
+  by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
+  `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`
+  exactly as W4 guessed it would: `1 - VEGETATION_SHIELDING * density`, with the half from
+  Istanbulluoglu and Bras (2005) carried at the constant. Measured back out of the finished worlds
+  at 0.42-0.47 of bare ground's incision per unit of stream power, over the four standard seeds at
+  512, with the bands' own selection divided out by a control run. Only the hillslope cut takes it;
+  the outlet notch and the distributary grooves cut through days-old spoil with nothing growing on
+  it. H3's half of the field - erodibility by rock and by age of crust - is still open.
 - **The canopy darkening was sized for a step and is now spending its range on differences nobody
   can see.** `ClimateTint.CANOPY_DARKENING` is a twelfth, derived when the canopy was one figure
   per biome and the only question was whether a wood read as darker ground than the plain beside

@@ -78,11 +78,12 @@ which the terrain stage's FFT already provides the machinery for. Earth's bimoda
 densities; with isostasy in, "ocean coverage" stops being a percentile the user sets and becomes
 the continental-crust fraction the plate stage draws, with the percentile as a check.
 
-**Erosion reads the climate (S3).** The hydraulic pass runs before climate exists, so a rain
-shadow erodes as fast as a windward slope; GEOGRAPHY.md lists this as a deviation. The cure is
-the one H2 used for glaciation: a provisional climate march before erosion (0.9 s at 2048),
-with discharge `Q = P·A` in the stream-power law and precipitation-weighted talus. Willett
-(1999) shows the orographic asymmetry this produces: steeper, faster-exhuming windward flanks.
+**Erosion reads the climate (S3).** *Closed 2026-09-21, except for the talus.* The hydraulic pass
+ran before climate existed, so a rain shadow eroded as fast as a windward slope. The cure was the
+one H2 used for glaciation: a provisional climate march before erosion, with discharge `Q = P·A` in
+the stream-power law. The precipitation-weighted talus was declined rather than built — see 1.3 —
+and the asymmetry Willett (1999) describes is reproduced in sign and in a fraction of its strength;
+GEOGRAPHY.md carries the measured ratios and the three reasons the strength falls short.
 
 **Lithology (H3, already planned)** completes this: K and D vary by rock and age of crust.
 
@@ -101,9 +102,23 @@ calderas and flood-basalt plateaus (H3) follow.
   lower and broader by the measured ageing; hypsometry bimodal with modes near Earth's; foreland
   basins appear in front of collision belts. Visual: large (mountain roots, coastal plains,
   basins). GPU: the flexure is an FFT (G-track candidate at 4096+).
-- **S3 Erosion reads the climate** — provisional march before erosion; Q = P·A. Guard: windward
-  flank steeper and more dissected than leeward by a stated ratio on a seed with a strong shadow.
-  Visual: medium. GPU: the march stays CPU (lock-step wavefronts).
+- **S3 Erosion reads the climate** — *landed 2026-09-21.* A provisional climate march runs on the
+  weathered uplift before round 1 and again at the midpoint (twice, on measurement: the rainfall
+  drifts by about a third of the land mean over the twelve rounds), and the flow accumulation
+  carries each cell's rainfall, so `Q = P·A`. The cover the same march computes shields the
+  incision: `K * (1 - 0.5 * density)`, Istanbulluoglu and Bras (2005), measured back out at
+  **0.42-0.47** of bare ground's rate per unit of stream power. `ErosionConfig.climateFeed` is the
+  control and reproduces every earlier world bit for bit. **Landed:** the discharge law, the
+  vegetation shielding, the orographic asymmetry (the weather cuts the windward flank 1.11-1.32
+  times as deep as the leeward once the belt's own geometry is divided out) and dissection
+  following rainfall over the land as a whole (Spearman +0.230 to +0.296 against a control's +0.087
+  to +0.137). **Declined:** the precipitation-weighted talus — the thermal sweeps model rock
+  failing past a critical slope, which is a property of the rock, and a rainfall-driven hillslope
+  law would be Culling's diffusion, a different physics S1 already rejected; the defensible
+  precipitation term there is on the critical slope itself and belongs to H3 with lithology. **Not
+  delivered:** the windward flank is not more finely divided than the leeward, on either
+  instrument; GEOGRAPHY.md records the figures. GPU: the march stays CPU (lock-step wavefronts),
+  measured at a low single-digit share of a generation.
 
 ## 2. Hydrology
 

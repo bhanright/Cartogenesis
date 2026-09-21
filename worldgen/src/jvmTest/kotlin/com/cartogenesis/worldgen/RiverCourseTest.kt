@@ -2,7 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.worldgen.pipeline.RiverStage
+import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -41,9 +41,9 @@ class RiverCourseTest {
      * The drawn network, flattened: which cells are channel, and how long the watercourse above
      * each of them runs.
      *
-     * The channel mask is rebuilt rather than read, because the tracer keeps none: it is the same
-     * three conditions, land, not open water, and carrying at least the source threshold's share
-     * of the world's runoff.
+     * The channel mask is rebuilt rather than read, because the tracer keeps none:
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation] is the stage's own criterion and this
+     * asks it the same question about the same finished world.
      */
     private class Network(val world: WorldMap) {
         val isChannel: BooleanArray
@@ -60,15 +60,7 @@ class RiverCourseTest {
             val flow = world.rivers.flowAccumulation.data
             val target = world.rivers.flowTarget
             val lakes = world.rivers.lakes
-            var runoff = 0f
-            for (i in 0 until cells) {
-                if (world.sea.isLand[i]) runoff += 0.05f + world.climate.precipitation.data[i]
-            }
-            val threshold = (runoff * world.config.rivers.sourceFlowShare)
-                .coerceAtLeast(RiverStage.MIN_SOURCE_FLOW)
-            isChannel = BooleanArray(cells) {
-                world.sea.isLand[it] && !lakes.isOpenWater(it) && flow[it] >= threshold
-            }
+            isChannel = ChannelInitiation.channelMaskOf(world)
 
             // Downstream order: a cell's answer needs its donors' answers, and every donor carries
             // less water than it does, so rising discharge is the order to walk in.
@@ -235,10 +227,11 @@ class RiverCourseTest {
             // nothing upstream has been severed, and there is no thread of standing water between
             // two thick channels, which is the whole of what this clause is about. What there is
             // instead is a lake's outflow that carries no line, because a cell with no channel
-            // above it is a head, and the course from this head to the trunk it joins is two cells
-            // against `RiverConfig.minLengthCells`' eight, so the tracer discards it as a stub.
-            // That is a real artefact and a different one; it is in docs/TODO.md with these
-            // figures. The other three seeds have no such cell.
+            // above it is a head, and the course from this head to the trunk it joins was two
+            // cells against the eight `RiverConfig.minLengthCells` then asked for, so the tracer
+            // discarded it as a stub. R1 replaced that count with a length in kilometres and gave
+            // the ground a channel-head criterion of its own; whether an outflow carrying a whole
+            // lake's catchment is now drawn is what this clause's `gaps` count says.
             val fedByADrawnChannel = BooleanArray(cells)
             for (donor in 0 until cells) {
                 if (!drawn[donor] || !network.isChannel[donor]) continue

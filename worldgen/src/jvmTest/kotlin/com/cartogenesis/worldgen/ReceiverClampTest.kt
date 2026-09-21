@@ -156,8 +156,9 @@ class ReceiverClampTest {
             FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, config.seed)
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
-        // The same figure `RiverConfig.sourceFlowShare` draws a river at, and the same one the
-        // in-round census uses; the depth is `LakesConfig.minDepthMetres`.
+        // The share of the world's runoff the in-round census counts as a channel, which is what
+        // this case is about; the depth is `LakesConfig.minDepthMetres`. Not R1's channel-head
+        // criterion, which needs a climate and this case builds a height field alone.
         val channel = 0.0006f
         val minDepth = config.scale.reliefShareOfMetres(config.lakes.minDepthMetres)
         val ground = sea.relativeElevation.data

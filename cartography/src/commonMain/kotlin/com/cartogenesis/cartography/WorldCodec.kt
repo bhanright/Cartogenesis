@@ -135,6 +135,14 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 13 because a channel begins where the ground can cut one. `rivers.sourceFlowShare`,
+     * `rivers.maxRivers` and `rivers.minLengthCells` are gone — a share of the world's runoff, a
+     * count of courses and a count of cells, all three of them a different thing at every grid —
+     * and `rivers.channelHeadAreaSlopeSquaredKm2`, `rivers.coverRaisesChannelHead` and
+     * `rivers.shortestDrawnCourseKm` stand in their place. A format-12 file would open with this
+     * build's defaults wherever one of those has moved and redraw its rivers by a rule its author
+     * never chose.
+     *
      * 12 because the ground gained a cover. The climate result now carries a vegetation density
      * per cell and a permafrost zone per cell, saved as `climate.vegetationDensity` and
      * `climate.permafrost`, and the settings gained a `vegetation` section for the two controls
@@ -208,7 +216,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 12
+    const val FORMAT_VERSION = 13
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

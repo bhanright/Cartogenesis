@@ -1828,15 +1828,39 @@ data class VegetationConfig(
 @Serializable
 data class RiverConfig(
     /**
-     * How much of the world's runoff a cell must carry before it is drawn as a river, as a share
-     * of the whole world's runoff rather than as a count of cells — which is what keeps the river
-     * network the same density at every grid.
+     * Where a channel begins: the runoff-weighted drainage area times the square of the gradient,
+     * in square kilometres, that the ground has to reach before running water can cut one.
+     *
+     * Montgomery and Dietrich's own product, and the derivation — both ends of their measured range
+     * and why they agree — is against
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.CHANNEL_HEAD_AREA_SLOPE_SQUARED_KM2],
+     * which this repeats because a config property's default is read by people who never open the
+     * pipeline. An area in square kilometres and a dimensionless slope, so it means the same thing
+     * at every grid and [WorldGenConfig.atResolution] must not touch it.
      */
-    val sourceFlowShare: Float = 0.0006f,
-    /** The most channels drawn, longest first, so a very wet world does not become a thicket. */
-    val maxRivers: Int = 400,
-    /** Shortest channel worth drawing, in cells. Below this it is a rill, not a river. */
-    val minLengthCells: Int = 8
+    val channelHeadAreaSlopeSquaredKm2: Float = 0.008f,
+    /**
+     * Whether plant cover raises the threshold where it grows.
+     *
+     * On, the ground's critical shear stress rises with the canopy and the threshold with it, which
+     * is what makes drainage density peak in semi-arid country instead of simply tracking the rain
+     * — see
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.COVER_CRITICAL_SHEAR_GAIN]. Off, every
+     * cell is held to the bare-ground figure, which is the control the drainage-density guard is
+     * shown failing against.
+     */
+    val coverRaisesChannelHead: Boolean = true,
+    /**
+     * The shortest course the map draws, in kilometres.
+     *
+     * A length of ground and not a count of cells, and the only rule here that is about the drawing
+     * rather than about the water. A hundred kilometres is what a world map's finest engraved blue
+     * line is worth: at the scale a whole world is printed at, about one to forty million, a
+     * millimetre of paper is forty kilometres and a line under two of them is a tick rather than a
+     * river. Every reach above [channelHeadAreaSlopeSquaredKm2] is a channel whatever its length;
+     * this decides only which of them are worth a separate course on the sheet.
+     */
+    val shortestDrawnCourseKm: Float = 100f
 )
 
 /** What happens to land no realm particularly wants. */

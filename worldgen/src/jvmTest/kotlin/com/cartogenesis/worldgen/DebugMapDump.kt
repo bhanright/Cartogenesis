@@ -997,17 +997,11 @@ class DebugMapDump {
         g.dispose()
     }
 
-    /** Mirrors RiverStage's threshold maths so the network can be inspected from outside. */
+    /** Asks `ChannelInitiation` the stage's own question so the network can be inspected here. */
     private fun riverDiagnostics(world: WorldMap): String {
         val acc = world.rivers.flowAccumulation.data
         val land = world.sea.isLand
-        var totalRunoff = 0f
-        for (i in acc.indices) {
-            if (land[i]) totalRunoff += 0.05f + world.climate.precipitation.data[i]
-        }
-        val threshold = (totalRunoff * world.config.rivers.sourceFlowShare).coerceAtLeast(1e-4f)
-
-        val channel = BooleanArray(acc.size) { land[it] && acc[it] >= threshold }
+        val channel = com.cartogenesis.worldgen.pipeline.ChannelInitiation.channelMaskOf(world)
         val channelCount = channel.count { it }
 
         val hasUpstream = BooleanArray(acc.size)
@@ -1037,9 +1031,9 @@ class DebugMapDump {
         }
         val worst = directions.take(8).max() * 100 / routed.coerceAtLeast(1)
 
-        return "threshold=%.1f channels=%d sources=%d tracedCells=%d meanLen=%d topDir=%d%%"
+        return "channels=%d sources=%d tracedCells=%d meanLen=%d topDir=%d%%"
             .format(
-                threshold, channelCount, sources, traced,
+                channelCount, sources, traced,
                 if (world.rivers.rivers.isEmpty()) 0 else traced / world.rivers.rivers.size,
                 worst
             )

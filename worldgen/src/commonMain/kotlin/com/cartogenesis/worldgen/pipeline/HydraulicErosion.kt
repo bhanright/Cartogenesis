@@ -433,11 +433,13 @@ internal object HydraulicErosion {
         val refreshAtRound =
             if (erosion.climateFeed && erosion.hydraulicRounds > 1) erosion.hydraulicRounds / 2
             else -1
-        var weather =
+        val opening =
             if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
             else Weather(FloatArray(cellsAcross * cellsDown) { 1f }, FloatArray(cellsAcross * cellsDown))
-        var runoff = weather.runoff
-        var vegetationDensity = weather.vegetationDensity
+        // Held as the two arrays rather than as the pair, because the accumulation reads one of
+        // them once per land cell per round and a field load there is not free.
+        var runoff = opening.runoff
+        var vegetationDensity = opening.vegetationDensity
 
         // The solid earth's two answers to what the water is doing, both of them off by default
         // and both switched by their own setting so a guard can measure the world without them.
@@ -559,9 +561,9 @@ internal object HydraulicErosion {
             // it and the sea as this round will take it, which is the same pair the march at the
             // top was given.
             if (round == refreshAtRound) {
-                weather = provisionalWeather(config, working, provisionalSeaLevel, round)
-                runoff = weather.runoff
-                vegetationDensity = weather.vegetationDensity
+                val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round)
+                runoff = refreshed.runoff
+                vegetationDensity = refreshed.vegetationDensity
             }
 
             // The rock rises first, before the water is routed over it: a round is a span of time,

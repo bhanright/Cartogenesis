@@ -69,6 +69,20 @@ class ClimateFedErosionTest {
         val density = weather.vegetationDensity
 
         /**
+         * The factor the first round actually multiplies its incision by: `1 - 0.5 * density` over
+         * that same expression's mean across the round's land, which is what `shieldingOverLand`
+         * builds inside the stage. Relative, so the land's mean erodibility is 1.
+         */
+        val erodibility = FloatArray(density.size).also { factors ->
+            var summed = 0.0
+            for (cell in factors.indices) {
+                if (cut.isLand[cell]) summed += (1.0 - 0.5 * density[cell])
+            }
+            val mean = (summed / cut.landCellCount).toFloat()
+            for (cell in factors.indices) factors[cell] = (1f - 0.5f * density[cell]) / mean
+        }
+
+        /**
          * The weights the first round routes with: the march's rainfall over its own mean across
          * the land that round sees, which is what `normaliseOverLand` does inside the stage.
          */
@@ -116,7 +130,7 @@ class ClimateFedErosionTest {
                 val diagonal = (cell % config.width) != (receiver % config.width) &&
                     (cell / config.width) != (receiver / config.width)
                 val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
-                val shielding = if (shielded) 1f - 0.5f * density[cell] else 1f
+                val shielding = if (shielded) erodibility[cell] else 1f
                 val bare = coefficient * sqrt(area.data[cell] / landCells) * slope * shielding
                 incision[cell] = minOf(bare, drop * 0.5f, relative[cell].coerceAtLeast(0f))
             }
@@ -134,7 +148,16 @@ class ClimateFedErosionTest {
             return FloatArray(rainfall.size) { rainfall[it] / mean }
         }
 
-        /** Where neither of [firstRoundIncision]'s two caps bit, so the law is what was spent. */
+        /**
+         * Where neither of [firstRoundIncision]'s two caps bit on *either* run, so the quotient of
+         * the two is the cover's factor and nothing else.
+         *
+         * Both runs, and that matters now the factor is relative: it runs from about 0.6 on closed
+         * canopy to about 1.2 on bare ground, so the shielded cut is the *larger* of the two
+         * wherever the ground is barer than the land's mean, and it can reach a cap the unshielded
+         * one does not. Testing the bare cut alone let those cells in, and the quotient there is
+         * the cap's arithmetic rather than the law's.
+         */
         fun unclamped(weights: FloatArray): BooleanArray {
             val area = FlowRouting.accumulate(
                 config.width, config.height, cut.isLand, filled, receivers, cut.landCellCount
@@ -157,7 +180,9 @@ class ClimateFedErosionTest {
                             (cell / config.width) != (receiver / config.width)
                         val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
                         val bare = coefficient * sqrt(area.data[cell] / landCells) * slope
-                        bare > 0f && bare < drop * 0.5f && bare < relative[cell].coerceAtLeast(0f)
+                        val larger = bare * maxOf(1f, erodibility[cell])
+                        bare > 0f && larger < drop * 0.5f &&
+                            larger < relative[cell].coerceAtLeast(0f)
                     }
                 }
             }
@@ -355,17 +380,27 @@ class ClimateFedErosionTest {
     }
 
     /**
-     * The cover multiplies the incision by exactly what the constant says, cell by cell.
+     * The cover multiplies the incision by exactly what the constant says, cell by cell — and
+     * takes no rock off the world in the aggregate.
      *
-     * Asserted here and not as a ratio between two bands of cells, because a ratio between bands
-     * cannot test this. `1 - 0.5 * density` over cells at density >= 0.6 against cells at
+     * Two clauses, and the second is the one that was learned the hard way. The multiplier is
+     * relative: `1 - 0.5 * density` over its own mean across the land, so the land's mean
+     * erodibility is exactly 1 and the term redistributes the cutting rather than reducing it.
+     * `bedrockErodibilityPerYear` was calibrated on real bedrock rivers, which ran through
+     * forests, so an absolute multiplier counts the cover twice — it was built that way first and
+     * it cost a third of the world's erosion. So the mean of the factor over land is asserted to
+     * be 1, and that is what makes the calibration survive the feature.
+     *
+     * The per-cell clause is asserted per cell and not as a ratio between two bands, because a
+     * band ratio cannot test it: `1 - 0.5 * density` over cells at density >= 0.6 against cells at
      * density <= 0.1 can land anywhere from about 0.50 to 0.74 depending on how the density is
      * distributed inside each band, so a bar drawn at Istanbulluoglu and Bras's half would fail a
-     * correct implementation as readily as a wrong one. What is actually claimed is a per-cell
-     * law, so it is checked per cell: take the first round's incision with the cover and without
-     * it on the same terrain and the same receivers, keep the cells where neither of the two caps
-     * bit — a capped cut is the cap's figure and not the law's — and the quotient must be the
-     * multiplier to the last few bits of a float. The band ratio is printed beside it.
+     * correct implementation as readily as a wrong one. Take the first round's incision with the
+     * cover and without it on the same terrain and the same receivers, keep the cells where
+     * neither of the two caps bit — a capped cut is the cap's figure and not the law's — and the
+     * quotient must be the factor to the last few bits of a float. The band ratio is printed
+     * beside it, and being a ratio of two relative factors it is the same figure the absolute form
+     * gave: the mean divides out of it.
      */
     @Test
     fun `cover on the ground holds the incision back`() {
@@ -383,7 +418,7 @@ class ClimateFedErosionTest {
                 if (!unclamped[cell] || bare[cell] <= 0f) continue
                 checked++
                 val measured = shielded[cell].toDouble() / bare[cell].toDouble()
-                val expected = 1.0 - 0.5 * density[cell]
+                val expected = ground.erodibility[cell].toDouble()
                 val off = abs(measured - expected)
                 if (off > worst) {
                     worst = off
@@ -396,10 +431,15 @@ class ClimateFedErosionTest {
             val bandRatio =
                 perUnitPower(shielded, bare, wooded) / perUnitPower(shielded, bare, bareBand)
             println(
-                ("S3 COVER seed=%d  the multiplier is right on all %d unclamped cells, worst off " +
-                    "by %.2e; the band ratio (density >= %.1f against <= %.1f) is %.2f over %d " +
-                    "and %d cells, where the cover means %.2f and %.2f").format(
-                    seed, checked, worst, WOODED_DENSITY, BARE_DENSITY, bandRatio,
+                ("S3 COVER seed=%d  the factor is right on all %d unclamped cells, worst off by " +
+                    "%.2e; it runs %.3f to %.3f and means %.6f over the land; the band ratio " +
+                    "(density >= %.1f against <= %.1f) is %.2f over %d and %d cells, where the " +
+                    "cover means %.2f and %.2f").format(
+                    seed, checked, worst,
+                    ground.erodibility.filterIndexed { cell, _ -> ground.cut.isLand[cell] }.min(),
+                    ground.erodibility.filterIndexed { cell, _ -> ground.cut.isLand[cell] }.max(),
+                    meanOver(ground.erodibility, ground.cut.isLand),
+                    WOODED_DENSITY, BARE_DENSITY, bandRatio,
                     wooded.count { it }, bareBand.count { it },
                     meanOver(density, wooded), meanOver(density, bareBand)
                 )
@@ -411,7 +451,22 @@ class ClimateFedErosionTest {
                 "seed $seed: cell $worstCell was shielded by " +
                     "${"%.6f".format(shielded[worstCell] / bare[worstCell])} where its cover of " +
                     "${"%.3f".format(density[worstCell])} asks for " +
-                    "${"%.6f".format(1.0 - 0.5 * density[worstCell])}"
+                    "${"%.6f".format(ground.erodibility[worstCell])}"
+            )
+            // And the clause that keeps the calibration: the factor's mean over the land is one,
+            // so a world of uniform cover - any uniform cover - erodes exactly as a bare one did.
+            var factorSum = 0.0
+            var landCells = 0
+            for (cell in density.indices) {
+                if (!ground.cut.isLand[cell]) continue
+                factorSum += ground.erodibility[cell].toDouble()
+                landCells++
+            }
+            val factorMean = factorSum / landCells
+            assertTrue(
+                abs(factorMean - 1.0) <= MEAN_TOLERANCE,
+                "seed $seed: the cover's factor averages ${"%.6f".format(factorMean)} over the " +
+                    "land, so it is taking rock off the world rather than moving where it comes off"
             )
         }
     }
@@ -682,6 +737,15 @@ class ClimateFedErosionTest {
          * with one factor changed, so the quotient is the factor up to rounding.
          */
         const val MULTIPLIER_TOLERANCE = 1e-5
+
+        /**
+         * How far the cover's factor may average from 1 over the land.
+         *
+         * A sum of a hundred thousand floats in a double, divided by their count, against the same
+         * sum taken the same way inside the stage: the two are the same arithmetic and differ only
+         * by the order the land mask is walked in, which is the same order.
+         */
+        const val MEAN_TOLERANCE = 1e-6
 
         /** Stated from the measurement; see docs/DESIGN_LEDGER.md, S3. */
         const val DISSECTION_CORRELATION = 0.20

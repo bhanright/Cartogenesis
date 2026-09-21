@@ -381,6 +381,40 @@ internal object HydraulicErosion {
      * With the feed off the field is all ones, whose mean is one, so every weight comes back as
      * exactly the 1f the accumulation used to be handed and the old world is reproduced to the bit.
      */
+    /**
+     * Turns a plant cover into the erodibility factor the cut spends, into [erodibility].
+     *
+     * `(1 - VEGETATION_SHIELDING * density)` over its own mean across [isLand], so the land's mean
+     * erodibility is exactly 1 however much of the world is wooded and only the contrast between
+     * one cell and another is left. See [VEGETATION_SHIELDING] for why it has to be relative.
+     *
+     * Taken again every round beside [normaliseOverLand], and for the same reason: the shoreline
+     * moves, and a mean taken over a coastline that no longer exists is not the mean of the land
+     * this round is cutting.
+     *
+     * With the cover off the density is zero everywhere, so every factor is 1 and the mean is 1
+     * and the quotient is exactly the 1f that multiplied nothing before there was a cover at all.
+     */
+    private fun shieldingOverLand(
+        density: FloatArray,
+        isLand: BooleanArray,
+        landCellCount: Int,
+        erodibility: FloatArray
+    ) {
+        var summed = 0.0
+        for (cell in density.indices) {
+            if (isLand[cell]) summed += (1f - VEGETATION_SHIELDING * density[cell]).toDouble()
+        }
+        val mean = (summed / landCellCount).toFloat()
+        if (mean <= 0f) {
+            erodibility.fill(1f)
+            return
+        }
+        for (cell in density.indices) {
+            erodibility[cell] = (1f - VEGETATION_SHIELDING * density[cell]) / mean
+        }
+    }
+
     private fun normaliseOverLand(
         rainfallMm: FloatArray,
         isLand: BooleanArray,
@@ -468,9 +502,10 @@ internal object HydraulicErosion {
         // once per land cell per round and a field load there is not free.
         var rainfallMm = opening.rainfallMm
         var vegetationDensity = opening.vegetationDensity
-        // Filled at the top of every round by [normaliseOverLand], once that round's shoreline is
-        // known. Allocated here so the rounds share it.
+        // Filled at the top of every round by [normaliseOverLand] and [shieldingOverLand], once
+        // that round's shoreline is known. Allocated here so the rounds share them.
         val runoff = FloatArray(cellsAcross * cellsDown)
+        val erodibility = FloatArray(cellsAcross * cellsDown)
 
         // The solid earth's two answers to what the water is doing, both of them off by default
         // and both switched by their own setting so a guard can measure the world without them.
@@ -682,9 +717,11 @@ internal object HydraulicErosion {
                 settle()
                 return working
             }
-            // This round's shoreline is now known, so the weights are taken against this round's
-            // land. See [normaliseOverLand] for why that is where the mean has to come from.
+            // This round's shoreline is now known, so both fields are taken against this round's
+            // land. See [normaliseOverLand] for why that is where the mean has to come from, and
+            // [VEGETATION_SHIELDING] for why the cover is spent relatively too.
             normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
+            shieldingOverLand(vegetationDensity, sea.isLand, sea.landCellCount, erodibility)
 
             val filled = FlowRouting.fillDepressions(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation
@@ -853,7 +890,7 @@ internal object HydraulicErosion {
                 var taken =
                     cut(
                         rates, cell, receiver, cellsAcross, drop, area, landCells, relative,
-                        vegetationDensity
+                        erodibility
                     )
                 if (receiverClamp && !toSea) {
                     // In the height field's own units, which is what the cut is spent in. A cell
@@ -1460,6 +1497,20 @@ internal object HydraulicErosion {
      * different shape of law with its own parameters. A half spent linearly in the cover is the
      * effect their results carry, at the resolution this stage works to, and not their formula.
      *
+     * **It is a relative half, and it is spent relatively.** `1 - 0.5 * density` is divided by its
+     * own mean over the land before it reaches the cut — see [shieldingOverLand] — so what the
+     * term carries is the contrast between bare ground and closed canopy and not a change in how
+     * much rock the world loses. That is not tidiness, it is the difference between a calibrated
+     * stage and an uncalibrated one. `ErosionConfig.bedrockErodibilityPerYear` carries Stock and
+     * Montgomery's and Lague's figures for real bedrock rivers, and those rivers ran through
+     * forests: the cover is already in the number. Multiplying it by `1 - 0.5 * density` again
+     * counts the cover twice, and it was built that way first and measured - denudation off an
+     * active belt fell from 0.271 to 0.189 mm/yr, a third of the world's erosion gone, and seven
+     * guards in seven classes went red behind it. Istanbulluoglu and Bras compare a vegetated
+     * catchment with a bare one; they do not say what either does in absolute terms, so a relative
+     * half is also the only thing their result licenses. The runoff weight is normalised for
+     * exactly this reason and in exactly this way.
+     *
      * Only the ordinary stream-power cut in [cut] reads it, which is every hillslope and channel
      * cell of every round. The outlet notch and the distributary grooves do not, and the reason is
      * not that the ground there is bare: a notch is a spill's base-level fall, spent over a fixed
@@ -1913,7 +1964,8 @@ internal object HydraulicErosion {
         area: FloatField,
         landCells: Float,
         relative: FloatArray,
-        vegetationDensity: FloatArray
+        /** The cover's factor on this cell, already relative to the land's mean. */
+        erodibility: FloatArray
     ): Float {
         val distance = if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
         val slope = drop / distance * cellsAcross
@@ -1922,8 +1974,7 @@ internal object HydraulicErosion {
         // cell's share of everything that falls on the map.
         val share = area.data[cell] / landCells
 
-        val shielding = 1f - VEGETATION_SHIELDING * vegetationDensity[cell]
-        val incision = rates.incisionCoefficient * sqrt(share) * slope * shielding
+        val incision = rates.incisionCoefficient * sqrt(share) * slope * erodibility[cell]
         val aboveSea = relative[cell].coerceAtLeast(0f)
         return minOf(incision, drop * 0.5f, aboveSea)
     }

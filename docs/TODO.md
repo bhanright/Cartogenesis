@@ -28,6 +28,28 @@
   on that machine should be treated as settled until the nightly runner has agreed with it.** If
   any of the three index errors ever reproduces on the runner, the habitability path above is
   where to start on the first of them. 2026-09-21, T3.
+- **Hack's exponent falls by nine hundredths between 512 and 2048, because the channel network is
+  thresholded in cells and not in ground.** The Earth-likeness suite fitted Hack's law over the
+  *drawn* basins until T3, and at 2048 that read 0.324-0.433 on the six audited seeds — outside
+  Earth's 0.5-0.6 on every one of them, which is what had the nightly tier red. Most of that was
+  the drawn sample: `RiverConfig.maxRivers` caps the map at four hundred courses whatever the grid,
+  so at 2048 the fit was over 313-350 basins covering 0.506 of the watercourses they stand for,
+  and it was measuring the cap. Fitting instead over the terrain's own routed network — every land
+  cell draining at least the support area, ~100,000 reaches a seed — puts the same worlds at
+  0.444-0.485, pooled 0.465, five of six inside the band. What that exposed is the part that is
+  not the cap: over the *same* routed network the four standard seeds read 0.527-0.565 at 512,
+  pooled 0.552, against 0.444-0.485 at 2048, pooled 0.465. The same generator, the same
+  measurement, nine hundredths apart. Both ends of the fit are counted in cells:
+  `EarthLikeness.CHANNEL_SUPPORT_CELLS`'s sixteen and `SMALLEST_HACK_CATCHMENT_CELLS`'s hundred
+  are 4,400 and 27,500 km2 at 512 and 275 and 1,700 at 2048, so the finer grid's fit runs over two
+  extra decades of small basins the coarse one never sees, and the smallest of those are not
+  basins but hillslopes — a cell is a channel here when a fixed count of cells drains through it
+  and nothing else, there being no channel-initiation criterion at all. So the clause is a finding
+  with the figure printed on every seed, and **R1, channel initiation in physical units, is the
+  chunk that earns the assertion back**, the same chunk the drainage-density wet side is waiting
+  on. The obvious cure — make both thresholds areas — was not taken here because the support area
+  is also what Horton's bifurcation ratios are ordered over and those are asserted and passing, and
+  a chunk about a red tier is not the place to re-derive a green one. 2026-09-21, T3.
 - **A ring of standing water is not a measurement that tells graded aggradation from flat.** E6's
   discriminating guard counted water lying in a circular band inside a window the author had
   cropped by eye round seed 718106's southern rift, where reverting the `headroom` unit muddle by

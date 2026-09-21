@@ -499,6 +499,25 @@ and that distinction is now available to the map: pooled over seeds 7, 42, 1234 
 share of land falls from 28.8% to 9.2%, and at one summer temperature the wettest quarter of the
 land carries ice on every seed while the driest quarter carries none.
 
+**A sheet's surface is the lowest profile that reaches it, and a balance of nothing is not ice.**
+The plastic profile solves for a surface measured from the ice's own margin, and a margin is a line
+of ground at many different heights. Measured from the *nearest* margin cell, the datum is a
+piecewise constant field whose regions are Voronoi cells, so the surface steps wherever two
+neighbouring cells look up different margins — on seed 878210 at 1024 by as much as 1,965 m between
+one cell and the next, and by 40.9 m on the average east-west pair, which is the dome's own fall
+across the same cell. The surface that satisfies the yield condition against a margin of varying
+height is instead the lower envelope of the profiles rising from *every* margin point,
+`S(x) = min over m of (z_m + k * sqrt(d(x, m)))`, which is that equation's viscosity solution:
+differentiate one branch and `|grad S| = k^2 / 2H` falls out, and where two branches meet the
+surface creases rather than steps, which is an ice divide. Beside it, the mask the profile is drawn
+over: ice is where the year's snow outlasts the year's melt *by an amount that means something*,
+because over a polar desert nothing falls and nothing melts, both sides of the subtraction cancel,
+and the sign of what is left is float rounding rather than weather. Nearly a quarter of one world's
+frozen ground was standing on a balance under a hundredth of a millimetre a year, and what a
+plastic profile makes of a mask speckled that way is a comb of ice walls a cell wide and four
+hundred metres tall. Both together are what drew the ruled flank I3 was reported for. See
+`IceSheet.marginDistanceKm`, `SnowBalance.isGlaciated` and `IceSheetTest`.
+
 **Cold country is lake country — and the cold that made it is not today's.** Where the ice is, it
 takes over the valleys the water cut: a flat-floored U-shaped trough across the flow instead of a
 V, a cirque bitten out of every head, a staircase of over-deepened basins whose spacing is set by

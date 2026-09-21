@@ -147,7 +147,12 @@ object IceSheet {
      *
      * So the flood is run over the plastic cost instead of over the distance: each cell takes the
      * margin that puts the lowest surface over it and reports how far off that margin is, which
-     * [profileMetres] turns into the height above it. A weighted flood is not exact the way the
+     * [profileMetres] turns into the height above it. Its sources are the margin itself — ice-free
+     * ground with ice against it — and not every ice-free cell, which is a distinction the plain
+     * flood never had to make, the nearest ice-free cell being on the edge whatever else is seeded.
+     * An envelope will rise a profile from anything it is offered, and seeded with the whole ocean
+     * it hands a dome eight hundred kilometres of open water to start from: on the reported world
+     * that took the thickest ice from 2,739 m to 1,730 and the continental clause with it. A weighted flood is not exact the way the
      * plain one is — see [JumpFloodDistance.run] — and what it can leave behind is a cell whose
      * surface is a little too high, which is why `IceSheetTest` measures the finished surface for
      * steps rather than taking the flood's word for it.
@@ -162,11 +167,32 @@ object IceSheet {
         metresPerRootKilometre: Float,
         cellSpanKm: Float
     ): Margin {
-        val cellCount = config.width * config.height
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
         val distance = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
         val nearest = IntArray(cellCount) { -1 }
+        // The margin, and only the margin: ice-free ground with ice against it. The plain
+        // nearest-margin flood could seed every ice-free cell, because the nearest one of those is
+        // always on the edge anyway; an envelope cannot, because a profile is allowed to rise from
+        // any source it is offered and the open ocean a thousand kilometres from the nearest ice
+        // is not a place an ice sheet's surface starts. A margin is where the ice ends.
         for (cell in 0 until cellCount) {
-            if (!frozen[cell]) {
+            if (frozen[cell]) continue
+            val column = cell % cellsAcross
+            val row = cell / cellsAcross
+            var touchesIce = false
+            for (rowStep in -1..1) {
+                val neighbourRow = row + rowStep
+                if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                for (columnStep in -1..1) {
+                    if (rowStep == 0 && columnStep == 0) continue
+                    var neighbourColumn = (column + columnStep) % cellsAcross
+                    if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                    if (frozen[neighbourRow * cellsAcross + neighbourColumn]) touchesIce = true
+                }
+            }
+            if (touchesIce) {
                 distance[cell] = 0f
                 nearest[cell] = cell
             }
@@ -183,12 +209,15 @@ object IceSheet {
             (datum + profileMetres(km, metresPerRootKilometre, cellSpanKm)).toDouble()
         }
         for (cell in 0 until cellCount) {
-            // A world entirely under ice has no margin to measure from, and the flood leaves its
-            // sentinel behind rather than an answer. Zero is the honest reading of "no margin
-            // anywhere", and it makes such a world bare rather than infinitely thick.
+            // Ground with no ice on it has no profile and stands where it stands, so its reading
+            // is nothing however far off the ice happens to be. A world entirely under ice has no
+            // margin to measure from at all, and the flood leaves its sentinel behind rather than
+            // an answer; zero is the honest reading of "no margin anywhere", and it makes such a
+            // world bare rather than infinitely thick.
             distance[cell] =
-                if (distance[cell] >= JumpFloodDistance.INFINITE) 0f
+                if (!frozen[cell] || distance[cell] >= JumpFloodDistance.INFINITE) 0f
                 else distance[cell] * kilometresPerCellWidth
+            if (!frozen[cell]) nearest[cell] = cell
         }
         return Margin(distance, nearest)
     }

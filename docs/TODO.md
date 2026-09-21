@@ -1,5 +1,25 @@
 # To do
 
+- **The sheet's surface envelope measures straight lines, not distances through the ice.** I3 made
+  the surface the lower envelope of the plastic profiles rising from every margin point, which is
+  the yield condition's own solution and is what took the facets and the ruling off the flank. The
+  distance in it is the straight line to the margin cell, and a straight line is free to leave the
+  ice: on seed 878210 at 1024 a cell whose nearest margin is 250 km off is governed by one 800 km
+  away across open water, because that one stands at the waterline and the near one stands on a
+  3 km massif. The envelope can then only under-state a dome, never over-state it, which is the
+  safe direction and is why it was left; the honest quantity is the geodesic through the ice, and
+  the tool for it is a marching solve rather than a jump flood, whose whole point is that it
+  measures to a real cell and not along a path. Worth doing before any claim is made about how
+  thick a sheet with a ragged coast stands. 2026-09-21, I3.
+- **A balance of nothing still decides a biome and a permafrost zone.** I3 gave the frozen mask a
+  floor at the arithmetic's own precision, `SnowBalance.SMALLEST_MEANINGFUL_BALANCE_MM`, and the
+  biome classification reads the same predicate. What is not settled is the ground *between* that
+  floor and anything Earth would call a glacier: on the reported world 6,164 frozen cells carry a
+  balance under 1 mm a year and 12,446 under 20 mm, against the 21-23 mm a year measured at Vostok
+  and Dome A, which are the driest places on Earth that sustain a sheet. Raising the floor to an
+  Earth figure would take about a third of that world's ice, which is a change to the ice share
+  every world is judged on and belongs in a chunk that re-derives it rather than in a defect fix.
+  2026-09-21, I3.
 - **An export is bounded by the heap, and the graphics card has memory of its own.** The packaged
   application's heap is a share of the machine's memory (three quarters), which lifts the fixed
   12 GB wall an 8192 export hit, but the fields of an 8192 world still all live on the heap at once.
@@ -176,7 +196,10 @@
   the 1,130 to 1,370 m the planing was worth. It reads as a valley rather than as a stamp and no
   guard fires on it, so it is a note rather than a defect; whoever picks it up should look at
   smoothing the stamped axis rather than at the cross-section, since the cross-section is now
-  bounded by the ground. 2026-09-14, I2.
+  bounded by the ground. 2026-09-14, I2. **Not what I3 was:** the vertical ruling reported on seed
+  878210's ice was the sheet's surface and not a trough at all — that world carries one outlet of
+  seventeen cells and none after the mask was floored — so this entry is still open and still
+  wants a render at 2048 of a reach with two legs. 2026-09-21, I3.
 - **`cutBasins` cuts one basin a world, or none, and the sinuosity test is why.** Tallies at 1024 on
   the four seeds I2 measured: seed 42 one basin from ten candidate stretches, seed 7 one from
   twelve, 718106 one from nine — and 364673 at 2048 **none at all**, from no candidates. Every

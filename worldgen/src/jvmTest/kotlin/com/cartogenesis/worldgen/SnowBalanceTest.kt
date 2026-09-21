@@ -330,6 +330,19 @@ class SnowBalanceTest {
      * the same question F26's ice edge ran into and it is the ocean's heat transport, not this.
      * Moving the bar to fit would be pretending the generator reaches a figure it does not;
      * printing it keeps the number in front of whoever next works on the polar ocean.
+     *
+     * I3 moved it further down, and the direction is the honest one. Pooled over the same four
+     * seeds the share went **5.26% -> 4.86%**, against a control that also fell, 33.45% -> 32.68%.
+     * Almost all of that is the surface envelope rather than the floor: with
+     * `SnowBalance.SMALLEST_MEANINGFUL_BALANCE_MM` set to zero the pooled share reads 4.94%, so
+     * the floor is worth 0.08 points of it and the datum is worth 0.32. Both are ice the world
+     * was never entitled to — a nearest-margin datum standing a sheet's surface up to 1,965 m too
+     * high cools the ground under it by the lapse rate and freezes more of it, and a balance of a
+     * ten-thousandth of a millimetre is a rounding rather than a snowfall — so what left is ice
+     * that was being manufactured by the model of the ice. The gap to Earth's 10.1% is still the
+     * standing finding it has been since W2 and its cause is upstream of the cryosphere: a
+     * continent whose interior takes a third of Earth's rain has polar deserts with nothing to
+     * freeze. That is W3's open finding, not this one's.
      */
     @Test
     fun `the ice share of land is within reach of Earth's`() {
@@ -504,33 +517,62 @@ class SnowBalanceTest {
                     " dry ${"%.1f".format(control.dryShare)}%" +
                     " [wet ${"%.0f".format(balance.wetMm)}mm, dry ${"%.0f".format(balance.dryMm)}mm]"
             )
-            // The control has to be *undiscriminating*, and the strong form of that — the dry
-            // quarter more heavily iced than the wet one, which is the annual mean running
-            // backwards — can only be read where the control is not already saturated. On a seed
-            // where both quarters are 99-100% under ice the comparison is between two roundings,
-            // and W1's climate put seed 7 there: 99.5 against 99.4. So the clause is stated as
-            // "the control cannot tell them apart", which is what it is for, with the strong form
-            // still asserted wherever there is room to see it.
-            val controlSaturated = control.dryShare >= CONTROL_SATURATED_SHARE &&
-                control.wetShare >= CONTROL_SATURATED_SHARE
-            // And a third reading, which S2's fourth pass needed. The strong form asks the annual
-            // mean to run backwards, and it can only do that where the mean is cold enough to ice
-            // the dry quarter at all; flattening the cratons took seed 42's ice to 0.9% of its
-            // land and left its dry quarter with 83 cold cells, of which the mean freezes 2.6%.
-            // What survives on every seed is the claim the case is for: the balance separates the
-            // two quarters by more than the mean does. Seed 42 reads 41.6 against 0.0 with the
-            // balance and 28.1 against 2.6 without.
+            println(
+                "SNOWBALANCE seed=$seed the same band read by the mean rule instead:" +
+                    " wet ${"%.1f".format(balance.gateWetShare)}%," +
+                    " dry ${"%.1f".format(balance.gateDryShare)}%" +
+                    " (the control world's own band: wet" +
+                    " ${"%.1f".format(control.gateWetShare)}%, dry" +
+                    " ${"%.1f".format(control.gateDryShare)}%)"
+            )
+            // The margin below is measured on one world, and until I3 it was measured across two.
+            //
+            // The claim the case is for has never moved: at one temperature the balance ices the
+            // wet quarter and leaves the dry one bare, and the annual mean — which cannot see
+            // rainfall at all — does not. What that claim needs beside it is a control, and the
+            // control used to be the same seed generated with the balance switched off. Two
+            // worlds, though, are not two rules. The band is cut by the warm half-year's
+            // temperature and the quarters by the rainfall inside it, so each world picks its own
+            // cells, and anything that moves a temperature field moves which cells are compared.
+            //
+            // I3's surface envelope moved one. The real climate runs on the glaciated terrain, so
+            // an ice surface standing on a stepped nearest-margin datum carried that datum's
+            // spurious altitude into the lapse rate — and in the control, where ice is decided by
+            // temperature and nothing else, the ice was partly making its own cold. With the
+            // envelope in, seed 42's control dry quarter fell from 42.6% under ice to 1.6% and its
+            // separation rose from 9.3 points to 38.9 against the balance's 36.0. The clause
+            // failed against a control that had got *better*, which is not a thing a control is
+            // supposed to be able to do to the claim it supports.
+            //
+            // The floor is not in this: with `SMALLEST_MEANINGFUL_BALANCE_MM` set to zero the
+            // control still reads 40.5% and 1.6%, because nothing reads the balance on a world
+            // generated without one.
+            //
+            // So the comparison goes where it belongs, onto a single world. The pre-H2 rule is a
+            // predicate on the annual mean and nothing more — the case above asserts that the
+            // control's ice is exactly that predicate, to the cell — so reading it over the
+            // *balance* world's own marginal band compares the two rules on the same cells, the
+            // same temperatures and the same rainfall quartiles, with nothing left between them
+            // but the rule. There is no constant to choose: the balance must separate the quarters
+            // by more than the mean does on the same ground. Measured, mean against balance: seed
+            // 7 -1.9 points against 28.6, seed 42 28.2 against 36.0, seed 1234 -0.2 against 16.2,
+            // seed 99 -2.2 against 17.7. On three of the four the mean ices 98-100% of both
+            // quarters and genuinely cannot tell them apart, which is the saturation the old
+            // clause had to carve out by hand and which here needs no clause of its own, the
+            // separation simply being nothing. Seed 42 is the one seed where the mean has
+            // something to say, and the balance still says more.
             val balanceSeparates = balance.wetShare - balance.dryShare
-            val controlSeparates = control.wetShare - control.dryShare
+            val meanSeparates = balance.gateWetShare - balance.gateDryShare
             assertTrue(
-                "seed $seed: with the balance off the dry quarter is not the more heavily iced" +
-                    " (wet ${"%.1f".format(control.wetShare)}%, dry" +
-                    " ${"%.1f".format(control.dryShare)}%) and the mean separates the two by" +
-                    " ${"%.1f".format(controlSeparates)} points against the balance's" +
-                    " ${"%.1f".format(balanceSeparates)}, so the contrast below is not the" +
+                "seed $seed: over the same marginal band the annual-mean rule separates the wet" +
+                    " quarter from the dry by ${"%.1f".format(meanSeparates)} points (wet" +
+                    " ${"%.1f".format(balance.gateWetShare)}%, dry" +
+                    " ${"%.1f".format(balance.gateDryShare)}%) against the balance's" +
+                    " ${"%.1f".format(balanceSeparates)} (wet" +
+                    " ${"%.1f".format(balance.wetShare)}%, dry" +
+                    " ${"%.1f".format(balance.dryShare)}%), so the contrast below is not the" +
                     " balance's doing",
-                controlSaturated || control.dryShare >= control.wetShare ||
-                    balanceSeparates > controlSeparates
+                balanceSeparates > meanSeparates
             )
             assertTrue(
                 "seed $seed: only ${"%.1f".format(balance.wetShare)}% of the wet quarter carries" +
@@ -554,12 +596,6 @@ class SnowBalanceTest {
          * of the range and not at the middle.
          */
         const val EARTH_ICE_SHARE = 10.1
-
-        /**
-         * Above this share of a quarter under ice the control has stopped discriminating and the
-         * wet-against-dry comparison is between two roundings. See the clause that reads it.
-         */
-        const val CONTROL_SATURATED_SHARE = 99.0
 
         /**
          * How many warm carved cells a mask in the *right* place may still leave, as a count
@@ -665,6 +701,8 @@ class SnowBalanceTest {
     private class IceByRainfall(
         val wetShare: Double,
         val dryShare: Double,
+        val gateWetShare: Double,
+        val gateDryShare: Double,
         val wetFloor: Float?,
         val dryFloor: Float?,
         val wetMm: Float,
@@ -701,6 +739,11 @@ class SnowBalanceTest {
         fun share(cells: List<Int>) =
             cells.count { world.climate.biome[it] == Biome.ICE_SHEET } * 100.0 / cells.size
 
+        /** The same quarters read by the pre-H2 rule instead: the annual mean and nothing else. */
+        fun gateShare(cells: List<Int>) = cells.count {
+            world.climate.temperature.data[it] < PRE_H2_ICE_GATE_C
+        } * 100.0 / cells.size
+
         /** The lowest ground under ice, as the 5th percentile so one stray cell cannot decide it. */
         fun floor(cells: List<Int>): Float? {
             val iced = cells
@@ -713,6 +756,8 @@ class SnowBalanceTest {
         return IceByRainfall(
             wetShare = share(wet),
             dryShare = share(dry),
+            gateWetShare = gateShare(wet),
+            gateDryShare = gateShare(dry),
             wetFloor = floor(wet),
             dryFloor = floor(dry),
             wetMm = rain[rain.size * 7 / 8],

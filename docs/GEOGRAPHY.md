@@ -518,6 +518,17 @@ plastic profile makes of a mask speckled that way is a comb of ice walls a cell 
 hundred metres tall. Both together are what drew the ruled flank I3 was reported for. See
 `IceSheet.marginDistanceKm`, `SnowBalance.isGlaciated` and `IceSheetTest`.
 
+Both take ice off the map, and the ice share of land — a standing finding at half Earth's since W2
+— moved *further* from Earth's 10.1% on that account: pooled over seeds 7, 42, 1234 and 99 it
+reads 4.86% where it read 5.26% before, against a control that fell from 33.45% to 32.68%. Of the
+0.40 points, 0.32 is the datum and 0.08 the floor, measured by setting the floor to zero and
+generating the four worlds again. Neither is ice the world was entitled to: a surface standing on
+a stepped datum cools the ground under it by the lapse rate and so freezes more of it, and a
+balance of a ten-thousandth of a millimetre a year is a rounding rather than a snowfall, so what
+left was ice the model of the ice was manufacturing for itself. The gap to Earth remains what it
+was — a continent whose interior takes a third of Earth's rainfall has polar deserts with no snow
+to freeze, which is the moisture budget's open finding and not the cryosphere's.
+
 **Cold country is lake country — and the cold that made it is not today's.** Where the ice is, it
 takes over the valleys the water cut: a flat-floored U-shaped trough across the flow instead of a
 V, a cirque bitten out of every head, a staircase of over-deepened basins whose spacing is set by

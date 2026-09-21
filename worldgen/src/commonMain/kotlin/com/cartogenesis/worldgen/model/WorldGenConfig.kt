@@ -1828,26 +1828,28 @@ data class VegetationConfig(
 @Serializable
 data class RiverConfig(
     /**
-     * Where a channel begins: the runoff-weighted drainage area times the square of the gradient,
-     * in square kilometres, that the ground has to reach before running water can cut one.
+     * Where a channel begins: the runoff-weighted drainage area times the gradient to Montgomery
+     * and Dietrich's exponent of 1.65, in square kilometres, that the ground has to reach before
+     * running water can cut one.
      *
-     * Montgomery and Dietrich's own product, and the derivation — both ends of their measured range
-     * and why they agree — is against
-     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.CHANNEL_HEAD_AREA_SLOPE_SQUARED_KM2],
-     * which this repeats because a config property's default is read by people who never open the
-     * pipeline. An area in square kilometres and a dimensionless slope, so it means the same thing
-     * at every grid and [WorldGenConfig.atResolution] must not touch it.
+     * Their own product over their own steepland fit, and the derivation — which sites, which
+     * regime, and how it is carried to a lowland — is against
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.CHANNEL_HEAD_AREA_SLOPE_KM2], which
+     * this repeats because a config property's default is read by people who never open the
+     * pipeline. An area in square kilometres against a dimensionless gradient, so it means the same
+     * thing at every grid and [WorldGenConfig.atResolution] must not touch it.
      */
-    val channelHeadAreaSlopeSquaredKm2: Float = 0.008f,
+    val channelHeadAreaSlopeKm2: Float = 0.011f,
     /**
      * Whether plant cover raises the threshold where it grows.
      *
-     * On, the ground's critical shear stress rises with the canopy and the threshold with it, which
-     * is what makes drainage density peak in semi-arid country instead of simply tracking the rain
-     * — see
-     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.COVER_CRITICAL_SHEAR_GAIN]. Off, every
-     * cell is held to the bare-ground figure, which is the control the drainage-density guard is
-     * shown failing against.
+     * On, the ground's resistance to being cut rises with the canopy and the threshold with it,
+     * which is what makes drainage density peak in semi-arid country instead of simply tracking the
+     * rain — see
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation.CLOSED_CANOPY_RESISTANCE_GAIN]. Off,
+     * every cell is held to the bare-ground figure, and the runoff weight is then the only climate
+     * term left, which can push cells over a fixed bar but cannot bring any back: that is the
+     * control `ChannelInitiationControlTest` shows the drainage-density clauses failing against.
      */
     val coverRaisesChannelHead: Boolean = true,
     /**
@@ -1857,8 +1859,14 @@ data class RiverConfig(
      * rather than about the water. A hundred kilometres is what a world map's finest engraved blue
      * line is worth: at the scale a whole world is printed at, about one to forty million, a
      * millimetre of paper is forty kilometres and a line under two of them is a tick rather than a
-     * river. Every reach above [channelHeadAreaSlopeSquaredKm2] is a channel whatever its length;
-     * this decides only which of them are worth a separate course on the sheet.
+     * river. Every reach above [channelHeadAreaSlopeKm2] is a channel whatever its length; this
+     * decides only which of them are worth a separate course on the sheet.
+     *
+     * **A course out of a lake is exempt**, however short it is. This rule is about a headwater
+     * scratch — a few cells of channel that gather nothing — and a lake's outflow is the opposite
+     * of one: everything the lake drains comes down it, and its length is the lake's business
+     * rather than the channel's. I3's finisher found the case, a twelve-cell lake on seed 7 whose
+     * outflow reached the trunk in two cells and was thrown away with the scratches.
      */
     val shortestDrawnCourseKm: Float = 100f
 )

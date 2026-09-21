@@ -162,8 +162,8 @@ class IncrementalReuseTest {
             ),
             "rivers" to base.copy(
                 rivers = base.rivers.copy(
-                    channelHeadAreaSlopeSquaredKm2 =
-                        base.rivers.channelHeadAreaSlopeSquaredKm2 * 4f
+                    channelHeadAreaSlopeKm2 =
+                        base.rivers.channelHeadAreaSlopeKm2 * 4f
                 )
             ),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),

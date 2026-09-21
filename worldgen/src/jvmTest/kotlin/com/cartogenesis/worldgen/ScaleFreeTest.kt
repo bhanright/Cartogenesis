@@ -112,13 +112,13 @@ class ScaleFreeTest {
         SEEDS.forEach { seed ->
             val coarse = configAt(seed, 512)
             val fine = configAt(seed, 1024)
-            if (coarse.rivers.channelHeadAreaSlopeSquaredKm2 !=
-                fine.rivers.channelHeadAreaSlopeSquaredKm2
+            if (coarse.rivers.channelHeadAreaSlopeKm2 !=
+                fine.rivers.channelHeadAreaSlopeKm2
             ) {
                 complaints.add(
                     "seed $seed: the channel-head threshold is" +
-                        " ${coarse.rivers.channelHeadAreaSlopeSquaredKm2} km2 at 512 and" +
-                        " ${fine.rivers.channelHeadAreaSlopeSquaredKm2} at 1024"
+                        " ${coarse.rivers.channelHeadAreaSlopeKm2} km2 at 512 and" +
+                        " ${fine.rivers.channelHeadAreaSlopeKm2} at 1024"
                 )
             }
             if (coarse.rivers.shortestDrawnCourseKm != fine.rivers.shortestDrawnCourseKm) {

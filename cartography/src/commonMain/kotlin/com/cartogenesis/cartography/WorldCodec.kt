@@ -138,7 +138,7 @@ object WorldCodec {
      * 13 because a channel begins where the ground can cut one. `rivers.sourceFlowShare`,
      * `rivers.maxRivers` and `rivers.minLengthCells` are gone — a share of the world's runoff, a
      * count of courses and a count of cells, all three of them a different thing at every grid —
-     * and `rivers.channelHeadAreaSlopeSquaredKm2`, `rivers.coverRaisesChannelHead` and
+     * and `rivers.channelHeadAreaSlopeKm2`, `rivers.coverRaisesChannelHead` and
      * `rivers.shortestDrawnCourseKm` stand in their place. A format-12 file would open with this
      * build's defaults wherever one of those has moved and redraw its rivers by a rule its author
      * never chose.

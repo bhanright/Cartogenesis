@@ -210,7 +210,8 @@ object RiverStage {
         val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm)
         val flow = accumulateFlow(cellsAcross, cellsDown, sea, climate, filled, flowTarget)
         val isChannel = ChannelInitiation.channelMask(
-            config, sea.isLand, sea.landCellCount, filled, flowTarget, climate
+            config, sea.isLand, sea.landCellCount, sea.relativeElevation, filled, flowTarget,
+            climate
         ) { lakes.isOpenWater(it) }
         val rivers = traceRivers(config, sea, flow, flowTarget, lakes, isChannel)
 
@@ -468,6 +469,37 @@ object RiverStage {
         cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
     ) { cell -> runoffWeight(climate.precipitation.data[cell]) }
 
+    /**
+     * Whether a headwater is a lake's outflow rather than a scratch on a hillside: some neighbour
+     * of it is open water that drains into it.
+     *
+     * The exemption `RiverConfig.shortestDrawnCourseKm` names. A cell whose only upstream water is
+     * a lake has no channel above it and so is a head like any other, and where the lake sits a few
+     * cells from the trunk its course is shorter than the drawing asks for — but everything the
+     * lake drains comes down it, so a short one is a great river and not a rill. I3's finisher found
+     * the case on seed 7 at 512: cell 191210, one cell of narrow water at the outflow end of a
+     * twelve-cell lake, with a drawn trunk one cell below and no line between them.
+     *
+     * Asked of the neighbours rather than of the flow targets, because the lake's own cells are
+     * re-pointed at the water inside an endorheic basin and a brim-full lake's outlet cell drains
+     * *to* this one: either way the water above a true outflow is beside it.
+     */
+    private fun drainsALake(
+        cellsAcross: Int,
+        cellsDown: Int,
+        head: Int,
+        flowTarget: IntArray,
+        lakes: LakeResult
+    ): Boolean {
+        var found = false
+        FlowRouting.forEachNeighbour(
+            cellsAcross, cellsDown, head % cellsAcross, head / cellsAcross
+        ) { neighbour ->
+            if (lakes.isOpenWater(neighbour) && flowTarget[neighbour] == head) found = true
+        }
+        return found
+    }
+
     /** The ground one D8 step covers, in kilometres, on a grid whose cells are not square. */
     private fun stepKilometres(
         from: Int,
@@ -611,7 +643,10 @@ object RiverStage {
                     path[step], path[step + 1], cellsAcross, cellWidthKm, cellHeightKm, diagonalKm
                 )
             }
-            if (courseKm < riverConfig.shortestDrawnCourseKm) {
+            if (courseKm < riverConfig.shortestDrawnCourseKm && !drainsALake(
+                    cellsAcross, cellsDown, source, flowTarget, lakes
+                )
+            ) {
                 // Release only the cells this trace claimed, never a trunk it merely touched.
                 for (step in 0 until claimedByThisRiver) claimed[path[step]] = false
                 continue

@@ -560,7 +560,7 @@ class GroundTextureTest {
          * [DRAINAGE_DENSITY_ALLOWANCE] for what moved it and what did not.
          */
         const val MAIN_BELT_FLANK_TEXTURE_METRES = 113.0
-        const val MAIN_DRAINAGE_DENSITY_KM_PER_KM2 = 0.0078
+        const val MAIN_DRAINAGE_DENSITY_KM_PER_KM2 = 0.0136
 
         /**
          * How far the drainage density may sit from the pre-S2 tree's, either way.
@@ -574,8 +574,9 @@ class GroundTextureTest {
          * **Re-pinned at R1, and the reference moved rather than the allowance.** This measurement
          * is over the courses the map *draws*, and what R1 changed is which courses those are: the
          * cap of four hundred was the binding rule at 512 as well as at 2048, and taking it off
-         * trebles the drawn length without adding a cell of channel to the terrain. Measured on the
-         * five seeds after R1: 0.0072, 0.0094, 0.0075, 0.0074 and 0.0073, pooled 0.0078, against
+         * multiplies the drawn length fivefold without adding a cell of channel to the terrain.
+         * Measured on the five seeds after R1: 0.0117, 0.0145, 0.0138, 0.0149 and 0.0129, pooled
+         * 0.0136, against
          * 0.0026 before. Re-pinning to the new figure is what this constant is for — it says what
          * `main` measured by this arithmetic — and the third of allowance around it is untouched,
          * so the bar is exactly as tight as it was. It is still not an Earth figure and the

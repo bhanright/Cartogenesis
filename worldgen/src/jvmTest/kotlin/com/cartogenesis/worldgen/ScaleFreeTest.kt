@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
@@ -90,6 +91,70 @@ class ScaleFreeTest {
     }
 
     /**
+     * The channel-head threshold is the same area of ground at every grid, and so is the network
+     * it picks out.
+     *
+     * The clause R1 owes this suite. A threshold in square kilometres against a gradient is a
+     * statement about ground, so `atResolution` must leave it exactly alone — where the rule it
+     * replaced was a share of the world's runoff, a count of courses and a count of cells, each of
+     * which described different ground at every grid. The share of land the criterion calls channel
+     * is the other half: it is not asked to be equal, because a finer grid resolves gradients a
+     * coarse one averages away and the criterion reads gradients, but it is asked to stay within
+     * the factor the drainage-density clause already allows.
+     */
+    @Test
+    fun `the channel-head threshold is an area of ground and does not move with the grid`() {
+        val complaints = ArrayList<String>()
+        SEEDS.forEach { seed ->
+            val coarse = configAt(seed, 512)
+            val fine = configAt(seed, 1024)
+            if (coarse.rivers.channelHeadAreaSlopeSquaredKm2 !=
+                fine.rivers.channelHeadAreaSlopeSquaredKm2
+            ) {
+                complaints.add(
+                    "seed $seed: the channel-head threshold is" +
+                        " ${coarse.rivers.channelHeadAreaSlopeSquaredKm2} km2 at 512 and" +
+                        " ${fine.rivers.channelHeadAreaSlopeSquaredKm2} at 1024"
+                )
+            }
+            if (coarse.rivers.shortestDrawnCourseKm != fine.rivers.shortestDrawnCourseKm) {
+                complaints.add(
+                    "seed $seed: the shortest drawn course is" +
+                        " ${coarse.rivers.shortestDrawnCourseKm} km at 512 and" +
+                        " ${fine.rivers.shortestDrawnCourseKm} at 1024"
+                )
+            }
+            val coarseShare = channelShareOfLand(worldAt(seed, 512))
+            val fineShare = channelShareOfLand(worldAt(seed, 1024))
+            val ratio = fineShare / coarseShare
+            println(
+                ("SCALEFREE channel head seed %d  %.4f of the land is channel at 512 and %.4f at" +
+                    " 1024 (x%.2f)").format(seed, coarseShare, fineShare, ratio)
+            )
+            if (ratio < 1.0 / CHANNEL_SHARE_FACTOR || ratio > CHANNEL_SHARE_FACTOR) {
+                complaints.add(
+                    "seed $seed: the criterion calls ${"%.4f".format(coarseShare)} of the land" +
+                        " channel at 512 and ${"%.4f".format(fineShare)} at 1024, a factor of" +
+                        " ${"%.2f".format(ratio)} over the $CHANNEL_SHARE_FACTOR allowed"
+                )
+            }
+        }
+        assertTrue(
+            "the channel-head criterion is not the same criterion at two grids:" +
+                " ${complaints.joinToString("; ")}",
+            complaints.isEmpty()
+        )
+    }
+
+    /** What share of the land the channel-head criterion calls channel. */
+    private fun channelShareOfLand(world: WorldMap): Double {
+        val channel = ChannelInitiation.channelMaskOf(world)
+        var channelCells = 0L
+        for (cell in channel.indices) if (channel[cell]) channelCells++
+        return channelCells.toDouble() / world.sea.landCellCount
+    }
+
+    /**
      * The plates own the same ground, and the sea stands on the same coast, at 512 and at 1024.
      *
      * Where the clause above asks about fourteen points, these two ask about every cell: the
@@ -168,6 +233,18 @@ class ScaleFreeTest {
          * before F35 — the two cases are nowhere near each other.
          */
         const val PLATE_INTERIOR_AGREEMENT = 0.999
+
+        /**
+         * How far the share of land under channel may move between 512 and 1024.
+         *
+         * The same 1.35 [ScaleFree.TOLERANCES] allows the drainage density itself, and for the same
+         * reason: the criterion reads the gradient to a cell's own receiver, and a finer grid
+         * resolves relief that a coarse one averages into a gentler slope, so a network extracted
+         * on the same ground is drawn finer without being denser. What the clause refuses is what
+         * a count of cells did — sixteen times the cells at four times the grid, which is a factor
+         * of four in any share.
+         */
+        const val CHANNEL_SHARE_FACTOR = 1.35
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)

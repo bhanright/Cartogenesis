@@ -26,6 +26,38 @@ headwaters — channel cells with no upstream channel — which by definition si
 `RiverEndingsTest` follows the whole drainage and finds no breaks. Depression filling guarantees
 every land cell has a downhill path out.
 
+**A channel begins where the ground can cut one.** A cell carries a channel where its
+runoff-weighted drainage area times the square of its gradient clears a threshold in square
+kilometres, and everything downstream of such a cell carries one too, because discharge only grows.
+That is Montgomery and Dietrich's criterion (1988, 1989; Dietrich et al. 1993), and the threshold is
+theirs: their channel heads run from one to ten hectares of support area on a humid steepland to
+square kilometres on an arid lowland — three orders of magnitude — while `A x S²` over the same
+sites is 0.008 km² at one end and 0.0075 at the other. The area is weighted by the cell's rainfall
+against Earth's mean over land, 715 mm, so a wet hillside reaches the threshold on less ground; the
+threshold is multiplied by the plant cover the ground carries, up to two hundredfold under a closed
+canopy, which is the universal soil-loss equation's cover factor (1.0 bare, 0.005 forested) read as
+a resistance. Ground that never thaws — where Thornthwaite's demand is exactly zero — starts no
+channel of its own, though a river rising in a warmer catchment still runs across it.
+
+Everything in that rule is a length, an area or a dimensionless gradient, so it means the same thing
+at every grid. What it replaced meant three different things: a channel was drawn where the
+accumulated runoff passed a share of the world's own total, the drawing was capped at four hundred
+courses, and a course under eight cells was dropped — a share, a count of courses and a count of
+cells, each of which describes different ground at 512 and at 2048. The one rule left about the
+drawing is cartographic and says so: a course shorter than a hundred kilometres is not given a line
+of its own.
+
+**Drainage density peaks in dry country.** Langbein and Schumm (1958) and Moglen, Eltahir and Bras
+(1998) put the maximum of channel length per unit of land at low to intermediate effective
+precipitation, with a fall-off on both sides: more rain makes more runoff, and more rain also grows
+the cover that holds a hillside together, and above semi-arid country the second wins. The two terms
+of the criterion above are exactly those two, so the curve is a consequence rather than a setting.
+Measured over the network the criterion initiates, on seeds 7/42/1234/99 at 512, the density is
+0.0096, 0.0141, 0.0193, 0.0182 and 0.0158 km per km² across hyper-arid, arid, semi-arid, dry
+sub-humid and humid country: the peak is in a dryland on every seed and pooled, and humid country
+carries 0.82 of the semi-arid density. With the cover term off the same worlds peak in humid country
+and the ratio is above one, which is the control.
+
 **A river runs from its farthest source.** A course is traced from the headwater with the longest
 way down to the water rather than from the one already carrying the most, so what the map calls a
 river holds the whole of the longest watercourse in its catchment and every other branch is drawn

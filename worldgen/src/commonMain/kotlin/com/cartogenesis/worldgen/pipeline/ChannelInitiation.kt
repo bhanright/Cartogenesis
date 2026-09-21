@@ -20,7 +20,8 @@ import kotlin.math.sqrt
  * Two things make it a criterion rather than a number. The area is **weighted by runoff**, so a wet
  * hillside reaches the threshold on less ground than a dry one and starts its channels closer
  * together; and the threshold itself **rises with the plant cover**, because what the water has to
- * beat at a channel head is the ground's critical shear stress and roots raise that several-fold.
+ * beat at a channel head is the ground's resistance to being cut, and a plant cover raises that
+ * by two orders of magnitude.
  * The two pull opposite ways as a country gets wetter, which is why drainage density on Earth peaks
  * in semi-arid country and falls away on both sides (Langbein & Schumm 1958; Moglen, Eltahir & Bras
  * 1998) instead of simply tracking the rain.
@@ -45,10 +46,10 @@ object ChannelInitiation {
      * — the support area spans three orders of magnitude and `A x S^2` spans none — so eight
      * thousandths is a measurement and not a fitted number.
      *
-     * "Over bare ground" because the shear stress a channel head has to beat is the bare soil's
-     * here; [coverFactor] raises it where there is a canopy. Both of their site classes carry some
-     * cover, so this is if anything a shade high for true bare ground, and that is the conservative
-     * direction: it makes the dry end of the map less dissected rather than more.
+     * "Over bare ground" because [coverFactor] raises it where there is a canopy. Both of their
+     * site classes carry some cover, so this is if anything a shade high for true bare ground, and
+     * that is the conservative direction: it makes the dry end of the map less dissected rather
+     * than more.
      */
     const val CHANNEL_HEAD_AREA_SLOPE_SQUARED_KM2 = 0.008f
 

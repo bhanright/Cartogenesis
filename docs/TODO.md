@@ -20,6 +20,23 @@
   Earth figure would take about a third of that world's ice, which is a change to the ice share
   every world is judged on and belongs in a chunk that re-derives it rather than in a defect fix.
   2026-09-21, I3.
+- **The dome clause's own gate refuses a neighbourhood that is plainly one.** `IceSheetTest`
+  reads its radial-flow clause only where the ice near the dome fills a third of the disc
+  `NEAR_THE_DOME_KM` describes, which I1 derived as "where a neighbourhood is still a
+  neighbourhood" rather than from any measurement. On seed 878210 at 1024 that refuses 3,076 cells
+  — 26.9% of the 11,440 a 1024 disc holds — on a sheet whose flow is the best of the five worlds
+  the class measures, 86.8% outward at a mean 44.3 degrees off radial, where an indifferent bearing
+  gives 50% and 90. A share of a disc is also not scale-free in the way it looks: the same sheet on
+  the ground fills a smaller share of a disc that holds four times as many cells. What the gate
+  wants is a shape test — whether the neighbourhood is round or an arc — and not a count.
+  `LEAST_SEEDS_WITH_A_DOME` went from two to one because of it. 2026-09-21, I3.
+- **Four worlds are not a sample for an outlet's depth.** I3 turned `IceSheetTest`'s fjord clause
+  into a finding with a floor at 0.9 of Sognefjord, because the deepest outlet over the four
+  audited worlds now asks 1,255 m against the 1,308 the bar is, 0.96 of it. Sognefjord is a
+  measurement of Earth and did not move; what moved is the ice, for two reasons that are both
+  corrections. The question the clause is really asking — can a sheet of this kind deliver enough
+  ice to an outlet to cut a fjord — wants more worlds rather than a lower bar, and the pooled
+  maximum over four is a statistic with one observation in it. 2026-09-21, I3.
 - **An export is bounded by the heap, and the graphics card has memory of its own.** The packaged
   application's heap is a share of the machine's memory (three quarters), which lifts the fixed
   12 GB wall an 8192 export hit, but the fields of an 8192 world still all live on the heap at once.

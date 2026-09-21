@@ -37,12 +37,18 @@ class VegetationTintTest {
         /** The gallery's world, and the same world with the field switched off. */
         val WORLD: WorldMap get() = TestWorlds.gallery
 
-        val WITHOUT_FIELD: WorldMap by lazy {
-            val base = WORLD.config
-            WorldGenerationEngine.generateBlocking(
-                base.copy(vegetation = base.vegetation.copy(enabled = false))
-            )
-        }
+        /**
+         * The figure the old table would have given a cell: its biome's one canopy closure.
+         *
+         * Read straight off [ClimateTint.canopyClosure] rather than off a second world generated
+         * with `vegetation.enabled = false`, which is what this used to do. Since S3 the erosion
+         * reads the vegetation section - the cover shields the incision - so that second world is
+         * carved differently, has a different coastline and classifies some of its cells into
+         * different biomes, and a table read off *its* biomes for cells chosen by *this* world's
+         * biomes is not one figure a biome. It is the table that is the control here, and the
+         * table is a lookup.
+         */
+        fun tableAt(cell: Int): Float = ClimateTint.canopyClosure(WORLD.climate.biome[cell])
 
         /** Below this a biome is too rare on this world for a spread within it to say anything. */
         const val MIN_BIOME_CELLS = 200
@@ -94,7 +100,7 @@ class VegetationTintTest {
         populous.forEach { biome ->
             val cells = WORLD.climate.biome.indices.filter { WORLD.climate.biome[it] == biome }
             val field = cells.map { ClimateTint.canopyAt(WORLD, it) }
-            val table = cells.map { ClimateTint.canopyAt(WITHOUT_FIELD, it) }
+            val table = cells.map { tableAt(it) }
             println(
                 "CANOPY %-26s %d cells: field mean %.3f spread %.3f, table mean %.3f spread %.3f"
                     .format(
@@ -148,10 +154,7 @@ class VegetationTintTest {
                     )
                     fieldStep += step
                     if (step > worstFieldStep) worstFieldStep = step
-                    tableStep += abs(
-                        ClimateTint.canopyAt(WITHOUT_FIELD, cell) -
-                            ClimateTint.canopyAt(WITHOUT_FIELD, next)
-                    )
+                    tableStep += abs(tableAt(cell) - tableAt(next))
                 }
             }
         }

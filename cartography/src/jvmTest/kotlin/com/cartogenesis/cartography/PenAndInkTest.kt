@@ -206,20 +206,30 @@ class PenAndInkTest {
          * to 0.9526, and it is the first re-derivation in this comment that makes the ground
          * *smoother*: both of those artefacts were sheer faces in the elevation field and both
          * were catching a shadow. Re-taken last, after the two module suites had settled.
+         *
+         * S3 moved all twelve, and it is the plainest case of the ground moving there has been
+         * since W1: the hydraulic rounds weight their flow accumulation by a provisional rainfall
+         * and hold their incision back by the plant cover, so every valley on every world is cut
+         * by a different amount and the elevation field the renderer shades is a different field
+         * everywhere. `ReliefShading.ORDINARY_GROUND` is re-derived with them, from 0.9526 to
+         * 0.9566, and it moves the way it should: the median land cell is a little *less* shaded
+         * than it was, because a third less rock came off the world's belts and what is left is
+         * ordinary country with rather more of its own relief still on it. Re-taken last, after
+         * the two module suites had settled.
          */
         val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 134383402,
-            MapStyle.VELLUM to 694054057,
-            MapStyle.INK_WASH to -2128395974,
-            MapStyle.NAUTICAL to -1223318882,
-            MapStyle.MIDNIGHT to -929263577,
-            MapStyle.SCHOOLROOM to -1009162886,
-            MapStyle.VERDANT to -480432821,
-            MapStyle.SCROLL to 1321030905,
-            MapStyle.PEN_AND_INK to 196471673,
-            MapStyle.MARS to 799156801,
-            MapStyle.NATURAL to -9294290,
-            MapStyle.CLEAR to 730586730
+            MapStyle.ATLAS to -824581685,
+            MapStyle.VELLUM to -247227779,
+            MapStyle.INK_WASH to -973090344,
+            MapStyle.NAUTICAL to 250729721,
+            MapStyle.MIDNIGHT to 1576266719,
+            MapStyle.SCHOOLROOM to 1667363289,
+            MapStyle.VERDANT to -154958061,
+            MapStyle.SCROLL to 987337570,
+            MapStyle.PEN_AND_INK to -1361521103,
+            MapStyle.MARS to -1507413801,
+            MapStyle.NATURAL to -1026779527,
+            MapStyle.CLEAR to 489684213
         )
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */

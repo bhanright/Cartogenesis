@@ -861,21 +861,37 @@ its divides. [S3 Erosion reads the climate](DESIGN_LEDGER.md) closed the circle 
 glaciation's: a provisional climate march runs on the weathered uplift before the first round and
 again at the midpoint, and the flow accumulation carries each cell's own rainfall, so discharge is
 `Q = P * A` and the stream-power law is spent against the water rather than against the catchment.
-What is *not* Earth's figure is the strength. Measured on the largest convergent belt of each of the
-four standard seeds at 512, windward flank against leeward: the windward side takes 2.33 to 4.77
-times the rain, and the channels on it gather only **1.43 to 1.81 times the discharge**, because a
-catchment does not stop at a divide — a windward channel is fed partly from over the crest, and the
-leeward flank's longer rivers gather the crest's wet side on their way down. The incision follows
-the discharge and not the rainfall, at **1.11 to 1.32 times the leeward flank's** once the belt's own
-geometric asymmetry (measured with the feed switched off, 0.88 to 1.28) is divided out. Earth's
-comparison is the Southern Alps of New Zealand, where the western flank takes about ten times the
-eastern's rain and exhumes at 5-10 mm a year against the east's under one (Willett 1999; Hovius,
-Stark and Allen 1997) — an order of magnitude where this is tens of per cent. Two of the three
-reasons are recorded elsewhere on this page: the interior is drier than Earth's by nearly three, so
-the rainfall contrast a range can make is smaller to begin with, and the vegetation the wet flank
-grows holds 0.88 to 0.95 of its own erodibility back against the dry flank's, which is a real term
-pulling the other way rather than an error. The third is the divide-crossing catchment above, and
-that is a fact about ranges rather than about this model. `ErosionConfig.climateFeed` is the control.
+**The forcing itself is the law's.** Measured on the largest convergent belt of each of the four
+standard seeds at 512, on the first round — the one round where the two runs still share a terrain,
+a set of receivers and a set of gradients, so the only thing that differs is the weather. The
+windward flank takes 2.33 to 4.77 times the leeward's rain, and turning the feed on multiplies its
+share of that round's incision by **1.55, 1.65, 1.26 and 2.00**, against the **1.49, 1.47, 1.22 and
+1.75** that `sqrt(P_windward / P_leeward)` at m = 0.5 asks for with a fifth off. So the rain does
+what the stream-power law says it should, and `ClimateFedErosionTest` asserts it there.
+
+**What twelve rounds then leave is a good deal less, and that is a landscape and not a law.** The
+relief lost on the windward flank over the leeward comes to 1.12 to 1.68 times, against 0.88 to 1.28
+for the same belts with the feed off — tens of per cent where Earth's comparison, the Southern Alps
+of New Zealand, has the western flank taking about ten times the eastern's rain and exhuming at 5-10
+mm a year against the east's under one (Willett 1999; Hovius, Stark and Allen 1997). Three reasons,
+none of them the law's. The interior is drier than Earth's by nearly three, recorded below, so the
+rainfall contrast a range can make is smaller to begin with. A catchment does not stop at a divide,
+so a windward channel is fed partly from over the crest and a leeward one gathers the crest's wet
+side on its way down, and the *discharge* ratio between the flanks is far gentler than the rainfall
+ratio. And the shadow fades as the range wears down: over the twelve rounds the flanks' own weight
+ratio falls from 3.24 to 2.29 on seed 7, 3.17 to 2.49 on 42, 2.36 to 1.54 on 1234 and 3.99 to 3.41
+on 99, because a lower range wrings less out of the wind crossing it. The vegetation the wet flank
+grows is a fourth term and it pulls the same way, holding some of that flank's erodibility back —
+which is a real effect and not an error. `ErosionConfig.climateFeed` is the control.
+
+**What the scheme is and is not.** The weights are rainfall divided by its own mean over the land,
+so this is *relative* climatic forcing: it says where the water falls and not how much there is. A
+world made uniformly wetter or drier erodes exactly as it did, by construction, because the division
+cancels it — deliberate, since the incision coefficient was fitted at one total and nothing here
+re-fits it. The weight is also rainfall standing in for runoff, with no evapotranspiration, no
+infiltration and no flood intermittency between them. And the climate the rounds cut with is
+today's, applied across rounds that stand for hundreds of thousands of years each: a
+stationary-climate approximation, taken twice over the run rather than once, and not a history.
 
 **A wet flank is not more finely divided than a dry one.** The companion claim to the one above,
 and the measurement does not support it. Against a fixed support area — the network's bare geometry

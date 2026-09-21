@@ -358,7 +358,7 @@ internal object ReliefShading {
      * because leaving it stale would draw every map one and a half percent off the tone the lamp
      * set, which is the one thing this constant exists to hold still.
      */
-    private const val ORDINARY_GROUND = 0.9526f
+    private const val ORDINARY_GROUND = 0.9566f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

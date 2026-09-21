@@ -134,19 +134,23 @@
   measured factor, and spends it against a `bedrockErodibilityPerYear` that already carries Stock
   and Montgomery's and Lague's figures for real bedrock rivers - rivers that ran through forests.
   So the cover is counted once in the calibration and once again in the multiplier, and denudation
-  off an active belt falls from **0.271 to 0.183 mm/yr** (`IsostasyTest`'s own instrument, pooled
-  over five seeds). That one number is why seven cases in six classes that are green on the
-  pre-S3 commit are red: the collision uplift rate no longer matches the derivation it was set
-  from, 718106 keeps a lake past the Caspian's share because the notch has lost the water to cut
-  it out, its ice sheet stands 2511 m where it stood 1941, the deepest outlet trough asked for
-  over four worlds fell from 1255 m to 346, seed 43's rift lost two of its three land bridges, and
-  the plains read rougher than the bar. The cure is the one the runoff weight already uses and is
-  two lines: divide the shielding by its own mean over land, so the land's mean erodibility is
-  unchanged and what the term carries is the *relative* half between bare ground and closed
-  canopy, which is all the paper claims. It was left undone on purpose - it is a change to S3's
-  design rather than to its implementation, and the figures above are what the decision wants.
-  Whether `ErosionConfig.collisionUpliftMmPerYear` is then re-derived is a second question and
-  S2's. 2026-09-21, S3.
+  off an active belt falls from **0.271 to 0.189 mm/yr** (`IsostasyTest`'s own instrument, pooled
+  over five seeds), which asks 0.69 mm/yr of a collision uplift rate the setting carries 0.77 of.
+  That one number is why four cases in four classes that are green on the pre-S3 commit are red
+  here: the collision uplift rate no longer matches the derivation it was set from
+  (`IsostasyTest`, the defect stated directly); the deepest outlet trough the ice asks for over
+  four worlds is 750 m where it was 1255, 0.57 of Sognefjord against 0.96 (`IceSheetTest`); the
+  lowest quarter of the land departs from its own smoothed self by 66.491 m against a bar of 65.2,
+  where it managed 64.957 (`GroundTextureTest`, the plains left rougher by less planing); and on
+  718106 the two ways of measuring a drowned basin's fall now land within a fifth of a per cent of
+  each other, 0.1336% against 0.1359%, so that control can no longer tell the two rules apart
+  (`OutletIncisionTest`). The cure is the one the runoff weight already uses and is two lines:
+  divide the shielding by its own mean over land, so the land's mean erodibility is unchanged and
+  what the term carries is the *relative* half between bare ground and closed canopy, which is all
+  the paper claims. It was left undone on purpose - it is a change to S3's design rather than to
+  its implementation, and the figures above are what the decision wants. Whether
+  `ErosionConfig.collisionUpliftMmPerYear` is then re-derived is a second question and S2's.
+  2026-09-21, S3.
 - ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
   by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
   `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`

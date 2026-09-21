@@ -112,10 +112,13 @@ calderas and flood-basalt plateaus (H3) follow.
   vegetation shielding, the orographic asymmetry (the weather cuts the windward flank 1.11-1.32
   times as deep as the leeward once the belt's own geometry is divided out) and dissection
   following rainfall over the land as a whole (Spearman +0.230 to +0.296 against a control's +0.087
-  to +0.137). **Declined:** the precipitation-weighted talus — the thermal sweeps model rock
-  failing past a critical slope, which is a property of the rock, and a rainfall-driven hillslope
-  law would be Culling's diffusion, a different physics S1 already rejected; the defensible
-  precipitation term there is on the critical slope itself and belongs to H3 with lithology. **Not
+  to +0.137). **Out of scope, not impossible:** the precipitation-weighted talus. Water does
+  change where rock fails — pore pressure lowers the effective stress on a slip surface and roots
+  add cohesion above it — so this is a scope decision and not a physical argument. What was
+  refused is the particular form: a rainfall-driven hillslope flux would be Culling's diffusion, a
+  linear law where the sweeps are a threshold one, and S1 already rejected that as different
+  physics. The defensible precipitation term for a threshold law is on the critical slope itself,
+  and it belongs with H3, where the rock gets a lithology to have a critical slope of. **Not
   delivered:** the windward flank is not more finely divided than the leeward, on either
   instrument; GEOGRAPHY.md records the figures. GPU: the march stays CPU (lock-step wavefronts),
   measured at a low single-digit share of a generation.

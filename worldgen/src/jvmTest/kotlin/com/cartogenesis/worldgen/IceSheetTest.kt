@@ -402,6 +402,112 @@ class IceSheetTest {
     }
 
     /**
+     * I3's guard: whether the sheet's surface is a dome, or a set of facets ruled down the grid.
+     *
+     * Two clauses, and between them they describe what the defect looked like — a flank striped
+     * column by column in light and dark, over a surface reading as flat facets with hard edges
+     * instead of a dome.
+     *
+     * ### The step
+     *
+     * A plastic dome rises at `k * sqrt(x)` from its margin, so the fastest it can ever climb
+     * across one cell is the climb out of the margin itself: [IceSheet.profileMetres] over one
+     * cell width, which is 404 m at 1024 on a world 12,000 km across and less everywhere further
+     * in, the curve being concave. Two neighbouring cells *both carrying ice* therefore cannot
+     * stand more than that apart, whatever the ground under them is doing, because where there is
+     * ice the surface is the dome and not the bed. It is a ceiling derived from the equation the
+     * sheet is drawn by, not a figure fitted to a world.
+     *
+     * It fails on the reported world before I3 and passes after, and the two numbers say which of
+     * the two causes each half of the chunk took out. See docs/DESIGN_LEDGER.md, I3.
+     *
+     * ### The ruling
+     *
+     * A neck of ice one cell wide is not a sheet's geometry — a sheet is fifty thousand square
+     * kilometres by definition — and the grid it is drawn on has no business deciding which way
+     * such a neck runs. If anything the grid leans the other way: a row is half as tall as a
+     * column is wide on this projection, so a neck one *row* thick is 5.9 km of ground at 1024
+     * and one a *column* thick is 11.7, and a ragged margin frays more easily in the finer
+     * direction. So the count of north-south necks may not run ahead of the count of east-west
+     * ones at all, and the clause allows it a factor of two for the sample being what it is.
+     */
+    @Test
+    fun `the sheet's surface is a dome and not a ruling of the grid`() {
+        val failures = ArrayList<String>()
+        val worlds = seeds.map { it to measure(it) } + listOf(REPORTED_SEED to reported())
+        worlds.forEach { (seed, measured) ->
+            val config = measured.config
+            val across = config.width
+            val down = config.height
+            val metres = config.scale.highestLandMetres
+            val thickness = measured.mass.iceThicknessMetres
+            val surface = measured.carved.relativeElevation.data
+            val stepCeiling = IceSheet.profileMetres(
+                config.cellWidthKm.toFloat(),
+                IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity),
+                sqrt(config.squareKilometresPerCell).toFloat()
+            )
+            var worstAcross = 0f
+            var worstDown = 0f
+            var overAcross = 0
+            var overDown = 0
+            var pairs = 0
+            var necksAcross = 0
+            var necksDown = 0
+            var iceCells = 0
+            for (cell in 0 until across * down) {
+                if (thickness[cell] <= 0f) continue
+                iceCells++
+                val column = cell % across
+                val row = cell / across
+                if (column < across - 1 && thickness[cell + 1] > 0f) {
+                    pairs++
+                    val step = abs(surface[cell] - surface[cell + 1]) * metres
+                    if (step > worstAcross) worstAcross = step
+                    if (step > stepCeiling) overAcross++
+                }
+                if (row < down - 1 && thickness[cell + across] > 0f) {
+                    pairs++
+                    val step = abs(surface[cell] - surface[cell + across]) * metres
+                    if (step > worstDown) worstDown = step
+                    if (step > stepCeiling) overDown++
+                }
+                // A neck one cell wide: ice here and none on either side of it.
+                if (column > 0 && column < across - 1 &&
+                    thickness[cell - 1] <= 0f && thickness[cell + 1] <= 0f
+                ) {
+                    necksAcross++
+                }
+                if (row > 0 && row < down - 1 &&
+                    thickness[cell - across] <= 0f && thickness[cell + across] <= 0f
+                ) {
+                    necksDown++
+                }
+            }
+            println(
+                ("I3 DOME seed %d at %d: %d ice cells, %d neighbour pairs, ceiling %.0f m," +
+                    " worst step %.0f m east-west and %.0f m north-south, %d and %d over;" +
+                    " one-cell necks %d east-west against %d north-south")
+                    .format(
+                        seed, across, iceCells, pairs, stepCeiling, worstAcross, worstDown,
+                        overAcross, overDown, necksAcross, necksDown
+                    )
+            )
+            if (overAcross + overDown > 0) {
+                failures += "seed $seed at $across steps ${"%.0f".format(maxOf(worstAcross, worstDown))} m" +
+                    " between neighbouring cells of ice on ${overAcross + overDown} pairs, over the" +
+                    " ${"%.0f".format(stepCeiling)} m the profile itself can climb across one cell"
+            }
+            if (necksAcross > NECK_BEARING_ALLOWANCE * maxOf(necksDown, 1)) {
+                failures += "seed $seed at $across carries $necksAcross one-cell necks running" +
+                    " north and south against $necksDown running east and west, over the" +
+                    " ${NECK_BEARING_ALLOWANCE}x a grid with no preferred bearing allows"
+            }
+        }
+        assertTrue(failures.joinToString("; "), failures.isEmpty())
+    }
+
+    /**
      * The mean `|cos|` between the gradient of the ground the scour lowered and the flow it was
      * lowered along, over the sheet.
      *
@@ -466,6 +572,15 @@ class IceSheetTest {
     private fun measure(seed: Long): Measured =
         measured.getOrPut(seed) { carve(WorldGenConfig(seed = seed, width = 512, height = 512)) }
 
+    /** The reported world, at the grid it was reported at. See [REPORTED_SEED]. */
+    private fun reported(): Measured =
+        measured.getOrPut(REPORTED_SEED) {
+            carve(
+                WorldGenConfig(seed = REPORTED_SEED, width = 512, height = 512)
+                    .atResolution(REPORTED_SIDE, REPORTED_SIDE)
+            )
+        }
+
     /**
      * The glaciation stage on its own, over the terrain [config] makes.
      *
@@ -499,6 +614,22 @@ class IceSheetTest {
          * is the smaller of Earth's two sheets and so is where the family starts.
          */
         const val CONTINENTAL_MARGIN_KM = 400f
+
+        /**
+         * The world I3 was reported on, and the grid it was reported at.
+         *
+         * Built from a 512 base through `atResolution`, which is how the desktop application
+         * builds the config a reader sees: the knobs a stage reads are scaled by that call, so a
+         * bare 1024 config is a different world and would not be the one in the report.
+         */
+        const val REPORTED_SEED = 878210L
+        const val REPORTED_SIDE = 1024
+
+        /**
+         * How far the count of one-cell necks along one grid bearing may run ahead of the count
+         * along the other. See the clause for why one is the honest figure and this is two.
+         */
+        const val NECK_BEARING_ALLOWANCE = 2f
 
         /** What Greenland's divide stands at, in metres, and the floor a sheet that size owes. */
         const val CONTINENTAL_THICKNESS_FLOOR_M = 2_000f

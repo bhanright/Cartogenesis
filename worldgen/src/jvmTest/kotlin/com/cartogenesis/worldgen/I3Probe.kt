@@ -27,7 +27,8 @@ class I3Probe {
             config, bed, OceanStage.withoutCurrents(config, bed)
         )
         var mass: com.cartogenesis.worldgen.pipeline.GlacialMass? = null
-        runBlocking { GlaciationStage.apply(config, bed, balance, null) { mass = it } }
+        val carved =
+            runBlocking { GlaciationStage.apply(config, bed, balance, null) { mass = it } }
         val m = mass!!
         val across = config.width
         val down = config.height
@@ -135,6 +136,37 @@ class I3Probe {
             }
             println("I3 PROBE east-west pairs=%d mean datum jump=%.1f m, mean profile jump=%.1f m, worst datum jump=%.0f m"
                 .format(pairs, datumJump / pairs, profileJump / pairs, worst))
+        }
+        run {
+            val metres = config.scale.highestLandMetres
+            val t = m.iceThicknessMetres
+            val surfaceField = carved.relativeElevation.data
+            val k = com.cartogenesis.worldgen.pipeline.IceSheet.metresPerRootKilometre(
+                config.isostasy.iceDensity, config.isostasy.gravity)
+            val span = kotlin.math.sqrt(config.squareKilometresPerCell).toFloat()
+            val bar = com.cartogenesis.worldgen.pipeline.IceSheet.profileMetres(
+                config.cellWidthKm.toFloat(), k, span)
+            var worstAcross = 0f; var worstDown = 0f; var overAcross = 0; var overDown = 0
+            var pairsAcross = 0; var pairsDown = 0
+            for (c in 0 until across * down) {
+                if (t[c] <= 0f) continue
+                val col = c % across; val row = c / across
+                if (col < across - 1 && t[c + 1] > 0f) {
+                    pairsAcross++
+                    val step = kotlin.math.abs(surfaceField[c] - surfaceField[c + 1]) * metres
+                    if (step > worstAcross) worstAcross = step
+                    if (step > bar) overAcross++
+                }
+                if (row < down - 1 && t[c + across] > 0f) {
+                    pairsDown++
+                    val step = kotlin.math.abs(surfaceField[c] - surfaceField[c + across]) * metres
+                    if (step > worstDown) worstDown = step
+                    if (step > bar) overDown++
+                }
+            }
+            println(("I3 PROBE surface step bar=%.0f m: across %d pairs, worst %.0f m, %d over;" +
+                " down %d pairs, worst %.0f m, %d over")
+                .format(bar, pairsAcross, worstAcross, overAcross, pairsDown, worstDown, overDown))
         }
         run {
             var tiny = 0; var under1 = 0; var under20 = 0; var under50 = 0; var all = 0

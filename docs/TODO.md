@@ -711,6 +711,22 @@
   trunk. The repair is in the tracing: rank the heads by the length of the path below them rather
   than by the flow at them, or trace each mouth upstream along its longest branch. 2026-09-12.
 
+- **Moglen's wet side flattens as the grid is refined.** R1's criterion has humid country carrying
+  0.73 of the semi-arid drainage density pooled at 512 and 0.79 at 2048, and per seed the narrowing
+  is larger than the pooled figure suggests: 1234 reads 0.81 at 512 and 0.97 at 2048, seed 7 0.80
+  and 0.92. Every seed still turns the curve over, so the clause holds at both grids, but the margin
+  is thinner where the grid is finer and the direction is consistent. The cause is in the criterion:
+  it reads the gradient to a cell's own receiver, a finer grid resolves the steep ground orographic
+  rain falls on, and the wet side therefore gains more from refinement than the dry does. Worth a
+  measurement at 4096 before deciding whether it converges or keeps going. 2026-09-21, R1.
+- **`EarthLikeness.strahlerStreamOrders` still walks the height order.** R1 moved the
+  longest-flow-path walk onto `FlowRouting.drainageOrder` after the height order was shown to lose
+  length on long paths — the drawn courses read 1.10 to 1.30 of the watercourse they lie on at 2048,
+  which cannot happen. Strahler's ordering has the same shape of walk over the same tree and the
+  same exposure, and it was left alone because Horton's ratios are asserted and passing and a chunk
+  should not move a green bar in passing. What it would cost is one sort; what it might move is the
+  bifurcation ratio, which would then want its own measurement of before and after. 2026-09-21, R1.
+
 ## Done
 
 - **A lake's outflow could be discarded as a headwater stub** (2026-09-21, R1) — the course from a

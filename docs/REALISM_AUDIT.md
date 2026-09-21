@@ -140,16 +140,19 @@ overlay from fields that exist, the second needs lithology.
 - **R1 Channel initiation and drainage density** — *landed 2026-09-21; see the ledger row for the
   figures.* A·S² threshold in square kilometres, the area weighted by the cell's rainfall against
   Earth's land mean and the threshold by the plant cover, with `maxRivers` and `minLengthCells`
-  retired and the drawing left one rule in kilometres. All four guards are asserted at 512 and at
-  2048: the density peaks in a dryland and falls on the wet side, which is W2's open finding earned
-  back; Hack's exponent is a clause again and its scale dependence is closed; Horton's ratio holds;
-  and the drawn courses cover what they stand for. **Two things this line did not foresee.** The
-  criterion's climate term is *not* mostly the runoff weight — the threshold rises with cover faster
-  than the area rises with rain, and it has to, or the curve does not turn over; the runoff weight
-  alone left the peak in humid country on three of four seeds. And **the paragraph above is wrong
-  that the constant threshold "gives one density everywhere"**: it gave a density that tracked the
-  terrain's slope, which correlates with rain, so the old network was *denser* in humid country,
-  not uniform. Visual: medium at 2048. GPU: declined with a cost print.
+  retired and the drawing left one rule in kilometres. All four guards are asserted on every seed at
+  512 and at 2048: the density peaks in a dryland and falls on the wet side, which is W2's open
+  finding earned back; Hack's exponent is a clause again and its scale dependence is down from nine
+  hundredths to four; Horton's ratio holds without the support-threshold allowance; and the drawn
+  courses cover exactly what they stand for. **Three things this line did not foresee.** The
+  exponent is 1.65 and not 2 — `A·S²` is Dietrich et al.'s landsliding threshold and Montgomery and
+  Dietrich's own steepland fit is `A ∝ S^-1.65`, so quoting the first for the second would be citing
+  one regime's paper for another's law. The climate term is *not* mostly the runoff weight: a weight
+  on the area can only push cells over a fixed bar, so the threshold's cover term is what makes the
+  curve turn over, and with it off the peak is in humid country on every seed. And **the paragraph
+  above is wrong that the constant threshold "gives one density everywhere"**: it gave a density
+  that tracked the terrain's slope, which correlates with rain, so the old network was *denser* in
+  humid country, not uniform. Visual: medium at 2048. GPU: declined at 0.20% of a 2048 world.
 - **R2 Rivers drawn as rivers** — width from discharge, braided reaches above the Leopold–Wolman
   slope, meander geometry below cell scale at export, floodplain width from deposition. Guard:
   none needed beyond the picture; visual: large on exports.

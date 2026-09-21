@@ -336,8 +336,8 @@ internal object ReliefShading {
      * lamp had it and lets only the relief move. `ReliefShadingTest` measures it at the haze it
      * derives and asserts this is that figure.
      *
-     * It was 0.936 until the 2.0.x line's routing came across, 0.9318 until S2's fourth pass and
-     * 0.9582 until I1. Nothing in this file changed any of those times; the ground did. The water
+     * It was 0.936 until the 2.0.x line's routing came across, 0.9318 until S2's fourth pass,
+     * 0.9582 until I1 and 0.9473 until I3. Nothing in this file changed any of those times; the ground did. The water
      * is routed by the steepest triangular facet now, so twelve rounds of erosion cut different
      * rock; the base relief carries a texture proportional to the ground's own relief, so ordinary
      * country came out smoother and caught more of the light; and I1 wrote the ice sheet's own
@@ -346,12 +346,19 @@ internal object ReliefShading {
      * down to 0.9421; and the merge of I1 with W2 moved it once more, to 0.9473, because W2's
      * pressure wind reaches the provisional climate the glaciation stage carves from, so the two
      * sides between them left a third world under the lamp and neither side's figure described
-     * it. Re-derived rather than argued with, because the figure is defined as that
+     * it. I3 moved it back up, to 0.9526, and it is the first of these moves that made the ground
+     * *smoother*: the sheet's surface is the lower envelope of the profiles rising from its whole
+     * margin instead of the profile rising from the nearest margin cell, so the steps of up to
+     * 1,965 m that a nearest-cell datum put between one ice cell and the next are gone, and the
+     * comb of one-cell four-hundred-metre walls that a balance of nothing was growing over the
+     * polar desert is gone with them. Both were sheer faces written into the elevation field, both
+     * were catching a shadow, and ordinary country is half a percent brighter without them.
+     * Re-derived rather than argued with, because the figure is defined as that
      * median and for no other reason — and re-derived rather than absorbed into the drift bar,
      * because leaving it stale would draw every map one and a half percent off the tone the lamp
      * set, which is the one thing this constant exists to hold still.
      */
-    private const val ORDINARY_GROUND = 0.9473f
+    private const val ORDINARY_GROUND = 0.9526f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

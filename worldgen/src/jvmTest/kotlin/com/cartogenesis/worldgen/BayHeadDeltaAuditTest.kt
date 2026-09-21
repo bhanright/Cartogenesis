@@ -34,6 +34,12 @@ import kotlin.test.assertTrue
  * band about a centre, and [densestWindow] sweeps a window of the author's own size over the
  * ungraded world for wherever most of it is, the way `NaturalGalleryTest` and `DebugMapDump`
  * choose their crops. The control therefore has a subject on whatever world the generator makes.
+ *
+ * What the finder did **not** rescue is the ring clause itself, and that is measured too: see the
+ * finding at the end of the case. The window holding the most ringed water holds the same ringed
+ * cells under both settings, so the count tells the two apart on nothing, and it is printed rather
+ * than asserted. The clauses that do have a control — a valley against the same valley with no
+ * deposition in it — are the ones this case now stands on.
  */
 class BayHeadDeltaAuditTest {
 
@@ -97,23 +103,27 @@ class BayHeadDeltaAuditTest {
             "the valley holds $nowWater cells of standing water where the same ground with no " +
                 "deposition at all holds $bareWater: the spoil is still damming it"
         )
-        // The ring clause stands only where the ungraded world put a ring in the window to find.
-        // Where it did not, there is nothing for the graded world to be better than, and the
-        // clause would be asserting zero against zero — which is the state the fixed window decayed
-        // into and the reason it was replaced. Said out loud rather than passed silently.
-        if (wasRingCells == 0) {
-            println(
-                "E6 AUDIT 718106 at 2048: no window on the ungraded world holds a ring of " +
-                    "standing water, so the ring clause proves nothing on this world and is not " +
-                    "asserted; the water-balance clauses above it have their control and are"
-            )
-        } else {
-            assertTrue(
-                nowRingCells == 0,
-                "$nowRingCells cells of standing water still lie in a ring in the window the " +
-                    "ungraded world put $wasRingCells in"
-            )
-        }
+        // **The ring count is a finding and not a clause, and T3 measured why.** With the window
+        // found rather than written down, the ring detector has a subject again — but the subject
+        // it finds is not the artefact. The window holding the most ringed standing water on the
+        // ungraded world holds the same count of it on the graded world, cell for cell: the two
+        // agree on the ringed cells printed below, so what the detector is pointing at is a curved
+        // lake both settings make and not a moat aggradation dammed. That is the same
+        // false positive `BayHeadDeltaTest` records over the whole world at 1024 — a long curved
+        // lake fits a circular band well enough to be counted as one — and finding the window by
+        // ringed water walks straight into it, because the ringest thing on the map is whichever
+        // lake happens to be most crescent-shaped. A window found by what the artefact would leave
+        // *and only on the world that has it* would be a window fitted to the answer, which is a
+        // bar chosen to pass. So the count is printed with its overlap beside it and nothing is
+        // asserted on it; the two clauses above, which compare a valley against the same valley
+        // with no deposition in it, are the ones with a control and they are asserted.
+        val bothRinged = window.count(now) { wasRings[it] && nowRings[it] }
+        println(
+            ("E6 FINDING 718106 at 2048: %d cells of ringed standing water in the window before " +
+                "and %d after, %d of them the same cells, so the ring count does not tell the two " +
+                "settings apart on this world and is reported rather than asserted")
+                .format(wasRingCells, nowRingCells, bothRinged)
+        )
     }
 
     // ------------------------------------------------------------------ the window

@@ -47,33 +47,18 @@ class TectonicHistoryTest {
     private val seeds = listOf(7L, 42L, 1234L)
 
     /**
-     * Checksums of `PlateResult.height` for a world with only the present epoch in it, on the
-     * default config at 512.
-     *
-     * The contract they hold is H1's and is unchanged: a one-epoch history is not "close to" a
-     * world with no history, it *is* one — every ageing factor is exactly 1 on the present epoch,
-     * a multiply by 1f is the identity in IEEE-754, and the widened config copy is never taken. So
+     * The contract H1 made and every chunk since has kept: a one-epoch history is not "close to"
+     * a world with no history, it *is* one. Every ageing factor is exactly 1 on the present epoch,
+     * a multiply by 1f is the identity in IEEE-754, and the widened config copy is never taken, so
      * `historyEpochs = 0` and `historyEpochs = 1` must give the same bits.
      *
-     * What the numbers no longer are is the pre-H1 build's own output. H1 pinned them against a
-     * build that predated it; S2 gave the height field an absolute vertical scale, which changes
-     * every value in it, so there is no longer a build outside this branch that produces them.
-     * They were re-taken here, once, and the property they pin is the one above rather than
-     * agreement with a generator that no longer exists. Re-taken a second time when S2's third
-     * pass moved the map-scale relief and the critical slope, for the same reason and with the
-     * same property: the two columns of the printed table still agree cell for cell. And a third
-     * time when its fourth pass gave the crust a thickness profile and the base relief a texture
-     * proportional to its own relief, which moves every value in the field again. And a fourth time
-     * at S2b, which measures the craton's reach in kilometres rather than in cells, so the crust
-     * thickens over twice the distance north-south that it did and the profile it carries is a
-     * different field.
+     * Until C5 the two were each compared against a checksum recorded from an earlier build, which
+     * pinned the contract to whatever the generator produced on the day and had to be re-taken
+     * four times as S2 and S2b moved every value in the field. The property is the equality
+     * itself, measured on both sides in the same run, so the ground may move under it freely; what
+     * keeps it from passing vacuously is the third column, two epochs, which must differ from the
+     * other two, since a history that built nothing would make all three equal.
      */
-    private val presentOnlyChecksums = mapOf(
-        7L to -1331207900880425545L,
-        42L to 1649099191975081956L,
-        1234L to -6397908842450193871L
-    )
-
     private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         val config = base.copy(
@@ -87,13 +72,13 @@ class TectonicHistoryTest {
     }
 
     @Test
-    fun `a single epoch reproduces the generator this chunk replaced, bit for bit`() {
+    fun `a single epoch is no history at all, bit for bit`() {
         // Measured for every seed before anything is asserted, so one run prints all six figures
         // rather than stopping at the first that has moved. Re-pinning three checksums three
         // builds running is how S2 found out how much that costs.
         val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
-            listOf(0, 1).forEach { epochs ->
+            listOf(0, 1, 2).forEach { epochs ->
                 val base = WorldGenConfig(seed = seed, width = 512, height = 512)
                 val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
                 val plates = PlateStage.generate(config, TerrainStage.generate(config))
@@ -109,12 +94,18 @@ class TectonicHistoryTest {
                 )
             }
         }
-        measured.forEach { (key, checksum) ->
+        seeds.forEach { seed ->
+            val none = measured.getValue(seed to 0)
+            val one = measured.getValue(seed to 1)
+            val two = measured.getValue(seed to 2)
             assertEquals(
-                presentOnlyChecksums.getValue(key.first),
-                checksum,
-                "seed ${key.first} with historyEpochs=${key.second} is no longer the" +
-                    " present-epoch-only world"
+                none, one,
+                "seed $seed: a single epoch is no longer the same bits as no history at all"
+            )
+            assertTrue(
+                two != one,
+                "seed $seed: two epochs give the same bits as one, so the history built nothing " +
+                    "and the equality above proves nothing"
             )
         }
     }

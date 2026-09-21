@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
  */
 class PenAndInkTest {
 
-    private companion object {
+    internal companion object {
 
         /**
          * How far the ink may run from the aspect, in degrees, averaged over the land it is drawn
@@ -280,6 +280,14 @@ class PenAndInkTest {
             "PENINK fingerprints at 512: " +
                 drawn.entries.joinToString(", ") { "${it.key.name} ${it.value}" }
         )
+        // The property beside the records: no two styles collapse onto one drawing. A style
+        // whose levers all read as another's would pass its record only by coincidence and
+        // fail this outright.
+        val collapsed = drawn.entries.groupBy { it.value }.filter { it.value.size > 1 }
+        assertTrue(
+            collapsed.isEmpty(),
+            "styles rendering identical pixels: " + collapsed.values.joinToString { group -> group.joinToString("/") { it.key.name } }
+        )
         RECORDED_STYLES.forEach { (style, expected) ->
             assertEquals(
                 expected,
@@ -380,7 +388,7 @@ class PenAndInkTest {
     // ---- measurements ----
 
     /** The ordinary 17-and-31 hash over every pixel. Order matters, which is the point. */
-    private fun fingerprint(pixels: IntArray): Int {
+    internal fun fingerprint(pixels: IntArray): Int {
         var hash = 17
         for (pixel in pixels) hash = hash * 31 + pixel
         return hash

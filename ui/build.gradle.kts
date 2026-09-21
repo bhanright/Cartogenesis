@@ -36,10 +36,12 @@ kotlin {
                     // 128-cell world in the browser to ask whether the interface gets the thread
                     // back between stages. Most of that generation's cost does not shrink with the
                     // grid — the energy balance solves 240 bands through 360 steps of twenty years
-                    // however small the map is, several times over — so the world is small and the
-                    // wait is not. Sixty seconds is a hang, which is what a timeout should catch;
-                    // two is the arithmetic finishing. See TODO.md for the cost itself.
-                    timeout = "60s"
+                    // however small the map is — so the world is small and the wait is not. The
+                    // hosted runner measured that generation at 69 s, so the sixty seconds this
+                    // once allowed was the arithmetic being cut off and not a hang being caught.
+                    // The test carries its own derived limit (three times the measured cost); this
+                    // one only has to stand above it. See TODO.md for the cost itself.
+                    timeout = "300s"
                 }
             }
         }

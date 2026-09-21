@@ -8,6 +8,8 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * That a generation lets the interface draw, and does so at every stage.
@@ -30,7 +32,8 @@ import kotlinx.coroutines.test.runTest
 class GenerationProgressTest {
 
     @Test
-    fun `the interface gets the thread back at every stage of a generation`() = runTest {
+    fun `the interface gets the thread back at every stage of a generation`() = runTest(timeout = LONGEST_WAIT) {
+        val started = TimeSource.Monotonic.markNow()
         /** What the interface is currently showing, which is all a repaint would read. */
         var showing: String? = null
 
@@ -56,6 +59,7 @@ class GenerationProgressTest {
 
         println("PROGRESS the interface painted ${painted.size} of ${STAGE_LABELS.size} stages")
         println("PROGRESS $painted")
+        println("PROGRESS the generation and its painter took ${started.elapsedNow()} against $LONGEST_WAIT allowed")
         assertEquals(
             STAGE_LABELS,
             painted,
@@ -103,6 +107,20 @@ class GenerationProgressTest {
          * guard is about the interleaving rather than about the generator's speed.
          */
         val SMALL_WORLD = WorldGenConfig(seed = 42L, width = 128, height = 128)
+
+        /**
+         * How long the generation above may take before the test gives up on it.
+         *
+         * The coroutine test framework's own default is sixty seconds, a figure about unit tests
+         * and not about this one, which runs a whole generation in the browser: most of that cost
+         * does not shrink with the grid, since the energy balance solves 240 bands through 360
+         * steps of twenty years however small the map is. On the hosted runner that generation was
+         * measured at 69 s from the test's start to the framework giving up, so sixty was not a
+         * hang being caught, it was the arithmetic being cut off. Three times the measured cost,
+         * so a runner half again as slow still finishes and a real hang still fails inside the
+         * five minutes the module's browser harness allows.
+         */
+        val LONGEST_WAIT = 210.seconds
 
         val STAGE_LABELS: List<String> = GenerationStage.entries.map { it.label }
     }

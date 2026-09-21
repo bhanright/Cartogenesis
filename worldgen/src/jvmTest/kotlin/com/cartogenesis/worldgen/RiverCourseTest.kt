@@ -30,6 +30,22 @@ class RiverCourseTest {
         /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val SIDE = 512
+
+        /**
+         * How far short of its own longest watercourse one drawn course may fall, in kilometres.
+         *
+         * A metre, which is a tolerance on the arithmetic and not on the rule. The drawn length and
+         * the longest watercourse are summed over the same steps in the same order in doubles, so
+         * they agree to the last bit when the course is right; a metre is there because "the same
+         * order" is a property of two loops rather than of one. Measured, no course needs it: the
+         * worst coverage on the four seeds is 1.000 and so is the pooled figure.
+         *
+         * It was twelve kilometres — one north-south step — for the length of one run, on the
+         * theory that two heads of exactly equal length could tie to the wrong arm. They cannot:
+         * the sort's tie-break is the cell index and the trace follows whichever arm it picked the
+         * whole way down, so the drawn course is that arm's full length either way.
+         */
+        const val ONE_STEP_OF_SLACK_KM = 0.001
     }
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
@@ -47,12 +63,24 @@ class RiverCourseTest {
      */
     private class Network(val world: WorldMap) {
         val isChannel: BooleanArray
-        /** The longest watercourse ending at each channel cell, in cells, itself included. */
-        val longestAbove: IntArray
+
+        /** The ground one D8 step covers, so the drawn courses can be measured the same way. */
+        lateinit var stepKilometres: (Int, Int) -> Double
+            private set
+        /**
+         * The longest watercourse ending at each channel cell, in kilometres.
+         *
+         * Kilometres since R1 and not cells, because the tracer ranks its heads in kilometres and
+         * a guard has to ask the question the rule answers. On a world twice as wide as it is tall
+         * the two disagree: a cell is 23.4 km across and 11.7 down at 512, so six cells north is
+         * less ground than five cells east. `RiverStage.kilometresToTheWater` has the case that
+         * found it.
+         */
+        val longestAbove: DoubleArray
         /** The largest discharge among the headwaters that drain to each channel cell. */
         val biggestHead: FloatArray
-        /** How long the course from that headwater down to each cell runs, in cells. */
-        val fromBiggestHead: IntArray
+        /** How far the course from that headwater down to each cell runs, in kilometres. */
+        val fromBiggestHead: DoubleArray
 
         init {
             val w = world.width
@@ -65,9 +93,25 @@ class RiverCourseTest {
             // Downstream order: a cell's answer needs its donors' answers, and every donor carries
             // less water than it does, so rising discharge is the order to walk in.
             val order = (0 until cells).filter { isChannel[it] }.sortedBy { flow[it] }
-            longestAbove = IntArray(cells) { 1 }
+            val scale = world.config.scale
+            val cellWidthKm = scale.cellWidthKm(w)
+            val cellHeightKm = scale.cellHeightKm(world.height)
+            val diagonalKm =
+                kotlin.math.sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
+            fun stepKm(from: Int, to: Int): Double {
+                var columnStep = (to % w) - (from % w)
+                if (columnStep > w / 2) columnStep -= w
+                if (columnStep < -w / 2) columnStep += w
+                val rowStep = (to / w) - (from / w)
+                return when {
+                    columnStep != 0 && rowStep != 0 -> diagonalKm
+                    columnStep != 0 -> cellWidthKm
+                    else -> cellHeightKm
+                }
+            }
+            longestAbove = DoubleArray(cells)
             biggestHead = FloatArray(cells)
-            fromBiggestHead = IntArray(cells) { 1 }
+            fromBiggestHead = DoubleArray(cells)
             val hasUpstream = BooleanArray(cells)
             order.forEach { cell ->
                 val below = target[cell]
@@ -77,14 +121,16 @@ class RiverCourseTest {
                 if (!hasUpstream[cell]) biggestHead[cell] = flow[cell]
                 val below = target[cell]
                 if (below < 0 || !isChannel[below]) return@forEach
-                if (longestAbove[cell] + 1 > longestAbove[below]) {
-                    longestAbove[below] = longestAbove[cell] + 1
+                val step = stepKm(cell, below)
+                if (longestAbove[cell] + step > longestAbove[below]) {
+                    longestAbove[below] = longestAbove[cell] + step
                 }
                 if (biggestHead[cell] > biggestHead[below]) {
                     biggestHead[below] = biggestHead[cell]
-                    fromBiggestHead[below] = fromBiggestHead[cell] + 1
+                    fromBiggestHead[below] = fromBiggestHead[cell] + step
                 }
             }
+            this.stepKilometres = ::stepKm
         }
     }
 
@@ -99,31 +145,37 @@ class RiverCourseTest {
      */
     @Test
     fun `a river is its own longest watercourse`() {
-        var drawnTotal = 0L
-        var longestTotal = 0L
-        var beforeTotal = 0L
+        var drawnTotal = 0.0
+        var longestTotal = 0.0
+        var beforeTotal = 0.0
         SEEDS.forEach { seed ->
             val network = Network(world(seed))
             val world = network.world
-            var drawnHere = 0L
-            var longestHere = 0L
-            var beforeHere = 0L
+            var drawnHere = 0.0
+            var longestHere = 0.0
+            var beforeHere = 0.0
             var courses = 0
             var worst = 1.0
             world.rivers.rivers.forEach { river ->
                 val last = river.cells.last { network.isChannel[it] }
                 if (river.cells.last() == last) return@forEach // stops on another river
                 courses++
-                val drawn = river.cells.count { network.isChannel[it] }
+                var drawn = 0.0
+                for (step in 0 until river.cells.size - 1) {
+                    if (!network.isChannel[river.cells[step]]) continue
+                    if (!network.isChannel[river.cells[step + 1]]) continue
+                    drawn += network.stepKilometres(river.cells[step], river.cells[step + 1])
+                }
                 val longest = network.longestAbove[last]
                 drawnHere += drawn
                 longestHere += longest
                 beforeHere += network.fromBiggestHead[last]
-                worst = minOf(worst, drawn.toDouble() / longest)
+                if (longest <= 0.0) return@forEach
+                worst = minOf(worst, drawn / longest)
                 assertTrue(
-                    drawn >= longest,
-                    "seed $seed: the course into cell $last is $drawn cells where the longest " +
-                        "watercourse above it is $longest"
+                    drawn >= longest - ONE_STEP_OF_SLACK_KM,
+                    "seed $seed: the course into cell $last is ${"%.1f".format(drawn)} km where" +
+                        " the longest watercourse above it is ${"%.1f".format(longest)}"
                 )
             }
             drawnTotal += drawnHere
@@ -132,13 +184,12 @@ class RiverCourseTest {
             println(
                 ("RIVERCOURSE seed=$seed $courses courses into water, coverage %.3f (worst %.3f), " +
                     "%.3f from the biggest headwater").format(
-                    drawnHere.toDouble() / longestHere, worst,
-                    beforeHere.toDouble() / longestHere
+                    drawnHere / longestHere, worst, beforeHere / longestHere
                 )
             )
         }
-        val coverage = drawnTotal.toDouble() / longestTotal
-        val before = beforeTotal.toDouble() / longestTotal
+        val coverage = drawnTotal / longestTotal
+        val before = beforeTotal / longestTotal
         println(
             "RIVERCOURSE pooled coverage %.3f now against %.3f from the biggest headwater"
                 .format(coverage, before)

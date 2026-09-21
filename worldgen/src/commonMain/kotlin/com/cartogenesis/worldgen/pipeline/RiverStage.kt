@@ -555,7 +555,9 @@ object RiverStage {
             if (target >= 0 && isChannel[target]) hasUpstream[target] = true
         }
 
-        val courseBelow = lengthsToTheWater(cellCount, isChannel, flowTarget)
+        val courseBelowKm = kilometresToTheWater(
+            cellCount, cellsAcross, isChannel, flowTarget, cellWidthKm, cellHeightKm, diagonalKm
+        )
 
         // Headwaters, the farthest from the water first, so a river claims its own longest
         // watercourse before any tributary can take part of it.
@@ -563,16 +565,15 @@ object RiverStage {
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) sourceCount++
         }
-        // The length of the course below a head in the high half of the key and the cell index in
-        // the low half, so one sort puts the farthest head last and ties fall to the lower cell
-        // index on every platform. A count of cells is never negative, so it sorts in the same
-        // order as its values — unlike FlowRouting.encode, which carries elevations.
+        // The kilometres below a head packed above the cell index, through the same encoding
+        // every other ordering in this pipeline uses, so one sort puts the farthest head last and
+        // ties fall to the lower cell index on every platform.
         val sourcesByCourseLength = LongArray(sourceCount)
         var written = 0
         for (cell in 0 until cellCount) {
             if (isChannel[cell] && !hasUpstream[cell]) {
                 sourcesByCourseLength[written++] =
-                    (courseBelow[cell].toLong() shl 32) or cell.toLong()
+                    FlowRouting.encode(courseBelowKm[cell], cell)
             }
         }
         sourcesByCourseLength.sort()
@@ -625,34 +626,56 @@ object RiverStage {
     }
 
     /**
-     * How many channel cells lie between each channel cell and the water it ends at, itself
-     * included: the length of the watercourse below it.
+     * How far it is from each channel cell to the water it ends at, in kilometres: the length of
+     * the watercourse below it.
+     *
+     * **Kilometres and not cells, and the difference is not cosmetic.** This world is twice as wide
+     * as it is tall on a square grid, so a cell is half as tall as it is wide — 23.4 km across and
+     * 11.7 down at 512 — and a course of six cells running north is shorter ground than a course of
+     * five running east. Ranked by cells, the tracer would hand the map's longest course to the
+     * branch with the most *steps* in it, and where the shorter-in-cells branch was longer in
+     * kilometres the length rule below would then drop the one it had preferred and draw the other.
+     * Seed 7 at 512 had one: a six-cell head whose course was 58 km, under the hundred the drawing
+     * asks for, releasing its claim to a five-cell head of 117 km. Measured on the ground there is
+     * no such case, because the two rules are then asking the same question.
      *
      * The flow targets are a forest — every cell has one receiver, strictly lower on the filled
-     * surface — so the answer for a cell is one more than the answer for its receiver, and the
+     * surface — so the answer for a cell is its own step plus the answer for its receiver, and the
      * whole field falls out of one memoised walk per unvisited cell. The walk is bounded by the
-     * grid for the same reason the trace below is: a routing bug that made a ring would otherwise
+     * grid for the same reason the trace above is: a routing bug that made a ring would otherwise
      * hang the generator rather than draw something odd.
      */
-    private fun lengthsToTheWater(
+    private fun kilometresToTheWater(
         cellCount: Int,
+        cellsAcross: Int,
         isChannel: BooleanArray,
-        flowTarget: IntArray
-    ): IntArray {
-        val below = IntArray(cellCount)
+        flowTarget: IntArray,
+        cellWidthKm: Float,
+        cellHeightKm: Float,
+        diagonalKm: Float
+    ): FloatArray {
+        val below = FloatArray(cellCount)
         val walked = ArrayList<Int>()
         for (start in 0 until cellCount) {
-            if (!isChannel[start] || below[start] != 0) continue
+            if (!isChannel[start] || below[start] != 0f) continue
             walked.clear()
             var cell = start
-            while (cell >= 0 && isChannel[cell] && below[cell] == 0 && walked.size < cellCount) {
+            while (cell >= 0 && isChannel[cell] && below[cell] == 0f && walked.size < cellCount) {
                 walked.add(cell)
                 cell = flowTarget[cell]
             }
-            var length = if (cell >= 0 && isChannel[cell]) below[cell] else 0
+            var kilometres = if (cell >= 0 && isChannel[cell]) below[cell] else 0f
             for (k in walked.indices.reversed()) {
-                length++
-                below[walked[k]] = length
+                val here = walked[k]
+                val next = if (k + 1 < walked.size) walked[k + 1] else cell
+                kilometres += if (next < 0) {
+                    cellHeightKm
+                } else {
+                    stepKilometres(
+                        here, next, cellsAcross, cellWidthKm, cellHeightKm, diagonalKm
+                    )
+                }
+                below[here] = kilometres
             }
         }
         return below

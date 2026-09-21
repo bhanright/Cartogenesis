@@ -555,11 +555,12 @@ class GroundTextureTest {
          * What `main` at 2eb0f0d measured, by this arithmetic, on these five seeds.
          *
          * Taken by running this measurement on that tree rather than remembered: the belt flank
-         * reads 77, 94, 133, 123 and 140 m, and the drainage density 0.0030, 0.0030, 0.0019,
-         * 0.0025 and 0.0024 km/km2.
+         * reads 77, 94, 133, 123 and 140 m. The drainage density read 0.0030, 0.0030, 0.0019,
+         * 0.0025 and 0.0024 km/km2 there and is re-pinned at R1 — see
+         * [DRAINAGE_DENSITY_ALLOWANCE] for what moved it and what did not.
          */
         const val MAIN_BELT_FLANK_TEXTURE_METRES = 113.0
-        const val MAIN_DRAINAGE_DENSITY_KM_PER_KM2 = 0.00256
+        const val MAIN_DRAINAGE_DENSITY_KM_PER_KM2 = 0.0078
 
         /**
          * How far the drainage density may sit from the pre-S2 tree's, either way.
@@ -568,11 +569,17 @@ class GroundTextureTest {
          * 275 km² support threshold is not a figure this project has looked up — which is in
          * `TODO.md`. It was a fifth until S2's fourth pass and is a third now, for a reason that is
          * the chunk's own: the crust has a thickness that rises inland, so a continent has a slope
-         * of its own and the water that used to stand on it runs. The two figures move together
-         * and both moved toward Earth — the lake share of land fell from 1.73% to 0.70% against
-         * Earth's 1.48%, and the density rose from 0.00256 to 0.0032 — so holding the second
-         * inside a fifth of a tree whose continents were level would be holding on to the ponding
-         * the first measures.
+         * of its own and the water that used to stand on it runs.
+         *
+         * **Re-pinned at R1, and the reference moved rather than the allowance.** This measurement
+         * is over the courses the map *draws*, and what R1 changed is which courses those are: the
+         * cap of four hundred was the binding rule at 512 as well as at 2048, and taking it off
+         * trebles the drawn length without adding a cell of channel to the terrain. Measured on the
+         * five seeds after R1: 0.0072, 0.0094, 0.0075, 0.0074 and 0.0073, pooled 0.0078, against
+         * 0.0026 before. Re-pinning to the new figure is what this constant is for — it says what
+         * `main` measured by this arithmetic — and the third of allowance around it is untouched,
+         * so the bar is exactly as tight as it was. It is still not an Earth figure and the
+         * `TODO.md` entry that says so still stands.
          */
         const val DRAINAGE_DENSITY_ALLOWANCE = 1.35
 

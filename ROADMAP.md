@@ -9,8 +9,8 @@ table disagree, so there is nothing to keep in step by hand.
 | Release | What it brings |
 | --- | --- |
 | 3.0.0 | The realism audit: the plates, the seas, the air and the water measured against Earth, and corrected where the measurement showed how. |
-| 3.1.0 (current) | Rainfall that holds up at larger map sizes, monsoon coasts, ice sheets with the shape and weight of ice, and softer woodland edges. |
-| 3.2 | Erosion shaped by rain and vegetation, and rivers that begin with the slope and the flow. |
+| 3.1.0 | Rainfall that holds up at larger map sizes, monsoon coasts, ice sheets with the shape and weight of ice, and softer woodland edges. |
+| 3.2.0 (current) | Erosion shaped by rain and vegetation, rivers that begin with the slope and the flow, and ice sheets without stripes down their flanks. |
 | 3.3 | Waves that shape beaches, spits and barrier islands. |
 | 3.x | Saved worlds that keep opening after an update. |
 | 3.x | Wetter continental interiors, and cold currents that make coastal deserts. |

@@ -207,20 +207,8 @@ class PenAndInkTest {
          * *smoother*: both of those artefacts were sheer faces in the elevation field and both
          * were catching a shadow. Re-taken last, after the two module suites had settled.
          */
-        val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 134383402,
-            MapStyle.VELLUM to 694054057,
-            MapStyle.INK_WASH to -2128395974,
-            MapStyle.NAUTICAL to -1223318882,
-            MapStyle.MIDNIGHT to -929263577,
-            MapStyle.SCHOOLROOM to -1009162886,
-            MapStyle.VERDANT to -480432821,
-            MapStyle.SCROLL to 1321030905,
-            MapStyle.PEN_AND_INK to 196471673,
-            MapStyle.MARS to 799156801,
-            MapStyle.NATURAL to -9294290,
-            MapStyle.CLEAR to 730586730
-        )
+        /** The twelve records live in [RecordedRenders], with the one script that re-takes them. */
+        val RECORDED_STYLES: Map<MapStyle, Int> get() = RecordedRenders.STYLES_AT_512
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery

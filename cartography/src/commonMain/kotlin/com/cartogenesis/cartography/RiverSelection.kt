@@ -57,7 +57,7 @@ enum class RiverInk(val label: String) {
  *
  * **Which figure carries to another scale, and which does not.** Between those two tiers the
  * *length* drawn goes as the 0.533 power of the change in scale, which is Töpfer and Pillewizer's
- * square root to within seven hundredths, so the ink is carried by the published law and the
+ * square root to within three hundredths, so the ink is carried by the published law and the
  * measured exponent stands beside it as the check. The *count* goes as the 0.751 power, which is
  * not the law and is what small-scale generalisation actually does: a sheet at half the scale does
  * not draw half-length rivers, it drops the short courses outright and keeps the long trunks
@@ -100,9 +100,10 @@ object RiverSelection {
      *
      * Natural Earth's `ne_50m_rivers_lake_centerlines`, `featurecla = River`: 359 courses,
      * 254 284 km over Earth's 148.94 million km² of land. The 1:10 000 000 tier carried here by
-     * [inkExponent] gives 0.001800, so the two tiers bracket 0.001754 within three per cent of
-     * each other; the nearer tier is taken because this map's own scales are 1:22M and 1:50M.
-     * See the class comment for the whole derivation.
+     * [INK_EXPONENT] gives 0.001800, five and a half per cent above this, so the two tiers bracket
+     * 0.001754 and neither is more than three per cent from it; the nearer tier is taken outright
+     * because this map's own two scales are 1:22M and 1:50M. See the class comment for the whole
+     * derivation, and `RiverSelectionTest` for the check that the two still agree.
      */
     const val DRAWN_RIVER_KM_PER_SQUARE_KM_AT_FIFTY_MILLION: Double = 0.001707
 
@@ -376,7 +377,7 @@ object RiverSelection {
      * a length. A step east or west across the world's seam is one cell like any other, not the
      * width of the map.
      */
-    internal fun courseKilometres(world: WorldMap, river: River): Double {
+    fun courseKilometres(world: WorldMap, river: River): Double {
         val cellsAcross = world.width
         val cellWidthKm = world.config.cellWidthKm
         val cellHeightKm = world.config.cellHeightKm

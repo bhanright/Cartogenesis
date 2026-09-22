@@ -84,10 +84,13 @@ data class MapSheet(
 
     companion object {
         /**
-         * A cell to a pixel, where nothing is dropped and nothing is simplified.
+         * A cell to a pixel: the largest a sheet of this world is ever drawn at.
          *
-         * What an export and every offline render draw on: the world was generated at the size it
-         * is being drawn at, so the scale is 1 and Töpfer's law asks for every feature there is.
+         * What an export and every offline render draw on, the world having been generated at the
+         * size it is being drawn at. Nothing is simplified here — the coast keeps every vertex it
+         * has — but the rivers are still selected, because a sheet at a cell to a pixel still has
+         * a scale (about 1:22 000 000 for a 2048 world, 1:88 000 000 for a 512 one) and
+         * [RiverSelection] answers to that rather than to the grid.
          */
         val UNGENERALISED: MapSheet = MapSheet(1f)
 

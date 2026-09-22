@@ -17,7 +17,9 @@ import kotlin.test.assertTrue
  * belongs to the sheet's scale rather than to the grid the world was generated on — which is the
  * one thing the radical law on the traced count cannot do, and is shown failing below.
  *
- * All at 512. The same measurements at 1024 and 2048, on the author's own world, are
+ * At 512, but for the one clause that cannot be: a rule that answers to the sheet rather than to
+ * the grid can only be shown to by drawing two grids at one sheet, so the last case generates a
+ * 1024 world as well. The same measurements at 2048, on the author's own world, are
  * `RiverSelectionAuditTest` in `:desktop`.
  */
 class RiverSelectionTest {
@@ -52,17 +54,29 @@ class RiverSelectionTest {
          * How far two generation resolutions' densities may sit from each other at one output scale.
          *
          * Much tighter, because this one is arithmetic rather than geography: the two sheets have
-         * the same representative fraction and so the same budget per square kilometre of land, and
-         * the only slack is the last course each fits — at most one course of a hundred kilometres
-         * or more against a budget of tens of thousands — plus what the two grids' coastlines make
-         * of the same world's land area. Five per cent covers both with room to spare.
+         * the same representative fraction and so the same budget per square kilometre of land,
+         * and the land area cancels between the budget and the density reported against it. What
+         * is left is the last chain each grid could not fit, which is **not bounded** in general —
+         * a refused chain can be a trunk and its tributaries and run to thousands of kilometres,
+         * and a thin network can run out of courses before the budget runs out. So five per cent
+         * is a regression tolerance for networks as rich as these and not a guarantee: the
+         * headroom measured on these seeds is 21 to 37 km against budgets near 35 000, and the
+         * spread between grids reads 0.0 to 0.1 per cent. The cases below print the headroom, so a
+         * world that ran out of network says so rather than passing quietly.
          */
         const val ACROSS_RESOLUTIONS_BAND = 0.05
     }
 
+    /**
+     * One seed at one grid, the way the application reaches a grid above 512.
+     *
+     * Through [WorldGenConfig.atResolution], which carries the tectonic widths measured in cells;
+     * constructing the config at 1024 outright would leave a 512-calibrated belt half as wide and
+     * the two grids would not be the same world.
+     */
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = seed, width = side, height = side)
+            WorldGenConfig(seed = seed, width = SIDE, height = SIDE).atResolution(side, side)
         )
 
     /** The sheet a whole world of [cellsAcross] cells is shown on in a [PANE_PIXELS_ACROSS] pane. */
@@ -74,7 +88,8 @@ class RiverSelectionTest {
     @Test
     fun `the reference's two tiers agree under the law that carries them`() {
         // Natural Earth's 1:10M tier, 0.004025 km of drawn river per km2 of land, carried to the
-        // 1:50M tier by Töpfer's square root, against the 0.001707 measured there.
+        // 1:50M tier by Töpfer's square root: 0.001800 against the 0.001707 measured there, which
+        // is five and a half per cent, and is the whole of what the constant's KDoc claims.
         val fromTheFinerTier = 0.004025 * kotlin.math.sqrt(10.0 / 50.0)
         val measured = RiverSelection.DRAWN_RIVER_KM_PER_SQUARE_KM_AT_FIFTY_MILLION
         val disagreement = abs(fromTheFinerTier - measured) / measured
@@ -131,8 +146,10 @@ class RiverSelectionTest {
         SEEDS.forEach { seed ->
             val map = world(seed)
             val chosen = RiverSelection.select(map, MapSheet.UNGENERALISED)
+            // A hair of room for the summation: acceptance adds chain by chain and this adds
+            // course by course, over different orders, so the two totals differ in the last bits.
             assertTrue(
-                chosen.drawnKilometres <= chosen.budgetKilometres,
+                chosen.drawnKilometres <= chosen.budgetKilometres * (1.0 + 1e-9),
                 "seed $seed drew ${chosen.drawnKilometres.round()} km against a budget of " +
                     "${chosen.budgetKilometres.round()}"
             )
@@ -186,6 +203,13 @@ class RiverSelectionTest {
                 println(
                     "X1C $seed at ${sheet.pixelsPerCell} px per cell: ${chosen.drawnCount} drawn, " +
                         "$tributaries of them joining a drawn trunk"
+                )
+                // Without this the clause above would pass on a reconstruction that found no
+                // trunks at all, which is the one way it could be wrong and look right.
+                assertTrue(
+                    tributaries > 0,
+                    "seed $seed drew ${chosen.drawnCount} courses and not one of them joined " +
+                        "another, so the closure clause examined nothing"
                 )
             }
         }
@@ -241,36 +265,86 @@ class RiverSelectionTest {
         )
     }
 
-    // ---- what the crowding rule spreads, printed ------------------------------------------------
+    // ---- the crowding lattice, against the same selection without it ---------------------------
 
     @Test
-    fun `how the drawn mouths are spread, against the reference's own spacing`() {
+    fun `the crowding lattice spreads the ink, and the same budget without it does not`() {
         SEEDS.forEach { seed ->
             val map = world(seed)
             val sheet = MapSheet.UNGENERALISED
-            val chosen = RiverSelection.select(map, sheet)
-            listOf(RiverInk.EARTH_DENSITY, RiverInk.RADICAL_LAW).forEach { rule ->
-                val drawn = RiverSelection.drawnOn(map, sheet, rule)
-                val perSquare = HashMap<Long, Int>()
-                drawn.forEach { river ->
-                    val end = river.cells[river.cells.size - 1]
-                    val across = (end % map.width * map.config.cellWidthKm / chosen.crowdingPitchKm)
-                        .toLong()
-                    val down = (end / map.width * map.config.cellHeightKm / chosen.crowdingPitchKm)
-                        .toLong()
-                    val key = (down shl 32) or across
-                    perSquare[key] = (perSquare[key] ?: 0) + 1
-                }
-                val fullest = perSquare.values.maxOrNull() ?: 0
+            val spread = RiverSelection.select(map, sheet)
+            // The control: the same Earth budget and the same discharge ranking, with the lattice
+            // switched off. It is the only thing that differs, so a difference is the lattice's.
+            val unspread = RiverSelection.select(map, sheet, spreadByCrowdingLattice = false)
+            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverInk.RADICAL_LAW)
+
+            val fullestSpread = fullestSquare(map, drawnEnds(map, spread), spread.crowdingPitchKm)
+            val fullestUnspread =
+                fullestSquare(map, drawnEnds(map, unspread), spread.crowdingPitchKm)
+            val fullestLaw = fullestSquare(
+                map, byTheLaw.map { it.cells[it.cells.size - 1] }, spread.crowdingPitchKm
+            )
+            println(
+                "X1C $seed crowding, on a ${spread.crowdingPitchKm.round()} km lattice: " +
+                    "the lattice on draws ${spread.drawnCount} courses with $fullestSpread in its " +
+                    "fullest square; off, ${unspread.drawnCount} with $fullestUnspread; the " +
+                    "radical law ${byTheLaw.size} with $fullestLaw. Natural Earth at 1:50M draws " +
+                    "2.41 courses per million km2, one to every 645 km of spacing."
+            )
+            assertTrue(
+                fullestSpread < fullestUnspread,
+                "seed $seed put $fullestSpread courses in its fullest square with the lattice on " +
+                    "and $fullestUnspread with it off, so the lattice is doing nothing"
+            )
+        }
+    }
+
+    // ---- that the budget is spent on the biggest rivers ------------------------------------------
+
+    @Test
+    fun `the largest river on the map is always drawn`() {
+        SEEDS.forEach { seed ->
+            val map = world(seed)
+            listOf(MapSheet.UNGENERALISED, paneSheet(map.width)).forEach { sheet ->
+                val chosen = RiverSelection.select(map, sheet)
+                val biggest = map.rivers.rivers.indices
+                    .maxByOrNull { RiverSelection.peakWidthRatio(map.rivers.rivers[it]) }!!
+                assertTrue(
+                    chosen.drawn[biggest],
+                    "seed $seed left out the river carrying the most water on the map"
+                )
+                // And the ink is spent on big rivers rather than spread over small ones: the mean
+                // peak of a drawn course against the mean peak of one left out. Printed, because
+                // what separates the two distributions is the world's own hypsometry.
+                val drawnPeak = chosen.drawn.indices.filter { chosen.drawn[it] }
+                    .map { RiverSelection.peakWidthRatio(map.rivers.rivers[it]).toDouble() }
+                val leftPeak = chosen.drawn.indices.filter { !chosen.drawn[it] }
+                    .map { RiverSelection.peakWidthRatio(map.rivers.rivers[it]).toDouble() }
                 println(
-                    "X1C $seed, ${rule.name}: ${drawn.size} courses over ${perSquare.size} squares " +
-                        "of the ${chosen.crowdingPitchKm.round()} km crowding lattice, " +
-                        "fullest square $fullest, mean ${(drawn.size.toDouble() /
-                            maxOf(1, perSquare.size)).oneDecimal()}. Natural Earth at 1:50M has " +
-                        "2.41 courses per million km2, which is one to every 645 km of spacing."
+                    "X1C $seed at ${sheet.pixelsPerCell} px per cell: mean peak width ratio " +
+                        "${(drawnPeak.average() * 1000).oneDecimal()}e-3 over ${drawnPeak.size} " +
+                        "drawn against ${(leftPeak.average() * 1000).oneDecimal()}e-3 over " +
+                        "${leftPeak.size} left out"
                 )
             }
         }
+    }
+
+    /** Where each drawn course ends: a mouth on the water, or the junction it joins its trunk at. */
+    private fun drawnEnds(map: WorldMap, chosen: RiverSelection.Selection): List<Int> =
+        chosen.drawn.indices.filter { chosen.drawn[it] }
+            .map { map.rivers.rivers[it].cells.last() }
+
+    /** How many of [ends] fall in the fullest square of a [pitchKm] lattice on the ground. */
+    private fun fullestSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int {
+        val perSquare = HashMap<Long, Int>()
+        ends.forEach { end ->
+            val across = (end % map.width * map.config.cellWidthKm / pitchKm).toLong()
+            val down = (end / map.width * map.config.cellHeightKm / pitchKm).toLong()
+            val key = (down shl 32) or across
+            perSquare[key] = (perSquare[key] ?: 0) + 1
+        }
+        return perSquare.values.maxOrNull() ?: 0
     }
 
     private fun disagreement(first: Double, second: Double): Double =

@@ -32,87 +32,70 @@ enum class RiverInk(val label: String) {
  * Which of the traced courses a sheet at a given scale actually draws.
  *
  * The generator traces every channel the ground can cut and hands on every course over a hundred
- * kilometres (R1). That is a statement about the world, and it is not a statement about the map:
- * a map draws as much river as its scale has room for, and a 1:22 000 000 sheet has room for very
- * little. What decides how little is the question this object answers, and the answer is an Earth
- * figure rather than a share of whatever the generator produced.
+ * kilometres (R1). That is a statement about the world and not about the map: a map draws as much
+ * river as its scale has room for, and how much that is is an Earth figure rather than a share of
+ * whatever the generator produced. The rule at a sheet whose representative fraction is `1:d`:
  *
- * **The reference.** Natural Earth (naturalearthdata.com; the vector data as published at
- * github.com/nvkelso/natural-earth-vector), the public-domain map data built by cartographers for
- * small-scale mapping at three stated scales. Its `rivers_lake_centerlines` layer is the river
- * line a map at that scale draws, and `featurecla` separates true river line from the centreline
- * carried through a lake — which this map draws as lake and not as river, so the `River` class
- * alone is the match. Measured over Earth's 148.94 million square kilometres of land, on the
- * WGS84 sphere:
+ * 1. A budget of [drawnRiverKmPerSquareKm] kilometres of drawn river per square kilometre of this
+ *    world's land, which is Natural Earth's measured figure carried by Töpfer's law.
+ * 2. Courses ranked by discharge, largest first, on the peak width ratio.
+ * 3. A first pass taking at most one *candidate* per square of the [crowdingPitchKilometres]
+ *    lattice, so a dissected coastal front does not spend the budget on its own gullies before the
+ *    rest of the map is served; then a second pass, with no lattice, spending whatever is left.
+ * 4. Downstream closure: taking a course takes every trunk below it not already taken, charged to
+ *    the budget, and a course is taken only if its whole chain fits.
  *
- * - **1:50 000 000** — 359 courses, 254 284 km of drawn line: **0.001707 km of river per km² of
- *   land**, 2.41 courses per million km².
- * - **1:10 000 000** — 1 202 courses, 599 507 km: **0.004025 km/km²**, 8.07 courses per million km².
+ * Closure is explicit because the crowding pass breaks the argument that would otherwise give it
+ * for nothing. Ranking by discharge reaches a trunk before any of its tributaries, since a trunk's
+ * peak is never below theirs — but reaching it is not taking it, and the lattice can defer it.
  *
- * (Without Antarctica, which has no rivers on either sheet and is 14.00 of those 148.94 million,
- * both figures rise by a tenth: 0.001884 and 0.004443. The larger land area is taken, because this
- * generator's ice sheets carry no channels either and are inside its own land area for the same
- * reason. The 1:110 000 000 tier is not a third point: it holds thirteen rivers and is a token
- * selection rather than a generalisation of the other two.)
+ * What the lattice is and is not: the first pass tests the *candidate's* own square, so a trunk
+ * pulled in by closure may land in a square already taken, and the second pass ignores squares
+ * altogether. It spreads the ink rather than bounding it. The fullest square it leaves is a
+ * measurement and not a guarantee — 2 drawn courses against the radical law's 49 to 70 on the four
+ * standard seeds, and `RiverSelectionTest` shows it against the same selection with the lattice
+ * switched off.
  *
- * **Which figure carries to another scale, and which does not.** Between those two tiers the
- * *length* drawn goes as the 0.533 power of the change in scale, which is Töpfer and Pillewizer's
- * square root to within three hundredths, so the ink is carried by the published law and the
- * measured exponent stands beside it as the check. The *count* goes as the 0.751 power, which is
- * not the law and is what small-scale generalisation actually does: a sheet at half the scale does
- * not draw half-length rivers, it drops the short courses outright and keeps the long trunks
- * whole — the mean drawn course is 499 km at 1:10M and 708 km at 1:50M. So the budget is in
- * kilometres of ink, which the law carries and which does not depend on where anyone chooses to
- * cut one course from the next; and the count, whose exponent is measured from two points and
- * whose definition of "a course" is the reference's rather than this map's, is used only to set
- * the spacing the ink is spread over.
+ * Ties fall to the course the tracer reached first, which is the head with the longest way down to
+ * the water; that is not the same as the longest *drawn* course, because a tributary is cut at the
+ * junction it joins. A world saved before rivers were sized by flow has no ratios at all and every
+ * peak is zero, which makes that order the whole order.
  *
- * **What the rule then is**, at a sheet whose representative fraction is `1:d`:
- *
- * 1. A budget of `0.001707 · √(50 000 000 / d)` kilometres of drawn river per square kilometre of
- *    this world's land.
- * 2. Courses ranked by discharge, largest first — the peak width ratio, which is the square root
- *    of the flow accumulation normalised over the network, so it rises with discharge and with
- *    nothing else.
- * 3. A first pass that takes at most one course per square of a lattice whose pitch is the mean
- *    spacing the reference's own course density implies at this scale, so a dissected coastal
- *    front cannot spend the whole map's budget on its own gullies; then a second pass over what
- *    the first deferred, which spends whatever is left.
- * 4. Downstream closure: taking a course takes every trunk below it that is not already taken, and
- *    those trunks are charged to the budget. A course is taken only if its whole chain fits, so
- *    the budget is never exceeded and no tributary is ever drawn hanging off a river that is not.
- *
- * **Why closure has to be explicit.** Ranking by discharge alone already keeps the network whole,
- * because a trunk's peak is never below its tributaries' and so is always reached first. The
- * crowding pass breaks that argument — it can defer a trunk whose square is taken and then reach
- * a tributary of it — so the chain is walked and charged rather than assumed.
- *
- * **Ties.** Two courses of equal peak are ordered by their position in the traced list, which is
- * the tracer's own longest-watercourse-first order (`RiverStage.traceRivers`), so the longer river
- * is taken first. A world saved before rivers were sized by flow has no ratios at all and every
- * peak is zero, which makes that order the whole order — the longest courses, up to the budget,
- * which is the right answer for a map that cannot tell its rivers apart.
+ * The figures, the reference and what was declined are in docs/GEOGRAPHY.md and in the ledger row
+ * X1c; the two densities' derivations are beside the constants below, as rule 8 asks.
  */
 object RiverSelection {
 
     /**
      * Kilometres of drawn river per square kilometre of land on a 1:50 000 000 map.
      *
-     * Natural Earth's `ne_50m_rivers_lake_centerlines`, `featurecla = River`: 359 courses,
-     * 254 284 km over Earth's 148.94 million km² of land. The 1:10 000 000 tier carried here by
-     * [INK_EXPONENT] gives 0.001800, five and a half per cent above this, so the two tiers bracket
-     * 0.001754 and neither is more than three per cent from it; the nearer tier is taken outright
-     * because this map's own two scales are 1:22M and 1:50M. See the class comment for the whole
-     * derivation, and `RiverSelectionTest` for the check that the two still agree.
+     * The reference is **Natural Earth**'s `rivers_lake_centerlines`, `featurecla = River` — the
+     * public-domain linework built for small-scale mapping at three stated scales, measured from
+     * the GeoJSON at `github.com/nvkelso/natural-earth-vector` (the 1:50M and 1:10M files last
+     * moved at commit 0e1681f, 2017-10-23; repository version 5.2.0-pre when read) by summing
+     * great-circle distances over every vertex. At 1:50M that is **359 courses and 254 284 km**
+     * over Earth's 148.94 million km² of land; at 1:10M, 1 202 courses and 599 507 km, which is
+     * 0.004025. `Lake Centerline` is excluded because this map draws a lake as a lake.
+     *
+     * Carried here by [INK_EXPONENT], the 1:10M tier gives 0.001800, **five and a half per cent
+     * above this**; the two bracket 0.001754, and the 1:50M tier is taken outright because this
+     * map's own two scales are 1:22M and 1:50M and it is the nearer of the two. It is a *chosen
+     * benchmark and not a physical constant*: Natural Earth's linework is hand-smoothed and
+     * hand-ranked, its own documentation recommends the 1:10M tier around 1:30M and supplements
+     * elsewhere, and a different atlas would give a different figure. Earth's land area is quoted
+     * with Antarctica in it, which carries no river on either tier; without it both densities rise
+     * by a tenth. See docs/GEOGRAPHY.md for the rest, and `RiverSelectionTest` for the check that
+     * the two tiers still agree.
      */
     const val DRAWN_RIVER_KM_PER_SQUARE_KM_AT_FIFTY_MILLION: Double = 0.001707
 
     /**
      * Drawn courses per square kilometre of land on a 1:50 000 000 map: 2.41 per million.
      *
-     * The same 359 courses over the same land area. Used only for [crowdingPitchKilometres], for
-     * the reason the class comment gives — a count depends on where the reference cuts one course
-     * from the next, and this map cuts them elsewhere.
+     * The same 359 courses over the same land area. Used only for [crowdingPitchKilometres], and
+     * not for the budget, because a count depends on where the reference cuts one course from the
+     * next and this map cuts them elsewhere — at a hundred kilometres, against a reference whose
+     * mean drawn course is 708 km at this scale and 499 km at 1:10M.
      */
     const val DRAWN_COURSES_PER_SQUARE_KM_AT_FIFTY_MILLION: Double = 2.41e-6
 
@@ -122,17 +105,27 @@ object RiverSelection {
     /**
      * How the ink carries from one scale to another: Töpfer and Pillewizer's square root.
      *
-     * *The principles of selection* (The Cartographic Journal 3(1), 1966, 10-16). Natural Earth's
-     * own two tiers measure 0.533 over a fivefold change of scale, so the published law is used
-     * and the measurement is the check on it rather than the other way round.
+     * *The principles of selection* (The Cartographic Journal 3(1), 1966, 10-16) measured a
+     * **count**, so carrying a *length* by it is an assumption and not the law restated. It is a
+     * documented one: Wilmer and Brewer (*Application of the radical law in generalization of
+     * national hydrography data for multiscale mapping*, ISPRS Archives XXXVIII-4, AutoCarto 2010)
+     * apply the law to hydrography measured as flowline length per square kilometre and find it
+     * needs a correction of its own. Here the assumption is checked rather than assumed: Natural
+     * Earth's two tiers measure **0.533** over a fivefold change of scale, a thirtieth from the
+     * law, and 0.5 is taken as the simpler of the two. Between 1:10M and 1:50M that is
+     * interpolation; outside them it is extrapolation, and this map's export at 512 cells across is
+     * already at 1:88M.
      */
     private const val INK_EXPONENT: Double = 0.5
 
     /**
      * How the count carries: the 0.751 measured between Natural Earth's 1:10M and 1:50M tiers.
      *
-     * Not Töpfer's square root, and the difference is the point — see the class comment. Measured
-     * from two tiers and no more, which is why nothing is asserted on it; it sets a spacing.
+     * Not Töpfer's square root, and the gap is what small-scale generalisation does — it drops
+     * short courses outright rather than drawing half-length rivers. Two points and no published
+     * law behind it, which is why nothing is asserted on it and it sets a spacing rather than the
+     * budget. Natural Earth's 1:110M tier is not a third point: thirteen rivers is a token
+     * selection, not a generalisation of the other two.
      */
     private const val COUNT_EXPONENT: Double = 0.751
 
@@ -155,31 +148,41 @@ object RiverSelection {
      * The mean spacing of the reference's own courses at this scale: one course to every
      * `1 / density` square kilometres is one course to every `√(1 / density)` kilometres of
      * spacing, which is the pitch of a square lattice holding one apiece. 645 km at 1:50 000 000
-     * and 475 km at 1:22 000 000 — about eighty cells of a 2048 grid — which is what stops a
-     * straight coastal front from keeping every gully it has.
+     * and 475 km at 1:22 000 000 — about eighty cells across a 2048 grid. The lattice is laid out
+     * in ground kilometres rather than cells, because a cell of this world is twice as wide as it
+     * is tall; it does not wrap the east-west seam, so two mouths either side of it are never
+     * crowded against each other.
      */
     fun crowdingPitchKilometres(denominator: Double): Double =
         sqrt(1.0 / drawnCoursesPerSquareKm(denominator))
 
-    /**
-     * Everything one sheet's selection decided, for a guard or a report to read.
-     *
-     * [drawn] is one flag per course of `world.rivers.rivers`, in that order. [courseKilometres]
-     * is each course's traced length along the ground, and [trunkOf] the course that carries its
-     * water on, or [NO_TRUNK].
-     */
+    /** Everything one sheet's selection decided, for a guard or a report to read. */
     class Selection(
+        /** One flag per course of `world.rivers.rivers`, in that order: drawn or not drawn. */
         val drawn: BooleanArray,
+        /** Each course's traced length along the ground, in kilometres. See [courseKilometres]. */
         val courseKilometres: DoubleArray,
+        /** Each course's trunk, or [NO_TRUNK] where it reaches water or the edge of the world. */
         val trunkOf: IntArray,
+        /** The sheet's representative fraction: the `22 000 000` of `1:22 000 000`. */
         val denominator: Double,
+        /** This world's land, in square kilometres, which the budget is per. */
         val landAreaSquareKm: Double,
+        /** Kilometres of river line this sheet is allowed, at Earth's density for its scale. */
         val budgetKilometres: Double,
+        /** The side of the crowding lattice, in ground kilometres. */
         val crowdingPitchKm: Double
     ) {
         val drawnCount: Int get() = drawn.count { it }
 
-        /** Kilometres of river line this sheet puts on the paper. */
+        /**
+         * Kilometres of traced course this sheet draws.
+         *
+         * The centreline as the tracer laid it, which is what the reference measures too, and a
+         * few parts in a thousand above the ink the reader finally sees: the rasterizer cuts the
+         * last stroke back at the shore (`MapRasterizer.trimmedAtTheShore`) and skips any segment
+         * lying inside open water.
+         */
         val drawnKilometres: Double
             get() {
                 var total = 0.0
@@ -210,8 +213,24 @@ object RiverSelection {
         return rivers.filterIndexed { course, _ -> selection.drawn[course] }
     }
 
-    /** [drawnOn]'s working, kept whole so a guard can read the budget it was spent against. */
-    fun select(world: WorldMap, sheet: MapSheet): Selection {
+    /**
+     * [drawnOn]'s working, kept whole so a guard can read the budget it was spent against.
+     *
+     * [world] gives the network, the land the density is per and the water a course ends in;
+     * [sheet] gives the scale, through [MapSheet.pixelsPerCell] and nothing else. Every length in
+     * the result is in kilometres on the ground and every area in square kilometres. The invariant
+     * is that the drawn kilometres never exceed [Selection.budgetKilometres] and that every drawn
+     * course's trunk is drawn.
+     *
+     * [spreadByCrowdingLattice] is the control, not a setting: with it false the budget is spent
+     * on the discharge ranking alone, which is what `RiverSelectionTest` measures the lattice
+     * against. Nothing in the drawing ever passes false.
+     */
+    fun select(
+        world: WorldMap,
+        sheet: MapSheet,
+        spreadByCrowdingLattice: Boolean = true
+    ): Selection {
         val rivers = world.rivers.rivers
         val config = world.config
         val denominator = MapScale.representativeFractionDenominator(
@@ -234,7 +253,7 @@ object RiverSelection {
             // Two passes over the same ranking: the first holds to one course per lattice square,
             // the second spends what that left. A course deferred by the first is not penalised in
             // the second — it keeps its place in the discharge order.
-            for (spreadByLattice in booleanArrayOf(true, false)) {
+            for (spreadByLattice in booleanArrayOf(spreadByCrowdingLattice, false)) {
                 for (ranked in byDischarge.indices) {
                     val course = decodeCourse(byDischarge[ranked])
                     if (drawn[course]) continue
@@ -372,10 +391,11 @@ object RiverSelection {
     /**
      * How long a course runs on the ground, in kilometres.
      *
-     * The traced polyline, mouth step included — the same line the rasterizer strokes, before it
-     * cuts the last stroke back half its width at the shore, which is a pen's worth of ink and not
-     * a length. A step east or west across the world's seam is one cell like any other, not the
-     * width of the map.
+     * The traced centreline, mouth step included, which is the same quantity the Earth reference
+     * measures. It is a few parts in a thousand above the ink actually laid down: the rasterizer
+     * cuts the last stroke back at the shore, by half the mouth step plus half a pen width, and
+     * skips any segment lying inside open water. A step east or west across the world's seam is
+     * one cell like any other, not the width of the map.
      */
     fun courseKilometres(world: WorldMap, river: River): Double {
         val cellsAcross = world.width
@@ -388,9 +408,9 @@ object RiverSelection {
             var across = abs(to % cellsAcross - from % cellsAcross)
             if (across > cellsAcross / 2) across = cellsAcross - across
             val down = abs(to / cellsAcross - from / cellsAcross)
-            val eastWest = across * cellWidthKm
-            val northSouth = down * cellHeightKm
-            kilometres += sqrt(eastWest * eastWest + northSouth * northSouth)
+            val eastWestKm = across * cellWidthKm
+            val northSouthKm = down * cellHeightKm
+            kilometres += sqrt(eastWestKm * eastWestKm + northSouthKm * northSouthKm)
         }
         return kilometres
     }

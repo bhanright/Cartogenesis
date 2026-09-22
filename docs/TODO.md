@@ -97,45 +97,61 @@
   raster); keeping the world's fields resident in graphics memory between stages, or generating in
   tiles, is what would let an export outgrow the heap. Whether 8192 completes in 24 GB wants
   measuring first. 2026-09-20.
-- **The render records are pinned in two places and the regenerator only writes one of them.**
-  `RecordedRenders.kt` carries twelve style fingerprints and its own KDoc calls itself "the one
-  place a chunk that moves the ground re-takes them"; `RegenerateRecordedRenders` writes that file
-  and nothing else. But nothing reads it: `PenAndInkTest.RECORDED_STYLES` holds a second copy of
-  the same twelve, and it is that copy the guard asserts against. So a chunk that moved the ground,
-  ran the regenerator as the KDoc tells it to and re-ran the suite is still red, with the failure
-  pointing at a number it has just rewritten - which is exactly what happened in S3, twice, before
-  the duplication was noticed. Either the guard should read `RecordedRenders.STYLES_AT_512` and the
-  inline map go, or the regenerator should rewrite `PenAndInkTest`'s map instead and
-  `RecordedRenders.kt` go; the first is the smaller change, but `PenAndInkTest`'s map carries the
-  long per-chunk history comment that says *why* each re-take happened, and that comment is the
-  valuable part and would have to move with it. Both are updated by hand in S3. 2026-09-21, S3.
-- **Seven guards are red on terrain S3 moved, and none of them is a bar that can honestly be
-  lifted.** The chunk's own defect - the cover counted twice against an erodibility already
-  calibrated on vegetated catchments - is fixed by spending the factor relative to its own land
+- ~~**The render records are pinned in two places and the regenerator only writes one of them.**~~
+  Closed by R1, 2026-09-21, and confirmed on the merged tree. `PenAndInkTest.RECORDED_STYLES` is a
+  getter onto `RecordedRenders.STYLES_AT_512` now, so the file whose KDoc calls itself "the one
+  place a chunk that moves the ground re-takes them" is the one place, and `RegenerateRecordedRenders`
+  writing it is enough. The long per-chunk history comment that says *why* each re-take happened
+  stays on `PenAndInkTest`, above the getter, because that is where a reader of the guard meets it.
+- **Erosion's rule for a river is its own, and is not the network the map draws.**
+  `HydraulicErosion.DRAWN_RIVER` picks the mouths the distributary pass cuts grooves at, and it is
+  a share of the land's water - 0.0006 of it, on an accumulation whose weights are rainfall. Since
+  R1 a watercourse is drawn where `ChannelInitiation` says the ground can be cut, which is an area
+  times a gradient in square kilometres, raised by the plant cover and held off ground that never
+  thaws, and the two rules answer different questions. Erosion cannot read the other one cheaply:
+  the criterion is parameterised by `config.rivers`, which is chosen long after erosion runs, so
+  reading it would put `rivers` into erosion's reuse guard and let a river setting re-cut twelve
+  rounds of valleys. The constant says all of this where it stands. What is *not* known is how far
+  apart the two networks are at a mouth - how many wet-country trunks the groove pass cuts that the
+  map does not draw, and how many dry-country ones it misses - and that is a measurement nobody has
+  taken. 2026-09-22, S3.
+
+- ~~**Seven guards are red on terrain S3 moved, and none of them is a bar that can honestly be
+  lifted.**~~ Closed on the merged tree, 2026-09-22, and none of the seven turned out to want a
+  lifted bar. The chunk's own defect - the cover counted twice against an erodibility already
+  calibrated on vegetated catchments - was fixed by spending the factor relative to its own land
   mean, and denudation off an active belt went **0.271 -> 0.189 -> 0.218 mm/yr** (see the ledger,
-  S3). What is left is a world that is genuinely a different world, and seven cases that measure
-  it: `IsostasyTest` *the collision rate is Earth's surface uplift plus this model's own
-  denudation* (the derivation asks 0.718 where `collisionUpliftMmPerYear` carries 0.77, and the
-  clause is tight enough that 0.220 passed and 0.218 does not); `IceSheetTest` *the sheet's outlets
-  cut troughs a fjord could be drowned in* (the deepest cut asked for over four worlds 1255 -> 936
-  m, 0.96 -> 0.72 of Sognefjord; the same class's thickness clause came back and passes);
-  `GroundTextureTest` *the ground's texture follows its relief* (the lowest quarter of the land
-  64.957 -> 65.573 m against a bar of 65.200); `LakeWaterBalanceTest` *a dry basin settles far
-  below its spill level* (seed 13 holds 47% of its spill area against 45%); `OutletIncisionTest`
-  *a sill level to the water is what the notch could not cut* (0.1464% against 0.1477%);
-  `StraightRunTest` *the old rule draws more of the map with a ruler* (29 ruled runs against the
-  plain rule's 28); and `FlatCourseTest` *the potential keeps every flat cell a way down* (2 ruled
-  runs over raised ground against the staircase's 1). Nothing was re-pinned, and the reasons
-  differ. Four are **strict inequalities between a rule and its own control**, and a control that
-  has stopped discriminating cannot be re-pinned at all: there is no number to move. The ice clause
-  is measured against **Earth's own figure**, Sognefjord's depth, and it belongs with the standing
-  finding that the ice share is half Earth's because the interior is dry, which GEOGRAPHY.md
-  records. `IsostasyTest`'s is the derived constant the defect was diagnosed through, and whether
-  `collisionUpliftMmPerYear` is re-derived from the new denudation is S2's question rather than
-  S3's. The texture bar is a comparison against a pre-S2 tree rather than against Earth, so it is
-  the one that could most defensibly be re-derived, and it is left alone because moving the only
-  movable bar is the tuning the other six forbid. Each should be looked at by whoever owns the
-  stage it belongs to, with this as the cause. 2026-09-21, S3.
+  S3). What was left was a world that is genuinely a different world, and the seven cases sorted
+  into four kinds. **One was a derivation, not a pin**: `IsostasyTest` holds
+  `TectonicsConfig.collisionUpliftMmPerYear` to Earth's collision surface uplift plus what this
+  model's own rivers remove, and the second term is re-measured on every run, so the rate follows
+  it - 0.77 to **0.718 mm/yr**, with the Andean, arc and rift-shoulder rates keeping England and
+  Molnar's ratios at 0.287, 0.101 and 0.043. **Two were recorded figures and were re-taken with
+  the reason**: `GroundTextureTest`'s quarter textures to **65.7 and 110.4 m** from 65.2 and 115.9
+  (the plains a little rougher because dry lowland now draws the least water, the ranges a little
+  smoother because high ground draws the most and is shielded by its own cover, and because a belt
+  races a gentler uplift), and `LakeWaterBalanceTest`'s dry basin to **50%** from 45% (at 81 mm a
+  year that catchment carries the least water on the map, so its floor is the least incised and
+  the same balance level covers more of it). The highest-quarter clause was a second red standing
+  behind the first, at 110.378 m against a bar of 115.9, and is re-taken with it. **Two were
+  single-grid control comparisons and are pooled now**: `StraightRunTest` reads 422 ruled runs
+  against 521 over the four standard seeds where one seed's margin has been a single run either
+  way, and `OutletIncisionTest`'s sill clause reads **0.0531% of land against 0.0904%** over five
+  seeds where 718106 alone has gone the wrong way by thirteen ten-thousandths of a per cent.
+  **Two became findings**: `IceSheetTest`'s outlet depth, printed against Sognefjord because an
+  outlet deepens a pre-glacial valley and these sheets stand over the dry interiors the rain-fed
+  rounds cut least, with the clause that the sheet feeds its outlets at all kept as the guard;
+  and `FlatCourseTest`'s census, which has read 2 against 1, 4 against 4 and 1 against 5 on three
+  re-cuts of the same four worlds and is asserted at 2048 in `FlatCourseAuditTest` instead.
+- **The ice outlets ask for 0.72 of Sognefjord and what would settle it is more than four seeds.**
+  The deepest cut asked for over the four standard worlds is 936 m against Sognefjord's 1,308, and
+  it was 1,255 before the hydraulic rounds read the climate. The mechanism named above is
+  plausible and unmeasured: an outlet trough deepens the valley the rivers left, a sheet grows over
+  a cold interior, a cold interior is a dry one, and the rainfall weight gives dry ground the least
+  water. What would turn that into a measurement is the correlation between a sheet's own
+  pre-glacial dissection and the trough its outlets cut, over more worlds than four - the same
+  sample problem the ice share carries, which GEOGRAPHY.md records. 2026-09-22, S3.
+
 - ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
   by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
   `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`

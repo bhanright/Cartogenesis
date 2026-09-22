@@ -37,15 +37,35 @@ km², and their arid lowland sites — three square kilometres at a gradient nea
 twice as much rather than two hundred times, which is the finding those papers are about.
 
 Two terms make it a criterion rather than a number. The area is weighted by the cell's runoff
-against Earth's mean over land, 715 mm a year, with the river stage's own 150 mm floor on it, so a
-wet hillside reaches the threshold on less ground. And the threshold is multiplied by the plant
-cover the ground carries, up to two hundredfold under a closed canopy, which is the universal
-soil-loss equation's cover factor (1.0 bare, 0.005 forested) read as a resistance. The gradient is
-the **true ground's**, never the routing surface's: the depression fill and the potential laid
-across the flats it makes are bookkeeping that let a receiver be chosen, and a flat's true gradient
-is zero, which is why a reach crossing one initiates nothing of its own and is carried by the
-downstream rule instead. Ground that never thaws — where Thornthwaite's demand is exactly zero —
-starts no channel, though a river rising in a warmer catchment still runs across it.
+against Earth's mean over land, 715 mm a year, so a wet hillside reaches the threshold on less
+ground. And the threshold is multiplied by the plant cover the ground carries, up to two
+hundredfold under a closed canopy, which is the universal soil-loss equation's cover factor (1.0
+bare, 0.005 forested) read as a resistance. The gradient is the **true ground's**, never the routing
+surface's: the depression fill and the potential laid across the flats it makes are bookkeeping that
+let a receiver be chosen, and a flat's true gradient is zero, which is why a reach crossing one
+initiates nothing of its own and is carried by the downstream rule instead. Ground that never
+thaws — where the warmest month of the year stays at or below freezing — starts no channel, though
+a river rising in a warmer catchment still runs across it.
+
+The runoff itself is one figure for the whole pipeline, `Runoff.annualWeightMm`: a cell's rainfall
+in millimetres a year, held at or above a floor of **60 mm** so that an arid upland still feeds the
+channel leaving it. The floor is the river stage's own, 0.05 of the 1,200 mm scale
+`ClimateResult.precipitation` is normalised against, and the channel criterion had it wrong at 150
+mm until 2026-09-22 — read off a 3,000 mm scale that nothing in the climate uses, and added to the
+rainfall rather than taken as a floor under it, which gave every desert cell a fifth of Earth's
+land mean in water it does not have. Correcting it thins the network where it should be thinnest:
+pooled over the four standard seeds at 512, drainage density in hyper-arid country falls from
+0.0527 to 0.0362 km/km² against humid country's 0.0309 to 0.0280, so the dryland peak is narrower
+and the humid-over-semi-arid ratio rises from 0.71 to 0.83 — still under one, which is the side of
+Moglen, Eltahir and Bras's curve the guard asserts, but with less room than before.
+
+What each stage divides that weight by differs, and the difference is the point. The channel
+criterion divides by **Earth's** land mean, because its threshold is an area of real ground: against
+this world's own mean a world twice as wet would draw exactly the same network. The hydraulic
+erosion divides by the mean over **the land the pass is routing on**, because its incision
+coefficient was fitted at one world's total water and a mean of exactly one is what keeps a weighted
+accumulation a share — which is why that stage says where the rain falls and not how much, recorded
+below with the rest of its limitations.
 
 Everything in that rule is a length, an area or a dimensionless gradient, so it means the same thing
 at every grid. What it replaced meant three different things: a channel was drawn where the
@@ -947,7 +967,8 @@ of things this stage does not answer, and they are worth having in one place.
   time step, as it was before, and nothing here re-fits either.
 - **Rainfall stands in for runoff.** What reaches a channel is rainfall less what the plants breathe
   out and the ground takes in, delivered in floods rather than evenly. None of the three is
-  modelled, and the floor of 60 mm a year under every cell is a stand-in for the last of them.
+  modelled, and the floor of 60 mm a year under every cell — `Runoff.FLOOR_MM`, the same figure the
+  channel criterion reads — is a stand-in for the last of them.
 - **The normalisation is global, so distant cover changes local erodibility.** A cell's factor is
   its own `1 - 0.5 x density` over the *land's* mean, so afforesting one continent lifts the bare
   ground of another by a fraction of a per cent. The mean-one rule removes the blanket attenuation
@@ -981,7 +1002,8 @@ driven by the outflow over a lip, and a basin in dry country has no outflow: Lak
 down through its rim, which is why it is still there. Since S3 the hydraulic pass can tell part of
 the difference — the accumulation the outlet notch and the closing breach read is discharge now, so
 a desert basin's rim is cut by a desert's water — but only part, because the runoff a cell
-contributes is floored at 60 mm a year (`RiverStage.RUNOFF_FLOOR` of `ClimateStage.REFERENCE_MM`) so
+contributes is floored at 60 mm a year (`Runoff.FLOOR_MM`, the river stage's own floor read in
+millimetres) so
 that an arid upland still feeds the channel leaving it, and a basin below that floor is drained on
 the same terms as one at it. How much lake survives in dry country as a result was not re-measured
 by S3; the standing water a dry basin keeps is still decided afterwards, by the water balance, out

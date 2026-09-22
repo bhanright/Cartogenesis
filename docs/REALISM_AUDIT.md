@@ -106,12 +106,13 @@ calderas and flood-basalt plateaus (H3) follow.
   weathered uplift before round 1 and again at the midpoint (twice, on measurement: the rainfall
   drifts by about a third of the land mean over the twelve rounds), and the flow accumulation
   carries each cell's rainfall, so `Q = P·A`. The cover the same march computes shields the
-  incision: `K * (1 - 0.5 * density)`, Istanbulluoglu and Bras (2005), measured back out at
-  **0.42-0.47** of bare ground's rate per unit of stream power. `ErosionConfig.climateFeed` is the
-  control and reproduces every earlier world bit for bit. **Landed:** the discharge law, the
+  incision by `1 - 0.5 * density` over that expression's own mean across the land — Istanbulluoglu
+  and Bras (2005), spent as the relative half their result licenses, so the world loses as much
+  rock as it did and only the places it comes off move. `ErosionConfig.climateFeed` is the control
+  and reproduces every earlier world bit for bit. **Landed:** the discharge law, the
   vegetation shielding, the orographic asymmetry (the weather cuts the windward flank 1.11-1.32
   times as deep as the leeward once the belt's own geometry is divided out) and dissection
-  following rainfall over the land as a whole (Spearman +0.230 to +0.296 against a control's +0.087
+  following rainfall over the land as a whole (Spearman +0.244 to +0.312 against a control's +0.087
   to +0.137). **Out of scope, not impossible:** the precipitation-weighted talus. Water does
   change where rock fails — pore pressure lowers the effective stress on a slip surface and roots
   add cohesion above it — so this is a scope decision and not a physical argument. What was

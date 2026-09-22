@@ -141,42 +141,45 @@
   `RecordedRenders.kt` go; the first is the smaller change, but `PenAndInkTest`'s map carries the
   long per-chunk history comment that says *why* each re-take happened, and that comment is the
   valuable part and would have to move with it. Both are updated by hand in S3. 2026-09-21, S3.
-- **The vegetation shielding counts the cover twice, and it has taken a third of the world's
-  erosion away.** S3 scales the incision by `1 - 0.5 * density`, which is Istanbulluoglu and Bras's
-  measured factor, and spends it against a `bedrockErodibilityPerYear` that already carries Stock
-  and Montgomery's and Lague's figures for real bedrock rivers - rivers that ran through forests.
-  So the cover is counted once in the calibration and once again in the multiplier, and denudation
-  off an active belt falls from **0.271 to 0.189 mm/yr** (`IsostasyTest`'s own instrument, pooled
-  over five seeds), which asks 0.69 mm/yr of a collision uplift rate the setting carries 0.77 of.
-  That one number is why seven cases in seven classes that are green on the pre-S3 commit are red
-  here: the collision uplift rate no longer matches the derivation it was set from
-  (`IsostasyTest`, the defect stated directly); the deepest outlet trough the ice asks for over
-  four worlds is 750 m where it was 1255, 0.57 of Sognefjord against 0.96 (`IceSheetTest`); the
-  lowest quarter of the land departs from its own smoothed self by 66.491 m against a bar of 65.2,
-  where it managed 64.957 (`GroundTextureTest`, the plains left rougher by less planing); on
-  718106 the two ways of measuring a drowned basin's fall now land within a fifth of a per cent of
-  each other, 0.1336% against 0.1359%, so that control can no longer tell the two rules apart
-  (`OutletIncisionTest`); and the gallery world's alpine country grew from 1,244 cells to 1,596 as
-  more high ground survived the rounds, so its canopy - which is nearly nothing either way, a mean
-  of 0.005 - now varies by 0.017 against a floor of 0.02 where it varied by 0.021
-  (`VegetationTintTest`, marginal before and tipped by this); seed 13's dry basin holds 47% of its
-  spill area against a bar of 45%, a deeper basin surviving where a third more rock used to come
-  out of it (`LakeWaterBalanceTest`); and the flat-routing potential leaves 2 ruled runs over
-  raised ground against its staircase control's 1, where the clause asks for no more than the
-  control (`FlatCourseTest`, a count small enough that a terrain this much changed moves it). The cure is the one the runoff weight already uses and is two lines:
-  divide the shielding by its own mean over land, so the land's mean erodibility is unchanged and
-  what the term carries is the *relative* half between bare ground and closed canopy, which is all
-  the paper claims. It was left undone on purpose - it is a change to S3's design rather than to
-  its implementation, and the figures above are what the decision wants. Whether
-  `ErosionConfig.collisionUpliftMmPerYear` is then re-derived is a second question and S2's.
+- **Five guards are red on terrain S3 moved, and none of them is a bar that can honestly be
+  lifted.** The chunk's own defect - the cover counted twice - is fixed (see the ledger, S3), and
+  denudation off an active belt went 0.271 -> 0.189 -> **0.220 mm/yr**, which cleared `IsostasyTest`
+  and `FlatCourseTest` and left the relief-shading datum where it was. What is left is a world that
+  is genuinely a different world, and seven cases in six classes that measure it:
+  `IceSheetTest` *a sheet stands as thick as Earth's* (718106's sheet 2511 -> 1781 m against
+  Greenland's 2000 m divide) and *the sheet's outlets cut troughs a fjord could be drowned in*
+  (the deepest cut asked for over four worlds 1255 -> 844 m, 0.96 -> 0.65 of Sognefjord);
+  `GroundTextureTest` *the ground's texture follows its relief* (the lowest quarter of the land
+  64.957 -> 65.519 m against a bar of 65.200, half a per cent over); `LakeWaterBalanceTest` *a dry
+  basin settles far below its spill level* (seed 13 holds 47% of its spill area against 45%);
+  `RiftSegmentationTest` *a flooded rift is a chain of gulfs* (seed 43's land bridges 3 -> 1,
+  wanting 2); `StraightRunTest` *the old rule draws more of the map with a ruler* (27 ruled runs
+  against the plain rule's 26); `OutletIncisionTest` *a sill level to the water is what the notch
+  could not cut* (718106's drowned basin 0.1264% measured to the last land cell against 0.1576% to
+  the water, the wrong way round); and `OceanCurrentTest` *warm coasts are worth more than cold
+  ones* (seed 42's warm coasts settle to 0.7458 against cold coasts' 0.7464, a tie at four
+  decimals). Nothing here was re-pinned, and the reasons differ. The two ice clauses are measured
+  against **Earth's own figures** - Greenland's divide, Sognefjord's depth - and a bar moved to
+  admit a thinner sheet is not a measurement any more; they also belong with the standing finding
+  that the ice share is half Earth's because the interior is dry, which GEOGRAPHY.md records and
+  which a moisture supply is what would fix. Four of the others are **strict inequalities between a
+  rule and its own control** (the facet rule against the plain one, the fall to the land against
+  the fall to the water, warm coasts against cold, two land bridges against one), and a control
+  that has stopped discriminating cannot be re-pinned at all: there is no number to move. The
+  texture bar is half a per cent away and is a comparison against a pre-S2 tree rather than against
+  Earth, so it is the one that could most defensibly be re-derived, and it is left alone because a
+  0.5% move on the one bar that *can* be moved would be the tuning the other six forbid. All seven
+  should be looked at by whoever owns the stage each belongs to, with this row as the cause.
   2026-09-21, S3.
 - ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
   by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
   `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`
   exactly as W4 guessed it would: `1 - VEGETATION_SHIELDING * density`, with the half from
-  Istanbulluoglu and Bras (2005) carried at the constant. Measured back out of the finished worlds
-  at 0.42-0.47 of bare ground's incision per unit of stream power, over the four standard seeds at
-  512, with the bands' own selection divided out by a control run. Only the hillslope cut takes it;
+  Istanbulluoglu and Bras (2005) carried at the constant, and spent *relative to its own mean over
+  the land* so that an erodibility already calibrated on vegetated catchments is not asked to carry
+  the cover twice. Checked cell by cell against the first round's own arithmetic on four seeds at
+  512: right to within 7.7e-08 on every one of the ~92,000 cells a seed leaves unclamped, with the
+  factor running 0.577 to 1.295 and averaging 1.000000 over the land. Only the hillslope cut takes it;
   the outlet notch and the distributary grooves cut through days-old spoil with nothing growing on
   it. H3's half of the field - erodibility by rock and by age of crust - is still open.
 - **The canopy darkening was sized for a step and is now spending its range on differences nobody

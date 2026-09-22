@@ -11,6 +11,7 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.erodeBlockingObservingCover
 import com.cartogenesis.worldgen.pipeline.thermalSweepBlocking
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -188,6 +189,142 @@ class ClimateFedErosionTest {
             }
         }
 
+        // ---------------------------------------------------------------------------------
+        // What the production stage actually does, observed rather than reconstructed.
+        //
+        // The guards below used to rebuild the stream-power expression here and compare it with
+        // the multiplier they had just put into it, which is a test of the test: delete the
+        // shielding from `cut` outright and it would still have gone green. So the stage is run,
+        // and what is asserted is the difference between two height fields it produced.
+        //
+        // One round, on ground both runs share. Everything else that could move a cell is off:
+        // no deposition, so nothing is laid back down; no thermal budget, so neither the opening
+        // sweeps nor the relaxation between rounds touches the field and the terrain the round is
+        // handed is the raw uplift; no outlet notch; no uplift rate. What is left in the height
+        // field is that round's incision and nothing else.
+        // ---------------------------------------------------------------------------------
+
+        /** The terrain the one-round runs are handed, the thermal budget being switched off. */
+        val bare = plates.height
+
+        /**
+         * The very config those runs use, and every reference field below is read through it.
+         *
+         * Not the twelve-round one, and the difference is not cosmetic: `standBelowToday` puts the
+         * sea below today's shoreline for the early rounds of a twelve-round world and leaves it
+         * at today's for a one-round world, because the transgression is a schedule over the round
+         * count. Reading the march through the twelve-round config gave a different sea, so a
+         * different coastline, a different rainfall and a different land mean to normalise over -
+         * and the guard was comparing what the stage did against a factor built for another world.
+         */
+        val once = config.copy(
+            erosion = config.erosion.copy(
+                hydraulicRounds = 1,
+                deposition = false,
+                // Both halves of the thermal pass, because the relaxation between rounds takes
+                // `sweepsFor / rounds` coerced up to at least one sweep, so a zero travel distance
+                // does not switch it off - and one sweep moves material between cells after the
+                // cut, which is not incision and would land in the height difference read back.
+                debrisTravelKm = 0.0,
+                rate = 0f,
+                outletIncision = false
+            )
+        )
+
+        val bareCut = SeaLevelStage.percentileCut(bare, once.seaLevel, once.scale)
+        private val bareWeather = HydraulicErosion.provisionalWeather(once, bare, once.seaLevel)
+
+        /**
+         * The march over that same terrain, for the wind that tells a windward flank from a
+         * leeward one and the rainfall the law's bar is read from.
+         *
+         * The belt has to be found on the terrain the incision is observed on, not on the
+         * thermally weathered one: the flanks are picked by the sign of a rise, and the sweeps
+         * move exactly the rises that a flank is made of.
+         */
+        val bareClimate = ClimateStage.generateWithSeasonalMm(
+            once, bareCut, OceanStage.withoutCurrents(once, bareCut)
+        ).result
+
+        /** The cover that round shields with, and the factor it turns into. Relative, mean 1. */
+        val bareDensity = bareWeather.vegetationDensity
+        val bareErodibility = FloatArray(bareDensity.size).also { factors ->
+            var summed = 0.0
+            for (cell in factors.indices) {
+                if (bareCut.isLand[cell]) summed += (1.0 - 0.5 * bareDensity[cell])
+            }
+            val mean = (summed / bareCut.landCellCount).toFloat()
+            for (cell in factors.indices) factors[cell] = (1f - 0.5f * bareDensity[cell]) / mean
+        }
+        val bareRunoff = FloatArray(bareDensity.size).also { weights ->
+            var summed = 0.0
+            for (cell in weights.indices) {
+                if (bareCut.isLand[cell]) summed += bareWeather.rainfallMm[cell].toDouble()
+            }
+            val mean = (summed / bareCut.landCellCount).toFloat()
+            for (cell in weights.indices) weights[cell] = bareWeather.rainfallMm[cell] / mean
+        }
+
+        private val observed = HashMap<Triple<Boolean, Boolean, Boolean>, FloatArray>()
+
+        /** Metres the real stage took off each cell in one round, under the three switches. */
+        fun observedIncision(
+            climateFeed: Boolean,
+            shieldCut: Boolean,
+            receiverClamp: Boolean = true
+        ): FloatArray =
+            observed.getOrPut(Triple(climateFeed, shieldCut, receiverClamp)) {
+                val after = erodeBlockingObservingCover(
+                    once.copy(erosion = once.erosion.copy(climateFeed = climateFeed)),
+                    bare, shieldCut = shieldCut, receiverClamp = receiverClamp
+                )
+                val metresPerUnit = once.scale.reliefSpanMetres
+                FloatArray(bare.data.size) {
+                    (bare.data[it] - after.height.data[it]) * metresPerUnit
+                }
+            }
+
+        /**
+         * Where neither of the round's two caps bit on either run, so the quotient of two observed
+         * incisions is the cover's factor and nothing else.
+         *
+         * Both runs, and that matters now the factor is relative: it runs from about 0.58 on
+         * closed canopy to about 1.3 on bare ground, so the shielded cut is the *larger* of the
+         * two wherever the ground is barer than the land's mean, and it can reach a cap the
+         * unshielded one does not.
+         */
+        val bareUnclamped: BooleanArray by lazy {
+            val filledBare = FlowRouting.fillDepressions(
+                once.width, once.height, bareCut.isLand, bareCut.relativeElevation
+            )
+            val receiversBare = FlowRouting.flowDirections(
+                once.width, once.height, bareCut.isLand, bareCut.relativeElevation, filledBare,
+                once.seed, once.facetRouting, once.flatPotential
+            )
+            val area = FlowRouting.accumulate(
+                config.width, config.height, bareCut.isLand, filledBare, receiversBare,
+                bareCut.landCellCount
+            ) { cell -> bareRunoff[cell] }
+            val landCells = bareCut.landCellCount.toFloat()
+            val coefficient = HydraulicErosion.Rates(once).incisionCoefficient
+            val relative = bareCut.relativeElevation.data
+            val floor = filledBare.data
+            BooleanArray(area.data.size) { cell ->
+                val receiver = receiversBare[cell]
+                if (receiver < 0 || !bareCut.isLand[cell]) return@BooleanArray false
+                val toSea = !bareCut.isLand[receiver]
+                val drop = floor[cell] - if (toSea) relative[receiver] else floor[receiver]
+                if (drop <= 0f) return@BooleanArray false
+                val diagonal = (cell % config.width) != (receiver % config.width) &&
+                    (cell / config.width) != (receiver / config.width)
+                val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
+                val unshielded = coefficient * sqrt(area.data[cell] / landCells) * slope
+                val larger = unshielded * maxOf(1f, bareErodibility[cell])
+                unshielded > 0f && larger < drop * 0.5f &&
+                    larger < relative[cell].coerceAtLeast(0f)
+            }
+        }
+
         private val carved = HashMap<Boolean, FloatField>()
 
         /** Memoised: four guards ask the same two worlds, and each is twelve hydraulic rounds. */
@@ -223,15 +360,15 @@ class ClimateFedErosionTest {
             if (belt.windwardCells < MIN_FLANK_CELLS || belt.leewardCells < MIN_FLANK_CELLS) {
                 return@mapNotNull null
             }
-            val rainfall = ground.climate.precipitationMm.data
+            val rainfall = ground.bareClimate.precipitationMm.data
             val windwardRain = meanOver(rainfall, belt.windward)
             val leewardRain = meanOver(rainfall, belt.leeward)
 
-            // The forcing, on ground both runs agree about. Same terrain, same receivers, same
-            // gradients; the only thing that differs is whether the water and the cover are the
-            // world's own or flat and absent.
-            val fed = ground.firstRoundIncision(ground.runoff, shielded = true)
-            val flat = ground.firstRoundIncision(ground.flat, shielded = false)
+            // The forcing, read off what the stage actually did. One round each way on the same
+            // terrain, so the receivers and the gradients are shared and the only thing that
+            // differs is whether the water and the cover are the world's own or flat and absent.
+            val fed = ground.observedIncision(climateFeed = true, shieldCut = true)
+            val flat = ground.observedIncision(climateFeed = false, shieldCut = true)
             val figures = Flank(
                 seed = seed,
                 rainRatio = windwardRain / leewardRain,
@@ -406,69 +543,139 @@ class ClimateFedErosionTest {
     fun `cover on the ground holds the incision back`() {
         for (seed in SEEDS) {
             val ground = ground(seed)
-            val shielded = ground.firstRoundIncision(ground.runoff, shielded = true)
-            val bare = ground.firstRoundIncision(ground.runoff, shielded = false)
-            val unclamped = ground.unclamped(ground.runoff)
-            val density = ground.density
+            // Both from the stage, on the same terrain, with one switch between them: the second
+            // run is the production cut with its shielding taken out. Nothing here recomputes the
+            // incision, so a shielding term deleted from `cut` fails this rather than passing it.
+            val shielded = ground.observedIncision(
+                climateFeed = true, shieldCut = true, receiverClamp = false
+            )
+            val unshielded = ground.observedIncision(
+                climateFeed = true, shieldCut = false, receiverClamp = false
+            )
+            val unclamped = ground.bareUnclamped
+            val density = ground.bareDensity
+            val factor = ground.bareErodibility
 
             var checked = 0
             var worst = 0.0
             var worstCell = -1
+            var control = 0.0
+            var outliers = 0
             for (cell in shielded.indices) {
-                if (!unclamped[cell] || bare[cell] <= 0f) continue
+                // A floor on the cut itself, and not fussiness. The two incisions are differences
+                // of a float height field whose own resolution is about a millimetre of ground, so
+                // a cell the round barely touched carries a quotient made mostly of rounding. A
+                // metre of cut leaves three decimal places of signal in it.
+                if (!unclamped[cell] || unshielded[cell] < OBSERVED_FLOOR_METRES) continue
                 checked++
-                val measured = shielded[cell].toDouble() / bare[cell].toDouble()
-                val expected = ground.erodibility[cell].toDouble()
-                val off = abs(measured - expected)
+                val measured = shielded[cell].toDouble() / unshielded[cell].toDouble()
+                val off = abs(measured - factor[cell])
+                if (off > OBSERVED_TOLERANCE) outliers++
                 if (off > worst) {
                     worst = off
                     worstCell = cell
                 }
+                // What the same measurement reads for the control run against itself, which is
+                // exactly 1 and is what a stage with no shielding in it would give.
+                val flat = abs(1.0 - factor[cell])
+                if (flat > control) control = flat
             }
 
             val wooded = BooleanArray(density.size) { unclamped[it] && density[it] >= WOODED_DENSITY }
             val bareBand = BooleanArray(density.size) { unclamped[it] && density[it] <= BARE_DENSITY }
             val bandRatio =
-                perUnitPower(shielded, bare, wooded) / perUnitPower(shielded, bare, bareBand)
+                perUnitPower(shielded, unshielded, wooded) / perUnitPower(shielded, unshielded, bareBand)
+            val landFactor = meanOver(factor, ground.bareCut.isLand)
             println(
-                ("S3 COVER seed=%d  the factor is right on all %d unclamped cells, worst off by " +
-                    "%.2e; it runs %.3f to %.3f and means %.6f over the land; the band ratio " +
-                    "(density >= %.1f against <= %.1f) is %.2f over %d and %d cells, where the " +
-                    "cover means %.2f and %.2f").format(
-                    seed, checked, worst,
-                    ground.erodibility.filterIndexed { cell, _ -> ground.cut.isLand[cell] }.min(),
-                    ground.erodibility.filterIndexed { cell, _ -> ground.cut.isLand[cell] }.max(),
-                    meanOver(ground.erodibility, ground.cut.isLand),
-                    WOODED_DENSITY, BARE_DENSITY, bandRatio,
+                ("S3 COVER seed=%d  observed on %d unclamped cells of one production round: the " +
+                    "factor is right within %.0e on all but %d of them, worst %.2e, where the " +
+                    "same measurement on the unshielded control is out by %.2f; the factor runs " +
+                    "%.3f to %.3f and means %.6f over the land; the band ratio (density >= %.1f " +
+                    "against <= %.1f) is %.2f over %d and %d cells, where the cover means %.2f " +
+                    "and %.2f").format(
+                    seed, checked, OBSERVED_TOLERANCE, outliers, worst, control,
+                    factor.filterIndexed { cell, _ -> ground.bareCut.isLand[cell] }.min(),
+                    factor.filterIndexed { cell, _ -> ground.bareCut.isLand[cell] }.max(),
+                    landFactor, WOODED_DENSITY, BARE_DENSITY, bandRatio,
                     wooded.count { it }, bareBand.count { it },
                     meanOver(density, wooded), meanOver(density, bareBand)
                 )
             )
 
             assertTrue(checked > MIN_FLANK_CELLS, "seed $seed: only $checked unclamped cells")
+            // All but a handful, rather than all. The two runs are whole passes of the stage,
+            // and a few cells in a hundred thousand diverge in ways this cap model does not
+            // reproduce exactly - a cell whose receiver was cut to a different depth in the two
+            // runs meets a different drop, and both caps are read off that drop. The tail is what
+            // is bounded, and tightly enough that a shielding term deleted from `cut` could not
+            // hide in it: that would put *every* cell out by the factor's own spread, which the
+            // control clause below measures.
             assertTrue(
-                worst <= MULTIPLIER_TOLERANCE,
-                "seed $seed: cell $worstCell was shielded by " +
-                    "${"%.6f".format(shielded[worstCell] / bare[worstCell])} where its cover of " +
-                    "${"%.3f".format(density[worstCell])} asks for " +
-                    "${"%.6f".format(ground.erodibility[worstCell])}"
+                outliers <= checked / OBSERVED_OUTLIER_SHARE,
+                "seed $seed: $outliers of $checked unclamped cells are out by more than " +
+                    "$OBSERVED_TOLERANCE, worst cell $worstCell shielded by " +
+                    "${"%.6f".format(shielded[worstCell] / unshielded[worstCell])} where its " +
+                    "cover of ${"%.3f".format(density[worstCell])} asks for " +
+                    "${"%.6f".format(factor[worstCell])}"
             )
-            // And the clause that keeps the calibration: the factor's mean over the land is one,
-            // so a world of uniform cover - any uniform cover - erodes exactly as a bare one did.
-            var factorSum = 0.0
-            var landCells = 0
-            for (cell in density.indices) {
-                if (!ground.cut.isLand[cell]) continue
-                factorSum += ground.erodibility[cell].toDouble()
-                landCells++
-            }
-            val factorMean = factorSum / landCells
+            // And the control is shown to fail the same clause: with the shielding taken out of
+            // the production cut the quotient is 1 everywhere, which is wrong by the width of the
+            // factor's own spread. Without this the clause above would pass a stage that had lost
+            // its shielding term, because it would be comparing 1 against 1.
             assertTrue(
-                abs(factorMean - 1.0) <= MEAN_TOLERANCE,
-                "seed $seed: the cover's factor averages ${"%.6f".format(factorMean)} over the " +
+                control > OBSERVED_CONTROL_MARGIN,
+                "seed $seed: the factor never departs from 1 by more than " +
+                    "${"%.3f".format(control)}, so a stage with no shielding at all would pass " +
+                    "the clause above and this measurement proves nothing"
+            )
+            // The clause that keeps the calibration: the factor averages 1 over the land, so a
+            // world of uniform cover erodes exactly as a bare one did.
+            assertTrue(
+                abs(landFactor - 1.0) <= MEAN_TOLERANCE,
+                "seed $seed: the cover's factor averages ${"%.6f".format(landFactor)} over the " +
                     "land, so it is taking rock off the world rather than moving where it comes off"
             )
         }
+    }
+
+    /**
+     * Every routing pass weights its water against its own land, and the weights sum to that
+     * land's cell count.
+     *
+     * The invariant the whole scheme rests on, read back out of production rather than assumed.
+     * A pass whose weights averaged anything but one would be spending `E = K A^m S^n` against a
+     * differently scaled A than the coefficient was fitted to — and the three passes route over
+     * three different surfaces, the round's rock, the spoil-laid surface the closing breach cuts,
+     * and the finished terrain the outlet pass grooves, each with a shoreline of its own.
+     */
+    @Test
+    fun `every routing pass weights its water against its own land`() {
+        val config = WorldGenConfig(seed = 42L, width = 256, height = 256)
+        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val passes = mutableListOf<Triple<String, Double, Int>>()
+        erodeBlockingObservingCover(config, uplift) { name, summed, landCells ->
+            passes += Triple(name, summed, landCells)
+        }
+        assertTrue(passes.size >= config.erosion.hydraulicRounds, "only ${passes.size} passes")
+        var worst = 0.0
+        var worstPass = ""
+        passes.forEach { (name, summed, landCells) ->
+            val off = abs(summed / landCells - 1.0)
+            if (off > worst) {
+                worst = off
+                worstPass = name
+            }
+        }
+        println(
+            "S3 WEIGHT SUMS %d passes, worst mean off 1 by %.2e at %s".format(
+                passes.size, worst, worstPass
+            )
+        )
+        assertTrue(
+            worst <= MEAN_TOLERANCE,
+            "$worstPass summed its weights to ${"%.3f".format(worst + 1.0)} of its own land's " +
+                "cell count, so that pass routed water it had not normalised"
+        )
     }
 
     /** One [Ground] per seed for the whole class: each is two full erosion runs. */
@@ -483,8 +690,8 @@ class ClimateFedErosionTest {
         val distance = ground.plates.boundaryDistance.data
         val boundaryClass = ground.plates.nearestBoundaryClass
         val falloff = config.tectonics.boundaryFalloffCells
-        val relative = ground.cut.relativeElevation.data
-        val land = ground.cut.isLand
+        val relative = ground.bareCut.relativeElevation.data
+        val land = ground.bareCut.isLand
 
         val inBelt = BooleanArray(cellsAcross * cellsDown) { cell ->
             land[cell] && distance[cell] <= falloff &&
@@ -494,8 +701,8 @@ class ClimateFedErosionTest {
         }
         val largest = largestRun(inBelt, cellsAcross, cellsDown) ?: return null
 
-        val zonal = ground.climate.windDirection
-        val meridional = ground.climate.windMeridional.data
+        val zonal = ground.bareClimate.windDirection
+        val meridional = ground.bareClimate.windMeridional.data
         val windward = BooleanArray(largest.size)
         val leeward = BooleanArray(largest.size)
         // How much of a rise counts as a flank rather than as a crest or a bench: a tenth of what
@@ -737,6 +944,45 @@ class ClimateFedErosionTest {
          * with one factor changed, so the quotient is the factor up to rounding.
          */
         const val MULTIPLIER_TOLERANCE = 1e-5
+
+        /**
+         * How far the observed quotient of two production height fields may sit from the factor.
+         *
+         * Looser than [MULTIPLIER_TOLERANCE] and deliberately so: this is not one expression
+         * compared with itself but two runs of a whole stage differenced through a float height
+         * field, where the cut is subtracted from an elevation of order 1 and the difference is of
+         * order 1e-4. A part in ten thousand of the factor is what that arithmetic can carry.
+         */
+        const val OBSERVED_TOLERANCE = 1e-3
+
+        /**
+         * The least a cell must have been cut for its quotient to carry the factor.
+         *
+         * The height field is a float on a 16 km relief span, so its own resolution is of order a
+         * millimetre of ground; below a metre of cut the quotient of two of them is mostly the
+         * subtraction's rounding. See [OBSERVED_TOLERANCE], which is what a metre leaves.
+         */
+        const val OBSERVED_FLOOR_METRES = 1f
+
+        /**
+         * One cell in this many may sit outside [OBSERVED_TOLERANCE], as a divisor on the count.
+         *
+         * A thousand, so a tenth of a per cent, against a tail measured in the dozens out of
+         * eighty-odd thousand. It is a bar on a *count* rather than on a figure, which is what
+         * makes it safe: a stage that had lost its shielding would put every cell outside the
+         * tolerance at once, not one in a thousand.
+         */
+        const val OBSERVED_OUTLIER_SHARE = 1000
+
+        /**
+         * How far the factor must depart from 1 somewhere, for the control to mean anything.
+         *
+         * The control run takes the shielding out of the production cut, so its quotient is 1 on
+         * every cell. If the factor were within a whisker of 1 everywhere, the clause above could
+         * not tell that run from the shielded one and would be passing on a coincidence. Measured
+         * spread is about 0.4 either way; a tenth is the floor.
+         */
+        const val OBSERVED_CONTROL_MARGIN = 0.1
 
         /**
          * How far the cover's factor may average from 1 over the land.

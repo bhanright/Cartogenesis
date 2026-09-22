@@ -865,12 +865,12 @@ again at the midpoint, and the flow accumulation carries each cell's own rainfal
 standard seeds at 512, on the first round — the one round where the two runs still share a terrain,
 a set of receivers and a set of gradients, so the only thing that differs is the weather. The
 windward flank takes 2.33 to 4.77 times the leeward's rain, and turning the feed on multiplies its
-share of that round's incision by **1.55, 1.65, 1.26 and 2.00**, against the **1.49, 1.47, 1.22 and
+share of that round's incision by **1.57, 1.65, 1.26 and 2.00**, against the **1.49, 1.47, 1.22 and
 1.75** that `sqrt(P_windward / P_leeward)` at m = 0.5 asks for with a fifth off. So the rain does
 what the stream-power law says it should, and `ClimateFedErosionTest` asserts it there.
 
 **What twelve rounds then leave is a good deal less, and that is a landscape and not a law.** The
-relief lost on the windward flank over the leeward comes to 1.12 to 1.68 times, against 0.88 to 1.28
+relief lost on the windward flank over the leeward comes to 1.11 to 1.64 times, against 0.88 to 1.28
 for the same belts with the feed off — tens of per cent where Earth's comparison, the Southern Alps
 of New Zealand, has the western flank taking about ten times the eastern's rain and exhuming at 5-10
 mm a year against the east's under one (Willett 1999; Hovius, Stark and Allen 1997). Three reasons,
@@ -895,8 +895,8 @@ stationary-climate approximation, taken twice over the run rather than once, and
 
 **A wet flank is not more finely divided than a dry one.** The companion claim to the one above,
 and the measurement does not support it. Against a fixed support area — the network's bare geometry
-— the windward flank of the belt on every one of the four standard seeds carries about **0.35 to
-0.48** of the leeward flank's share of channel cells, and it carries **0.41 to 0.47** of it with the
+— the windward flank of the belt on every one of the four standard seeds carries about **0.39 to
+0.51** of the leeward flank's share of channel cells, and it carries **0.41 to 0.47** of it with the
 climate feed switched off as well, so the ordering is the belt's shape and not the rain: the
 windward side is the one the ocean is on, which makes it the shorter and steeper side, with less
 room behind it for a network to branch in. On the discharge the stage actually routes, the wet flank
@@ -904,7 +904,7 @@ leads on two of the four seeds (1.08 and 1.82) and trails on two (0.88 and 0.44)
 gives a consistent sign, so `ClimateFedErosionTest` prints the figures and asserts nothing about
 them. What dissection *does* follow is rainfall over the land as a whole rather than across one
 belt: Spearman's rank correlation between a cell's rainfall and how far it fell over the twelve
-rounds reads **+0.230 to +0.296** over the four seeds, against **+0.087 to +0.137** with the feed off.
+rounds reads **+0.244 to +0.312** over the four seeds, against **+0.087 to +0.137** with the feed off.
 
 **Every basin's outlet erodes, including the ones that would never overflow.** Outlet incision is
 driven by the outflow over a lip, and a basin in dry country has no outflow: Lake Eyre does not cut

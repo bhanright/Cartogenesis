@@ -326,7 +326,7 @@ internal object HydraulicErosion {
         val cut = SeaLevelStage.percentileCut(
             terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
-        val rainfall = FloatArray(cellCount)
+        val rainfall = FloatArray(cellCount) { RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM }
         if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount))
 
         val climate =
@@ -341,8 +341,14 @@ internal object HydraulicErosion {
         // a share of `ClimateStage.REFERENCE_MM`, which is the scale its rainfall is normalised
         // against, so the same figure in millimetres is that share times the reference.
         val floorMm = RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM
+        // Every cell, and the sea's cells too. The provisional march's shoreline is not the
+        // shoreline of every round: the sea stands lower early on and rises up the valleys as the
+        // rounds close, so ground that is under the march's water is land the later rounds route
+        // over. Left at zero, that ground would contribute nothing to the water below it — a hole
+        // in the discharge field exactly where a river mouth is — until the midpoint march caught
+        // up with it. The floor is the honest figure for a cell the march has no rainfall for, and
+        // it is the same floor an arid upland gets.
         for (cell in 0 until cellCount) {
-            if (!cut.isLand[cell]) continue
             rainfall[cell] = if (annualMm[cell] > floorMm) annualMm[cell] else floorMm
         }
 
@@ -364,10 +370,15 @@ internal object HydraulicErosion {
      * divisor would have to become the summed rainfall in two places at once, and `E = K A^m S^n`
      * would be spent against a differently scaled A than the one it was fitted to.
      *
-     * Taken again every round, over that round's own land mask rather than the march's, because
-     * the shoreline moves as the land wears down and the sea rises up the valleys: a mean taken
-     * once would be the mean of a coastline that no longer exists, and the land the round routes
-     * on would carry a mean a little off 1.
+     * Taken again for **every routing pass**, over the mask that pass actually routes on rather
+     * than over the march's, because the shoreline moves as the land wears down and the sea rises
+     * up the valleys — and because the closing breach and the post-cut outlet pass route over a
+     * spoil-laid surface with a shoreline of their own. A mean taken once would be the mean of a
+     * coastline that no longer exists, and the land the pass routes on would carry a mean a little
+     * off 1, which is the one thing the divisor below cannot tolerate.
+     *
+     * Returns the summed weight over the mask, which is the land's cell count when the mean is
+     * exactly 1 — the passes print it, so the invariant is visible rather than assumed.
      *
      * What the scheme is, said plainly: **relative climatic forcing**. It redistributes the
      * world's water across the land and cannot change how much there is, so a world made uniformly
@@ -420,15 +431,20 @@ internal object HydraulicErosion {
         isLand: BooleanArray,
         landCellCount: Int,
         weights: FloatArray
-    ) {
+    ): Double {
         var summed = 0.0
         for (cell in rainfallMm.indices) if (isLand[cell]) summed += rainfallMm[cell].toDouble()
         val mean = (summed / landCellCount).toFloat()
         if (mean <= 0f) {
             weights.fill(0f)
-            return
+            return 0.0
         }
-        for (cell in rainfallMm.indices) weights[cell] = rainfallMm[cell] / mean
+        var weighted = 0.0
+        for (cell in rainfallMm.indices) {
+            weights[cell] = rainfallMm[cell] / mean
+            if (isLand[cell]) weighted += weights[cell].toDouble()
+        }
+        return weighted
     }
 
     /**
@@ -468,6 +484,15 @@ internal object HydraulicErosion {
         onRound: ((RoundMass) -> Unit)? = null,
         log: DepositionLog? = null,
         receiverClamp: Boolean = true,
+        /**
+         * Handed every routing pass's name, the weight it summed over its own land, and how many
+         * land cells that was. Diagnostics only, on the same terms as [onRound]: the two agree to
+         * the last few bits when the normalisation is doing its job, and a guard reads them back
+         * rather than taking the invariant on trust.
+         */
+        weightSums: ((String, Double, Int) -> Unit)? = null,
+        /** Whether [cut] takes the cover's factor. Only ever false in the cover's own guard. */
+        shieldCut: Boolean = true,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
@@ -506,6 +531,9 @@ internal object HydraulicErosion {
         // that round's shoreline is known. Allocated here so the rounds share them.
         val runoff = FloatArray(cellsAcross * cellsDown)
         val erodibility = FloatArray(cellsAcross * cellsDown)
+        // The closing breach and the post-cut outlet pass route over surfaces the rounds never
+        // routed over, each with its own shoreline, so each takes its own normalisation.
+        val spoilRunoff = FloatArray(cellsAcross * cellsDown)
 
         // The solid earth's two answers to what the water is doing, both of them off by default
         // and both switched by their own setting so a guard can measure the world without them.
@@ -720,8 +748,14 @@ internal object HydraulicErosion {
             // This round's shoreline is now known, so both fields are taken against this round's
             // land. See [normaliseOverLand] for why that is where the mean has to come from, and
             // [VEGETATION_SHIELDING] for why the cover is spent relatively too.
-            normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
-            shieldingOverLand(vegetationDensity, sea.isLand, sea.landCellCount, erodibility)
+            val roundWeight =
+                normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
+            if (shieldCut) {
+                shieldingOverLand(vegetationDensity, sea.isLand, sea.landCellCount, erodibility)
+            } else {
+                erodibility.fill(1f)
+            }
+            weightSums?.invoke("round $round", roundWeight, sea.landCellCount)
 
             val filled = FlowRouting.fillDepressions(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation
@@ -1263,11 +1297,16 @@ internal object HydraulicErosion {
                             config.seed, config.facetRouting, config.flatPotential
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
-                    // what it has to cut with is the discharge behind that sill. The same weights
-                    // the rounds routed with, over the spoil-laid surface this pass re-routes on.
+                    // what it has to cut with is the discharge behind that sill. Weighted as the
+                    // rounds weight it — but renormalised here, because this pass routes over the
+                    // spoil-laid surface and that surface has a shoreline of its own.
+                    val spoilWeight = normaliseOverLand(
+                        rainfallMm, after.isLand, after.landCellCount, spoilRunoff
+                    )
+                    weightSums?.invoke("breach $round", spoilWeight, after.landCellCount)
                     val spoilArea = FlowRouting.accumulate(
                         cellsAcross, cellsDown, after.isLand, spoilFilled, spoilFlow, after.landCellCount
-                    ) { cell -> runoff[cell] }
+                    ) { cell -> spoilRunoff[cell] }
                     val cut = breach(
                         erosion, rates, cellsAcross,
                         FlowRouting.spillways(
@@ -1297,7 +1336,7 @@ internal object HydraulicErosion {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
                     rates.pondDepth, config.seed, config.facetRouting, config.flatPotential,
-                    runoff
+                    rainfallMm, weightSums
                 )
                 incised += opened.removed
                 lost += opened.removed
@@ -1617,8 +1656,9 @@ internal object HydraulicErosion {
         seed: Long,
         byFacet: Boolean,
         overPotential: Boolean,
-        /** The rounds' own rainfall weights; see [normaliseOverLand]. */
-        runoff: FloatArray
+        /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
+        rainfallMm: FloatArray,
+        weightSums: ((String, Double, Int) -> Unit)?
     ): Opened {
         val cellCount = cellsAcross * cellsDown
         val sea = SeaLevelStage.percentileCut(working, provisionalSeaLevel, scale)
@@ -1641,8 +1681,12 @@ internal object HydraulicErosion {
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, byFacet, overPotential
         )
-        // Weighted as the rounds weighted it, so a groove is cut where a river's water is and
-        // not merely where a lot of ground drains.
+        // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
+        // merely where a lot of ground drains — and normalised over this pass's own land, which is
+        // the finished terrain's and not any round's.
+        val runoff = FloatArray(cellCount)
+        val outletWeight = normaliseOverLand(rainfallMm, isLand, sea.landCellCount, runoff)
+        weightSums?.invoke("outlet", outletWeight, sea.landCellCount)
         val area = FlowRouting.accumulate(
             cellsAcross, cellsDown, isLand, filled, flow, sea.landCellCount
         ) { cell -> runoff[cell] }

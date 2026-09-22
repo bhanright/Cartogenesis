@@ -109,7 +109,18 @@ object ErosionStage {
         accelerator: ErosionAccelerator?,
         onRound: ((RoundMass) -> Unit)?,
         log: DepositionLog? = null,
-        receiverClamp: Boolean = true
+        receiverClamp: Boolean = true,
+        /** See `HydraulicErosion.apply`: every routing pass's weight sum, for the guard. */
+        weightSums: ((String, Double, Int) -> Unit)? = null,
+        /**
+         * Whether the rounds shield the incision with the plant cover.
+         *
+         * Only ever false in `ClimateFedErosionTest`, which is where the cover's own guard is shown
+         * to fail without it. Kept off `WorldGenConfig` for the reason the receiver clamp is: the
+         * shielding is not a taste, and a world generated with the rain but without the cover is
+         * not a world anybody wants, only a control.
+         */
+        shieldCut: Boolean = true
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -129,7 +140,7 @@ object ErosionStage {
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp
+                receiverClamp, weightSums, shieldCut
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },

@@ -66,3 +66,34 @@ internal fun erodeBlockingWithReceiverClamp(
 ): ErosionResult = runBlocking {
     ErosionStage.apply(config, height, null, null, onRound, receiverClamp = receiverClamp)
 }
+
+/**
+ * The whole stage, with the cover's shielding switchable and every routing pass's weight sum
+ * reported — what `ClimateFedErosionTest` observes production through.
+ *
+ * Kept off `WorldGenConfig` for the reason [erodeBlockingWithReceiverClamp] is: a world cut by the
+ * rain but not held back by what grows on it is not a world anyone wants, only the control that
+ * shows the cover is doing something. The guards read the height field this returns rather than
+ * rebuilding the incision formula beside it, so a shielding term deleted from `cut` shows up as a
+ * failure instead of passing a test that was computing its own answer.
+ */
+internal fun erodeBlockingObservingCover(
+    config: WorldGenConfig,
+    height: FloatField,
+    shieldCut: Boolean = true,
+    /**
+     * The clamp is switched off for the cover's own guard, and only there. It bounds a cell's cut
+     * by the receiver's *new* height, so whether it bites on a given cell depends on how much the
+     * cells upstream of it were cut — which is exactly what the guard is varying. Left on, a few
+     * cells in a hundred thousand are clamped in one run and not the other, and the quotient there
+     * is the clamp's arithmetic rather than the cover's. The clamp is not part of the erodibility
+     * law, so taking it out is what makes the comparison exact rather than what makes it pass.
+     */
+    receiverClamp: Boolean = true,
+    weightSums: ((String, Double, Int) -> Unit)? = null
+): ErosionResult = runBlocking {
+    ErosionStage.apply(
+        config, height, null, null, null, null, receiverClamp = receiverClamp,
+        weightSums = weightSums, shieldCut = shieldCut
+    )
+}

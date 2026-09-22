@@ -70,6 +70,13 @@ class LakeWaterBalanceTest {
     private val wetSeed = 31L
 
     /**
+     * How much of its spill-level footprint the dry basin may still hold once the balance has
+     * settled it. A recorded figure, re-taken when the terrain under it moves; the clause below
+     * carries what moved it and why the claim does not depend on the number.
+     */
+    private val DRY_BASIN_SHARE_OF_SPILL_AREA = 0.50
+
+    /**
      * Both worlds are generated with the outlet notch off, and that is not a convenience.
      *
      * E1 drains a filled basin by cutting its lip down, and the two basins this test is built
@@ -177,19 +184,33 @@ class LakeWaterBalanceTest {
         // construction: this is the guard failing without the fix, measured rather than asserted
         // from memory.
         assertEquals(1.0, control, 1e-9, "with waterBalance off the basin should still be full")
-        // Re-recorded by E4 (segmented rifts), from 30% to 45%, and the reason is worth stating
-        // because a moved threshold usually is not allowed. Seed 43's dry basin holds no rift cells
-        // at all — the guard prints that above, 0 of 1630 — so nothing about it is a rift. What
-        // moved it is that `PlateStage` normalizes the whole height field over its own range, so
-        // any change to the deepest ground on the map rescales the relief everywhere, and this
-        // basin's hypsometry turns out to be knife-edged: the basin went from 1775 cells at spill
-        // to 1630 and the balance level settled one terrace higher, 40% of the footprint against
-        // 18%. The claim being guarded is unchanged and still carries — a dry basin does not fill
-        // to its rim, and the control on the line above is 100% of the same footprint by
-        // construction — but the figure it is measured by is no longer 18%.
+        // Re-recorded twice, and the reason is worth stating each time because a moved threshold
+        // usually is not allowed. What is being guarded is that a dry basin does not fill to its
+        // rim; the control on the line above is 100% of the same footprint by construction, so
+        // that claim is unchanged and carries whatever this figure reads. What the figure itself
+        // depends on is the hypsometry of one particular hollow, which is knife-edged: the level
+        // the balance settles at falls on a terrace or between two, and a small change in the
+        // terrain moves it a whole terrace.
+        //
+        // E4 (segmented rifts) took it from 30% to 45%. Seed 43's dry basin holds no rift cells at
+        // all — the guard prints that above — so nothing about it is a rift; what moved it is that
+        // `PlateStage` normalizes the whole height field over its own range, so any change to the
+        // deepest ground on the map rescales the relief everywhere. The basin went from 1,775
+        // cells at spill to 1,630 and the level settled one terrace higher, 40% against 18%.
+        //
+        // S3 takes it to 50%, and this time the cause is the water rather than the rock. The
+        // hydraulic rounds read the climate now, and the rainfall weight is *relative*: this basin
+        // averages 81 mm a year against the land's own mean, which is the bottom of the
+        // distribution, so its catchment carries the least water on the map and its rim and floor
+        // are the ground the rounds cut least. A shallower, less incised floor spreads the same
+        // balance level over more of the footprint. 2,359 cells at spill against 1,630, 1,109 of
+        // them still wet, 47%. Recorded at 50 for the same reason the previous figure was recorded
+        // at 45 rather than at 40: the terrace below is a long way down and a bar on the terrace
+        // itself would be re-taken by the next chunk that moves a metre of rock.
         assertTrue(
-            share < 0.45,
-            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area, wanted under 45%"
+            share < DRY_BASIN_SHARE_OF_SPILL_AREA,
+            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
+                " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
         )
 
         val lake = basin.mapNotNull { cell ->

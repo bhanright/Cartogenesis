@@ -977,33 +977,44 @@ data class TectonicsConfig(
      * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
      * at five millimetres a year and gain about half of one, because the rest comes off as
      * sediment — so a rate is only meaningful beside the erosion it is racing. This generator's
-     * rivers and hillslopes take **0.27 mm/yr** off an active belt, measured over the belts of the
-     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off, which
-     * `IsostasyTest` re-measures and holds this constant against. It was 0.36 until S2's fourth
-     * pass gave the base relief a texture proportional to the ground's own relief: a smoother
-     * plain is less for the water to take away.
+     * rivers and hillslopes take **0.218 mm/yr** off an active belt, measured over the belts of the
+     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off
+     * (0.192, 0.275, 0.191, 0.201 and 0.229), which `IsostasyTest` re-measures and holds this
+     * constant against.
      *
      * So the collision rate is the surface uplift Earth's own collisions manage — half a
-     * millimetre a year — plus what this model's rivers will take back off it, which is 0.77 mm/yr
-     * of rock uplift, and the other three follow the ratios above. That is close to England and
-     * Molnar's own band for an active collision, 1 to 10 mm/yr, where S2's first pass reached 0.6,
-     * and the reason is worth saying. The first pass measured the denudation at 0.101 mm/yr on a
-     * surface with a quarter of the mid-band relief for the water to cut into, and divided the
-     * metres a round removes by a round two and two-thirds longer than S1's own derivation gives
-     * (see [WorldScale.yearsPerHydraulicRound]). Both were corrected in the second pass, the
-     * erosion rate came out at Earth's own order for an orogen, and the uplift that has to race it
-     * came with it.
+     * millimetre a year — plus what this model's rivers will take back off it, which is
+     * **0.718 mm/yr** of rock uplift, and the other three follow the ratios above. That is close to
+     * England and Molnar's own band for an active collision, 1 to 10 mm/yr, where S2's first pass
+     * reached 0.6, and the reason is worth saying. The first pass measured the denudation at 0.101
+     * mm/yr on a surface with a quarter of the mid-band relief for the water to cut into, and
+     * divided the metres a round removes by a round two and two-thirds longer than S1's own
+     * derivation gives (see [WorldScale.yearsPerHydraulicRound]). Both were corrected in the second
+     * pass, the erosion rate came out at Earth's own order for an orogen, and the uplift that has
+     * to race it came with it.
      *
-     * Over the one and a half million years twelve rounds stand for that is 1.2 km of rock into a
-     * collision belt and 0.4 km out of it, against a dead belt of the same age that only loses.
+     * **The denudation has been re-measured twice since, and the rate follows it each time rather
+     * than staying put.** S2's fourth pass gave the base relief a texture proportional to the
+     * ground's own relief, and a smoother plain is less for the water to take away: 0.36 to 0.27,
+     * which is where 0.77 came from. Then the hydraulic rounds started reading the climate. Two
+     * terms arrived together there and they pull the same way on a belt: the rainfall weight
+     * redistributes the world's water, and the plant cover's relative shielding takes erodibility
+     * off the wettest and best-wooded ground — which is what an active belt is — so a belt keeps a
+     * little more of itself. 0.27 to 0.218, and the rate with it. This is a derived constant and
+     * not a pin: what it is held to is Earth's surface uplift plus whatever this model's own
+     * rivers are measured to remove on the day, and a chunk that moves the second re-derives the
+     * first.
+     *
+     * Over the one and a half million years twelve rounds stand for that is 1.1 km of rock into a
+     * collision belt and 0.3 km out of it, against a dead belt of the same age that only loses.
      * The difference between the two is what S2 exists to show.
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.77f,
-    val andeanUpliftMmPerYear: Float = 0.308f,
-    val islandArcUpliftMmPerYear: Float = 0.108f,
-    val riftShoulderUpliftMmPerYear: Float = 0.046f,
+    val collisionUpliftMmPerYear: Float = 0.718f,
+    val andeanUpliftMmPerYear: Float = 0.287f,
+    val islandArcUpliftMmPerYear: Float = 0.101f,
+    val riftShoulderUpliftMmPerYear: Float = 0.043f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *

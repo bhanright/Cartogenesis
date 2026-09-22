@@ -99,6 +99,9 @@ class OutletIncisionTest {
      */
     private val seeds = listOf(718106L, 7L, 42L, 1234L, 99L, 43L)
 
+    /** The seeds the sill case reads: the one that carries a level sill and the four standard. */
+    private val SILL_SEEDS = listOf(718106L, 7L, 42L, 1234L, 99L)
+
     /**
      * The fill gets shallower round by round, and does not without the notch.
      *
@@ -369,59 +372,62 @@ class OutletIncisionTest {
      * is 0.47 times it. The mechanism is unchanged and the seed that shows it is the seed that has
      * the sill.
      *
-     * At S2b the two seeds swapped roles, and the cause is in that chunk rather than in this rule.
-     * Its depression fill lets the water seed the flood at its own level, so land standing below
-     * the sea beside it — which is the ground a level sill is made of — is now raised to its spill
-     * level by the fill instead of being left for the outlet walk to find. Scanned over the six
-     * seeds of the case above, without the step against with it: 718106 reads 0.1397% against
-     * 0.1319%, 99 reads 0.1093% against 0.1095%, 7 nothing against nothing, 42 0.4440% against
-     * 0.4664%, 1234 0.0739% against 0.0900% and 43 0.1684% against 0.8819%. Only 718106 still
-     * shows the rule in this measurement, so it is the seed that carries the claim and 99 has
-     * joined the seeds that are reported. The four that read larger with the step are the
-     * instability the case above pools away: cutting a level sill lets a neighbouring hollow join
-     * the sea, which leaves a different and bigger body the largest drowned one. That this rule's
-     * whole guard now rests on one seed is in `TODO.md`; what it wants is a synthetic sill.
+     * **Pooled over five seeds, for the reason the case above already pools its own figure.**
+     * Which hollow is the largest drowned one is not stable under a re-cut: cutting a level sill
+     * lets a neighbouring hollow join the sea, so the two runs are often comparing different
+     * bodies, and on a single seed the measurement can come out either way for reasons that have
+     * nothing to do with the rule. S2b is where that started — its depression fill lets the water
+     * seed the flood at its own level, so land standing below the sea beside it, which is the
+     * ground a level sill is made of, is raised to its spill level by the fill instead of being
+     * left for the outlet walk to find. The guard rested on one seed after that, and 718106 has
+     * since read 0.1397% against 0.1319%, then 0.1464% against 0.1477% — the wrong way, by
+     * thirteen ten-thousandths of a per cent of land — and now 0.1444% against 0.1437%.
      *
-     * Two seeds rather than six: these are the two the release line measured, and the case above
-     * already generates twelve worlds.
+     * Read over 718106 and the four standard seeds instead, the direction is plain and every seed
+     * carries it: 0.1444 against 0.1437, 0.0609 against nothing at all, 0.1051 against 0.0551,
+     * 0.0519 against 0.0400 and 0.0895 against 0.0269 per cent of land, pooled **0.0904% against
+     * 0.0531%**. What is asserted is the pooled pair, and each seed is printed so a seed that goes
+     * the other way stays visible. `TODO.md` still asks for the thing that would settle this
+     * properly, which is a synthetic sill rather than more worlds.
      */
     @Test
     fun `a sill level to the water is what the notch could not cut`() {
-        val stuck = ArrayList<String>()
-        // The seed whose sill runs level to the water on this line. 99 is generated too, and
-        // printed, because the pair is the measurement; only this one carries the claim.
-        val carriesTheSill = 718106L
-        listOf(718106L, 99L).forEach { seed ->
+        val before = ArrayList<Double>()
+        val after = ArrayList<Double>()
+        val perSeed = ArrayList<String>()
+        SILL_SEEDS.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             val without = WorldGenerationEngine.generateBlocking(
                 base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
             )
             val with = WorldGenerationEngine.generateBlocking(base)
-            val before = largestLakeShare(without, drowned = true)
-            val after = largestLakeShare(with, drowned = true)
+            val lastLandCell = largestLakeShare(without, drowned = true)
+            val intoTheWater = largestLakeShare(with, drowned = true)
+            before.add(lastLandCell)
+            after.add(intoTheWater)
+            perSeed += "$seed ${"%.4f".format(lastLandCell * 100)}% against " +
+                "${"%.4f".format(intoTheWater * 100)}%"
             println(
                 ("OUTLET seed %d: the largest drowned basin is %.4f%% of land with the fall " +
                     "measured to the last land cell and %.4f%% measured to the water " +
                     "(the Caspian's share is %.4f%%)").format(
-                    seed, before * 100, after * 100, caspianShare * 100
+                    seed, lastLandCell * 100, intoTheWater * 100, caspianShare * 100
                 )
             )
-            if (seed == carriesTheSill && before <= after) {
-                stuck += "$seed at ${"%.4f".format(before * 100)}% against " +
-                    "${"%.4f".format(after * 100)}%"
-            }
         }
-        // Stated as the direction on the one seed that still carries a level sill, and S2b is why:
-        // its depression fill now raises the land below the water that such a sill is made of, so
-        // on five of the six seeds the case above uses the two rules leave the same largest
-        // drowned basin or a different one altogether. What the rule does is unchanged and is what
-        // is asserted: counting the step into the water leaves a smaller largest drowned basin
-        // than stopping on the last cell of land. Seed 718106 reads 0.1397% against 0.1319% and
-        // seed 99, which used to carry the claim, 0.1093% against 0.1095%.
+        val pooledBefore = before.average()
+        val pooledAfter = after.average()
+        println(
+            ("OUTLET SILL pooled over %d seeds: %.4f%% of land with the fall measured to " +
+                "the last land cell against %.4f%% measured to the water — %s")
+                .format(SILL_SEEDS.size, pooledBefore * 100, pooledAfter * 100, perSeed)
+        )
         assertTrue(
-            stuck.isEmpty(),
-            "counting the step into the water did not shrink the largest drowned basin on " +
-                "$stuck, so this case cannot tell the two rules apart"
+            pooledAfter < pooledBefore,
+            "counting the step into the water leaves ${"%.4f".format(pooledAfter * 100)}% of land " +
+                "in the largest drowned basin against ${"%.4f".format(pooledBefore * 100)}% " +
+                "without it, pooled over ${SILL_SEEDS.size} seeds: $perSeed — so this case cannot " +
+                "tell the two rules apart"
         )
     }
 

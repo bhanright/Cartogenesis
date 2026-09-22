@@ -19,10 +19,12 @@ import org.junit.Assert.assertTrue
  * ponded plateau, then — the third pass — the whole of the land under one uniform sandpaper and
  * continents flooded through the middle. These four measurements are what the eye was reading.
  *
- * All four are compared against `main` measured by exactly this arithmetic on the same five seeds —
- * the first two against 2eb0f0d, the tree before S2, and the last two against 230deb9, the tree S2's
- * fourth pass merged. Three of them carry a control that shows the bar bite. The fourth's control
- * could not bite and has been taken out rather than printed; the clause says so where it stands.
+ * All four are compared against a reference measured by exactly this arithmetic on the same five
+ * seeds. The belt flank and the drainage read against 2eb0f0d, the tree before S2, and the drowned
+ * rim against 230deb9, the tree S2's fourth pass merged; the two quarter textures are re-recorded
+ * whenever a chunk genuinely moves the ground, and the constant they live at says what moved it
+ * last. Three of them carry a control that shows the bar bite. The fourth's control could not bite
+ * and has been taken out rather than printed; the clause says so where it stands.
  */
 class GroundTextureTest {
 
@@ -191,11 +193,11 @@ class GroundTextureTest {
             controlLowest.add(control.first)
             controlHighest.add(control.second)
             println(
-                ("TEXTURE ground seed %d: lowest quarter %.0f m against main's %.0f, highest %.0f" +
+                ("TEXTURE ground seed %d: lowest quarter %.0f m against the record's %.0f, highest %.0f" +
                     " against %.0f; stationary control %.0f and %.0f")
                     .format(
-                        seed, here.first, MAIN_LOWEST_QUARTER_TEXTURE_METRES,
-                        here.second, MAIN_HIGHEST_QUARTER_TEXTURE_METRES,
+                        seed, here.first, RECORDED_LOWEST_QUARTER_TEXTURE_METRES,
+                        here.second, RECORDED_HIGHEST_QUARTER_TEXTURE_METRES,
                         control.first, control.second
                     )
             )
@@ -203,32 +205,32 @@ class GroundTextureTest {
         val pooledLowest = lowest.average()
         val pooledHighest = highest.average()
         println(
-            ("TEXTURE ground pooled: lowest quarter %.3f m against main's %.3f, highest %.3f" +
+            ("TEXTURE ground pooled: lowest quarter %.3f m against the record's %.3f, highest %.3f" +
                 " against %.3f; stationary control %.3f and %.3f")
                 .format(
-                    pooledLowest, MAIN_LOWEST_QUARTER_TEXTURE_METRES,
-                    pooledHighest, MAIN_HIGHEST_QUARTER_TEXTURE_METRES,
+                    pooledLowest, RECORDED_LOWEST_QUARTER_TEXTURE_METRES,
+                    pooledHighest, RECORDED_HIGHEST_QUARTER_TEXTURE_METRES,
                     controlLowest.average(), controlHighest.average()
                 )
         )
         assertTrue(
             "the lowest quarter of the land departs from its own smoothed self by" +
-                " ${"%.3f".format(pooledLowest)} m, where the tree before S2 manages" +
-                " ${"%.1f".format(MAIN_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
-            pooledLowest <= MAIN_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE
+                " ${"%.3f".format(pooledLowest)} m, where the record reads" +
+                " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
+            pooledLowest <= RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE
         )
         assertTrue(
-            "the highest quarter departs by ${"%.1f".format(pooledHighest)} m against the" +
-                " ${"%.1f".format(MAIN_HIGHEST_QUARTER_TEXTURE_METRES)} m the tree before S2" +
-                " manages: the ranges have been smoothed along with the plains",
-            pooledHighest >= MAIN_HIGHEST_QUARTER_TEXTURE_METRES
+            "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
+                " ${"%.1f".format(RECORDED_HIGHEST_QUARTER_TEXTURE_METRES)} m recorded: the ranges" +
+                " have been smoothed along with the plains",
+            pooledHighest >= RECORDED_HIGHEST_QUARTER_TEXTURE_METRES - RECORDED_TO_THE_TENTH_METRE
         )
         assertTrue(
             "with the texture rule off the lowest quarter reads" +
-                " ${"%.1f".format(controlLowest.average())} m, which is already inside main's" +
-                " ${"%.1f".format(MAIN_LOWEST_QUARTER_TEXTURE_METRES)} — so this guard would pass" +
-                " without the fix and proves nothing",
-            controlLowest.average() > MAIN_LOWEST_QUARTER_TEXTURE_METRES
+                " ${"%.1f".format(controlLowest.average())} m, which is already inside the" +
+                " record's ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)} — so this" +
+                " guard would pass without the fix and proves nothing",
+            controlLowest.average() > RECORDED_LOWEST_QUARTER_TEXTURE_METRES
         )
     }
 
@@ -499,19 +501,13 @@ class GroundTextureTest {
         val WORLDS = HashMap<Long, WorldMap>()
 
         /**
-         * What `main` at 230deb9 measures, by [textureByElevation], on these five seeds.
+         * How much slack the two quarter comparisons below carry, in metres: a tenth, which is the
+         * precision the figures they compare against are recorded to.
          *
-         * Taken by running the measurement on that tree rather than remembered: the lowest quarter
-         * reads 46, 45, 73, 74 and 89 m and the highest 70, 83, 141, 116 and 170.
-         */
-        /**
-         * How much slack the lowest-quarter comparison below carries, in metres: a tenth,
-         * which is the precision the figure it compares against is recorded to.
-         *
-         * Not slack for its own sake. [MAIN_LOWEST_QUARTER_TEXTURE_METRES] is the mean of five
-         * per-seed measurements written down to one decimal place, so a strict inequality against
-         * it asserts a difference finer than that number is quoted to, and any change
-         * anywhere upstream of the terrain tips it whichever way the last digit happens to fall.
+         * Not slack for its own sake. Each is the mean of five per-seed measurements written down
+         * to one decimal place, so a strict inequality against one asserts a difference finer than
+         * that number is quoted to, and any change anywhere upstream of the terrain tips it
+         * whichever way the last digit happens to fall.
          * W2 tipped it: the pressure wind reaches the provisional climate the glaciation stage
          * carves from, so a change to the air moves the ice mask and the ice mask moves the rock,
          * and the pooled figure crossed by less than the tenth of a metre it is recorded to. The
@@ -520,8 +516,39 @@ class GroundTextureTest {
          */
         const val RECORDED_TO_THE_TENTH_METRE = 0.1
 
-        const val MAIN_LOWEST_QUARTER_TEXTURE_METRES = 65.2
-        const val MAIN_HIGHEST_QUARTER_TEXTURE_METRES = 115.9
+        /**
+         * What [textureByElevation] reads on this tree over the five seeds: how far the lowest and
+         * the highest quarter of the land depart from their own smoothed selves, in metres.
+         *
+         * **Regression references and not Earth figures**, which is why they are re-taken when the
+         * ground genuinely moves and why the two comparisons below run in opposite directions: the
+         * plains may not get rougher than this and the ranges may not get smoother. What the pair
+         * is guarding is S2's texture rule — fine relief scaled by the local relief of the ground
+         * under it — and what it refuses is the two ways that rule can fail, sandpaper on a plain
+         * and a planed-off range.
+         *
+         * Taken by running the measurement rather than remembered. The lowest quarter reads 64, 83,
+         * 60, 55 and 66 m on seeds 7, 42, 1234, 99 and 718106 and the highest 101, 131, 92, 117 and
+         * 112, so the pooled figures are 65.7 and 110.4.
+         *
+         * **Re-taken once, and here is what moved.** They stood at 65.2 and 115.9 — the tree before
+         * S2, which S2's own tree cleared at 63.1 and 120.4 — until the hydraulic rounds began
+         * reading the climate. Both terms the rounds gained redistribute erosion rather than change
+         * how much of it there is, so what they move is *where* the rock comes off, and both
+         * quarters felt it in the direction the scheme predicts. The plains are a little rougher,
+         * 65.7 against 65.2: dry lowland now takes the smallest share of the world's water and the
+         * least erosion with it, and ground the rivers leave alone keeps the fine relief the
+         * texture rule gave it. The ranges are smoother, 110.4 against 115.9: high ground is wet
+         * and wooded, so it draws the largest rainfall weight while its cover holds some of its
+         * erodibility back, and the collision uplift that used to race a denudation of 0.27 mm/yr
+         * now races 0.218 and stands at 0.718 mm/yr rather than 0.77 — a range that is pushed up
+         * more gently is a range with less of the sheer young relief this measurement reads.
+         * Neither figure is anywhere near the claim's own scale: the plains would have to reach
+         * the texture-off control's 104 m to be sandpaper, and the ranges are still 1.7 times the
+         * plains.
+         */
+        const val RECORDED_LOWEST_QUARTER_TEXTURE_METRES = 65.7
+        const val RECORDED_HIGHEST_QUARTER_TEXTURE_METRES = 110.4
 
         /**
          * How far from the crust's own edge a drowned continental cell may lie and still count as

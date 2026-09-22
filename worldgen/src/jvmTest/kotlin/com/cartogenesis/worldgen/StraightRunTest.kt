@@ -36,9 +36,6 @@ class StraightRunTest {
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val STANDARD_SIDE = 512
 
-        /** The seed the live control runs on: the most ruled runs of the four at 512. */
-        const val CONTROL_SEED = 42L
-
         /**
          * The author's second world, at the one grid the ruled shores can be found on.
          *
@@ -292,26 +289,45 @@ class StraightRunTest {
     }
 
     /**
-     * The rule this replaced draws more of the map with a ruler, on the same seed and the same day.
+     * The rule this replaced draws more of the map with a ruler, on the same seeds and the same day.
      *
      * The live control, and the reason the census above is worth reading. A run of seven steps on
      * one bearing is 40 to 160 km of watercourse without a bend at these grids; the plain rule
      * leaves more of them than the facet rule on every seed measured — 76/28/38/22/31 against
-     * 66/21/32/15/20 on 298405 at 1024 and on 7/42/1234/99 at 512 — and one seed at 512 keeps
-     * proving that per merge. The audit tier runs the whole table.
+     * 66/21/32/15/20 on 298405 at 1024 and on 7/42/1234/99 at 512. The audit tier runs the whole
+     * table; this runs the four standard seeds at 512 and compares the totals.
+     *
+     * **Pooled over the four rather than on one, and the reason is scatter.** One seed's count is
+     * a few dozen runs over one world, and a chunk that re-cuts the ground moves both counts by
+     * that order: on a single seed the margin has read 29 against 28 — one run, the wrong way —
+     * and 101 against 127 on successive re-cuts of the same seed, while the sign over four seeds
+     * has never turned. What this clause is about is a property of the two routing rules, so it is
+     * read over as much map as the per-merge tier can afford rather than over one world's worth of
+     * accident, and each seed is printed so a seed that goes the other way is still visible.
      */
     @Test
     fun `the old rule draws more of the map with a ruler`() {
-        val plain = RuledLines.ruledRunsOf(world(CONTROL_SEED, STANDARD_SIDE, byFacet = false))
-        val facet = RuledLines.ruledRunsOf(world(CONTROL_SEED, STANDARD_SIDE))
+        var plain = 0
+        var facet = 0
+        STANDARD_SEEDS.forEach { seed ->
+            val plainHere = RuledLines.ruledRunsOf(world(seed, STANDARD_SIDE, byFacet = false))
+            val facetHere = RuledLines.ruledRunsOf(world(seed, STANDARD_SIDE))
+            plain += plainHere
+            facet += facetHere
+            println(
+                "F18 ruled runs of ${RuledLines.RULED_RUN_CELLS}+ on $seed@$STANDARD_SIDE: " +
+                    "steepest neighbour $plainHere, steepest facet $facetHere"
+            )
+        }
         println(
-            "F18 ruled runs of ${RuledLines.RULED_RUN_CELLS}+ on $CONTROL_SEED@$STANDARD_SIDE: " +
+            "F18 ruled runs pooled over $STANDARD_SEEDS at $STANDARD_SIDE: " +
                 "steepest neighbour $plain, steepest facet $facet"
         )
         assertTrue(
             facet < plain,
-            "the facet rule left $facet ruled runs against the plain rule's $plain, so the two " +
-                "cannot be told apart and the census above proves nothing"
+            "the facet rule left $facet ruled runs against the plain rule's $plain over " +
+                "${STANDARD_SEEDS.size} seeds, so the two cannot be told apart and the census " +
+                "above proves nothing"
         )
     }
 

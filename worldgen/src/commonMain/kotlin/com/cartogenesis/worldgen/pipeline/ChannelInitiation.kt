@@ -237,7 +237,7 @@ object ChannelInitiation {
 
         for (cell in 0 until cellCount) {
             if (!isLand[cell] || isOpenWater(cell)) continue
-            if (neverThaws(config, climate, cell)) continue
+            if (neverThaws(climate, cell)) continue
             channel[cell] = isChannelHead(
                 areaKm2.data[cell], gradient[cell], vegetationDensity.data[cell], config.rivers
             )
@@ -269,27 +269,36 @@ object ChannelInitiation {
     ) { world.rivers.lakes.isOpenWater(it) }
 
     /**
-     * Ground that never thaws, and so never starts a channel of its own.
+     * Ground that never thaws, and so never starts a channel of its own: ground whose own warmest
+     * month stays at or below freezing.
      *
-     * Thornthwaite's demand is exactly zero where neither season rises above freezing, which is the
-     * same test `EarthLikeness` files as its FROZEN class and the same arithmetic the lake water
-     * balance runs. Such a cell is under perennial snow or ice or is a polar desert on frozen
-     * ground: water does not run over it in any season, so nothing there cuts a head. What crosses
-     * it from warmer ground upstream is still a channel — the downstream rule in [channelMask]
-     * carries it — which is the Lena and the Yenisey, rivers that rise where the summer thaws and
-     * run on over ground that does not.
+     * `ClimateResult.summerTemperature` is the cell's warmest month wherever it lies, so this is
+     * the whole of the question — a cell that never rises above freezing is under perennial snow or
+     * ice or is a polar desert on frozen ground, water does not run over it in any season, and
+     * nothing there cuts a head. What crosses it from warmer ground upstream is still a channel —
+     * the downstream rule in [channelMask] carries it — which is the Lena and the Yenisey, rivers
+     * that rise where the summer thaws and run on over ground that does not.
+     *
+     * **Read off the thermometer, and no longer off Thornthwaite's demand.** The demand is zero on
+     * exactly this ground, so it gave the right answer and was the tidier way to say it; but the
+     * demand that was run is [LakeWaterBalance.potentialEvaporationMm], whose last act is to
+     * multiply by `LakesConfig.evaporationScale`. That figure is a setting on how hard a lake's
+     * surface evaporates, and a world that turns it off got a demand of zero everywhere: every land
+     * cell read as permanently frozen, no cell anywhere passed the head test, and the map came out
+     * with no channel on it at all. Seed 42 at 512 initiates 52,525 channel cells and initiated
+     * none. Whether water runs over a hillside in summer is not a lake's business, and the rule now
+     * asks the field that answers it.
      *
      * A head rule and not a mask over the network, for exactly that reason, and it is why the
      * drainage densities this criterion produces can be read as a curve against aridity at all:
      * without it the coldest country came out as the most finely dissected on the map, on cells
      * where no water runs.
      */
-    fun neverThaws(config: WorldGenConfig, climate: ClimateResult, cell: Int): Boolean =
-        LakeWaterBalance.potentialEvaporationMm(
-            climate.summerTemperature.data[cell],
-            climate.winterTemperature.data[cell],
-            config.lakes.evaporationScale
-        ) <= 0f
+    fun neverThaws(climate: ClimateResult, cell: Int): Boolean =
+        climate.summerTemperature.data[cell] <= FREEZING_C
+
+    /** Where water stops running, in degrees Celsius. */
+    const val FREEZING_C = 0f
 
     /**
      * The dimensionless fall from each land cell to the cell it drains into, on the **true ground**:

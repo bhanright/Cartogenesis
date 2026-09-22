@@ -505,6 +505,18 @@ object SeaLevelStage {
                 config.facetRouting,
                 config.flatPotential
             )
+            // The land count and the land mask must agree, because every walk below sizes its
+            // arrays by the one and fills them from the other; a mismatch would surface as an index
+            // one past an array's end deep inside the routing, which is exactly how a 2048 run once
+            // failed on a machine that was corrupting memory. One scan per pass names the fault
+            // where it is instead.
+            run {
+                var counted = 0
+                for (cell in isLand.indices) if (isLand[cell]) counted++
+                check(counted == current.landCellCount) {
+                    "the drowned-basin pass was handed $counted land cells under a count of ${current.landCellCount}"
+                }
+            }
             val catchmentArea = FlowRouting.accumulate(
                 cellsAcross, cellsDown, isLand, filled, flowDirections, current.landCellCount
             ) { 1f }

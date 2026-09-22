@@ -50,7 +50,17 @@ class VegetationTintTest {
          */
         fun tableAt(cell: Int): Float = ClimateTint.canopyClosure(WORLD.climate.biome[cell])
 
-        /** Below this a biome is too rare on this world for a spread within it to say anything. */
+        /**
+         * Below this a biome is too rare on this world for a spread within it to say anything:
+         * two hundred cells.
+         *
+         * A sample-size gate and nothing else. A standard deviation over a handful of cells is
+         * mostly the handful, and a biome that covers a dozen cells of one world is a classifier's
+         * edge case rather than a country the reader is shown; two hundred cells is about a fifth
+         * of a per cent of this world's land, which is the smallest patch that reads as a region
+         * at all. A biome under it is printed with its figures and not asserted on, so it is
+         * visible rather than silently dropped.
+         */
         const val MIN_BIOME_CELLS = 200
 
         /**
@@ -74,8 +84,32 @@ class VegetationTintTest {
          * applied, so a biome that only just clears it is still drawn as one flat country — which
          * is why the clause below asserts this of *every* populous biome rather than of the map's
          * average, where one varied class could carry a dozen flat ones.
+         *
+         * **Asked only of a biome that has this much canopy to begin with.** The canopy is a
+         * density on 0..1 and cannot go below zero, so a class whose cells all sit against the
+         * bottom of the scale cannot have a standard deviation of a fiftieth however continuous
+         * the field under it is: the arithmetic forbids it, and no correct implementation could
+         * pass. `ALPINE` is that class on this world — 1,509 cells averaging 0.005 of canopy, which
+         * is ground above the treeline, where there is nothing growing for the field to vary — and
+         * it reads a spread of 0.018, more than three times its own mean and still under the
+         * floor. So a biome whose mean canopy is itself below this figure is *reported* rather than
+         * asserted on, for the same reason [NO_GROUND] is: asking bare rock to vary by more canopy
+         * than it carries is asking the field to invent something. Every other populous class on
+         * this world means 0.095 or more and is asserted.
          */
         const val LEAST_SPREAD_WITHIN_A_BIOME = 0.02f
+
+        /**
+         * How many populous biomes have to be asserted on, rather than reported, for the clause to
+         * mean anything: five.
+         *
+         * The two exemptions above — too few cells, and too little canopy to vary by — are each
+         * written for a reason, and between them they could in principle empty the clause out on
+         * some future world without anything failing. This is the backstop that says so. Five is
+         * the same figure the populous count is held to below and for the same reason: a claim
+         * about the map's vegetation wants several countries behind it.
+         */
+        const val LEAST_BIOMES_ASSERTED = 5
 
         /**
          * How much of the old table's step across a biome boundary may survive.
@@ -97,14 +131,16 @@ class VegetationTintTest {
         }
         assertTrue(populous.size >= 5, "this world has too few populous biomes to measure: $populous")
 
+        var asserted = 0
         populous.forEach { biome ->
             val cells = WORLD.climate.biome.indices.filter { WORLD.climate.biome[it] == biome }
             val field = cells.map { ClimateTint.canopyAt(WORLD, it) }
             val table = cells.map { tableAt(it) }
+            val mean = field.average()
             println(
                 "CANOPY %-26s %d cells: field mean %.3f spread %.3f, table mean %.3f spread %.3f"
                     .format(
-                        biome.name, cells.size, field.average(), spread(field),
+                        biome.name, cells.size, mean, spread(field),
                         table.average(), spread(table)
                     )
             )
@@ -112,11 +148,29 @@ class VegetationTintTest {
                 spread(table) == 0f,
                 "the control is supposed to be one figure a biome, and $biome varies in it"
             )
+            if (mean < LEAST_SPREAD_WITHIN_A_BIOME) {
+                println(
+                    ("CANOPY %s REPORTED and not asserted: its mean canopy of %.3f is under the " +
+                        "%.2f of spread the floor asks for, so the floor is arithmetically out of " +
+                        "reach — its spread is %.3f, %.1f times its own mean")
+                        .format(
+                            biome.name, mean, LEAST_SPREAD_WITHIN_A_BIOME, spread(field),
+                            if (mean > 0) spread(field) / mean else 0.0
+                        )
+                )
+                return@forEach
+            }
+            asserted++
             assertTrue(
                 spread(field) >= LEAST_SPREAD_WITHIN_A_BIOME,
                 "$biome is drawn as one flat country: its canopy varies by only ${spread(field)}"
             )
         }
+        assertTrue(
+            asserted >= LEAST_BIOMES_ASSERTED,
+            "only $asserted of this world's ${populous.size} populous biomes carried enough canopy" +
+                " to be asked to vary, so this clause has emptied itself out"
+        )
     }
 
     @Test

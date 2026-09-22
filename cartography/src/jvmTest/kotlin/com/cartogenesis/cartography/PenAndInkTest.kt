@@ -219,6 +219,20 @@ class PenAndInkTest {
          * measurably less shaded, at 0.9566. With the relative form the median is back inside the
          * tolerance of the recorded 0.9526 and the datum stands. Re-taken last, after the two
          * module suites had settled.
+         *
+         * S3 moved them a second time when it met R1 on the merged tree, and three things did it
+         * at once. R1 draws a watercourse where the ground can cut one rather than where a share
+         * of the world's runoff passes a bar, so the ink on the map is a different network on
+         * every style that draws rivers. The runoff floor every stage reads was corrected from a
+         * hundred and fifty millimetres a year to sixty — the first was read off a rainfall scale
+         * that is not the one the climate normalises against — which thins the channel network in
+         * dry country. And `TectonicsConfig.collisionUpliftMmPerYear` was re-derived from the
+         * denudation the climate-fed rounds leave, 0.77 to 0.718 mm/yr, which moves the height of
+         * every active belt on every world. Again `ReliefShading.ORDINARY_GROUND` is not
+         * re-derived: `ReliefShadingTest` re-measures the median illumination over seed 234475's
+         * land on this tree and still finds the recorded figure, because a gentler uplift and a
+         * different set of drawn rivers move the belts and the valleys rather than the roughness
+         * of ordinary country. Re-taken last, after the two module suites had settled.
          */
         /** The twelve records live in [RecordedRenders], with the one script that re-takes them. */
         val RECORDED_STYLES: Map<MapStyle, Int> get() = RecordedRenders.STYLES_AT_512

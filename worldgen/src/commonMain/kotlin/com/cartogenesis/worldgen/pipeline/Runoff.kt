@@ -1,8 +1,13 @@
 package com.cartogenesis.worldgen.pipeline
 
 /**
- * How much water a land cell sheds in a year, in millimetres: the one weight every accumulation in
- * the pipeline routes with.
+ * How much water a land cell sheds in a year, in millimetres: the one weight the erosion rounds
+ * and the channel-initiation criterion route with.
+ *
+ * Not yet the whole pipeline: `RiverStage.runoffWeight`, which weights the drawn network's own
+ * accumulation, still adds its floor to a rainfall on the 0..1 scale, the older form, and is left
+ * as it is because moving it re-draws every river for the sake of consistency alone; it is the
+ * third consumer to bring here, with the drawn network re-measured when it comes.
  *
  * Three stages ask the same question of a cell and used to answer it three ways. `RiverStage` adds
  * a floor to a rainfall already normalised to 0..1, `ChannelInitiation` added a hundred and fifty

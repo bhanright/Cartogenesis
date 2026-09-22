@@ -21,9 +21,12 @@ import kotlin.math.sqrt
  * `A · S^2` is Dietrich et al.'s form for the *landsliding* threshold, a different way for a hollow
  * to become a channel, and using it here would be citing one regime's paper for another's law.
  *
- * **The regime this criterion is about is the shear-stress channel head**: overland flow gathering
- * down a hollow until the stress it exerts beats what holds the surface together. That is why the
- * two terms below are the ones they are. The area is **weighted by runoff**, so a wet hillside
+ * **The regime assumed here is the shear-stress channel head**: overland flow gathering down a
+ * hollow until the stress it exerts beats what holds the surface together. That is this file's
+ * assumption and not the survey's finding: Montgomery and Dietrich attribute their steepest heads
+ * to subsurface-flow instability and their gentler ones to seepage and saturation overland flow,
+ * so the exponent is an empirical fit across regimes, and the two terms below are the ones a
+ * shear-stress head would have. The area is **weighted by runoff**, so a wet hillside
  * reaches the threshold on less ground than a dry one; and the threshold itself **rises with the
  * plant cover**, because what the flow has to cut is the ground's resistance and roots raise that
  * by two orders of magnitude. The two pull opposite ways as a country gets wetter, which is why
@@ -109,10 +112,13 @@ object ChannelInitiation {
      * How much the threshold is multiplied by over ground carrying [vegetationDensity] of cover:
      * one over bare ground and [CLOSED_CANOPY_RESISTANCE_GAIN] under a closed canopy.
      *
-     * Exponential in the cover between those two ends, which is the shape the soil-loss literature
-     * measures rather than a convenience: Elwell and Stocking (1976) fit soil loss against
-     * percentage cover as a decaying exponential, and the USLE's own cover-management table is that
-     * curve tabulated. A linear interpolation between the same two ends would put nine tenths of
+     * A hypothesis, stated as one. The USLE's cover factor predicts rill and interrill soil loss
+     * on a slope, not the resistance of a hollow to starting a channel; its inverse is used here
+     * because it is the best-measured shape the cover's protection has, and the gain it implies
+     * is unvalidated against channel heads. Exponential in the cover between the two ends, which
+     * is the shape the soil-loss literature measures rather than a convenience: Elwell and
+     * Stocking (1976) fit soil loss against percentage cover as a decaying exponential, and the
+     * USLE's own cover-management table is that curve tabulated. A linear interpolation between the same two ends would put nine tenths of
      * the resistance in the last tenth of the canopy, which is the opposite of what a grass sward
      * does — the first thirty per cent of cover is where most of the protection is.
      */

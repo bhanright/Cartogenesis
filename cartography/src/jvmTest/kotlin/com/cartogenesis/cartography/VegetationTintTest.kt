@@ -85,11 +85,12 @@ class VegetationTintTest {
          * is why the clause below asserts this of *every* populous biome rather than of the map's
          * average, where one varied class could carry a dozen flat ones.
          *
-         * **Asked only of a biome that has this much canopy to begin with.** The canopy is a
-         * density on 0..1 and cannot go below zero, so a class whose cells all sit against the
-         * bottom of the scale cannot have a standard deviation of a fiftieth however continuous
-         * the field under it is: the arithmetic forbids it, and no correct implementation could
-         * pass. `ALPINE` is that class on this world — 1,509 cells averaging 0.005 of canopy, which
+         * **Asked only of a biome that has this much canopy to begin with.** A spread is a claim
+         * about a class relative to its mean: a density on 0..1 whose mean is 0.005 could in
+         * principle carry a standard deviation up to about 0.07, so the arithmetic does not forbid
+         * it, but nothing in the field would put it there, and asking it of ground with no canopy
+         * to vary tests the treeline rather than the tint. So the floor is a scope choice, asked
+         * where the mean can carry it. `ALPINE` is that class on this world — 1,509 cells averaging 0.005 of canopy, which
          * is ground above the treeline, where there is nothing growing for the field to vary — and
          * it reads a spread of 0.018, more than three times its own mean and still under the
          * floor. So a biome whose mean canopy is itself below this figure is *reported* rather than

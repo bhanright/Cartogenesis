@@ -1,22 +1,42 @@
 # To do
 
-- **The river-ink rule has no control in the panel, and the Earth reference is one dataset.**
-  `RenderOptions.riverInk` chooses between Earth's measured density and F14's radical law on the
-  traced count, and nothing in the interface turns it: X1c was scoped to the cartographic layer and
-  left `:ui` alone except where the pane passes its size, which it already did. A reader who wants
-  the old thicket back, or who finds a 512 export's 27 to 36 courses too bare for a small picture,
-  cannot ask for either. Beside it, three things about the reference that a second dataset would
-  settle. **It is one atlas.** Natural Earth's linework is hand-smoothed and hand-ranked and its own
+- **The Earth reference behind the river density is one dataset.** The Cartography panel's River
+  density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale
+  allows, with Earth's figure as the default mark, so the reader can now have the old drawing back
+  or a barer one; what stands is the figure the default is measured against. **It is one atlas.**
+  Natural Earth's linework is hand-smoothed and hand-ranked and its own
   documentation recommends the 1:10M tier around 1:30M with supplements elsewhere, so 0.001707
   km/km2 at 1:50M is a chosen benchmark and not a constant of cartography; a named printed atlas
   sheet counted at 1:25M to 1:35M would be the independent check the brief asked for and was not
   found. **The count exponent is two points.** 0.751 between the 1:10M and 1:50M tiers, used for
   the crowding lattice's pitch and nothing else, with no published law behind it; the 1:110M tier
-  is thirteen rivers and is a token selection rather than a third point. **The two rulers differ.**
-  The reference is measured on the sphere over Earth's real land area and this map is measured in
-  the generator's planar equirectangular kilometres over a rectangular cell area, so the agreement
-  is a calibration in this map's own units and not a claim that the two draw the same physical
-  length of river. 2026-09-22, X1c.
+  is thirteen rivers and is a token selection rather than a third point, though it does set the
+  slider's bottom mark (it draws a quarter of what the law asks of its scale). **The two rulers
+  differ.** The reference is measured on the sphere over Earth's real land area and this map is
+  measured in the generator's planar equirectangular kilometres over a rectangular cell area, so the
+  agreement is a calibration in this map's own units and not a claim that the two draw the same
+  physical length of river. 2026-09-22, X1c.
+
+- **No setting of the drawing is saved with a world.** The river density slider was asked for
+  "saved with the world's render options as the other cartography settings are", and there are no
+  such options: `WorldDocument` holds the config, the edits, the labels and the terrain, and every
+  Cartography mark - style, view, relief shading, lamp, coastline, graticule - starts at its default
+  in every new window. The slider's mark is kept in the application's preferences instead
+  (`AppSettings.riverInkStep`), so it outlives the window and applies to every world opened after,
+  which is a reader's standing preference rather than one world's. If the author wants the drawing
+  saved per world, it is `RenderOptions` made `@Serializable`, a section in the save, a
+  `WorldCodec.FORMAT_VERSION` bump and the gzip fixture regenerated (CONVENTIONS rule 11), and a
+  decision about which wins when a world's own mark and the reader's preference disagree.
+  2026-09-22, X1c.
+
+- **The top of the river density scale is the coastal comb again, by construction.** The top mark
+  was asked to reproduce the old rule's drawing exactly, and the old rule drew the comb; so the
+  crowding lattice, which runs at every mark, decides only the order there and the fullest square
+  is the radical law's own (the figures are in the X1c row). Below the top the lattice still serves
+  every square once before the extra ink goes anywhere, and the fullest square grows gradually with
+  the mark rather than jumping to the law's. If the author wants a top mark that draws every river
+  and still thins a straight front, it has to stop being the old rule: a cap per lattice square
+  that the top keeps would do it, at the price of the exact reproduction. 2026-09-22, X1c.
 
 - **The crowding measure is printed against a control and not against Earth, because a coastline's
   length is fractal.** X1c's lattice is shown to work by the same selection with the lattice

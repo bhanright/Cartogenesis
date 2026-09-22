@@ -3,6 +3,7 @@ package com.cartogenesis.cartography
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -16,7 +17,8 @@ import kotlin.math.sqrt
  *
  * 1. A budget of [drawnRiverKmPerSquareKm] kilometres of drawn river per square kilometre of this
  *    world's land, which is Natural Earth's measured figure carried by Töpfer's law, times
- *    [inkScaleAt] for the mark the reader has the density scale set to.
+ *    [inkScaleAt] for the mark the reader has the density scale set to - and never less than the
+ *    largest river and the trunks below it, so that river is on every map at every mark.
  * 2. A second limit, which almost never binds: no course below the peak discharge of the
  *    [MapSheet.featuresKept]'th largest is drawn. That is Töpfer's law read the way F14 read it,
  *    on the traced count, and it is here so that the top of the density scale - where the budget
@@ -39,6 +41,13 @@ import kotlin.math.sqrt
  * measurement and not a guarantee — 2 drawn courses against the radical law's 49 to 70 on the four
  * standard seeds, and `RiverSelectionTest` shows it against the same selection with the lattice
  * switched off.
+ *
+ * The density scale is the reader's, and the lattice runs at every mark of it: above Earth's mark
+ * the first pass still serves every square once before the second pass spends the extra ink, so a
+ * larger budget goes to the next-largest river anywhere on the map before it goes to a second gully
+ * on one front. At the top mark nothing is refused at all, which is what the top is for - every
+ * course the scale has room for, F14's drawing - and there the lattice decides only the order, so
+ * the fullest square is the radical law's own.
  *
  * Ties fall to the course the tracer reached first, which is the head with the longest way down to
  * the water; that is not the same as the longest *drawn* course, because a tributary is cut at the
@@ -199,7 +208,11 @@ object RiverSelection {
         val denominator: Double,
         /** This world's land, in square kilometres, which the budget is per. */
         val landAreaSquareKm: Double,
-        /** Kilometres of river line this sheet is allowed, at Earth's density for its scale. */
+        /**
+         * Kilometres of river line this sheet is allowed: Earth's density for its scale times the
+         * density scale's mark, or the largest river's chain where that is longer, or infinity at
+         * the top of the scale.
+         */
         val budgetKilometres: Double,
         /** The side of the crowding lattice, in ground kilometres. */
         val crowdingPitchKm: Double
@@ -269,19 +282,32 @@ object RiverSelection {
             config.scale, world.width, sheet.pixelsPerCell
         )
         val landAreaSquareKm = world.sea.landCellCount * config.squareKilometresPerCell
-        val budgetKilometres =
-            drawnRiverKmPerSquareKm(denominator) * landAreaSquareKm * inkScaleAt(inkStep)
         val pitchKm = crowdingPitchKilometres(denominator)
 
         val courseKilometres = DoubleArray(rivers.size) { courseKilometres(world, rivers[it]) }
         val trunkOf = trunksOf(world)
         val drawn = BooleanArray(rivers.size)
+        val byDischarge = rankedByDischarge(rivers)
+        val chain = ArrayList<Int>()
+
+        // The largest river is the first thing the ranking reaches, so a budget that covers it and
+        // its trunks is a budget that draws it: the lattice has nothing taken yet, and its peak is
+        // the highest there is, so no cut below can refuse it. At Earth's mark the budget is tens
+        // of thousands of kilometres and this never binds; it is there for the bottom of the scale
+        // on a small sheet, where a quarter of Earth's ink could fall below one long trunk.
+        var largestRiverChainKm = 0.0
+        if (byDischarge.isNotEmpty()) {
+            chainDownTo(drawn, trunkOf, decodeCourse(byDischarge[0]), chain)
+            for (link in chain) largestRiverChainKm += courseKilometres[link]
+        }
+        val budgetKilometres = max(
+            drawnRiverKmPerSquareKm(denominator) * landAreaSquareKm * inkScaleAt(inkStep),
+            largestRiverChainKm
+        )
 
         if (budgetKilometres > 0.0) {
-            val byDischarge = rankedByDischarge(rivers)
             val leastDrawablePeak = radicalLawCut(rivers, sheet)
             val takenSquares = HashSet<Long>()
-            val chain = ArrayList<Int>()
             var spentKilometres = 0.0
 
             // Two passes over the same ranking: the first holds to one course per lattice square,

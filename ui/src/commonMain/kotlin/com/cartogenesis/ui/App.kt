@@ -194,14 +194,12 @@ private fun Application(
     }
     var options by remember { mutableStateOf(SettingsEffects.startingRenderOptions(settings)) }
 
-    // The only setting of the drawing that is remembered between sessions, and the reason is that
-    // it is the only one that changes what the map *says* rather than how it is dressed: a reader
-    // who wants every river drawn wants it on the next world too. See `docs/TODO.md` for the rest
-    // of the cartography marks, which are still forgotten when the window closes.
+    // The river density is stored with the preferences as soon as it moves, so the next window -
+    // and every world opened in it - is drawn at the reader's own mark. See
+    // `SettingsEffects.settingsAfterDrawing` for why it is the only setting of the drawing kept.
     LaunchedEffect(options.riverInkStep) {
-        if (options.riverInkStep != settings.riverInkStep) {
-            onSettings(settings.copy(riverInkStep = options.riverInkStep))
-        }
+        val remembered = SettingsEffects.settingsAfterDrawing(settings, options)
+        if (remembered != settings) onSettings(remembered)
     }
     var world by remember { mutableStateOf<WorldMap?>(null) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }

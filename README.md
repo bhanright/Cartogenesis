@@ -162,7 +162,9 @@ affect how the map is drawn without changing the generated world.
   map at its own scale does — measured off Natural Earth's 1:50M and 1:10M river layers and carried
   between scales by Töpfer and Pillewizer's radical law — so the faintest rivers are dropped as you
   zoom out and return as you zoom in, and the same country looks the same whether the world behind
-  it was generated at 512 or at 2048. The coast is traced as a simplified polyline over the raster.
+  it was generated at 512 or at 2048. A River density slider in the Cartography panel scales that
+  ink from a quarter of the published figure, which still keeps the largest river, up to every
+  river the sheet has room for. The coast is traced as a simplified polyline over the raster.
 - **Graticule.** Lines every ten degrees with figured edges (`40°N`, `170°W`), on screen and on
   exports.
 - **Scale bar.** In the legend and on exports, restating itself as you zoom — 2000 km at fit, 20 km

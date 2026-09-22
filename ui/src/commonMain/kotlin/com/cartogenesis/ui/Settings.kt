@@ -1,9 +1,9 @@
 package com.cartogenesis.ui
 
-import com.cartogenesis.worldgen.model.Acceleration
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
+import com.cartogenesis.worldgen.model.Acceleration
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -170,6 +170,20 @@ internal object SettingsEffects {
      */
     fun startingRenderOptions(settings: AppSettings): RenderOptions =
         RenderOptions(riverInkStep = settings.riverInkStep)
+
+    /**
+     * The preferences to store once the reader has set the drawing to [options]: [settings] with
+     * the river density carried over, and nothing else of [options] with it.
+     *
+     * A world save carries no setting of the drawing at all - `WorldDocument` holds the world, its
+     * edits and its labels - so the preferences are where a drawing setting can outlive the
+     * window, and the river density is the one that earns it: it decides how much of the network
+     * the map *says*, where the others dress one map. Equal to [settings] when the mark has not
+     * moved, so the caller can tell there is nothing to write.
+     */
+    fun settingsAfterDrawing(settings: AppSettings, options: RenderOptions): AppSettings =
+        if (options.riverInkStep == settings.riverInkStep) settings
+        else settings.copy(riverInkStep = options.riverInkStep)
 
     /**
      * The grid a fresh world starts at: the preference, or the platform's own if there is none —

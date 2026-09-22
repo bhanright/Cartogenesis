@@ -347,10 +347,10 @@ class PanelKnobsTest {
             }
         )
         // Cartography keeps its own marks, so the section is not left empty: whether the relief is
-        // drawn at all, which light it is drawn by, whether the coast is inked, and whether the
-        // sheet carries a graticule.
+        // drawn at all, which light it is drawn by, whether the coast is inked, whether the sheet
+        // carries a graticule, and how much of the river network it draws.
         assertEquals(
-            listOf("Relief shading", "Single-lamp relief", "Coastline", "Graticule"),
+            listOf("Relief shading", "Single-lamp relief", "Coastline", "Graticule", "River density"),
             Knobs.inSection(PanelSection.CARTOGRAPHY).map { it.label }
         )
     }

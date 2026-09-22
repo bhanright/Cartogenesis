@@ -17,6 +17,7 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
@@ -196,6 +197,20 @@ class RiverSelectionAuditTest {
                         "draws ${byTheLaw.size} courses, fullest crowding square " +
                         "${fullestSquare(map, byTheLaw.map { it.cells.last() }, chosen.crowdingPitchKm)}"
                 )
+                val top = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
+                assertEquals(
+                    byTheLaw.map { it.cells.first() }.toSet(),
+                    top.map { it.cells.first() }.toSet(),
+                    "the top of the scale on the author's $where is not the radical law's drawing"
+                )
+                // The sparsest mark keeps the river carrying the most water, and its chain.
+                val sparsest = RiverSelection.select(map, sheet, RiverSelection.INK_STEPS.first)
+                var link = map.rivers.rivers.indices
+                    .maxByOrNull { RiverSelection.peakWidthRatio(map.rivers.rivers[it]) }!!
+                while (link != RiverSelection.NO_TRUNK) {
+                    assertTrue(sparsest.drawn[link], "the sparsest $where lost the largest river")
+                    link = sparsest.trunkOf[link]
+                }
             }
 
         // Rule 8: the selection walks every cell of the grid once, to find out which course owns

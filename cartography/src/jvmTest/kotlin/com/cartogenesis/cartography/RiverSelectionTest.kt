@@ -66,6 +66,15 @@ class RiverSelectionTest {
          * world that ran out of network says so rather than passing quietly.
          */
         const val ACROSS_RESOLUTIONS_BAND = 0.05
+
+        /**
+         * A sheet a sixty-fourth of a pixel to the cell: a 512 world eight pixels across.
+         *
+         * Nothing draws a map this small; it is here because the budget goes as the square root
+         * of the scale, so at an eighth of the export's budget a quarter of Earth's ink falls to
+         * about 1,100 km on these worlds, below the length of their largest river.
+         */
+        const val TINY_SHEET_PIXELS_PER_CELL = 1f / 64f
     }
 
     /**
@@ -277,7 +286,7 @@ class RiverSelectionTest {
             // The control: the same Earth budget and the same discharge ranking, with the lattice
             // switched off. It is the only thing that differs, so a difference is the lattice's.
             val unspread = RiverSelection.select(map, sheet, spreadByCrowdingLattice = false)
-            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
+            val byTheLaw = RiverSelection.drawnByTheRadicalLaw(map.rivers.rivers, sheet)
 
             val fullestSpread = fullestSquare(map, drawnEnds(map, spread), spread.crowdingPitchKm)
             val fullestUnspread =
@@ -297,6 +306,19 @@ class RiverSelectionTest {
                 "seed $seed put $fullestSpread courses in its fullest square with the lattice on " +
                     "and $fullestUnspread with it off, so the lattice is doing nothing"
             )
+
+            // The same on every mark of the density scale, printed: the lattice is not a setting
+            // of Earth's mark alone, and turning the scale up spends the extra ink on the rest of
+            // the map before a second gully on one front. At the top nothing is refused, so the
+            // fullest square there is the radical law's own - which is what the top is for.
+            val byMark = RiverSelection.INK_STEPS.joinToString(", ") { mark ->
+                val on = RiverSelection.select(map, sheet, mark)
+                val off = RiverSelection.select(map, sheet, mark, spreadByCrowdingLattice = false)
+                "$mark: ${on.drawnCount} courses, fullest " +
+                    "${fullestSquare(map, drawnEnds(map, on), spread.crowdingPitchKm)} on / " +
+                    "${fullestSquare(map, drawnEnds(map, off), spread.crowdingPitchKm)} off"
+            }
+            println("X1C $seed crowding by mark, the radical law $fullestLaw: $byMark")
         }
     }
 
@@ -310,10 +332,13 @@ class RiverSelectionTest {
                 val chosen = RiverSelection.select(map, sheet)
                 val biggest = map.rivers.rivers.indices
                     .maxByOrNull { RiverSelection.peakWidthRatio(map.rivers.rivers[it]) }!!
-                assertTrue(
-                    chosen.drawn[biggest],
-                    "seed $seed left out the river carrying the most water on the map"
-                )
+                // At every mark of the density scale, and not only at Earth's.
+                RiverSelection.INK_STEPS.forEach { mark ->
+                    assertTrue(
+                        RiverSelection.select(map, sheet, mark).drawn[biggest],
+                        "seed $seed left out the river carrying the most water at mark $mark"
+                    )
+                }
                 // And the ink is spent on big rivers rather than spread over small ones: the mean
                 // peak of a drawn course against the mean peak of one left out. Printed, because
                 // what separates the two distributions is the world's own hypsometry.
@@ -367,13 +392,14 @@ class RiverSelectionTest {
         listOf(7L, 42L).forEach { seed ->
             val map = world(seed)
             val traced = map.rivers.rivers
-            // An export, where the law keeps everything, and a sheet small enough that it does
-            // not: a 512 world in a 900-pixel pane is at two pixels to the cell and the law has
-            // nothing to cut there, so the second sheet is a quarter of a pixel to the cell, where
-            // it keeps half of them and the tie at its cut is the thing worth agreeing about.
+            // An export, where the law keeps everything, and a pane where it does not. A 512
+            // world fitted into a 900-pixel pane is at two pixels to the cell and the law has
+            // nothing to cut there, so the pane is the band the author's own 2048 world falls in
+            // (0.44 pixels to the cell, which `MapSheet.onScreen` rounds to a half), where it keeps
+            // 71 per cent of them and the tie at its cut is the thing worth agreeing about.
             listOf(
                 "export" to MapSheet.UNGENERALISED,
-                "a quarter-pixel sheet" to MapSheet.onScreen(0.25f)
+                "the half-pixel pane" to MapSheet.onScreen(0.5f)
             ).forEach { (where, sheet) ->
                     val top = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
                     val law = RiverSelection.drawnByTheRadicalLaw(traced, sheet)
@@ -426,6 +452,25 @@ class RiverSelectionTest {
                 bottom.drawnCount < atlas.drawnCount,
                 "seed $seed drew as much at the bottom of the scale as at the atlas mark"
             )
+
+            // And on a sheet so small that a quarter of Earth's ink is shorter than that river's
+            // own chain, which is where the budget's floor is what draws it. The clause asserts the
+            // quarter really is short there, so it cannot pass on a sheet where the floor is idle.
+            val postage = MapSheet(TINY_SHEET_PIXELS_PER_CELL)
+            val tiny = RiverSelection.select(map, postage, RiverSelection.INK_STEPS.first)
+            val quarterOfEarthKm = RiverSelection.drawnRiverKmPerSquareKm(tiny.denominator) *
+                tiny.landAreaSquareKm * RiverSelection.LEAST_INK_SCALE
+            println(
+                "X1C $seed on a ${TINY_SHEET_PIXELS_PER_CELL} px-per-cell sheet at the bottom: " +
+                    "a quarter of Earth's ink is ${quarterOfEarthKm.round()} km, the budget " +
+                    "${tiny.budgetKilometres.round()} km, ${tiny.drawnCount} drawn"
+            )
+            assertTrue(
+                quarterOfEarthKm < tiny.budgetKilometres,
+                "seed $seed: the largest river's chain fits a quarter of Earth's ink even here, " +
+                    "so this sheet does not exercise the floor"
+            )
+            assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
         }
     }
 

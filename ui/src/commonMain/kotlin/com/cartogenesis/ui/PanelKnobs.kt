@@ -469,8 +469,11 @@ internal object Knobs {
                 RiverSelection.EARTH_DENSITY_STEP ->
                     "As much river as a published map at this scale draws."
                 RiverSelection.EVERY_COURSE_STEP ->
-                    "Every course the generator traced that this scale has room for."
-                else -> "A share of what a published map at this scale draws."
+                    "Every river the generator traced that this scale has room for."
+                in RiverSelection.INK_STEPS.first until RiverSelection.EARTH_DENSITY_STEP ->
+                    "Fewer than a published map at this scale draws: the largest rivers only."
+                else ->
+                    "More than a published map at this scale draws, spread over the whole map."
             }
         },
         read = { it.riverInkStep },

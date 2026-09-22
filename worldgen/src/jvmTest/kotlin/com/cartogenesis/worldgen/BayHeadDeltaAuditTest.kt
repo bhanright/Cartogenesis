@@ -1,7 +1,6 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -20,6 +19,12 @@ import kotlin.test.assertTrue
  * are: it generates 2048 worlds, and erodes two of them a second time for the deposition log, and
  * the per-merge tier cannot afford that. `BayHeadDeltaTest` carries the same measurements over the
  * whole world at 1024.
+ *
+ * Each world is reduced to the few arrays the case reads ([Snapshot]) the moment it is generated,
+ * so that at most one world-sized working set is alive at a time. Holding three whole 2048
+ * worlds through a fourth erosion is what took the hosted runner down twice on the day this
+ * census was added: its 16 GB has to carry this JVM's 8 GB heap beside the desktop audit's, and
+ * the job was cancelled fifteen minutes in, both times, as the first logged erosion began.
  *
  * Three worlds of seed 718106: aggradation graded to the slope the river needs (E6's rule), the
  * ungraded rule before it, and no deposition at all. The case finds the window of the author's
@@ -53,11 +58,9 @@ class BayHeadDeltaAuditTest {
 
     @Test
     fun `what deposition ponds on the author's world, and what lies round it`() {
-        val now = WorldGenerationEngine.generateBlocking(config(true))
-        val was = WorldGenerationEngine.generateBlocking(config(false))
-        val bare = WorldGenerationEngine.generateBlocking(
-            config(true).let { it.copy(erosion = it.erosion.copy(deposition = false)) }
-        )
+        val now = generate(config(true))
+        val was = generate(config(false))
+        val bare = generate(config(true).let { it.copy(erosion = it.erosion.copy(deposition = false)) })
 
         // The window is chosen on the ungraded world, which is the one the artefact is in. Choosing
         // it on the graded world would be choosing the window with the least to find in it.
@@ -117,6 +120,34 @@ class BayHeadDeltaAuditTest {
         )
     }
 
+    // ------------------------------------------------------------------ the worlds
+
+    /** The arrays of a world this case reads, held so the rest of the world can be collected. */
+    private class Snapshot(
+        val width: Int,
+        val height: Int,
+        val elevation: FloatArray,
+        val isLand: BooleanArray,
+        val lake: BooleanArray,
+        val lakeId: IntArray,
+        /** Every lake's cell count by its id. */
+        val lakeCells: Map<Int, Int>
+    )
+
+    private fun generate(config: WorldGenConfig): Snapshot {
+        val world = WorldGenerationEngine.generateBlocking(config)
+        val cells = world.width * world.height
+        return Snapshot(
+            width = world.width,
+            height = world.height,
+            elevation = world.elevation.data,
+            isLand = world.sea.isLand,
+            lake = BooleanArray(cells) { world.rivers.lakes.isLake(it) },
+            lakeId = world.rivers.lakes.lakeId,
+            lakeCells = world.rivers.lakes.lakes.associate { it.id to it.cellCount }
+        )
+    }
+
     // ------------------------------------------------------------------ the shores
 
     /** A lake the no-deposition world lacks, and the gross deposition round its shore. */
@@ -160,7 +191,7 @@ class BayHeadDeltaAuditTest {
      * no-deposition world; a lake both worlds hold whose shore moved a few cells is the sea
      * level's, cut at a different percentile once the spoil is on the map.
      */
-    private fun shoreSpoilOfNewLakes(world: WorldMap, bare: WorldMap, config: WorldGenConfig): List<ShoreSpoil> {
+    private fun shoreSpoilOfNewLakes(world: Snapshot, bare: Snapshot, config: WorldGenConfig): List<ShoreSpoil> {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val log = DepositionLog(world.width * world.height)
         val eroded = runBlocking {
@@ -168,28 +199,26 @@ class BayHeadDeltaAuditTest {
         }
         var differing = 0
         for (cell in eroded.height.data.indices) {
-            if (eroded.height.data[cell] != world.elevation.data[cell]) differing++
+            if (eroded.height.data[cell] != world.elevation[cell]) differing++
         }
         check(differing == 0) { "the logged erosion differs from the generated world on $differing cells" }
 
         val w = world.width
         val h = world.height
-        val lakes = world.rivers.lakes
         val dryOnBare = HashMap<Int, Int>()
         for (cell in 0 until w * h) {
-            if (lakes.isLake(cell) && bare.sea.isLand[cell] && !bare.rivers.lakes.isLake(cell)) {
-                dryOnBare[lakes.lakeId[cell]] = (dryOnBare[lakes.lakeId[cell]] ?: 0) + 1
+            if (world.lake[cell] && bare.isLand[cell] && !bare.lake[cell]) {
+                dryOnBare[world.lakeId[cell]] = (dryOnBare[world.lakeId[cell]] ?: 0) + 1
             }
         }
-        val newLakes = lakes.lakes.filter { (dryOnBare[it.id] ?: 0) * 2 > it.cellCount }
+        val newLakes = world.lakeCells.filter { (id, cells) -> (dryOnBare[id] ?: 0) * 2 > cells }
         if (newLakes.isEmpty()) return emptyList()
 
         // The shore ring of each new lake: land, not lake, within reach of one of its cells. One
         // pass over the grid, looking at the neighbourhood of every land cell that is not water.
         val shoreOf = IntArray(w * h) { -1 }
-        val wanted = newLakes.associate { it.id to it }
         for (cell in 0 until w * h) {
-            if (!world.sea.isLand[cell] || lakes.isLake(cell)) continue
+            if (!world.isLand[cell] || world.lake[cell]) continue
             val x = cell % w
             val y = cell / w
             var nearest = -1
@@ -200,23 +229,23 @@ class BayHeadDeltaAuditTest {
                     var nx = (x + dx) % w
                     if (nx < 0) nx += w
                     val n = ny * w + nx
-                    if (lakes.isLake(n) && wanted.containsKey(lakes.lakeId[n])) nearest = lakes.lakeId[n]
+                    if (world.lake[n] && newLakes.containsKey(world.lakeId[n])) nearest = world.lakeId[n]
                 }
             }
             shoreOf[cell] = nearest
         }
-        return newLakes.map { lake ->
+        return newLakes.map { (id, cells) ->
             val laid = DoubleArray(4)
             var shoreCells = 0
             for (cell in 0 until w * h) {
-                if (shoreOf[cell] != lake.id) continue
+                if (shoreOf[cell] != id) continue
                 shoreCells++
                 for (mechanism in 1..3) laid[mechanism] += log.laidByMechanism[mechanism][cell].toDouble()
             }
             ShoreSpoil(
-                lakeId = lake.id,
-                cells = lake.cellCount,
-                dryOnBareCells = dryOnBare[lake.id] ?: 0,
+                lakeId = id,
+                cells = cells,
+                dryOnBareCells = dryOnBare[id] ?: 0,
                 shoreCells = shoreCells,
                 laidByMechanismHeightUnits = laid
             )
@@ -227,7 +256,7 @@ class BayHeadDeltaAuditTest {
 
     /** A rectangle of cells, half open on the right and the bottom. */
     private class Window(val left: Int, val top: Int, val right: Int, val bottom: Int) {
-        inline fun count(world: WorldMap, wanted: (Int) -> Boolean): Int {
+        inline fun count(world: Snapshot, wanted: (Int) -> Boolean): Int {
             var n = 0
             for (y in top until bottom) for (x in left until right) {
                 if (wanted(y * world.width + x)) n++
@@ -253,12 +282,10 @@ class BayHeadDeltaAuditTest {
      * off a summed-area table taken once, so a window costs four reads however big it is; the
      * stride is [SEARCH_STEP_CELLS]. Two earlier finders and where they landed are in the T4 row.
      */
-    private fun pondedWindow(ungraded: WorldMap, bare: WorldMap): Window {
+    private fun pondedWindow(ungraded: Snapshot, bare: Snapshot): Window {
         val w = ungraded.width
         val h = ungraded.height
-        val ponded = DoubleArray(w * h) { cell ->
-            if (ungraded.rivers.lakes.isLake(cell) && !bare.rivers.lakes.isLake(cell)) 1.0 else 0.0
-        }
+        val ponded = DoubleArray(w * h) { cell -> if (ungraded.lake[cell] && !bare.lake[cell]) 1.0 else 0.0 }
         val sums = summedArea(ponded, w, h)
         var best = Window(0, 0, WINDOW_WIDTH_CELLS, WINDOW_HEIGHT_CELLS)
         var bestPonded = -1.0
@@ -295,14 +322,9 @@ class BayHeadDeltaAuditTest {
         return summed
     }
 
-    private fun lakeCells(world: WorldMap, window: Window): Int =
-        window.count(world) { world.rivers.lakes.isLake(it) }
+    private fun lakeCells(world: Snapshot, window: Window): Int = window.count(world) { world.lake[it] }
 
-    private fun lakeCells(world: WorldMap): Int {
-        var n = 0
-        for (cell in 0 until world.width * world.height) if (world.rivers.lakes.isLake(cell)) n++
-        return n
-    }
+    private fun lakeCells(world: Snapshot): Int = world.lake.count { it }
 
     // ------------------------------------------------------------------ what a ring is
 
@@ -327,16 +349,16 @@ class BayHeadDeltaAuditTest {
      * component about an arbitrary member to catch the handful that straddle the seam would be
      * more arithmetic than the case it buys.
      */
-    private fun ringedWaterMask(world: WorldMap): BooleanArray {
+    private fun ringedWaterMask(world: Snapshot): BooleanArray {
         val w = world.width
         val h = world.height
-        val lakes = world.rivers.lakes
+        val lakes = world.lake
         val ring = BooleanArray(w * h)
         val seen = BooleanArray(w * h)
         val stack = IntArray(w * h)
         val members = ArrayList<Int>()
         for (start in 0 until w * h) {
-            if (seen[start] || !lakes.isLake(start)) continue
+            if (seen[start] || !lakes[start]) continue
             var top = 0
             stack[top++] = start
             seen[start] = true
@@ -345,7 +367,7 @@ class BayHeadDeltaAuditTest {
                 val cell = stack[--top]
                 members.add(cell)
                 neighbours(w, h, cell) { n ->
-                    if (lakes.isLake(n) && !seen[n]) { seen[n] = true; stack[top++] = n }
+                    if (lakes[n] && !seen[n]) { seen[n] = true; stack[top++] = n }
                 }
             }
             if (members.size < SMALLEST_RING_CELLS) continue

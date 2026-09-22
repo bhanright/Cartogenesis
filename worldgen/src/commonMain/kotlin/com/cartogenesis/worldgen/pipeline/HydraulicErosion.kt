@@ -64,9 +64,9 @@ internal data class RoundMass(
      * deposition and the closing passes do to the finished surface shows up in the closing slot,
      * which is taken after the spoil is laid.
      *
-     * A channel is a cell draining at least [DRAWN_RIVER] of the land, which is the same figure the
-     * river stage draws a river at. Diagnostics only; nothing reads them back, and they are
-     * computed only when a caller asked for the round tally.
+     * A channel is a cell carrying at least [DRAWN_RIVER] of the land's water, which is the
+     * erosion stage's own rule for one and not the network the map draws. Diagnostics only;
+     * nothing reads them back, and they are computed only when a caller asked for the round tally.
      */
     val channelPits: IntArray = IntArray(0)
 )
@@ -326,7 +326,7 @@ internal object HydraulicErosion {
         val cut = SeaLevelStage.percentileCut(
             terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
-        val rainfall = FloatArray(cellCount) { RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM }
+        val rainfall = FloatArray(cellCount) { Runoff.FLOOR_MM }
         if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount))
 
         val climate =
@@ -335,12 +335,10 @@ internal object HydraulicErosion {
             ).result
         val annualMm = climate.precipitationMm.data
 
-        // A floor and not a physical term, and deliberately the river stage's own: below it a
-        // desert range would contribute nothing at all to the water leaving it, and the channel
-        // that drains it would have no discharge to cut with. The river stage states the floor as
-        // a share of `ClimateStage.REFERENCE_MM`, which is the scale its rainfall is normalised
-        // against, so the same figure in millimetres is that share times the reference.
-        val floorMm = RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM
+        // [Runoff.annualWeightMm] and its floor, which is the one every stage in the pipeline
+        // reads: see that file for why there is a floor at all and for why this stage divides the
+        // weight by its own land's mean where `ChannelInitiation` divides it by Earth's.
+        //
         // Every cell, and the sea's cells too. The provisional march's shoreline is not the
         // shoreline of every round: the sea stands lower early on and rises up the valleys as the
         // rounds close, so ground that is under the march's water is land the later rounds route
@@ -349,13 +347,47 @@ internal object HydraulicErosion {
         // up with it. The floor is the honest figure for a cell the march has no rainfall for, and
         // it is the same floor an arid upland gets.
         for (cell in 0 until cellCount) {
-            rainfall[cell] = if (annualMm[cell] > floorMm) annualMm[cell] else floorMm
+            rainfall[cell] = Runoff.annualWeightMm(annualMm[cell])
         }
 
         // Zero everywhere when the vegetation section is switched off, because that is the field
         // the climate stage hands back then — and a density of zero is a shielding factor of one,
         // so switching the cover off leaves the incision exactly as bare rock's.
         return Weather(rainfall, climate.vegetationDensity.data)
+    }
+
+    /**
+     * Turns a plant cover into the erodibility factor the cut spends, into [erodibility].
+     *
+     * `(1 - VEGETATION_SHIELDING * density)` over its own mean across [isLand], so the land's mean
+     * erodibility is exactly 1 however much of the world is wooded and only the contrast between
+     * one cell and another is left. See [VEGETATION_SHIELDING] for why it has to be relative.
+     *
+     * Taken again every round beside [normaliseOverLand], and for the same reason: the shoreline
+     * moves, and a mean taken over a coastline that no longer exists is not the mean of the land
+     * this round is cutting.
+     *
+     * With the cover off the density is zero everywhere, so every factor is 1 and the mean is 1
+     * and the quotient is exactly the 1f that multiplied nothing before there was a cover at all.
+     */
+    private fun shieldingOverLand(
+        density: FloatArray,
+        isLand: BooleanArray,
+        landCellCount: Int,
+        erodibility: FloatArray
+    ) {
+        var summed = 0.0
+        for (cell in density.indices) {
+            if (isLand[cell]) summed += (1f - VEGETATION_SHIELDING * density[cell]).toDouble()
+        }
+        val mean = (summed / landCellCount).toFloat()
+        if (mean <= 0f) {
+            erodibility.fill(1f)
+            return
+        }
+        for (cell in density.indices) {
+            erodibility[cell] = (1f - VEGETATION_SHIELDING * density[cell]) / mean
+        }
     }
 
     /**
@@ -391,41 +423,11 @@ internal object HydraulicErosion {
      *
      * With the feed off the field is all ones, whose mean is one, so every weight comes back as
      * exactly the 1f the accumulation used to be handed and the old world is reproduced to the bit.
+     *
+     * The field handed in is [Runoff.annualWeightMm] per cell. That file carries the floor under
+     * it and the other divisor the same weight is taken against — `ChannelInitiation` divides it
+     * by Earth's land mean, for reasons that are the mirror image of the ones above.
      */
-    /**
-     * Turns a plant cover into the erodibility factor the cut spends, into [erodibility].
-     *
-     * `(1 - VEGETATION_SHIELDING * density)` over its own mean across [isLand], so the land's mean
-     * erodibility is exactly 1 however much of the world is wooded and only the contrast between
-     * one cell and another is left. See [VEGETATION_SHIELDING] for why it has to be relative.
-     *
-     * Taken again every round beside [normaliseOverLand], and for the same reason: the shoreline
-     * moves, and a mean taken over a coastline that no longer exists is not the mean of the land
-     * this round is cutting.
-     *
-     * With the cover off the density is zero everywhere, so every factor is 1 and the mean is 1
-     * and the quotient is exactly the 1f that multiplied nothing before there was a cover at all.
-     */
-    private fun shieldingOverLand(
-        density: FloatArray,
-        isLand: BooleanArray,
-        landCellCount: Int,
-        erodibility: FloatArray
-    ) {
-        var summed = 0.0
-        for (cell in density.indices) {
-            if (isLand[cell]) summed += (1f - VEGETATION_SHIELDING * density[cell]).toDouble()
-        }
-        val mean = (summed / landCellCount).toFloat()
-        if (mean <= 0f) {
-            erodibility.fill(1f)
-            return
-        }
-        for (cell in density.indices) {
-            erodibility[cell] = (1f - VEGETATION_SHIELDING * density[cell]) / mean
-        }
-    }
-
     private fun normaliseOverLand(
         rainfallMm: FloatArray,
         isLand: BooleanArray,
@@ -1503,20 +1505,39 @@ internal object HydraulicErosion {
     private const val REFERENCE_GRID = 512f
 
     /**
-     * How much of the land a watercourse must drain before this stage treats it as a river.
+     * How much of the land's water a watercourse must carry before this stage treats it as a river.
      *
-     * Deliberately the same figure as `RiverConfig.sourceFlowShare`, and deliberately a constant
-     * rather than a read of that setting, for the same reason [POND_DEPTH_METRES] is: the rivers section
-     * is chosen long after erosion runs, and reading it here would mean adding `rivers` to
-     * erosion's reuse guard so that moving a river setting re-cut every valley.
+     * **A share of runoff and no longer a share of area, and that is the intended effect.** The
+     * accumulation this is compared against is weighted by rainfall now, and [normaliseOverLand]
+     * leaves the land a mean weight of exactly one, so dividing a catchment's summed weight by the
+     * land's cell count still gives a share — of the water that falls on the map rather than of the
+     * ground it falls on. Under flat rain the two were the same number and this threshold sat at a
+     * fixed fraction of the map's *area*. It now sits where the water is: on a wet flank a smaller
+     * catchment reaches it and on a dry one a larger one does not, which is a channel threshold
+     * following the discharge rather than the geometry.
      *
-     * The two are the same float and no longer the same quantity. The river stage's figure is a
-     * share of the world's runoff; this one is a share of the land the accumulation weights, and
-     * the weights are rainfall. Under flat rain those coincided, and this stage's channel
-     * threshold sat at a fixed fraction of the map's *area*. It now sits where the water is: on a
-     * wet flank a smaller catchment reaches it and on a dry one a larger one does not, which is
-     * the threshold following the discharge rather than the geometry, and is the intended effect
-     * rather than a drift between two constants to be corrected. See docs/DESIGN_LEDGER.md, S3.
+     * **This stage's own rule, and a separate approximation from the network the map draws.**
+     * Since R1 a watercourse is drawn where `ChannelInitiation` says the ground can be cut — an
+     * area-slope criterion in square kilometres, raised by the plant cover and held off ground that
+     * never thaws — and nothing about that criterion is a share of anything. This constant does not
+     * follow it, for two reasons that are worth keeping separate.
+     *
+     * The first is the practical one, and is the same reason [POND_DEPTH_METRES] is a constant
+     * here rather than a read of its setting: the criterion is parameterised by `config.rivers`,
+     * the rivers section is chosen long after erosion runs, and reading it here would mean adding
+     * `rivers` to erosion's reuse guard so that moving a river setting re-cut twelve rounds of
+     * valleys.
+     *
+     * The second is that the two rules answer different questions. The criterion asks whether
+     * running water can open a head in *this* ground, which is about the gradient and what is
+     * rooted in it; the passes below ask whether enough water arrives at a place for a delta to be
+     * built there and a distributary to be worth cutting, which is about discharge alone — and they
+     * ask it on a delta lobe, which is precisely the flat ground where the criterion initiates
+     * nothing of its own and relies on carrying a channel downstream onto it. So this is a
+     * discharge rule standing in for a network the stage cannot see, and a coarse one: it will
+     * count a wet-country trunk the map does not draw and miss a dry-country one it does. What it
+     * has to be right about is the order of magnitude of the water at a mouth, and it is.
+     * See docs/DESIGN_LEDGER.md, S3 and R1.
      */
     private const val DRAWN_RIVER = 0.0006f
 
@@ -1706,11 +1727,11 @@ internal object HydraulicErosion {
         // which is exactly what they were.
         for (rank in order.indices.reversed()) {
             val cell = order[rank]
-            // Every river the map will draw, not only the few big enough to build a delta. The
-            // rivers stage draws a channel once it carries `RiverConfig.sourceFlowShare` of the
-            // world's runoff, and with the flat rain this stage works to that is the same figure as
-            // a share of the land. At `deltaMinCatchment` instead — five times as much — the trunk
-            // at the author's own mouth on seed 59758 did not qualify and nothing was cut.
+            // Every watercourse carrying a river's worth of water, not only the few big enough
+            // to build a delta: at `deltaMinCatchment` instead — five times as much — the trunk at
+            // the author's own mouth on seed 59758 did not qualify and nothing was cut. Which
+            // courses the map goes on to draw is `ChannelInitiation`'s answer and not this one;
+            // see [DRAWN_RIVER] for why this pass keeps a rule of its own.
             if (area.data[cell] / landCells < DRAWN_RIVER) continue
             val standing = filled.data[cell] - sea.relativeElevation.data[cell]
             val onFlat = standing > 0f && (standing <= pondDepth || spoil[cell] > 0f)

@@ -106,28 +106,6 @@ object ChannelInitiation {
     const val CLOSED_CANOPY_RESISTANCE_GAIN = 200.0
 
     /**
-     * The rainfall the runoff weight is measured against, in millimetres a year: Earth's mean over
-     * land, about 715 (Legates & Willmott's land mean, quoted at 700-750 in every later census).
-     *
-     * An absolute reference and not the world's own mean, which is what makes the weight a physical
-     * quantity. Against the world's mean a world twice as wet would draw the same network, because
-     * every cell's weight would be divided by twice as much; against Earth's it draws a denser one.
-     */
-    const val EARTH_MEAN_LAND_RAINFALL_MM = 715f
-
-    /**
-     * Runoff a cell sheds over and above its own rainfall, in millimetres a year.
-     *
-     * `RiverStage.RUNOFF_FLOOR` in the unit this file works in. That floor is 0.05 of
-     * `ClimateResult.precipitation`, which is `precipitationMm / 3000`, so it is a hundred and fifty
-     * millimetres a year — and it is here for the same reason it is there: an arid upland still
-     * gathers a trickle from snowmelt and the odd storm, and its channels are cut by the rare storm
-     * rather than by the annual mean. The two have to be the same number, or the stage would
-     * accumulate water down a network drawn by a different rule about where water comes from.
-     */
-    const val RUNOFF_FLOOR_MM = 150f
-
-    /**
      * How much the threshold is multiplied by over ground carrying [vegetationDensity] of cover:
      * one over bare ground and [CLOSED_CANOPY_RESISTANCE_GAIN] under a closed canopy.
      *
@@ -143,9 +121,20 @@ object ChannelInitiation {
         return exp(ln(CLOSED_CANOPY_RESISTANCE_GAIN) * cover).toFloat()
     }
 
-    /** A cell's runoff as a share of Earth's mean over land — see the two constants above. */
+    /**
+     * A cell's runoff as a share of Earth's mean over land.
+     *
+     * [Runoff.shareOfEarthMean], and the division is the whole of what this file adds to the
+     * shared weight. **Absolute, against Earth's 715 mm land mean and not against this world's**,
+     * because the threshold on the other side of [isChannelHead] is an area of real ground in
+     * square kilometres: divided by the world's own mean, a world twice as wet would draw exactly
+     * the same network, since every weight would be divided by twice as much. Divided by Earth's,
+     * it draws a denser one, which is the aridity dependence this chunk is about. `HydraulicErosion`
+     * divides the same weight by its own land's mean instead, and [Runoff] says why each is right
+     * where it stands.
+     */
     fun runoffShareOfEarthMean(precipitationMm: Float): Float =
-        (precipitationMm + RUNOFF_FLOOR_MM) / EARTH_MEAN_LAND_RAINFALL_MM
+        Runoff.shareOfEarthMean(precipitationMm)
 
     /**
      * The drainage area above each cell in square kilometres, each contributing cell counted in

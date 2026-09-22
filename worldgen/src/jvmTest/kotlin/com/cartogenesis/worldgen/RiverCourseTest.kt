@@ -142,6 +142,14 @@ class RiverCourseTest {
      * the right one by the same rule applied to what was left. The control is the order this
      * replaces — from the headwater with the most water, whose course down to the same mouth is
      * what [Network.fromBiggestHead] follows — and it has to fail.
+     *
+     * A mouth whose longest watercourse is shorter than `RiverConfig.shortestDrawnCourseKm` is left
+     * out, because the length rule would not draw that watercourse at all: a course reaches such a
+     * mouth only by the lake exemption, as a lake's outflow, and a lake is not a channel cell, so
+     * the walk here sees the outflow's arm begin at the shore and scores the lake's own inflows as
+     * nothing. The rule this clause checks is the order the length rule's survivors are traced in,
+     * and an exempt outflow is not one of them. The count left out is printed, and beside it how
+     * many of those fall short of the channel walk, which is the population the exclusion excuses.
      */
     @Test
     fun `a river is its own longest watercourse`() {
@@ -155,11 +163,13 @@ class RiverCourseTest {
             var longestHere = 0.0
             var beforeHere = 0.0
             var courses = 0
+            var outflowsOnly = 0
+            var outflowsShort = 0
             var worst = 1.0
+            val shortestDrawnKm = world.config.rivers.shortestDrawnCourseKm.toDouble()
             world.rivers.rivers.forEach { river ->
                 val last = river.cells.last { network.isChannel[it] }
                 if (river.cells.last() == last) return@forEach // stops on another river
-                courses++
                 var drawn = 0.0
                 for (step in 0 until river.cells.size - 1) {
                     if (!network.isChannel[river.cells[step]]) continue
@@ -167,6 +177,12 @@ class RiverCourseTest {
                     drawn += network.stepKilometres(river.cells[step], river.cells[step + 1])
                 }
                 val longest = network.longestAbove[last]
+                if (longest < shortestDrawnKm) {
+                    outflowsOnly++
+                    if (drawn < longest - ONE_STEP_OF_SLACK_KM) outflowsShort++
+                    return@forEach
+                }
+                courses++
                 drawnHere += drawn
                 longestHere += longest
                 beforeHere += network.fromBiggestHead[last]
@@ -183,8 +199,10 @@ class RiverCourseTest {
             beforeTotal += beforeHere
             println(
                 ("RIVERCOURSE seed=$seed $courses courses into water, coverage %.3f (worst %.3f), " +
-                    "%.3f from the biggest headwater").format(
-                    drawnHere / longestHere, worst, beforeHere / longestHere
+                    "%.3f from the biggest headwater; %d lake outflows under the drawn length " +
+                    "left out, %d of them short of the channel walk").format(
+                    drawnHere / longestHere, worst, beforeHere / longestHere, outflowsOnly,
+                    outflowsShort
                 )
             )
         }

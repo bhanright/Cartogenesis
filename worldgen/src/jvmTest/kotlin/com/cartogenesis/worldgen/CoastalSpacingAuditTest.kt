@@ -84,10 +84,18 @@ class CoastalSpacingAuditTest {
         beltFloorMetres: Float = RangeFront.BELT_FLOOR_METRES,
         edit: (WorldGenConfig) -> WorldGenConfig = { it }
     ): RangeFront.Report {
+        val beforeGeneration = System.nanoTime()
         var held: WorldMap? = world(seed, side, edit)
+        val beforeFinder = System.nanoTime()
         val report = RangeFront.measure(held!!, beltFloorMetres)
+        val after = System.nanoTime()
         held = null
         System.gc()
+        println(
+            "X1d COST seed %d at %d: %.1f s to generate, %.1f s to find the fronts".format(
+                seed, side, (beforeFinder - beforeGeneration) / 1e9, (after - beforeFinder) / 1e9
+            )
+        )
         return report
     }
 
@@ -113,6 +121,8 @@ class CoastalSpacingAuditTest {
     private fun sweep(side: Int) {
         val pooled = ArrayList<Double>()
         val pooledCells = ArrayList<Double>()
+        val pooledEvery = ArrayList<Double>()
+        val pooledEveryCells = ArrayList<Double>()
         val pooledRatio = ArrayList<Double>()
         val byBearing = RangeFront.Bearing.entries.associateWith { ArrayList<Double>() }
         val byBearingCells = RangeFront.Bearing.entries.associateWith { ArrayList<Double>() }
@@ -134,17 +144,22 @@ class CoastalSpacingAuditTest {
                     }
                     byBearing.getValue(front.front.bearing).add(front.medianSpacingKm!!)
                     front.hoviusRatio?.let { pooledRatio.add(it) }
+                    front.medianEveryOutletSpacingKm?.let { pooledEvery.add(it) }
+                    report.everyOutletSpacingInCells(front)?.let { pooledEveryCells.add(it) }
                 }
             }
         }
 
         println(
-            ("X1d SPACING POOLED at %d over %d seeds and %d fronts: spacing %s km, %s cells " +
-                "(the author read %.0f cells), divide-to-front ratio %s against Hovius's %.1f")
+            ("X1d SPACING POOLED at %d over %d seeds and %d fronts: trunk spacing %s km, %s " +
+                "cells; every-outlet spacing %s km, %s cells (the author read %.0f cells); " +
+                "Hovius %s against %.1f")
                 .format(
                     side, seedsWithSample, pooled.size,
                     RangeFront.show(RangeFront.median(pooled)),
                     RangeFront.show(RangeFront.median(pooledCells)),
+                    RangeFront.show(RangeFront.median(pooledEvery)),
+                    RangeFront.show(RangeFront.median(pooledEveryCells)),
                     REPORTED_SPACING_CELLS,
                     RangeFront.show(RangeFront.median(pooledRatio)), RangeFront.HOVIUS_RATIO
                 )

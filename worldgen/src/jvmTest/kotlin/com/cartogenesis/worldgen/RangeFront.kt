@@ -7,6 +7,7 @@ import kotlin.math.acos
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -230,11 +231,23 @@ internal object RangeFront {
     class Measured(
         val front: Front,
         val trunks: List<Trunk>,
-        /** Differences between neighbouring outlets along the chord, in kilometres. */
+        /** Differences between neighbouring *trunk* outlets along the chord, in kilometres. */
         val spacingsKm: List<Double>,
-        /** Outlets that reached the front before the trunk filter, for the census. */
-        val outletsAtFront: Int
+        /**
+         * Differences between neighbouring outlets of *every* basin leaving by this front.
+         *
+         * Hovius's ratio is over trunk basins, so the trunk filter is what the spacing above is
+         * for. But the author's report is of what the map shows, and the map draws a course down
+         * every gully that carries one: this is the comb the eye sees, and it is the figure the
+         * "ten cells" is to be read against.
+         */
+        val everyOutletSpacingKm: List<Double>
     ) {
+        /** Outlets that reached the front before the trunk filter, for the census. */
+        val outletsAtFront: Int get() = everyOutletSpacingKm.size + 1
+
+        val medianEveryOutletSpacingKm: Double? get() = median(everyOutletSpacingKm)
+
         val medianSpacingKm: Double? get() = median(spacingsKm)
         val medianDivideToFrontKm: Double? get() = median(trunks.map { it.divideToFrontKm })
 
@@ -285,11 +298,49 @@ internal object RangeFront {
         /** The pooled spacing counted in grid cells along each front, which is the author's unit. */
         val pooledSpacingCells: Double? get() = median(sample.mapNotNull { spacingInCells(it) })
 
+        /** The same over every outlet rather than the trunks: the comb the map draws. */
+        val pooledEveryOutletSpacingKm: Double?
+            get() = median(measured.mapNotNull { it.medianEveryOutletSpacingKm })
+
+        val pooledEveryOutletSpacingCells: Double?
+            get() = median(measured.mapNotNull { everyOutletSpacingInCells(it) })
+
         fun spacingInCells(measured: Measured): Double? = measured.medianSpacingKm?.let {
             measured.front.cellsAlong(it, cellWidthKm, cellHeightKm)
         }
 
+        fun everyOutletSpacingInCells(measured: Measured): Double? =
+            measured.medianEveryOutletSpacingKm?.let {
+                measured.front.cellsAlong(it, cellWidthKm, cellHeightKm)
+            }
+
         fun sampleFor(bearing: Bearing): List<Measured> = sample.filter { it.front.bearing == bearing }
+
+        /**
+         * Every gap between neighbouring outlets on every front, rather than one median per front.
+         *
+         * A per-front median weights a front carrying three outlets the same as one carrying forty,
+         * which is right for a pooled figure over worlds and wrong when the whole sample is one or
+         * two fronts — a 512 world yields that on most seeds. So both are reported: the median over
+         * fronts, and the median over gaps with the number of gaps beside it.
+         *
+         * [trunksOnly] takes the gaps between trunk basins, which is Hovius's sample; false takes
+         * the gaps between every outlet, which is the comb the map draws.
+         */
+        fun gapsKm(trunksOnly: Boolean, bearing: Bearing? = null): List<Double> = measured
+            .filter { bearing == null || it.front.bearing == bearing }
+            .flatMap { if (trunksOnly) it.spacingsKm else it.everyOutletSpacingKm }
+
+        /** The same gaps, each counted in the grid cells its own front's bearing makes of it. */
+        fun gapsInCells(trunksOnly: Boolean, bearing: Bearing? = null): List<Double> = measured
+            .filter { bearing == null || it.front.bearing == bearing }
+            .flatMap { front ->
+                (if (trunksOnly) front.spacingsKm else front.everyOutletSpacingKm)
+                    .map { front.front.cellsAlong(it, cellWidthKm, cellHeightKm) }
+            }
+
+        /** How many eligible fronts run each way, whether or not they carry a spacing. */
+        fun frontsFacing(bearing: Bearing): Int = measured.count { it.front.bearing == bearing }
 
         fun pooledSpacingKmFor(bearing: Bearing): Double? =
             median(sampleFor(bearing).mapNotNull { it.medianSpacingKm })
@@ -301,10 +352,12 @@ internal object RangeFront {
         fun line(label: String): String {
             val spacing = pooledSpacingKm
                 ?: return "$label: no sample - ${census}"
-            return ("%s: %d fronts, spacing %.1f km (%.2f cells along the front), " +
-                "divide-to-front %.1f km, Hovius %.2f against %.1f")
+            return ("%s: %d fronts, trunk spacing %.1f km (%.2f cells along the front), " +
+                "every-outlet spacing %s km (%s cells), divide-to-front %.1f km, " +
+                "Hovius %.2f against %.1f")
                 .format(
                     label, sample.size, spacing, pooledSpacingCells ?: Double.NaN,
+                    show(pooledEveryOutletSpacingKm), show(pooledEveryOutletSpacingCells),
                     pooledDivideToFrontKm ?: Double.NaN, pooledHoviusRatio ?: Double.NaN,
                     HOVIUS_RATIO
                 )
@@ -383,7 +436,7 @@ internal object RangeFront {
         }
 
         val exit = exitsOf(belt, flowTarget, cellCount)
-        val basins = basinsOf(exit)
+        val basins = basinsOf(exit, flowTarget, cellsAcross, cellsDown, cellWidthKm, cellHeightKm)
 
         val chains = boundaryChains(belt, component, componentCount, cellsAcross, cellsDown)
         var straightRuns = 0
@@ -401,7 +454,7 @@ internal object RangeFront {
         val stamp = IntArray(cellCount)
         val measured = fronts.mapIndexed { index, front ->
             measureFront(
-                front, basins, flowTarget, stamp, index + 1,
+                front, basins, stamp, index + 1,
                 cellsAcross, cellsDown, cellWidthKm, cellHeightKm
             )
         }
@@ -522,9 +575,39 @@ internal object RangeFront {
         val member: IntArray
     ) {
         val count: Int get() = outletCell.size
+
+        /** Each outlet's position in kilometre space, so a front need not divide by the grid. */
+        lateinit var outletKmX: DoubleArray
+        lateinit var outletKmY: DoubleArray
+
+        /** Where each outlet's own receiver stands, which says whether the step is seaward. */
+        lateinit var receiverKmX: DoubleArray
+        lateinit var receiverKmY: DoubleArray
+
+        /**
+         * Outlets bucketed by a square of ground, so a front reads the outlets near it and no more.
+         *
+         * A front's band is at most its own length by two straightness bars, and the world holds
+         * hundreds of thousands of outlets at 2048: scanning them all once per front is what made
+         * the first run of this measurement take longer than the twenty-one worlds it was over.
+         */
+        lateinit var bucketStart: IntArray
+        lateinit var bucketMember: IntArray
+        var bucketsAcross: Int = 0
+        var bucketsDown: Int = 0
     }
 
-    private fun basinsOf(exit: IntArray): Basins {
+    /** The side of one bucket of the outlet index, in kilometres. */
+    private const val OUTLET_BUCKET_KM = 100.0
+
+    private fun basinsOf(
+        exit: IntArray,
+        flowTarget: IntArray,
+        cellsAcross: Int,
+        cellsDown: Int,
+        cellWidthKm: Double,
+        cellHeightKm: Double
+    ): Basins {
         val idOfExit = HashMap<Int, Int>()
         val basinOf = IntArray(exit.size) { -1 }
         val outlets = ArrayList<Int>()
@@ -549,7 +632,44 @@ internal object RangeFront {
             val id = basinOf[cell]
             if (id >= 0) member[fill[id]++] = cell
         }
-        return Basins(outlets.toIntArray(), start, member)
+        val basins = Basins(outlets.toIntArray(), start, member)
+
+        basins.outletKmX = DoubleArray(count) { (basins.outletCell[it] % cellsAcross) * cellWidthKm }
+        basins.outletKmY = DoubleArray(count) { (basins.outletCell[it] / cellsAcross) * cellHeightKm }
+        basins.receiverKmX = DoubleArray(count)
+        basins.receiverKmY = DoubleArray(count)
+        for (basin in 0 until count) {
+            val target = flowTarget[basins.outletCell[basin]]
+            if (target < 0) {
+                // No receiver: park it on its own outlet, which fails the seaward test below.
+                basins.receiverKmX[basin] = basins.outletKmX[basin]
+                basins.receiverKmY[basin] = basins.outletKmY[basin]
+            } else {
+                basins.receiverKmX[basin] = (target % cellsAcross) * cellWidthKm
+                basins.receiverKmY[basin] = (target / cellsAcross) * cellHeightKm
+            }
+        }
+
+        basins.bucketsAcross = max(1, (cellsAcross * cellWidthKm / OUTLET_BUCKET_KM).toInt() + 1)
+        basins.bucketsDown = max(1, (cellsDown * cellHeightKm / OUTLET_BUCKET_KM).toInt() + 1)
+        val buckets = basins.bucketsAcross * basins.bucketsDown
+        val bucketStart = IntArray(buckets + 1)
+        val bucketOf = IntArray(count)
+        for (basin in 0 until count) {
+            val column = (basins.outletKmX[basin] / OUTLET_BUCKET_KM).toInt()
+                .coerceIn(0, basins.bucketsAcross - 1)
+            val row = (basins.outletKmY[basin] / OUTLET_BUCKET_KM).toInt()
+                .coerceIn(0, basins.bucketsDown - 1)
+            bucketOf[basin] = row * basins.bucketsAcross + column
+            bucketStart[bucketOf[basin] + 1]++
+        }
+        for (bucket in 1..buckets) bucketStart[bucket] += bucketStart[bucket - 1]
+        val bucketFill = bucketStart.copyOf()
+        val bucketMember = IntArray(count)
+        for (basin in 0 until count) bucketMember[bucketFill[bucketOf[basin]]++] = basin
+        basins.bucketStart = bucketStart
+        basins.bucketMember = bucketMember
+        return basins
     }
 
     // ---------------------------------------------------------------- boundary chains
@@ -768,7 +888,6 @@ internal object RangeFront {
     private fun measureFront(
         front: Front,
         basins: Basins,
-        flowTarget: IntArray,
         stamp: IntArray,
         token: Int,
         cellsAcross: Int,
@@ -779,22 +898,42 @@ internal object RangeFront {
         fun kmXOf(cell: Int) = (cell % cellsAcross) * cellWidthKm
         fun kmYOf(cell: Int) = (cell / cellsAcross) * cellHeightKm
 
+        // Only the buckets the front's own band can reach, which is what keeps the cost of a front
+        // to its own neighbourhood rather than to the whole world's outlets.
+        val lowKmX = min(front.startKmX, front.endKmX) - FRONT_STRAIGHTNESS_KM
+        val highKmX = max(front.startKmX, front.endKmX) + FRONT_STRAIGHTNESS_KM
+        val lowKmY = min(front.startKmY, front.endKmY) - FRONT_STRAIGHTNESS_KM
+        val highKmY = max(front.startKmY, front.endKmY) + FRONT_STRAIGHTNESS_KM
+        val firstBucketColumn = (lowKmX / OUTLET_BUCKET_KM).toInt().coerceAtLeast(0)
+        val lastBucketColumn = (highKmX / OUTLET_BUCKET_KM).toInt()
+            .coerceAtMost(basins.bucketsAcross - 1)
+        val firstBucketRow = (lowKmY / OUTLET_BUCKET_KM).toInt().coerceAtLeast(0)
+        val lastBucketRow = (highKmY / OUTLET_BUCKET_KM).toInt().coerceAtMost(basins.bucketsDown - 1)
+
         val onFront = ArrayList<Int>()
-        for (basin in 0 until basins.count) {
-            val outlet = basins.outletCell[basin]
-            val kmX = kmXOf(outlet)
-            val kmY = kmYOf(outlet)
-            val along = front.alongAt(kmX, kmY)
-            if (along < 0.0 || along > front.lengthKm) continue
-            val landward = front.landwardAt(kmX, kmY)
-            if (abs(landward) > FRONT_STRAIGHTNESS_KM) continue
-            val target = flowTarget[outlet]
-            if (target < 0) continue
-            // A course crossing the line inward is not leaving the belt by this front.
-            if (front.landwardAt(kmXOf(target), kmYOf(target)) >= landward) continue
-            onFront.add(basin)
+        val alongOfOutlet = ArrayList<Double>()
+        for (bucketRow in firstBucketRow..lastBucketRow) {
+            for (bucketColumn in firstBucketColumn..lastBucketColumn) {
+                val bucket = bucketRow * basins.bucketsAcross + bucketColumn
+                for (index in basins.bucketStart[bucket] until basins.bucketStart[bucket + 1]) {
+                    val basin = basins.bucketMember[index]
+                    val kmX = basins.outletKmX[basin]
+                    val kmY = basins.outletKmY[basin]
+                    val along = front.alongAt(kmX, kmY)
+                    if (along < 0.0 || along > front.lengthKm) continue
+                    val landward = front.landwardAt(kmX, kmY)
+                    if (abs(landward) > FRONT_STRAIGHTNESS_KM) continue
+                    // A course crossing the line inward is not leaving the belt by this front.
+                    val receiver = front.landwardAt(
+                        basins.receiverKmX[basin], basins.receiverKmY[basin]
+                    )
+                    if (receiver >= landward) continue
+                    onFront.add(basin)
+                    alongOfOutlet.add(along)
+                }
+            }
         }
-        if (onFront.isEmpty()) return Measured(front, emptyList(), emptyList(), 0)
+        if (onFront.isEmpty()) return Measured(front, emptyList(), emptyList(), emptyList())
 
         // The region this front's basins tile, stamped once so the rim test can read it.
         onFront.forEach { basin ->
@@ -855,7 +994,12 @@ internal object RangeFront {
         for (index in 1 until trunks.size) {
             spacings.add(trunks[index].alongFrontKm - trunks[index - 1].alongFrontKm)
         }
-        return Measured(front, trunks, spacings, onFront.size)
+        val everyOutlet = alongOfOutlet.sorted()
+        val everySpacing = ArrayList<Double>()
+        for (index in 1 until everyOutlet.size) {
+            everySpacing.add(everyOutlet[index] - everyOutlet[index - 1])
+        }
+        return Measured(front, trunks, spacings, everySpacing)
     }
 
     // ---------------------------------------------------------------- cross-resolution matching

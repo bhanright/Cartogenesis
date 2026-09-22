@@ -293,10 +293,6 @@ internal object EarthLikeness {
             world.rivers.flowTarget, world.sea.landCellCount
         ) { 1f }
 
-        val byHeight = FlowRouting.heightOrder(
-            cellsAcross, cellsDown, world.sea.isLand, world.rivers.filledElevation,
-            world.sea.landCellCount
-        )
         val downstreamOrder = FlowRouting.drainageOrder(
             cellsAcross, cellsDown, world.sea.isLand, world.rivers.flowTarget,
             world.sea.landCellCount
@@ -332,11 +328,11 @@ internal object EarthLikeness {
         val horton = CHANNEL_SUPPORT_KM2.map { support ->
             strahlerStreamOrders(
                 supportAreaChannelMask(world, catchmentCells.data, support),
-                world.rivers.flowTarget, byHeight
+                world.rivers.flowTarget, downstreamOrder
             )
         }
         val hortonDrawnRivers =
-            strahlerStreamOrders(drawnChannelMask(world), world.rivers.flowTarget, byHeight)
+            strahlerStreamOrders(drawnChannelMask(world), world.rivers.flowTarget, downstreamOrder)
         val aridity = aridityByCell(world)
         val landByAridity = landAreaByAridity(aridity, squareKilometresPerCell)
         val drainage = DrainageByAridity(
@@ -925,25 +921,33 @@ internal object EarthLikeness {
     /**
      * Strahler orders over the channel cells, and the number of streams each order carries.
      *
-     * Walked highest ground first over [FlowRouting.heightOrder], so a cell's upstream is settled
-     * before the cell itself — the same order the engine accumulates water in, and for the same
-     * reason. A cell with no channel above it is order 1; a cell fed by two or more channels of its
-     * own highest incoming order is one order above them; anything else keeps the highest order
-     * that reaches it. A *stream* of an order is a run of consecutive cells holding it, counted at
-     * its downstream end, which is where the run leaves that order.
+     * Walked over [FlowRouting.drainageOrder] — sources first and mouths last — so everything
+     * draining into a cell is settled before the cell itself. A cell with no channel above it is
+     * order 1; a cell fed by two or more channels of its own highest incoming order is one order
+     * above them; anything else keeps the highest order that reaches it. A *stream* of an order is
+     * a run of consecutive cells holding it, counted at its downstream end, which is where the run
+     * leaves that order.
+     *
+     * **A topological order and not [FlowRouting.heightOrder], which is what this walked before.**
+     * Height said "downstream" only for as long as the routing surface fell at every step, and
+     * since F30b it does not: a reach crossing a filled flat follows the potential laid over the
+     * flat rather than the fill's own staircase, so a receiver can sit level with or above the cell
+     * draining into it. The walk then reached a junction before the branches that make it one, read
+     * nothing arriving, called it a headwater and lost the bifurcation. `FlowRouting.accumulate`
+     * had the same fault and was given the same answer; `EarthLikenessControlTest` holds the two
+     * heads and the junction below them that tell the two orders apart.
      */
     fun strahlerStreamOrders(
         channel: BooleanArray,
         flowTarget: IntArray,
-        byHeight: IntArray
+        downstreamOrder: IntArray
     ): StreamOrders {
         val cellCount = channel.size
         val order = IntArray(cellCount)
         // The highest order arriving at each cell, and how many channels arrive carrying it.
         val incomingOrder = IntArray(cellCount)
         val incomingCount = IntArray(cellCount)
-        for (rank in byHeight.indices.reversed()) {
-            val cell = byHeight[rank]
+        for (cell in downstreamOrder) {
             if (!channel[cell]) continue
             order[cell] = when {
                 incomingCount[cell] == 0 -> 1

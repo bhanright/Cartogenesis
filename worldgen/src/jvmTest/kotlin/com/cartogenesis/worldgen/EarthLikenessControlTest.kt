@@ -173,7 +173,10 @@ class EarthLikenessControlTest {
             row * cellsAcross + rank % cellsAcross
         }
 
-        val orders = EarthLikeness.strahlerStreamOrders(channel, flowTarget, byHeight)
+        // Sources first and mouths last, which on a comb is the height order read backwards.
+        val downstream = byHeight.reversedArray()
+
+        val orders = EarthLikeness.strahlerStreamOrders(channel, flowTarget, downstream)
         val hortonComplaint = EarthLikeness.bifurcationComplaint("COMB", orders)
         println(
             "EARTH CONTROL comb network: streams ${orders.perOrder()}," +
@@ -330,6 +333,74 @@ class EarthLikenessControlTest {
                 " land reports a wet-side ratio of ${"%.4f".format(noFallOffRatio)}, not the 1.5" +
                 " it was laid out to have",
             abs(noFallOffRatio - 1.5) < 1e-9
+        )
+    }
+
+    /**
+     * Strahler's orders are walked in a topological order of the flow forest, not in order of
+     * height.
+     *
+     * A cell's own order is decided by what arrives at it, so the walk has to reach every donor
+     * before the cell it drains into. Height used to say that for nothing: the routing surface fell
+     * at every step, so lower on the fill meant downstream. Since F30b it does not — a reach
+     * crossing a filled flat follows the potential laid over it and not the fill's own staircase,
+     * so a receiver can sit level with, or above, the cell draining into it — and a walk ordered by
+     * height then reaches a junction before the branches that make it one, gives it the order of a
+     * headwater, and loses the bifurcation the network has there. `FlowRouting.accumulate` had the
+     * same fault and was given [FlowRouting.drainageOrder], which is Kahn's algorithm over the flow
+     * forest and is exact.
+     *
+     * The network here is that case with nothing else in it: two heads meeting at a junction whose
+     * cell index — and so whose place in any tie-broken ordering of a flat — is *below* both of
+     * them. Ordered topologically it is a second-order stream; ordered by height it is not, and the
+     * same call with the same network in that order is the control.
+     */
+    @Test
+    fun `the stream orders are walked in a topological order and not by height`() {
+        val cellsAcross = 8
+        val cellCount = cellsAcross * cellsAcross
+        val flowTarget = IntArray(cellCount) { -1 }
+        val channel = BooleanArray(cellCount)
+        // Two heads, a junction below them, and the junction's own reach down to the edge. The
+        // heads are cells 9 and 10 and the junction is cell 40: a flat's ordering falls to the cell
+        // index, so height puts the junction first and the walk meets it before either branch.
+        val heads = intArrayOf(9, 10)
+        val junction = 40
+        val mouth = 41
+        heads.forEach { head ->
+            channel[head] = true
+            flowTarget[head] = junction
+        }
+        channel[junction] = true
+        flowTarget[junction] = mouth
+        channel[mouth] = true
+
+        // Sources first and mouths last: what [FlowRouting.drainageOrder] returns for this forest.
+        val downstream = intArrayOf(heads[0], heads[1], junction, mouth)
+        val orders = EarthLikeness.strahlerStreamOrders(channel, flowTarget, downstream)
+        // The sequence the height walk visited in: the height order read from its high end, which
+        // over a flat is the cell index descending.
+        val byHeight = intArrayOf(mouth, junction, heads[1], heads[0])
+        val ordersByHeight = EarthLikeness.strahlerStreamOrders(channel, flowTarget, byHeight)
+        println(
+            "EARTH CONTROL two heads meeting at a junction below them: streams" +
+                " ${orders.perOrder()} walked downstream, ${ordersByHeight.perOrder()} walked by" +
+                " height"
+        )
+        assertTrue(
+            "two first-order heads meeting gave ${orders.highestOrder} Strahler orders, not the" +
+                " two a junction makes",
+            orders.highestOrder == 2
+        )
+        assertTrue(
+            "the junction and the reach below it are one second-order stream and the two heads are" +
+                " first-order, which is ${orders.perOrder()}",
+            orders.streamsByOrder.toList() == listOf(2L, 1L)
+        )
+        assertTrue(
+            "walking by height now finds the junction too, so this control no longer says which" +
+                " order the walk has to be in",
+            ordersByHeight.highestOrder == 1
         )
     }
 }

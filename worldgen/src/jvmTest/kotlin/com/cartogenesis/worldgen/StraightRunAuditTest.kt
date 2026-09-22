@@ -42,10 +42,6 @@ class StraightRunAuditTest {
         const val EARTH_HACK_HIGH = 0.6
         const val HACK_TOLERANCE = 0.05
 
-        /** Horton (1945): natural basins run 3 to 5, weighted after Strahler (1953). */
-        const val EARTH_BIFURCATION_LOW = 3.0
-        const val EARTH_BIFURCATION_HIGH = 5.0
-
         /**
          * The smallest basin Hack's fit will take, in cells.
          *
@@ -71,91 +67,70 @@ class StraightRunAuditTest {
     /**
      * Hack's exponent and the bifurcation ratio, on the four standard seeds, both ways.
      *
-     * The bar is that the routing rule moves each statistic by less than the spread across seeds.
-     * These are figures that characterise *a world of this kind* rather than one particular world,
-     * so a rule that moved one further than the choice of seed does would have changed the kind.
-     * It is not fitted to anything this code produces.
+     * The bar is Earth's, under both rules: Hack's exponent inside its band on every seed, and the
+     * bifurcation ratio inside Horton's with the allowance `EarthLikeness` derives for how the
+     * figure moves with its support threshold. A routing rule that took a network out of either
+     * band would have changed the kind of world, and that is what this case is for.
      *
-     * Earth's own bands are printed beside the figures rather than asserted, and the reason is
-     * worth writing down. Hack's exponent sits inside its band on every seed under both rules. The
-     * bifurcation ratio does not: measured over the *drawn* courses, which are three Strahler
-     * orders deep, it reads 5.05 to 6.41 under the old rule and 4.87 to 6.52 under the new one,
-     * where Horton's range is 3 to 5. A network three orders deep has two ratios to average and the
-     * top one is a handful of streams, so the figure is high for a reason that has nothing to do
-     * with how the water is routed — `EarthLikeness` takes it over a support-area channel mask
-     * many orders deep, which is a different and better-conditioned measurement. Asserting Earth's
-     * band here would be failing F18 for something it did not do and did not move; the band that
-     * belongs to this chunk is how far the rule shifts the figure, and that is asserted.
+     * **What it used to assert, and why it no longer does.** F18 asserted that the rule moves each
+     * statistic by less than the spread across the four seeds. That is one noisy figure against
+     * another: the spread is a property of the four facet worlds, so a rule that made worlds more
+     * alike would fail it and one that made them differ more would pass, and four seeds cannot
+     * derive an equivalence margin. It held at F18 (docs/DESIGN_LEDGER.md: the ratio moved 0.413
+     * against 1.842) because the drawn network's ratio was loose across seeds; R1 pruned the
+     * drawn courses and the same figure came out tight, and the rule's move, 0.318 on seed 42,
+     * stood over a spread of 0.124 without the rule having changed. The paired moves are printed
+     * on every seed and not asserted.
+     *
+     * **Over the support-area channel network, not the drawn courses.** The drawn network is
+     * conditioned on `RiverConfig.maxRivers` and on R1's pruning, neither of which is the routing
+     * rule; the support-area network, every land cell draining at least 4,400 km2, is the sample
+     * `EarthLikeness` fits Horton on, a fifth order of a stream or two deeper than the drawn one
+     * and independent of what the map chooses to draw. The drawn figure is still printed on every
+     * seed beside it, because it is what the map shows.
      */
     @Test
-    fun `Hack's exponent and the bifurcation ratio stay where they were`() {
-        val plainHack = ArrayList<Double>()
-        val facetHack = ArrayList<Double>()
-        val plainBifurcation = ArrayList<Double>()
-        val facetBifurcation = ArrayList<Double>()
-
+    fun `Hack's exponent and the bifurcation ratio stay inside Earth's bands under both rules`() {
+        val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
             val plain = statisticsOf(world(seed, SIDE, byFacet = false))
             val facet = statisticsOf(world(seed, SIDE, byFacet = true))
-            plainHack += plain.hackExponent
-            facetHack += facet.hackExponent
-            plainBifurcation += plain.bifurcationRatio
-            facetBifurcation += facet.bifurcationRatio
             println(
                 "F18 NETWORK seed $seed: Hack %.4f -> %.4f over %d/%d basins, bifurcation ".format(
                     plain.hackExponent, facet.hackExponent, plain.basins, facet.basins
                 ) + "%.3f -> %.3f, orders %s -> %s".format(
                     plain.bifurcationRatio, facet.bifurcationRatio,
-                    plain.streamsByOrder.toList(), facet.streamsByOrder.toList()
+                    plain.routed.perOrder(), facet.routed.perOrder()
                 )
             )
-        }
-
-        val hackSpread = facetHack.max() - facetHack.min()
-        val bifurcationSpread = facetBifurcation.max() - facetBifurcation.min()
-        val hackMoved = SEEDS.indices.maxOf { abs(facetHack[it] - plainHack[it]) }
-        val bifurcationMoved = SEEDS.indices.maxOf { abs(facetBifurcation[it] - plainBifurcation[it]) }
-        println(
-            "F18 NETWORK: Hack moved at most %.4f against a spread of %.4f across seeds; "
-                .format(hackMoved, hackSpread) +
-                "bifurcation moved at most %.3f against a spread of %.3f".format(
-                    bifurcationMoved, bifurcationSpread
+            println(
+                ("F18 NETWORK seed $seed over the drawn courses: bifurcation %.3f -> %.3f, " +
+                    "orders %s -> %s; printed and not asserted, see the note on the case").format(
+                    plain.drawn.bifurcationRatio, facet.drawn.bifurcationRatio,
+                    plain.drawn.perOrder(), facet.drawn.perOrder()
                 )
-        )
-
-        SEEDS.forEachIndexed { at, seed ->
-            assertTrue(
-                facetHack[at] >= EARTH_HACK_LOW - HACK_TOLERANCE &&
-                    facetHack[at] <= EARTH_HACK_HIGH + HACK_TOLERANCE,
-                "seed $seed: Hack's exponent is %.4f, outside Earth's %.2f to %.2f give or take %.2f"
-                    .format(facetHack[at], EARTH_HACK_LOW, EARTH_HACK_HIGH, HACK_TOLERANCE)
             )
-            // The bifurcation ratio is reported against Earth rather than asserted, for the reason
-            // in the note above this case: over the drawn network it is out of Horton's range
-            // under both rules, which is a property of the measurement and not of the routing.
-            if (facetBifurcation[at] < EARTH_BIFURCATION_LOW ||
-                facetBifurcation[at] > EARTH_BIFURCATION_HIGH
-            ) {
-                println(
-                    ("F18 NETWORK seed $seed: the bifurcation ratio is %.3f over the drawn " +
-                        "network, outside Horton's %.1f to %.1f, and was %.3f under the plain rule")
-                        .format(
-                            facetBifurcation[at], EARTH_BIFURCATION_LOW, EARTH_BIFURCATION_HIGH,
-                            plainBifurcation[at]
-                        )
-                )
+            println(
+                "F18 NETWORK seed $seed: the rule moved Hack by %.4f and the bifurcation ratio by %.3f"
+                    .format(
+                        abs(facet.hackExponent - plain.hackExponent),
+                        abs(facet.bifurcationRatio - plain.bifurcationRatio)
+                    )
+            )
+            listOf("plain" to plain, "facet" to facet).forEach { (rule, statistics) ->
+                if (statistics.hackExponent < EARTH_HACK_LOW - HACK_TOLERANCE ||
+                    statistics.hackExponent > EARTH_HACK_HIGH + HACK_TOLERANCE
+                ) {
+                    complaints += ("seed $seed, $rule rule: Hack's exponent is %.4f, outside " +
+                        "Earth's %.2f to %.2f give or take %.2f").format(
+                        statistics.hackExponent, EARTH_HACK_LOW, EARTH_HACK_HIGH, HACK_TOLERANCE
+                    )
+                }
+                EarthLikeness.bifurcationComplaint("seed $seed, $rule rule", statistics.routed)
+                    ?.let { complaints += it }
             }
         }
-        assertTrue(
-            hackMoved <= hackSpread,
-            "the routing rule moved Hack's exponent by %.4f, more than the %.4f between one seed and another"
-                .format(hackMoved, hackSpread)
-        )
-        assertTrue(
-            bifurcationMoved <= bifurcationSpread,
-            "the routing rule moved the bifurcation ratio by %.3f, more than the %.3f between one seed and another"
-                .format(bifurcationMoved, bifurcationSpread)
-        )
+        assertTrue(complaints.isEmpty(), complaints.joinToString("\n"))
     }
 
     /**
@@ -196,8 +171,8 @@ class StraightRunAuditTest {
     @Test
     fun `how far the drawn network moved`() {
         (SEEDS.map { it to SIDE } + (AUTHORS_SEED to AUTHORS_SIDE)).forEach { (seed, side) ->
-            val plain = drawnChannelMask(world(seed, side, byFacet = false))
-            val facet = drawnChannelMask(world(seed, side, byFacet = true))
+            val plain = EarthLikeness.drawnChannelMask(world(seed, side, byFacet = false))
+            val facet = EarthLikeness.drawnChannelMask(world(seed, side, byFacet = true))
             val awayFromThePlainNetwork = chebyshevDistanceFrom(plain, side, side)
             var drawnByBoth = 0
             var drawnByFacetOnly = 0
@@ -282,9 +257,13 @@ class StraightRunAuditTest {
     private class Statistics(
         val hackExponent: Double,
         val basins: Int,
-        val bifurcationRatio: Double,
-        val streamsByOrder: LongArray
-    )
+        /** Over the support-area channel network, `EarthLikeness`'s metric of record. */
+        val routed: EarthLikeness.StreamOrders,
+        /** Over the drawn courses, which is what the map shows: printed, not asserted. */
+        val drawn: EarthLikeness.StreamOrders
+    ) {
+        val bifurcationRatio get() = routed.bifurcationRatio
+    }
 
     private fun statisticsOf(world: WorldMap): Statistics {
         val cellsAcross = world.width
@@ -294,16 +273,22 @@ class StraightRunAuditTest {
             cellsAcross, cellsDown, world.sea.isLand, filled, world.rivers.flowTarget,
             world.sea.landCellCount
         ) { 1f }.data
-        val byHeight = FlowRouting.heightOrder(
-            cellsAcross, cellsDown, world.sea.isLand, filled, world.sea.landCellCount
+        // Sources first and mouths last: a topological order of the flow forest, which
+        // `FlowRouting.heightOrder` has not been since F30b laid a potential over each filled flat,
+        // where a receiver may stand higher on the fill than the cell draining into it. Walked on
+        // the height order, the two accumulations below can settle a cell before its feeders and
+        // read a shorter main stem or a lower Strahler order there. At 512 that is worth hundredths
+        // on the four seeds, since a flat is a few cells there; `EarthLikeness` made the same
+        // change at R1's follow-up.
+        val sourcesFirst = FlowRouting.drainageOrder(
+            cellsAcross, cellsDown, world.sea.isLand, world.rivers.flowTarget, world.sea.landCellCount
         )
 
         // Hack's `L` is the main stem measured from the divide, which on a tree is the longest of
         // the paths reaching the cell. In cells rather than kilometres: the exponent is the slope
         // of a log-log fit, and rescaling both axes by a constant moves only the intercept.
         val longestPath = DoubleArray(cellsAcross * cellsDown)
-        for (rank in byHeight.indices.reversed()) {
-            val cell = byHeight[rank]
+        for (cell in sourcesFirst) {
             val receiver = world.rivers.flowTarget[cell]
             if (receiver < 0 || !world.sea.isLand[receiver]) continue
             val columnStep = shortestColumnStep(receiver % cellsAcross - cell % cellsAcross, cellsAcross)
@@ -327,14 +312,23 @@ class StraightRunAuditTest {
             mainStems += ln(mainStem)
         }
 
-        val orders = strahlerStreamOrders(
-            drawnChannelMask(world), world.rivers.flowTarget, byHeight
+        // Strahler over the support-area network, which is `EarthLikeness`'s metric of record,
+        // and over the drawn courses. The bar is on the first and the second is printed: see the
+        // note on the case.
+        val routed = EarthLikeness.strahlerStreamOrders(
+            EarthLikeness.supportAreaChannelMask(
+                world, catchmentCells, EarthLikeness.CHANNEL_SUPPORT_KM2.min()
+            ),
+            world.rivers.flowTarget, sourcesFirst
+        )
+        val drawn = EarthLikeness.strahlerStreamOrders(
+            EarthLikeness.drawnChannelMask(world), world.rivers.flowTarget, sourcesFirst
         )
         return Statistics(
             hackExponent = fitSlope(catchments, mainStems),
             basins = catchments.size,
-            bifurcationRatio = bifurcationRatioOf(orders),
-            streamsByOrder = orders
+            routed = routed,
+            drawn = drawn
         )
     }
 
@@ -355,88 +349,6 @@ class StraightRunAuditTest {
         val step = if (runsOffTheMap) cells.size - 1 else cells.size - 2
         val cell = cells[step]
         return if (world.sea.isLand[cell] && !world.rivers.lakes.isLake(cell)) step else -1
-    }
-
-    /** The cells the world drew a river through: land, not under a lake, and on a traced course. */
-    private fun drawnChannelMask(world: WorldMap): BooleanArray {
-        val channel = BooleanArray(world.width * world.height)
-        world.rivers.rivers.forEach { river ->
-            river.cells.forEach { cell ->
-                if (world.sea.isLand[cell] && !world.rivers.lakes.isLake(cell)) channel[cell] = true
-            }
-        }
-        return channel
-    }
-
-    /**
-     * Strahler orders over the channel cells, and how many streams each order carries.
-     *
-     * `EarthLikeness`'s own walk, copied. Highest ground first, so a cell's upstream is settled
-     * before the cell itself. A cell with no channel above it is order 1; a cell fed by two or more
-     * channels of its own highest incoming order is one order above them; anything else keeps the
-     * highest order that reaches it. A stream of an order is a run of consecutive cells holding it,
-     * counted where the run leaves that order.
-     */
-    private fun strahlerStreamOrders(
-        channel: BooleanArray,
-        flowTarget: IntArray,
-        byHeight: IntArray
-    ): LongArray {
-        val cellCount = channel.size
-        val order = IntArray(cellCount)
-        val incomingOrder = IntArray(cellCount)
-        val incomingCount = IntArray(cellCount)
-        for (rank in byHeight.indices.reversed()) {
-            val cell = byHeight[rank]
-            if (!channel[cell]) continue
-            order[cell] = when {
-                incomingCount[cell] == 0 -> 1
-                incomingCount[cell] >= 2 -> incomingOrder[cell] + 1
-                else -> incomingOrder[cell]
-            }
-            val receiver = flowTarget[cell]
-            if (receiver < 0 || !channel[receiver]) continue
-            when {
-                order[cell] > incomingOrder[receiver] -> {
-                    incomingOrder[receiver] = order[cell]
-                    incomingCount[receiver] = 1
-                }
-                order[cell] == incomingOrder[receiver] -> incomingCount[receiver]++
-            }
-        }
-        var highest = 0
-        for (cell in 0 until cellCount) if (order[cell] > highest) highest = order[cell]
-        if (highest == 0) return LongArray(0)
-        val streams = LongArray(highest)
-        for (cell in 0 until cellCount) {
-            val own = order[cell]
-            if (own == 0) continue
-            val receiver = flowTarget[cell]
-            val continues = receiver >= 0 && channel[receiver] && order[receiver] == own
-            if (!continues) streams[own - 1]++
-        }
-        return streams
-    }
-
-    /**
-     * Strahler's weighted mean bifurcation ratio, `EarthLikeness`'s own.
-     *
-     * Each adjacent pair of orders gives a ratio, averaged weighted by how many streams the pair
-     * holds — Strahler (1953)'s correction, because the top of a network is a handful of streams
-     * carrying most of the noise and none of the information.
-     */
-    private fun bifurcationRatioOf(streamsByOrder: LongArray): Double {
-        var weighted = 0.0
-        var weight = 0.0
-        for (order in 0 until streamsByOrder.size - 1) {
-            val above = streamsByOrder[order]
-            val below = streamsByOrder[order + 1]
-            if (above <= 0L || below <= 0L) continue
-            val pairWeight = (above + below).toDouble()
-            weighted += pairWeight * above.toDouble() / below
-            weight += pairWeight
-        }
-        return if (weight <= 0.0) 0.0 else weighted / weight
     }
 
     /** Least squares, `EarthLikeness`'s own, reduced to the slope this file needs. */

@@ -19,8 +19,15 @@ internal class DepositionLog(cells: Int) {
     /** For a fan cell, the cell the fan grew from; -1 for everything else. */
     val apex = IntArray(cells) { -1 }
 
-    /** How much was laid on the cell, summed over every round. */
+    /** How much was laid on the cell, summed over every round and every mechanism. */
     val laid = DoubleArray(cells)
+
+    /**
+     * The same, by mechanism, indexed by the marks below. [mechanism] is only whichever touched
+     * the cell last, and a fan cell a floodplain later brushed would otherwise read as the
+     * floodplain's; a reader that wants to know what built a shore needs the split.
+     */
+    val laidByMechanism = Array(4) { FloatArray(cells) }
 
     /** The first and the last hydraulic round that laid anything on the cell; -1 for neither. */
     val firstRound = ByteArray(cells) { -1 }
@@ -35,6 +42,7 @@ internal class DepositionLog(cells: Int) {
         if (firstRound[cell] < 0) firstRound[cell] = round.toByte()
         lastRound[cell] = round.toByte()
         laid[cell] += amount
+        laidByMechanism[mark.toInt()][cell] += amount.toFloat()
     }
 
     companion object {

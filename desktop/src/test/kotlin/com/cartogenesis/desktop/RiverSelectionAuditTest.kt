@@ -6,7 +6,6 @@ import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
-import com.cartogenesis.cartography.RiverInk
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -57,6 +56,18 @@ class RiverSelectionAuditTest {
 
         /** See `RiverSelectionTest`: the same figure, for the same reason. */
         const val ACROSS_RESOLUTIONS_BAND = 0.05
+
+        /**
+         * The three marks of the density scale the pictures are drawn at, sparsest first.
+         *
+         * The two ends and the default: a quarter of Earth's ink, Earth's ink, and every course
+         * the sheet's scale allows, which is what F14 drew.
+         */
+        val MARKS = listOf(
+            "sparsest" to RiverSelection.INK_STEPS.first,
+            "atlas" to RiverSelection.EARTH_DENSITY_STEP,
+            "every" to RiverSelection.EVERY_COURSE_STEP
+        )
     }
 
     private val outputDir = File("build/x1c-renders")
@@ -87,19 +98,19 @@ class RiverSelectionAuditTest {
      */
     @Test
     fun `one pane draws one map from three grids`() {
-        val byRule = HashMap<RiverInk, MutableMap<Int, Double>>()
+        val byMark = HashMap<Int, MutableMap<Int, Double>>()
         listOf(512, 1024, 2048).forEach { side ->
             val map = world(7L, side)
             val sheet = paneSheet(side)
             val chosen = RiverSelection.select(map, sheet)
             val denominator =
                 MapScale.representativeFractionDenominator(map.config.scale, side, sheet.pixelsPerCell)
-            RiverInk.entries.forEach { rule ->
-                val drawn = RiverSelection.drawnOn(map, sheet, rule)
+            MARKS.forEach { (name, mark) ->
+                val drawn = RiverSelection.drawnOn(map, sheet, mark)
                 val kilometres = drawn.sumOf { RiverSelection.courseKilometres(map, it) }
-                byRule.getOrPut(rule) { HashMap() }[side] = kilometres / chosen.landAreaSquareKm
+                byMark.getOrPut(mark) { HashMap() }[side] = kilometres / chosen.landAreaSquareKm
                 println(
-                    "X1C PANE seed 7 at $side, ${rule.name}: ${drawn.size} courses, " +
+                    "X1C PANE seed 7 at $side, $name: ${drawn.size} courses, " +
                         "${kilometres.round()} km, " +
                         "${(kilometres / chosen.landAreaSquareKm).sig()} km/km2 " +
                         "(${map.rivers.rivers.size} traced, ${chosen.tracedKilometres.round()} km, " +
@@ -109,25 +120,27 @@ class RiverSelectionAuditTest {
             }
         }
 
-        RiverInk.entries.forEach { rule ->
-            val densities = byRule.getValue(rule)
+        MARKS.forEach { (name, mark) ->
+            val densities = byMark.getValue(mark)
             val spread = (densities.values.max() - densities.values.min()) / densities.values.max()
             println(
-                "X1C PANE ${rule.name} over 512/1024/2048: " +
+                "X1C PANE $name over 512/1024/2048: " +
                     densities.toSortedMap().values.joinToString(", ") { it.sig() } +
                     " km/km2, a spread of ${(spread * 100).oneDecimal()}%"
             )
-            if (rule == RiverInk.EARTH_DENSITY) {
+            if (mark == RiverSelection.EVERY_COURSE_STEP) {
+                // The control, and the reason this chunk exists: the top of the scale is F14's
+                // rule, and F14's rule is a share of whatever was traced.
                 assertTrue(
-                    spread <= ACROSS_RESOLUTIONS_BAND,
-                    "one pane drew ${(spread * 100).oneDecimal()}% more ink from one grid than " +
-                        "another under ${rule.name}"
+                    spread > ACROSS_RESOLUTIONS_BAND,
+                    "the top of the scale agreed across grids to ${(spread * 100).oneDecimal()}%, " +
+                        "so this measurement cannot tell the two ends apart"
                 )
             } else {
                 assertTrue(
-                    spread > ACROSS_RESOLUTIONS_BAND,
-                    "the radical law agreed across grids to ${(spread * 100).oneDecimal()}%, so " +
-                        "this measurement cannot tell the two rules apart"
+                    spread <= ACROSS_RESOLUTIONS_BAND,
+                    "one pane drew ${(spread * 100).oneDecimal()}% more ink from one grid than " +
+                        "another at the $name mark"
                 )
             }
         }
@@ -136,12 +149,13 @@ class RiverSelectionAuditTest {
     /**
      * The author's world: the figures, then the pictures.
      *
-     * Four sheets of 969495 at 2048 — the pane's drawing and the export's, under each rule — whole
-     * and cropped on the window with the most river ink in it, which at 2048 is where the comb of
-     * short coastal courses the author reported lives.
+     * Six sheets of 969495 at 2048 — the pane's drawing and the export's, at the bottom of the
+     * density scale, at its default and at its top — whole and cropped on the window with the most
+     * river ink in it, which at 2048 is where the comb of short coastal courses the author
+     * reported lives.
      */
     @Test
-    fun `969495 at 2048, the pane's drawing and the export's, before and after`() {
+    fun `969495 at 2048, the pane's drawing and the export's, at three marks`() {
         outputDir.mkdirs()
         val map = world(AUTHORS_SEED, AUTHORS_SIDE)
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
@@ -162,14 +176,25 @@ class RiverSelectionAuditTest {
                         "budget ${chosen.budgetKilometres.round()} km, " +
                         "crowding pitch ${chosen.crowdingPitchKm.round()} km"
                 )
-                val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverInk.RADICAL_LAW)
-                val lawKilometres = byTheLaw.sumOf { RiverSelection.courseKilometres(map, it) }
+                MARKS.forEach { (name, mark) ->
+                    val drawn = RiverSelection.drawnOn(map, sheet, mark)
+                    val kilometres = drawn.sumOf { RiverSelection.courseKilometres(map, it) }
+                    println(
+                        "X1C AUTHOR $AUTHORS_SEED at $AUTHORS_SIDE, $where, $name " +
+                            "(x${RiverSelection.inkScaleAt(mark)}): ${drawn.size} courses, " +
+                            "${kilometres.round()} km, " +
+                            "${(kilometres / chosen.landAreaSquareKm).sig()} km/km2, " +
+                            "${(kilometres / chosen.drawnKilometres).oneDecimal()} times the " +
+                            "atlas mark's ink, fullest crowding square " +
+                            "${fullestSquare(map, drawn.map { it.cells.last() }, chosen.crowdingPitchKm)}"
+                    )
+                }
+                // The top mark against F14's own arithmetic, which is what it is meant to be.
+                val byTheLaw = RiverSelection.drawnByTheRadicalLaw(map.rivers.rivers, sheet)
                 println(
-                    "X1C AUTHOR $AUTHORS_SEED at $AUTHORS_SIDE, $where, RADICAL_LAW: " +
-                        "${byTheLaw.size} courses, ${lawKilometres.round()} km, " +
-                        "${(lawKilometres / chosen.landAreaSquareKm).sig()} km/km2, " +
-                        "which is ${(lawKilometres / chosen.drawnKilometres).oneDecimal()} times " +
-                        "the ink"
+                    "X1C AUTHOR $AUTHORS_SEED at $AUTHORS_SIDE, $where: the radical law on its own " +
+                        "draws ${byTheLaw.size} courses, fullest crowding square " +
+                        "${fullestSquare(map, byTheLaw.map { it.cells.last() }, chosen.crowdingPitchKm)}"
                 )
             }
 
@@ -201,12 +226,12 @@ class RiverSelectionAuditTest {
         val window = busiestWindow(map, options)
         listOf("pane" to paneSheet(AUTHORS_SIDE), "export" to MapSheet.UNGENERALISED)
             .forEach { (where, sheet) ->
-                RiverInk.entries.forEach { rule ->
-                    val bitmap = MapImage.toBitmap(map, options.copy(riverInk = rule), ground, sheet)
-                    val tag = if (rule == RiverInk.RADICAL_LAW) "before" else "after"
-                    written += write("$AUTHORS_SEED-$where-$tag.png", bitmap)
+                MARKS.forEach { (name, mark) ->
+                    val bitmap =
+                        MapImage.toBitmap(map, options.copy(riverInkStep = mark), ground, sheet)
+                    written += write("$AUTHORS_SEED-$where-$name.png", bitmap)
                     written += write(
-                        "$AUTHORS_SEED-$where-$tag-peninsula.png",
+                        "$AUTHORS_SEED-$where-$name-peninsula.png",
                         crop(bitmap, window.first, window.second)
                     )
                     bitmap.close()
@@ -215,21 +240,20 @@ class RiverSelectionAuditTest {
         written.forEach { println("X1C RENDER $it") }
     }
 
-    /** The four standard seeds at 512, before and after, whole. */
+    /** The four standard seeds at 512, at each of the scale's three marks, whole. */
     @Test
-    fun `the four standard seeds at 512, before and after`() {
+    fun `the four standard seeds at 512, at the bottom, the default and the top`() {
         outputDir.mkdirs()
         val written = ArrayList<String>()
         STANDARD_SEEDS.forEach { seed ->
             val map = world(seed, 512)
             val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
             val ground = MapRasterizer.rasterize(map, options)
-            RiverInk.entries.forEach { rule ->
+            MARKS.forEach { (name, mark) ->
                 val bitmap = MapImage.toBitmap(
-                    map, options.copy(riverInk = rule), ground, MapSheet.UNGENERALISED
+                    map, options.copy(riverInkStep = mark), ground, MapSheet.UNGENERALISED
                 )
-                val tag = if (rule == RiverInk.RADICAL_LAW) "before" else "after"
-                written += write("$seed-512-$tag.png", bitmap)
+                written += write("$seed-512-$name.png", bitmap)
                 bitmap.close()
             }
         }
@@ -239,12 +263,13 @@ class RiverSelectionAuditTest {
     /**
      * The top-left corner of the [CROP]-square window holding the most river ink there is.
      *
-     * Measured under the rule that draws every course, because the question the crop answers is
-     * what the new rule *removed*, and a window chosen on what it kept would never show that.
+     * Measured at the top of the density scale, where every course is drawn, because the question
+     * the crop answers is what the atlas mark *removed*, and a window chosen on what it kept would
+     * never show that.
      */
     private fun busiestWindow(map: WorldMap, options: RenderOptions): Pair<Int, Int> {
         val rivers = MapRasterizer.overlay(
-            map, options.copy(riverInk = RiverInk.RADICAL_LAW), MapSheet.UNGENERALISED
+            map, options.copy(riverInkStep = RiverSelection.EVERY_COURSE_STEP), MapSheet.UNGENERALISED
         ).rivers
         var best = 0
         var at = (map.width - CROP) / 2 to (map.height - CROP) / 2
@@ -266,6 +291,18 @@ class RiverSelectionAuditTest {
         }
         println("X1C crop window at ${at.first}, ${at.second} with $best river segments in it")
         return at
+    }
+
+    /** How many of [ends] fall in the fullest square of a [pitchKm] lattice on the ground. */
+    private fun fullestSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int {
+        val perSquare = HashMap<Long, Int>()
+        ends.forEach { end ->
+            val across = (end % map.width * map.config.cellWidthKm / pitchKm).toLong()
+            val down = (end / map.width * map.config.cellHeightKm / pitchKm).toLong()
+            val key = (down shl 32) or across
+            perSquare[key] = (perSquare[key] ?: 0) + 1
+        }
+        return perSquare.values.maxOrNull() ?: 0
     }
 
     private fun write(name: String, bitmap: Bitmap): String {

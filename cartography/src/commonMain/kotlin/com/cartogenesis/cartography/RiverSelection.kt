@@ -6,28 +6,6 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-/** Which rule decides how much river a sheet draws. See [RiverSelection]. */
-enum class RiverInk(val label: String) {
-    /**
-     * As much river line per square kilometre of land as a published map at this sheet's scale
-     * draws, spread over the map rather than spent wherever the ground happens to be dissected.
-     * [RiverSelection] is the whole of it.
-     */
-    EARTH_DENSITY("Earth's ink at this scale"),
-
-    /**
-     * What F14 drew: every traced course on a sheet at a cell to a pixel, and a share of them on
-     * anything smaller, by Töpfer and Pillewizer's radical law on the *traced count*.
-     *
-     * Kept because it is the control the density is measured against, and because the law relates
-     * a derived map to a source map and says nothing about either in absolute terms: how much ink
-     * it puts on the page depends entirely on how many courses the generator happened to trace, so
-     * the same country drawn from a 512 world and from a 2048 world comes out at two densities.
-     * [MapSheet.featuresKept] is the arithmetic.
-     */
-    RADICAL_LAW("Every traced course, thinned by scale")
-}
-
 /**
  * Which of the traced courses a sheet at a given scale actually draws.
  *
@@ -37,12 +15,18 @@ enum class RiverInk(val label: String) {
  * whatever the generator produced. The rule at a sheet whose representative fraction is `1:d`:
  *
  * 1. A budget of [drawnRiverKmPerSquareKm] kilometres of drawn river per square kilometre of this
- *    world's land, which is Natural Earth's measured figure carried by Töpfer's law.
- * 2. Courses ranked by discharge, largest first, on the peak width ratio.
- * 3. A first pass taking at most one *candidate* per square of the [crowdingPitchKilometres]
+ *    world's land, which is Natural Earth's measured figure carried by Töpfer's law, times
+ *    [inkScaleAt] for the mark the reader has the density scale set to.
+ * 2. A second limit, which almost never binds: no course below the peak discharge of the
+ *    [MapSheet.featuresKept]'th largest is drawn. That is Töpfer's law read the way F14 read it,
+ *    on the traced count, and it is here so that the top of the density scale - where the budget
+ *    is removed altogether - is exactly the drawing F14 made. Below the top it is dead weight:
+ *    Earth's figure asks for a few dozen courses where this asks for hundreds.
+ * 3. Courses ranked by discharge, largest first, on the peak width ratio.
+ * 4. A first pass taking at most one *candidate* per square of the [crowdingPitchKilometres]
  *    lattice, so a dissected coastal front does not spend the budget on its own gullies before the
  *    rest of the map is served; then a second pass, with no lattice, spending whatever is left.
- * 4. Downstream closure: taking a course takes every trunk below it not already taken, charged to
+ * 5. Downstream closure: taking a course takes every trunk below it not already taken, charged to
  *    the budget, and a course is taken only if its whole chain fits.
  *
  * Closure is explicit because the crowding pass breaks the argument that would otherwise give it
@@ -129,6 +113,53 @@ object RiverSelection {
      */
     private const val COUNT_EXPONENT: Double = 0.751
 
+    /**
+     * The sparsest mark of the density scale, as a multiple of Earth's figure: a quarter.
+     *
+     * Derived from the reference rather than chosen. Natural Earth's third tier, 1:110 000 000,
+     * draws 13 courses and 42,873 km over Earth's land - **0.000288 km/km2** - where
+     * [INK_EXPONENT] carried from the 1:50M anchor predicts 0.001151 for that scale. The tier is a
+     * token world selection rather than a generalisation of the other two, which is why it is not
+     * a third point for the law; but it is a real published sheet, and the ratio of what it draws
+     * to what the law asks for, **0.250**, is how far below its own rule the sparsest map in the
+     * reference goes. That is the bottom of this scale.
+     */
+    const val LEAST_INK_SCALE: Double = 0.25
+
+    /** The mark the scale starts at: Earth's figure for this sheet's scale, exactly. */
+    const val EARTH_DENSITY_STEP: Int = 4
+
+    /**
+     * The mark at the top: no ink budget at all, leaving only the second limit above.
+     *
+     * Which is to say F14's drawing, to the course: on a sheet at a cell to a pixel
+     * [MapSheet.featuresKept] keeps everything, so every traced course is drawn, and on a smaller
+     * sheet it keeps Töpfer's share of the traced count. [drawnByTheRadicalLaw] is that rule
+     * written out on its own, and is what the guards measure this mark against.
+     */
+    const val EVERY_COURSE_STEP: Int = 9
+
+    /** Every mark of the scale, sparsest first. */
+    val INK_STEPS: IntRange = 0..EVERY_COURSE_STEP
+
+    /**
+     * How much of Earth's ink the scale asks for at [step], or infinity at [EVERY_COURSE_STEP].
+     *
+     * Half-octave marks - a factor of √2 apart - which is the step [MapSheet.onScreen] already
+     * bands the zoom by and half the doubling a printed map series steps its scales by. The nine
+     * finite marks are symmetric about [EARTH_DENSITY_STEP] in that step, two octaves each way, so
+     * the highest of them asks for four times Earth's ink exactly as the lowest asks for
+     * [LEAST_INK_SCALE]; the tenth is the top, where the budget is gone.
+     */
+    fun inkScaleAt(step: Int): Double {
+        val mark = step.coerceIn(INK_STEPS.first, INK_STEPS.last)
+        if (mark == EVERY_COURSE_STEP) return Double.POSITIVE_INFINITY
+        return 2.0.pow((mark - EARTH_DENSITY_STEP) / MARKS_PER_OCTAVE)
+    }
+
+    /** √2 apart. See [inkScaleAt]. */
+    private const val MARKS_PER_OCTAVE: Double = 2.0
+
     /** No trunk below this course: it reaches the sea, a lake, or the edge of the world. */
     const val NO_TRUNK: Int = -1
 
@@ -205,11 +236,10 @@ object RiverSelection {
      * the land area the density is per, and the water a course ends in. The same call serves the
      * pane and the export, which differ only in their [MapSheet.pixelsPerCell].
      */
-    fun drawnOn(world: WorldMap, sheet: MapSheet, rule: RiverInk): List<River> {
+    fun drawnOn(world: WorldMap, sheet: MapSheet, inkStep: Int): List<River> {
         val rivers = world.rivers.rivers
         if (rivers.isEmpty()) return rivers
-        if (rule == RiverInk.RADICAL_LAW) return byRadicalLaw(rivers, sheet)
-        val selection = select(world, sheet)
+        val selection = select(world, sheet, inkStep)
         return rivers.filterIndexed { course, _ -> selection.drawn[course] }
     }
 
@@ -217,7 +247,8 @@ object RiverSelection {
      * [drawnOn]'s working, kept whole so a guard can read the budget it was spent against.
      *
      * [world] gives the network, the land the density is per and the water a course ends in;
-     * [sheet] gives the scale, through [MapSheet.pixelsPerCell] and nothing else. Every length in
+     * [sheet] gives the scale, through [MapSheet.pixelsPerCell] and nothing else; [inkStep] is the
+     * mark of the density scale, [EARTH_DENSITY_STEP] being Earth's own figure. Every length in
      * the result is in kilometres on the ground and every area in square kilometres. The invariant
      * is that the drawn kilometres never exceed [Selection.budgetKilometres] and that every drawn
      * course's trunk is drawn.
@@ -229,6 +260,7 @@ object RiverSelection {
     fun select(
         world: WorldMap,
         sheet: MapSheet,
+        inkStep: Int = EARTH_DENSITY_STEP,
         spreadByCrowdingLattice: Boolean = true
     ): Selection {
         val rivers = world.rivers.rivers
@@ -237,7 +269,8 @@ object RiverSelection {
             config.scale, world.width, sheet.pixelsPerCell
         )
         val landAreaSquareKm = world.sea.landCellCount * config.squareKilometresPerCell
-        val budgetKilometres = drawnRiverKmPerSquareKm(denominator) * landAreaSquareKm
+        val budgetKilometres =
+            drawnRiverKmPerSquareKm(denominator) * landAreaSquareKm * inkScaleAt(inkStep)
         val pitchKm = crowdingPitchKilometres(denominator)
 
         val courseKilometres = DoubleArray(rivers.size) { courseKilometres(world, rivers[it]) }
@@ -246,6 +279,7 @@ object RiverSelection {
 
         if (budgetKilometres > 0.0) {
             val byDischarge = rankedByDischarge(rivers)
+            val leastDrawablePeak = radicalLawCut(rivers, sheet)
             val takenSquares = HashSet<Long>()
             val chain = ArrayList<Int>()
             var spentKilometres = 0.0
@@ -257,6 +291,9 @@ object RiverSelection {
                 for (ranked in byDischarge.indices) {
                     val course = decodeCourse(byDischarge[ranked])
                     if (drawn[course]) continue
+                    // The second limit. A trunk's peak is never below its tributaries', so nothing
+                    // refused here can be pulled in by the closure walk below either.
+                    if (peakWidthRatio(rivers[course]) < leastDrawablePeak) continue
                     if (spreadByLattice &&
                         takenSquares.contains(latticeSquare(world, rivers[course], pitchKm))
                     ) {
@@ -265,6 +302,8 @@ object RiverSelection {
                     chainDownTo(drawn, trunkOf, course, chain)
                     var cost = 0.0
                     for (link in chain) cost += courseKilometres[link]
+                    // At the top of the density scale the budget is infinite and no finite chain
+                    // is ever refused, which is what makes that mark F14's drawing exactly.
                     if (spentKilometres + cost > budgetKilometres) continue
                     spentKilometres += cost
                     for (link in chain) {
@@ -286,11 +325,29 @@ object RiverSelection {
         )
     }
 
-    /** F14's rule, unchanged, for [RiverInk.RADICAL_LAW]. */
-    private fun byRadicalLaw(rivers: List<River>, sheet: MapSheet): List<River> {
+    /**
+     * The peak width ratio below which no course is drawn at this sheet, whatever the budget.
+     *
+     * Töpfer and Pillewizer's radical law on the traced count, which is the rule F14 selected
+     * rivers by: keep [MapSheet.featuresKept] of them, cut at the peak of the last one kept, and
+     * draw everything at or above that cut - so a tie at the cut keeps every course tied with it,
+     * which is why this is a ratio and not a count. Zero when the sheet keeps them all.
+     */
+    internal fun radicalLawCut(rivers: List<River>, sheet: MapSheet): Float {
         val kept = sheet.featuresKept(rivers.size)
-        if (kept >= rivers.size) return rivers
-        val cut = rivers.map(::peakWidthRatio).sortedDescending()[kept - 1]
+        if (kept >= rivers.size) return 0f
+        return rivers.map(::peakWidthRatio).sortedDescending()[kept - 1]
+    }
+
+    /**
+     * F14's whole rule, unchanged, as the control the top of the density scale is measured against.
+     *
+     * Nothing in the drawing calls this: [EVERY_COURSE_STEP] reaches the same answer by removing
+     * the ink budget and leaving [radicalLawCut] standing, and `RiverSelectionTest` asserts that
+     * the two agree course for course. It is kept so that assertion has something to be against.
+     */
+    internal fun drawnByTheRadicalLaw(rivers: List<River>, sheet: MapSheet): List<River> {
+        val cut = radicalLawCut(rivers, sheet)
         return rivers.filter { peakWidthRatio(it) >= cut }
     }
 

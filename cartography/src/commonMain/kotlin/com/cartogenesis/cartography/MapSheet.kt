@@ -54,8 +54,10 @@ data class MapSheet(
      * **This is a share and not a density**, which is why the rivers are no longer selected by it:
      * the law relates a derived map to a source map, so what it puts on the page depends on how
      * many courses the generator traced, and the same country drawn from a 512 world and from a
-     * 2048 world comes out at two densities. It is kept as [RiverInk.RADICAL_LAW], the control
-     * [RiverSelection]'s Earth figure is measured against. The coast is still generalised by the
+     * 2048 world comes out at two densities. It survives as the top mark of
+     * [RiverSelection]'s density scale, [RiverSelection.EVERY_COURSE_STEP], which is the control
+     * that scale's Earth figure is measured against and the answer a reader gets by asking for
+     * every river there is. The coast is still generalised by the
      * sheet, through [simplifyToleranceCells], which is a tolerance in the plane of the drawing and
      * has no such problem.
      */

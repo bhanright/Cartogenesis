@@ -90,6 +90,7 @@ import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -191,7 +192,17 @@ private fun Application(
             SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
         )
     }
-    var options by remember { mutableStateOf(RenderOptions()) }
+    var options by remember { mutableStateOf(SettingsEffects.startingRenderOptions(settings)) }
+
+    // The only setting of the drawing that is remembered between sessions, and the reason is that
+    // it is the only one that changes what the map *says* rather than how it is dressed: a reader
+    // who wants every river drawn wants it on the next world too. See `docs/TODO.md` for the rest
+    // of the cartography marks, which are still forgotten when the window closes.
+    LaunchedEffect(options.riverInkStep) {
+        if (options.riverInkStep != settings.riverInkStep) {
+            onSettings(settings.copy(riverInkStep = options.riverInkStep))
+        }
+    }
     var world by remember { mutableStateOf<WorldMap?>(null) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     /**
@@ -511,7 +522,16 @@ private fun Application(
     LaunchedEffect(options) {
         val current = world ?: return@LaunchedEffect
         val sheet = MapSheet.onScreen(camera.pixelsPerCell)
-        val pixels = withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
+        // The river density changes the ink and not the ground, so a drag of that slider keeps
+        // the raster it already has: at 2048 the raster is the better part of half a second and
+        // the overlay is twenty milliseconds, and the two are drawn on every notch of the slider.
+        val standing = raster
+        val keptGround = standing?.pixels?.takeIf {
+            standing.world === current &&
+                standing.options.copy(riverInkStep = options.riverInkStep) == options
+        }
+        val pixels = keptGround
+            ?: withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
         raster = RasterSheet(current, options, pixels)
         image = withContext(Dispatchers.Default) {
             MapImage.render(current, options, pixels, sheet)
@@ -1765,6 +1785,24 @@ private fun KnobControl(
         }
 
         is Mark -> Toggle(knob.label, knob.read(options)) { onOptions(knob.set(options, it)) }
+
+        is Gauge -> {
+            val value = knob.read(options)
+            Labelled(knob.label, knob.show(value)) {
+                Slider(
+                    value = value.toFloat(),
+                    onValueChange = { onOptions(knob.set(options, it.roundToInt())) },
+                    valueRange = knob.marks.first.toFloat()..knob.marks.last.toFloat(),
+                    // One fewer than the marks: Compose counts the stops *between* the ends.
+                    steps = knob.marks.last - knob.marks.first - 1
+                )
+                Text(
+                    knob.note(value),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

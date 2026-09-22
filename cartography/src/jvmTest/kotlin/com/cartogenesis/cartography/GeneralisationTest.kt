@@ -23,7 +23,8 @@ import kotlin.test.assertTrue
  *    a wide margin, because it has no idea which points were carrying the shape.
  *  - **Fewer rivers at whole-world scale than at four times zoom.** The control is the renderer as
  *    it stood: one overlay whatever the zoom, so the two counts were equal. These two clauses are
- *    now asked of [RiverInk.RADICAL_LAW] by name, because the law is no longer what chooses the
+ *    now asked at the top mark of [RiverSelection]'s density scale, because the law is no
+ *    longer what chooses the
  *    rivers a sheet draws: it is a share of the traced count and so has no answer in kilometres of
  *    ink per square kilometre of land, which is what X1c measures a map by. Nothing about the law
  *    itself has changed, and neither have the figures here. See `RiverSelectionTest`.
@@ -162,7 +163,7 @@ class GeneralisationTest {
         val map = world(42L)
         // The radical law by name: it is a setting now, and these are its guards. See the class
         // comment, and `RiverSelectionTest` for what the default rule is measured against instead.
-        val options = RenderOptions(riverInk = RiverInk.RADICAL_LAW)
+        val options = RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP)
 
         // The control is the call every front end made before generalisation existed: no sheet,
         // so nothing to generalise for, and the same overlay whatever the reader was looking at.
@@ -193,7 +194,7 @@ class GeneralisationTest {
     fun `the rivers that survive are the ones carrying the most water`() {
         val map = world(42L)
         val drawn = MapRasterizer.overlay(
-            map, RenderOptions(riverInk = RiverInk.RADICAL_LAW), MapSheet.onScreen(AT_FIT)
+            map, RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP), MapSheet.onScreen(AT_FIT)
         )
         // Every drawn segment's width comes from a ratio, and the smallest ratio still on the map
         // has to be at least as big as the biggest one that was dropped.

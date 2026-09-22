@@ -4,7 +4,7 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
-import com.cartogenesis.cartography.RiverInk
+import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -383,12 +383,15 @@ class RiverWidthTest {
      */
     @Test
     fun `the pen is the same share of the sheet at every size`() {
-        // Every traced course, by name: this clause is about `RiverPen`'s span from hairline to
-        // full pen, and the sheet's own selection (X1c) draws only the largest rivers, whose
-        // thinnest headwater need not reach the hairline at all — at 512 the thinnest drawn
-        // stroke came out 0.0009 px above it. What the pen spans is not the selection's business.
+        // Every traced course, at the top mark of the density scale: this clause is about
+        // `RiverPen`'s span from hairline to full pen, and the sheet's own selection (X1c) draws
+        // only the largest rivers, whose thinnest headwater need not reach the hairline at all —
+        // at 512 the thinnest drawn stroke came out 0.0009 px above it. What the pen spans is not
+        // the selection's business.
         val options = RenderOptions(
-            view = MapView.FANTASY, style = MapStyle.ATLAS, riverInk = RiverInk.RADICAL_LAW
+            view = MapView.FANTASY,
+            style = MapStyle.ATLAS,
+            riverInkStep = RiverSelection.EVERY_COURSE_STEP
         )
         val spans = listOf(512, 1024).map { side ->
             val widths = MapRasterizer.overlay(world(42L, side), options).rivers.map { it.widthPixels }

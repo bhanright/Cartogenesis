@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -177,6 +178,30 @@ internal class Mark(
     private val write: (RenderOptions, Boolean) -> RenderOptions
 ) : Knob() {
     fun set(options: RenderOptions, value: Boolean): RenderOptions = write(options, value)
+}
+
+/**
+ * A graduated setting of the drawing: a slider with marks rather than a range.
+ *
+ * [Mark] is the drawing's on-and-off; this is the drawing's dial. It steps between whole marks
+ * because the one setting that needs it - how much river a sheet draws - is a ladder of stated
+ * densities and not a continuum, and because a slider that redrew the ink on every pixel of travel
+ * would redraw a 2048 sheet a hundred times on the way across.
+ *
+ * [note] is the line printed under the slider, which is where a mark that means something outside
+ * the application - Earth's own figure - can say so.
+ */
+internal class Gauge(
+    override val section: PanelSection,
+    override val label: String,
+    val marks: IntRange,
+    val show: (Int) -> String,
+    val note: (Int) -> String,
+    val read: (RenderOptions) -> Int,
+    private val write: (RenderOptions, Int) -> RenderOptions
+) : Knob() {
+    fun set(options: RenderOptions, value: Int): RenderOptions =
+        write(options, value.coerceIn(marks.first, marks.last))
 }
 
 /**
@@ -421,6 +446,37 @@ internal object Knobs {
         write = { options, on -> options.copy(showBorders = on) }
     )
 
+    /**
+     * How much river the sheet draws, as a scale with Earth's own figure at its middle mark.
+     *
+     * In Cartography and not in Water, because it decides nothing about the world: the generator
+     * traces the same channels whatever this says, and this chooses how many of them reach the
+     * paper. See `RiverSelection` for the reference the default mark is, and X1c in the ledger.
+     */
+    val riverDensity = Gauge(
+        section = PanelSection.CARTOGRAPHY,
+        label = "River density",
+        marks = RiverSelection.INK_STEPS,
+        show = { step ->
+            when (step) {
+                RiverSelection.EARTH_DENSITY_STEP -> "Atlas"
+                RiverSelection.EVERY_COURSE_STEP -> "Every river"
+                else -> "${(RiverSelection.inkScaleAt(step) * 100).roundToInt()}%"
+            }
+        },
+        note = { step ->
+            when (step) {
+                RiverSelection.EARTH_DENSITY_STEP ->
+                    "As much river as a published map at this scale draws."
+                RiverSelection.EVERY_COURSE_STEP ->
+                    "Every course the generator traced that this scale has room for."
+                else -> "A share of what a published map at this scale draws."
+            }
+        },
+        read = { it.riverInkStep },
+        write = { options, step -> options.copy(riverInkStep = step) }
+    )
+
     val hillshade = Mark(
         section = PanelSection.CARTOGRAPHY,
         label = "Relief shading",
@@ -496,7 +552,7 @@ internal object Knobs {
         seasonalTiltDegrees, rainShadow, ice,
         rivers, lakes, dryBasins,
         realms, wilderness, borders,
-        hillshade, singleLamp, coastline, graticule,
+        hillshade, singleLamp, coastline, graticule, riverDensity,
         landmarkCount, landmarks
     )
 

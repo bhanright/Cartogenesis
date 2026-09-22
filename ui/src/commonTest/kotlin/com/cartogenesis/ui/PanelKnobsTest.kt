@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -63,7 +64,7 @@ class PanelKnobsTest {
         assertEquals(listOf("Ocean coverage"), Knobs.inSection(PanelSection.WORLD).map { it.label })
         // The header draws its knobs through the same renderer the sections use, and hands it no
         // usable `RenderOptions`, so nothing filed there may be a Mark.
-        assertTrue(Knobs.inSection(PanelSection.HEADER).none { it is Mark })
+        assertTrue(Knobs.inSection(PanelSection.HEADER).none { it is Mark || it is Gauge })
     }
 
     @Test
@@ -173,6 +174,7 @@ class PanelKnobsTest {
         is Stepper -> knob.set(base, knob.read(wanted)) == wanted
         is Latch -> knob.set(base, knob.read(wanted)) == wanted
         is Mark -> false
+        is Gauge -> false
     }
 
     // ---- each knob writes its own field, and only its own -----------------------------------
@@ -243,6 +245,10 @@ class PanelKnobsTest {
         assertEquals(view.copy(showCoastline = false), Knobs.coastline.set(view, false))
         assertEquals(view.copy(showLandmarks = true), Knobs.landmarks.set(view, true))
         assertEquals(view.copy(showGraticule = true), Knobs.graticule.set(view, true))
+        assertEquals(
+            view.copy(riverInkStep = RiverSelection.EVERY_COURSE_STEP),
+            Knobs.riverDensity.set(view, RiverSelection.EVERY_COURSE_STEP)
+        )
     }
 
     /**
@@ -258,6 +264,7 @@ class PanelKnobsTest {
                 is Stepper -> assertEquals(base, knob.set(base, knob.read(base)), knob.label)
                 is Latch -> assertEquals(base, knob.set(base, knob.read(base)), knob.label)
                 is Mark -> assertEquals(view, knob.set(view, knob.read(view)), knob.label)
+                is Gauge -> assertEquals(view, knob.set(view, knob.read(view)), knob.label)
             }
         }
     }

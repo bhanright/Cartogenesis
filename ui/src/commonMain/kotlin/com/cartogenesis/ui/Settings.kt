@@ -2,6 +2,8 @@ package com.cartogenesis.ui
 
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverSelection
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -76,7 +78,19 @@ data class AppSettings(
      * the check is a menu item until someone turns this on.
      */
     @SerialName("checkForUpdatesOnLaunch")
-    val checkForUpdatesOnLaunch: Boolean = false
+    val checkForUpdatesOnLaunch: Boolean = false,
+
+    /**
+     * Which mark of the river-density scale the map is drawn at. See `RiverSelection`.
+     *
+     * A setting of the drawing rather than of the world, and the only one of those kept here: it
+     * decides how much of the river network reaches the paper, which is a reader's standing
+     * preference about maps and not a dressing of one map. A settings file written before this
+     * existed opens at `EARTH_DENSITY_STEP`, which is the default and is what the application
+     * draws when nobody has said otherwise.
+     */
+    @SerialName("riverInkStep")
+    val riverInkStep: Int = RiverSelection.EARTH_DENSITY_STEP
 ) {
     companion object {
         const val FOLLOW_PLATFORM = 0
@@ -130,7 +144,9 @@ object SettingsCodec {
         workingResolution = if (workingResolution in Knobs.RESOLUTIONS) workingResolution
         else AppSettings.FOLLOW_PLATFORM,
         exportSize = if (exportSize in Exports.SIZES) exportSize else Exports.SIZES.first(),
-        interfaceScale = interfaceScale.coerceIn(AppSettings.SCALES.first(), AppSettings.SCALES.last())
+        interfaceScale = interfaceScale.coerceIn(AppSettings.SCALES.first(), AppSettings.SCALES.last()),
+        riverInkStep = riverInkStep
+            .coerceIn(RiverSelection.INK_STEPS.first, RiverSelection.INK_STEPS.last)
     )
 }
 
@@ -143,6 +159,17 @@ object SettingsCodec {
  * exactly these; there is no second path by which a preference reaches the interface.
  */
 internal object SettingsEffects {
+
+    /**
+     * The drawing a fresh window starts with: the reader's own river density and nothing else.
+     *
+     * The one render option a preference reaches. Everything else in `RenderOptions` is a dressing
+     * of the map in front of the reader and starts at its own default every time the window opens;
+     * how much of the river network a map draws is a standing preference about maps, so it is
+     * carried. `SettingsTest` asserts that this is the whole of the path.
+     */
+    fun startingRenderOptions(settings: AppSettings): RenderOptions =
+        RenderOptions(riverInkStep = settings.riverInkStep)
 
     /**
      * The grid a fresh world starts at: the preference, or the platform's own if there is none —

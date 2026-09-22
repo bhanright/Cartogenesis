@@ -140,11 +140,16 @@ class BugReportTest {
                 is Dial -> knob.set(config, knob.range.endInclusive)
                 is Stepper -> knob.set(config, knob.range.last)
                 is Latch -> knob.set(config, !knob.read(WorldGenConfig()))
-                is Mark -> config
+                is Mark, is Gauge -> config
             }
         }
         val marks = Knobs.all.filterIsInstance<Mark>().fold(RenderOptions()) { options, mark ->
             mark.set(options, !mark.read(RenderOptions()))
+        }
+        // The gauges moved too, to whichever end of their scale they are not already at, so the
+        // report below is as long as this panel can make one.
+        val drawing = Knobs.all.filterIsInstance<Gauge>().fold(marks) { options, gauge ->
+            gauge.set(options, gauge.marks.last)
         }
         // The longest name the header will take, so the report is as long as one can be made.
         val report = BugReport.of(
@@ -152,7 +157,7 @@ class BugReportTest {
             host = "Desktop",
             world = "W".repeat(MAX_WORLD_NAME_LENGTH),
             config = everything,
-            options = marks,
+            options = drawing,
             acceleration = BugReport.accelerationLine(true, "a fake graphics card")
         )
 

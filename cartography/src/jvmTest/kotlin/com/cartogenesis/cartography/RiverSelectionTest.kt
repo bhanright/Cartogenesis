@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 import kotlin.test.assertTrue
 
@@ -227,7 +228,7 @@ class RiverSelectionTest {
             val sheet = paneSheet(side)
             val scale = MapScale.representativeFractionDenominator(map.config.scale, side, sheet.pixelsPerCell)
             val earth = RiverSelection.select(map, sheet)
-            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverInk.RADICAL_LAW)
+            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
             val lawKilometres = byTheLaw.sumOf { RiverSelection.courseKilometres(map, it) }
             densities.getOrPut("Earth's density") { HashMap() }[side] = earth.drawnKmPerSquareKm
             densities.getOrPut("radical law") { HashMap() }[side] =
@@ -276,7 +277,7 @@ class RiverSelectionTest {
             // The control: the same Earth budget and the same discharge ranking, with the lattice
             // switched off. It is the only thing that differs, so a difference is the lattice's.
             val unspread = RiverSelection.select(map, sheet, spreadByCrowdingLattice = false)
-            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverInk.RADICAL_LAW)
+            val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
 
             val fullestSpread = fullestSquare(map, drawnEnds(map, spread), spread.crowdingPitchKm)
             val fullestUnspread =
@@ -328,6 +329,121 @@ class RiverSelectionTest {
                 )
             }
         }
+    }
+
+    // ---- the two ends of the density scale ------------------------------------------------------
+
+    @Test
+    fun `every mark of the scale reaches the drawing, and draws more than the one below it`() {
+        val map = world(42L)
+        val sheet = MapSheet.UNGENERALISED
+        val drawn = RiverSelection.INK_STEPS.map { step ->
+            step to MapRasterizer.overlay(
+                map, RenderOptions(riverInkStep = step), sheet
+            ).riversDrawn
+        }
+        println(
+            "X1C the scale on seed 42 at $SIDE, courses drawn: " +
+                drawn.joinToString(", ") { (step, count) -> "$step:$count" } +
+                " of ${map.rivers.rivers.size} traced"
+        )
+        // The panel's setting is the drawing's setting: `MapRasterizer` reads this field and
+        // hands it to the selection, so a mark that did not reach it would show as a flat run.
+        drawn.zipWithNext().forEach { (lower, higher) ->
+            assertTrue(
+                higher.second > lower.second,
+                "mark ${higher.first} drew ${higher.second} courses where mark ${lower.first} " +
+                    "drew ${lower.second}, so the scale is not reaching the drawing"
+            )
+        }
+        assertEquals(
+            map.rivers.rivers.size, drawn.last().second,
+            "the top of the scale left a traced course off an export"
+        )
+    }
+
+    @Test
+    fun `the top of the scale is F14's drawing, course for course`() {
+        listOf(7L, 42L).forEach { seed ->
+            val map = world(seed)
+            val traced = map.rivers.rivers
+            // An export, where the law keeps everything, and a sheet small enough that it does
+            // not: a 512 world in a 900-pixel pane is at two pixels to the cell and the law has
+            // nothing to cut there, so the second sheet is a quarter of a pixel to the cell, where
+            // it keeps half of them and the tie at its cut is the thing worth agreeing about.
+            listOf(
+                "export" to MapSheet.UNGENERALISED,
+                "a quarter-pixel sheet" to MapSheet.onScreen(0.25f)
+            ).forEach { (where, sheet) ->
+                    val top = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
+                    val law = RiverSelection.drawnByTheRadicalLaw(traced, sheet)
+                    println(
+                        "X1C $seed $where: the top of the scale draws ${top.size} courses, " +
+                            "the radical law on its own ${law.size}, of ${traced.size} traced"
+                    )
+                    assertEquals(
+                        law.size, top.size,
+                        "seed $seed at $where: the top of the scale drew a different number of " +
+                            "courses than the rule it is meant to be"
+                    )
+                    // Course for course and not merely count for count: the two are built out of
+                    // the same cut on peak discharge, so they have no licence to differ at all.
+                    assertEquals(
+                        law.map { it.cells.first() }.toSet(),
+                        top.map { it.cells.first() }.toSet(),
+                        "seed $seed at $where: the top of the scale drew different courses"
+                    )
+                }
+        }
+    }
+
+    @Test
+    fun `the bottom of the scale keeps the largest river and its trunk chain`() {
+        SEEDS.forEach { seed ->
+            val map = world(seed)
+            val sheet = MapSheet.UNGENERALISED
+            val bottom = RiverSelection.select(map, sheet, RiverSelection.INK_STEPS.first)
+            val atlas = RiverSelection.select(map, sheet, RiverSelection.EARTH_DENSITY_STEP)
+            val biggest = map.rivers.rivers.indices
+                .maxByOrNull { RiverSelection.peakWidthRatio(map.rivers.rivers[it]) }!!
+            println(
+                "X1C $seed at the bottom of the scale (x${RiverSelection.LEAST_INK_SCALE}): " +
+                    "${bottom.drawnCount} courses, ${bottom.drawnKilometres.round()} km, " +
+                    "${bottom.drawnKmPerSquareKm.sig()} km/km2, against ${atlas.drawnCount} " +
+                    "courses and ${atlas.drawnKilometres.round()} km at the atlas mark"
+            )
+            assertTrue(
+                bottom.drawn[biggest],
+                "seed $seed lost the river carrying the most water at the bottom of the scale"
+            )
+            // And the whole chain below it, which is what a course needs to be drawn at all.
+            var link = bottom.trunkOf[biggest]
+            while (link != RiverSelection.NO_TRUNK) {
+                assertTrue(bottom.drawn[link], "seed $seed drew a river into an undrawn trunk")
+                link = bottom.trunkOf[link]
+            }
+            assertTrue(
+                bottom.drawnCount < atlas.drawnCount,
+                "seed $seed drew as much at the bottom of the scale as at the atlas mark"
+            )
+        }
+    }
+
+    @Test
+    fun `the scale's marks run from the reference's sparsest tier to no budget at all`() {
+        val scales = RiverSelection.INK_STEPS.map { RiverSelection.inkScaleAt(it) }
+        println("X1C the density scale: " + scales.joinToString(", ") { "$it" })
+        assertEquals(RiverSelection.LEAST_INK_SCALE, scales.first(), 1e-9)
+        assertEquals(1.0, scales[RiverSelection.EARTH_DENSITY_STEP], 1e-9)
+        assertTrue(scales.last().isInfinite(), "the top of the scale still has a budget")
+        // Rising, and half an octave at a time between the finite marks.
+        scales.dropLast(1).zipWithNext().forEach { (lower, higher) ->
+            assertTrue(higher > lower, "the scale does not rise: $lower then $higher")
+            assertEquals(kotlin.math.sqrt(2.0), higher / lower, 1e-9)
+        }
+        // Off the ends is the end, not an exception: the panel clamps, and so does this.
+        assertEquals(scales.first(), RiverSelection.inkScaleAt(-3), 1e-9)
+        assertTrue(RiverSelection.inkScaleAt(99).isInfinite())
     }
 
     /** Where each drawn course ends: a mouth on the water, or the junction it joins its trunk at. */

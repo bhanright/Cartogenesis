@@ -1,5 +1,7 @@
 package com.cartogenesis.ui
 
+import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverSelection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,6 +22,56 @@ import kotlinx.coroutines.test.runTest
  */
 class SettingsTest {
 
+    /**
+     * The river-density slider, end to end: the panel writes it, the drawing reads it, the store
+     * keeps it, and a hand-edited file cannot put it off its own scale.
+     *
+     * The drawing's half of the path — that `RenderOptions.riverInkStep` is what decides how many
+     * courses the overlay lays out — is measured on a generated world in `:cartography`'s
+     * `RiverSelectionTest`, which is where there is a world to measure it on. What is asserted
+     * here is everything between the reader's finger and that field.
+     */
+    @Test
+    fun `the river density slider reaches the drawing, and comes back next time`() = runTest {
+        val platform = FakePlatform()
+        val asked = AppSettings(riverInkStep = RiverSelection.INK_STEPS.first)
+
+        // The panel's knob is the only thing that writes it, and it writes nothing else.
+        val turned = Knobs.riverDensity.set(RenderOptions(), RiverSelection.INK_STEPS.first)
+        assertEquals(RenderOptions(riverInkStep = RiverSelection.INK_STEPS.first), turned)
+        assertEquals(RiverSelection.EARTH_DENSITY_STEP, Knobs.riverDensity.read(RenderOptions()))
+
+        // What the application draws with when a window opens is that preference and nothing else.
+        assertEquals(turned, SettingsEffects.startingRenderOptions(asked))
+        assertEquals(
+            RenderOptions(),
+            SettingsEffects.startingRenderOptions(AppSettings()),
+            "a reader who has never touched the slider gets a different map than the default"
+        )
+
+        platform.settingsStore.write(SettingsCodec.encode(asked))
+        assertEquals(
+            asked.riverInkStep,
+            SettingsCodec.decode(platform.settingsStore.read()).riverInkStep,
+            "the chosen river density did not survive being written and read back"
+        )
+
+        // A file written before the slider existed opens at Earth's own figure.
+        assertEquals(
+            RiverSelection.EARTH_DENSITY_STEP,
+            SettingsCodec.decode("{\"theme\": \"MARS\"}").riverInkStep
+        )
+        // And a hand-edited one cannot ask for a mark the scale does not have.
+        assertEquals(
+            RiverSelection.EVERY_COURSE_STEP,
+            SettingsCodec.decode("{\"riverInkStep\": 40}").riverInkStep
+        )
+        assertEquals(
+            RiverSelection.INK_STEPS.first,
+            SettingsCodec.decode("{\"riverInkStep\": -7}").riverInkStep
+        )
+    }
+
     @Test
     fun `every setting survives a trip through the platform seam`() = runTest {
         val platform = FakePlatform()
@@ -31,7 +83,8 @@ class SettingsTest {
             exportSize = 4096,
             libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
-            checkForUpdatesOnLaunch = true
+            checkForUpdatesOnLaunch = true,
+            riverInkStep = RiverSelection.EVERY_COURSE_STEP
         )
 
         platform.settingsStore.write(SettingsCodec.encode(chosen))

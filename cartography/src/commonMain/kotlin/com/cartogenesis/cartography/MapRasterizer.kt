@@ -64,13 +64,15 @@ data class RenderOptions(
     val style: MapStyle = MapStyle.ATLAS,
     val showRivers: Boolean = true,
     /**
-     * How much of the traced river network this sheet draws.
+     * Which mark of [RiverSelection]'s density scale this sheet draws its rivers at.
      *
-     * A setting of the drawing and not of the world, like [singleLamp] beside it: it never reaches
-     * a save, and turning it does not move a cell of ground. [RiverInk.RADICAL_LAW] is what F14
-     * drew and is kept as the control the density is measured against. See [RiverSelection].
+     * [RiverSelection.EARTH_DENSITY_STEP] is as much river line per square kilometre of land as a
+     * published map at this sheet's scale draws; the marks below it thin toward a few trunks and
+     * the top mark, [RiverSelection.EVERY_COURSE_STEP], removes the budget and draws every course
+     * the scale allows. A setting of the drawing and not of the world, like [singleLamp] beside
+     * it: turning it does not move a cell of ground, only the ink.
      */
-    val riverInk: RiverInk = RiverInk.EARTH_DENSITY,
+    val riverInkStep: Int = RiverSelection.EARTH_DENSITY_STEP,
     val showCoastline: Boolean = true,
     val showHillshade: Boolean = true,
     /**
@@ -380,7 +382,7 @@ object MapRasterizer {
 
         val drawnRivers =
             if (options.showRivers && !options.view.showsFlow) {
-                RiverSelection.drawnOn(world, sheet, options.riverInk)
+                RiverSelection.drawnOn(world, sheet, options.riverInkStep)
             } else {
                 emptyList()
             }

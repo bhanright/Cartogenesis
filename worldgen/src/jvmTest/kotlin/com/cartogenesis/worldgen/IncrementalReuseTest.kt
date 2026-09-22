@@ -165,7 +165,12 @@ class IncrementalReuseTest {
             "currentMoisture" to base.copy(
                 climate = base.climate.copy(currentMoisture = base.climate.currentMoisture + 0.1f)
             ),
-            "rivers" to base.copy(rivers = base.rivers.copy(maxRivers = base.rivers.maxRivers / 2)),
+            "rivers" to base.copy(
+                rivers = base.rivers.copy(
+                    channelHeadAreaSlopeKm2 =
+                        base.rivers.channelHeadAreaSlopeKm2 * 4f
+                )
+            ),
             "lakes" to base.copy(lakes = base.lakes.copy(enabled = !base.lakes.enabled)),
             // E2's knobs live on the same section, and the river stage's guard covers the whole of
             // it - but the water balance reaches further than any earlier lake setting did, since

@@ -135,15 +135,22 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
-     * 13 because the rivers learned where the rain falls. `erosion.climateFeed` is new, and with
-     * it the hydraulic rounds weight their flow accumulation by a provisional rainfall and hold
-     * their incision back by the plant cover under it, so the terrain a seed produces is not the
-     * terrain the same seed produced before. A format-12 file has no such key and would open with
-     * this build's default, which is on: the heights in the file would still draw, and the moment
-     * a reader moved a knob and asked for the world again it would be re-cut by a rule the world
-     * in the file was never cut by. Worse than the usual case of that, because the key's default
-     * is the *new* behaviour rather than the old one, so nothing about the reopened world would
-     * look wrong enough to notice. Rule 11 of docs/CONVENTIONS.md is what this is.
+     * 13 because a channel begins where the ground can cut one and the rounds that cut it read
+     * the rain. Two chunks landed on this version and neither shipped without the other, so the
+     * one entry covers both. `rivers.sourceFlowShare`, `rivers.maxRivers` and
+     * `rivers.minLengthCells` are gone — a share of the world's runoff, a count of courses and a
+     * count of cells, all three of them a different thing at every grid — and
+     * `rivers.channelHeadAreaSlopeKm2`, `rivers.coverRaisesChannelHead` and
+     * `rivers.shortestDrawnCourseKm` stand in their place. `erosion.climateFeed` arrived beside
+     * them, and with it the hydraulic rounds weight their flow accumulation by a provisional
+     * rainfall and hold their incision back by the plant cover under it, so the terrain a seed
+     * produces is not the terrain the same seed produced before.
+     *
+     * A format-12 file has neither set of keys. It would open with this build's defaults wherever
+     * one of the river names has moved and redraw its rivers by a rule its author never chose, and
+     * it would be re-cut by the climate feed as well, whose default is *on* — worse than the usual
+     * case of rule 11 of docs/CONVENTIONS.md, because the default is the *new* behaviour rather
+     * than the old one, so nothing about the reopened world would look wrong enough to notice.
      *
      * 12 because the ground gained a cover. The climate result now carries a vegetation density
      * per cell and a permafrost zone per cell, saved as `climate.vegetationDensity` and

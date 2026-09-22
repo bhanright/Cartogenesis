@@ -598,8 +598,14 @@ class DataExportTest {
          * pixel of it is a partial blend rather than a run of one colour — and a lossy codec pays
          * for that. Both formats moved by the same eight, which is what says the picture changed
          * and not the relation between them; quality 30 is 74 and still misses the bound.
+         *
+         * Re-derived a second time when channels began where the water can cut one (R1): the
+         * drawn network is chosen by discharge rather than by a count, so the sheet carries
+         * different thin lines, and WebP's figure on the new picture is 69 against 61. The bound
+         * follows it by the same rule, WebP plus seven: JPEG at quality 90 reads 72 and sits
+         * inside it, quality 30 reads 82 and still misses it.
          */
-        const val MAX_JPEG_DRIFT = 68
+        const val MAX_JPEG_DRIFT = 76
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

@@ -2,7 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.worldgen.pipeline.RiverStage
+import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -30,6 +30,22 @@ class RiverCourseTest {
         /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val SIDE = 512
+
+        /**
+         * How far short of its own longest watercourse one drawn course may fall, in kilometres.
+         *
+         * A metre, which is a tolerance on the arithmetic and not on the rule. The drawn length and
+         * the longest watercourse are summed over the same steps in the same order in doubles, so
+         * they agree to the last bit when the course is right; a metre is there because "the same
+         * order" is a property of two loops rather than of one. Measured, no course needs it: the
+         * worst coverage on the four seeds is 1.000 and so is the pooled figure.
+         *
+         * It was twelve kilometres — one north-south step — for the length of one run, on the
+         * theory that two heads of exactly equal length could tie to the wrong arm. They cannot:
+         * the sort's tie-break is the cell index and the trace follows whichever arm it picked the
+         * whole way down, so the drawn course is that arm's full length either way.
+         */
+        const val ONE_STEP_OF_SLACK_KM = 0.001
     }
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
@@ -41,18 +57,30 @@ class RiverCourseTest {
      * The drawn network, flattened: which cells are channel, and how long the watercourse above
      * each of them runs.
      *
-     * The channel mask is rebuilt rather than read, because the tracer keeps none: it is the same
-     * three conditions, land, not open water, and carrying at least the source threshold's share
-     * of the world's runoff.
+     * The channel mask is rebuilt rather than read, because the tracer keeps none:
+     * [com.cartogenesis.worldgen.pipeline.ChannelInitiation] is the stage's own criterion and this
+     * asks it the same question about the same finished world.
      */
     private class Network(val world: WorldMap) {
         val isChannel: BooleanArray
-        /** The longest watercourse ending at each channel cell, in cells, itself included. */
-        val longestAbove: IntArray
+
+        /** The ground one D8 step covers, so the drawn courses can be measured the same way. */
+        lateinit var stepKilometres: (Int, Int) -> Double
+            private set
+        /**
+         * The longest watercourse ending at each channel cell, in kilometres.
+         *
+         * Kilometres since R1 and not cells, because the tracer ranks its heads in kilometres and
+         * a guard has to ask the question the rule answers. On a world twice as wide as it is tall
+         * the two disagree: a cell is 23.4 km across and 11.7 down at 512, so six cells north is
+         * less ground than five cells east. `RiverStage.kilometresToTheWater` has the case that
+         * found it.
+         */
+        val longestAbove: DoubleArray
         /** The largest discharge among the headwaters that drain to each channel cell. */
         val biggestHead: FloatArray
-        /** How long the course from that headwater down to each cell runs, in cells. */
-        val fromBiggestHead: IntArray
+        /** How far the course from that headwater down to each cell runs, in kilometres. */
+        val fromBiggestHead: DoubleArray
 
         init {
             val w = world.width
@@ -60,22 +88,30 @@ class RiverCourseTest {
             val flow = world.rivers.flowAccumulation.data
             val target = world.rivers.flowTarget
             val lakes = world.rivers.lakes
-            var runoff = 0f
-            for (i in 0 until cells) {
-                if (world.sea.isLand[i]) runoff += 0.05f + world.climate.precipitation.data[i]
-            }
-            val threshold = (runoff * world.config.rivers.sourceFlowShare)
-                .coerceAtLeast(RiverStage.MIN_SOURCE_FLOW)
-            isChannel = BooleanArray(cells) {
-                world.sea.isLand[it] && !lakes.isOpenWater(it) && flow[it] >= threshold
-            }
+            isChannel = ChannelInitiation.channelMaskOf(world)
 
             // Downstream order: a cell's answer needs its donors' answers, and every donor carries
             // less water than it does, so rising discharge is the order to walk in.
             val order = (0 until cells).filter { isChannel[it] }.sortedBy { flow[it] }
-            longestAbove = IntArray(cells) { 1 }
+            val scale = world.config.scale
+            val cellWidthKm = scale.cellWidthKm(w)
+            val cellHeightKm = scale.cellHeightKm(world.height)
+            val diagonalKm =
+                kotlin.math.sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
+            fun stepKm(from: Int, to: Int): Double {
+                var columnStep = (to % w) - (from % w)
+                if (columnStep > w / 2) columnStep -= w
+                if (columnStep < -w / 2) columnStep += w
+                val rowStep = (to / w) - (from / w)
+                return when {
+                    columnStep != 0 && rowStep != 0 -> diagonalKm
+                    columnStep != 0 -> cellWidthKm
+                    else -> cellHeightKm
+                }
+            }
+            longestAbove = DoubleArray(cells)
             biggestHead = FloatArray(cells)
-            fromBiggestHead = IntArray(cells) { 1 }
+            fromBiggestHead = DoubleArray(cells)
             val hasUpstream = BooleanArray(cells)
             order.forEach { cell ->
                 val below = target[cell]
@@ -85,14 +121,16 @@ class RiverCourseTest {
                 if (!hasUpstream[cell]) biggestHead[cell] = flow[cell]
                 val below = target[cell]
                 if (below < 0 || !isChannel[below]) return@forEach
-                if (longestAbove[cell] + 1 > longestAbove[below]) {
-                    longestAbove[below] = longestAbove[cell] + 1
+                val step = stepKm(cell, below)
+                if (longestAbove[cell] + step > longestAbove[below]) {
+                    longestAbove[below] = longestAbove[cell] + step
                 }
                 if (biggestHead[cell] > biggestHead[below]) {
                     biggestHead[below] = biggestHead[cell]
-                    fromBiggestHead[below] = fromBiggestHead[cell] + 1
+                    fromBiggestHead[below] = fromBiggestHead[cell] + step
                 }
             }
+            this.stepKilometres = ::stepKm
         }
     }
 
@@ -107,31 +145,37 @@ class RiverCourseTest {
      */
     @Test
     fun `a river is its own longest watercourse`() {
-        var drawnTotal = 0L
-        var longestTotal = 0L
-        var beforeTotal = 0L
+        var drawnTotal = 0.0
+        var longestTotal = 0.0
+        var beforeTotal = 0.0
         SEEDS.forEach { seed ->
             val network = Network(world(seed))
             val world = network.world
-            var drawnHere = 0L
-            var longestHere = 0L
-            var beforeHere = 0L
+            var drawnHere = 0.0
+            var longestHere = 0.0
+            var beforeHere = 0.0
             var courses = 0
             var worst = 1.0
             world.rivers.rivers.forEach { river ->
                 val last = river.cells.last { network.isChannel[it] }
                 if (river.cells.last() == last) return@forEach // stops on another river
                 courses++
-                val drawn = river.cells.count { network.isChannel[it] }
+                var drawn = 0.0
+                for (step in 0 until river.cells.size - 1) {
+                    if (!network.isChannel[river.cells[step]]) continue
+                    if (!network.isChannel[river.cells[step + 1]]) continue
+                    drawn += network.stepKilometres(river.cells[step], river.cells[step + 1])
+                }
                 val longest = network.longestAbove[last]
                 drawnHere += drawn
                 longestHere += longest
                 beforeHere += network.fromBiggestHead[last]
-                worst = minOf(worst, drawn.toDouble() / longest)
+                if (longest <= 0.0) return@forEach
+                worst = minOf(worst, drawn / longest)
                 assertTrue(
-                    drawn >= longest,
-                    "seed $seed: the course into cell $last is $drawn cells where the longest " +
-                        "watercourse above it is $longest"
+                    drawn >= longest - ONE_STEP_OF_SLACK_KM,
+                    "seed $seed: the course into cell $last is ${"%.1f".format(drawn)} km where" +
+                        " the longest watercourse above it is ${"%.1f".format(longest)}"
                 )
             }
             drawnTotal += drawnHere
@@ -140,13 +184,12 @@ class RiverCourseTest {
             println(
                 ("RIVERCOURSE seed=$seed $courses courses into water, coverage %.3f (worst %.3f), " +
                     "%.3f from the biggest headwater").format(
-                    drawnHere.toDouble() / longestHere, worst,
-                    beforeHere.toDouble() / longestHere
+                    drawnHere / longestHere, worst, beforeHere / longestHere
                 )
             )
         }
-        val coverage = drawnTotal.toDouble() / longestTotal
-        val before = beforeTotal.toDouble() / longestTotal
+        val coverage = drawnTotal / longestTotal
+        val before = beforeTotal / longestTotal
         println(
             "RIVERCOURSE pooled coverage %.3f now against %.3f from the biggest headwater"
                 .format(coverage, before)
@@ -235,10 +278,11 @@ class RiverCourseTest {
             // nothing upstream has been severed, and there is no thread of standing water between
             // two thick channels, which is the whole of what this clause is about. What there is
             // instead is a lake's outflow that carries no line, because a cell with no channel
-            // above it is a head, and the course from this head to the trunk it joins is two cells
-            // against `RiverConfig.minLengthCells`' eight, so the tracer discards it as a stub.
-            // That is a real artefact and a different one; it is in docs/TODO.md with these
-            // figures. The other three seeds have no such cell.
+            // above it is a head, and the course from this head to the trunk it joins was two
+            // cells against the eight `RiverConfig.minLengthCells` then asked for, so the tracer
+            // discarded it as a stub. R1 replaced that count with a length in kilometres and gave
+            // the ground a channel-head criterion of its own; whether an outflow carrying a whole
+            // lake's catchment is now drawn is what this clause's `gaps` count says.
             val fedByADrawnChannel = BooleanArray(cells)
             for (donor in 0 until cells) {
                 if (!drawn[donor] || !network.isChannel[donor]) continue
@@ -270,5 +314,58 @@ class RiverCourseTest {
             "RIVERCOURSE $narrowTotal channel cells under water one cell wide, $drawnTotal drawn, " +
                 "none of them drawn at all under the rule this replaces"
         )
+    }
+
+    /**
+     * A course that ends in water has a reach on land to draw.
+     *
+     * The mouth cell is water — the sea, or a lake's open surface — and it is kept so the line
+     * reaches the water rather than stopping a step short of it. What is drawn is therefore the
+     * land above it, cut back half a stroke from the shore so the round cap is tangent to the
+     * coast rather than sitting out on the water; `MapRasterizer.trimmedAtTheShore` is where that
+     * happens. A course holding one cell of land and a mouth has nothing left once that cut is
+     * made — there is no vertex above the last one on land to pull the end back to — so it is
+     * drawn whole, and the stroke finishes at the centre of the water cell with a cap of half its
+     * own width out there beside it.
+     *
+     * That is a fact about the course and not about the drawing, which is why it is asserted here:
+     * a single cell of land between water above and water below is a rock the flow crosses, not a
+     * watercourse, and no length of pen makes it one.
+     */
+    @Test
+    fun `a course into water runs more than one cell on land`() {
+        var intoWaterTotal = 0
+        SEEDS.forEach { seed ->
+            val world = world(seed)
+            val lakes = world.rivers.lakes
+            fun isWater(cell: Int) = !world.sea.isLand[cell] || lakes.isOpenWater(cell)
+
+            var intoWater = 0
+            var stubs = 0
+            var firstStub = ""
+            world.rivers.rivers.forEach { river ->
+                val cells = river.cells
+                if (!isWater(cells.last())) return@forEach // stops on another river
+                intoWater++
+                if (cells.size > 2) return@forEach
+                stubs++
+                if (firstStub.isEmpty()) firstStub = cells.joinToString(" -> ")
+            }
+            intoWaterTotal += intoWater
+            println(
+                "RIVERCOURSE seed=$seed $intoWater courses into water, $stubs of them one cell " +
+                    "of land and a mouth"
+            )
+            assertTrue(
+                stubs == 0,
+                "seed $seed: $stubs courses into water hold one cell of land and a mouth, the " +
+                    "first at $firstStub"
+            )
+        }
+        assertTrue(
+            intoWaterTotal > 0,
+            "no course on any seed ends in water, so this guard has stopped discriminating"
+        )
+        println("RIVERCOURSE $intoWaterTotal courses into water, every one of them with a reach")
     }
 }

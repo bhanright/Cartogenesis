@@ -39,7 +39,7 @@ class EarthLikenessTest {
             )
             assertTrue(
                 "seed ${metrics.label} has only ${metrics.hack.points} basins over" +
-                    " ${EarthLikeness.SMALLEST_HACK_CATCHMENT_CELLS} cells, too few for Hack",
+                    " ${EarthLikeness.SMALLEST_HACK_CATCHMENT_KM2} km2, too few for Hack",
                 metrics.hack.points > 50
             )
             assertTrue(

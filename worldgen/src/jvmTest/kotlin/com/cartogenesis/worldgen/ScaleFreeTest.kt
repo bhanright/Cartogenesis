@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
@@ -90,6 +91,95 @@ class ScaleFreeTest {
     }
 
     /**
+     * The channel-head threshold is the same area of ground at every grid, and so is the network
+     * it picks out.
+     *
+     * The clause R1 owes this suite. A threshold in square kilometres against a gradient is a
+     * statement about ground, so `atResolution` must leave it exactly alone — where the rule it
+     * replaced was a share of the world's runoff, a count of courses and a count of cells, each of
+     * which described different ground at every grid. The network it picks out is the other half,
+     * and it is asked about as a **density** — kilometres of channel over square kilometres of land
+     * — and not as a share of the cells. A channel is a line and the land is an area, so the share
+     * of *cells* under channel must halve when the cell halves whatever the criterion does;
+     * measured, it goes as 0.64 to 0.66 from 512 to 1024 where the geometry alone would say 0.5,
+     * and reading that as a failure would be reading the grid. The density is the quantity that
+     * describes the ground, and it is held to the same 1.35 [ScaleFree.TOLERANCES] allows the
+     * support-area network's.
+     */
+    @Test
+    fun `the channel-head threshold is an area of ground and does not move with the grid`() {
+        val complaints = ArrayList<String>()
+        SEEDS.forEach { seed ->
+            val coarse = configAt(seed, 512)
+            val fine = configAt(seed, 1024)
+            if (coarse.rivers.channelHeadAreaSlopeKm2 !=
+                fine.rivers.channelHeadAreaSlopeKm2
+            ) {
+                complaints.add(
+                    "seed $seed: the channel-head threshold is" +
+                        " ${coarse.rivers.channelHeadAreaSlopeKm2} km2 at 512 and" +
+                        " ${fine.rivers.channelHeadAreaSlopeKm2} at 1024"
+                )
+            }
+            if (coarse.rivers.shortestDrawnCourseKm != fine.rivers.shortestDrawnCourseKm) {
+                complaints.add(
+                    "seed $seed: the shortest drawn course is" +
+                        " ${coarse.rivers.shortestDrawnCourseKm} km at 512 and" +
+                        " ${fine.rivers.shortestDrawnCourseKm} at 1024"
+                )
+            }
+            val coarse512 = worldAt(seed, 512)
+            val fine1024 = worldAt(seed, 1024)
+            val coarseDensity = channelDensityKmPerKm2(coarse512)
+            val fineDensity = channelDensityKmPerKm2(fine1024)
+            val ratio = fineDensity / coarseDensity
+            println(
+                ("SCALEFREE channel head seed %d  the initiated network is %.4f km/km2 at 512 and" +
+                    " %.4f at 1024 (x%.2f)").format(seed, coarseDensity, fineDensity, ratio)
+            )
+            if (ratio < 1.0 / CHANNEL_DENSITY_FACTOR || ratio > CHANNEL_DENSITY_FACTOR) {
+                complaints.add(
+                    "seed $seed: the criterion initiates ${"%.4f".format(coarseDensity)} km of" +
+                        " channel per km2 of land at 512 and ${"%.4f".format(fineDensity)} at" +
+                        " 1024, a factor of ${"%.2f".format(ratio)} over the" +
+                        " $CHANNEL_DENSITY_FACTOR allowed"
+                )
+            }
+        }
+        assertTrue(
+            "the channel-head criterion is not the same criterion at two grids:" +
+                " ${complaints.joinToString("; ")}",
+            complaints.isEmpty()
+        )
+    }
+
+    /**
+     * Kilometres of channel per square kilometre of land over the network the criterion initiates,
+     * one D8 step per channel cell — the same arithmetic [ScaleFree] measures its own network with.
+     */
+    private fun channelDensityKmPerKm2(world: WorldMap): Double {
+        val channel = ChannelInitiation.channelMaskOf(world)
+        val scale = world.config.scale
+        val cellsAcross = world.width
+        val cellWidthKm = scale.cellWidthKm(cellsAcross)
+        val cellHeightKm = scale.cellHeightKm(world.height)
+        val diagonalKm = kotlin.math.sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
+        var channelKm = 0.0
+        for (cell in channel.indices) {
+            if (!channel[cell]) continue
+            val receiver = world.rivers.flowTarget[cell]
+            if (receiver < 0) continue
+            channelKm += when {
+                receiver == cell + cellsAcross || receiver == cell - cellsAcross -> cellHeightKm
+                receiver / cellsAcross == cell / cellsAcross -> cellWidthKm
+                else -> diagonalKm
+            }
+        }
+        val landKm2 = world.sea.landCellCount * cellWidthKm * cellHeightKm
+        return if (landKm2 <= 0.0) 0.0 else channelKm / landKm2
+    }
+
+    /**
      * The plates own the same ground, and the sea stands on the same coast, at 512 and at 1024.
      *
      * Where the clause above asks about fourteen points, these two ask about every cell: the
@@ -168,6 +258,18 @@ class ScaleFreeTest {
          * before F35 — the two cases are nowhere near each other.
          */
         const val PLATE_INTERIOR_AGREEMENT = 0.999
+
+        /**
+         * How far the initiated network's drainage density may move between 512 and 1024.
+         *
+         * The same 1.35 [ScaleFree.TOLERANCES] allows the support-area network's, and for the same
+         * reason: the criterion reads the gradient to a cell's own receiver, and a finer grid
+         * resolves relief that a coarse one averages into a gentler slope, so the same ground gives
+         * a network drawn finer without being a denser one. What the clause refuses is what the
+         * rule R1 replaced did — a threshold in cells picks out sixteen times the cells at four
+         * times the grid, which is a factor the measurement cannot survive.
+         */
+        const val CHANNEL_DENSITY_FACTOR = 1.35
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)

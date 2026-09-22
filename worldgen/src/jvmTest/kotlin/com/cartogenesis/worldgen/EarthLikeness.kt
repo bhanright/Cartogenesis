@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
@@ -187,13 +188,22 @@ internal object EarthLikeness {
     const val SMALLEST_ISLAND_FITTED_CELLS = 4
 
     /**
-     * The smallest catchment Hack's fit takes, in cells.
+     * The smallest catchment Hack's fit takes, in square kilometres.
      *
-     * A reach draining fewer cells than this has a length the D8 grid quantises into a handful of
-     * values — eight bearings and a step of one or 1.41 cells — so it carries no slope. Hack's own
-     * basins span four decades of area; a hundred cells still leaves this fit two or three.
+     * **An area since R1, and that is what closed the fit's scale dependence.** It was a hundred
+     * cells, which describes 27,500 km2 at 512 and 1,700 at 2048 — so the finer grid's fit ran over
+     * two extra decades of small basins the coarse one never saw, and the exponent read 0.552
+     * pooled at 512 against 0.465 at 2048. A statistic that moves with the resolution is measuring
+     * the resolution.
+     *
+     * Twenty-five thousand is that hundred cells at the coarser of the two grids this suite runs,
+     * written as ground. The constraint the hundred stood for is the grid's and not Hack's: a reach
+     * draining fewer cells than that has a length the D8 staircase quantises into a handful of
+     * values — eight bearings and a step of one or 1.41 cells — so it carries no slope, and it is
+     * the *coarsest* grid that sets where that bites. Hack's own basins span four decades of area;
+     * this floor still leaves the fit two or three at 512 and four at 2048, over the same basins.
      */
-    const val SMALLEST_HACK_CATCHMENT_CELLS = 100
+    const val SMALLEST_HACK_CATCHMENT_KM2 = 25_000.0
 
     /**
      * Support areas the channel network is extracted at for Strahler ordering, in cells.
@@ -204,14 +214,23 @@ internal object EarthLikeness {
      * mostly made of. So the network is extracted from the D8 tree by support area instead, the way
      * a network is extracted from any digital elevation model.
      *
-     * Sixteen cells is four by four, the smallest square a D8 tree can branch twice inside and so
-     * the least that can carry an order above the first; sixty-four is two octaves coarser, and the
-     * pair is printed together because a bifurcation ratio that moves when the threshold moves is a
-     * measurement of the threshold. Neither is Montgomery & Dietrich's physical channel head: at
-     * 275 km2 a cell this grid cannot resolve one, and the criterion that could needs S1's metric
-     * units and R1's channel initiation.
+     * **Areas since R1, for the reason written against [SMALLEST_HACK_CATCHMENT_KM2].** They are
+     * the same two thresholds this suite has always used, read at the coarser of its two grids:
+     * sixteen cells at 512 is 4,400 km2 and sixty-four is 17,600. Sixteen cells was four by four,
+     * the smallest square a D8 tree can branch twice inside and so the least that can carry an
+     * order above the first; sixty-four is two octaves coarser, and the pair is printed together
+     * because a bifurcation ratio that moves when the threshold moves is a measurement of the
+     * threshold — which is exactly the sensitivity [BIFURCATION_RATIO_SUPPORT_ALLOWANCE] is derived
+     * from, so writing the pair as ground keeps that derivation true at both grids instead of only
+     * at 512.
+     *
+     * Deliberately not the channel-head criterion itself. Horton's law is about where a network
+     * branches and wants one threshold over the whole map; R1's threshold varies cell by cell with
+     * the gradient, the runoff and the cover, and a ratio taken over a network whose head moves
+     * with the climate would fold the climate into the ratio. That network is measured here too —
+     * it is what Hack's fit and the drainage densities are taken over — under its own name.
      */
-    val CHANNEL_SUPPORT_CELLS = intArrayOf(16, 64)
+    val CHANNEL_SUPPORT_KM2 = doubleArrayOf(4_400.0, 17_600.0)
 
     // ------------------------------------------------------------------ measuring a world
 
@@ -237,6 +256,8 @@ internal object EarthLikeness {
         val hortonDrawnRivers: StreamOrders,
         val drainage: DrainageByAridity,
         val drainageFullNetwork: DrainageByAridity,
+        val drainageInitiatedNetwork: DrainageByAridity,
+        val channelHead: ChannelHeadByAridity,
         val lakeSizes: SizeDistribution,
         val islandSizes: SizeDistribution,
         val iceCells: Long,
@@ -272,33 +293,46 @@ internal object EarthLikeness {
             world.rivers.flowTarget, world.sea.landCellCount
         ) { 1f }
 
-        val byHeight = FlowRouting.heightOrder(
-            cellsAcross, cellsDown, world.sea.isLand, world.rivers.filledElevation,
+        val downstreamOrder = FlowRouting.drainageOrder(
+            cellsAcross, cellsDown, world.sea.isLand, world.rivers.flowTarget,
             world.sea.landCellCount
         )
-        val longestPathKm = longestFlowPathKilometres(world, byHeight, squareKilometresPerCell)
-        val reaches = reachSample(world, catchmentCells.data, longestPathKm, squareKilometresPerCell)
+        val longestPathKm =
+            longestFlowPathKilometres(world, downstreamOrder, squareKilometresPerCell)
+        val initiated = ChannelInitiation.channelMaskOf(world)
+        // The same walk restricted to the cells that carry a channel, which is the denominator the
+        // coverage share needs: see [ReachSample.add].
+        val longestChannelKm =
+            longestFlowPathKilometres(world, downstreamOrder, squareKilometresPerCell, initiated)
+        val reaches = reachSample(
+            world, catchmentCells.data, longestPathKm, longestChannelKm, squareKilometresPerCell
+        )
         val hack = fitLine(reaches.mainStem.map { it.first }, reaches.mainStem.map { it.second })
         val hackDrawnCourse =
             fitLine(reaches.drawnCourse.map { it.first }, reaches.drawnCourse.map { it.second })
 
-        // The terrain's own channel network, at the finer of the two support areas Horton's
-        // ratios are taken over. Hack's exponent and the drainage-density ordering are both read
-        // off this rather than off the drawn courses: see [hackOverChannelNetwork].
+        // Two networks, and the suite needs both. The support-area mask is T3's instrument —
+        // every land cell draining at least CHANNEL_SUPPORT_KM2 — and the drainage-density
+        // ordering over it is kept as a regression check, because it was asserted and passing
+        // before R1 and R1 must not have broken it. The initiated network is the criterion's own:
+        // every cell where the runoff-weighted area times the gradient clears the threshold, and
+        // everything downstream of one. It is the only one of the two that knows about the
+        // climate, so it is the sample a claim about climate is made over, and it is what Hack's
+        // exponent is fitted on.
         val fullNetwork =
-            supportAreaChannelMask(world, catchmentCells.data, CHANNEL_SUPPORT_CELLS.min())
+            supportAreaChannelMask(world, catchmentCells.data, CHANNEL_SUPPORT_KM2.min())
         val hackFullNetwork = hackOverChannelNetwork(
-            fullNetwork, catchmentCells.data, longestPathKm, squareKilometresPerCell
+            initiated, catchmentCells.data, longestPathKm, squareKilometresPerCell
         )
 
-        val horton = CHANNEL_SUPPORT_CELLS.map { support ->
+        val horton = CHANNEL_SUPPORT_KM2.map { support ->
             strahlerStreamOrders(
                 supportAreaChannelMask(world, catchmentCells.data, support),
-                world.rivers.flowTarget, byHeight
+                world.rivers.flowTarget, downstreamOrder
             )
         }
         val hortonDrawnRivers =
-            strahlerStreamOrders(drawnChannelMask(world), world.rivers.flowTarget, byHeight)
+            strahlerStreamOrders(drawnChannelMask(world), world.rivers.flowTarget, downstreamOrder)
         val aridity = aridityByCell(world)
         val landByAridity = landAreaByAridity(aridity, squareKilometresPerCell)
         val drainage = DrainageByAridity(
@@ -321,6 +355,13 @@ internal object EarthLikeness {
             routedChannelKilometresByAridity(
                 world, unfrozenNetwork, aridity, squareKilometresPerCell
             ),
+            landByAridity
+        )
+        // The same measurement over the network the criterion initiates. The ice rule above is not
+        // repeated: [ChannelInitiation.neverThaws] keeps a head off ground that never thaws, which
+        // is the same statement made where it belongs.
+        val drainageInitiatedNetwork = DrainageByAridity(
+            routedChannelKilometresByAridity(world, initiated, aridity, squareKilometresPerCell),
             landByAridity
         )
 
@@ -364,6 +405,8 @@ internal object EarthLikeness {
             hortonDrawnRivers = hortonDrawnRivers,
             drainage = drainage,
             drainageFullNetwork = drainageFullNetwork,
+            drainageInitiatedNetwork = drainageInitiatedNetwork,
+            channelHead = ChannelHeadByAridity.of(world, aridity),
             lakeSizes = SizeDistribution.of(lakeAreas),
             islandSizes = SizeDistribution.of(islandAreas),
             iceCells = iceCells,
@@ -568,22 +611,43 @@ internal object EarthLikeness {
      * The longest watercourse arriving at every land cell, in kilometres.
      *
      * Hack's `L` is the main stem measured from the drainage divide, which on a D8 tree is the
-     * longest of the paths that reach the cell. Walked lowest-last over the height order the engine
-     * routes water in, so a cell's own answer is final before it is handed downstream.
+     * longest of the paths that reach the cell. Walked over [FlowRouting.drainageOrder], which puts
+     * every cell after everything that drains into it, so a cell's own answer is final before it is
+     * handed downstream.
+     *
+     * **The drainage order and not the height order, and the difference is a fault this suite
+     * carried until R1.** `FlowRouting.heightOrder` biases an elevation by four before taking its
+     * raw bits, so two cells whose real heights differ by less than a float's last place there sort
+     * as equal; and since F30b the routing crosses a flat over a laid potential rather than over
+     * the fill's staircase, so a receiver is not always lower on the fill than the cell draining
+     * into it. Either way the walk can hand a length to a cell it has already passed, and that
+     * length is lost. `drainageOrder` is a topological sort of the flow forest and has no such
+     * tolerance - its own KDoc says so, because the sediment budget caught the same fault.
+     *
+     * What exposed it was an impossibility: at 2048 the drawn courses measured 1.10 to 1.30 of the
+     * longest watercourse they lie on, where a drawn course *is* one of those paths and the share
+     * cannot exceed one. The figures either side are in docs/DESIGN_LEDGER.md, R1.
+     */
+    /**
+     * [within], when given, restricts the walk to the cells it marks: a cell outside it starts a
+     * fresh path of zero rather than extending the one above it.
      */
     private fun longestFlowPathKilometres(
         world: WorldMap,
-        byHeight: IntArray,
-        squareKilometresPerCell: Double
+        drainageOrder: IntArray,
+        squareKilometresPerCell: Double,
+        within: BooleanArray? = null
     ): DoubleArray {
         val cellsAcross = world.width
         val cellWidthKm = sqrt(squareKilometresPerCell * cellAspect(world))
         val cellHeightKm = squareKilometresPerCell / cellWidthKm
         val longestKm = DoubleArray(cellsAcross * world.height)
-        for (rank in byHeight.indices.reversed()) {
-            val cell = byHeight[rank]
+        for (rank in drainageOrder.indices) {
+            val cell = drainageOrder[rank]
+            if (within != null && !within[cell]) continue
             val receiver = world.rivers.flowTarget[cell]
             if (receiver < 0 || !world.sea.isLand[receiver]) continue
+            if (within != null && !within[receiver]) continue
             val throughHere = longestKm[cell] +
                 stepKilometres(cell, receiver, cellsAcross, cellWidthKm, cellHeightKm)
             if (throughHere > longestKm[receiver]) longestKm[receiver] = throughHere
@@ -620,11 +684,35 @@ internal object EarthLikeness {
         val drawnShareOfMainStem: Double
             get() = if (mainStemKilometres <= 0.0) 0.0 else drawnKilometres / mainStemKilometres
 
-        fun add(catchmentKm2: Double, mainStemKm: Double, drawnKm: Double) {
+        /**
+         * Two things separate the coverage share from the two fits, and both are about what 1.0
+         * is supposed to mean.
+         *
+         * Hack's `L` runs to the **drainage divide**, over hillslope as well as channel, which is
+         * what [mainStem] pairs and what his exponent is defined over. A drawn course begins at a
+         * channel head, so measured against that it can never reach 1.0 and never could — the
+         * shortfall was the hillslope above every head, not a missing line. The coverage share
+         * therefore reads [longestChannelKm], the longest watercourse arriving at the outlet over
+         * the cells that carry a channel, and against that 1.0 is exactly the claim: a river is its
+         * own longest watercourse.
+         *
+         * And [countTowardCoverage] keeps to the courses that end on the sea or on a lake. A course
+         * ending on another river is a tributary: it stops where the trunk was already drawn, and
+         * the longest watercourse arriving at that junction very often comes up the *trunk* rather
+         * than up the tributary. `RiverCourseTest` draws the same line for the same reason.
+         */
+        fun add(
+            catchmentKm2: Double,
+            mainStemKm: Double,
+            drawnKm: Double,
+            longestChannelKm: Double,
+            countTowardCoverage: Boolean
+        ) {
             mainStem.add(ln(catchmentKm2) to ln(mainStemKm))
             drawnCourse.add(ln(catchmentKm2) to ln(drawnKm))
+            if (!countTowardCoverage) return
             drawnKilometres += drawnKm
-            mainStemKilometres += mainStemKm
+            mainStemKilometres += longestChannelKm
         }
     }
 
@@ -632,6 +720,7 @@ internal object EarthLikeness {
         world: WorldMap,
         catchmentCells: FloatArray,
         longestPathKm: DoubleArray,
+        longestChannelKm: DoubleArray,
         squareKilometresPerCell: Double
     ): ReachSample {
         val cellsAcross = world.width
@@ -642,8 +731,8 @@ internal object EarthLikeness {
             val outletStep = lastOwnStep(world, river.cells)
             if (outletStep < 1) return@forEach
             val outlet = river.cells[outletStep]
-            val catchment = catchmentCells[outlet].toDouble()
-            if (catchment < SMALLEST_HACK_CATCHMENT_CELLS) return@forEach
+            val catchmentKm2 = catchmentCells[outlet].toDouble() * squareKilometresPerCell
+            if (catchmentKm2 < SMALLEST_HACK_CATCHMENT_KM2) return@forEach
             val mainStemKm = longestPathKm[outlet]
             var drawnKm = 0.0
             for (step in 0 until outletStep) {
@@ -652,7 +741,12 @@ internal object EarthLikeness {
                 )
             }
             if (mainStemKm <= 0.0 || drawnKm <= 0.0) return@forEach
-            sample.add(catchment * squareKilometresPerCell, mainStemKm, drawnKm)
+            val last = river.cells[river.cells.size - 1]
+            val endsInWater = !world.sea.isLand[last] || world.rivers.lakes.isLake(last)
+            sample.add(
+                catchmentKm2, mainStemKm, drawnKm, longestChannelKm[outlet],
+                endsInWater && longestChannelKm[outlet] > 0.0
+            )
         }
         return sample
     }
@@ -684,11 +778,11 @@ internal object EarthLikeness {
         val fit = LineAccumulator()
         for (cell in channel.indices) {
             if (!channel[cell]) continue
-            val catchment = catchmentCells[cell].toDouble()
-            if (catchment < SMALLEST_HACK_CATCHMENT_CELLS) continue
+            val catchmentKm2 = catchmentCells[cell].toDouble() * squareKilometresPerCell
+            if (catchmentKm2 < SMALLEST_HACK_CATCHMENT_KM2) continue
             val mainStemKm = longestPathKm[cell]
             if (mainStemKm <= 0.0) continue
-            fit.add(ln(catchment * squareKilometresPerCell), ln(mainStemKm))
+            fit.add(ln(catchmentKm2), ln(mainStemKm))
         }
         return fit
     }
@@ -809,39 +903,51 @@ internal object EarthLikeness {
         return channel
     }
 
-    /** Every land cell draining at least [supportCells] cells: the terrain's own channel network. */
+    /** Every land cell draining at least [supportKm2] of ground: a network by support area. */
     fun supportAreaChannelMask(
         world: WorldMap,
         catchmentCells: FloatArray,
-        supportCells: Int
-    ): BooleanArray = BooleanArray(world.width * world.height) { cell ->
-        world.sea.isLand[cell] &&
-            !world.rivers.lakes.isLake(cell) &&
-            catchmentCells[cell] >= supportCells
+        supportKm2: Double
+    ): BooleanArray {
+        val supportCells = supportKm2 /
+            world.config.scale.squareKilometresPerCell(world.width, world.height)
+        return BooleanArray(world.width * world.height) { cell ->
+            world.sea.isLand[cell] &&
+                !world.rivers.lakes.isLake(cell) &&
+                catchmentCells[cell] >= supportCells
+        }
     }
 
     /**
      * Strahler orders over the channel cells, and the number of streams each order carries.
      *
-     * Walked highest ground first over [FlowRouting.heightOrder], so a cell's upstream is settled
-     * before the cell itself — the same order the engine accumulates water in, and for the same
-     * reason. A cell with no channel above it is order 1; a cell fed by two or more channels of its
-     * own highest incoming order is one order above them; anything else keeps the highest order
-     * that reaches it. A *stream* of an order is a run of consecutive cells holding it, counted at
-     * its downstream end, which is where the run leaves that order.
+     * Walked over [FlowRouting.drainageOrder] — sources first and mouths last — so everything
+     * draining into a cell is settled before the cell itself. A cell with no channel above it is
+     * order 1; a cell fed by two or more channels of its own highest incoming order is one order
+     * above them; anything else keeps the highest order that reaches it. A *stream* of an order is
+     * a run of consecutive cells holding it, counted at its downstream end, which is where the run
+     * leaves that order.
+     *
+     * **A topological order and not [FlowRouting.heightOrder], which is what this walked before.**
+     * Height said "downstream" only for as long as the routing surface fell at every step, and
+     * since F30b it does not: a reach crossing a filled flat follows the potential laid over the
+     * flat rather than the fill's own staircase, so a receiver can sit level with or above the cell
+     * draining into it. The walk then reached a junction before the branches that make it one, read
+     * nothing arriving, called it a headwater and lost the bifurcation. `FlowRouting.accumulate`
+     * had the same fault and was given the same answer; `EarthLikenessControlTest` holds the two
+     * heads and the junction below them that tell the two orders apart.
      */
     fun strahlerStreamOrders(
         channel: BooleanArray,
         flowTarget: IntArray,
-        byHeight: IntArray
+        downstreamOrder: IntArray
     ): StreamOrders {
         val cellCount = channel.size
         val order = IntArray(cellCount)
         // The highest order arriving at each cell, and how many channels arrive carrying it.
         val incomingOrder = IntArray(cellCount)
         val incomingCount = IntArray(cellCount)
-        for (rank in byHeight.indices.reversed()) {
-            val cell = byHeight[rank]
+        for (cell in downstreamOrder) {
             if (!channel[cell]) continue
             order[cell] = when {
                 incomingCount[cell] == 0 -> 1
@@ -883,6 +989,71 @@ internal object EarthLikeness {
      * the thermometer, not about the rain.
      */
     internal enum class Aridity { FROZEN, HYPER_ARID, ARID, SEMI_ARID, DRY_SUBHUMID, HUMID }
+
+    /**
+     * What the channel-head criterion reads in each aridity class: the cover, the threshold the
+     * cover sets, and the runoff-weighted area a cell of that class brings to it.
+     *
+     * The mechanism printed rather than argued. Moglen, Eltahir and Bras's curve turns over because
+     * two terms pull opposite ways as a country gets wetter — more runoff on the left of the
+     * inequality, more root strength on the right — and a density that comes out in the wrong class
+     * is one of those two winning by the wrong margin. Without these three lines there is no way to
+     * tell which.
+     */
+    internal class ChannelHeadByAridity(
+        private val coverSum: DoubleArray,
+        private val thresholdKm2Sum: DoubleArray,
+        private val areaKm2Sum: DoubleArray,
+        private val cells: LongArray
+    ) {
+        fun meanCover(aridity: Aridity): Double = mean(coverSum, aridity)
+        fun meanThresholdKm2(aridity: Aridity): Double = mean(thresholdKm2Sum, aridity)
+        fun meanAreaKm2(aridity: Aridity): Double = mean(areaKm2Sum, aridity)
+
+        private fun mean(sums: DoubleArray, aridity: Aridity): Double {
+            val count = cells[aridity.ordinal]
+            return if (count == 0L) 0.0 else sums[aridity.ordinal] / count
+        }
+
+        operator fun plus(other: ChannelHeadByAridity) = ChannelHeadByAridity(
+            DoubleArray(coverSum.size) { coverSum[it] + other.coverSum[it] },
+            DoubleArray(thresholdKm2Sum.size) { thresholdKm2Sum[it] + other.thresholdKm2Sum[it] },
+            DoubleArray(areaKm2Sum.size) { areaKm2Sum[it] + other.areaKm2Sum[it] },
+            LongArray(cells.size) { cells[it] + other.cells[it] }
+        )
+
+        companion object {
+            fun of(world: WorldMap, aridity: Array<Aridity?>): ChannelHeadByAridity {
+                val classes = Aridity.entries.size
+                val cover = DoubleArray(classes)
+                val threshold = DoubleArray(classes)
+                val area = DoubleArray(classes)
+                val cells = LongArray(classes)
+                val areaKm2 = ChannelInitiation.runoffWeightedAreaKm2(
+                    world.width, world.height, world.sea.isLand, world.sea.landCellCount,
+                    world.rivers.filledElevation, world.rivers.flowTarget,
+                    world.climate.precipitationMm,
+                    world.config.scale.squareKilometresPerCell(world.width, world.height)
+                )
+                val riverConfig = world.config.rivers
+                for (cell in aridity.indices) {
+                    val here = aridity[cell] ?: continue
+                    val density = world.climate.vegetationDensity.data[cell]
+                    cover[here.ordinal] += density.toDouble()
+                    threshold[here.ordinal] +=
+                        riverConfig.channelHeadAreaSlopeKm2.toDouble() *
+                            if (riverConfig.coverRaisesChannelHead) {
+                                ChannelInitiation.coverFactor(density).toDouble()
+                            } else {
+                                1.0
+                            }
+                    area[here.ordinal] += areaKm2.data[cell].toDouble()
+                    cells[here.ordinal]++
+                }
+                return ChannelHeadByAridity(cover, threshold, area, cells)
+            }
+        }
+    }
 
     /** Channel length and land area in each aridity class, which is drainage density per class. */
     internal class DrainageByAridity(
@@ -1103,6 +1274,8 @@ internal object EarthLikeness {
         private var hortonDrawnRivers: StreamOrders? = null
         private var drainage: DrainageByAridity? = null
         private var drainageFullNetwork: DrainageByAridity? = null
+        private var drainageInitiatedNetwork: DrainageByAridity? = null
+        private var channelHead: ChannelHeadByAridity? = null
         private var iceCells = 0L
         private var lakeCells = 0L
         private var landCells = 0L
@@ -1150,6 +1323,10 @@ internal object EarthLikeness {
             drainage = drainage?.plus(metrics.drainage) ?: metrics.drainage
             drainageFullNetwork = drainageFullNetwork?.plus(metrics.drainageFullNetwork)
                 ?: metrics.drainageFullNetwork
+            drainageInitiatedNetwork =
+                drainageInitiatedNetwork?.plus(metrics.drainageInitiatedNetwork)
+                    ?: metrics.drainageInitiatedNetwork
+            channelHead = channelHead?.plus(metrics.channelHead) ?: metrics.channelHead
             iceCells += metrics.iceCells
             lakeCells += metrics.lakeCells
             landCells += metrics.landCells
@@ -1175,13 +1352,20 @@ internal object EarthLikeness {
                 fitLine(hackDrawnPoints.map { it.first }, hackDrawnPoints.map { it.second }),
             drawnKilometres = drawnKilometres,
             mainStemKilometres = mainStemKilometres,
-            horton = horton ?: CHANNEL_SUPPORT_CELLS.map { StreamOrders(LongArray(0)) },
+            horton = horton ?: CHANNEL_SUPPORT_KM2.map { StreamOrders(LongArray(0)) },
             hortonDrawnRivers = hortonDrawnRivers ?: StreamOrders(LongArray(0)),
             drainage = drainage ?: DrainageByAridity(
                 DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
             ),
             drainageFullNetwork = drainageFullNetwork ?: DrainageByAridity(
                 DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
+            ),
+            drainageInitiatedNetwork = drainageInitiatedNetwork ?: DrainageByAridity(
+                DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size)
+            ),
+            channelHead = channelHead ?: ChannelHeadByAridity(
+                DoubleArray(Aridity.entries.size), DoubleArray(Aridity.entries.size),
+                DoubleArray(Aridity.entries.size), LongArray(Aridity.entries.size)
             ),
             lakeSizes = SizeDistribution.of(lakeAreas),
             islandSizes = SizeDistribution.of(islandAreas),
@@ -1236,7 +1420,8 @@ internal object EarthLikeness {
         line(label, "hackReaches", metrics.hack.points.toString(), "-", "Hack 1957")
         line(label, "drawnCourseShareOfMainStem", "%.3f".format(metrics.drawnShareOfMainStem),
             "1.0", "a river is its own longest watercourse")
-        CHANNEL_SUPPORT_CELLS.forEachIndexed { index, support ->
+        CHANNEL_SUPPORT_KM2.forEachIndexed { index, supportKm2 ->
+            val support = "%.0f".format(supportKm2) + "km2"
             val orders = metrics.horton[index]
             line(label, "bifurcationRatioAtSupport$support",
                 "%.2f".format(orders.bifurcationRatio),
@@ -1260,6 +1445,33 @@ internal object EarthLikeness {
                 "${it.name}:${"%.4f".format(metrics.drainageFullNetwork.densityIn(it))}"
             },
             "-", "Moglen, Eltahir & Bras 1998")
+        line(label, "drainageDensityPeakInitiated",
+            metrics.drainageInitiatedNetwork.peak()?.name ?: "none",
+            "SEMI_ARID", "Moglen, Eltahir & Bras 1998")
+        line(label, "drainageDensityKmPerKm2Initiated",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.4f".format(metrics.drainageInitiatedNetwork.densityIn(it))}"
+            },
+            "-", "Moglen, Eltahir & Bras 1998")
+        line(label, "drainageWetSideRatioInitiated",
+            "%.3f".format(drainageWetSideRatio(metrics.drainageInitiatedNetwork)),
+            "< 1", "Moglen, Eltahir & Bras 1998")
+        line(label, "channelHeadCoverByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.3f".format(metrics.channelHead.meanCover(it))}"
+            },
+            "-", "Istanbulluoglu & Bras 2005")
+        line(label, "channelHeadThresholdKm2ByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.4f".format(metrics.channelHead.meanThresholdKm2(it))}"
+            },
+            "%.4f".format(metrics.channelHead.meanThresholdKm2(Aridity.HYPER_ARID)),
+            "Montgomery & Dietrich 1988")
+        line(label, "runoffWeightedAreaKm2ByAridity",
+            Aridity.entries.joinToString(" ") {
+                "${it.name}:${"%.0f".format(metrics.channelHead.meanAreaKm2(it))}"
+            },
+            "-", "Montgomery & Dietrich 1988")
         line(label, "drainageDensityPeak", metrics.drainage.peak()?.name ?: "none",
             "SEMI_ARID", "Moglen, Eltahir & Bras 1998")
         line(label, "drainageDensityKmPerKm2",
@@ -1335,16 +1547,22 @@ internal object EarthLikeness {
     fun complaints(metrics: Metrics, oneWorld: Boolean): List<String> {
         val label = metrics.label
         val complaints = listOfNotNull(
-            // Hack's exponent is a finding rather than a complaint, and [hackScaleDependence] has
-            // the measurement that made it one. The peak below reads the terrain's own channel
-            // network and not the drawn courses, which the 2048 tier is what exposed:
-            // `RiverConfig.maxRivers` caps the drawn network at a count of courses, so the finer
-            // the grid the smaller the share of its own drainage the map draws, and a clause over
-            // the drawn sample was measuring the cap. See [hackOverChannelNetwork] and
-            // [routedChannelKilometresByAridity]; the drawn figures and what they cover stand
-            // beside these in [print] and [findings].
+            // The four river clauses all read the network R1 initiates rather than the courses
+            // the map draws: the drawn sample was capped at a count of courses until R1 and so
+            // measured the cap, and a network by support area alone cannot answer a question about
+            // climate. See [hackOverChannelNetwork] and [routedChannelKilometresByAridity]; the
+            // drawn figures and what they cover stand beside these in [print] and [findings].
             bifurcationComplaint(label, metrics.horton[0]),
+            hackComplaint(label, metrics.hackFullNetwork),
+            // T3's clause, over T3's instrument, kept per seed as a regression check: the
+            // support-area network is climate-blind and its peak was asserted and passing before
+            // R1, so R1 must not have moved it.
             drainagePeakComplaint(label, metrics.drainageFullNetwork),
+            // R1's own two, over the network its criterion initiates. Per seed, because every seed
+            // meets them at both grids.
+            drainagePeakComplaint(label, metrics.drainageInitiatedNetwork),
+            drainageWetSideComplaint(label, metrics.drainageInitiatedNetwork),
+            drawnCoverageComplaint(label, metrics.drawnShareOfMainStem),
             // Asserted since S2 gave the height field an absolute vertical scale. Before that the
             // curve was a single peak straddling the shoreline on every seed and both clauses were
             // findings; the world they were findings about is what `IsostasyTest` runs as its
@@ -1391,7 +1609,7 @@ internal object EarthLikeness {
     }
 
     /**
-     * Why Hack's exponent is a finding and not a clause, in the figures that made it one.
+     * Why Hack's exponent is a clause again, in the figures that took it away and brought it back.
      *
      * **It was asserted until T3, over the drawn basins, and it had been red in the nightly tier
      * at 2048 on every seed since the tier existed.** T3 moved the fit off the drawn courses and
@@ -1404,32 +1622,23 @@ internal object EarthLikeness {
      * grid four times finer each way, and the floor of the band with its tolerance is 0.45, so one
      * seed falls through it at 2048 and none does at 512.
      *
-     * A statistic that moves with the resolution is measuring the resolution. The cause is that
-     * both ends of this fit are counted in cells and not in ground: [CHANNEL_SUPPORT_CELLS]'s
-     * sixteen and [SMALLEST_HACK_CATCHMENT_CELLS]'s hundred describe 4,400 and 27,500 km2 at 512
-     * and 275 and 1,700 at 2048, so the finer grid's fit is taken over two extra decades of small
-     * basins that the coarse grid never sees — and the smallest of them are not basins at all but
-     * hillslopes, because this generator has no channel-initiation criterion and a cell is a
-     * channel when a fixed count of cells drains through it. That is the same defect as
-     * `RiverConfig.maxRivers` being a count of courses, one layer down, and **R1, channel
-     * initiation with a physical criterion, is the chunk that earns the assertion back** — the
-     * same chunk [drainageWetSideRatio] names, for a related reason.
+     * A statistic that moves with the resolution is measuring the resolution, and the cause was
+     * that both ends of this fit were counted in cells and not in ground: the support area's
+     * sixteen and the fit's hundred described 4,400 and 27,500 km2 at 512 and 275 and 1,700 at
+     * 2048, so the finer grid's fit ran over two extra decades of small basins the coarse one
+     * never saw — and the smallest of them were not basins at all but hillslopes, because the
+     * generator had no channel-initiation criterion and a cell was a channel when a fixed count of
+     * cells drained through it.
      *
-     * Not fixed here by making the two thresholds areas instead of counts, which is the obvious
-     * cure and is a re-derivation: [CHANNEL_SUPPORT_CELLS] is also what Horton's ratios are
-     * ordered over and those *are* asserted, so moving it moves a bar that is passing today, and a
-     * chunk about a red tier is not the place to re-derive a green one.
+     * **R1 is what earned it back, in two pieces.** Both thresholds are areas of ground now —
+     * [CHANNEL_SUPPORT_KM2] and [SMALLEST_HACK_CATCHMENT_KM2] — so the fit is taken over the same
+     * basins at both grids; and the network the fit runs on is [ChannelInitiation]'s, every reach
+     * where the runoff-weighted drainage area times the square of the gradient clears Montgomery
+     * and Dietrich's threshold, which is a criterion about the ground rather than about the grid.
+     * The figures either side are in docs/DESIGN_LEDGER.md, R1.
      *
-     * [hackComplaint] itself is untouched and is still shown to bite on `EarthLikenessControlTest`'s
-     * comb, so the bar is alive and can be re-asserted in one line.
+     * [hackComplaint] is still shown to bite on `EarthLikenessControlTest`'s comb.
      */
-    fun hackScaleDependence(metrics: Metrics): String =
-        "Hack's exponent is ${"%.3f".format(metrics.hackFullNetwork.slope)} over" +
-            " ${metrics.hackFullNetwork.points} reaches of the routed network, against Earth's" +
-            " $EARTH_HACK_EXPONENT_LOW-$EARTH_HACK_EXPONENT_HIGH +/- $HACK_EXPONENT_TOLERANCE" +
-            " (Hack 1957; Rigon et al. 1996); reported and not asserted because the same fit reads" +
-            " 0.552 pooled at 512 and 0.465 at 2048 and both of its thresholds are counts of cells" +
-            " rather than areas of ground, which is R1's"
 
     fun hackComplaint(label: String, hack: LineFit): String? {
         if (hack.slope >= EARTH_HACK_EXPONENT_LOW - HACK_EXPONENT_TOLERANCE &&
@@ -1466,6 +1675,19 @@ internal object EarthLikeness {
      * 0.0053 across hyper-arid, arid and semi-arid — so which of them comes out on top is the
      * tie-break and not the result. Dry against wet is the result, and it is what these two clauses
      * hold.
+     *
+     * **Read over two networks since R1, and asserted on both.** Over the support-area network —
+     * T3's instrument, which is climate-blind — it stays where T3 left it, because it was asserted
+     * and passing there before R1 and a chunk must not break a green bar. Over the network R1's
+     * criterion initiates it is the new clause, and it is the one that means something about
+     * climate, because that network is the only one of the two whose head moves with the rain and
+     * the cover. Both hold on every seed at 512 and at 2048; the figures are in
+     * docs/DESIGN_LEDGER.md, R1.
+     *
+     * Which dryland the maximum lands in moved when the criterion did, and the paragraph below
+     * says why that is not the result: over the initiated network it is hyper-arid on most seeds
+     * and semi-arid or arid on the rest, and the dry classes run within a fifth of one another.
+     * Dry against wet is the result, and [drainageWetSideComplaint] is the other half of it.
      *
      * The peak clause listed three classes until W1 and now lists four, which is UNEP's own list:
      * dry sub-humid, from an aridity index of 0.5 to 0.65, is a dryland, and leaving it out was an
@@ -1518,12 +1740,78 @@ internal object EarthLikeness {
      * property of the drainage, and the accident is what W2 spent. R1, channel initiation with a
      * climate term, is queued for exactly this and is the chunk that earns the assertion back.
      *
-     * The peak clause above is untouched and still asserted: the maximum is still in a dryland.
+     * **Asserted since R1, over the network the criterion initiates, and on every seed.** The
+     * criterion reads the climate now — the area is weighted by the runoff and the threshold by the
+     * cover — and the curve turns over on every seed at both grids: 0.58 to 0.81 over the four
+     * standard seeds at 512, pooled 0.73, and 0.54 to 0.97 over the six audited seeds at 2048,
+     * pooled 0.79.
+     *
+     * The margin narrows as the grid is refined and that is worth watching rather than hiding: seed
+     * 1234 reads 0.81 at 512 and 0.97 at 2048. A finer grid resolves the steep ground that
+     * orographic rain falls on, and this criterion reads the gradient, so the wet side gains more
+     * from refinement than the dry. It is in `TODO.md` with the figures.
+     *
+     * `ChannelInitiationControlTest` is the control: with `RiverConfig.coverRaisesChannelHead` off,
+     * the ratio is 1.05 to 1.15 and this clause bites on every seed.
      */
     fun drainageWetSideRatio(drainage: DrainageByAridity): Double {
         val semiArid = drainage.densityIn(Aridity.SEMI_ARID)
         if (semiArid <= 0.0) return 0.0
         return drainage.densityIn(Aridity.HUMID) / semiArid
+    }
+
+    /**
+     * The wet side of Moglen's curve, asserted: humid country carries less channel per unit of land
+     * than semi-arid country does.
+     *
+     * One and not a tolerance, because one is where the claim lives. Moglen, Eltahir and Bras
+     * (1998) put the maximum at low to intermediate effective precipitation and have the density
+     * falling away above it; a ratio at or above one is a curve that does not fall, whatever its
+     * peak is doing, and that is the whole of the test. The peak clause beside it is the dry side
+     * of the same curve.
+     */
+    fun drainageWetSideComplaint(label: String, drainage: DrainageByAridity): String? {
+        val ratio = drainageWetSideRatio(drainage)
+        if (ratio > 0.0 && ratio < 1.0) return null
+        return "$label: humid country carries ${"%.2f".format(ratio)} times the channel per unit" +
+            " of land that semi-arid country does, where Moglen, Eltahir & Bras (1998) have the" +
+            " density falling away on the wet side and so below one — " +
+            Aridity.entries.joinToString(", ") { "$it ${"%.4f".format(drainage.densityIn(it))}" }
+    }
+
+    /**
+     * What share of the watercourses it stands for the drawn map has to cover.
+     *
+     * A river is its own longest watercourse, so the share is 1.0 by definition and everything
+     * below it is the drawing losing ground the world has. Two things take it below one and only
+     * one of them is a fault. A course stops where an earlier one has already claimed the reach
+     * below, and the reach is then drawn — by that other course — so a trunk shared between two
+     * `River` objects reads short here while the map is complete; and a course whose whole length
+     * falls under `RiverConfig.shortestDrawnCourseKm` is not drawn at all, which is a watercourse
+     * the map really does not have.
+     *
+     * Ninety-nine hundredths, which is a hundredth of slack on an invariant rather than a
+     * tolerance on a quantity. A basin that loses its whole course to the hundred-kilometre rule
+     * leaves the sample with it — it has no drawn river to measure — so every basin still in the
+     * sample should read exactly 1.0, and measured it does at both grids. The denominator is the
+     * longest watercourse over the **same eligible network** the course was drawn on, not the
+     * longest path to the divide: a drawn course begins at a channel head and the hillslope above
+     * that head is not a line the map failed to draw.
+     *
+     * What it refuses is the rule R1 removed: `RiverConfig.maxRivers` capped the drawing at four
+     * hundred courses whatever the grid, and the share that left was 0.484 at 512 and 0.408 to
+     * 0.506 at 2048 — falling with the grid, which is the signature of a cap being measured rather
+     * than a drainage. It also refuses a reading over one, which is what an out-of-order walk over
+     * the flow tree produced and is how that fault was found; see [longestFlowPathKilometres].
+     */
+    const val DRAWN_COVERAGE_BAR = 0.99
+
+    fun drawnCoverageComplaint(label: String, drawnShareOfMainStem: Double): String? {
+        if (drawnShareOfMainStem >= DRAWN_COVERAGE_BAR) return null
+        return "$label: the courses the map draws cover" +
+            " ${"%.3f".format(drawnShareOfMainStem)} of the watercourses they stand for, under" +
+            " the bar of $DRAWN_COVERAGE_BAR, where a river is its own longest watercourse and" +
+            " the share is 1.0 by definition"
     }
 
     /** A Pareto or Korcak exponent against its published one, at [SAMPLING_ERRORS_ALLOWED]. */
@@ -1609,22 +1897,17 @@ internal object EarthLikeness {
      */
     fun findings(metrics: Metrics): List<String> {
         val findings = ArrayList<Pair<Double, String>>()
-        // See [drainageWetSideRatio] for why this is a finding rather than a complaint, and for
-        // which chunk earns the assertion back.
-        // See [hackScaleDependence] for why this is a finding rather than a complaint, and for
-        // which chunk earns the assertion back. Ranked by where the exponent sits in Earth's band,
-        // so a fit at the band's floor ranks as far off as one at its ceiling.
-        val hackMiddle = (EARTH_HACK_EXPONENT_LOW + EARTH_HACK_EXPONENT_HIGH) / 2
-        findings.add(metrics.hackFullNetwork.slope / hackMiddle to hackScaleDependence(metrics))
-        val wetSide = drainageWetSideRatio(metrics.drainageFullNetwork)
+        // Hack's exponent and the wet side of Moglen's curve are both asserted since R1 and are
+        // in [complaints]; what is left here of the drawn courses is the drawn network's own
+        // figures, which have no Earth bar of their own and stand beside the asserted ones.
+        val drawnWetSide = drainageWetSideRatio(metrics.drainage)
         findings.add(
-            wetSide to
-                "humid country carries ${"%.2f".format(wetSide)} times the channel per unit of" +
-                    " land that semi-arid country does over the terrain's own network, and" +
-                    " ${"%.2f".format(drainageWetSideRatio(metrics.drainage))} over the drawn" +
-                    " courses, where Moglen, Eltahir & Bras (1998) have the density falling away" +
-                    " on the wet side, so below one; the channel threshold does not read the" +
-                    " climate, which is R1's"
+            drawnWetSide to
+                "over the drawn courses alone humid country carries" +
+                    " ${"%.2f".format(drawnWetSide)} times the channel per unit of land that" +
+                    " semi-arid country does, against" +
+                    " ${"%.2f".format(drainageWetSideRatio(metrics.drainageInitiatedNetwork))}" +
+                    " over the network the ground initiates, which is the sample the clause reads"
         )
         // The land's mode is reported rather than asserted, and deliberately: measured after S2 it
         // runs 301 to 1,470 m against Earth's 800, which is inside any bar wide enough to admit the
@@ -1671,7 +1954,8 @@ internal object EarthLikeness {
             drawnShare to
                 "the courses the map draws cover ${"%.3f".format(drawnShare)} of the watercourses" +
                     " they stand for, where a river is its own longest watercourse and the share" +
-                    " is 1.0; over the same basins Hack's exponent is" +
+                    " is 1.0 (asserted at $DRAWN_COVERAGE_BAR); over the same basins Hack's" +
+                    " exponent is" +
                     " ${"%.3f".format(metrics.hackDrawnCourse.slope)} drawn and" +
                     " ${"%.3f".format(metrics.hack.slope)} over their main stems, against" +
                     " ${"%.3f".format(metrics.hackFullNetwork.slope)} over the" +

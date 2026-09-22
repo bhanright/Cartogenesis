@@ -220,20 +220,8 @@ class PenAndInkTest {
          * tolerance of the recorded 0.9526 and the datum stands. Re-taken last, after the two
          * module suites had settled.
          */
-        val RECORDED_STYLES: Map<MapStyle, Int> = mapOf(
-            MapStyle.ATLAS to 1209203688,
-            MapStyle.VELLUM to 1894897389,
-            MapStyle.INK_WASH to 1828366156,
-            MapStyle.NAUTICAL to -1817872209,
-            MapStyle.MIDNIGHT to -359420799,
-            MapStyle.SCHOOLROOM to -748871396,
-            MapStyle.VERDANT to 434219653,
-            MapStyle.SCROLL to 241074769,
-            MapStyle.PEN_AND_INK to -864088289,
-            MapStyle.MARS to -1349302083,
-            MapStyle.NATURAL to -1957323322,
-            MapStyle.CLEAR to 1366281434
-        )
+        /** The twelve records live in [RecordedRenders], with the one script that re-takes them. */
+        val RECORDED_STYLES: Map<MapStyle, Int> get() = RecordedRenders.STYLES_AT_512
 
         /** The gallery's world, at the size the guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery

@@ -166,9 +166,11 @@ object NationStage {
 
     /**
      * Share of the world's runoff a cell must carry for habitability to treat it as being on a
-     * river. `RiverConfig.sourceFlowShare`'s default — see [drawableRiverFlow].
+     * river, and the floor under it so a world with almost no rain still has a few riverine cells
+     * rather than all of them. See [drawableRiverFlow].
      */
-    private const val DRAWN_RIVER_FLOW_SHARE = 0.0006f
+    private const val RIVERINE_FLOW_SHARE = 0.0006f
+    private const val MIN_RIVERINE_FLOW = 1e-4f
 
     /**
      * Radii for the two blurred copies [describe] judges a capital site on, as a divisor of the
@@ -627,15 +629,17 @@ object NationStage {
     }
 
     /**
-     * The accumulated flow at which `RiverStage` would draw a channel, so habitability and the map
-     * agree about which cells are on a river — computed from the rainfall rather than by
-     * re-tracing anything.
+     * The accumulated flow above which habitability counts a cell as being on a river — computed
+     * from the rainfall rather than by re-tracing anything.
      *
-     * This pins `RiverConfig.sourceFlowShare`'s default rather than reading the setting, so a
-     * world generated with that slider moved has a habitability field built against the default
-     * river density while the map draws a different one. Reading the setting would leave a default
-     * world untouched and move every other one, which is a change to what the generator produces
-     * and not a rename; noted here rather than made, because it is a difference and not a design.
+     * A share of the world's own runoff, which is the rule `RiverStage` drew a channel by until R1
+     * gave the channels a physical threshold. It is left here as habitability's own figure, under
+     * its own name, rather than followed across: what a settlement wants is water it can drink and
+     * carry a boat on, which is a question about discharge and not about whether the ground can cut
+     * a channel, and the two answers part company exactly where R1 intends them to — on a bare
+     * steep hillside, which now carries a channel and has never been a place to live. Wiring
+     * habitability to the channel mask instead would move every realm on every map, so it is in
+     * `TODO.md` as a difference to measure rather than made here as a rename.
      */
     private fun drawableRiverFlow(sea: SeaLevelResult, climate: ClimateResult): Float {
         var totalRunoff = 0f
@@ -644,7 +648,7 @@ object NationStage {
                 totalRunoff += RiverStage.runoffWeight(climate.precipitation.data[cell])
             }
         }
-        return (totalRunoff * DRAWN_RIVER_FLOW_SHARE).coerceAtLeast(RiverStage.MIN_SOURCE_FLOW)
+        return (totalRunoff * RIVERINE_FLOW_SHARE).coerceAtLeast(MIN_RIVERINE_FLOW)
     }
 
     /**

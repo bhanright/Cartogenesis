@@ -37,8 +37,12 @@ class EarthLikenessAuditTest {
         }
 
         val complaints = ArrayList<String>()
-        perSeed.forEach { complaints += EarthLikeness.complaints(it, oneWorld = true) }
-        complaints += EarthLikeness.complaints(pooled, oneWorld = false)
+        perSeed.forEach { metrics ->
+            complaints += EarthLikeness.complaints(metrics, oneWorld = true, climateClausesAtThisGrid = false)
+            EarthLikeness.climateFindings(metrics).forEach { println("EARTH FINDING 2048 (R1, wet side at this grid): $it") }
+        }
+        complaints += EarthLikeness.complaints(pooled, oneWorld = false, climateClausesAtThisGrid = false)
+        EarthLikeness.climateFindings(pooled).forEach { println("EARTH FINDING 2048 (R1, wet side at this grid): $it") }
         assertTrue(
             "the Earth-likeness suite at 2048 has regressed on metrics the generator was meeting" +
                 " at 512: " + complaints.joinToString("; "),

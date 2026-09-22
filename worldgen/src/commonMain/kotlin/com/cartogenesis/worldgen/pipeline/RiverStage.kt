@@ -555,8 +555,10 @@ object RiverStage {
      *
      * [isChannel] is [ChannelInitiation]'s, and since R1 the network is every reach the ground can
      * cut a channel in rather than every reach carrying a share of the world's runoff. What is left
-     * here of the drawing is one rule and it is cartographic: a course shorter than
-     * `RiverConfig.shortestDrawnCourseKm` is not given a line of its own. There is no cap on the
+     * here of the drawing is two rules and both are cartographic: a course shorter than
+     * `RiverConfig.shortestDrawnCourseKm` is not given a line of its own, and neither is a course
+     * that ends in water with one cell of land above the mouth, which has no reach left once the
+     * ink is stopped at the shore. There is no cap on the
      * number of courses; a count of courses was a limit on the drawing masquerading as a fact about
      * the world, and at four hundred it drew half of a 2048 world's watercourses and nearly all of
      * a 512 one's.
@@ -579,6 +581,11 @@ object RiverStage {
         val cellWidthKm = config.cellWidthKm.toFloat()
         val cellHeightKm = config.cellHeightKm.toFloat()
         val diagonalKm = sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
+
+        // The water a course ends at: the sea, or a lake's own surface. A strip of lake one cell
+        // wide is not open water and is a reach of the river, for the reason [LakeResult.openWater]
+        // gives.
+        fun isTheWater(cell: Int): Boolean = !sea.isLand[cell] || lakes.isOpenWater(cell)
 
         val hasUpstream = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -630,7 +637,7 @@ object RiverStage {
 
                 val next = flowTarget[current]
                 if (next < 0) break
-                if (!sea.isLand[next] || lakes.isOpenWater(next)) {
+                if (isTheWater(next)) {
                     path.add(next) // the river mouth, on the sea or on a lake shore
                     break
                 }
@@ -643,10 +650,23 @@ object RiverStage {
                     path[step], path[step + 1], cellsAcross, cellWidthKm, cellHeightKm, diagonalKm
                 )
             }
-            if (courseKm < riverConfig.shortestDrawnCourseKm && !drainsALake(
-                    cellsAcross, cellsDown, source, flowTarget, lakes
-                )
-            ) {
+            val tooShortToDraw = courseKm < riverConfig.shortestDrawnCourseKm && !drainsALake(
+                cellsAcross, cellsDown, source, flowTarget, lakes
+            )
+            // A course that ends in water and holds one cell of land has no reach to draw. The
+            // mouth is the water the last cell on land drains into, and what carries ink is the
+            // land above it, cut back half a stroke from the shore so the round cap is tangent to
+            // the coast (`MapRasterizer.trimmedAtTheShore`). With a single cell on land there is
+            // no vertex above it to pull the end back to, so the line is drawn whole and finishes
+            // at the centre of the water with half a stroke of cap beside it.
+            //
+            // Only the lake exemption above ever offers one: a single step is one cell of ground
+            // and the length rule drops it otherwise. Seed 42 at 512 has the case — cell 139041,
+            // one cell of land standing in a 449-cell lake with the lake's own water above it and
+            // below it — and it is what the exemption is not for. Water crossing a rock in a lake
+            // is not a watercourse; the exemption is for an outflow carrying a lake's water on.
+            val noReachOnLand = path.size < 3 && isTheWater(path[path.size - 1])
+            if (tooShortToDraw || noReachOnLand) {
                 // Release only the cells this trace claimed, never a trunk it merely touched.
                 for (step in 0 until claimedByThisRiver) claimed[path[step]] = false
                 continue

@@ -315,4 +315,57 @@ class RiverCourseTest {
                 "none of them drawn at all under the rule this replaces"
         )
     }
+
+    /**
+     * A course that ends in water has a reach on land to draw.
+     *
+     * The mouth cell is water — the sea, or a lake's open surface — and it is kept so the line
+     * reaches the water rather than stopping a step short of it. What is drawn is therefore the
+     * land above it, cut back half a stroke from the shore so the round cap is tangent to the
+     * coast rather than sitting out on the water; `MapRasterizer.trimmedAtTheShore` is where that
+     * happens. A course holding one cell of land and a mouth has nothing left once that cut is
+     * made — there is no vertex above the last one on land to pull the end back to — so it is
+     * drawn whole, and the stroke finishes at the centre of the water cell with a cap of half its
+     * own width out there beside it.
+     *
+     * That is a fact about the course and not about the drawing, which is why it is asserted here:
+     * a single cell of land between water above and water below is a rock the flow crosses, not a
+     * watercourse, and no length of pen makes it one.
+     */
+    @Test
+    fun `a course into water runs more than one cell on land`() {
+        var intoWaterTotal = 0
+        SEEDS.forEach { seed ->
+            val world = world(seed)
+            val lakes = world.rivers.lakes
+            fun isWater(cell: Int) = !world.sea.isLand[cell] || lakes.isOpenWater(cell)
+
+            var intoWater = 0
+            var stubs = 0
+            var firstStub = ""
+            world.rivers.rivers.forEach { river ->
+                val cells = river.cells
+                if (!isWater(cells.last())) return@forEach // stops on another river
+                intoWater++
+                if (cells.size > 2) return@forEach
+                stubs++
+                if (firstStub.isEmpty()) firstStub = cells.joinToString(" -> ")
+            }
+            intoWaterTotal += intoWater
+            println(
+                "RIVERCOURSE seed=$seed $intoWater courses into water, $stubs of them one cell " +
+                    "of land and a mouth"
+            )
+            assertTrue(
+                stubs == 0,
+                "seed $seed: $stubs courses into water hold one cell of land and a mouth, the " +
+                    "first at $firstStub"
+            )
+        }
+        assertTrue(
+            intoWaterTotal > 0,
+            "no course on any seed ends in water, so this guard has stopped discriminating"
+        )
+        println("RIVERCOURSE $intoWaterTotal courses into water, every one of them with a reach")
+    }
 }

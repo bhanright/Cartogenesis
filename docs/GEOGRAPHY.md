@@ -884,14 +884,34 @@ on 99, because a lower range wrings less out of the wind crossing it. The vegeta
 grows is a fourth term and it pulls the same way, holding some of that flank's erodibility back —
 which is a real effect and not an error. `ErosionConfig.climateFeed` is the control.
 
-**What the scheme is and is not.** The weights are rainfall divided by its own mean over the land,
-so this is *relative* climatic forcing: it says where the water falls and not how much there is. A
-world made uniformly wetter or drier erodes exactly as it did, by construction, because the division
-cancels it — deliberate, since the incision coefficient was fitted at one total and nothing here
-re-fits it. The weight is also rainfall standing in for runoff, with no evapotranspiration, no
-infiltration and no flood intermittency between them. And the climate the rounds cut with is
-today's, applied across rounds that stand for hundreds of thousands of years each: a
-stationary-climate approximation, taken twice over the run rather than once, and not a history.
+**What the scheme is and is not, in full.** Both terms are *relative*: the rainfall weight is
+divided by its own mean over the land each pass routes on, and so is the cover's erodibility factor.
+That is deliberate and it is what keeps the stage calibrated — `bedrockErodibilityPerYear` carries
+figures measured on real bedrock rivers running through real forests, so an absolute cover
+multiplier would count the vegetation twice, and an absolute rainfall weight would spend the
+stream-power law against a differently scaled discharge than it was fitted to. The price is a list
+of things this stage does not answer, and they are worth having in one place.
+
+- **It says where the rain falls, not how much.** A world made uniformly wetter or drier erodes
+  exactly as it did: the division cancels it. Total denudation is set by the coefficient and the
+  time step, as it was before, and nothing here re-fits either.
+- **Rainfall stands in for runoff.** What reaches a channel is rainfall less what the plants breathe
+  out and the ground takes in, delivered in floods rather than evenly. None of the three is
+  modelled, and the floor of 60 mm a year under every cell is a stand-in for the last of them.
+- **The normalisation is global, so distant cover changes local erodibility.** A cell's factor is
+  its own `1 - 0.5 x density` over the *land's* mean, so afforesting one continent lifts the bare
+  ground of another by a fraction of a per cent. The mean-one rule removes the blanket attenuation
+  an absolute multiplier caused; it does not prove the calibration survives cell by cell, and this
+  coupling is the reason it does not.
+- **The climate is stationary.** Today's rain and today's cover are spent over rounds standing for
+  hundreds of thousands of years each. The march is re-taken once at the midpoint and no more, so
+  what the rounds cut with is two snapshots and not a history.
+- **A residual drift is left after that refresh.** From the midpoint's terrain the weights still
+  move by 15 to 19 per cent of the land mean by the last round at 512, and about 10 at 2048. Two
+  marches take the drift from about 40 per cent to that; a third would cost another 6 per cent of a
+  generation for a good deal less.
+- **A head is a cell.** The channel threshold is a share of the land's weighted water, so where a
+  first-order channel begins is set by the grid as much as by the climate.
 
 **A wet flank is not more finely divided than a dry one.** The companion claim to the one above,
 and the measurement does not support it. Against a fixed support area — the network's bare geometry

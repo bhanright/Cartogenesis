@@ -141,36 +141,33 @@
   `RecordedRenders.kt` go; the first is the smaller change, but `PenAndInkTest`'s map carries the
   long per-chunk history comment that says *why* each re-take happened, and that comment is the
   valuable part and would have to move with it. Both are updated by hand in S3. 2026-09-21, S3.
-- **Five guards are red on terrain S3 moved, and none of them is a bar that can honestly be
-  lifted.** The chunk's own defect - the cover counted twice - is fixed (see the ledger, S3), and
-  denudation off an active belt went 0.271 -> 0.189 -> **0.220 mm/yr**, which cleared `IsostasyTest`
-  and `FlatCourseTest` and left the relief-shading datum where it was. What is left is a world that
-  is genuinely a different world, and seven cases in six classes that measure it:
-  `IceSheetTest` *a sheet stands as thick as Earth's* (718106's sheet 2511 -> 1781 m against
-  Greenland's 2000 m divide) and *the sheet's outlets cut troughs a fjord could be drowned in*
-  (the deepest cut asked for over four worlds 1255 -> 844 m, 0.96 -> 0.65 of Sognefjord);
+- **Seven guards are red on terrain S3 moved, and none of them is a bar that can honestly be
+  lifted.** The chunk's own defect - the cover counted twice against an erodibility already
+  calibrated on vegetated catchments - is fixed by spending the factor relative to its own land
+  mean, and denudation off an active belt went **0.271 -> 0.189 -> 0.218 mm/yr** (see the ledger,
+  S3). What is left is a world that is genuinely a different world, and seven cases that measure
+  it: `IsostasyTest` *the collision rate is Earth's surface uplift plus this model's own
+  denudation* (the derivation asks 0.718 where `collisionUpliftMmPerYear` carries 0.77, and the
+  clause is tight enough that 0.220 passed and 0.218 does not); `IceSheetTest` *the sheet's outlets
+  cut troughs a fjord could be drowned in* (the deepest cut asked for over four worlds 1255 -> 936
+  m, 0.96 -> 0.72 of Sognefjord; the same class's thickness clause came back and passes);
   `GroundTextureTest` *the ground's texture follows its relief* (the lowest quarter of the land
-  64.957 -> 65.519 m against a bar of 65.200, half a per cent over); `LakeWaterBalanceTest` *a dry
-  basin settles far below its spill level* (seed 13 holds 47% of its spill area against 45%);
-  `RiftSegmentationTest` *a flooded rift is a chain of gulfs* (seed 43's land bridges 3 -> 1,
-  wanting 2); `StraightRunTest` *the old rule draws more of the map with a ruler* (27 ruled runs
-  against the plain rule's 26); `OutletIncisionTest` *a sill level to the water is what the notch
-  could not cut* (718106's drowned basin 0.1264% measured to the last land cell against 0.1576% to
-  the water, the wrong way round); and `OceanCurrentTest` *warm coasts are worth more than cold
-  ones* (seed 42's warm coasts settle to 0.7458 against cold coasts' 0.7464, a tie at four
-  decimals). Nothing here was re-pinned, and the reasons differ. The two ice clauses are measured
-  against **Earth's own figures** - Greenland's divide, Sognefjord's depth - and a bar moved to
-  admit a thinner sheet is not a measurement any more; they also belong with the standing finding
-  that the ice share is half Earth's because the interior is dry, which GEOGRAPHY.md records and
-  which a moisture supply is what would fix. Four of the others are **strict inequalities between a
-  rule and its own control** (the facet rule against the plain one, the fall to the land against
-  the fall to the water, warm coasts against cold, two land bridges against one), and a control
-  that has stopped discriminating cannot be re-pinned at all: there is no number to move. The
-  texture bar is half a per cent away and is a comparison against a pre-S2 tree rather than against
-  Earth, so it is the one that could most defensibly be re-derived, and it is left alone because a
-  0.5% move on the one bar that *can* be moved would be the tuning the other six forbid. All seven
-  should be looked at by whoever owns the stage each belongs to, with this row as the cause.
-  2026-09-21, S3.
+  64.957 -> 65.573 m against a bar of 65.200); `LakeWaterBalanceTest` *a dry basin settles far
+  below its spill level* (seed 13 holds 47% of its spill area against 45%); `OutletIncisionTest`
+  *a sill level to the water is what the notch could not cut* (0.1464% against 0.1477%);
+  `StraightRunTest` *the old rule draws more of the map with a ruler* (29 ruled runs against the
+  plain rule's 28); and `FlatCourseTest` *the potential keeps every flat cell a way down* (2 ruled
+  runs over raised ground against the staircase's 1). Nothing was re-pinned, and the reasons
+  differ. Four are **strict inequalities between a rule and its own control**, and a control that
+  has stopped discriminating cannot be re-pinned at all: there is no number to move. The ice clause
+  is measured against **Earth's own figure**, Sognefjord's depth, and it belongs with the standing
+  finding that the ice share is half Earth's because the interior is dry, which GEOGRAPHY.md
+  records. `IsostasyTest`'s is the derived constant the defect was diagnosed through, and whether
+  `collisionUpliftMmPerYear` is re-derived from the new denudation is S2's question rather than
+  S3's. The texture bar is a comparison against a pre-S2 tree rather than against Earth, so it is
+  the one that could most defensibly be re-derived, and it is left alone because moving the only
+  movable bar is the tuning the other six forbid. Each should be looked at by whoever owns the
+  stage it belongs to, with this as the cause. 2026-09-21, S3.
 - ~~**Erosion does not read the vegetation, and the field it would read is sitting there.**~~ Done
   by S3, 2026-09-21. The provisional climate march W4 named as the prerequisite is in
   `HydraulicErosion.provisionalWeather`, and the density it computes scales the incision in `cut`

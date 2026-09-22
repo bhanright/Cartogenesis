@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
@@ -47,14 +48,33 @@ class S3RenderDump {
             // The window is chosen on the fed world, because that is the one that has a shadow to
             // find; the same window is then cut out of both, so the two pictures are of the same
             // ground rather than of each world's own most interesting corner.
-            val window = rainShadowWindow(after, side)
+            val shadow = rainShadowWindow(after, side)
             println(
-                "S3 RENDER seed=$seed at $side: window ${window.left},${window.top} " +
-                    "${window.side} cells, rainfall ${"%.0f".format(window.wettest)} to " +
-                    "${"%.0f".format(window.driest)} mm across it"
+                "S3 RENDER seed=$seed at $side: shadow window ${shadow.left},${shadow.top} " +
+                    "${shadow.side} cells, rainfall ${"%.0f".format(shadow.wettest)} to " +
+                    "${"%.0f".format(shadow.driest)} mm across it"
             )
-            dump(after, seed, side, "after", window)
-            dump(before, seed, side, "before", window)
+            dump(after, seed, side, "after", shadow, "shadow")
+            dump(before, seed, side, "before", shadow, "shadow")
+
+            // And the belt the guard actually measured, which is not always the window with the
+            // strongest contrast: `ClimateFedErosionTest` picks the largest connected run of cells
+            // near an Andean or collisional boundary standing above a kilometre, and asserts the
+            // rain's forcing on its two flanks. A picture of some other range is a picture of
+            // something the guard never looked at, so the belt is found here by the same rule and
+            // cropped to as well.
+            val belt = beltWindow(after, side)
+            if (belt == null) {
+                println("S3 RENDER seed=$seed at $side: no belt over $RANGE_METRES m to crop to")
+            } else {
+                println(
+                    "S3 RENDER seed=$seed at $side: belt window ${belt.left},${belt.top} " +
+                        "${belt.side} cells, rainfall ${"%.0f".format(belt.wettest)} to " +
+                        "${"%.0f".format(belt.driest)} mm across it"
+                )
+                dump(after, seed, side, "after", belt, "belt")
+                dump(before, seed, side, "before", belt, "belt")
+            }
         }
     }
 
@@ -66,21 +86,28 @@ class S3RenderDump {
         )
     }
 
-    private fun dump(world: WorldMap, seed: Long, side: Int, label: String, window: Window) {
+    private fun dump(
+        world: WorldMap,
+        seed: Long,
+        side: Int,
+        label: String,
+        window: Window,
+        which: String
+    ) {
         listOf(
             "atlas" to RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS),
             "rainfall" to RenderOptions(view = MapView.RAINFALL)
         ).forEach { (name, options) ->
             val image = rasterOf(world, options)
             val crop = image.getSubimage(window.left, window.top, window.side, window.side)
-            ImageIO.write(crop, "png", File(outputDir, "$seed-$side-$name-$label.png"))
+            ImageIO.write(crop, "png", File(outputDir, "$seed-$side-$which-$name-$label.png"))
             // The whole map beside the crop, at 512 whatever the grid, so the window can be
             // placed on the world it was cut from.
             val whole = BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB)
             val pen = whole.createGraphics()
             pen.drawImage(image, 0, 0, 512, 512, null)
             pen.dispose()
-            ImageIO.write(whole, "png", File(outputDir, "$seed-$side-$name-$label-whole.png"))
+            ImageIO.write(whole, "png", File(outputDir, "$seed-$side-$which-$name-$label-whole.png"))
         }
     }
 
@@ -147,6 +174,96 @@ class S3RenderDump {
         // Nothing on this world stands high enough to hold a shadow; the middle of the map is
         // then as good a window as any, and the print says the contrast was nothing.
         return best ?: Window((side - cropSide) / 2, (side - cropSide) / 2, cropSide, 0.0, 0.0)
+    }
+
+    /**
+     * A window over the largest mountain belt, found by `ClimateFedErosionTest`'s own rule.
+     *
+     * The largest 8-connected run of land cells lying within the tectonics' boundary falloff of an
+     * Andean margin or a collisional plateau and standing above [RANGE_METRES], cropped to its own
+     * bounding box's centre. Kept in step with the guard by construction rather than by comment: a
+     * picture is worth looking at only if it is a picture of the ground the figures came from.
+     */
+    private fun beltWindow(world: WorldMap, side: Int): Window? {
+        val cropSide = CROP_AT_512 * side / 512
+        val land = world.sea.isLand
+        val relative = world.sea.relativeElevation.data
+        val scale = world.config.scale
+        val distance = world.plates.boundaryDistance.data
+        val boundaryClass = world.plates.nearestBoundaryClass
+        val falloff = world.config.tectonics.boundaryFalloffCells
+
+        val inBelt = BooleanArray(side * side) { cell ->
+            land[cell] && distance[cell] <= falloff &&
+                (boundaryClass[cell] == BoundaryClass.ANDEAN_MARGIN.ordinal ||
+                    boundaryClass[cell] == BoundaryClass.COLLISION_PLATEAU.ordinal) &&
+                scale.metresAboveShoreline(relative[cell]) >= RANGE_METRES
+        }
+
+        val label = IntArray(inBelt.size) { -1 }
+        val queue = IntArray(inBelt.size)
+        var best = -1
+        var bestSize = 0
+        var next = 0
+        for (start in inBelt.indices) {
+            if (!inBelt[start] || label[start] >= 0) continue
+            var head = 0
+            var tail = 0
+            queue[tail++] = start
+            label[start] = next
+            var size = 0
+            while (head < tail) {
+                val cell = queue[head++]
+                size++
+                val column = cell % side
+                val row = cell / side
+                for (rowStep in -1..1) for (columnStep in -1..1) {
+                    if (rowStep == 0 && columnStep == 0) continue
+                    val neighbourRow = row + rowStep
+                    if (neighbourRow < 0 || neighbourRow >= side) continue
+                    val neighbour = neighbourRow * side + (column + columnStep + side) % side
+                    if (!inBelt[neighbour] || label[neighbour] >= 0) continue
+                    label[neighbour] = next
+                    queue[tail++] = neighbour
+                }
+            }
+            if (size > bestSize) {
+                bestSize = size
+                best = next
+            }
+            next++
+        }
+        if (best < 0) return null
+
+        var minRow = side
+        var maxRow = 0
+        var minColumn = side
+        var maxColumn = 0
+        for (cell in label.indices) {
+            if (label[cell] != best) continue
+            val row = cell / side
+            val column = cell % side
+            if (row < minRow) minRow = row
+            if (row > maxRow) maxRow = row
+            if (column < minColumn) minColumn = column
+            if (column > maxColumn) maxColumn = column
+        }
+        val left = ((minColumn + maxColumn) / 2 - cropSide / 2).coerceIn(0, side - cropSide)
+        val top = ((minRow + maxRow) / 2 - cropSide / 2).coerceIn(0, side - cropSide)
+
+        val rainfall = world.climate.precipitationMm.data
+        var wettest = 0.0
+        var driest = Double.MAX_VALUE
+        for (row in top until top + cropSide) {
+            for (column in left until left + cropSide) {
+                val cell = row * side + column
+                if (!land[cell]) continue
+                val mm = rainfall[cell].toDouble()
+                if (mm > wettest) wettest = mm
+                if (mm < driest) driest = mm
+            }
+        }
+        return Window(left, top, cropSide, wettest, if (driest == Double.MAX_VALUE) 0.0 else driest)
     }
 
     private fun rasterOf(world: WorldMap, options: RenderOptions): BufferedImage {

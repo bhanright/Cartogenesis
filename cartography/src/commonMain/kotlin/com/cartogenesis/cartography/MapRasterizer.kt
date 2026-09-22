@@ -63,6 +63,14 @@ data class RenderOptions(
      */
     val style: MapStyle = MapStyle.ATLAS,
     val showRivers: Boolean = true,
+    /**
+     * How much of the traced river network this sheet draws.
+     *
+     * A setting of the drawing and not of the world, like [singleLamp] beside it: it never reaches
+     * a save, and turning it does not move a cell of ground. [RiverInk.RADICAL_LAW] is what F14
+     * drew and is kept as the control the density is measured against. See [RiverSelection].
+     */
+    val riverInk: RiverInk = RiverInk.EARTH_DENSITY,
     val showCoastline: Boolean = true,
     val showHillshade: Boolean = true,
     /**
@@ -142,7 +150,7 @@ class LandmarkGlyph(
  */
 class MapOverlay(
     val rivers: List<RiverSegment>,
-    /** How many separate rivers those segments belong to, after [MapSheet.featuresKept]. */
+    /** How many separate rivers those segments belong to, after [RiverSelection.drawnOn]. */
     val riversDrawn: Int,
     /**
      * The coast as polylines in cell coordinates, generalised for the sheet. Each is `x, y, x, y, …`
@@ -372,7 +380,7 @@ object MapRasterizer {
 
         val drawnRivers =
             if (options.showRivers && !options.view.showsFlow) {
-                riversAtThisScale(world.rivers.rivers, sheet)
+                RiverSelection.drawnOn(world, sheet, options.riverInk)
             } else {
                 emptyList()
             }
@@ -544,38 +552,6 @@ object MapRasterizer {
                 else (glyphRadiusPixels * GLYPH_OUTLINE_SHARE_OF_RADIUS)
                     .coerceAtLeast(THINNEST_LINE_PIXELS)
         )
-    }
-
-    /**
-     * The rivers big enough to be worth drawing at this scale, in their own order.
-     *
-     * A cut on the peak [River.widthRatio] is a cut on discharge: the ratio is the square root of
-     * the flow accumulation normalised across the whole network (see `RiverWidth` in `:worldgen`),
-     * so it rises with discharge and with nothing else, and the rivers above the cut are exactly
-     * the rivers carrying the most water. How many survive is [MapSheet.featuresKept], which is
-     * Töpfer's radical law.
-     *
-     * Ranking by the *peak* is also what keeps the network whole. A tributary's peak is its
-     * discharge where it joins its trunk, and the trunk carries at least that much from the
-     * junction down to its own mouth, so a trunk's peak is never below its tributaries'. Keeping
-     * the largest can therefore never leave a tributary hanging off a river that is not drawn.
-     *
-     * A world saved before rivers were sized this way has no ratios to rank by and every peak comes
-     * out zero; the cut is then at zero and every river is drawn, which is the right answer for a
-     * map that cannot tell its rivers apart.
-     */
-    private fun riversAtThisScale(rivers: List<River>, sheet: MapSheet): List<River> {
-        val kept = sheet.featuresKept(rivers.size)
-        if (kept >= rivers.size) return rivers
-        val cut = rivers.map(::peakWidthRatio).sortedDescending()[kept - 1]
-        return rivers.filter { peakWidthRatio(it) >= cut }
-    }
-
-    /** The widest point of a river, which for a course traced source to mouth is its mouth. */
-    private fun peakWidthRatio(river: River): Float {
-        var peak = 0f
-        river.widthRatio.forEach { if (it > peak) peak = it }
-        return peak
     }
 
     /**

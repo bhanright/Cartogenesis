@@ -46,9 +46,18 @@ data class MapSheet(
      * the cell, so the ratio of the two scales is [pixelsPerCell] itself and the share that
      * survives is its square root.
      *
-     * A 2048 world at fit in a 900-pixel pane is at 0.44, so 66% of the rivers are drawn; at four
-     * times zoom it is at 1.76, the law asks for more features than exist, and every river is
-     * drawn. Never below one, because a map with rivers on it should not lose all of them.
+     * A 2048 world at fit in a 900-pixel pane is at 0.44, which [onScreen] quantises to 0.5, so 71%
+     * of the rivers are drawn; at four times zoom it is at 1.76, quantised to 2.0, the law asks for
+     * more features than exist, and every river is drawn. Never below one, because a map with
+     * rivers on it should not lose all of them.
+     *
+     * **This is a share and not a density**, which is why the rivers are no longer selected by it:
+     * the law relates a derived map to a source map, so what it puts on the page depends on how
+     * many courses the generator traced, and the same country drawn from a 512 world and from a
+     * 2048 world comes out at two densities. It is kept as [RiverInk.RADICAL_LAW], the control
+     * [RiverSelection]'s Earth figure is measured against. The coast is still generalised by the
+     * sheet, through [simplifyToleranceCells], which is a tolerance in the plane of the drawing and
+     * has no such problem.
      */
     fun featuresKept(total: Int): Int {
         if (total <= 0) return 0

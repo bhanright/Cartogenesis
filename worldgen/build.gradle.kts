@@ -197,9 +197,10 @@ tasks.named<Test>("jvmTest") {
     val budget = rootProject.extra
     maxParallelForks = budget["worldgenTestForks"] as Int
     maxHeapSize = budget["worldgenTestHeap"] as String
-    val poolThreads = budget["worldgenTestPoolThreads"] as Int
+    val processors = budget["worldgenTestProcessors"] as Int
     jvmArgs(
-        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$poolThreads"
+        "-XX:ActiveProcessorCount=$processors",
+        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
     mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
 }

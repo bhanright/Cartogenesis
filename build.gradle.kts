@@ -8,31 +8,31 @@ plugins {
 
 /*
  * The per-merge tier's share of the machine: how many test workers each JVM test task forks, how
- * wide each worker's thread pool is, and how much heap, decided here because they are one budget.
+ * many processors each worker may use, and how much heap, decided here because they are one budget.
  *
  * With `org.gradle.parallel` the four JVM test tasks of the tier run side by side, so what they
- * hold at once is the sum over all of them, not any one task's figure. Generation parallelises
- * through the common `ForkJoinPool`, which sizes itself to the whole processor in every JVM that
- * starts one, so left alone seven workers would each run a pool as wide as the machine. Each
- * worker's pool is given its share instead, and the shares add up to the hardware threads:
+ * hold at once is the sum over all of them, not any one task's figure. Every JVM sizes itself to
+ * the whole processor — the common `ForkJoinPool` generation parallelises through, the garbage
+ * collector's threads, the compiler's — so left alone seven workers would each behave as though
+ * they had the machine to themselves. Each worker is told how many processors are its share
+ * (`-XX:ActiveProcessorCount`, which sizes all three) and its pool is set to the same width, so
+ * the shares add up to the hardware threads:
  *
- *   :worldgen:jvmTest     4 workers x 2 threads, 3.5 GB heap each     8 threads, 14 GB
- *   :desktop:test         1 worker  x 6 threads, 3 GB heap            6 threads,  3 GB
- *   :cartography:jvmTest  1 worker  x 1 thread,  2 GB heap            1 thread,   2 GB
- *   :ui:jvmTest           1 worker  x 1 thread,  0.5 GB heap          1 thread,   0.5 GB
- *   the Gradle daemon (org.gradle.jvmargs)                                        4 GB
- *                                                                    16 threads, 23.5 GB
+ *   :worldgen:jvmTest     4 workers x 2 processors, 3.5 GB heap each     8 threads, 14 GB
+ *   :desktop:test         1 worker  x 6 processors, 3 GB heap            6 threads,  3 GB
+ *   :cartography:jvmTest  1 worker  x 1 processor, 2 GB heap             1 thread,   2 GB
+ *   :ui:jvmTest           1 worker  x 1 processor, 0.5 GB heap           1 thread,   0.5 GB
+ *   the Gradle daemon (org.gradle.jvmargs)                                           4 GB
+ *                                                                       16 threads, 23.5 GB
  *
  * on a sixteen-thread, 32 GB machine, which leaves the rest of its memory to whatever else it is
  * doing. Generation is mostly serial — a lone worker with a pool as wide as the machine kept it
  * under a quarter busy — so `:worldgen`'s many classes are spread over four narrow workers, and
  * `:desktop`'s, which cannot be spread (see its build script), get a wide one: its 2048 worlds are
- * the part of generation that does parallelise. The collector's and the compiler's threads are
- * left to the JVM: capping them too (`-XX:ActiveProcessorCount`) was tried and made the tier
- * slower, because they work in short bursts on a processor that is idle half the time. The heaps
- * are each worker's measured peak with room over it; see the ledger's T5 row. The figures scale
- * down with the machine, never below one worker and two threads for a generating worker, so a
- * four-core runner gets one `:worldgen` worker rather than four contending for it.
+ * the part of generation that does parallelise. The heaps are each worker's measured peak with
+ * room over it; see the ledger's T5 row. The figures scale down with the machine, never below one
+ * worker and two processors for a generating worker, so a four-core runner gets one `:worldgen`
+ * worker rather than four contending for it.
  *
  * The audit tier is not in this budget: it runs on its own, one worker per task, with the heap
  * its 2048 and 4096 cases were sized for.
@@ -43,12 +43,12 @@ plugins {
 val hardwareThreads = Runtime.getRuntime().availableProcessors()
 extra["worldgenTestForks"] = providers.gradleProperty("testWorkers").map { it.toInt() }
     .getOrElse((hardwareThreads / 4).coerceIn(1, 4))
-extra["worldgenTestPoolThreads"] = (hardwareThreads / 8).coerceAtLeast(2)
+extra["worldgenTestProcessors"] = (hardwareThreads / 8).coerceAtLeast(2)
 extra["worldgenTestHeap"] = "3584m"
-extra["desktopTestPoolThreads"] = (hardwareThreads * 3 / 8).coerceAtLeast(2)
+extra["desktopTestProcessors"] = (hardwareThreads * 3 / 8).coerceAtLeast(2)
 extra["desktopTestHeap"] = "3g"
 extra["cartographyTestHeap"] = "2g"
-extra["lightTestPoolThreads"] = (hardwareThreads / 16).coerceAtLeast(1)
+extra["lightTestProcessors"] = (hardwareThreads / 16).coerceAtLeast(1)
 
 /**
  * The test tiers' timing report, printed once at the end of any build that ran tests: each test

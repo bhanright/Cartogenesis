@@ -83,9 +83,10 @@ compose.resources {
 // The JVM tests' share of the processor is the root build script's budget: they run beside the
 // other modules' and generate nothing larger than 128 cells, so one processor is what they get.
 tasks.named<Test>("jvmTest") {
-    val poolThreads = rootProject.extra["lightTestPoolThreads"] as Int
+    val processors = rootProject.extra["lightTestProcessors"] as Int
     jvmArgs(
-        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$poolThreads"
+        "-XX:ActiveProcessorCount=$processors",
+        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
 }
 

@@ -30,7 +30,8 @@ jobs:
 
       # Unqualified, this runs the `audit` task in every subproject that declares one —
       # `:worldgen:audit`, `:cartography:audit` and `:desktop:audit` today — the same way
-      # `gradlew audit` does locally.
+      # `gradlew audit` does locally, one after another: two of them side by side have taken this
+      # runner's 16 GB down, and the root build script orders them.
       - name: Audit tier
         run: ./gradlew audit --console=plain
 

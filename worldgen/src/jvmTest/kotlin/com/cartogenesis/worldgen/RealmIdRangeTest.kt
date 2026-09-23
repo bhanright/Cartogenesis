@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Every realm id on the map is an index into the realm list.
@@ -25,10 +24,7 @@ import org.junit.Rule
  * invariant after the first and the last of those, so a failure here names the step rather than
  * the symptom.
  */
-class RealmIdRangeTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RealmIdRangeTest : BorrowsSharedWorlds() {
 
     /**
      * Cheap cases, and deliberately varied: wilderness changes which steps run at all — it is what

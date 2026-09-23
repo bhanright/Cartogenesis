@@ -301,9 +301,11 @@ regenerate the render PNGs alone: `./gradlew :worldgen:audit --tests '*DebugMapD
 
 The per-merge JVM suites run in parallel workers, and a test that reads a standard world borrows
 it from `SharedWorlds` (in `worldgen/src/sharedTestSupport`) rather than generating its own; each
-borrowed world is fingerprinted and checked after every test that borrowed it, so a test that
-writes to one fails and is named. A timing report — each test task's wall time and the slowest
-classes — is printed at the end of any run that tests.
+borrowed world is fingerprinted and checked whenever it is lent, after every test and every class
+that borrowed it, and before it is dropped, so a test that writes to one fails and is named. The
+audit tasks run one after another rather than side by side, for the memory their 2048 worlds want.
+A timing report — each test task's wall time and the slowest classes — is printed at the end of
+any run that tests.
 
 CI also compares a JVM-versus-Wasm world fingerprint (`WorldFingerprintTest`, read from the test
 runs' own output) and reports a difference as a warning rather than a failure, since saves carry the

@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether a flooded continental rift reads as a chain of gulfs or as a canal.
@@ -32,10 +31,7 @@ import org.junit.Rule
  * the count of sea bodies is printed by both tests and asserted by neither, for the reason set out
  * beside [minLandBridges].
  */
-class RiftSegmentationTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RiftSegmentationTest : BorrowsSharedWorlds() {
 
     /** The known case: a long rift below the sea-level cut at the author's settings. */
     // Re-picked at S2, which drowned seed 59758's rift along its whole length: with the height

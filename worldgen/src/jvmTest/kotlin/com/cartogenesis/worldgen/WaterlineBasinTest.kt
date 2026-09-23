@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * E8's census: how many basins the sea-level cut leaves standing at the waterline, and what became
@@ -46,10 +45,7 @@ import org.junit.Rule
  * can actually reach the scene E8 was aimed at. Nothing here is asserted except that the census
  * found something to count.
  */
-class WaterlineBasinTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class WaterlineBasinTest : BorrowsSharedWorlds() {
 
     /**
      * Earth's surge range, in metres above the waterline.

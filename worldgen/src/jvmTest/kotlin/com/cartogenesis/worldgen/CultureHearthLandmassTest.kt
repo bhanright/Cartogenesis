@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.CultureStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether a hearth's landmass is decided fairly, not just its climate.
@@ -26,10 +25,7 @@ import org.junit.Rule
  * seed 7 already satisfied before the fix — the bug was never that a large landmass went hearth-
  * less, it was that it went under-provisioned relative to its size.
  */
-class CultureHearthLandmassTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class CultureHearthLandmassTest : BorrowsSharedWorlds() {
 
     @Test
     fun `hearths are shared out between landmasses in proportion to habitable land`() {

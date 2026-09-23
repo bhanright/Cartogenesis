@@ -9,7 +9,6 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * A river crosses its own delta and reaches the open sea.
@@ -36,10 +35,7 @@ import org.junit.Rule
  * figure is nought on every seed now — still printed, because a zero that used to be forty is worth
  * seeing.
  */
-class DeltaMouthTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class DeltaMouthTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(59758L, 42L, 7L, 1234L)
 

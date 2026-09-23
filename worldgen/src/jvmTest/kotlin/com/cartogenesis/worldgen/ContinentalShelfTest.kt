@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * B1: continental shelves.
@@ -25,10 +24,7 @@ import org.junit.Rule
  * land -- closing straits into land bridges and merging landmasses that should have stayed apart.
  * [`the shelf never touches land`] is the guard for that regression specifically.
  */
-class ContinentalShelfTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ContinentalShelfTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L)
 

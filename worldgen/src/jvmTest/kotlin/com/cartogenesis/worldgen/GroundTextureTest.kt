@@ -8,7 +8,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 
 /**
  * What the ground looks like, in figures rather than as an opinion.
@@ -27,10 +26,7 @@ import org.junit.Rule
  * last. Three of them carry a control that shows the bar bite. The fourth's control could not bite
  * and has been taken out rather than printed; the clause says so where it stands.
  */
-class GroundTextureTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class GroundTextureTest : BorrowsSharedWorlds() {
 
     /**
      * A mountain belt's flank is dissected, and at S1's critical slope it is an analytic ramp.
@@ -494,15 +490,15 @@ class GroundTextureTest {
 
     private fun standard(seed: Long) = WorldGenConfig(seed = seed, width = 512, height = 512)
 
-    /** The five worlds on the defaults, built once and shared by every clause below. */
-    private fun world(seed: Long): WorldMap =
-        WORLDS.getOrPut(seed) { SharedWorlds.world(standard(seed)) }
+    /**
+     * The five worlds on the defaults, borrowed from `SharedWorlds` by every clause that reads one
+     * rather than kept here, so that they are generated once and checked after every clause.
+     */
+    private fun world(seed: Long): WorldMap = SharedWorlds.world(standard(seed))
 
     private companion object {
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
-
-        val WORLDS = HashMap<Long, WorldMap>()
 
         /**
          * How much slack the two quarter comparisons below carry, in metres: a tenth, which is the

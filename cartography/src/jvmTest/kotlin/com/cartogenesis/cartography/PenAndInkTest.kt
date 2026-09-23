@@ -1,6 +1,6 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.SharedWorlds
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -11,7 +11,6 @@ import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether [MapStyle.PEN_AND_INK] draws what an engraver would have drawn.
@@ -33,10 +32,7 @@ import org.junit.Rule
  *    first and what the review sent back: at 2048 its hachures are dashes thirty pixels long and
  *    its stipple is polka dots.
  */
-class PenAndInkTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class PenAndInkTest : BorrowsSharedWorlds() {
 
     internal companion object {
 

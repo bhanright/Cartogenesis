@@ -11,7 +11,6 @@ import kotlin.math.max
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * B3: rivers put material back down.
@@ -25,10 +24,7 @@ import org.junit.Rule
  * catches an implementation that is correct and does nothing. Both are needed, which is why the
  * second is shown failing against the `deposition = false` control before it is shown passing.
  */
-class DepositionTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class DepositionTest : BorrowsSharedWorlds() {
 
     /** The sea-level percentile every world here is generated at, and measured at. */
     private val seaLevel = WorldGenConfig().seaLevel

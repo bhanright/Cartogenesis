@@ -87,6 +87,59 @@ class SharedWorldsGuardTest {
     }
 
     @Test
+    fun `a second request in the same test is checked, so a write and a restore cannot pass`() {
+        val lender = privateLender()
+        lender.beginTest("Writer", "Writer.writesThenRestores")
+        val lent = lender.world(config)
+        val kept = lent.ocean.temperature.data[5]
+        lent.ocean.temperature.data[5] = kept + 1f
+        // The second request would see a world fresh generation does not make; restoring after it
+        // would leave the check after the test nothing to find.
+        val reported = assertFailsWith<AssertionError> { lender.world(config) }
+        lent.ocean.temperature.data[5] = kept
+
+        assertTrue("while Writer.writesThenRestores held it" in reported.message!!, reported.message)
+        assertTrue("ocean.temperature" in reported.message!!, reported.message)
+    }
+
+    @Test
+    fun `a world dropped from the cache is checked for as long as something still holds it`() {
+        val roomForOne = ReachableState.arrayBytes(original) + 1
+        val lender = WorldLender({ ReachableState.deepCopy(original) }, roomForOne, Int.MAX_VALUE)
+        lender.beginTest("Holder", "Holder.keeps")
+        val kept = lender.world(config)
+        lender.world(config.copy(seed = 43L))
+        lender.endTest("Holder", "Holder.keeps")
+        assertEquals(listOf(config.copy(seed = 43L)), lender.retainedConfigs())
+        assertEquals(1, lender.releasedStillReferenced(), "the first world went, and is still held")
+
+        // What a companion cache would let a later test do to a world nobody lends any more.
+        lender.beginTest("Holder", "Holder.writesLater")
+        kept.rivers.flowAccumulation.data[0] += 1f
+        val reported = assertFailsWith<AssertionError> {
+            lender.endTest("Holder", "Holder.writesLater")
+        }
+
+        assertTrue("dropped from the cache but still held" in reported.message!!, reported.message)
+        assertTrue("rivers.flowAccumulation" in reported.message!!, reported.message)
+    }
+
+    @Test
+    fun `a write after a class's last test is found by the sweep after the class`() {
+        val lender = privateLender()
+        lender.beginTest("Last", "Last.reads")
+        val lent = lender.world(config)
+        lender.endTest("Last", "Last.reads")
+        // A teardown's write, after the check that follows the class's last test, in the last
+        // class of a worker, where nothing borrows afterwards to find it.
+        lent.nations.nationId[0] = -9
+        val reported = assertFailsWith<AssertionError> { lender.sweepAfterClass("Last") }
+
+        assertTrue("after Last had finished" in reported.message!!, reported.message)
+        assertTrue("nations.nationId" in reported.message!!, reported.message)
+    }
+
+    @Test
     fun `a world is lent again only while nothing has written to it`() {
         val lender = privateLender()
         lender.beginTest("First", "First.reads")

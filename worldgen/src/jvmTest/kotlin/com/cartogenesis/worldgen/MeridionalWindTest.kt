@@ -11,7 +11,6 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether the wind slants across the latitude lines, and what that changes about the rain.
@@ -40,10 +39,7 @@ import org.junit.Rule
  * the control for a belt claim carried a second wind inside it, and the third claim's paired
  * worlds would differ by two things rather than one.
  */
-class MeridionalWindTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class MeridionalWindTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SIZE = 512

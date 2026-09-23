@@ -8,7 +8,6 @@ import kotlin.math.abs
 import kotlin.test.Test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 
 /**
  * One ruler: every vertical constant in the pipeline is read back through `WorldScale`, and no
@@ -29,10 +28,7 @@ import org.junit.Rule
  *
  * See `docs/DESIGN_LEDGER.md`, S1.
  */
-class UnitsTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class UnitsTest : BorrowsSharedWorlds() {
 
     private val stock = WorldGenConfig(seed = 42L, width = 512, height = 512)
 

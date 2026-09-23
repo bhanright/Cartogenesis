@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether realms actually reach the whole world, and whether any one of them reaches too much of it.
@@ -14,10 +13,7 @@ import org.junit.Rule
  * water at all, and rendered an entire southern continent blank. Letting them cross for free then
  * produced the opposite: one realm island-hopped an archipelago and held most of the world.
  */
-class RealmSpreadTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RealmSpreadTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every landmass is settled, and no realm swallows the world`() {

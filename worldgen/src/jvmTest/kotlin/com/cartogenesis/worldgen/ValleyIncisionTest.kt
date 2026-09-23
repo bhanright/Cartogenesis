@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether rivers run in valleys they cut, or merely in whatever hollows the noise left.
@@ -34,10 +33,7 @@ import org.junit.Rule
  * as deep as the pre-S2 tree cut. Whether the incision law is under-cutting on rougher ground is a
  * question for S3, and it is in `TODO.md`.
  */
-class ValleyIncisionTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ValleyIncisionTest : BorrowsSharedWorlds() {
 
     @Test
     fun `rivers sit in valleys they cut`() {

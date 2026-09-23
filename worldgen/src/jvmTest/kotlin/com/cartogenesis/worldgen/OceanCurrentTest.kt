@@ -11,7 +11,6 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Checks that the stream-function solve actually produces circulation, and draws it.
@@ -21,10 +20,7 @@ import org.junit.Rule
  * carries water equatorward and arrives cold. If that comes out backwards the gyres are wrong even
  * though they look fine.
  */
-class OceanCurrentTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class OceanCurrentTest : BorrowsSharedWorlds() {
 
     @Test
     fun `currents circulate and carry temperature`() {

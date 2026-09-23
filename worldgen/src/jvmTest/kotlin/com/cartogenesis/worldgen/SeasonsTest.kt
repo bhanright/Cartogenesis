@@ -8,7 +8,6 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether the year actually has two halves, and whether they are the halves they should be.
@@ -25,10 +24,7 @@ import org.junit.Rule
  * That claim is asserted with seasons on and shown to fail with them off, where the class is
  * unreachable by construction.
  */
-class SeasonsTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class SeasonsTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)

@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether the peoples layer says anything the political map does not.
@@ -21,10 +20,7 @@ import org.junit.Rule
  * neighbouring culture by nine cells is not meaningfully two-cultured, and counting it as such would
  * let the layer pass while looking like a copy of the borders.
  */
-class CultureRealmTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class CultureRealmTest : BorrowsSharedWorlds() {
 
     @Test
     fun `cultures and realms disagree`() {

@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * H4: the moisture march's over-sea pickup now scales by
@@ -22,10 +21,7 @@ import org.junit.Rule
  * *east* coasts that carry the warm, poleward-flowing western-boundary current (the Gulf Stream
  * and Kuroshio's role), so that is where the guard's warm-current comparison is drawn from.
  */
-class CurrentFeedsRainTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SEED = 26L

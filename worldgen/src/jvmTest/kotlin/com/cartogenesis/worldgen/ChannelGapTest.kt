@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 
 /**
  * An initiated channel does not stop and start again, and in particular it does not stop on a flat.
@@ -23,10 +22,7 @@ import org.junit.Rule
  * not fall carry channel cells, counted here, and with the downstream rule off every one of them
  * would be a gap.
  */
-class ChannelGapTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ChannelGapTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */

@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether a continental interior actually swings further through the year than a coast does, at
@@ -27,10 +26,7 @@ import org.junit.Rule
  *
  * See docs/DESIGN_LEDGER.md, W1; A2 wrote the version of this guard that had a knob in it.
  */
-class ContinentalityTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ContinentalityTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** Matches the plan's own worked example: an interior against a coast at 50 degrees. */

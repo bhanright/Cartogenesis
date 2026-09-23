@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Audits generated worlds against the rules real geography follows — the ones fantasy maps are
@@ -17,10 +16,7 @@ import org.junit.Rule
  * checking against actual output, and the numbers show which rules the pipeline honours by
  * accident rather than by design.
  */
-class GeographyAuditTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class GeographyAuditTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 

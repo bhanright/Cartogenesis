@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 
 /**
  * The same seed at 512 and at 1024, measured in kilometres, metres and shares of the land.
@@ -24,10 +23,7 @@ import org.junit.Rule
  * built on, and once of the ground itself, because a world whose plates have all moved weighs the
  * same as the world it replaced and the statistics said so for a month.
  */
-class ScaleFreeTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ScaleFreeTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the same world at 512 and 1024 measures the same and stands on the same ground`() {

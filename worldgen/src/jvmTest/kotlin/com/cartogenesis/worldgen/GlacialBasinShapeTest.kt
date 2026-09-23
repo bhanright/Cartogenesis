@@ -9,7 +9,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -29,10 +28,7 @@ import org.junit.Test
  * which must not run straight along a grid bearing for longer than their own size explains, and
  * their floors, which must not pile their cells at one height. See docs/DESIGN_LEDGER.md, I2.
  */
-class GlacialBasinShapeTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class GlacialBasinShapeTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the ice leaves no dead-level slab of ground`() {

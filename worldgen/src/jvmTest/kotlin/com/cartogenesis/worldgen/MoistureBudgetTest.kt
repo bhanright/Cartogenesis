@@ -8,7 +8,6 @@ import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * The three things W3 put into the moisture march, each with its own control.
@@ -36,10 +35,7 @@ import org.junit.Rule
  *
  * See docs/DESIGN_LEDGER.md, W3, and `MoistureBudget` for where each constant comes from.
  */
-class MoistureBudgetTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class MoistureBudgetTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L, 99L)

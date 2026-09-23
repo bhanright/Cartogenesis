@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * How much of a world's land is tundra and how much is boreal forest, against Earth's own shares.
@@ -18,10 +17,7 @@ import org.junit.Rule
  *
  * See docs/DESIGN_LEDGER.md, W1.
  */
-class ColdBiomeShareTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ColdBiomeShareTest : BorrowsSharedWorlds() {
 
     private companion object {
 

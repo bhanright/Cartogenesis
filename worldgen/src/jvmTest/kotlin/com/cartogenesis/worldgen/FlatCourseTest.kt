@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.FlowRouting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * F30b: a river crossing ground the depression fill raised does not run in a ruled line.
@@ -25,10 +24,7 @@ import org.junit.Rule
  * discriminating case is the world the defect was seen on, at the size it was seen: see
  * `FlatCourseAuditTest`.
  */
-class FlatCourseTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class FlatCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)

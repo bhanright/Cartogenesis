@@ -8,7 +8,6 @@ import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
@@ -26,10 +25,7 @@ import kotlinx.coroutines.runBlocking
  * immune to a world simply having more water in it: both zones are measured on the same world, and
  * the control world differs only by [com.cartogenesis.worldgen.model.GlaciationConfig.enabled].
  */
-class GlaciationTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class GlaciationTest : BorrowsSharedWorlds() {
 
     /**
      * Seed 42 at 1024, not at 512.

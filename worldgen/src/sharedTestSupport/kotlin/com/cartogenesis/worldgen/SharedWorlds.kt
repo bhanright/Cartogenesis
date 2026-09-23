@@ -2,6 +2,9 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import java.lang.ref.WeakReference
+import org.junit.ClassRule
+import org.junit.Rule
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -20,10 +23,13 @@ import org.junit.runners.model.Statement
  * with itself.
  *
  * Lent worlds carry mutable arrays, and a test that wrote into one would change what every later
- * test sees. So each is fingerprinted when it is made ([WorldGuard]), checked again every time it is
- * handed out, and checked after every test that borrowed it, by the [Check] rule the borrowing class
- * declares; the first check that finds a change fails the test it runs in and names the test that
- * last held the world. A test that means to write asks for [privateCopy] instead.
+ * test sees. So each is fingerprinted when it is made ([WorldGuard]) and checked every time it is
+ * handed out, after every test of a class that borrowed it ([Check]), after every such class has
+ * finished, its teardown included ([Sweep]), and before it is dropped; the first check that finds a
+ * change fails through the runner and names the test that last held the world. A borrowing class
+ * extends [BorrowsSharedWorlds], which declares both rules. A test that means to write asks for
+ * [privateCopy] instead, and nothing keeps a lent world past its test: a class that holds one in its
+ * companion would hold it past the checks that see it and past the bound that frees it.
  */
 object SharedWorlds {
 
@@ -54,7 +60,7 @@ object SharedWorlds {
     )
 
     /**
-     * The world [config] generates, shared: do not write to it.
+     * The world [config] generates, shared: do not write to it, and do not keep it past the test.
      *
      * Shared only with a test whose class declares [Check], which is what makes the check after the
      * test run; anywhere else the world is generated for the caller and kept by nobody.
@@ -68,35 +74,77 @@ object SharedWorlds {
     fun privateCopy(config: WorldGenConfig): WorldMap = ReachableState.deepCopy(lender.world(config))
 
     /**
-     * Declared as a rule by every class that borrows a shared world:
-     * `@get:Rule val sharedWorlds = SharedWorlds.Check()`.
-     *
-     * Before each test it names the borrower; after it, every shared world the class has borrowed so
-     * far is checked against its fingerprint, and the test fails if one changed. Checked after every
-     * test rather than once at the end of the run so that the failure lands on the test that wrote,
-     * and so that it is the runner that reports it rather than a hook at JVM exit.
+     * Before each test, names the borrower; after it, checks every shared world the class has
+     * borrowed so far and fails the test if one changed. After every test rather than once at the
+     * end of the run, so that the failure lands on the test that wrote, and so that it is the runner
+     * that reports it rather than a hook at JVM exit. Declared by [BorrowsSharedWorlds].
      */
     class Check : TestRule {
+        override fun apply(base: Statement, description: Description): Statement {
+            val borrower = "${description.className}.${description.methodName}"
+            return runThenCheck(
+                base,
+                begin = { lender.beginTest(description.className, borrower) },
+                check = { lender.endTest(description.className, borrower) }
+            )
+        }
+    }
+
+    /**
+     * After a class has finished — its tests, and its own teardown after them — checks every world
+     * this worker still holds or that anything still references, and fails the class if one changed.
+     *
+     * The check after each test cannot see a class's teardown, and in the last class of a worker
+     * nothing borrows afterwards to see it either; this is what closes that. A class rule, so it is
+     * the runner that reports it, against the class. Declared by [BorrowsSharedWorlds].
+     */
+    class Sweep : TestRule {
         override fun apply(base: Statement, description: Description): Statement =
-            object : Statement() {
-                override fun evaluate() {
-                    val borrower = "${description.className}.${description.methodName}"
-                    lender.beginTest(description.className, borrower)
-                    var failure: Throwable? = null
-                    try {
-                        base.evaluate()
-                    } catch (thrown: Throwable) {
-                        failure = thrown
-                    }
-                    try {
-                        lender.endTest(description.className, borrower)
-                    } catch (changed: AssertionError) {
-                        if (failure == null) throw changed
-                        failure.addSuppressed(changed)
-                    }
-                    if (failure != null) throw failure
+            runThenCheck(base, begin = {}, check = { lender.sweepAfterClass(description.className) })
+    }
+
+    /**
+     * Runs [base] between [begin] and [check], and reports a change [check] finds even when [base]
+     * has failed, as a suppressed exception beside that failure.
+     */
+    private fun runThenCheck(base: Statement, begin: () -> Unit, check: () -> Unit): Statement =
+        object : Statement() {
+            override fun evaluate() {
+                begin()
+                var failure: Throwable? = null
+                try {
+                    base.evaluate()
+                } catch (thrown: Throwable) {
+                    failure = thrown
                 }
+                try {
+                    check()
+                } catch (changed: AssertionError) {
+                    if (failure == null) throw changed
+                    failure.addSuppressed(changed)
+                }
+                if (failure != null) throw failure
             }
+        }
+}
+
+/**
+ * What a JUnit 4 class that borrows shared worlds extends: [SharedWorlds.Check] after each of its
+ * tests and [SharedWorlds.Sweep] after the class. One line in the class's declaration rather than
+ * two rules in its body, and the class rule needs a static field, which a Kotlin class can only get
+ * from a companion object that many of these classes already have, most of them private.
+ *
+ * `:desktop`'s tests run on the JUnit Platform instead and use `SharedWorldsCheck` there.
+ */
+abstract class BorrowsSharedWorlds {
+
+    @get:Rule
+    val sharedWorlds: TestRule = SharedWorlds.Check()
+
+    companion object {
+        @JvmField
+        @ClassRule
+        val sharedWorldsSweep: TestRule = SharedWorlds.Sweep()
     }
 }
 
@@ -106,13 +154,16 @@ object SharedWorlds {
  * See [ReachableState.digestsByBranch] for what a branch is and what the digest reads.
  */
 class WorldGuard(private val world: WorldMap) {
-    private val digests: Map<String, Long> = ReachableState.digestsByBranch(world)
+    internal val digests: Map<String, Long> = ReachableState.digestsByBranch(world)
 
     /** The branches whose contents differ from when this guard was made, in the world's order. */
-    fun changedBranches(): List<String> {
-        val now = ReachableState.digestsByBranch(world)
-        return digests.keys.filter { now[it] != digests[it] } + now.keys.filter { it !in digests }
-    }
+    fun changedBranches(): List<String> = changedBranches(digests, world)
+}
+
+/** The branches of [world] whose digests differ from [digests], in the world's order. */
+private fun changedBranches(digests: Map<String, Long>, world: WorldMap): List<String> {
+    val now = ReachableState.digestsByBranch(world)
+    return digests.keys.filter { now[it] != digests[it] } + now.keys.filter { it !in digests }
 }
 
 /**
@@ -127,7 +178,10 @@ class WorldGuard(private val world: WorldMap) {
  * its default settings, is what the next class asks for too. Counting the classes that have asked
  * is not enough on its own: a standard world only its first class has reached yet counts one, and
  * a run of variants would push it out. See docs/DESIGN_LEDGER.md, T5, for what that cost.
- * Every world is checked when lent again and before it goes.
+ *
+ * A world that goes is checked first and then followed by a weak reference, so that if anything
+ * still holds it — which nothing should — it goes on being checked until it is collected, and the
+ * reference keeps nothing alive.
  */
 class WorldLender(
     private val generate: (WorldGenConfig) -> WorldMap,
@@ -139,19 +193,25 @@ class WorldLender(
         val arrayBytes: Long = ReachableState.arrayBytes(world)
         val plain: Boolean = isPlainWorld(config)
         var lastBorrower: String = ""
-        var lastLentInTest = 0
         val borrowingClasses = HashSet<String>()
     }
+
+    /** A world that has gone from the cache, followed until nothing holds it. */
+    private class Released(
+        val config: WorldGenConfig,
+        val world: WeakReference<WorldMap>,
+        val digests: Map<String, Long>,
+        val lastBorrower: String,
+        val borrowingClasses: Set<String>
+    )
 
     /** Access-ordered, so the first entry is the least recently lent. */
     private val loans = LinkedHashMap<WorldGenConfig, Loan>(16, 0.75f, true)
     private val loansByClass = HashMap<String, MutableSet<WorldGenConfig>>()
+    private val released = ArrayList<Released>()
     private var retainedBytes = 0L
     private var activeClass: String? = null
     private var activeBorrower: String? = null
-
-    /** Counts tests begun, so a loan can tell a second request from the same test run apart. */
-    private var testsBegun = 0
 
     /** How many worlds this lender has generated, retained or not. */
     var generated = 0
@@ -161,15 +221,16 @@ class WorldLender(
     fun beginTest(testClass: String, borrower: String) {
         activeClass = testClass
         activeBorrower = borrower
-        testsBegun++
     }
 
-    /** Checks every retained world [testClass] has borrowed, failing on the first that changed. */
+    /**
+     * Checks every world [testClass] has borrowed — retained, or gone and still referenced — and
+     * fails on the first that changed.
+     */
     @Synchronized
     fun endTest(testClass: String, borrower: String) {
         try {
-            val borrowed = loansByClass[testClass].orEmpty().toList()
-            for (config in borrowed) {
+            for (config in loansByClass[testClass].orEmpty().toList()) {
                 val loan = loans[config] ?: continue
                 requireUnchanged(loan, "after $borrower, which had borrowed it") { changed ->
                     "$borrower wrote to the shared world for ${describe(config)}: " +
@@ -177,6 +238,7 @@ class WorldLender(
                         "SharedWorlds.privateCopy."
                 }
             }
+            requireReleasedUnchanged({ testClass in it.borrowingClasses }, "after $borrower")
         } finally {
             activeClass = null
             activeBorrower = null
@@ -184,8 +246,24 @@ class WorldLender(
     }
 
     /**
+     * Checks every world this lender holds or has let go of and something still references, after
+     * [testClass] has finished, and fails on the first that changed.
+     */
+    @Synchronized
+    fun sweepAfterClass(testClass: String) {
+        for (loan in loans.values.toList()) {
+            requireUnchanged(loan, "after $testClass had finished, its teardown included") { changed ->
+                "the shared world for ${describe(loan.config)} was written to after " +
+                    "${loan.lastBorrower} borrowed it: ${changed.joinToString()} changed"
+            }
+        }
+        requireReleasedUnchanged({ true }, "after $testClass had finished, its teardown included")
+    }
+
+    /**
      * The world [config] generates: the retained one if there is one and it is unchanged, otherwise a
-     * new one, retained if it is small enough.
+     * new one, retained if it is small enough. Every hand-out is checked, a second one to the same
+     * test included, because a test could write between the two and restore after the second.
      *
      * Asked for outside a test that declares the check — from a static initialiser, or from a helper
      * an audit class shares with a per-merge one — the world is generated for the caller alone and
@@ -210,12 +288,6 @@ class WorldLender(
             return generate(config).also { report("generated, too large to keep", config, borrower, started) }
         }
         val existing = loans[config]
-        if (existing != null && existing.lastLentInTest == testsBegun) {
-            // Asked for again by the test that already holds it — a getter read in a loop, say.
-            // Nothing else has held it since it was last checked, and the check after this test
-            // covers whatever this test does to it, so it is handed straight back.
-            return existing.world
-        }
         val loan = if (existing != null) {
             requireUnchanged(existing, "when lent to $borrower") { changed ->
                 "the shared world for ${describe(config)} was written to while " +
@@ -232,7 +304,6 @@ class WorldLender(
             }
         }
         loan.lastBorrower = borrower
-        loan.lastLentInTest = testsBegun
         loan.borrowingClasses.add(testClass)
         loansByClass.getOrPut(testClass) { HashSet() }.add(config)
         return loan.world
@@ -255,6 +326,10 @@ class WorldLender(
     @Synchronized
     fun retainedConfigs(): List<WorldGenConfig> = loans.keys.toList()
 
+    /** How many worlds that have gone from the cache something still references. For the tests. */
+    @Synchronized
+    fun releasedStillReferenced(): Int = released.count { it.world.get() != null }
+
     private fun admit(loan: Loan, borrower: String) {
         while (retainedBytes + loan.arrayBytes > retainedArrayBytes && loans.isNotEmpty()) {
             val leaving = loans.values.firstOrNull { !it.plain }
@@ -266,7 +341,10 @@ class WorldLender(
         retainedBytes += loan.arrayBytes
     }
 
-    /** Checks [leaving] one last time and lets it go, failing [borrower]'s test if it changed. */
+    /**
+     * Checks [leaving] one last time and lets it go, failing [borrower]'s test if it changed; a world
+     * that goes unchanged is followed from then on by a weak reference.
+     */
     private fun dropToMakeRoom(leaving: Loan, borrower: String) {
         requireUnchanged(leaving, "before it was dropped to make room for $borrower's") { changed ->
             "the shared world for ${describe(leaving.config)} was written to while " +
@@ -274,6 +352,12 @@ class WorldLender(
                 "when it was dropped to make room, so $borrower fails in its place."
         }
         forget(leaving)
+        released.add(
+            Released(
+                leaving.config, WeakReference(leaving.world), leaving.guard.digests,
+                leaving.lastBorrower, leaving.borrowingClasses.toSet()
+            )
+        )
     }
 
     private fun forget(loan: Loan) {
@@ -290,6 +374,32 @@ class WorldLender(
         if (changed.isEmpty()) return
         forget(loan)
         throw AssertionError("${message(changed)} (checked $`when`)")
+    }
+
+    /**
+     * Throws if a world that has gone from the cache, that [which] selects and that something still
+     * references, has changed; forgets the ones nothing references any more.
+     */
+    private fun requireReleasedUnchanged(which: (Released) -> Boolean, `when`: String) {
+        val iterator = released.iterator()
+        while (iterator.hasNext()) {
+            val gone = iterator.next()
+            val world = gone.world.get()
+            if (world == null) {
+                iterator.remove()
+                continue
+            }
+            if (!which(gone)) continue
+            val changed = changedBranches(gone.digests, world)
+            if (changed.isEmpty()) continue
+            iterator.remove()
+            throw AssertionError(
+                "the shared world for ${describe(gone.config)}, dropped from the cache but still " +
+                    "held by something, was written to after ${gone.lastBorrower} borrowed it: " +
+                    "${changed.joinToString()} changed. Nothing may keep a lent world past its " +
+                    "test. (checked $`when`)"
+            )
+        }
     }
 
     private fun describe(config: WorldGenConfig): String {

@@ -3,7 +3,6 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * How much of the land is ribbon — long thin strips a couple of cells wide.
@@ -16,10 +15,7 @@ import org.junit.Rule
  * Measured as the share of land sitting within two cells of water, which is what "thin" means
  * here, alongside the longest single strip so a few big continents cannot hide a bad one.
  */
-class RibbonLandTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RibbonLandTest : BorrowsSharedWorlds() {
 
     /**
      * The most of its land a world may hold in strips, as a percentage — see the assertion below

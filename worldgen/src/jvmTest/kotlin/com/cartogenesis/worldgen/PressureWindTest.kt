@@ -9,7 +9,6 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * The wind the pressure field drives, and what it does to the rain.
@@ -39,10 +38,7 @@ import org.junit.Rule
  *
  * See docs/DESIGN_LEDGER.md, W2.
  */
-class PressureWindTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class PressureWindTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L, 99L)

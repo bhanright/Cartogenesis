@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -8,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * X1c: how much river a sheet draws, and whether that is Earth's figure.
@@ -23,10 +23,7 @@ import org.junit.Rule
  * 1024 world as well. The same measurements at 2048, on the author's own world, are
  * `RiverSelectionAuditTest` in `:desktop`.
  */
-class RiverSelectionTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RiverSelectionTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** The four standard seeds, at the grid every per-merge guard in this repository uses. */

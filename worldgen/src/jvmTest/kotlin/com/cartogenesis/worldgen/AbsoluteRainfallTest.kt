@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * Whether an arid world and a lush one can tell each other apart.
@@ -19,10 +18,7 @@ import org.junit.Rule
  * [ClimateStage.MM_SCALE]-calibrated millimetres, so a genuinely arider seed produces genuinely
  * more desert and a genuinely wetter one produces genuinely less.
  */
-class AbsoluteRainfallTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class AbsoluteRainfallTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 

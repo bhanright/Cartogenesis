@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -9,7 +10,6 @@ import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * That the map is drawn for the scale it is being seen at, and says what that scale is.
@@ -35,10 +35,7 @@ import org.junit.Rule
  *    thirty-sixth of the width and an eighteenth of the height; the control is the same spacing
  *    rounded to whole cells, which puts the equator off the middle row.
  */
-class GeneralisationTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class GeneralisationTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SIDE = 512

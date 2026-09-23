@@ -13,7 +13,6 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * G4's guard: the distance field the pipeline reads has round contours, and the chamfer transform
@@ -42,10 +41,7 @@ import org.junit.Rule
  *     because measurement 1 shows it exact; what is checked of it here is that no cell of a real
  *     coastline slipped past the flood.
  */
-class JumpFloodDistanceTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class JumpFloodDistanceTest : BorrowsSharedWorlds() {
 
     /** The floor the plan asks for: an eight-fold component under 1% of the radius. */
     private val roundnessFloor = 0.01

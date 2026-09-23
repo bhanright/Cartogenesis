@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * H5: the coast remembers that the sea has moved.
@@ -37,10 +36,7 @@ import org.junit.Rule
  * estuary until the pockets are gone. Both figures for both halves alone are printed by the third
  * case below, which asserts nothing and exists so a report can say which did what.
  */
-class SeaLevelHistoryTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class SeaLevelHistoryTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L)
 

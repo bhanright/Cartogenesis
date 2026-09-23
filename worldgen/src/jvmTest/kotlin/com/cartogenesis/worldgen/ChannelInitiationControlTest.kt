@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 import kotlinx.coroutines.runBlocking
-import org.junit.Rule
 
 /**
  * R1's discriminating control: the channel-head threshold with the vegetation term off, shown
@@ -31,10 +30,7 @@ import org.junit.Rule
  * and the climate are literally the same objects. The only difference between the two networks is
  * the term under test.
  */
-class ChannelInitiationControlTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class ChannelInitiationControlTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */

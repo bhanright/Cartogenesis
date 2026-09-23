@@ -16,7 +16,6 @@ import kotlin.math.cos
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -33,10 +32,7 @@ import org.junit.Test
  * The four worlds are `GlaciationTest`'s own, at 512, so the same ice is being measured here as
  * there rather than a set of worlds picked to suit these clauses.
  */
-class IceSheetTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class IceSheetTest : BorrowsSharedWorlds() {
 
     @Test
     fun `a sheet stands as thick as Earth's sheets do`() {

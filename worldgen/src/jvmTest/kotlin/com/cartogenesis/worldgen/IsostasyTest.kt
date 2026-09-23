@@ -19,7 +19,6 @@ import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 
 /**
  * The solid earth floats and it bends, and both show on the map.
@@ -44,10 +43,7 @@ import org.junit.Rule
  *
  * See docs/DESIGN_LEDGER.md, S2, and [Isostasy].
  */
-class IsostasyTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class IsostasyTest : BorrowsSharedWorlds() {
 
     // ------------------------------------------------------------------ the columns
 

@@ -8,7 +8,6 @@ import com.cartogenesis.worldgen.pipeline.RiverResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * F18: no lake is a ruled line, because no river runs in one.
@@ -26,10 +25,7 @@ import org.junit.Rule
  * and run on the same day, still draws more of the map with a ruler than the new one — which is the
  * defect itself, is on every map, and is what makes the census above worth reading.
  */
-class StraightRunTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class StraightRunTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** The author's own world, at the size he looks at it, where the bar was found. */

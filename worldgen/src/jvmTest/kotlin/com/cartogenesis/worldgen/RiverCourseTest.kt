@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * What a `River` is: the whole of one watercourse, unbroken by water it is wider than.
@@ -26,10 +25,7 @@ import org.junit.Rule
  * it and start again on the far side, and the map drew a whole catchment's trunk as a one-pixel
  * thread of standing water between two thick channels. See `LakeResult.openWater`.
  */
-class RiverCourseTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class RiverCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */

@@ -8,7 +8,6 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingReportingRounds
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * E1: a lake is sized by its outlet, not by its basin.
@@ -29,10 +28,7 @@ import org.junit.Rule
  *
  * Both are shown failing with `outletIncision = false`, which reproduces the pre-E1 world.
  */
-class OutletIncisionTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class OutletIncisionTest : BorrowsSharedWorlds() {
 
     /**
      * The Caspian's share of Earth's *land*: the bar for "too big to be a lake".

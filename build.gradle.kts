@@ -10,45 +10,70 @@ plugins {
  * The per-merge tier's share of the machine: how many test workers each JVM test task forks, how
  * many processors each worker may use, and how much heap, decided here because they are one budget.
  *
- * With `org.gradle.parallel` the four JVM test tasks of the tier run side by side, so what they
- * hold at once is the sum over all of them, not any one task's figure. Every JVM sizes itself to
- * the whole processor — the common `ForkJoinPool` generation parallelises through, the garbage
- * collector's threads, the compiler's — so left alone seven workers would each behave as though
- * they had the machine to themselves. Each worker is told how many processors are its share
- * (`-XX:ActiveProcessorCount`, which sizes all three) and its pool is set to the same width, so
- * the shares add up to the hardware threads:
+ * With `org.gradle.parallel` the JVM test tasks of the tier run side by side, so what they hold at
+ * once is the sum over all of them, not any one task's figure. Every JVM sizes itself to the whole
+ * processor — the common `ForkJoinPool` generation parallelises through, the garbage collector's
+ * threads, the compiler's — so left alone seven workers would each behave as though they had the
+ * machine to themselves. Each worker is told how many processors are its share
+ * (`-XX:ActiveProcessorCount`, which sizes all three) and its pool is set to the same width. On a
+ * sixteen-thread, 32 GB machine:
  *
- *   :worldgen:jvmTest     4 workers x 2 processors, 3.5 GB heap each     8 threads, 14 GB
- *   :desktop:test         1 worker  x 6 processors, 3 GB heap            6 threads,  3 GB
- *   :cartography:jvmTest  1 worker  x 1 processor, 2 GB heap             1 thread,   2 GB
- *   :ui:jvmTest           1 worker  x 1 processor, 0.5 GB heap           1 thread,   0.5 GB
- *   the Gradle daemon (org.gradle.jvmargs)                                           4 GB
- *                                                                       16 threads, 23.5 GB
+ *   :worldgen:jvmTest     4 workers x 2 processors, 3.5 GB heap each    8 threads, 14 GB
+ *   :desktop:test         1 worker  x 6 processors, 3 GB heap           6 threads,  3 GB
+ *   :desktop:siteTest     1 worker, 0.5 GB heap, only after :desktop:test (one project, one lock)
+ *   :cartography:jvmTest  1 worker  x 1 processor, 2 GB heap            1 thread,   2 GB
+ *   :ui:jvmTest           1 worker  x 1 processor, 0.5 GB heap          1 thread,   0.5 GB
+ *   the workers' memory outside their heaps, measured                               1.7 GB
+ *   the browser tests' Node and headless Chrome, measured                           0.6 GB
+ *   the Gradle daemon and the Kotlin compiler's daemon, measured                    1.4 GB
+ *                                                                      16 threads, 23.2 GB
  *
- * on a sixteen-thread, 32 GB machine, which leaves the rest of its memory to whatever else it is
- * doing. Generation is mostly serial — a lone worker with a pool as wide as the machine kept it
- * under a quarter busy — so `:worldgen`'s many classes are spread over four narrow workers, and
- * `:desktop`'s, which cannot be spread (see its build script), get a wide one: its 2048 worlds are
- * the part of generation that does parallelise. The heaps are each worker's measured peak with
- * room over it; see the ledger's T5 row. The figures scale down with the machine, never below one
- * worker and two processors for a generating worker, so a four-core runner gets one `:worldgen`
- * worker rather than four contending for it.
+ * The workers are counted at their ceilings, because they reach them: a busy JVM's heap grows to
+ * its `-Xmx`. The two daemons are counted at what they were measured holding while the tier ran,
+ * not at their 4 GB ceilings, because during the tier they schedule and do not compile; a run that
+ * compiles first holds the compiler's daemon larger for the minutes it compiles. The tier does not
+ * reach that sum at any one moment either: cartography's suite, the interface's and the browser's
+ * finish in the first few minutes, while `:worldgen`'s heaps are still growing; the whole build's
+ * measured peak, and what one worker cost against it, are in the ledger's T5 row. 23 GB leaves 9 of
+ * the machine's 32 to whatever else it is doing, and on a machine with a record of memory faults
+ * under load no worker is given more than its measured peak with room over it.
  *
- * The audit tier is not in this budget: it runs on its own, one worker per task, with the heap
- * its 2048 and 4096 cases were sized for.
+ * Generation is mostly serial — a lone worker with a pool as wide as the machine kept it under a
+ * quarter busy — so `:worldgen`'s many classes are spread over narrow workers, and `:desktop`'s,
+ * which cannot be spread (see its build script), get a wide one: its 2048 worlds are the part of
+ * generation that does parallelise. The figures scale down with the machine. Below twelve hardware
+ * threads there is too little to share out, so a task's one worker takes the whole processor, as a
+ * CI runner that runs one task at a time wants.
  *
  * `-PtestWorkers=1` puts `:worldgen`'s classes back in one worker, for a failure that depends on
  * which classes shared one.
  */
 val hardwareThreads = Runtime.getRuntime().availableProcessors()
-extra["worldgenTestForks"] = providers.gradleProperty("testWorkers").map { it.toInt() }
+val machineIsShared = hardwareThreads >= 12
+val worldgenTestForks = providers.gradleProperty("testWorkers").map { it.toInt() }
     .getOrElse((hardwareThreads / 4).coerceIn(1, 4))
-extra["worldgenTestProcessors"] = (hardwareThreads / 8).coerceAtLeast(2)
+extra["worldgenTestForks"] = worldgenTestForks
+extra["worldgenTestProcessors"] =
+    if (machineIsShared) (hardwareThreads / 2 / worldgenTestForks).coerceAtLeast(2) else hardwareThreads
 extra["worldgenTestHeap"] = "3584m"
-extra["desktopTestProcessors"] = (hardwareThreads * 3 / 8).coerceAtLeast(2)
+extra["desktopTestProcessors"] = if (machineIsShared) hardwareThreads * 3 / 8 else hardwareThreads
 extra["desktopTestHeap"] = "3g"
 extra["cartographyTestHeap"] = "2g"
-extra["lightTestProcessors"] = (hardwareThreads / 16).coerceAtLeast(1)
+extra["lightTestProcessors"] = if (machineIsShared) (hardwareThreads / 16).coerceAtLeast(1) else hardwareThreads
+
+/*
+ * The audit tier's share: one audit task at a time, each with the machine to itself.
+ *
+ * Its heaps were sized for 2048 and 4096 worlds — `:worldgen` 8 GB, `:cartography` 8 GB, `:desktop`
+ * 10 GB — and with `org.gradle.parallel` the three tasks would otherwise run together: 26 GB of
+ * heap ceilings with the 4 GB daemon's beside them, on a 32 GB machine, and the 16 GB runner the
+ * nightly uses has been taken down twice by two of them together. In this order, one after
+ * another, the most held at once is `:desktop`'s 10 GB and the daemon's. Each task's pool is set to
+ * the machine less the one thread the daemon and the operating system need, which is what a lone
+ * JVM would choose for itself, stated here so that it is a decision rather than a default.
+ */
+val auditTasksInOrder = listOf(":worldgen:audit", ":cartography:audit", ":desktop:audit")
+val auditPoolThreads = (hardwareThreads - 1).coerceAtLeast(1)
 
 /**
  * The test tiers' timing report, printed once at the end of any build that ran tests: each test
@@ -130,6 +155,11 @@ val testTimingReport =
     gradle.sharedServices.registerIfAbsent("testTimingReport", TestTimingReport::class.java) {}
 
 subprojects {
+    tasks.withType<Test>().matching { it.path in auditTasksInOrder }.configureEach {
+        mustRunAfter(auditTasksInOrder.takeWhile { it != path })
+        jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=$auditPoolThreads")
+    }
+
     tasks.withType<AbstractTestTask>().configureEach {
         usesService(testTimingReport)
         val taskPath = path

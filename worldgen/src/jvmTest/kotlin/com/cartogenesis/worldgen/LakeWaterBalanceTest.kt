@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.Rule
 
 /**
  * E2. A closed basin holds as much water as its catchment can keep wet, not as much as its rim
@@ -25,10 +24,7 @@ import org.junit.Rule
  * Both directions matter. A change that shrank every lake would pass the first of these and fail
  * the second, and a world with no lakes in it is not more realistic than one with too many.
  */
-class LakeWaterBalanceTest {
-
-    @get:Rule
-    val sharedWorlds = SharedWorlds.Check()
+class LakeWaterBalanceTest : BorrowsSharedWorlds() {
 
     // Both are samples, re-picked at S2's fourth pass by the same scan that chose their
     // predecessors, and for the same reason it has had to be run at every terrain change: the

@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  * every cell, and the bound is [BoxBlur.toleranceShareOfLargest], derived from the float's own
  * half-ulp and the number of times a sweep rounds a result into the field. Nothing here is a
  * tolerance chosen until the test went green: on the float accumulator this replaced, the
- * measured error was eleven times the bound and the field went negative where its input was
+ * measured error was 8.6 times the bound and the field went negative where its input was
  * nowhere negative at all.
  *
  * See docs/DESIGN_LEDGER.md, X1b, for what that residue was doing to the polar ice.

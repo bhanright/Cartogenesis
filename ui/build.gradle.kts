@@ -82,6 +82,12 @@ tasks.named<Test>("jvmTest") {
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
 
+    // `BugReportFormTest` reads the bug form the report opens: an input, or the task stays up to
+    // date, and the build cache hands back an earlier pass, when only the form changes.
+    inputs.files(rootProject.fileTree(".github/ISSUE_TEMPLATE"))
+        .withPropertyName("issueFormsReadByTheBugReportFormTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // The known failures the tests record (`KnownFailures`, a twin of `:cartography`'s): a file
     // handed to the tests, cleared before the task runs and printed once it has, pass or fail, as
     // `:cartography`'s build script does for its own.

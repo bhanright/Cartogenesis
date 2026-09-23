@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import java.io.File
@@ -175,23 +176,23 @@ class SeaLevelHistoryAuditTest {
             }
             pockets = pocketBodies
 
-            // Narrow water, and how far into it each cell lies, by a walk inward from the open sea.
-            val toLand = IntArray(size) { -1 }
+            // How far each cell of water lies from land, as the 512 measurement reads it: a
+            // Euclidean distance in cells, so that narrow water can be told from open at any grid.
+            // (A walk of eight-neighbour steps that stopped at three, which this copy once was,
+            // reads every cell past three hops as open and none as past the 2048 grid's eight.)
+            val toLand = FloatArray(size) { if (land[it]) 0f else JumpFloodDistance.INFINITE }
+            val nearest = IntArray(size) { if (land[it]) it else -1 }
+            JumpFloodDistance.run(w, h, toLand, nearest)
+            val narrow = NARROW_CELLS_AT_512 * scale
+            val inlet = INLET_CELLS_AT_512 * scale
+            // And how far into the narrow water each cell of it lies, by a walk inward from the
+            // open sea.
+            val depth = IntArray(size) { -1 }
             val queue = IntArray(size)
             var head = 0
             var tail = 0
-            for (i in 0 until size) if (land[i]) { toLand[i] = 0; queue[tail++] = i }
-            while (head < tail) {
-                val i = queue[head++]
-                if (toLand[i] >= 3) continue
-                neighbours(w, h, i) { n -> if (toLand[n] < 0) { toLand[n] = toLand[i] + 1; queue[tail++] = n } }
-            }
-            val narrow = (2f * scale).toInt().coerceAtLeast(1)
-            val inlet = (3f * scale).toInt().coerceAtLeast(1)
-            val depth = IntArray(size) { -1 }
-            head = 0; tail = 0
             for (i in 0 until size) {
-                if (body[i] == ocean && (toLand[i] < 0 || toLand[i] > narrow)) {
+                if (body[i] == ocean && toLand[i] > narrow) {
                     depth[i] = 0
                     queue[tail++] = i
                 }
@@ -237,6 +238,14 @@ class SeaLevelHistoryAuditTest {
                     world.landFraction(), world.rivers.rivers.size, world.rivers.lakes.lakes.size
                 )
             )
+        }
+
+        private companion object {
+            /** `SeaLevelHistoryTest.NARROW`: water narrower than two cells at 512 is narrow. */
+            const val NARROW_CELLS_AT_512 = 2f
+
+            /** `SeaLevelHistoryTest.INLET_LENGTH`: an estuary mouth lies three cells inside it at 512. */
+            const val INLET_CELLS_AT_512 = 3f
         }
 
         private inline fun neighbours(w: Int, h: Int, cell: Int, action: (Int) -> Unit) {

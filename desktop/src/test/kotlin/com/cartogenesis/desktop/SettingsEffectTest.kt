@@ -187,10 +187,8 @@ class SettingsEffectTest {
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisRoot(FakeHost(settings)) }
             waitForIdle()
-            val pixels = onRoot().captureToImage().asSkiaBitmap().readPixels()!!
-            var value = 17
-            for (k in pixels.indices step 997) value = value * 31 + pixels[k]
-            hash = value
+            // Every byte: a sample of every 997th could hash a small change the same as none.
+            hash = onRoot().captureToImage().asSkiaBitmap().readPixels()!!.contentHashCode()
         }
         return hash
     }

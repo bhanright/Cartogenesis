@@ -95,6 +95,28 @@ class GpuErosionTest {
         erodeBlocking(sweepsOnlyOnGpu, uplift, gpu)
         val sweepCpuMs = fastestMillis { erodeBlocking(sweepsOnly, uplift) }
         val sweepGpuMs = fastestMillis { erodeBlocking(sweepsOnlyOnGpu, uplift, gpu) }
+
+        // The kernel on its own, against the processor's sweeps with no hydraulic round after
+        // them: the whole-stage bounds below are wide enough to let a kernel with a wrong diagonal
+        // limit or a wrong settled threshold through, since the sweeps touch only steep cells and
+        // the rounds' own chaos is added on top. Here there are no rounds and so no chaos to make
+        // room for, and what is left is how the two arithmetics round.
+        val sweptOnCpu = erodeBlocking(sweepsOnly, uplift).height.data
+        val sweptOnGpu = erodeBlocking(sweepsOnlyOnGpu, uplift, gpu).height.data
+        var sweepWorst = 0f
+        var sweepTotal = 0.0
+        for (i in sweptOnCpu.indices) {
+            val delta = abs(sweptOnCpu[i] - sweptOnGpu[i])
+            if (delta > sweepWorst) sweepWorst = delta
+            sweepTotal += delta.toDouble()
+        }
+        val sweepMean = sweepTotal / sweptOnCpu.size
+        println("GPU vs CPU sweeps alone: mean difference %.3e, worst %.3e (elevation is 0..1)".format(sweepMean, sweepWorst))
+        assertTrue(
+            sweepWorst < SWEEP_WORST_DIFFERENCE && sweepMean < SWEEP_MEAN_DIFFERENCE,
+            "the kernel's sweeps differ from the processor's by %.3e at worst and %.3e on average, past %.1e and %.1e: a different kernel rather than a different rounding"
+                .format(sweepWorst, sweepMean, SWEEP_WORST_DIFFERENCE, SWEEP_MEAN_DIFFERENCE)
+        )
         val sweepSpeedUp = sweepCpuMs.toDouble() / sweepGpuMs
         println(
             "GPU sweeps alone ${sweepGpuMs}ms vs CPU ${sweepCpuMs}ms: " +
@@ -263,5 +285,17 @@ class GpuErosionTest {
          * unequally. Under that load the quickest of three runs still read nearly five times.
          */
         const val MIN_SWEEP_SPEED_UP = 1.0
+
+        /**
+         * How far the kernel's sweeps may differ from the processor's, at the worst cell and on
+         * average, in the height field's 0..1 units.
+         *
+         * A regression pin on this machine's measurement, with room: nothing states how far a
+         * driver may round from the JVM. What it separates is rounding from a different kernel. A
+         * kernel with a wrong diagonal limit, a wrong rate or a missed pass moves every steep cell
+         * by a share of the limit itself, which is thousandths of the range.
+         */
+        const val SWEEP_WORST_DIFFERENCE = 1e-4f
+        const val SWEEP_MEAN_DIFFERENCE = 1e-6
     }
 }

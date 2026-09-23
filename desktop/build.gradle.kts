@@ -261,8 +261,11 @@ tasks.register<Test>("siteTest") {
     // What this test reads is another project's build output. Declaring it as an input here is
     // what Gradle would want, but it also makes Gradle refuse the build for using an output
     // without a producing dependency it can see. Never being up to date costs a few seconds and
-    // is the whole point: the run has to look at the tree that was just assembled.
+    // is the whole point: the run has to look at the tree that was just assembled. Never taken
+    // from the build cache either, for the same reason: a cache key blind to the tree would hand
+    // back an earlier pass over a tree that has since changed.
     outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
 }
 
 compose.desktop {
@@ -337,5 +340,12 @@ tasks.withType<Test>().configureEach {
         rootProject.files("ROADMAP.md"),
         rootProject.fileTree(".github/ISSUE_TEMPLATE")
     ).withPropertyName("roadmapAndIssueFormsReadByTheSiteAssemblyTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `SiteSourcesTest` holds the page's file names and apt source line to the installation
+    // document and the release notes' template: the same trap, the same declaration.
+    inputs.files(
+        rootProject.files("docs/INSTALL.md", "docs/RELEASE_NOTES_TEMPLATE.md")
+    ).withPropertyName("documentsReadByTheSiteSourcesTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

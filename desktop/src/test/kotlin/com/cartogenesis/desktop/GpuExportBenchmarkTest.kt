@@ -121,7 +121,13 @@ class GpuExportBenchmarkTest {
             "EXPORT 4096 raster across four tiles: %.4f%% of pixels differ from the CPU, worst %d"
                 .format(differing * 100.0 / onCpu.size, worst)
         )
-        assertTrue(worst <= 2, "the tiled 4096 raster drifted by $worst, past the 2 a rounding costs")
+        // The same bound the parity guard derives, in the same unit: a channel can flip by one at
+        // each truncation it passes, and it passes `GpuRasterTest.TRUNCATIONS_A_CHANNEL_PASSES`.
+        // A seam between tiles or a band written to the wrong offset moves whole rows by tens.
+        assertTrue(
+            worst <= GpuRasterTest.MAX_WORST_DRIFT,
+            "the tiled 4096 raster drifted by $worst, past the ${GpuRasterTest.MAX_WORST_DRIFT} its truncations can cost"
+        )
 
         println(
             ("EXPORT 4096 raster alone: the world alone holds %d MB; CPU %d ms, peak heap %d MB; " +

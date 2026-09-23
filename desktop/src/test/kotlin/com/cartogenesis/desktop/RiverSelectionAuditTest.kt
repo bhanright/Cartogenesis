@@ -190,7 +190,10 @@ class RiverSelectionAuditTest {
                             "${(kilometres / chosen.landAreaSquareKm).sig()} km/km2, " +
                             "${(kilometres / chosen.drawnKilometres).oneDecimal()} times the " +
                             "atlas mark's ink, fullest crowding square " +
-                            "${fullestSquare(map, drawn.map { it.cells.last() }, chosen.crowdingPitchKm)}"
+                            "${fullestSquare(map, drawn.map { it.cells.last() }, chosen.crowdingPitchKm)} " +
+                            "on the lattice the selection enforces and " +
+                            "${fullestOffsetSquare(map, drawn.map { it.cells.last() }, chosen.crowdingPitchKm)} " +
+                            "on the same lattice half a pitch over"
                     )
                 }
                 // The top mark against F14's own arithmetic, which is what it is meant to be.
@@ -354,16 +357,32 @@ class RiverSelectionAuditTest {
     }
 
     /** How many of [ends] fall in the fullest square of a [pitchKm] lattice on the ground. */
-    private fun fullestSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int {
+    private fun fullestSquare(
+        map: WorldMap,
+        ends: List<Int>,
+        pitchKm: Double,
+        offsetAcrossKm: Double = 0.0,
+        offsetDownKm: Double = 0.0
+    ): Int {
         val perSquare = HashMap<Long, Int>()
         ends.forEach { end ->
-            val across = (end % map.width * map.config.cellWidthKm / pitchKm).toLong()
-            val down = (end / map.width * map.config.cellHeightKm / pitchKm).toLong()
-            val key = (down shl 32) or across
+            val across = kotlin.math.floor((end % map.width * map.config.cellWidthKm + offsetAcrossKm) / pitchKm).toLong()
+            val down = kotlin.math.floor((end / map.width * map.config.cellHeightKm + offsetDownKm) / pitchKm).toLong()
+            val key = (down shl 32) or (across and 0xFFFFFFFFL)
             perSquare[key] = (perSquare[key] ?: 0) + 1
         }
         return perSquare.values.maxOrNull() ?: 0
     }
+
+    /**
+     * The fullest square on the lattice moved half a pitch across, down, or both: measured on the
+     * lattice the selection enforces, the fullest square is small by construction, and whether the
+     * ink is spread over the map rather than sorted into those squares shows only off it.
+     */
+    private fun fullestOffsetSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int =
+        listOf(0.5 to 0.0, 0.0 to 0.5, 0.5 to 0.5).maxOf { (across, down) ->
+            fullestSquare(map, ends, pitchKm, across * pitchKm, down * pitchKm)
+        }
 
     private fun write(name: String, bitmap: Bitmap): String {
         val data = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!

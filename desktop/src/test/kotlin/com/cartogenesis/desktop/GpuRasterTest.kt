@@ -40,7 +40,7 @@ import kotlinx.coroutines.runBlocking
  */
 class GpuRasterTest {
 
-    private companion object {
+    internal companion object {
         /**
          * How far a colour channel may drift, at the 99.9th percentile and at worst.
          *

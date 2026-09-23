@@ -49,7 +49,7 @@ internal class Judge(val familySize: Int, val placeFamily: Int) {
          * twenty thousand windows and rings. A window counts when its line is long enough to reach a
          * bar, and a ring when it is large enough to measure: a place that cannot fail spends none of
          * the family's error. The census fails a layer past it rather than let its places go
-         * uncounted; at 2048 the longest layers hold about fifteen thousand.
+         * uncounted; at 2048 the fullest layer, the isotherms, holds about two thousand.
          */
         const val MOST_PLACES_PER_LAYER = 20_000
 

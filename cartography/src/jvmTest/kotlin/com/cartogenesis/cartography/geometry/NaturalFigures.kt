@@ -35,7 +35,7 @@ internal class Tail(values: List<Double>) {
         "n %d, 95th percentile %.2f, mean excess %.2f, largest %.2f".format(count, threshold, scale, largest)
 
     companion object {
-        /** A twentieth: at the smallest ensemble read, a thousand windows, fifty excesses. */
+        /** A twentieth: in the smallest ensemble read, the smooth one of some seven hundred windows, thirty-six excesses. */
         const val TAIL_SHARE = 0.05
     }
 }
@@ -260,14 +260,19 @@ internal fun sampled(frame: GridFrame, at: (Double, Double) -> Double): FloatArr
  * Temperature falls [POLEWARD_GRADIENT_K_PER_DEGREE] toward each pole and varies along each
  * parallel as isotropic natural noise of standard deviation [ALONG_THE_PARALLEL_K], so a level line
  * wanders `3.75 / 0.75` = 5 degrees of latitude either way in standard deviation. That is Earth's
- * at the latitudes where isotherms and the ice's edge run: at about 61 N, Bergen (+7 C in the annual
- * normals) and Yakutsk (-8 C) stand about 15 K apart, which natural variation of standard deviation
- * 3.75 K reaches between its two-sigma extremes, and the annual 0 C isotherm reaches from the
- * Norwegian coast near 71 N to eastern Siberia near 50 N — twenty degrees, four standard deviations
- * of its wander at 0.75 K a degree, the mid-latitude gradient of the annual zonal mean. The gradient
- * is held constant where Earth's flattens in the tropics, which makes this field more zonal than
- * Earth's there and so a more lenient null. The noise runs from 2 cells (or, for a smooth field
- * like the generator's blurred climate, from 16) to 4,000 km, a continent.
+ * at the latitudes where isotherms and the ice's edge run: at about 61 N, Bergen (about +8 C in the
+ * annual normals) and Yakutsk (about -9 C) stand some 16 K apart, about the span between the
+ * two-sigma extremes of variation of standard deviation 3.75 K; and the annual 0 C isotherm
+ * reaches from the Norwegian coast near 71 N to eastern Siberia near 50 N, twenty degrees, four
+ * standard deviations of its wander at 0.75 K a degree, the mid-latitude gradient of the annual
+ * zonal mean. The gradient is held constant where Earth's flattens in the tropics, which makes
+ * this field more zonal than Earth's there and so a more lenient null. The noise runs from 2 cells
+ * (or, for a smooth field like the generator's blurred climate, from 16) to 4,000 km, a continent.
+ *
+ * Measured, the null comes out at 1.0 to 1.1 on every bearing at 512 and 2048: at the chord's
+ * length the along-parallel variation turns a level line more than the poleward gradient holds it,
+ * so an Earth-like zonal line does not prefer the row at that scale, and a layer that does, by the
+ * effect size, is not following the latitude the way Earth's lines do.
  *
  * Its level lines every [LEVEL_STEP_K] are read by the same chord reading as a layer's, on a
  * canvas of the census's own cells from pole to pole, and the ratio each grid bearing's bin reaches

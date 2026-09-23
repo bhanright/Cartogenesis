@@ -104,6 +104,7 @@ jobs:
             build/audit-outcome-worldgen.txt
             worldgen/build/test-results/audit/
             worldgen/build/reports/tests/
+            worldgen/build/known-failures/
             worldgen/build/maps/
             desktop/build/w3-crops/
           retention-days: 14

@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
+import com.cartogenesis.worldgen.pipeline.FlowRouting
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -142,6 +143,17 @@ class RiverCourseTest {
      * the right one by the same rule applied to what was left. The control is the order this
      * replaces — from the headwater with the most water, whose course down to the same mouth is
      * what [Network.fromBiggestHead] follows — and it has to fail.
+     *
+     * One case is excused, and only with proof that it is the lake exemption at work rather than a
+     * fault in the order. A course that falls short of the walk here is accepted when two things
+     * hold. First, the longest watercourse above its mouth, measured as the tracer measures a
+     * course (every step of it, the last one into the water included), is shorter than
+     * `RiverConfig.shortestDrawnCourseKm`, so the length rule would have dropped it. Second, the
+     * course that was drawn instead begins at a lake's outflow, the one head the length rule
+     * exempts. The walk here cannot see through a lake, because a lake is not a channel cell: it
+     * starts the outflow's arm at the shore and scores the lake's own inflows as nothing, so beside
+     * a short stub the outflow can look like the lesser arm when it is the only one on the map. An
+     * excused course is left out of the coverage, and the number excused is printed.
      */
     @Test
     fun `a river is its own longest watercourse`() {
@@ -151,15 +163,17 @@ class RiverCourseTest {
         SEEDS.forEach { seed ->
             val network = Network(world(seed))
             val world = network.world
+            val shortestDrawnKm = world.config.rivers.shortestDrawnCourseKm.toDouble()
             var drawnHere = 0.0
             var longestHere = 0.0
             var beforeHere = 0.0
             var courses = 0
+            var excusedAsLakeOutflows = 0
             var worst = 1.0
             world.rivers.rivers.forEach { river ->
-                val last = river.cells.last { network.isChannel[it] }
-                if (river.cells.last() == last) return@forEach // stops on another river
-                courses++
+                val lastChannelAt = river.cells.indexOfLast { network.isChannel[it] }
+                val last = river.cells[lastChannelAt]
+                if (lastChannelAt == river.cells.size - 1) return@forEach // stops on another river
                 var drawn = 0.0
                 for (step in 0 until river.cells.size - 1) {
                     if (!network.isChannel[river.cells[step]]) continue
@@ -167,24 +181,42 @@ class RiverCourseTest {
                     drawn += network.stepKilometres(river.cells[step], river.cells[step + 1])
                 }
                 val longest = network.longestAbove[last]
+                if (drawn < longest - ONE_STEP_OF_SLACK_KM) {
+                    // What the tracer would have measured for the longest watercourse: the walk
+                    // down to the last channel cell, and every step from there into the water.
+                    var belowLastChannelKm = 0.0
+                    for (step in lastChannelAt until river.cells.size - 1) {
+                        belowLastChannelKm +=
+                            network.stepKilometres(river.cells[step], river.cells[step + 1])
+                    }
+                    val longestCourseKm = longest + belowLastChannelKm
+                    val head = river.cells.first()
+                    assertTrue(
+                        longestCourseKm < shortestDrawnKm && drainsALake(world, head),
+                        "seed $seed: the course into cell $last is ${"%.3f".format(drawn)} km " +
+                            "where the longest watercourse above it is ${"%.3f".format(longest)}" +
+                            " (${"%.3f".format(longestCourseKm)} km to the water, against the " +
+                            "drawn length ${"%.0f".format(shortestDrawnKm)}; head $head " +
+                            "drains a lake: ${drainsALake(world, head)})"
+                    )
+                    excusedAsLakeOutflows++
+                    return@forEach
+                }
+                courses++
                 drawnHere += drawn
                 longestHere += longest
                 beforeHere += network.fromBiggestHead[last]
                 if (longest <= 0.0) return@forEach
                 worst = minOf(worst, drawn / longest)
-                assertTrue(
-                    drawn >= longest - ONE_STEP_OF_SLACK_KM,
-                    "seed $seed: the course into cell $last is ${"%.1f".format(drawn)} km where" +
-                        " the longest watercourse above it is ${"%.1f".format(longest)}"
-                )
             }
             drawnTotal += drawnHere
             longestTotal += longestHere
             beforeTotal += beforeHere
             println(
                 ("RIVERCOURSE seed=$seed $courses courses into water, coverage %.3f (worst %.3f), " +
-                    "%.3f from the biggest headwater").format(
-                    drawnHere / longestHere, worst, beforeHere / longestHere
+                    "%.3f from the biggest headwater; %d excused as lake outflows").format(
+                    drawnHere / longestHere, worst, beforeHere / longestHere,
+                    excusedAsLakeOutflows
                 )
             )
         }
@@ -200,6 +232,22 @@ class RiverCourseTest {
             "the biggest-headwater order now covers the watercourse too, so this guard has " +
                 "stopped discriminating"
         )
+    }
+
+    /**
+     * Whether [head] is a lake's outflow in the sense the tracer's length exemption means: some
+     * neighbour of it is open water that drains into it. The same question `RiverStage` asks.
+     */
+    private fun drainsALake(world: WorldMap, head: Int): Boolean {
+        val lakes = world.rivers.lakes
+        val flowTarget = world.rivers.flowTarget
+        var found = false
+        FlowRouting.forEachNeighbour(
+            world.width, world.height, head % world.width, head / world.width
+        ) { neighbour ->
+            if (lakes.isOpenWater(neighbour) && flowTarget[neighbour] == head) found = true
+        }
+        return found
     }
 
     /**

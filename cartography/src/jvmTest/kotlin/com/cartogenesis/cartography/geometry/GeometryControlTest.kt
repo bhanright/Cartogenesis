@@ -24,9 +24,16 @@ import kotlin.test.assertTrue
  *
  * The stamps are the causes the rule lists: a rectangle, a square window's thresholded mask, the
  * depression fill's chessboard staircase, a half-disc lobe, a nearest-seed partition, a ruled comb,
- * and the square, diamond and octagon a breadth-first or windowed operator draws. Not every
- * detector is asked to catch every stamp: the matrix printed below says which catches which, and
- * the assertions hold each stamp to the detectors built for it and every natural control to none.
+ * and the square, diamond and octagon a breadth-first or windowed operator draws; and beside them
+ * a natural island cut along a grid line, a reach laid along one among natural courses, a pyramid's
+ * creased level lines, a comb read at two grids, and Earth-like zonal lines. Not every detector is
+ * asked to catch every stamp: the matrix printed below says which catches which, and the
+ * assertions hold each stamp to the detectors built for it and every natural control to none.
+ *
+ * The per-place bars are the natural controls' tails at the census's corrected level
+ * ([NaturalTails], [Judge]); the ensemble test prints each class's tails part by part beside the
+ * bars they set, and holds a separate set of natural islands, which the tails were not read from,
+ * under every bar.
  */
 class GeometryControlTest {
 

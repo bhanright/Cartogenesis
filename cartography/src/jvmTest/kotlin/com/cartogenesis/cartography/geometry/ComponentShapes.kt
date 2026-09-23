@@ -285,8 +285,10 @@ internal object ComponentShapes {
      * 8 t` whatever the radius. Every smooth curve is locally a circle, so the polygon Douglas-
      * Peucker makes of any smooth line has a strength of 1 at most at every junction, and a line
      * that bends by curving, however tightly, never reads more. Two straight arms meeting at an angle
-     * — the edge of a pyramid, a level line crossing a ridge the grid drew — read their arms' length
-     * times their turn, however long the arms are.
+     * — the edge of a pyramid, a level line crossing a ridge the grid drew, or a line doubling back
+     * on itself in a straight hairpin — read their arms' length times their turn, however long the
+     * arms are. Near a saddle a smooth field's level lines do kink, their arms the saddle's nearly
+     * straight asymptotes, which is why the bar is the natural controls' tail and not 1.
      */
     fun creaseStrength(shorterArmKm: Double, turnDegrees: Double, toleranceKm: Double): Double =
         shorterArmKm * Math.toRadians(turnDegrees) / (8.0 * toleranceKm)

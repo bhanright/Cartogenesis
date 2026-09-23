@@ -16,12 +16,11 @@ import kotlin.test.assertTrue
  * times larger than the answer being written. What comes out is a residue that depends on which
  * column it is: a stripe.
  *
- * Both clauses are against a convolution of the same window summed from scratch in double for
- * every cell, and the bound is [BoxBlur.toleranceShareOfLargest], derived from the float's own
- * half-ulp and the number of times a sweep rounds a result into the field. Nothing here is a
- * tolerance chosen until the test went green: on the float accumulator this replaced, the
- * measured error was 8.6 times the bound and the field went negative where its input was
- * nowhere negative at all.
+ * Both clauses are against a convolution of the same windows summed from scratch in double for
+ * every cell, and both bounds are derived rather than chosen: [BoxBlur.errorBound] for the blur,
+ * the same argument for the reference's own few roundings, and for the sign the argument in the
+ * second clause. On the float accumulator this replaced, the measured error was 8.6 times the
+ * first bound and the field went 865,000 times further below zero than the second allows.
  *
  * See docs/DESIGN_LEDGER.md, X1b, for what that residue was doing to the polar ice.
  */
@@ -39,16 +38,24 @@ class BoxBlurTest {
 
     private val radius = 16
     private val passes = 2
+    private val sweeps = 2 * passes
+    private val longestLineCells = maxOf(cellsAcross, cellsDown)
 
     @Test
-    fun `a wet to dry column blurs to the exact convolution, within the float's own rounding`() {
+    fun `a wet to dry column blurs to the exact convolution, within the arithmetic's own bound`() {
         val field = wetToDryColumn()
-        val largest = field.data.max()
+        val largest = field.data.max().toDouble()
         val exact = exactConvolution(field, radius, passes)
         val blurred = FloatField(cellsAcross, cellsDown, field.data.copyOf())
         BoxBlur.apply(blurred, radius = radius, passes = passes)
 
-        val bound = BoxBlur.toleranceShareOfLargest(passes) * largest
+        // The reference is a double sum too: 2 * radius + 1 additions and a division a cell, the
+        // sweep the blur's own share describes when it primes and never slides.
+        val referenceShare = BoxBlur.slidingAverageShareOfLargest(radius, lineCells = 0)
+        var referenceGrowth = 1.0
+        repeat(sweeps) { referenceGrowth *= 1.0 + referenceShare }
+        val bound = BoxBlur.errorBound(largest, passes, radius, longestLineCells) +
+            largest * (referenceGrowth - 1.0)
         var worst = 0.0
         var worstCell = 0
         for (cell in 0 until cellsAcross * cellsDown) {
@@ -58,30 +65,46 @@ class BoxBlurTest {
                 worstCell = cell
             }
         }
+        println("BOXBLUR worst difference $worst against the bound $bound")
         assertTrue(
             worst <= bound,
             "the blur stands $worst from the exact convolution at row ${worstCell / cellsAcross} " +
                 "column ${worstCell % cellsAcross}, over the bound $bound " +
-                "(${BoxBlur.toleranceShareOfLargest(passes)} of the field's largest value $largest)"
+                "(the field's largest value is $largest)"
         )
     }
 
+    /**
+     * A box average of nonnegative numbers is nonnegative, and rounding to float keeps a sign and
+     * rounds zero to zero, so nothing below zero here comes from the float. It comes from the
+     * double sum: a cell whose exact answer is zero is the wet ground added and taken away again,
+     * and what the sum keeps of that can be a residue of either sign. So the clause is a floor,
+     * not zero, and the floor is that residue's own bound. One sweep can lower the most negative
+     * value by the sliding average's error, at most `d` of the largest magnitude, and its rounding
+     * to float can enlarge a negative by [BoxBlur.FLOAT_HALF_ULP] of itself plus the subnormal
+     * spacing; over `S` sweeps that is at most `S * (1 + FLOAT_HALF_ULP)^S * (d * A + eta)`, with
+     * `A` the largest magnitude any sweep sees.
+     */
     @Test
-    fun `a field with nothing negative in it does not blur negative`() {
+    fun `a field with nothing negative in it blurs to no less than the double sum's residue`() {
         val field = wetToDryColumn()
-        val largest = field.data.max()
         assertTrue(field.data.min() >= 0f, "the fixture is nonnegative")
+        val largest = field.data.max().toDouble()
         val blurred = FloatField(cellsAcross, cellsDown, field.data.copyOf())
         BoxBlur.apply(blurred, radius = radius, passes = passes)
 
-        // A box average of nonnegative numbers is nonnegative, so anything below zero here is
-        // arithmetic and not the field. The bound is the same one, because a result rounded once
-        // may land a half-ulp either side of an exact zero.
-        val floor = -BoxBlur.toleranceShareOfLargest(passes) * largest
-        val lowest = blurred.data.min()
+        val largestAnySweepSees =
+            largest + BoxBlur.errorBound(largest, passes, radius, longestLineCells)
+        val averageShare = BoxBlur.slidingAverageShareOfLargest(radius, longestLineCells)
+        var floatGrowth = 1.0
+        repeat(sweeps) { floatGrowth *= 1.0 + BoxBlur.FLOAT_HALF_ULP }
+        val floor = -sweeps * floatGrowth *
+            (averageShare * largestAnySweepSees + BoxBlur.FLOAT_SUBNORMAL_HALF_SPACING)
+        val lowest = blurred.data.min().toDouble()
+        println("BOXBLUR lowest value $lowest against the floor $floor")
         assertTrue(
             lowest >= floor,
-            "a nonnegative field blurred to $lowest, under the rounding floor $floor"
+            "a nonnegative field blurred to $lowest, under the double sum's residue floor $floor"
         )
     }
 

@@ -17,47 +17,86 @@ import com.cartogenesis.worldgen.model.FloatField
  * value depends on which column it is — which is a stripe, drawn column by column, in a field
  * where the answer is a smooth ramp to nothing.
  *
- * Measured on the author's seed 969495 at 2048 with the rain blur's own radius of 16: the cold
- * half's precipitation is *exactly zero* over the polar rows before the blur and came out of it
- * reading between -0.0060 and +0.0050 mm a year, sign alternating column by column, against a snow
- * balance there of 0.008 to 0.019 mm a year and a smallest meaningful balance of 0.01. The residue
- * was over half of the frozen mask's column flips at the pole. See docs/DESIGN_LEDGER.md, X1b, for
- * the table and for what it moved.
+ * A double accumulator is the repair, and [errorBound] is its contract. Each slide is two
+ * operations, so before the `n`th output of a sweep the sum has been rounded at most
+ * `2 * radius + 1 + 2 * n` times, each time by at most half an ulp of the largest partial sum on
+ * the line; in the worst case the drift grows linearly with the line's length. In a float that
+ * worst case is thousands of float roundings of the result at the end of a 2048-row column. The
+ * roundings of a real field are not correlated, and the usual *estimate* of their walk, `sqrt(n)`
+ * roundings rather than `n`, is the size the fault had in practice; it is an estimate and not a
+ * bound. In a double each rounding is at most `2^-53` of the partial sum, and the worst case down
+ * a 2048-row column comes to about a hundred-thousandth of one float rounding of the result. That
+ * still decides the stored float where the exact answer lies that close to a rounding boundary,
+ * and near zero, where a float's spacing is finer than the sum's residue: a cell whose exact answer
+ * is zero can come out as a residue of that size, of either sign, instead of zero. See
+ * docs/DESIGN_LEDGER.md, X1b, for what the float residue did to the polar ice and for the
+ * measurements.
  *
- * A double accumulator is the repair. The error a sliding sum carries after `n` updates is a walk
- * of `n` roundings, each at most half an ulp of the sum, so it stands at about `sqrt(n)` times
- * `2^-24` of the largest value in float and `sqrt(n)` times `2^-53` of it in double — five hundred
- * million times smaller, and so far under the last bit of the float it is stored in that it cannot
- * reach the result at any grid this generator runs. Re-summing the window every N rows was the
- * alternative and was declined: it costs `(2 * radius + 1) / N` extra additions per cell, where a
- * wider accumulator costs nothing measurable, the sum being one scalar either way.
+ * Re-summing the window every N rows was the alternative and was declined: it costs
+ * `(2 * radius + 1) / N` extra additions per cell, where a wider accumulator adds no operations
+ * at all, the sum being one scalar either way.
  */
 object BoxBlur {
 
-    /**
-     * Half an ulp of a float, `2^-24` — the most one rounding of a float result can be out, as a
-     * share of that result.
-     *
-     * Named here because it is what the accuracy contract below is stated in, and what
-     * `BoxBlurTest` derives its bound from rather than choosing a tolerance.
-     */
-    const val FLOAT_HALF_ULP = 5.9604645e-8f
+    /** Half an ulp of a float, `2^-24`: the most one rounding to float can be out, as a share. */
+    const val FLOAT_HALF_ULP = 5.9604644775390625e-8
+
+    /** Half an ulp of a double, `2^-53`: the same for one double operation. */
+    const val DOUBLE_HALF_ULP = 1.1102230246251565e-16
 
     /**
-     * How far a blurred cell may stand from the exact convolution of the same window, as a share
-     * of the largest magnitude anywhere in the field.
-     *
-     * Two sweeps a pass, each of which rounds its result into the float field once, and nothing
-     * else: with the sum kept in a double, the sum's own drift over a whole column is
-     * `height * 2^-53` of the largest value, which is under a thousandth of one float rounding at
-     * any grid this generator runs. So the bound is the roundings, `2 * passes * FLOAT_HALF_ULP`,
-     * and it does not grow with the radius or with the grid.
-     *
-     * Stated as a share of the field's largest value and not of the cell's own, because a box
-     * window mixes the whole window into every cell and a cell whose exact answer is zero still
-     * carries the arithmetic of the wet ground the window reached over.
+     * Half the spacing of the smallest float subnormals, `2^-150`: the most one rounding to float
+     * can be out in absolute terms where the relative bound fails, next to zero.
      */
-    fun toleranceShareOfLargest(passes: Int): Float = 2f * passes * FLOAT_HALF_ULP
+    const val FLOAT_SUBNORMAL_HALF_SPACING = 7.006492321624085e-46
+
+    /**
+     * The worst error one sweep's sliding average makes *before* it is rounded to a float, as a
+     * share of the largest magnitude on the line it slides along.
+     *
+     * [radius] is the window's half-width in cells and [lineCells] the length of the row or
+     * column. The running sum is primed with `2 * radius + 1` additions and slid with two
+     * operations per output, so it is rounded at most `2 * radius + 1 + 2 * lineCells` times, each
+     * by at most [DOUBLE_HALF_ULP] of the largest partial sum. A partial sum holds at most one
+     * window of values plus the drift itself, so divided by the window it is at most the line's
+     * largest magnitude over `1 - operations * DOUBLE_HALF_ULP`. The normalisation multiplies by a
+     * rounded reciprocal and rounds the product, two more roundings of the average. A worst case
+     * throughout, and so a bound rather than an estimate.
+     */
+    fun slidingAverageShareOfLargest(radius: Int, lineCells: Int): Double {
+        val operations = 2.0 * radius + 1.0 + 2.0 * lineCells
+        val sumDrift = operations * DOUBLE_HALF_ULP / (1.0 - operations * DOUBLE_HALF_ULP)
+        val normalisation = (1.0 + DOUBLE_HALF_ULP) * (1.0 + DOUBLE_HALF_ULP)
+        return sumDrift * normalisation + (normalisation - 1.0)
+    }
+
+    /**
+     * How far a blurred cell may stand from the exact convolution of the same windows, in the
+     * field's own units.
+     *
+     * [largestMagnitude] is the largest absolute value in the field before the blur; [passes],
+     * [radius] and [longestLineCells] are the blur's, with the larger radius and the longer side
+     * of the grid where they differ. Each sweep adds its sliding average's error, `d` of
+     * [slidingAverageShareOfLargest], and one rounding to float, at most [FLOAT_HALF_ULP] of the
+     * result plus [FLOAT_SUBNORMAL_HALF_SPACING]; a box average never enlarges an error already in
+     * its input, because its weights are nonnegative and sum to one. With `A` the largest
+     * magnitude, `e` the error so far and `beta = d + FLOAT_HALF_ULP * (1 + d)`, one sweep takes
+     * `e` to at most `e + (A + e) * beta + eta`, and over `S = 2 * passes` sweeps that closes to
+     * `(A + eta / beta) * ((1 + beta)^S - 1)`. It grows with the grid only through `d`, which at
+     * any grid this generator runs is a hundred-thousandth of a float rounding or less.
+     */
+    fun errorBound(
+        largestMagnitude: Double,
+        passes: Int,
+        radius: Int,
+        longestLineCells: Int
+    ): Double {
+        val averageShare = slidingAverageShareOfLargest(radius, longestLineCells)
+        val beta = averageShare + FLOAT_HALF_ULP * (1.0 + averageShare)
+        var growth = 1.0
+        repeat(2 * passes) { growth *= 1.0 + beta }
+        return (largestMagnitude + FLOAT_SUBNORMAL_HALF_SPACING / beta) * (growth - 1.0)
+    }
 
     /**
      * Box passes that approximate a Gaussian.

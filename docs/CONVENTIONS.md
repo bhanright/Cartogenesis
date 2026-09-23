@@ -152,3 +152,27 @@ If a stage reads a new section of `WorldGenConfig`, add it to that stage's guard
 `WorldGenerationEngine` and to the variant list in `IncrementalReuseTest`, which compares reuse
 against fresh generation for every section. Without both, a settings edit that should recompute a
 stage silently reuses the stored one.
+
+## 13. Nothing on the map carries the grid's geometry
+
+Rectangles, squares, edges running straight along a row, a column or a diagonal, right-angle
+corners, perfect circles and arcs, concentric terraces and ruled lines are the shapes a reader
+recognises at once as machine-made, and every one found in this project has had a cause in the
+code, never in the geography. The causes were independent of one another, which is why this is a
+rule about operators and outputs rather than about any one stage.
+
+- **Shapes come from the terrain or from an isotropic operator.** A mask, a basin, a stamp, a
+  margin or a boundary is shaped by the ground it lies on, or by an operator with no preferred
+  direction: a Euclidean distance field, a disc or Gaussian kernel, a solved potential. It is not
+  made by thresholding a square or octagonal window, by a chessboard or Manhattan distance, by a
+  union of fixed blocks, by a breadth-first ring, by a nearest-seed partition, or by stamping a
+  rectangle, a disc or any other primitive.
+- **An axis you cannot avoid is guarded for isotropy.** The grid itself and D8 routing have
+  preferred bearings. Where an operator with one is the right tool, its output is tested so that
+  features at the grid's bearings are neither more common nor longer than features at other
+  bearings, and the test is shown failing on a version that stamps the shape.
+- **Every layer the map draws goes through the geometry guard.** Coasts, lakes, rivers, ice,
+  basins, deltas, borders and any new layer are measured for straight runs by bearing,
+  rectangularity, right angles and concentric rings, per merge at 512 and in the nightly tier at
+  2048, where the artefacts show. The chunk that adds a layer adds it to the guard. A bar there is
+  derived from the isotropy of natural outlines, not from what a current world happens to produce.

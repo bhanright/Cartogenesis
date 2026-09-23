@@ -54,10 +54,20 @@ import kotlin.math.sqrt
  * does wrap, so a basin may reach across the seam from a front that does not, and every position
  * a front reads is taken as the copy of itself nearest the front's midpoint.
  *
- * **Front eligibility.** Each component's outer boundary is traced as a closed chain of cell
- * centres. Along that chain a *front* is a maximal run of points every one of which lies within
+ * **Front eligibility.** Fronts are found on the belt as a reference grid draws it: one of
+ * [FRONT_REFERENCE_CELLS_ACROSS] columns whose cells are square on the ground, so as many rows as
+ * the world's height allows at that cell width. Each block of working cells that is one reference
+ * cell is belt ground when at least half of it is. Each component's outer boundary on
+ * that grid is traced as a closed chain of cell centres. Along that chain a *front* is a maximal
+ * run of points every one of which lies within
  * [FRONT_STRAIGHTNESS_KM] of the straight chord between the run's first and last point, and it
- * qualifies when that chord is at least [SHORTEST_FRONT_KM] long. A front's *landward* side is
+ * qualifies when it is at least [SHORTEST_FRONT_KM] long. The front's line is then the
+ * least-squares line through the run's points, and its ends are the first and last points
+ * projected onto that line: a walk that carried a run a cell round a corner before the bar stopped
+ * it would otherwise tilt the chord by that cell, and a tilted chord moves the outlets at its far
+ * end out of the band they are counted in. No run includes a cell on the
+ * grid's own edge: a component touching the top or bottom row or the seam is cut off by it, and
+ * the straight line the cut draws is the grid's and not the ground's. A front's *landward* side is
  * whichever side of its chord carries more belt ground a straightness bar from it, and the
  * perpendicular coordinate `t` below is measured positive in that direction, the along-chord
  * coordinate `s` from 0 at its start. A front is **coastal** when open water lies within
@@ -216,6 +226,25 @@ internal object RangeFront {
 
     /** Hovius (1996): half-width over outlet spacing on Earth's linear mountain belts. */
     const val HOVIUS_RATIO = 2.1
+
+    /**
+     * The grid fronts are found on, in columns: the coarsest grid measured, 512, with square cells.
+     *
+     * A front has to be the same front at every grid or nothing measured on it can be compared
+     * across grids, and at 2048 the outline of a coast is serrated at the cell scale by the very
+     * valleys and delta lobes this instrument is measuring — enough, measured on the author's
+     * world, to push the traced outline of the comb's own coast past the straightness bar, so that
+     * the coast the author complained of was not a front at the grid he saw it on. Finding the
+     * fronts at the coarsest resolution judges straightness at the one resolution every grid
+     * shares; the basins, their outlets and the spacings are still measured at full resolution.
+     *
+     * Square, 23.4 km a side and so 256 rows, and not the 512 grid's own 23.4 by 11.7 km cells:
+     * on those, the 25 km bar allows a north-south outline one column of staircase and an
+     * east-west one two rows, and measured over the seven audited worlds the finder then found one
+     * north-south coast for every hundred east-west ones. A finder that preferred a bearing could
+     * not be used to ask whether the grid's bearings set a spacing.
+     */
+    const val FRONT_REFERENCE_CELLS_ACROSS = 512
 
     /** How many evenly spaced entries a boundary chain is walked from; see [straightRunsOf]. */
     private const val ENTRY_POINTS_PER_CHAIN = 4
@@ -511,13 +540,36 @@ internal object RangeFront {
         var landMetres = 0.0
         for (cell in 0 until cellCount) if (isLand[cell]) landMetres += metresAboveShoreline[cell]
 
-        val component = componentsOf(belt, cellsAcross, cellsDown)
+        // The belt as the square reference grid draws it, which is where the fronts are found.
+        val columnsPerBlock = max(1, cellsAcross / FRONT_REFERENCE_CELLS_ACROSS)
+        val rowsPerBlock = max(1, (columnsPerBlock * cellWidthKm / cellHeightKm).roundToInt())
+        val referenceAcross = cellsAcross / columnsPerBlock
+        val referenceDown = cellsDown / rowsPerBlock
+        val referenceBelt = BooleanArray(referenceAcross * referenceDown) { block ->
+            val firstColumn = (block % referenceAcross) * columnsPerBlock
+            val firstRow = (block / referenceAcross) * rowsPerBlock
+            var inBelt = 0
+            for (row in firstRow until firstRow + rowsPerBlock) {
+                for (column in firstColumn until firstColumn + columnsPerBlock) {
+                    if (belt[row * cellsAcross + column]) inBelt++
+                }
+            }
+            inBelt * 2 >= columnsPerBlock * rowsPerBlock
+        }
+        val referenceCellWidthKm = cellWidthKm * columnsPerBlock
+        val referenceCellHeightKm = cellHeightKm * rowsPerBlock
+        // A reference cell's centre in the working grid's coordinates, which count from the first
+        // cell's centre: a block of n cells is centred (n - 1) / 2 cells in.
+        val referenceOffsetKmX = (columnsPerBlock - 1) / 2.0 * cellWidthKm
+        val referenceOffsetKmY = (rowsPerBlock - 1) / 2.0 * cellHeightKm
+
+        val component = componentsOf(referenceBelt, referenceAcross, referenceDown)
         var componentCount = 0
         component.forEach { if (it + 1 > componentCount) componentCount = it + 1 }
         val seamComponents = HashSet<Int>()
-        for (row in 0 until cellsDown) {
-            val west = component[row * cellsAcross]
-            val east = component[row * cellsAcross + cellsAcross - 1]
+        for (row in 0 until referenceDown) {
+            val west = component[row * referenceAcross]
+            val east = component[row * referenceAcross + referenceAcross - 1]
             if (west >= 0) seamComponents.add(west)
             if (east >= 0) seamComponents.add(east)
         }
@@ -525,11 +577,15 @@ internal object RangeFront {
         val exit = exitsOf(belt, flowTarget, cellCount)
         val basins = basinsOf(exit, flowTarget, cellsAcross, cellsDown, cellWidthKm, cellHeightKm)
 
-        val chains = boundaryChains(belt, component, componentCount, cellsAcross, cellsDown)
+        val chains =
+            boundaryChains(referenceBelt, component, componentCount, referenceAcross, referenceDown)
         var straightRuns = 0
         val fronts = ArrayList<Front>()
         chains.forEach { chain ->
-            val runs = straightRunsOf(chain, cellsAcross, cellWidthKm, cellHeightKm)
+            val runs = straightRunsOf(
+                chain, referenceAcross, referenceDown, referenceCellWidthKm, referenceCellHeightKm,
+                referenceOffsetKmX, referenceOffsetKmY
+            )
             straightRuns += runs.size
             runs.forEach { run ->
                 if (run.lengthKm >= SHORTEST_FRONT_KM) {
@@ -834,6 +890,49 @@ internal object RangeFront {
     )
 
     /**
+     * The run of [span] + 1 points from [from] as a line: the least-squares line through them, cut
+     * where the first and last point project onto it.
+     */
+    private fun fittedRun(kmX: DoubleArray, kmY: DoubleArray, from: Int, span: Int): Run {
+        val points = kmX.size
+        var meanX = 0.0
+        var meanY = 0.0
+        for (step in 0..span) {
+            meanX += kmX[(from + step) % points]
+            meanY += kmY[(from + step) % points]
+        }
+        meanX /= span + 1
+        meanY /= span + 1
+        var spreadXX = 0.0
+        var spreadYY = 0.0
+        var spreadXY = 0.0
+        for (step in 0..span) {
+            val offX = kmX[(from + step) % points] - meanX
+            val offY = kmY[(from + step) % points] - meanY
+            spreadXX += offX * offX
+            spreadYY += offY * offY
+            spreadXY += offX * offY
+        }
+        // The principal axis of the points, turned to run the way the chain does.
+        val angle = 0.5 * atan2(2 * spreadXY, spreadXX - spreadYY)
+        var alongX = kotlin.math.cos(angle)
+        var alongY = kotlin.math.sin(angle)
+        val first = from % points
+        val last = (from + span) % points
+        if ((kmX[last] - kmX[first]) * alongX + (kmY[last] - kmY[first]) * alongY < 0) {
+            alongX = -alongX
+            alongY = -alongY
+        }
+        val startAlong = (kmX[first] - meanX) * alongX + (kmY[first] - meanY) * alongY
+        val endAlong = (kmX[last] - meanX) * alongX + (kmY[last] - meanY) * alongY
+        return Run(
+            meanX + alongX * startAlong, meanY + alongY * startAlong,
+            meanX + alongX * endAlong, meanY + alongY * endAlong,
+            endAlong - startAlong
+        )
+    }
+
+    /**
      * The straight runs of one closed boundary chain.
      *
      * A run stays straight while every point of it lies within [FRONT_STRAIGHTNESS_KM] of the chord
@@ -842,26 +941,37 @@ internal object RangeFront {
      * so a run may close round the end.
      *
      * Where a chain is entered decides where its runs are cut, so the walk is made from four evenly
-     * spaced entries and the one whose qualifying runs total the most length is kept: a long front
-     * is then not halved by the accident of the trace having begun in the middle of it. Four rather
-     * than more because the cost is linear in it and the cut only ever moves one run's worth.
+     * spaced entries and the one whose qualifying runs score the most is kept, the score being the
+     * sum of their squared lengths: a long front cut in two by the accident of where the trace
+     * began scores half what it would whole, where a plain sum of lengths would score the two
+     * halves the same as the front. Four entries rather than more because the cost is linear in it
+     * and the cut only ever moves one run's worth.
      */
     private fun straightRunsOf(
         chain: IntArray,
         cellsAcross: Int,
+        gridRows: Int,
         cellWidthKm: Double,
-        cellHeightKm: Double
+        cellHeightKm: Double,
+        offsetKmX: Double,
+        offsetKmY: Double
     ): List<Run> {
         val points = chain.size
         if (points < 3) return emptyList()
-        val kmX = DoubleArray(points) { (chain[it] % cellsAcross) * cellWidthKm }
-        val kmY = DoubleArray(points) { (chain[it] / cellsAcross) * cellHeightKm }
+        val kmX = DoubleArray(points) { (chain[it] % cellsAcross) * cellWidthKm + offsetKmX }
+        val kmY = DoubleArray(points) { (chain[it] / cellsAcross) * cellHeightKm + offsetKmY }
+        val onTheGridEdge = BooleanArray(points) {
+            val column = chain[it] % cellsAcross
+            val row = chain[it] / cellsAcross
+            column == 0 || column == cellsAcross - 1 || row == 0 || row == gridRows - 1
+        }
 
         var best: List<Run> = emptyList()
         var bestLength = -1.0
         for (entry in 0 until ENTRY_POINTS_PER_CHAIN) {
-            val runs = walk(kmX, kmY, points * entry / ENTRY_POINTS_PER_CHAIN)
-            val total = runs.filter { it.lengthKm >= SHORTEST_FRONT_KM }.sumOf { it.lengthKm }
+            val runs = walk(kmX, kmY, onTheGridEdge, points * entry / ENTRY_POINTS_PER_CHAIN)
+            val total = runs.filter { it.lengthKm >= SHORTEST_FRONT_KM }
+                .sumOf { it.lengthKm * it.lengthKm }
             if (total > bestLength) {
                 bestLength = total
                 best = runs
@@ -870,23 +980,34 @@ internal object RangeFront {
         return best
     }
 
-    /** One forward walk of a closed chain from [entry], cutting it into maximal straight runs. */
-    private fun walk(kmX: DoubleArray, kmY: DoubleArray, entry: Int): List<Run> {
+    /**
+     * One forward walk of a closed chain from [entry], cutting it into maximal straight runs, none
+     * of which reaches a point [onTheGridEdge] marks.
+     */
+    private fun walk(
+        kmX: DoubleArray,
+        kmY: DoubleArray,
+        onTheGridEdge: BooleanArray,
+        entry: Int
+    ): List<Run> {
         val points = kmX.size
         val runs = ArrayList<Run>()
         var covered = 0
         var from = entry
         while (covered < points) {
+            if (onTheGridEdge[from % points]) {
+                covered++
+                from++
+                continue
+            }
             var span = 1
-            while (covered + span < points && straight(kmX, kmY, from, span + 1)) span++
-            val startIndex = from % points
-            val endIndex = (from + span) % points
-            runs.add(
-                Run(
-                    kmX[startIndex], kmY[startIndex], kmX[endIndex], kmY[endIndex],
-                    hypot(kmX[endIndex] - kmX[startIndex], kmY[endIndex] - kmY[startIndex])
-                )
-            )
+            while (covered + span < points &&
+                !onTheGridEdge[(from + span + 1) % points] &&
+                straight(kmX, kmY, from, span + 1)
+            ) {
+                span++
+            }
+            runs.add(fittedRun(kmX, kmY, from, span))
             covered += span
             from += span
         }

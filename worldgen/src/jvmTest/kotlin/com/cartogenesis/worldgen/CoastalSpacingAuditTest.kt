@@ -64,7 +64,7 @@ import kotlin.test.assertTrue
  * In the audit tier: twenty-one whole worlds, seven of them at 2048, generated once each and each
  * reduced to its two reports — which carry no grid array — before the next is made, which is T4's
  * rule after the hosted runner went down under three retained 2048 worlds; then ten controlled
- * worlds and three more at 512 for the floor and the rulers.
+ * worlds at 512 and fourteen at 2048, and three more at 512 for the floor and the rulers.
  */
 class CoastalSpacingAuditTest {
 
@@ -363,72 +363,89 @@ class CoastalSpacingAuditTest {
     // ------------------------------------------------------------------ the controlled runs
 
     /**
-     * The two suspects moved directly: the relief band's wavelength and the belt's half-width.
+     * The two suspects moved directly — the relief band's wavelength and the belt's half-width —
+     * and a third the bearing split cannot tell from the grid, the terrain noise's finest octave.
      *
-     * At 512 on two seeds, because a controlled run has to be affordable and the grid sweep already
-     * says what the grid does. The relief wavelength is `TerrainConfig.reliefCornerKm`, which
-     * `TerrainStage.ReliefBand` turns into the scale the base relief is loudest at; the belt's
-     * half-width is `TectonicsConfig.andeanWidthCells` for a coastal range and
-     * `collisionWidthCells` for a plateau, moved together so a world's belts are all narrower or all
-     * broader rather than one kind of them. A halving and a doubling of each, a full octave either
-     * side of the stock figure: enough that a spacing which tracked either setting could not be
-     * mistaken for noise, and not so much that the world stops being the same world.
+     * On two seeds, at 512, where the brief asks for them and a controlled world costs seconds,
+     * and again at 2048, because at 512 the comb sits at two to four cells, the grid's own limit,
+     * where nothing could be seen to track anything. The relief wavelength is
+     * `TerrainConfig.reliefCornerKm`, which `TerrainStage.ReliefBand` turns into the scale the base
+     * relief is loudest at; the belt's half-width is `TectonicsConfig.andeanWidthCells` for a coastal
+     * range and `collisionWidthCells` for a plateau, moved together so a world's belts are all
+     * narrower or all broader rather than one kind of them. A halving and a doubling of each, a full
+     * octave either side of the stock figure: enough that a spacing which tracked either setting
+     * could not be mistaken for noise, and not so much that the world stops being the same world.
+     *
+     * The octave count is `TerrainConfig.octaves`. The noise is drawn on a lattice with as many
+     * cycles down the map as across it, so its finest octave is the same count of cells in both
+     * directions and twice the kilometres east-west — exactly the bearing signature a grid-set
+     * spacing has. Eight octaves put the finest at 512 cycles, 23 km across and 12 km down, which is
+     * four cells at 2048; seven octaves stop at twice that wavelength and nine at half of it. At 512
+     * a ninth octave would fall between the cells, so it is moved at 2048 only.
      *
      * A changed setting is a different world — the plates are the same, but the ground they carry
      * is not — so no front is matched from one run to another; each run's pooled gaps are read
-     * against the stock run's.
+     * against the stock run's at the same grid.
      */
     @Test
-    fun `the relief wavelength and the belt width moved, with the spacing beside them`() {
-        CONTROL_SEEDS.forEach { seed ->
-            val runs = LinkedHashMap<String, Map<Floor, RangeFront.Report>>()
-            runs["stock"] = reportsOf(seed, CONTROL_SIDE)
-            listOf(0.5, 2.0).forEach { factor ->
-                runs["relief wavelength x$factor"] = reportsOf(seed, CONTROL_SIDE, edit = { config ->
-                    config.copy(
-                        terrain = config.terrain.copy(
-                            reliefCornerKm = config.terrain.reliefCornerKm * factor
-                        )
+    fun `the relief wavelength, the belt width and the finest octave moved, with the spacing beside them`() {
+        listOf(CONTROL_SIDE, AUTHORS_SIDE).forEach { side ->
+            CONTROL_SEEDS.forEach { seed -> controlledRuns(seed, side) }
+        }
+    }
+
+    private fun controlledRuns(seed: Long, side: Int) {
+        val runs = LinkedHashMap<String, Map<Floor, RangeFront.Report>>()
+        runs["stock"] = reportsOf(seed, side)
+        listOf(0.5, 2.0).forEach { factor ->
+            runs["relief wavelength x$factor"] = reportsOf(seed, side, edit = { config ->
+                config.copy(
+                    terrain = config.terrain.copy(reliefCornerKm = config.terrain.reliefCornerKm * factor)
+                )
+            })
+        }
+        listOf(0.5, 2.0).forEach { factor ->
+            runs["belt half-width x$factor"] = reportsOf(seed, side, edit = { config ->
+                config.copy(
+                    tectonics = config.tectonics.copy(
+                        andeanWidthCells = (config.tectonics.andeanWidthCells * factor).toFloat(),
+                        collisionWidthCells = (config.tectonics.collisionWidthCells * factor).toFloat()
                     )
+                )
+            })
+        }
+        if (side > CONTROL_SIDE) {
+            listOf(-1, 1).forEach { step ->
+                runs["octaves %+d".format(step)] = reportsOf(seed, side, edit = { config ->
+                    config.copy(terrain = config.terrain.copy(octaves = config.terrain.octaves + step))
                 })
             }
-            listOf(0.5, 2.0).forEach { factor ->
-                runs["belt half-width x$factor"] = reportsOf(seed, CONTROL_SIDE, edit = { config ->
-                    config.copy(
-                        tectonics = config.tectonics.copy(
-                            andeanWidthCells = (config.tectonics.andeanWidthCells * factor).toFloat(),
-                            collisionWidthCells =
-                                (config.tectonics.collisionWidthCells * factor).toFloat()
-                        )
-                    )
-                })
+        }
+        Floor.entries.forEach { floor ->
+            runs.forEach { (label, byFloor) ->
+                printPooled(listOf(byFloor.getValue(floor)), "seed $seed at $side, ${floor.label}, $label")
             }
-            Floor.entries.forEach { floor ->
-                runs.forEach { (label, byFloor) ->
-                    printPooled(listOf(byFloor.getValue(floor)), "seed $seed at $CONTROL_SIDE, ${floor.label}, $label")
-                }
-                val stock = runs.getValue("stock").getValue(floor)
-                runs.forEach { (label, byFloor) ->
-                    val report = byFloor.getValue(floor)
-                    fun moved(of: (RangeFront.Report) -> List<Double>): String {
-                        val here = RangeFront.median(of(report))
-                        val there = RangeFront.median(of(stock))
-                        val ratio = if (here == null || there == null || there == 0.0) null else here / there
-                        return "%s km over %d (%s of stock)".format(
-                            RangeFront.show(here), of(report).size, RangeFront.show(ratio, 2)
-                        )
-                    }
-                    println(
-                        "X1d CONTROL seed %d, %s, %s: trunk %s; half-width %s; catchment comb %s; drawn comb %s"
-                            .format(
-                                seed, floor.label, label,
-                                moved { it.gapsKm(trunksOnly = true) },
-                                moved { it.halfWidthsKm() },
-                                moved { r -> r.measured.flatMap { it.catchmentSpacingsKm } },
-                                moved { r -> r.measured.flatMap { it.drawnSpacingsKm } }
-                            )
+            val stock = runs.getValue("stock").getValue(floor)
+            runs.forEach { (label, byFloor) ->
+                val report = byFloor.getValue(floor)
+                fun moved(of: (RangeFront.Report) -> List<Double>): String {
+                    val here = RangeFront.median(of(report))
+                    val there = RangeFront.median(of(stock))
+                    val ratio = if (here == null || there == null || there == 0.0) null else here / there
+                    return "%s km over %d (%s of stock)".format(
+                        RangeFront.show(here), of(report).size, RangeFront.show(ratio, 2)
                     )
                 }
+                println(
+                    ("X1d CONTROL seed %d at %d, %s, %s: trunk %s; half-width %s; catchment comb %s; " +
+                        "drawn comb %s").format(
+                        seed, side, floor.label, label,
+                        moved { it.gapsKm(trunksOnly = true) },
+                        moved { it.halfWidthsKm() },
+                        moved { r -> r.measured.flatMap { it.catchmentSpacingsKm } },
+                        moved { r -> r.measured.flatMap { it.drawnSpacingsKm } }
+                    )
+                )
             }
         }
     }

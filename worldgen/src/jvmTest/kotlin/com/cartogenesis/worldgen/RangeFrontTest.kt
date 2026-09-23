@@ -142,11 +142,13 @@ class RangeFrontTest {
             "spacing $spacingCells cells against the $OUTLET_SPACING_CELLS laid down"
         )
 
-        // The divide is the range's northern edge, 39 rows from the front.
+        // The divide is the range's northern edge, 39 rows from the front. The front is found on
+        // the square reference grid, whose cells are two of these rows tall, so where its chord
+        // lies is known to one reference cell and no better.
         val depthKm = assertNotNull(front.medianDivideToFrontKm)
         val expectedDepthKm = (49 - 10) * CELL_HEIGHT_KM
         assertTrue(
-            abs(depthKm - expectedDepthKm) <= CELL_HEIGHT_KM,
+            abs(depthKm - expectedDepthKm) <= CELL_WIDTH_KM,
             "divide-to-front $depthKm km against the $expectedDepthKm km laid down"
         )
         front.spacingsKm.forEach {

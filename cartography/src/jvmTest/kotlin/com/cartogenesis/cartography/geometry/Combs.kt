@@ -30,8 +30,9 @@ import kotlin.math.sqrt
  * resultant length (how closely the teeth sit on the ideal positions) of [MINIMUM_REGULARITY]. A
  * spacing that is fixed *in cells* across grids, rather than on the ground, is the grid's; that
  * claim needs the same world at two grids, and the audit tier makes it ([Census.pairCombs]): a comb
- * found again at half the grid at half the spacing in cells is fixed on the ground and let stand,
- * and one found at the same spacing in cells, or not found again, stands as a violation.
+ * found again at half the grid, at the same spacing on the ground and with its teeth where they
+ * were, is fixed on the ground and let stand; one found at the same spacing in cells, at any other
+ * spacing, with its teeth elsewhere, or not found again, stands as a violation.
  */
 internal object Combs {
 
@@ -59,13 +60,39 @@ internal object Combs {
     /** How far across from an anchor its comb may reach, in cells. */
     private const val REACH_CELLS = LONGEST_SPACING_CELLS * 6
 
-    private const val SPACING_STEP_CELLS = 0.05
+    /** The step the spacings are scanned at, in cells. */
+    const val SPACING_STEP_CELLS = 0.05
     private const val TILE_CELLS = 64.0
     private const val HARMONIC_TIE = 0.9
 
     /** How close across two parallel runs lie and are one tooth, in cells: half a cell. */
     private const val COLLINEAR_CELLS = 0.5
 
+    /**
+     * How far a tooth may sit from where a ruler would put it, in spacings, when the comb just
+     * clears [MINIMUM_REGULARITY]: teeth jittered uniformly by `±a` spacings have a mean resultant
+     * length of `sin(2 pi a) / (2 pi a)`, and this is the `a` at which that falls to the bar,
+     * solved by bisection (0.124).
+     */
+    val TOOTH_JITTER_SPACINGS: Double = run {
+        var low = 1e-6
+        var high = 0.5
+        repeat(60) {
+            val middle = (low + high) / 2
+            val resultant = sin(2 * PI * middle) / (2 * PI * middle)
+            if (resultant > MINIMUM_REGULARITY) low = middle else high = middle
+        }
+        (low + high) / 2
+    }
+
+    /**
+     * A comb: [teeth] consecutive teeth [spacingCells] apart along [bearingDegrees] on the sheet.
+     *
+     * [acrossX] and [acrossY] are the unit step across the teeth on the sheet, in cells, and
+     * [toothOffsetsCells] where each counted tooth lies along it from the anchor tooth's midpoint,
+     * in cells: what a second reading of the same world at another grid is matched against, tooth
+     * for tooth ([Census.pairCombs]).
+     */
     class Comb(
         val anchorXCells: Double,
         val anchorYCells: Double,
@@ -73,7 +100,10 @@ internal object Combs {
         val spacingCells: Double,
         val teeth: Int,
         val regularity: Double,
-        val rayleigh: Double
+        val rayleigh: Double,
+        val acrossX: Double = 0.0,
+        val acrossY: Double = 1.0,
+        val toothOffsetsCells: List<Double> = List(teeth) { it * spacingCells }
     ) {
         fun describe(grid: GridFrame): String {
             var column = anchorXCells % grid.cellsAcross
@@ -197,19 +227,32 @@ internal object Combs {
             // The teeth that count: long enough to be teeth at this spacing, one per multiple, and side
             // by side with no tooth missing — a ruled comb has every tooth, where offsets that fall in
             // phase by chance among a crowd of lines skip multiples.
-            val multiples = toothOffsets.indices
-                .filter { toothLengths[it] >= TOOTH_OVER_SPACING * bestSpacing }
-                .map { Math.round(toothOffsets[it] / bestSpacing) }.distinct().sorted()
+            val longTeeth = toothOffsets.indices.filter { toothLengths[it] >= TOOTH_OVER_SPACING * bestSpacing }
+            val multiples = longTeeth.map { Math.round(toothOffsets[it] / bestSpacing) }.distinct().sorted()
             var distinctMultiples = if (multiples.isEmpty()) 0 else 1
+            var runEnd = if (multiples.isEmpty()) 0L else multiples[0]
             var consecutive = 1
             for (at in 1 until multiples.size) {
                 consecutive = if (multiples[at] == multiples[at - 1] + 1) consecutive + 1 else 1
-                if (consecutive > distinctMultiples) distinctMultiples = consecutive
+                if (consecutive > distinctMultiples) {
+                    distinctMultiples = consecutive
+                    runEnd = multiples[at]
+                }
             }
             if (distinctMultiples >= MINIMUM_TEETH && regularity >= MINIMUM_REGULARITY) {
                 members.forEach { claimed[it] = true }
+                // The counted teeth where they actually lie, one to a multiple: the tooth nearest
+                // the ruler's place where two runs fell on one multiple.
+                val counted = (runEnd - distinctMultiples + 1..runEnd).map { multiple ->
+                    longTeeth.filter { Math.round(toothOffsets[it] / bestSpacing) == multiple }
+                        .minBy { abs(toothOffsets[it] - multiple * bestSpacing) }
+                        .let { toothOffsets[it] }
+                }
                 combs.add(
-                    Comb(anchor.midX, anchor.midY, anchor.directionDegrees % 180.0, bestSpacing, distinctMultiples, regularity, bestZ)
+                    Comb(
+                        anchor.midX, anchor.midY, anchor.directionDegrees % 180.0, bestSpacing, distinctMultiples, regularity, bestZ,
+                        acrossX = -anchor.uy, acrossY = anchor.ux, toothOffsetsCells = counted
+                    )
                 )
             }
         }

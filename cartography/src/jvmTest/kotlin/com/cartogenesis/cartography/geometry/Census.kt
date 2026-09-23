@@ -4,7 +4,7 @@ import com.cartogenesis.worldgen.LayerCapture
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.sqrt
+import kotlin.math.abs
 
 /**
  * What a census expects of today's worlds: the findings its known failures record, the signature
@@ -212,23 +212,48 @@ internal class Census(val side: Int, worlds: Int) {
         const val SAME_COMB_KM = 150.0
 
         /**
-         * The spacing ratio between a comb fixed in cells (1: the same count of cells at both grids)
-         * and one fixed on the ground (2: twice the cells at a grid twice as fine), taken at their
-         * geometric mean, `sqrt(2)`.
+         * How far one comb's spacing read at two grids may disagree with itself on the ground, as a
+         * share of it. A comb that just clears the regularity bar has each tooth up to
+         * [Combs.TOOTH_JITTER_SPACINGS] of a spacing from its ruled place, and the spacing fitted
+         * over the fewest teeth a comb has, [Combs.MINIMUM_TEETH], is out by at most the slope such a
+         * jitter can put through them, `a * sum|k - mean| / sum (k - mean)^2` over the teeth's
+         * indices (6.4% for six), and by half the scan's step at the closest spacing scanned (0.8%).
+         * The two readings, one at each grid, may be out that far in opposite directions: 14%.
          */
-        val GROUND_FIXED_RATIO = sqrt(2.0)
+        val SAME_SPACING_SHARE: Double = run {
+            val indices = (0 until Combs.MINIMUM_TEETH).map { it.toDouble() }
+            val mean = indices.average()
+            val fitted = Combs.TOOTH_JITTER_SPACINGS * indices.sumOf { abs(it - mean) } / indices.sumOf { (it - mean) * (it - mean) }
+            2 * (fitted + Combs.SPACING_STEP_CELLS / 2 / Combs.SHORTEST_SPACING_CELLS)
+        }
 
         /**
-         * Each comb [fine] found at a grid twice as fine as [coarse]'s, matched with the nearest comb
-         * [coarse] found along the same bearing within [SAME_COMB_KM]: fixed on the ground where its
-         * spacing in cells has doubled, and the grid's where it has not or where it has no partner.
+         * How far across the bearing one tooth read at two grids may lie from itself, in spacings:
+         * each reading within [Combs.TOOTH_JITTER_SPACINGS] of the ruled place both share, so twice
+         * that. A second comb's tooth laid down at random falls within it half the time, which is why
+         * a pairing asks for a whole comb's worth of teeth to agree and not one.
          */
-        fun pairCombs(fine: LayerReading, fineFrame: GridFrame, coarse: LayerReading, coarseFrame: GridFrame): List<CombPairing> =
-            fine.combs.mapIndexed { index, comb ->
+        val SAME_TOOTH_SPACINGS: Double = 2 * Combs.TOOTH_JITTER_SPACINGS
+
+        /**
+         * Each comb [fine] found at a grid finer than [coarse]'s, matched with the nearest comb
+         * [coarse] found along the same bearing within [SAME_COMB_KM], the distance taken the short
+         * way round the seam. It is fixed on the ground, and let stand, only where the two are one
+         * comb on the ground: the same spacing in kilometres, which is as many more cells between the
+         * teeth as the finer grid has cells to the coarser's (within [SAME_SPACING_SHARE]), and at
+         * least [Combs.MINIMUM_TEETH] of its teeth lying on the partner's (within
+         * [SAME_TOOTH_SPACINGS]). Fixed in cells, at another spacing, with its teeth elsewhere, or
+         * with no partner, it is the grid's and stands.
+         */
+        fun pairCombs(fine: LayerReading, fineFrame: GridFrame, coarse: LayerReading, coarseFrame: GridFrame): List<CombPairing> {
+            val groundRatio = coarseFrame.cellWidthKm / fineFrame.cellWidthKm
+            return fine.combs.mapIndexed { index, comb ->
                 val x = comb.anchorXCells * fineFrame.cellWidthKm
                 val y = comb.anchorYCells * fineFrame.cellHeightKm
-                fun distance(other: Combs.Comb): Double =
-                    lengthOf(other.anchorXCells * coarseFrame.cellWidthKm - x, other.anchorYCells * coarseFrame.cellHeightKm - y)
+                fun distance(other: Combs.Comb): Double = lengthOf(
+                    fineFrame.wrappedEastwardKm(other.anchorXCells * coarseFrame.cellWidthKm - x),
+                    other.anchorYCells * coarseFrame.cellHeightKm - y
+                )
                 val match = coarse.combs
                     .filter { fineFrame.bearingGapDegrees(it.bearingDegrees, comb.bearingDegrees) <= Combs.PARALLEL_DEGREES * 2 }
                     .minByOrNull(::distance)
@@ -236,16 +261,43 @@ internal class Census(val side: Int, worlds: Int) {
                     CombPairing(index, "${comb.describe(fineFrame)} | no comb at ${coarseFrame.cellsAcross} within $SAME_COMB_KM km: stands", false)
                 } else {
                     val ratio = comb.spacingCells / match.spacingCells
-                    val ground = ratio >= GROUND_FIXED_RATIO
+                    val onTheGround = ratio / groundRatio
+                    val spacingAgrees = onTheGround <= 1 + SAME_SPACING_SHARE && onTheGround >= 1 / (1 + SAME_SPACING_SHARE)
+                    val shared = sharedTeeth(comb, fineFrame, match, coarseFrame)
+                    val ground = spacingAgrees && shared >= Combs.MINIMUM_TEETH
+                    val verdict = when {
+                        ground -> "fixed on the ground, let stand"
+                        !spacingAgrees && abs(ratio - 1) <= SAME_SPACING_SHARE -> "fixed in cells, the grid's"
+                        !spacingAgrees -> "at another spacing on the ground, not the same comb: stands"
+                        else -> "its teeth are not the partner's, not the same comb: stands"
+                    }
                     CombPairing(
                         index,
-                        "%s | at %d %.2f cells apart, %.2f times: %s".format(
-                            comb.describe(fineFrame), coarseFrame.cellsAcross, match.spacingCells, ratio,
-                            if (ground) "fixed on the ground, let stand" else "fixed in cells, the grid's"
+                        "%s | at %d %.2f cells apart, %.2f times (%.2f of the same spacing on the ground), %d teeth in common: %s".format(
+                            comb.describe(fineFrame), coarseFrame.cellsAcross, match.spacingCells, ratio, onTheGround, shared, verdict
                         ),
                         ground
                     )
                 }
             }
+        }
+
+        /**
+         * How many of [fine]'s counted teeth lie on one of [coarse]'s, across [fine]'s bearing and
+         * within [SAME_TOOTH_SPACINGS] of its spacing: both combs' teeth placed on the finer sheet,
+         * east-west offsets taken the short way round the seam.
+         */
+        private fun sharedTeeth(fine: Combs.Comb, fineFrame: GridFrame, coarse: Combs.Comb, coarseFrame: GridFrame): Int {
+            val xScale = coarseFrame.cellWidthKm / fineFrame.cellWidthKm
+            val yScale = coarseFrame.cellHeightKm / fineFrame.cellHeightKm
+            val coarseTeeth = coarse.toothOffsetsCells.map { offset ->
+                val xFine = (coarse.anchorXCells + offset * coarse.acrossX) * xScale
+                val yFine = (coarse.anchorYCells + offset * coarse.acrossY) * yScale
+                val dx = fineFrame.wrappedEastwardKm((xFine - fine.anchorXCells) * fineFrame.cellWidthKm) / fineFrame.cellWidthKm
+                dx * fine.acrossX + (yFine - fine.anchorYCells) * fine.acrossY
+            }
+            val tolerance = SAME_TOOTH_SPACINGS * fine.spacingCells
+            return fine.toothOffsetsCells.count { offset -> coarseTeeth.any { abs(it - offset) <= tolerance } }
+        }
     }
 }

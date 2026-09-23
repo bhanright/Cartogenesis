@@ -77,9 +77,10 @@ internal class Verdict(
 ) {
     val worst: Place? get() = places.maxByOrNull { it.figure }
 
-    /** What a known failure records of this violation: how many places, the worst and its figure. */
-    fun signature(): Signature = worst?.let { Signature(places.size, it.column, it.row, it.figure) }
-        ?: Signature(1, -1, -1, figure)
+    /** What a known failure records of this violation: how many places, the worst and its figure, and the rest. */
+    fun signature(): Signature =
+        if (places.isEmpty()) Signature(1, -1, Signature.LAYER_WIDE_ROW, figure)
+        else Signature.of(places.map { (it.column to it.row) to it.figure })
 }
 
 /**
@@ -95,7 +96,9 @@ internal class RateTest(
     val lowerPer1000: Double,
     val naturalPer1000: Double,
     val minimumCellWidths: Double,
-    val blocks: Int
+    val blocks: Int,
+    /** The count's spread on the square-root scale the lower bound was taken with. */
+    val spreadOnRoots: Double = 0.0
 ) {
     val ratePer1000: Double get() = if (cellWidths > 0) count * 1000 / cellWidths else 0.0
     val barPer1000: Double get() = naturalPer1000 * BearingIsotropy.EFFECT_RATIO
@@ -133,9 +136,12 @@ internal class RateTest(
         ): RateTest {
             val total = blocks.sumOf { it.first }.toDouble()
             val length = blocks.sumOf { it.second }
-            // On the square-root scale, the bootstrap's spread over blocks; a layer traced twice has
-            // each block twice, which halves the bootstrap's variance of a count that is itself
-            // doubled, and the two cancel on this scale, so the spread reads straight across.
+            // On the square-root scale, the bootstrap's spread over blocks. A layer traced twice
+            // holds every block twice, and the two copies of one border always agree, so resampling
+            // them as independent draws twice as many blocks as the layer has: the variance of the
+            // count, halved again by the division that follows, comes out too small by the
+            // duplication, and the spread by its square root, which is put back here as
+            // `BearingIsotropy` puts it back for the chords.
             var spread = POISSON_SPREAD_ON_ROOTS
             if (blocks.size >= 2 && total > 0 && length > 0) {
                 val random = Random(seed)
@@ -149,14 +155,14 @@ internal class RateTest(
                     }
                     sqrt(if (line > 0) events / duplication * length / line else 0.0)
                 }
-                spread = maxOf(spread, Statistics.standardDeviation(roots))
+                spread = maxOf(spread, Statistics.standardDeviation(roots) * sqrt(duplication.toDouble()))
             }
             val count = total / duplication
             val cellWidths = length / duplication
             val lowerRoot = (sqrt(count) - z * spread).coerceAtLeast(0.0)
             val lower = if (cellWidths > 0) lowerRoot * lowerRoot * 1000 / cellWidths else 0.0
             val minimum = ceil(z * z / 4 + 1) * eventCellWidths
-            return RateTest(count, cellWidths, lower, naturalPer1000, minimum, blocks.size / duplication)
+            return RateTest(count, cellWidths, lower, naturalPer1000, minimum, blocks.size / duplication, spread)
         }
 
         /** A Poisson count's standard deviation on the square-root scale. */
@@ -401,7 +407,7 @@ internal object GeometryGuard {
             val text = isotropy.joinToString("; ") { it.toString() } +
                 if (layer.followsLatitude) " | against the zonal control's ratios " + nulls.joinToString("/") { "%.2f".format(it) } else ""
             val places = isotropy.filterIndexed { index, _ -> outcomes[index] == Outcome.VIOLATION }
-                .map { Place(it.bearingIndex, -1, it.ratio) }
+                .map { Place(it.bearingIndex, Signature.LAYER_WIDE_ROW, it.ratio) }
             verdicts[Detector.ISOTROPY] = Verdict(allOf(outcomes), text, places)
         }
 
@@ -412,7 +418,7 @@ internal object GeometryGuard {
             verdicts[Detector.ORIENTATION] = if (layer.openLines) Verdict(Outcome.NOT_APPLICABLE, "open lines only")
             else Verdict(
                 allOf(outcomes), axes.joinToString("; ") { it.toString() },
-                axes.filter { it.outcome == Outcome.VIOLATION }.map { Place(it.bearingIndex, -1, it.ratio) }
+                axes.filter { it.outcome == Outcome.VIOLATION }.map { Place(it.bearingIndex, Signature.LAYER_WIDE_ROW, it.ratio) }
             )
         }
 

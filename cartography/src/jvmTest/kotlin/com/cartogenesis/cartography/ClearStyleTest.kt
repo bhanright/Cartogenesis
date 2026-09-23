@@ -2,6 +2,10 @@ package com.cartogenesis.cartography
 
 import com.cartogenesis.cartography.ColorVision.Deficiency.DEUTERANOPIA
 import com.cartogenesis.cartography.ColorVision.Deficiency.PROTANOPIA
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -19,7 +23,7 @@ import kotlin.test.assertTrue
  * matrices at full severity, applied in linear light, and CIEDE2000 for the difference. The chrome
  * guard in `:ui` measures with the same instrument and states the same kind of margin.
  */
-class ClearStyleTest {
+class ClearStyleTest : BorrowsSharedWorlds() {
 
     private companion object {
 
@@ -56,6 +60,12 @@ class ClearStyleTest {
             "deuteranopia" to DEUTERANOPIA,
             "protanopia" to PROTANOPIA
         )
+
+        /** The known failures the rendered clauses record, by the audit finding. */
+        const val FILLS_SHADED_TOGETHER =
+            "Audit III F-I9: the colour-blind realm fills come closer than the margin where the relief shades them"
+        const val HATCH_SHADED_AWAY =
+            "Audit III F-I9: the colour-blind hatch comes closer to its fill than the margin where the relief shades it"
     }
 
     private fun difference(a: Int, b: Int, deficiency: ColorVision.Deficiency?): Double =
@@ -119,13 +129,17 @@ class ClearStyleTest {
     }
 
     /**
-     * The nine realm fills, as the political view actually draws them.
+     * The nine realm fills, blended toward every stop of the land ramp.
      *
      * Not the nine colours as published. The rasterizer blends a realm
      * [MapRasterizer.REALM_RELIEF_BLEED] of the way toward the land beneath it so that the
      * political map still reads as a map of somewhere, and that blend drags all nine toward one
      * colour — most at the snow line, where the land is nearly white. So the measurement is taken
      * over every stop of the ramp, and the worst of those is what the bar is set against.
+     *
+     * This is the palette on its own, before the relief shading every view lays over it and against
+     * the ramp's stops rather than the political view's own ground; the fills as the political view
+     * draws them are the next clause's.
      */
     @Test
     fun `every pair of realm fills stays apart under both deficiencies, over every ground`() {
@@ -155,6 +169,62 @@ class ClearStyleTest {
             "CLEAR realms: 9 fills over ${LAND_STOPS.size} grounds, 36 pairs each, " +
                 "worst ${worst.rounded()} CIEDE2000 ($worstWhere), bar $MARGIN"
         )
+    }
+
+    /**
+     * The nine realm fills as the political view draws them: the gallery's world rendered once
+     * with all its land given to each realm in turn, so that each land cell carries every realm
+     * over the same ground and under the same relief shade, and every pair compared cell by cell.
+     * Lakes are left out, since they are drawn as water whoever holds them.
+     *
+     * The relief darkens the fills together where the ground faces away from the light, and on the
+     * gallery's world some pairs come closer there than the margin (Audit III, F-I9, on this
+     * clause's older form, which measured the fills unshaded); the clause runs as a known failure
+     * recorded by the pairs that do.
+     */
+    @Test
+    fun `every pair of realm fills stays apart as the political view draws them`() {
+        val world = TestWorlds.gallery
+        val setSize = MapStyle.CLEAR.realmRamp!!.size
+        val drawn = (0 until setSize).map { drawnAs(world, it) }
+        val cells = realmCells(world)
+        var worst = Double.MAX_VALUE
+        var worstWhere = ""
+        val shortPairs = sortedSetOf<String>()
+        val shortCells = HashMap<String, Int>()
+        SIMULATIONS.forEach { (name, deficiency) ->
+            val measured = HashMap<Long, Double>()
+            for (first in 0 until setSize) for (second in first + 1 until setSize) {
+                var short = 0
+                for (cell in cells) {
+                    val a = drawn[first][cell]
+                    val b = drawn[second][cell]
+                    val apart = measured.getOrPut((a.toLong() shl 32) or (b.toLong() and 0xFFFFFFFFL)) { difference(a, b, deficiency) }
+                    if (apart < worst) {
+                        worst = apart
+                        worstWhere = "realms $first and $second at cell $cell under $name"
+                    }
+                    if (apart < MARGIN) short++
+                }
+                if (short > 0) {
+                    shortPairs.add("$first-$second")
+                    shortCells["$first-$second $name"] = short
+                }
+            }
+        }
+        println(
+            "CLEAR realms as drawn over ${cells.size} land cells of seed 234475: worst ${worst.rounded()} " +
+                "CIEDE2000 ($worstWhere), bar $MARGIN; under it: " +
+                shortCells.entries.joinToString { "${it.key} on ${it.value} cells" }.ifEmpty { "none" }
+        )
+        KnownFailures.expect(FILLS_SHADED_TOGETHER, "pairs under the margin: 0-3, 0-6, 1-2, 1-4, 1-5, 2-5, 3-6, 4-5, 7-8") {
+            if (shortPairs.isNotEmpty()) {
+                throw RecordedViolation(
+                    "realm fills as drawn come within ${worst.rounded()} of each other ($worstWhere), under $MARGIN",
+                    "pairs under the margin: " + shortPairs.joinToString()
+                )
+            }
+        }
     }
 
     /**
@@ -191,6 +261,70 @@ class ClearStyleTest {
             }
         }
         println("CLEAR hatch: worst stroke-against-fill ${worst.rounded()} CIEDE2000, bar $MARGIN")
+    }
+
+    /**
+     * The hatch as the political view draws it: each realm of the second turn of the set against
+     * its twin of the first, rendered over the gallery's world the way the clause above renders
+     * the fills, and compared at the cells the hatch strikes, which are the only ones that differ.
+     */
+    @Test
+    fun `the hatch stands out from its fill as the political view draws it`() {
+        val world = TestWorlds.gallery
+        val setSize = MapStyle.CLEAR.realmRamp!!.size
+        val cells = realmCells(world)
+        var worst = Double.MAX_VALUE
+        var worstWhere = ""
+        val shortRealms = sortedSetOf<Int>()
+        for (id in 0 until setSize) {
+            val plain = drawnAs(world, id)
+            val hatched = drawnAs(world, id + setSize)
+            val struck = cells.filter { plain[it] != hatched[it] }
+            assertTrue(
+                struck.size > cells.size / 4,
+                "realm ${id + setSize}'s hatch struck ${struck.size} of ${cells.size} cells, not the third it rules"
+            )
+            SIMULATIONS.forEach { (name, deficiency) ->
+                val measured = HashMap<Long, Double>()
+                for (cell in struck) {
+                    val a = plain[cell]
+                    val b = hatched[cell]
+                    val apart = measured.getOrPut((a.toLong() shl 32) or (b.toLong() and 0xFFFFFFFFL)) { difference(a, b, deficiency) }
+                    if (apart < worst) {
+                        worst = apart
+                        worstWhere = "realm ${id + setSize} at cell $cell under $name"
+                    }
+                    if (apart < MARGIN) shortRealms.add(id + setSize)
+                }
+            }
+        }
+        println("CLEAR hatch as drawn: worst stroke-against-fill ${worst.rounded()} CIEDE2000 ($worstWhere), bar $MARGIN")
+        KnownFailures.expect(HATCH_SHADED_AWAY, "hatched realms under the margin: 9") {
+            if (shortRealms.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the hatch comes within ${worst.rounded()} of its fill ($worstWhere), under $MARGIN",
+                    "hatched realms under the margin: " + shortRealms.joinToString()
+                )
+            }
+        }
+    }
+
+    /** The land cells a realm's fill is drawn on: every land cell that is not under a lake. */
+    private fun realmCells(world: WorldMap): List<Int> =
+        world.sea.isLand.indices.filter { world.sea.isLand[it] && !world.rivers.lakes.isLake(it) }
+
+    /**
+     * What the political view draws for realm [id] on every land cell of [world]: the world with
+     * all its land given to that realm, rendered in the colour-blind style with the coast's ink
+     * left off, since the coast is drawn over the fill whoever holds it.
+     */
+    private fun drawnAs(world: WorldMap, id: Int): IntArray {
+        val land = world.sea.isLand
+        val owners = IntArray(land.size) { cell -> if (land[cell]) id else world.nations.nationId[cell] }
+        val held = world.copy(nations = world.nations.copy(nationId = owners))
+        return MapRasterizer.rasterize(
+            held, RenderOptions(view = MapView.POLITICAL, style = MapStyle.CLEAR, showCoastline = false)
+        )
     }
 
     /** And that the hatch is laid where the style says it is, and only past the ninth realm. */

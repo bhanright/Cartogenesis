@@ -977,8 +977,11 @@ object MapRasterizer {
      * know how fast the floor falls here — a central difference over [stencil] cells each way,
      * divided by the distance it spans, which is the depth a single pixel of travel covers. Over a
      * stencil rather than between neighbours, for the reason [Isobaths.slopeStencil] gives.
+     *
+     * Internal rather than private so that `IsobathTest` holds its own measurement to this one on a
+     * generated world instead of trusting a copy of it.
      */
-    private fun seaContour(
+    internal fun seaContour(
         world: WorldMap,
         cell: Int,
         depth: Float,

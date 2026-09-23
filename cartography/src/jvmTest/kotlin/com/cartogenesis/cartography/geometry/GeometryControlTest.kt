@@ -312,6 +312,45 @@ class GeometryControlTest {
             assertTrue(different !is GeometryViolation && different.message!!.contains("a different violation"), "$other passed as $stamp")
         }
         assertEquals(Signature.parse(stamp.toString()).toString(), stamp.toString(), "a signature reads back as written")
+        // Every place past the bar is part of the violation, not only the worst: two stamps, of
+        // which the lesser is mended while a third breaks elsewhere, keep the count, the worst place
+        // and its figure, and are a different violation all the same.
+        val aside = ArrayList<String>()
+        val asideSink = { finding: String, detail: String -> aside.add("$finding: $detail"); Unit }
+        val pair = Signature(2, 30, 40, 12.5, listOf(90 to 90))
+        KnownFailures.expect("control finding", pair, { throw GeometryViolation("two stamps", Signature(2, 30, 40, 12.5, listOf(91 to 89))) }, asideSink)
+        val replaced = assertFailsWith<AssertionError> {
+            KnownFailures.expect("control finding", pair, { throw GeometryViolation("one mended, one new", Signature(2, 30, 40, 12.5, listOf(150 to 20))) }, asideSink)
+        }
+        assertTrue(replaced.message!!.contains("a different violation"), "a mended place replaced by a new one passed as the old pair")
+        assertEquals(pair.toString(), Signature.parse(pair.toString()).toString(), "a signature with its other places reads back as written")
+        // A grid bearing is a name, not a place: north-south is not east-west two columns over.
+        val eastWest = Signature(1, 0, Signature.LAYER_WIDE_ROW, 2.0)
+        KnownFailures.expect("control finding", eastWest, { throw GeometryViolation("along the rows", Signature(1, 0, Signature.LAYER_WIDE_ROW, 2.01)) }, asideSink)
+        val otherBearing = assertFailsWith<AssertionError> {
+            KnownFailures.expect("control finding", eastWest, { throw GeometryViolation("along the columns", Signature(1, 2, Signature.LAYER_WIDE_ROW, 2.0)) }, asideSink)
+        }
+        assertTrue(otherBearing.message!!.contains("a different violation"), "a north-south violation passed as the recorded east-west one")
+        assertEquals(2, aside.size, "the two matching violations were recorded")
+        // A clause outside the guard: its own violation type and its text signature, whole.
+        KnownFailures.expect("text finding", "west 3, north 2", { throw RecordedViolation("shores left uninked", "west 3, north 2") }, asideSink)
+        val otherText = assertFailsWith<AssertionError> {
+            KnownFailures.expect("text finding", "west 3, north 2", { throw RecordedViolation("shores left uninked", "west 3, north 1") }, asideSink)
+        }
+        assertTrue(otherText.message!!.contains("a different violation"), "another text signature passed")
+        assertEquals("text finding fixed: arm this clause",
+            assertFailsWith<AssertionError> { KnownFailures.expect("text finding", "west 3, north 2", { }, asideSink) }.message)
+        // Each overload catches its own type and lets the other's through untouched.
+        assertFailsWith<GeometryViolation> {
+            KnownFailures.expect("text finding", "west 3, north 2", { throw GeometryViolation("a stamp", stamp) }, asideSink)
+        }
+        assertFailsWith<RecordedViolation> {
+            KnownFailures.expect("control finding", stamp, { throw RecordedViolation("shores left uninked", "west 3, north 2") }, asideSink)
+        }
+        assertFailsWith<AssertionError> {
+            KnownFailures.expect("text finding", "west 3, north 2", { assertEquals(1, 2) }, asideSink)
+        }.also { assertTrue(it !is RecordedViolation && it.message?.contains("fixed") != true) }
+        assertEquals(3, aside.size, "only the matching violations were recorded")
         // A clause that no longer fails fails the helper, naming the finding.
         val fixed = assertFailsWith<AssertionError> { KnownFailures.expect("control finding", stamp, { }, sink) }
         assertEquals("control finding fixed: arm this clause", fixed.message)
@@ -327,6 +366,70 @@ class GeometryControlTest {
             KnownFailures.expect("control finding", stamp, { error("the world did not generate") }, sink)
         }
         assertEquals(1, recorded.size, "only the violation was recorded")
+    }
+
+    /**
+     * [Census.pairCombs] lets a comb stand as the ground's only where the reading at the coarser
+     * grid is the same comb on the ground: its spacing in kilometres the same, and its teeth where
+     * the finer reading's are. Combs laid down by hand, so each case is exactly the one named: the
+     * ground's own comb, the same place and spacing with the teeth half a spacing over (another
+     * comb), a third of the cells between the teeth rather than a half, the same count of cells
+     * (the grid's), and the ground's comb again with its two readings anchored either side of the
+     * seam.
+     */
+    @Test
+    fun `a comb is the ground's at two grids only with the same spacing on the ground and the same teeth`() {
+        val fine = GridFrame(512, 512, SQUARE.cellWidthKm / 2, SQUARE.cellHeightKm / 2)
+        // Teeth along the rows, laid one under another: across is down the sheet.
+        fun comb(x: Double, y: Double, spacing: Double, teeth: Int = 8) =
+            Combs.Comb(x, y, 0.0, spacing, teeth, 0.99, 50.0, acrossX = 0.0, acrossY = 1.0,
+                toothOffsetsCells = List(teeth) { it * spacing })
+        fun reading(frame: GridFrame, comb: Combs.Comb) = LayerReading(
+            "combs", frame, 0.0, emptyList(), listOf(comb), 0, mapOf(Detector.COMBS to Verdict(Outcome.CLEAN, "")), null
+        )
+        val cases = listOf(
+            Triple("the ground's comb", comb(128.0, 100.0, 6.0) to comb(256.0, 200.0, 12.0), true),
+            Triple("the teeth half a spacing over", comb(128.0, 100.0, 6.0) to comb(256.0, 206.0, 12.0), false),
+            Triple("a third of the cells", comb(128.0, 100.0, 6.0) to comb(256.0, 200.0, 18.0), false),
+            Triple("the same count of cells", comb(128.0, 100.0, 6.0) to comb(256.0, 200.0, 6.0), false),
+            Triple("the ground's comb read either side of the seam", comb(2.0, 100.0, 6.0) to comb(510.0, 200.0, 12.0), true)
+        )
+        val failures = ArrayList<String>()
+        for ((name, pairing, groundFixed) in cases) {
+            val (coarseComb, fineComb) = pairing
+            val result = Census.pairCombs(reading(fine, fineComb), fine, reading(SQUARE, coarseComb), SQUARE).single()
+            println("GEOMETRY CONTROL comb pairing, $name: ${result.line}")
+            if (result.groundFixed != groundFixed) failures.add("$name: let stand ${result.groundFixed}, expected $groundFixed — ${result.line}")
+        }
+        println("GEOMETRY CONTROL same spacing on the ground within %.3f, same tooth within %.3f spacings".format(
+            Census.SAME_SPACING_SHARE, Census.SAME_TOOTH_SPACINGS))
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    /**
+     * A partition's borders are traced once from each side, so a layer holding them holds every
+     * block of line twice, and the two copies always agree. [RateTest] reads such a layer as the
+     * same border traced once: the same count, the same length and the same spread, where resampling
+     * the copies as independent blocks had narrowed the spread by the square root of two and put the
+     * lower bound nearer the rate.
+     */
+    @Test
+    fun `a border traced from both sides is no surer of its rate than traced once`() {
+        val random = Random(23)
+        // Corners come in clumps — a stamp that makes one makes four — so the blocks' spread is
+        // well above the Poisson floor and it is the bootstrap that sets the bound.
+        val once = List(40) { (if (random.nextInt(8) == 0) 20 else 0) to 50.0 }
+        val single = RateTest.of(once, 1, 0.5, JUDGE.z, 1.0, 5L)
+        val twice = RateTest.of(once + once, 2, 0.5, JUDGE.z, 1.0, 5L)
+        println("GEOMETRY CONTROL rate traced once: $single, spread %.3f; traced twice: $twice, spread %.3f".format(
+            single.spreadOnRoots, twice.spreadOnRoots))
+        assertEquals(single.count, twice.count, 1e-9)
+        assertEquals(single.cellWidths, twice.cellWidths, 1e-9)
+        assertTrue(single.spreadOnRoots > 1.0, "the control's blocks are not clumped enough to set the spread")
+        assertTrue(
+            abs(twice.spreadOnRoots / single.spreadOnRoots - 1) < 0.1,
+            "a border traced twice spreads %.3f against %.3f traced once".format(twice.spreadOnRoots, single.spreadOnRoots)
+        )
     }
 
     /**

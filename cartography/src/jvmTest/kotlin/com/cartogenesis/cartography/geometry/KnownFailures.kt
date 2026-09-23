@@ -36,11 +36,17 @@ internal object KnownFailures {
 
     const val REPORT_PROPERTY = "cartogenesis.knownFailures"
 
-    fun expect(finding: String, clause: () -> Unit) {
+    fun expect(finding: String, clause: () -> Unit) = expect(finding, clause, ::record)
+
+    /**
+     * The same, with somewhere else to [report] to: the helper's own control test uses it so that
+     * showing the helper at work does not put a finding in the tier's report.
+     */
+    fun expect(finding: String, clause: () -> Unit, report: (String, String) -> Unit) {
         try {
             clause()
         } catch (violation: GeometryViolation) {
-            record(finding, violation.message ?: "")
+            report(finding, violation.message ?: "")
             return
         }
         throw AssertionError("$finding fixed: arm this clause")

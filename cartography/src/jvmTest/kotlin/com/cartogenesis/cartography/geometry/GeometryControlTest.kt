@@ -6,7 +6,6 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,6 +43,9 @@ class GeometryControlTest {
 
         /** A smaller square of the same cells, for the per-component controls. */
         val SQUARE = GridFrame(256, 256, FRAME.cellWidthKm, FRAME.cellHeightKm)
+
+        /** A larger one, for the populations the layer-wide isotropy test reads. */
+        val BIG = GridFrame(1024, 1024, FRAME.cellWidthKm, FRAME.cellHeightKm)
     }
 
     private fun read(name: String, mask: BooleanArray, frame: GridFrame, twice: Boolean = false): LayerReading =
@@ -138,6 +140,209 @@ class GeometryControlTest {
         }
     }
 
+    /**
+     * G2 and G6's controls on the instrument itself: a natural shape reads the same at every
+     * rotation, across the seam, against a pole and at every grid; a stamp turned off the grid
+     * stops being flagged for alignment; and the stamps' sizes and roughening say where each
+     * detector stops seeing them.
+     */
+    @Test
+    fun `the controls across rotation, size, seam, poles, noise and grid`() {
+        val lines = ArrayList<String>()
+        val failures = ArrayList<String>()
+
+        // Rotation: one natural field turned through twelve angles.
+        val ratios = Array(4) { ArrayList<Double>() }
+        for (step in 0 until 12) {
+            val rotation = step * 15.0 + 4.0
+            val mask = Controls.naturalField(FRAME, 202L, 0.35, 60 * FRAME.cellWidthKm, rotationDegrees = rotation)
+            val reading = read("natural turned", mask, FRAME)
+            reading.isotropy.forEach { ratios[it.bearingIndex].add(it.ratio) }
+            if (flagged(reading).isNotEmpty()) failures.add("natural field turned $rotation deg flagged by ${flagged(reading)}")
+        }
+        ratios.forEachIndexed { index, list ->
+            val mean = list.average()
+            val spread = Statistics.standardDeviation(list.toDoubleArray())
+            lines.add("natural field over 12 rotations, grid bearing %.1f: ratio %.2f +- %.2f (range %.2f to %.2f)".format(
+                FRAME.gridBearings[index], mean, spread, list.min(), list.max()))
+            if (mean > BearingIsotropy.EFFECT_RATIO / 1.2 || mean < 1.0 / (BearingIsotropy.EFFECT_RATIO / 1.2)) {
+                failures.add("natural rotations average %.2f at %.1f deg".format(mean, FRAME.gridBearings[index]))
+            }
+        }
+
+        // The seam: the same island centred on it and centred on the middle of the map.
+        val middle = Controls.naturalIsland(SQUARE, 44L, 40 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2)
+        val onSeam = Controls.naturalIsland(SQUARE, 44L, 40 * SQUARE.cellWidthKm, 0.0, SQUARE.cellsDown * SQUARE.cellHeightKm / 2)
+        val middleRings = ComponentShapes.measure(Contours.ofMask(middle, SQUARE), SQUARE).filter { it.measured }
+        val seamRings = ComponentShapes.measure(Contours.ofMask(onSeam, SQUARE), SQUARE).filter { it.measured }
+        val middleBig = middleRings.maxBy { it.areaCells }
+        val seamBig = seamRings.maxBy { it.areaCells }
+        lines.add("island in the middle: ${middleBig.describe(SQUARE)}")
+        lines.add("island on the seam:   ${seamBig.describe(SQUARE)}")
+        if (abs(middleBig.areaCells - seamBig.areaCells) > 1e-6 || abs(middleBig.fill - seamBig.fill) > 1e-9 ||
+            abs(middleBig.longestRunKm - seamBig.longestRunKm) > 1e-6
+        ) failures.add("the island reads differently across the seam")
+
+        // A pole: an island run off the top of the map leaves an open line and no run along the row.
+        val pole = Controls.naturalIsland(SQUARE, 45L, 40 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, 10 * SQUARE.cellHeightKm)
+        val poleOutlines = Contours.ofMask(pole, SQUARE)
+        val alongThePole = StraightRuns.of(poleOutlines, SQUARE).filter {
+            it.fromYKm < SQUARE.cellHeightKm && it.toYKm < SQUARE.cellHeightKm && it.lengthKm > SQUARE.cellWidthKm
+        }
+        lines.add("island over the pole: %d lines, %d open, %d runs along the polar row".format(
+            poleOutlines.size, poleOutlines.count { !it.closed }, alongThePole.size))
+        if (alongThePole.isNotEmpty() || poleOutlines.none { !it.closed }) failures.add("the pole was read as a shore")
+        val poleReading = read("pole", pole, SQUARE)
+        if (flagged(poleReading).isNotEmpty()) failures.add("the island over the pole was flagged by ${flagged(poleReading)}")
+
+        // Grids: the same ground at 512, 1024 and 2048.
+        for (side in listOf(512, 1024, 2048)) {
+            val frame = GridFrame.of(WorldGenConfig(width = 512, height = 512).atResolution(side, side))
+            val canvas = GridFrame(side / 2, side / 2, frame.cellWidthKm, frame.cellHeightKm)
+            val mask = Controls.naturalField(canvas, 303L, 0.35, 1500.0, finestWavelengthKm = 2 * 23.4375)
+            val reading = read("natural at $side", mask, canvas)
+            lines.add("the same natural ground at %d: %s".format(side, reading.isotropy.joinToString("; ") { "%.1f deg %.2fx %s".format(it.gridBearingDegrees, it.ratio, it.outcome) }))
+            if (flagged(reading).isNotEmpty()) failures.add("the natural ground at $side flagged by ${flagged(reading)}")
+        }
+
+        // A stamp turned off the grid: still a rectangle, no longer aligned.
+        for (turn in listOf(0.0, 3.0, 7.0, 23.0, 41.0)) {
+            val ring = ComponentShapes.measure(Contours.ofMask(
+                Controls.rectangle(SQUARE, 60.0, 30.0, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0, turn), SQUARE), SQUARE).single()
+            lines.add("rectangle turned %4.1f deg: fill %.3f, %s, aligned side %s, %d corner pairs".format(
+                turn, ring.fill, if (ring.alignedRectangle) "aligned" else "not aligned",
+                if (ring.hasLongAlignedSide) "flagged" else "clear", ring.cornerPairs))
+            if (!ring.isRectangle) failures.add("the rectangle turned $turn deg is no longer read as a rectangle")
+            if (turn == 0.0 && !ring.isAlignedStamp) failures.add("the rectangle on the grid is not flagged as aligned")
+            if (turn >= 3.0 && (ring.alignedRectangle || ring.hasCornerPair)) failures.add("the rectangle turned $turn deg is still flagged for alignment")
+        }
+
+        // Sizes and roughening: where each detector stops seeing a rectangle.
+        for (size in listOf(8.0, 12.0, 16.0, 24.0, 32.0, 48.0, 64.0)) for (rough in listOf(0.0, 0.5, 1.5)) {
+            var mask = Controls.rectangle(SQUARE, size * 2, size, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0)
+            if (rough > 0) mask = Controls.roughened(SQUARE, mask, 12L, rough)
+            lines.add(row("rectangle %.0fx%.0f roughened %.1f".format(size * 2, size, rough), read("rect", mask, SQUARE)))
+        }
+
+        println(lines.joinToString("\n", prefix = "GEOMETRY CONTROLS\n"))
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    @Test
+    fun `the known-failure helper catches the guard's own violation and nothing else`() {
+        val recorded = ArrayList<String>()
+        val sink = { finding: String, detail: String -> recorded.add("$finding: $detail"); Unit }
+        // A violation is recorded under its finding, and the clause passes.
+        KnownFailures.expect("control finding", { throw GeometryViolation("a stamped rectangle") }, sink)
+        assertEquals(listOf("control finding: a stamped rectangle"), recorded)
+        // A clause that no longer fails fails the helper, naming the finding.
+        val fixed = assertFailsWith<AssertionError> { KnownFailures.expect("control finding", { }, sink) }
+        assertEquals("control finding fixed: arm this clause", fixed.message)
+        // Everything else goes through untouched: too little data, another assertion, a setup error.
+        assertFailsWith<InsufficientSample> {
+            KnownFailures.expect("control finding", { throw InsufficientSample("three runs") }, sink)
+        }
+        val other = assertFailsWith<AssertionError> {
+            KnownFailures.expect("control finding", { assertEquals(1, 2) }, sink)
+        }
+        assertTrue(other !is GeometryViolation && other.message?.contains("fixed") != true)
+        assertFailsWith<IllegalStateException> {
+            KnownFailures.expect("control finding", { error("the world did not generate") }, sink)
+        }
+        assertEquals(1, recorded.size, "only the violation was recorded")
+    }
+
+    /**
+     * [BearingIsotropy.BLOCK_RUNS], shown: along natural outlines, whether a run lies in one of the
+     * grid's bins and whether the run a block further on does are no longer correlated, so blocks
+     * of that many runs resample as independent units.
+     */
+    @Test
+    fun `runs along a natural outline decorrelate within a block`() {
+        val indicators = ArrayList<DoubleArray>()
+        for (inCells in listOf(false, true)) for (rotation in listOf(0.0, 29.0)) {
+            val mask = Controls.naturalField(FRAME, 61L + rotation.toLong(), 0.35, 60 * FRAME.cellWidthKm,
+                rotationDegrees = rotation, isotropicInCells = inCells)
+            val outlines = Contours.ofMask(mask, FRAME)
+            StraightRuns.of(outlines, FRAME).groupBy { it.outline }.values.forEach { runs ->
+                if (runs.size < 4 * BearingIsotropy.BLOCK_RUNS) return@forEach
+                indicators.add(DoubleArray(runs.size) { index ->
+                    val run = runs[index]
+                    if (FRAME.gridBearings.any { FRAME.bearingGapDegrees(run.bearingDegrees, it) <= BearingIsotropy.BIN_HALF_WIDTH_DEGREES }) 1.0 else 0.0
+                })
+            }
+        }
+        val all = indicators.flatMap { it.asList() }
+        val mean = all.average()
+        val variance = all.sumOf { (it - mean) * (it - mean) } / all.size
+        val correlations = (1..2 * BearingIsotropy.BLOCK_RUNS).map { lag ->
+            var sum = 0.0
+            var pairs = 0
+            for (series in indicators) for (index in 0 until series.size - lag) {
+                sum += (series[index] - mean) * (series[index + lag] - mean)
+                pairs++
+            }
+            sum / pairs / variance
+        }
+        println("GEOMETRY CONTROL run indicator autocorrelation by lag: " +
+            correlations.mapIndexed { lag, value -> "%d:%.3f".format(lag + 1, value) }.joinToString(" "))
+        assertTrue(abs(correlations[BearingIsotropy.BLOCK_RUNS - 1]) < 0.1,
+            "runs a block apart are still correlated: ${correlations[BearingIsotropy.BLOCK_RUNS - 1]}")
+    }
+
+    /**
+     * The per-component bars that are taken from the control ensemble, shown against it: every
+     * ring of an ensemble of natural islands — three sizes of roughness, isotropic on the ground
+     * and on the sheet, at many rotations and radii — measured, and the largest figure any of them
+     * reaches printed beside the bar it sets.
+     */
+    @Test
+    fun `the natural ensemble sits below every bar it sets`() {
+        val rings = ArrayList<ComponentShapes.Ring>()
+        var arcs = 0
+        val arcNotes = ArrayList<String>()
+        var outlineKm = 0.0
+        val random = Random(17)
+        for (roughness in listOf(0.25, 0.4, 0.6)) for (inCells in listOf(false, true)) for (index in 0 until 30) {
+            val radiusCells = 4.0 + random.nextDouble() * 41.0
+            val mask = Controls.naturalIsland(
+                SQUARE, 900L + index * 7 + (roughness * 100).toLong(), radiusCells * SQUARE.cellWidthKm,
+                SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2,
+                rotationDegrees = random.nextDouble() * 180.0, isotropicInCells = inCells, roughnessOverRadius = roughness
+            )
+            val outlines = Contours.ofMask(mask, SQUARE)
+            outlineKm += outlines.sumOf { it.lengthKm() }
+            rings.addAll(ComponentShapes.measure(outlines, SQUARE))
+            val found = Arcs.measure(outlines, SQUARE)
+            arcs += found.arcs.size
+            found.arcs.forEach { arcNotes.add("r=%.1f roughness %.2f: %s".format(radiusCells, roughness, it.describe(SQUARE))) }
+        }
+        val measured = rings.filter { it.measured }
+        val worstFill = measured.maxBy { it.fill }
+        val worstFacet = measured.maxBy { it.longestRunKm / it.equivalentDiameterKm }
+        val worstSide = measured.maxBy { it.longestAlignedKm / it.alignedAllowanceKm }
+        println("GEOMETRY ENSEMBLE %d rings, %d measured, %.0f km of outline".format(rings.size, measured.size, outlineKm))
+        println("GEOMETRY ENSEMBLE fill: worst %.3f (%s) against the bar %.2f".format(worstFill.fill, worstFill.describe(SQUARE), ComponentShapes.RECTANGLE_FILL))
+        println("GEOMETRY ENSEMBLE facets: worst %.3f of the diameter (%s) against %.2f".format(
+            worstFacet.longestRunKm / worstFacet.equivalentDiameterKm, worstFacet.describe(SQUARE), ComponentShapes.LONGEST_RUN_OVER_DIAMETER))
+        println("GEOMETRY ENSEMBLE aligned side: worst %.3f of the allowance (%s)".format(
+            worstSide.longestAlignedKm / worstSide.alignedAllowanceKm, worstSide.describe(SQUARE)))
+        println("GEOMETRY ENSEMBLE corner pairs: %d rings; arcs: %d".format(measured.count { it.hasCornerPair }, arcs))
+        arcNotes.take(10).forEach { println("GEOMETRY ENSEMBLE arc $it") }
+        for (bound in listOf(64, 128, 256, 512, 1024, 4096)) {
+            val band = rings.filter { it.areaCells >= bound && it.rectangleShortCells >= ComponentShapes.MINIMUM_WIDTH_CELLS }
+            if (band.isEmpty()) continue
+            println("GEOMETRY ENSEMBLE from %5d cells: %3d rings, worst fill %.3f, worst facet %.3f, worst side %.3f".format(
+                bound, band.size, band.maxOf { it.fill }, band.maxOf { it.longestRunKm / it.equivalentDiameterKm },
+                band.maxOf { it.longestAlignedKm / it.alignedAllowanceKm }))
+        }
+        assertTrue(measured.none { it.isRectangle }, "a natural ring filled its rectangle: ${worstFill.describe(SQUARE)}")
+        assertTrue(measured.none { it.hasFacets }, "a natural ring has a facet: ${worstFacet.describe(SQUARE)}")
+        assertTrue(measured.none { it.hasLongAlignedSide }, "a natural ring has a long aligned side: ${worstSide.describe(SQUARE)}")
+        assertTrue(measured.none { it.hasCornerPair }, "a natural ring has an aligned corner pair")
+        assertEquals(0, arcs, "natural outlines fitted circles:\n" + arcNotes.take(10).joinToString("\n"))
+    }
+
     @Test
     fun `the detector and control matrix`() {
         val lines = ArrayList<String>()
@@ -199,6 +404,15 @@ class GeometryControlTest {
         expect("octagonal window", read("octagon", Controls.octagon(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
             setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.RECTANGLE))
 
+        // Populations, for the one detector that reads a layer rather than a component.
+        expect("union of 12-cell blocks", read("blocks", Controls.blockUnion(BIG, 21L, 12, 0.35, 90 * BIG.cellWidthKm), BIG),
+            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.COMBS))
+        val natural = Controls.naturalCourses(BIG, 31L, 600, 300, 6.0)
+        expect("natural courses", GeometryGuard.read(Layer("courses", natural), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
+        val routed = Controls.eightNeighbourCourses(BIG, 31L, 600, 300, 6.0)
+        expect("eight-neighbour courses", GeometryGuard.read(Layer("d8", routed), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km),
+            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.COMBS))
+
         println(lines.joinToString("\n", prefix = "GEOMETRY MATRIX\n"))
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
@@ -206,7 +420,4 @@ class GeometryControlTest {
     private val ISOTROPY_BINS = 36
     private val ISOTROPY_SAMPLES = 36_000
     private val NEAR_LEVEL = 0.02
-
-    @Suppress("unused")
-    private fun unusedSquareRoot(value: Double) = sqrt(value)
 }

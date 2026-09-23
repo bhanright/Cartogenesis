@@ -154,8 +154,8 @@ internal object Arcs {
             val starts = if (closed) count else count - window + 1
             var start = 0
             while (start < starts) {
-                val fit = fitWindow(xs, ys, start, window, count, fitFrame, grid)
-                if (fit != null && !covered[start]) {
+                val fit = if (covered[start]) null else fitWindow(xs, ys, start, window, count, fitFrame, grid)
+                if (fit != null) {
                     for (step in 0 until window) covered[(start + step) % count] = true
                     found.add(
                         Arc(

@@ -157,7 +157,8 @@ internal object Controls {
         centreYKm: Double,
         rotationDegrees: Double = 0.0,
         finestWavelengthKm: Double = 2.0 * maxOf(frame.cellWidthKm, frame.cellHeightKm),
-        isotropicInCells: Boolean = false
+        isotropicInCells: Boolean = false,
+        roughnessOverRadius: Double = ROUGHNESS_OVER_RADIUS
     ): BooleanArray {
         val noise = IsotropicNoise(
             seed,
@@ -172,7 +173,7 @@ internal object Controls {
             val dx = wrappedOffset(x, centreXKm, frame.worldWidthKm)
             val dy = (y - centreYKm) / stretchDown
             val radial = 1.0 - (dx * dx + dy * dy) / (radiusKm * radiusKm)
-            radial + ROUGHNESS_OVER_RADIUS * noise.at(dx, y - centreYKm) > 0.0
+            radial + roughnessOverRadius * noise.at(dx, y - centreYKm) > 0.0
         }
     }
 
@@ -218,7 +219,101 @@ internal object Controls {
         }
     }
 
+    /**
+     * Natural courses: [count] walks whose heading wanders by a Gaussian turn of
+     * [turnDegreesPerCell] per cell of travel, each [lengthCells] long, followed through the cells
+     * they cross. A river traced on a grid is a path of cells; this is one whose course owes the
+     * grid nothing but the cells it is drawn in.
+     */
+    fun naturalCourses(frame: GridFrame, seed: Long, count: Int, lengthCells: Int, turnDegreesPerCell: Double): List<Outline> =
+        courses(frame, seed, count, lengthCells, turnDegreesPerCell, stepByNearestNeighbour = false)
+
+    /**
+     * The same walks routed the way the plain steepest-of-eight rule routes water: each step goes
+     * to whichever of the eight neighbours lies nearest the heading, so a heading held for a while
+     * becomes a straight run along one of the grid's bearings — the ruled reaches the routing drew
+     * before the facet rule.
+     */
+    fun eightNeighbourCourses(frame: GridFrame, seed: Long, count: Int, lengthCells: Int, turnDegreesPerCell: Double): List<Outline> =
+        courses(frame, seed, count, lengthCells, turnDegreesPerCell, stepByNearestNeighbour = true)
+
+    private fun courses(
+        frame: GridFrame,
+        seed: Long,
+        count: Int,
+        lengthCells: Int,
+        turnDegreesPerCell: Double,
+        stepByNearestNeighbour: Boolean
+    ): List<Outline> {
+        val random = Random(seed)
+        val lines = ArrayList<Outline>()
+        repeat(count) {
+            // Heading and position on the ground; a cell's width is the unit of travel.
+            var heading = random.nextDouble() * 2 * PI
+            var x = (0.25 + 0.5 * random.nextDouble()) * frame.worldWidthKm
+            var y = (0.25 + 0.5 * random.nextDouble()) * frame.cellsDown * frame.cellHeightKm
+            val xs = DoubleArrayBuilder()
+            val ys = DoubleArrayBuilder()
+            var column = floor(x / frame.cellWidthKm).toInt()
+            var row = floor(y / frame.cellHeightKm).toInt()
+            xs.add((column + 0.5) * frame.cellWidthKm)
+            ys.add((row + 0.5) * frame.cellHeightKm)
+            var steps = 0
+            while (steps < lengthCells) {
+                heading += Math.toRadians(turnDegreesPerCell) * gaussian(random)
+                if (stepByNearestNeighbour) {
+                    // The neighbour whose ground bearing is nearest the heading.
+                    var best = 0 to 0
+                    var nearest = Double.MAX_VALUE
+                    for (dy in -1..1) for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) continue
+                        val bearing = kotlin.math.atan2(dy * frame.cellHeightKm, dx * frame.cellWidthKm)
+                        var gap = abs(bearing - heading) % (2 * PI)
+                        if (gap > PI) gap = 2 * PI - gap
+                        if (gap < nearest) { nearest = gap; best = dx to dy }
+                    }
+                    column += best.first
+                    row += best.second
+                } else {
+                    // A quarter of a cell at a time, taking every cell the walk enters.
+                    x += cos(heading) * frame.cellWidthKm / 4
+                    y += sin(heading) * frame.cellWidthKm / 4
+                    val nextColumn = floor(x / frame.cellWidthKm).toInt()
+                    val nextRow = floor(y / frame.cellHeightKm).toInt()
+                    if (nextColumn == column && nextRow == row) continue
+                    column = nextColumn
+                    row = nextRow
+                }
+                if (row < 1 || row >= frame.cellsDown - 1) break
+                xs.add((column + 0.5) * frame.cellWidthKm)
+                ys.add((row + 0.5) * frame.cellHeightKm)
+                steps++
+            }
+            if (xs.size >= 2) lines.add(Outline(xs.toArray(), ys.toArray(), closed = false, belt = false))
+        }
+        return lines
+    }
+
+    private fun gaussian(random: Random): Double {
+        val u = random.nextDouble().coerceAtLeast(1e-12)
+        val v = random.nextDouble()
+        return sqrt(-2.0 * ln(u)) * cos(2 * PI * v)
+    }
+
     // ---------------------------------------------------------------- stamps
+
+    /**
+     * A union of fixed blocks: a natural field decided once per [blockCells]-square block rather
+     * than once per cell, the swath of blocks the ice's old basin opening drew.
+     */
+    fun blockUnion(frame: GridFrame, seed: Long, blockCells: Int, coverShare: Double, longestWavelengthKm: Double): BooleanArray {
+        val natural = naturalField(frame, seed, coverShare, longestWavelengthKm)
+        return BooleanArray(frame.cellCount) { cell ->
+            val column = frame.columnOf(cell) / blockCells * blockCells + blockCells / 2
+            val row = frame.rowOf(cell) / blockCells * blockCells + blockCells / 2
+            natural[row.coerceAtMost(frame.cellsDown - 1) * frame.cellsAcross + column.coerceAtMost(frame.cellsAcross - 1)]
+        }
+    }
 
     /** A rectangle [lengthCells] by [widthCells], turned [rotationDegrees] on the sheet. */
     fun rectangle(
@@ -373,7 +468,7 @@ internal object Controls {
             if (abs(along) > lengthCells / 2 || across < -barCells || across > span + barCells) {
                 false
             } else {
-                val nearestTooth = Math.round(across / spacingCells).coerceIn(0, (teeth - 1).toLong())
+                val nearestTooth = Math.round(across / spacingCells).coerceIn(0L, (teeth - 1).toLong())
                 abs(across - nearestTooth * spacingCells) <= barCells / 2
             }
         }

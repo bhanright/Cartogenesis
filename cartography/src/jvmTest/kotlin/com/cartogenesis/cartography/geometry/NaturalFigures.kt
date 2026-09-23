@@ -17,9 +17,9 @@ internal class NaturalFigures private constructor(
     companion object {
         val SEEDS = longArrayOf(11L, 23L, 37L)
         val ROTATIONS = doubleArrayOf(0.0, 17.0, 45.0, 71.0)
-        const val SIDE_CELLS = 384
+        const val SIDE_CELLS = 256
 
-        /** The longest wavelength of the controls, in cells: a third of the square. */
+        /** The longest wavelength of the controls, in cells: half the square. */
         private const val LONGEST_WAVELENGTH_CELLS = 128.0
 
         /** How much of the square is inside: a lake-and-island country rather than one body. */

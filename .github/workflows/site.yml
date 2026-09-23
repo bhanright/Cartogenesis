@@ -29,6 +29,12 @@ concurrency:
 permissions:
   contents: read
 
+# Every `run:` step under `bash -eo pipefail` rather than GitHub's unspecified default, `bash -e`,
+# so that a step which pipes a command fails when the command does, not only when the last one does.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     name: Build and upload

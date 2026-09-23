@@ -11,6 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every `run:` step under `bash -eo pipefail`. With no shell named, GitHub runs a step as `bash -e`,
+# which has no pipefail, so a piped step takes the status of its last command: the two engine test
+# steps below, piped into `tee`, stayed green when a test failed.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   engine:
     name: Generation engine (JVM + Wasm)
@@ -50,8 +57,10 @@ jobs:
       - name: JVM and Wasm generation comparison
         continue-on-error: true
         run: |
-          grep 'FINGERPRINT' jvm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
-          grep 'FINGERPRINT' wasm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
+          # `|| true` because grep exits 1 when it finds nothing, and under pipefail that would end
+          # the step before the check below could say that no fingerprint was captured.
+          { grep 'FINGERPRINT' jvm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
+          { grep 'FINGERPRINT' wasm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
 
           echo "--- JVM ---";  cat jvm-fingerprint.txt
           echo "--- Wasm ---"; cat wasm-fingerprint.txt

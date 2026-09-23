@@ -34,6 +34,12 @@ permissions:
   # The last job asks the site workflow to run, which is an Actions write.
   actions: write
 
+# Every `run:` step under `bash -eo pipefail` rather than GitHub's unspecified default, `bash -e`,
+# so that a step which pipes a command fails when the command does, not only when the last one does.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Build, check and upload

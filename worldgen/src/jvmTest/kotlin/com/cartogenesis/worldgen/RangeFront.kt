@@ -13,7 +13,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Straight mountain fronts, the trunk basins that reach them, and how far apart their outlets are.
+ * Straight fronts, coasts and mountain fronts both, the basins that leave by them, and how far
+ * apart their outlets are.
  *
  * The instrument the coastal-valley question needs. The author's report is that the coasts carry
  * closely spaced valleys perpendicular to the shore about ten cells apart, and ten cells is a
@@ -58,21 +59,20 @@ import kotlin.math.sqrt
  * **Front eligibility.** Fronts are found on the belt as a reference grid draws it: one of
  * [FRONT_REFERENCE_CELLS_ACROSS] columns whose cells are square on the ground, so as many rows as
  * the world's height allows at that cell width. Each block of working cells that is one reference
- * cell is belt ground when at least half of it is. Each component's outer boundary on
- * that grid is traced as a closed chain of cell centres. Along that chain a *front* is a maximal
- * run of points every one of which lies within
- * [FRONT_STRAIGHTNESS_KM] of the straight chord between the run's first and last point, and it
- * qualifies when it is at least [SHORTEST_FRONT_KM] long. The front's line is then the
- * least-squares line through the run's points, and its ends are the first and last points
- * projected onto that line: a walk that carried a run a cell round a corner before the bar stopped
- * it would otherwise tilt the chord by that cell, and a tilted chord moves the outlets at its far
- * end out of the band they are counted in. No run includes a cell on the
- * grid's own edge: a component touching the top or bottom row or the seam is cut off by it, and
- * the straight line the cut draws is the grid's and not the ground's. A front's *landward* side is
- * whichever side of its chord carries more belt ground a straightness bar from it, and the
- * perpendicular coordinate `t` below is measured positive in that direction, the along-chord
+ * cell is belt ground when at least half of it is. Each component's outer boundary on that grid is
+ * traced as a closed chain of cell centres. Along that chain a *front* is a maximal run of points
+ * every one of which lies within [FRONT_STRAIGHTNESS_KM] of the straight chord between the run's
+ * first and last point, and it qualifies when it is at least [SHORTEST_FRONT_KM] long. No run
+ * includes a cell on the grid's own edge: a component touching the top or bottom row or the seam
+ * is cut off by it, and the straight line the cut draws is the grid's and not the ground's. The
+ * front's line is then the least-squares line through the run's points, and its ends are the first
+ * and last points projected onto that line: a walk that carried a run a cell round a corner before
+ * the bar stopped it would otherwise tilt the chord by that cell, and a tilted chord moves the
+ * outlets at its far end out of the band they are counted in. A front's *landward* side is
+ * whichever side of its line carries more belt ground a straightness bar from it, and the
+ * perpendicular coordinate `t` below is measured positive in that direction, the along-line
  * coordinate `s` from 0 at its start. A front is **coastal** when open water lies within
- * [COASTAL_REACH_KM] seaward of the chord at at least half of the points sampled along it.
+ * [COASTAL_REACH_KM] seaward of the line at at least half of the points sampled along it.
  *
  * **Exit.** Following `flowTarget` downstream from a belt cell, the *exit* is the last belt cell
  * before the path leaves belt ground. A path that ends inside the belt — a cell whose target is -1,

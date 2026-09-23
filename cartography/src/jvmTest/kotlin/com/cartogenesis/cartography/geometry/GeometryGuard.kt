@@ -46,8 +46,10 @@ internal class Judge(val familySize: Int, val placeFamily: Int) {
     companion object {
         /**
          * The most places one layer of one world may hold for the place family to be sized right:
-         * twenty thousand windows and rings. The census fails a layer past it rather than let its
-         * places go uncounted; at 2048 the longest layers hold a few thousand.
+         * twenty thousand windows and rings. A window counts when its line is long enough to reach a
+         * bar, and a ring when it is large enough to measure: a place that cannot fail spends none of
+         * the family's error. The census fails a layer past it rather than let its places go
+         * uncounted; at 2048 the longest layers hold about fifteen thousand.
          */
         const val MOST_PLACES_PER_LAYER = 20_000
 
@@ -174,7 +176,10 @@ internal class LayerReading(
     val outlineKm: Double,
     val isotropy: List<BearingIsotropy.Result>,
     val combs: List<Combs.Comb>,
-    /** Windows and rings: the places this layer adds to the place family. */
+    /**
+     * The places this layer adds to the place family: its windows on lines long enough to reach a
+     * bar, and its measured rings.
+     */
     val places: Int,
     private val verdicts: Map<Detector, Verdict>,
     private val combEligibility: String?
@@ -421,7 +426,16 @@ internal object GeometryGuard {
             Verdict(Outcome.INSUFFICIENT, "fewer than ${Combs.MINIMUM_TEETH} runs long enough to be teeth: $teeth")
         else Verdict(Outcome.CLEAN, "")
 
-        return LayerReading(layer.name, frame, outlineKm, isotropy, combs, windows.size + rings.size, verdicts, combEligibility)
+        // The places this layer spends of the place family: a window on a line too short to reach any
+        // bar cannot fail and spends none of it, and a ring too small to measure is not searched.
+        val reachKm = minOf(
+            bars.alignedSteps * shortestStepKm,
+            bars.runCellWidths * frame.cellWidthKm,
+            2 * maxOf(bars.creaseStrength * 8 * StraightRuns.toleranceKm(frame) / PI, ComponentShapes.CREASE_ARM_CELL_WIDTHS * frame.cellWidthKm)
+        )
+        val lineKm = outlines.map { it.lengthKm() }
+        val places = windows.count { lineKm[it.outline] >= reachKm } + rings.count { it.measured }
+        return LayerReading(layer.name, frame, outlineKm, isotropy, combs, places, verdicts, combEligibility)
     }
 
     /** Which class of natural control the layer's places are held to. */

@@ -83,8 +83,9 @@ internal class Census(val side: Int, worlds: Int) {
     }
 
     fun print(world: WorldReading) {
-        println("GEOMETRY CENSUS ${world.name}: generation %.1f s, tracing the layers %.1f s, the detectors %.1f s; %s"
-            .format(world.generationSeconds, world.layerSeconds, world.detectorSeconds, judge))
+        val fullest = world.readings.maxBy { it.places }
+        println("GEOMETRY CENSUS ${world.name}: generation %.1f s, tracing the layers %.1f s, the detectors %.1f s; %s; most places %d, %s"
+            .format(world.generationSeconds, world.layerSeconds, world.detectorSeconds, judge, fullest.places, fullest.layer))
         for (reading in world.readings) {
             for (detector in Detector.entries) {
                 val verdict = reading.verdict(detector)

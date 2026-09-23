@@ -19,11 +19,12 @@ import kotlin.math.sqrt
  *    world's land, which is Natural Earth's measured figure carried by Töpfer's law, times
  *    [inkScaleAt] for the mark the reader has the density scale set to - and never less than the
  *    largest river and the trunks below it, so that river is on every map at every mark.
- * 2. A second limit, which almost never binds: no course below the peak discharge of the
- *    [MapSheet.featuresKept]'th largest is drawn. That is Töpfer's law read the way F14 read it,
- *    on the traced count, and it is here so that the top of the density scale - where the budget
- *    is removed altogether - is exactly the drawing F14 made. Below the top it is dead weight:
- *    Earth's figure asks for a few dozen courses where this asks for hundreds.
+ * 2. At the top mark of the density scale only, where the budget is removed, a limit of another
+ *    kind: no course below the peak discharge of the [MapSheet.featuresKept]'th largest is drawn.
+ *    That is Töpfer's law read the way F14 read it, on the traced count, and it makes the top
+ *    exactly the drawing F14 made. It is not applied below the top, because in a pane smaller
+ *    than a cell to the pixel it would refuse the short courses the second pass fills the last of
+ *    Earth's budget with, and Earth's mark would no longer be the selection its guards measure.
  * 3. Courses ranked by discharge, largest first, on the peak width ratio.
  * 4. A first pass taking at most one *candidate* per square of the [crowdingPitchKilometres]
  *    lattice, so a dissected coastal front does not spend the budget on its own gullies before the
@@ -45,9 +46,9 @@ import kotlin.math.sqrt
  * The density scale is the reader's, and the lattice runs at every mark of it: above Earth's mark
  * the first pass still serves every square once before the second pass spends the extra ink, so a
  * larger budget goes to the next-largest river anywhere on the map before it goes to a second gully
- * on one front. At the top mark nothing is refused at all, which is what the top is for - every
- * course the scale has room for, F14's drawing - and there the lattice decides only the order, so
- * the fullest square is the radical law's own.
+ * on one front. At the top mark nothing above the law's cut is refused, which is what the top is
+ * for - every course the scale has room for, F14's drawing - and there the lattice decides only the
+ * order, so the fullest square is the radical law's own.
  *
  * Ties fall to the course the tracer reached first, which is the head with the longest way down to
  * the water; that is not the same as the longest *drawn* course, because a tributary is cut at the
@@ -139,7 +140,7 @@ object RiverSelection {
     const val EARTH_DENSITY_STEP: Int = 4
 
     /**
-     * The mark at the top: no ink budget at all, leaving only the second limit above.
+     * The mark at the top: no ink budget at all, and the radical law's cut in its place.
      *
      * Which is to say F14's drawing, to the course: on a sheet at a cell to a pixel
      * [MapSheet.featuresKept] keeps everything, so every traced course is drawn, and on a smaller
@@ -306,7 +307,8 @@ object RiverSelection {
         )
 
         if (budgetKilometres > 0.0) {
-            val leastDrawablePeak = radicalLawCut(rivers, sheet)
+            val leastDrawablePeak =
+                if (inkScaleAt(inkStep).isInfinite()) radicalLawCut(rivers, sheet) else 0f
             val takenSquares = HashSet<Long>()
             var spentKilometres = 0.0
 
@@ -317,8 +319,8 @@ object RiverSelection {
                 for (ranked in byDischarge.indices) {
                     val course = decodeCourse(byDischarge[ranked])
                     if (drawn[course]) continue
-                    // The second limit. A trunk's peak is never below its tributaries', so nothing
-                    // refused here can be pulled in by the closure walk below either.
+                    // The top mark's cut. A trunk's peak is never below its tributaries', so
+                    // nothing refused here can be pulled in by the closure walk below either.
                     if (peakWidthRatio(rivers[course]) < leastDrawablePeak) continue
                     if (spreadByLattice &&
                         takenSquares.contains(latticeSquare(world, rivers[course], pitchKm))
@@ -352,7 +354,7 @@ object RiverSelection {
     }
 
     /**
-     * The peak width ratio below which no course is drawn at this sheet, whatever the budget.
+     * The peak width ratio below which the top mark draws no course at this sheet.
      *
      * Töpfer and Pillewizer's radical law on the traced count, which is the rule F14 selected
      * rivers by: keep [MapSheet.featuresKept] of them, cut at the peak of the last one kept, and
@@ -368,11 +370,13 @@ object RiverSelection {
     /**
      * F14's whole rule, unchanged, as the control the top of the density scale is measured against.
      *
-     * Nothing in the drawing calls this: [EVERY_COURSE_STEP] reaches the same answer by removing
-     * the ink budget and leaving [radicalLawCut] standing, and `RiverSelectionTest` asserts that
-     * the two agree course for course. It is kept so that assertion has something to be against.
+     * [rivers] is the traced network in traced order and [sheet] the sheet's scale; the result is
+     * the courses kept, in the same order. Nothing in the drawing calls this: [EVERY_COURSE_STEP]
+     * reaches the same answer by removing the ink budget and putting [radicalLawCut] in its place, and
+     * `RiverSelectionTest` and `RiverSelectionAuditTest` assert that the two agree course for
+     * course. It is kept, and public, so those assertions have something to be against.
      */
-    internal fun drawnByTheRadicalLaw(rivers: List<River>, sheet: MapSheet): List<River> {
+    fun drawnByTheRadicalLaw(rivers: List<River>, sheet: MapSheet): List<River> {
         val cut = radicalLawCut(rivers, sheet)
         return rivers.filter { peakWidthRatio(it) >= cut }
     }
@@ -383,8 +387,10 @@ object RiverSelection {
      * Held inside 0..1, which is what a width ratio is: [rankedByDischarge] packs its raw bits and
      * a value outside that range — or a not-a-number out of a degenerate network — would pack into
      * a key that sorted the wrong way round rather than into a river that merely looked odd.
+     * Public because it is the discharge the whole ranking is by, and a guard naming "the largest
+     * river" has to mean the same one.
      */
-    internal fun peakWidthRatio(river: River): Float {
+    fun peakWidthRatio(river: River): Float {
         var peak = 0f
         river.widthRatio.forEach { if (it > peak) peak = it }
         return if (peak.isNaN()) 0f else peak.coerceIn(0f, 1f)

@@ -192,6 +192,22 @@ nothing, because a trunk's peak is never below its tributaries', but the crowdin
 trunk and reach its tributary afterwards, so the chain below a course is taken with it and charged
 to the budget.
 
+**The reader can turn the ink up or down, and Earth's figure is the default mark.** The Cartography
+panel's River density slider multiplies the budget in half-octave steps, √2 a mark, from a quarter
+of Earth's figure to four times it, with a tenth mark at the top that removes the budget. The bottom
+is the reference's own sparsest sheet: Natural Earth's 1:110 000 000 tier draws 13 courses and
+42,873 km, 0.000288 km/km², where the law carried from the 1:50M anchor asks 0.001151 of that scale
+— a quarter. The top is the rule that preceded this one, to the course, because there the budget
+gives way to the radical law's cut on the traced count: every course on an export, 71% of them in a
+pane at half a pixel to the cell, every course tied at the cut kept. The cut applies at the top
+alone, so Earth's mark is the selection described above to the course. The largest river and the
+trunks below it are drawn at every mark, since the budget never falls below that chain; at the
+bottom that binds only on a sheet far smaller than any the application draws. The lattice runs at
+every mark, and it spreads rather than caps: on the four standard seeds at 512 the fullest square
+holds one or two drawn courses up to Earth's mark, 7–12 at twice it, 18–25 at four times, and 49–70
+at the top, which is the law's own. So a reader who asks for every river asks for the coastal comb
+back, and the mark says so.
+
 **The coast is generalised by its own rule**, Douglas–Peucker at half a drawn pixel, which is a
 tolerance in the plane of the drawing and needs no reference outside it: 19,634 vertices at fit
 against 51,749 at four times zoom on seed 718106 at 2048.

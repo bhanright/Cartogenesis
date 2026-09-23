@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  * and run on the same day, still draws more of the map with a ruler than the new one — which is the
  * defect itself, is on every map, and is what makes the census above worth reading.
  */
-class StraightRunTest {
+class StraightRunTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** The author's own world, at the size he looks at it, where the bar was found. */
@@ -50,7 +50,7 @@ class StraightRunTest {
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = 512, height = 512)
                 .atResolution(side, side)
                 .copy(facetRouting = byFacet)

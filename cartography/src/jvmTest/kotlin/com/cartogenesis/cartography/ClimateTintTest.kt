@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import kotlin.test.Test
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
  * asserted of it here is that the climate leaves it exactly where the ramp put it, and
  * `ClearStyleTest` holds the ramp itself to its CIEDE2000 ladder.
  */
-class ClimateTintTest {
+class ClimateTintTest : BorrowsSharedWorlds() {
 
     private companion object {
 

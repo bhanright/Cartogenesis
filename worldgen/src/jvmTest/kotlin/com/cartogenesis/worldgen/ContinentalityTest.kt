@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W1; A2 wrote the version of this guard that had a knob in it.
  */
-class ContinentalityTest {
+class ContinentalityTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** Matches the plan's own worked example: an interior against a coast at 50 degrees. */
@@ -101,7 +101,7 @@ class ContinentalityTest {
     )
 
     private fun measure(): Measured {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val cellsAcross = world.width

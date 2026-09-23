@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W2.
  */
-class PressureWindTest {
+class PressureWindTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L, 99L)
@@ -418,7 +418,7 @@ class PressureWindTest {
 
     private fun generate(seed: Long, pressureWinds: Boolean): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        return WorldGenerationEngine.generateBlocking(
+        return SharedWorlds.world(
             base.copy(climate = base.climate.copy(pressureWinds = pressureWinds))
         )
     }

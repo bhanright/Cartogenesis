@@ -1,10 +1,10 @@
 package com.cartogenesis.desktop
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * The same world at four times the grid keeps the same lakes, not four times the water in one of
@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
  * This lives in `:desktop` rather than beside its sibling because a 2048 world needs more heap than
  * `:worldgen`'s test worker is given, and this module's already runs with ten gigabytes.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class OutletResolutionTest {
 
     /**
@@ -66,7 +67,7 @@ class OutletResolutionTest {
         val unmeasured = ArrayList<String>()
         listOf(59758L, 42L).forEach { seed ->
             val shares = listOf(512, 1024, 2048).map { size ->
-                val world = WorldGenerationEngine.generateBlocking(
+                val world = SharedWorlds.world(
                     WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
                 )
                 // Which lakes stand on ground below the sea-level cut, and so are none of the

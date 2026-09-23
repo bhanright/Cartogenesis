@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * discriminating case is the world the defect was seen on, at the size it was seen: see
  * `FlatCourseAuditTest`.
  */
-class FlatCourseTest {
+class FlatCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -82,8 +82,12 @@ class FlatCourseTest {
     @Test
     fun `the potential is a small share of a generation`() {
         val seed = STANDARD_SEEDS[0]
+        // Generated here rather than borrowed from `SharedWorlds`: the generation's own time is the
+        // denominator, and a borrowed world takes a few milliseconds to hand over.
         val started = System.nanoTime()
-        val world = FlatCourse.world(seed, STANDARD_SIDE, overPotential = true)
+        val world = WorldGenerationEngine.generateBlocking(
+            FlatCourse.config(seed, STANDARD_SIDE, overPotential = true)
+        )
         val generationMs = (System.nanoTime() - started) / 1_000_000.0
         val sea = world.sea
         val filled = FlowRouting.fillDepressions(world.width, world.height, sea.isLand, sea.relativeElevation)
@@ -118,11 +122,12 @@ class FlatCourseTest {
 internal object FlatCourse {
 
     fun world(seed: Long, side: Int, overPotential: Boolean): WorldMap =
-        WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(side, side)
-                .copy(flatPotential = overPotential)
-        )
+        SharedWorlds.world(config(seed, side, overPotential))
+
+    fun config(seed: Long, side: Int, overPotential: Boolean): WorldGenConfig =
+        WorldGenConfig(seed = seed, width = 512, height = 512)
+            .atResolution(side, side)
+            .copy(flatPotential = overPotential)
 
     /** Cells the fill raised, by any amount at all: where the routing surface is not the ground. */
     fun raisedGround(world: WorldMap): BooleanArray {

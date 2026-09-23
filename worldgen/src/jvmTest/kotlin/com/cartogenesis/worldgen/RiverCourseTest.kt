@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  * it and start again on the far side, and the map drew a whole catchment's trunk as a one-pixel
  * thread of standing water between two thick channels. See `LakeResult.openWater`.
  */
-class RiverCourseTest {
+class RiverCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
@@ -50,7 +50,7 @@ class RiverCourseTest {
     }
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side)
         )
 

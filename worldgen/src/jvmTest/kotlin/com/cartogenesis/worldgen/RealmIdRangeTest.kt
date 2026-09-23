@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * invariant after the first and the last of those, so a failure here names the step rather than
  * the symptom.
  */
-class RealmIdRangeTest {
+class RealmIdRangeTest : BorrowsSharedWorlds() {
 
     /**
      * Cheap cases, and deliberately varied: wilderness changes which steps run at all — it is what
@@ -62,7 +62,7 @@ internal fun authorsConfig(seed: Long): WorldGenConfig {
 
 /** Top-level for the same reason as [authorsConfig]: shared with [RealmIdRangeAuditTest]. */
 internal fun assertRealmIdsInRange(config: WorldGenConfig) {
-    val world = WorldGenerationEngine.generateBlocking(config)
+    val world = SharedWorlds.world(config)
     val nations = world.nations.nations
     val ids = world.nations.nationId
 

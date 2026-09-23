@@ -41,7 +41,7 @@ import kotlin.test.assertTrue
  *     because measurement 1 shows it exact; what is checked of it here is that no cell of a real
  *     coastline slipped past the flood.
  */
-class JumpFloodDistanceTest {
+class JumpFloodDistanceTest : BorrowsSharedWorlds() {
 
     /** The floor the plan asks for: an eight-fold component under 1% of the radius. */
     private val roundnessFloor = 0.01
@@ -174,7 +174,7 @@ class JumpFloodDistanceTest {
     @Test
     fun `seed 42's shelf break follows a round contour`() {
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height
         val shelf = config.cellsFor(config.sea.shelfWidthKm)

@@ -30,7 +30,7 @@ import kotlinx.coroutines.runBlocking
  * and the climate are literally the same objects. The only difference between the two networks is
  * the term under test.
  */
-class ChannelInitiationControlTest {
+class ChannelInitiationControlTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
@@ -43,7 +43,7 @@ class ChannelInitiationControlTest {
         val pool = EarthLikeness.Pool()
         val bare = SEEDS.map { seed ->
             val config = WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
-            val withCover: WorldMap = WorldGenerationEngine.generateBlocking(config)
+            val withCover: WorldMap = SharedWorlds.world(config)
             val withoutCover = runBlocking {
                 WorldGenerationEngine.generate(
                     config.copy(rivers = config.rivers.copy(coverRaisesChannelHead = false)),
@@ -87,7 +87,7 @@ class ChannelInitiationControlTest {
     @Test
     fun `the frozen-ground rule does not follow the lake's evaporation scale`() {
         val config = WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)
-        val world: WorldMap = WorldGenerationEngine.generateBlocking(config)
+        val world: WorldMap = SharedWorlds.world(config)
         val noLakeEvaporation = runBlocking {
             WorldGenerationEngine.generate(
                 config.copy(lakes = config.lakes.copy(evaporationScale = 0f)),

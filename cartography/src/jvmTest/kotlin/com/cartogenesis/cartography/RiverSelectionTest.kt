@@ -1,7 +1,7 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * 1024 world as well. The same measurements at 2048, on the author's own world, are
  * `RiverSelectionAuditTest` in `:desktop`.
  */
-class RiverSelectionTest {
+class RiverSelectionTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** The four standard seeds, at the grid every per-merge guard in this repository uses. */
@@ -85,7 +85,7 @@ class RiverSelectionTest {
      * the two grids would not be the same world.
      */
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = SIDE, height = SIDE).atResolution(side, side)
         )
 

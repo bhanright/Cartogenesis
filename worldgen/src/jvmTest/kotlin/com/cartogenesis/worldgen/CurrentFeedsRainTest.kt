@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * *east* coasts that carry the warm, poleward-flowing western-boundary current (the Gulf Stream
  * and Kuroshio's role), so that is where the guard's warm-current comparison is drawn from.
  */
-class CurrentFeedsRainTest {
+class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SEED = 26L
@@ -96,8 +96,8 @@ class CurrentFeedsRainTest {
     @Test
     fun `a cold-current coast dries out while a warm one does not`() {
         val base = WorldGenConfig(seed = SEED, width = 512, height = 512)
-        val on = WorldGenerationEngine.generateBlocking(base)
-        val off = WorldGenerationEngine.generateBlocking(
+        val on = SharedWorlds.world(base)
+        val off = SharedWorlds.world(
             base.copy(climate = base.climate.copy(currentMoisture = 0f))
         )
         val w = on.width

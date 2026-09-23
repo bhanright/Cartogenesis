@@ -45,7 +45,7 @@ import kotlin.test.assertTrue
  * can actually reach the scene E8 was aimed at. Nothing here is asserted except that the census
  * found something to count.
  */
-class WaterlineBasinTest {
+class WaterlineBasinTest : BorrowsSharedWorlds() {
 
     /**
      * Earth's surge range, in metres above the waterline.
@@ -67,7 +67,7 @@ class WaterlineBasinTest {
         var found = 0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val world = WorldGenerationEngine.generateBlocking(config)
+            val world = SharedWorlds.world(config)
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground
             // is a hollow at the waterline that no sea-level rule ever saw.

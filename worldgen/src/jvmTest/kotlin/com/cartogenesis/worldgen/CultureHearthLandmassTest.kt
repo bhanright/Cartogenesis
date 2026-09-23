@@ -25,12 +25,12 @@ import kotlin.test.assertTrue
  * seed 7 already satisfied before the fix — the bug was never that a large landmass went hearth-
  * less, it was that it went under-provisioned relative to its size.
  */
-class CultureHearthLandmassTest {
+class CultureHearthLandmassTest : BorrowsSharedWorlds() {
 
     @Test
     fun `hearths are shared out between landmasses in proportion to habitable land`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val placement = CultureStage.placeHearths(world.config, world.sea, world.climate, world.rivers)

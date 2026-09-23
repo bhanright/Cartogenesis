@@ -4,8 +4,7 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.MapImage
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
 import kotlin.math.abs
@@ -13,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * The wind and current layers, rendered and measured.
@@ -22,6 +22,7 @@ import org.jetbrains.skia.Image
  * looking: that arrows exist, that they sit on water for currents, and that the wind arrows
  * actually reverse across the circulation belts rather than all pointing one way.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class FlowLayerTest {
 
     private val outputDir = File("build/maps")
@@ -29,7 +30,7 @@ class FlowLayerTest {
     @Test
     fun `flow layers render and point the right ways`() {
         outputDir.mkdirs()
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
 

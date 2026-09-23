@@ -28,7 +28,7 @@ import org.junit.Assert.assertTrue
  *
  * See `docs/DESIGN_LEDGER.md`, S1.
  */
-class UnitsTest {
+class UnitsTest : BorrowsSharedWorlds() {
 
     private val stock = WorldGenConfig(seed = 42L, width = 512, height = 512)
 
@@ -207,7 +207,7 @@ class UnitsTest {
     fun `the declared ruler and the height field's own agree`() {
         val worst = ArrayList<Pair<Long, Double>>()
         listOf(7L, 42L, 1234L, 99L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val scale = world.config.scale

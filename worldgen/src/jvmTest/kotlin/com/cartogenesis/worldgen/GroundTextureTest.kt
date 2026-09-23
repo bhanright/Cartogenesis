@@ -26,7 +26,7 @@ import org.junit.Assert.assertTrue
  * last. Three of them carry a control that shows the bar bite. The fourth's control could not bite
  * and has been taken out rather than printed; the clause says so where it stands.
  */
-class GroundTextureTest {
+class GroundTextureTest : BorrowsSharedWorlds() {
 
     /**
      * A mountain belt's flank is dissected, and at S1's critical slope it is an analytic ramp.
@@ -49,7 +49,7 @@ class GroundTextureTest {
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val here = flankTexture(world(seed))
             val control = flankTexture(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     config.copy(
                         erosion = config.erosion.copy(
                             criticalFallMetresPerKm = CRITICAL_FALL_BEFORE_S2
@@ -175,7 +175,7 @@ class GroundTextureTest {
         SEEDS.forEach { seed ->
             val here = textureByElevation(world(seed))
             val control = textureByElevation(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
                             isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
@@ -258,7 +258,7 @@ class GroundTextureTest {
         SEEDS.forEach { seed ->
             val here = drownedCrust(world(seed))
             val control = drownedCrust(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
                             isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
@@ -490,15 +490,15 @@ class GroundTextureTest {
 
     private fun standard(seed: Long) = WorldGenConfig(seed = seed, width = 512, height = 512)
 
-    /** The five worlds on the defaults, built once and shared by every clause below. */
-    private fun world(seed: Long): WorldMap =
-        WORLDS.getOrPut(seed) { WorldGenerationEngine.generateBlocking(standard(seed)) }
+    /**
+     * The five worlds on the defaults, borrowed from `SharedWorlds` by every clause that reads one
+     * rather than kept here, so that they are generated once and checked after every clause.
+     */
+    private fun world(seed: Long): WorldMap = SharedWorlds.world(standard(seed))
 
     private companion object {
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
-
-        val WORLDS = HashMap<Long, WorldMap>()
 
         /**
          * How much slack the two quarter comparisons below carry, in metres: a tenth, which is the

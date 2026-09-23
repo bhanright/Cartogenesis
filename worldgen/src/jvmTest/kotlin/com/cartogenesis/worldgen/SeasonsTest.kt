@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * That claim is asserted with seasons on and shown to fail with them off, where the class is
  * unreachable by construction.
  */
-class SeasonsTest {
+class SeasonsTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
@@ -85,7 +85,7 @@ class SeasonsTest {
 
     @Test
     fun `at 35 degrees the land swings through the year and the open sea does not`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = size, height = size)
         )
         val w = world.width
@@ -183,7 +183,7 @@ class SeasonsTest {
 
     private fun measure(seed: Long, seasons: Boolean): Tally {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             base.copy(climate = base.climate.copy(seasons = seasons))
         )
         val w = world.width

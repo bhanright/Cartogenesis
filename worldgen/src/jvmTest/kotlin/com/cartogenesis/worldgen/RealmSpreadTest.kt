@@ -13,12 +13,12 @@ import kotlin.test.assertTrue
  * water at all, and rendered an entire southern continent blank. Letting them cross for free then
  * produced the opposite: one realm island-hopped an archipelago and held most of the world.
  */
-class RealmSpreadTest {
+class RealmSpreadTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every landmass is settled, and no realm swallows the world`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val land = world.sea.isLand.count { it }
@@ -54,7 +54,7 @@ class RealmSpreadTest {
     @Test
     fun `realms are not riddled with enclaves`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width
@@ -119,7 +119,7 @@ class RealmSpreadTest {
 
     @Test
     fun `realms differ in size`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val sizes = world.nations.nations.map { it.cellCount }.sortedDescending()

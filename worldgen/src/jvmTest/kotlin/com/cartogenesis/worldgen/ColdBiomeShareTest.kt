@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W1.
  */
-class ColdBiomeShareTest {
+class ColdBiomeShareTest : BorrowsSharedWorlds() {
 
     private companion object {
 
@@ -104,7 +104,7 @@ class ColdBiomeShareTest {
     fun `boreal forest takes Earth's kind of share of the land, and tundra is reported`() {
         var pooled = Shares(0, 0, 0)
         SEEDS.forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = GRID, height = GRID)
             )
             val shares = sharesOf(world)

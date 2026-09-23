@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
  * the count of sea bodies is printed by both tests and asserted by neither, for the reason set out
  * beside [minLandBridges].
  */
-class RiftSegmentationTest {
+class RiftSegmentationTest : BorrowsSharedWorlds() {
 
     /** The known case: a long rift below the sea-level cut at the author's settings. */
     // Re-picked at S2, which drowned seed 59758's rift along its whole length: with the height
@@ -145,7 +145,7 @@ class RiftSegmentationTest {
 
     private fun world(segmented: Boolean): WorldMap {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-        return WorldGenerationEngine.generateBlocking(
+        return SharedWorlds.world(
             base.copy(tectonics = base.tectonics.copy(riftSegmentation = segmented))
         )
     }

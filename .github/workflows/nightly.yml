@@ -2,8 +2,9 @@ name: Nightly audit
 
 # T1: the audit tier — DebugMapDump, StageProfileTest, GenerationSpeedTest, DesertCauseTest,
 # ColdCapReportTest, ErosionConvergenceTest, the 2048-scale cases split into *AuditTest classes,
-# and the desktop module's 2048/4096 exports. These are excluded from `jvmTest`/`test` (see
-# `worldgen/build.gradle.kts` and `desktop/build.gradle.kts`) so the per-merge suite stays fast;
+# the desktop module's 2048/4096 exports, and since T5 every render harness and printed report
+# that asserts nothing, `:cartography`'s among them. These are excluded from `jvmTest`/`test` (see
+# the three modules' build scripts) so the per-merge suite stays fast;
 # this workflow is what still runs them, once a day, so a regression in the parts CI no longer
 # covers is still caught within a day rather than only when someone remembers `gradlew audit`.
 
@@ -21,7 +22,7 @@ defaults:
 
 jobs:
   audit:
-    name: Audit tier (worldgen + desktop)
+    name: Audit tier (worldgen + cartography + desktop)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -34,8 +35,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Unqualified, this runs the `audit` task in every subproject that declares one —
-      # `:worldgen:audit` and `:desktop:audit` today — the same way `gradlew audit` does locally.
-      # --continue so that one project's red does not keep Gradle from starting the other's tier.
+      # `:worldgen:audit`, `:cartography:audit` and `:desktop:audit` today — the same way
+      # `gradlew audit` does locally, one after another: two of them side by side have taken this
+      # runner's 16 GB down, and the root build script orders them.
+      # --continue so that one project's red does not keep Gradle from starting the next tier.
       # The init script writes down, before anything runs, every class the tier is to run, which
       # is what the summary below holds the results against.
       - name: Audit tier
@@ -65,7 +68,11 @@ jobs:
             build/audit-tier-plan.tsv
             worldgen/build/reports/tests/
             worldgen/build/maps/
+            cartography/build/reports/tests/
             desktop/build/reports/tests/
             desktop/build/exports/
+            desktop/build/styles/
+            desktop/build/w3-crops/
+            desktop/build/w4-crops/
           retention-days: 14
           if-no-files-found: ignore

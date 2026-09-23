@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.PI
@@ -27,7 +28,7 @@ import kotlin.test.assertTrue
  *    from one, so [ReliefShading.HAZE] is chosen to make the difference up: the sweep below
  *    re-derives it from the two contrasts rather than trusting the constant.
  */
-class ReliefShadingTest {
+class ReliefShadingTest : BorrowsSharedWorlds() {
 
     private companion object {
 

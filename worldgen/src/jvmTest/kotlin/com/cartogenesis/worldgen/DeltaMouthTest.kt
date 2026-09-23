@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
  * figure is nought on every seed now — still printed, because a zero that used to be forty is worth
  * seeing.
  */
-class DeltaMouthTest {
+class DeltaMouthTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(59758L, 42L, 7L, 1234L)
 
@@ -73,11 +73,11 @@ class DeltaMouthTest {
         var lobeFlat = 0.0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val before = WorldGenerationEngine.generateBlocking(
+            val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deltaLobe = false))
             )
-            val after = WorldGenerationEngine.generateBlocking(config)
-            val bare = WorldGenerationEngine.generateBlocking(
+            val after = SharedWorlds.world(config)
+            val bare = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deposition = false))
             )
 

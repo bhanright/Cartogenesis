@@ -11,8 +11,7 @@ import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.MapImage
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
@@ -35,6 +34,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * What the three data exports promise, held to.
@@ -48,10 +48,11 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * 512, which takes a few seconds; the sizes the app actually offers are timed in `ExportAuditTest`.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class DataExportTest {
 
     private val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
-    private val world: WorldMap by lazy { WorldGenerationEngine.generateBlocking(config) }
+    private val world: WorldMap by lazy { SharedWorlds.world(config) }
 
     private fun write(layer: DataLayer): DataFiles = runBlocking {
         DataExports.write(world, layer, GzipCompressor, BuildInfo.VERSION)
@@ -189,7 +190,7 @@ class DataExportTest {
         // fourth thing this clause has to name before it can say the export is faithful.
         // Measured on seed 718106 at 512: 23 cells with only the enclosed seas switched off, 19
         // with the valley fill off as well, 0 with the ice off too.
-        val undrowned = WorldGenerationEngine.generateBlocking(
+        val undrowned = SharedWorlds.world(
             config.copy(
                 sea = config.sea.copy(
                     enclosedSeaIsLand = false,

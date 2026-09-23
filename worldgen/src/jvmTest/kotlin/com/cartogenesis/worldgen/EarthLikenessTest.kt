@@ -19,7 +19,7 @@ import org.junit.Assert.assertTrue
  * on the author's own settings are in [EarthLikenessAuditTest]. See [EarthLikeness] for what each
  * metric is and where Earth's number comes from.
  */
-class EarthLikenessTest {
+class EarthLikenessTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every metric of the suite, per seed and pooled`() {
@@ -114,7 +114,7 @@ class EarthLikenessTest {
         fun suite(): Suite = measured ?: run {
             val pool = EarthLikeness.Pool()
             val perSeed = seeds.map { seed ->
-                val world: WorldMap = WorldGenerationEngine.generateBlocking(
+                val world: WorldMap = SharedWorlds.world(
                     WorldGenConfig(seed = seed, width = 512, height = 512)
                 )
                 EarthLikeness.measure(world, seed.toString(), pool)

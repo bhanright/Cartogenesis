@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W4.
  */
-class VegetationDensityTest {
+class VegetationDensityTest : BorrowsSharedWorlds() {
 
     private companion object {
 
@@ -127,27 +127,16 @@ class VegetationDensityTest {
         const val MOST_OF_A_ZONE = 0.25f
 
         /**
-         * The four worlds, generated once for every clause here.
-         *
-         * In the companion and not in the class, because JUnit builds a fresh instance for each
-         * test method and four 512 worlds a method is four minutes rather than one.
+         * One of the four worlds, borrowed from `SharedWorlds` by every clause that reads it rather
+         * than kept here, so that each is generated once and checked after every clause.
          */
-        val WORLDS: Map<Long, WorldMap> by lazy {
-            SEEDS.associateWith {
-                WorldGenerationEngine.generateBlocking(
-                    WorldGenConfig(seed = it, width = GRID, height = GRID)
-                )
-            }
-        }
+        fun world(seed: Long): WorldMap =
+            SharedWorlds.world(WorldGenConfig(seed = seed, width = GRID, height = GRID))
 
-        /** The same four with the field switched off, for the control clauses. */
-        val WITHOUT_VEGETATION: Map<Long, WorldMap> by lazy {
-            SEEDS.associateWith {
-                val base = WorldGenConfig(seed = it, width = GRID, height = GRID)
-                WorldGenerationEngine.generateBlocking(
-                    base.copy(vegetation = base.vegetation.copy(enabled = false))
-                )
-            }
+        /** The same world with the field switched off, for the control clauses. */
+        fun withoutVegetation(seed: Long): WorldMap {
+            val base = WorldGenConfig(seed = seed, width = GRID, height = GRID)
+            return SharedWorlds.world(base.copy(vegetation = base.vegetation.copy(enabled = false)))
         }
     }
 
@@ -205,7 +194,7 @@ class VegetationDensityTest {
         var pooled = Counts(0, 0, 0, 0, 0, 0)
         val perSeed = ArrayList<Pair<Long, Float>>()
         SEEDS.forEach { seed ->
-            val counts = countsOf(WORLDS.getValue(seed))
+            val counts = countsOf(world(seed))
             pooled += counts
             val share = counts.barrenOrIce.toFloat() / counts.land
             perSeed.add(seed to share)
@@ -242,7 +231,7 @@ class VegetationDensityTest {
         var pooled = Counts(0, 0, 0, 0, 0, 0)
         val perSeed = ArrayList<Pair<Long, Float>>()
         SEEDS.forEach { seed ->
-            val counts = countsOf(WORLDS.getValue(seed))
+            val counts = countsOf(world(seed))
             pooled += counts
             val share = counts.forest.toFloat() / counts.iceFreeLand
             perSeed.add(seed to share)
@@ -276,7 +265,7 @@ class VegetationDensityTest {
     fun `the share of land over permafrost is Earth's`() {
         var pooled = Counts(0, 0, 0, 0, 0, 0)
         SEEDS.forEach { seed ->
-            val counts = countsOf(WORLDS.getValue(seed))
+            val counts = countsOf(world(seed))
             pooled += counts
             println(
                 ("VEGETATION seed %d: permafrost %.1f%% of ice-free land, of it continuous %.1f%%; " +
@@ -326,7 +315,7 @@ class VegetationDensityTest {
         var continuous = 0L
         var forestOverContinuous = 0L
         SEEDS.forEach { seed ->
-            val world = WORLDS.getValue(seed)
+            val world = world(seed)
             var seedContinuous = 0L
             var seedForest = 0L
             for (cell in world.sea.isLand.indices) {
@@ -479,7 +468,7 @@ class VegetationDensityTest {
         // asserted to be obvious: `VegetationConfig.enabled` off leaves the field at zero, so
         // every land cell is barren, no cell is forest, and the permafrost mask is empty.
         var pooled = Counts(0, 0, 0, 0, 0, 0)
-        SEEDS.forEach { pooled += countsOf(WITHOUT_VEGETATION.getValue(it)) }
+        SEEDS.forEach { pooled += countsOf(withoutVegetation(it)) }
         val barren = pooled.barrenOrIce.toFloat() / pooled.land
         val forest = pooled.forest.toFloat() / pooled.iceFreeLand
         val permafrost = pooled.permafrostAny.toFloat() / pooled.iceFreeLand

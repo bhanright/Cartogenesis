@@ -1,7 +1,6 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -33,7 +32,7 @@ import kotlin.test.assertTrue
  *    first and what the review sent back: at 2048 its hachures are dashes thirty pixels long and
  *    its stipple is polka dots.
  */
-class PenAndInkTest {
+class PenAndInkTest : BorrowsSharedWorlds() {
 
     internal companion object {
 

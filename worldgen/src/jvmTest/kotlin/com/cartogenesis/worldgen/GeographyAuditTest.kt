@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  * checking against actual output, and the numbers show which rules the pipeline honours by
  * accident rather than by design.
  */
-class GeographyAuditTest {
+class GeographyAuditTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
@@ -27,7 +27,7 @@ class GeographyAuditTest {
         // Desert and land cells per band, per seed and pooled. See [DesertBands].
         val bands = DesertBands()
         seeds.forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width
@@ -177,7 +177,7 @@ class GeographyAuditTest {
         val bands = DesertBands()
         seeds.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
             )
             for (i in 0 until world.width * world.height) {

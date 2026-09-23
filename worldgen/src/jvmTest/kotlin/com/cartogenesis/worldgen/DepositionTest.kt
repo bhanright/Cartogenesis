@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * catches an implementation that is correct and does nothing. Both are needed, which is why the
  * second is shown failing against the `deposition = false` control before it is shown passing.
  */
-class DepositionTest {
+class DepositionTest : BorrowsSharedWorlds() {
 
     /** The sea-level percentile every world here is generated at, and measured at. */
     private val seaLevel = WorldGenConfig().seaLevel
@@ -87,14 +87,14 @@ class DepositionTest {
     @Test
     fun `river mouths gain land, and do not without deposition`() {
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val without = WorldGenerationEngine.generateBlocking(
+        val without = SharedWorlds.world(
             base.copy(erosion = base.erosion.copy(deposition = false))
         )
 
         // Ground rule 2: the same measurement against a world that cannot deposit. The old
         // coastline is compared with itself, so nothing can have been gained.
         val control = mouthsGainingLand(
-            WorldGenerationEngine.generateBlocking(
+            SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(deposition = false))
             ),
             without
@@ -106,7 +106,7 @@ class DepositionTest {
                 "$control mouths"
         )
 
-        val world = WorldGenerationEngine.generateBlocking(base)
+        val world = SharedWorlds.world(base)
         val gained = mouthsGainingLand(world, without)
         // The guard's own radius is generous, so the tighter figure is reported beside it: new
         // ground the mouth is standing on rather than merely near.
@@ -128,13 +128,13 @@ class DepositionTest {
         val off = WorldGenConfig(seed = 42L, width = 128, height = 128).let {
             it.copy(erosion = it.erosion.copy(deposition = false))
         }
-        val world = WorldGenerationEngine.generateBlocking(off)
+        val world = SharedWorlds.world(off)
         println(
             "DEPOSITION off: elevation=${checksum(world)} land=${world.sea.landCellCount} " +
                 "rivers=${world.rivers.rivers.size} realms=${world.nations.nations.size}"
         )
 
-        val on = WorldGenerationEngine.generateBlocking(
+        val on = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 128, height = 128)
         )
         println(
@@ -155,7 +155,7 @@ class DepositionTest {
             )
         )
         assertEquals(
-            checksum(world), checksum(WorldGenerationEngine.generateBlocking(fiddled)),
+            checksum(world), checksum(SharedWorlds.world(fiddled)),
             "a deposition knob changed the world while deposition was off"
         )
 
@@ -170,7 +170,7 @@ class DepositionTest {
             )
         }
         assertEquals(
-            checksum(world), checksum(WorldGenerationEngine.generateBlocking(silent)),
+            checksum(world), checksum(SharedWorlds.world(silent)),
             "running the deposition pass changed the rock even with nothing laid down"
         )
     }
@@ -187,10 +187,10 @@ class DepositionTest {
         val dir = java.io.File("build/maps").apply { mkdirs() }
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val without = WorldGenerationEngine.generateBlocking(
+            val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(deposition = false))
             )
-            val world = WorldGenerationEngine.generateBlocking(base)
+            val world = SharedWorlds.world(base)
             val gained = gainedLand(world, without)
             val w = world.width
 

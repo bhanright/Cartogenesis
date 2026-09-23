@@ -20,11 +20,11 @@ import kotlin.test.assertTrue
  * carries water equatorward and arrives cold. If that comes out backwards the gyres are wrong even
  * though they look fine.
  */
-class OceanCurrentTest {
+class OceanCurrentTest : BorrowsSharedWorlds() {
 
     @Test
     fun `currents circulate and carry temperature`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val w = world.width
@@ -146,7 +146,7 @@ class OceanCurrentTest {
     /** The warm quartile's coastal habitability over the cold quartile's, as a ratio. */
     private fun checkCoasts(seed: Long): Double {
         val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height
 

@@ -4,8 +4,7 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.MapImage
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import java.io.File
@@ -18,6 +17,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Rect
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * Every style, on one world, written out to be looked at.
@@ -27,12 +27,13 @@ import org.jetbrains.skia.Rect
  * picture — a style that silently falls back to the default is the likely failure here, and it
  * would be invisible in any test that only asked whether rendering succeeded.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class StyleGalleryTest {
 
     @Test
     fun `every style renders, and none of them look alike`() {
         val dir = File("build/styles").apply { mkdirs() }
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 234475L, width = 512, height = 512).atResolution(1024, 1024)
         )
 
@@ -75,7 +76,7 @@ class StyleGalleryTest {
     @Test
     fun `the colour-blind style renders every view, and leaves the diagnostic ones alone`() {
         val dir = File("build/styles").apply { mkdirs() }
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 234475L, width = 512, height = 512)
         )
 
@@ -133,7 +134,7 @@ class StyleGalleryTest {
     fun `the engraved style, at 512 and at 2048`() {
         val dir = File("build/styles").apply { mkdirs() }
 
-        val small = WorldGenerationEngine.generateBlocking(
+        val small = SharedWorlds.world(
             WorldGenConfig(seed = 234475L, width = 512, height = 512)
         )
         write(dir, "f9-engraved-512", small, RenderOptions(style = MapStyle.PEN_AND_INK))
@@ -147,7 +148,7 @@ class StyleGalleryTest {
         }
 
         val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
-        val large = WorldGenerationEngine.generateBlocking(
+        val large = SharedWorlds.world(
             base.copy(
                 tectonics = base.tectonics.copy(plateCount = 14),
                 nations = base.nations.copy(nationCount = 12)

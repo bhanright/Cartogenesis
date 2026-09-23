@@ -201,6 +201,13 @@ The slow measurements above are in the audit tier, not the per-merge tier. `./gr
 `.github/workflows/nightly.yml` runs it once a day. Splitting them out took `:worldgen`'s per-merge
 run from about 23 minutes to 6, and `:desktop`'s from about 5 to 2.
 
+By 2026-09-23 the per-merge tier had grown back to 1 hour 25 minutes, and T5 took it to 22 minutes
+on the same machine: the four JVM suites in parallel workers, each worker's thread pool a share of
+the processor (the root `build.gradle.kts` holds the budget), the standard worlds generated once a
+worker and lent through `SharedWorlds` instead of once a class, and every class that asserts
+nothing moved to the audit tier. The end of every run that tests prints each task's wall time and
+the slowest classes. The ledger's T5 row has the measurements.
+
 To re-measure the stage profile alone, on a 2048 world among others:
 
 ```bash

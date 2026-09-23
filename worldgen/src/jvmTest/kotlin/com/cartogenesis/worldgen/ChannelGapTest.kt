@@ -22,7 +22,7 @@ import org.junit.Assert.assertTrue
  * not fall carry channel cells, counted here, and with the downstream rule off every one of them
  * would be a gap.
  */
-class ChannelGapTest {
+class ChannelGapTest : BorrowsSharedWorlds() {
 
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
@@ -34,7 +34,7 @@ class ChannelGapTest {
     fun `no initiated channel drains into land that carries none`() {
         val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val world: WorldMap = WorldGenerationEngine.generateBlocking(
+            val world: WorldMap = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
             )
             val channel = ChannelInitiation.channelMaskOf(world)

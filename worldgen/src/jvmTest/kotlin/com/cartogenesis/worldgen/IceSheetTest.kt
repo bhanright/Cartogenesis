@@ -32,7 +32,7 @@ import org.junit.Test
  * The four worlds are `GlaciationTest`'s own, at 512, so the same ice is being measured here as
  * there rather than a set of worlds picked to suit these clauses.
  */
-class IceSheetTest {
+class IceSheetTest : BorrowsSharedWorlds() {
 
     @Test
     fun `a sheet stands as thick as Earth's sheets do`() {
@@ -621,7 +621,7 @@ class IceSheetTest {
      * second opinion about it.
      */
     private fun carve(config: WorldGenConfig): Measured {
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val bed = SeaLevelStage.apply(world.erosion.height, config)
         val balance =
             if (config.climate.snowBalance) {

@@ -36,7 +36,7 @@ import kotlin.test.assertTrue
  * estuary until the pockets are gone. Both figures for both halves alone are printed by the third
  * case below, which asserts nothing and exists so a report can say which did what.
  */
-class SeaLevelHistoryTest {
+class SeaLevelHistoryTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L)
 
@@ -84,11 +84,11 @@ class SeaLevelHistoryTest {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
                 .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
-                WorldGenerationEngine.generateBlocking(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
+                SharedWorlds.world(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
                 "seed $seed lowstand 0     "
             )
             val lowered = Coast(
-                WorldGenerationEngine.generateBlocking(base),
+                SharedWorlds.world(base),
                 "seed $seed lowstand ${base.sea.lowstandMetres} m"
             )
             if (today.estuaries < controlEstuaryCeiling) controlFailures++
@@ -165,13 +165,13 @@ class SeaLevelHistoryTest {
         seeds.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             val loose = Coast(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     base.copy(sea = base.sea.copy(enclosedSeaIsLand = false))
                 ),
                 "seed $seed enclosed sea   "
             )
             val closed = Coast(
-                WorldGenerationEngine.generateBlocking(base),
+                SharedWorlds.world(base),
                 "seed $seed enclosed land  "
             )
             controlPockets += loose.pockets
@@ -229,7 +229,7 @@ class SeaLevelHistoryTest {
                 "H5b outlet  " to base.sea
             ).forEach { (name, sea) ->
                 Coast(
-                    WorldGenerationEngine.generateBlocking(base.copy(sea = sea)),
+                    SharedWorlds.world(base.copy(sea = sea)),
                     "seed $seed $name"
                 )
             }
@@ -240,10 +240,10 @@ class SeaLevelHistoryTest {
             listOf(128, 512).forEach { size ->
                 val base = WorldGenConfig(seed = 42L, width = size, height = size)
                     .copy(seaLevel = level)
-                val off = WorldGenerationEngine.generateBlocking(
+                val off = SharedWorlds.world(
                     base.copy(sea = base.sea.copy(enclosedSeaIsLand = false, lowstandMetres = 0f))
                 )
-                val on = WorldGenerationEngine.generateBlocking(base)
+                val on = SharedWorlds.world(base)
                 println(
                     "SEA HISTORY PROMISE seaLevel %.2f at %d: land %.5f -> %.5f (wanted %.5f)"
                         .format(level, size, off.landFraction(), on.landFraction(), 1f - level)

@@ -1,7 +1,6 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
@@ -30,7 +29,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W4.
  */
-class VegetationTintTest {
+class VegetationTintTest : BorrowsSharedWorlds() {
 
     private companion object {
 
@@ -48,7 +47,8 @@ class VegetationTintTest {
          * biomes is not one figure a biome. It is the table that is the control here, and the
          * table is a lookup.
          */
-        fun tableAt(cell: Int): Float = ClimateTint.canopyClosure(WORLD.climate.biome[cell])
+        fun tableAt(world: WorldMap, cell: Int): Float =
+            ClimateTint.canopyClosure(world.climate.biome[cell])
 
         /**
          * Below this a biome is too rare on this world for a spread within it to say anything:
@@ -127,16 +127,17 @@ class VegetationTintTest {
 
     @Test
     fun `a cell's canopy varies within its own biome, where the table gave every cell one figure`() {
+        val world = WORLD
         val populous = Biome.entries.filter { biome ->
-            WORLD.climate.biome.count { it == biome } >= MIN_BIOME_CELLS && biome !in NO_GROUND
+            world.climate.biome.count { it == biome } >= MIN_BIOME_CELLS && biome !in NO_GROUND
         }
         assertTrue(populous.size >= 5, "this world has too few populous biomes to measure: $populous")
 
         var asserted = 0
         populous.forEach { biome ->
-            val cells = WORLD.climate.biome.indices.filter { WORLD.climate.biome[it] == biome }
-            val field = cells.map { ClimateTint.canopyAt(WORLD, it) }
-            val table = cells.map { tableAt(it) }
+            val cells = world.climate.biome.indices.filter { world.climate.biome[it] == biome }
+            val field = cells.map { ClimateTint.canopyAt(world, it) }
+            val table = cells.map { tableAt(world, it) }
             val mean = field.average()
             println(
                 "CANOPY %-26s %d cells: field mean %.3f spread %.3f, table mean %.3f spread %.3f"
@@ -181,8 +182,9 @@ class VegetationTintTest {
             Biome.TEMPERATE_FOREST, Biome.TEMPERATE_RAINFOREST, Biome.TAIGA,
             Biome.TROPICAL_SEASONAL_FOREST, Biome.MONSOON_FOREST
         )
-        val cellsAcross = WORLD.width
-        val cellsDown = WORLD.height
+        val world = WORLD
+        val cellsAcross = world.width
+        val cellsDown = world.height
 
         var pairs = 0
         var fieldStep = 0.0
@@ -197,19 +199,19 @@ class VegetationTintTest {
                 )
                 neighbours.forEach { next ->
                     if (next < 0) return@forEach
-                    if (!WORLD.sea.isLand[cell] || !WORLD.sea.isLand[next]) return@forEach
-                    val here = WORLD.climate.biome[cell]
-                    val there = WORLD.climate.biome[next]
+                    if (!world.sea.isLand[cell] || !world.sea.isLand[next]) return@forEach
+                    val here = world.climate.biome[cell]
+                    val there = world.climate.biome[next]
                     val crossesTheLine =
                         (here in open && there in wooded) || (here in wooded && there in open)
                     if (!crossesTheLine) return@forEach
                     pairs++
                     val step = abs(
-                        ClimateTint.canopyAt(WORLD, cell) - ClimateTint.canopyAt(WORLD, next)
+                        ClimateTint.canopyAt(world, cell) - ClimateTint.canopyAt(world, next)
                     )
                     fieldStep += step
                     if (step > worstFieldStep) worstFieldStep = step
-                    tableStep += abs(tableAt(cell) - tableAt(next))
+                    tableStep += abs(tableAt(world, cell) - tableAt(world, next))
                 }
             }
         }

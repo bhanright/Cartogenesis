@@ -7,6 +7,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
 import com.cartogenesis.ui.MapImage
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -18,6 +19,7 @@ import kotlin.math.sqrt
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * Whether a river is drawn as wide as the water it carries.
@@ -33,6 +35,7 @@ import kotlin.test.assertTrue
  * only ever been green proves nothing, and keeping the superseded rule beside the new one is the
  * cheapest way to keep proving that this one can discriminate.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class RiverWidthTest {
 
     private companion object {
@@ -136,7 +139,7 @@ class RiverWidthTest {
         RiverPen.widthPixels(ratio, cellsAcross)
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = side, height = side)
         )
 
@@ -587,7 +590,11 @@ class RiverWidthTest {
     fun `how long the widths cost`() {
         val options = RenderOptions()
         var world: WorldMap? = null
-        val generateMs = measureTimeMillis { world = world(42L) }
+        // Generated here rather than borrowed from `SharedWorlds`, because the generation's time
+        // is one of the two figures printed.
+        val generateMs = measureTimeMillis {
+            world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = SIDE, height = SIDE))
+        }
         val ready = world!!
         MapRasterizer.overlay(ready, options)
         var segments = 0

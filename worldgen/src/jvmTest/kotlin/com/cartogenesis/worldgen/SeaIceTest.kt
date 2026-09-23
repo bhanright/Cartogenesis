@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  *
  * See docs/DESIGN_LEDGER.md, W1.
  */
-class SeaIceTest {
+class SeaIceTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
@@ -183,7 +183,7 @@ class SeaIceTest {
 
     private fun generate(seed: Long, seaIce: Boolean): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        return WorldGenerationEngine.generateBlocking(
+        return SharedWorlds.world(
             base.copy(climate = base.climate.copy(seaIce = seaIce))
         )
     }

@@ -1,7 +1,7 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
  *    thirty-sixth of the width and an eighteenth of the height; the control is the same spacing
  *    rounded to whole cells, which puts the equator off the middle row.
  */
-class GeneralisationTest {
+class GeneralisationTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SIDE = 512
@@ -60,7 +60,7 @@ class GeneralisationTest {
         const val ON_A_CELL_CENTRE = 1e-4f
     }
 
-    private fun world(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
+    private fun world(seed: Long): WorldMap = SharedWorlds.world(
         WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
     )
 

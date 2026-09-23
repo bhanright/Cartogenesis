@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * Measured as the share of land sitting within two cells of water, which is what "thin" means
  * here, alongside the longest single strip so a few big continents cannot hide a bad one.
  */
-class RibbonLandTest {
+class RibbonLandTest : BorrowsSharedWorlds() {
 
     /**
      * The most of its land a world may hold in strips, as a percentage — see the assertion below
@@ -57,7 +57,7 @@ class RibbonLandTest {
                 )
             )
         ).map { (name, config) ->
-            val world = WorldGenerationEngine.generateBlocking(config)
+            val world = SharedWorlds.world(config)
             val w = world.width
             val h = world.height
             val land = world.sea.isLand

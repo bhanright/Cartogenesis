@@ -27,7 +27,7 @@ import org.junit.Test
  * against a checksum of one world main once produced, and it is what makes every "before" figure
  * here honest.
  */
-class SnowBalanceTest {
+class SnowBalanceTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
@@ -50,17 +50,17 @@ class SnowBalanceTest {
      * the carving step.
      */
     private fun uncarvedTerrain(seed: Long): WorldMap =
-        WorldGenerationEngine.generateBlocking(config(seed).withoutBalance().withoutGlaciation())
+        SharedWorlds.world(config(seed).withoutBalance().withoutGlaciation())
 
     /**
      * Every guard here wants the same eight worlds — four seeds, with the balance and without —
      * and generating them once each rather than once per case is the difference between a minute
-     * and four in the per-merge tier. Held on the companion so the cache survives JUnit's fresh
-     * instance per test method.
+     * and four in the per-merge tier. Borrowed from `SharedWorlds` each time rather than kept here,
+     * which makes them once and checks them after every case.
      */
-    private fun world(seed: Long, balance: Boolean): WorldMap = cache.getOrPut(seed to balance) {
+    private fun world(seed: Long, balance: Boolean): WorldMap {
         val cfg = config(seed)
-        WorldGenerationEngine.generateBlocking(if (balance) cfg else cfg.withoutBalance())
+        return SharedWorlds.world(if (balance) cfg else cfg.withoutBalance())
     }
 
     // ---------------------------------------------------------------- the arithmetic itself
@@ -220,7 +220,7 @@ class SnowBalanceTest {
             // a tenth of them warm, because a moat reaches past a margin by construction. This
             // clause is about where the ice *cut*, so the load is switched off for it and asserted
             // on its own in `IsostasyTest`.
-            val carving = WorldGenerationEngine.generateBlocking(
+            val carving = SharedWorlds.world(
                 config(seed).withoutBalance()
                     .let { it.copy(isostasy = it.isostasy.copy(iceLoad = false)) }
             )
@@ -630,8 +630,6 @@ class SnowBalanceTest {
          * not with whatever the line happens to say today.
          */
         const val PRE_H2_ICE_GATE_C = -8f
-
-        private val cache = HashMap<Pair<Long, Boolean>, WorldMap>()
     }
 
     /**

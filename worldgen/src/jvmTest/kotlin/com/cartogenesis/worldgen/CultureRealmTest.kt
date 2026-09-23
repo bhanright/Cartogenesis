@@ -20,13 +20,13 @@ import kotlin.test.assertTrue
  * neighbouring culture by nine cells is not meaningfully two-cultured, and counting it as such would
  * let the layer pass while looking like a copy of the borders.
  */
-class CultureRealmTest {
+class CultureRealmTest : BorrowsSharedWorlds() {
 
     @Test
     fun `cultures and realms disagree`() {
         val pooled = ArrayList<Double>()
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val realmOf = world.nations.nationId
@@ -157,7 +157,7 @@ class CultureRealmTest {
     @Test
     fun `peoples cover the habitable world without one swallowing it`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val land = world.sea.isLand.count { it }

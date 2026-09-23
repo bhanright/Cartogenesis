@@ -23,7 +23,7 @@ import org.junit.Assert.assertTrue
  * built on, and once of the ground itself, because a world whose plates have all moved weighs the
  * same as the world it replaced and the statistics said so for a month.
  */
-class ScaleFreeTest {
+class ScaleFreeTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the same world at 512 and 1024 measures the same and stands on the same ground`() {
@@ -277,6 +277,6 @@ class ScaleFreeTest {
         }
 
         fun worldAt(seed: Long, size: Int): WorldMap =
-            WorldGenerationEngine.generateBlocking(configAt(seed, size))
+            SharedWorlds.world(configAt(seed, size))
     }
 }

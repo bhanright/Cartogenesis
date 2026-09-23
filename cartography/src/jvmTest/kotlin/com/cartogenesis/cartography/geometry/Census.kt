@@ -38,6 +38,11 @@ internal class Census(val side: Int, val familySize: Int) {
         val natural = NaturalFigures.of(frame)
         val readings = layers.map { GeometryGuard.read(it, frame, familySize, natural.cornersPer1000Km) }
         val read = System.nanoTime()
+        if (readings.any { reading -> Detector.entries.any { reading.outcome(it) == Outcome.VIOLATION } }) {
+            val raster = CensusImages.rasterOf(world)
+            val directory = java.io.File("build/geometry-census/$side")
+            layers.zip(readings).forEach { (layer, reading) -> CensusImages.write(world, raster, name, layer, reading, directory) }
+        }
         val reading = WorldReading(
             name, config.seed, readings,
             (generated - started) / 1e9, (traced - generated) / 1e9, (read - traced) / 1e9

@@ -45,9 +45,11 @@ internal class IsotropicNoise(
     private val unitsAcross: Double = 1.0,
     private val unitsDown: Double = 1.0
 ) {
-    // A band of wavelengths an octave wide at a time, and within each band the directions spread
-    // evenly round the half-circle with one random offset: drawn independently, the handful of
-    // shortest waves that dominate the gradient would each be a direction of their own.
+    // A band of wavelengths an octave wide at a time, counted down from the longest, and within
+    // each band the directions spread evenly round the half-circle with one random offset: drawn
+    // independently, the handful of shortest waves that dominate the gradient would each be a
+    // direction of their own. Each octave draws from its own stream, so asking for finer detail
+    // adds octaves and leaves the coarser ones — the shape at large — exactly as they were.
     private val octaves = maxOf(1, kotlin.math.ceil(ln(longestWavelength / shortestWavelength) / ln(2.0)).toInt())
     private val waves = octaves * WAVES_PER_OCTAVE
     private val waveX = DoubleArray(waves)
@@ -56,17 +58,21 @@ internal class IsotropicNoise(
     private val amplitude = DoubleArray(waves)
 
     init {
-        val random = Random(seed)
         val rotation = Math.toRadians(rotationDegrees)
-        val octaveWidth = (ln(longestWavelength) - ln(shortestWavelength)) / octaves
         var power = 0.0
+        var random = Random(seed)
         var bandOffset = 0.0
         for (wave in 0 until waves) {
             val octave = wave / WAVES_PER_OCTAVE
             val slot = wave % WAVES_PER_OCTAVE
-            if (slot == 0) bandOffset = random.nextDouble()
+            if (slot == 0) {
+                random = Random(seed * OCTAVE_STREAM_STRIDE + octave)
+                bandOffset = random.nextDouble()
+            }
             val direction = (slot + bandOffset) / WAVES_PER_OCTAVE * PI + rotation
-            val logWavelength = ln(shortestWavelength) + (octave + random.nextDouble()) * octaveWidth
+            val top = ln(longestWavelength) - octave * ln(2.0)
+            val bottom = maxOf(top - ln(2.0), ln(shortestWavelength))
+            val logWavelength = bottom + random.nextDouble() * (top - bottom)
             val wavelength = exp(logWavelength)
             val number = 2 * PI / wavelength
             waveX[wave] = number * cos(direction)
@@ -109,6 +115,9 @@ internal class IsotropicNoise(
 
         /** Mandelbrot's 1.25 for a coastline is `2 - H`; see [IsotropicNoise]. */
         const val HURST = 0.75
+
+        /** Separates the octaves' random streams. */
+        private const val OCTAVE_STREAM_STRIDE = 7919L
     }
 }
 

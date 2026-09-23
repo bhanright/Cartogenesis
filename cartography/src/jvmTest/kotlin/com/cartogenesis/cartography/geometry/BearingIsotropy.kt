@@ -8,7 +8,7 @@ import kotlin.math.tan
 import kotlin.random.Random
 
 /**
- * Detector 1: whether a layer's straight runs favour the grid's bearings.
+ * Detector 1: whether a layer's straight lines favour the grid's bearings.
  *
  * The null is not that a natural outline has no preferred bearing at all — ice and biome edges
  * follow the latitude, structural valleys follow the plates, and this generator's land runs twice
@@ -23,17 +23,23 @@ import kotlin.random.Random
  * sampling spread — its lower confidence bound, at the census's corrected level, is above 1.
  * Significance alone would, over a whole world's coast, reject real geography.
  *
- * Every run counts, by its length, but a run's bearing is known only as well as its two ends are:
- * each end of a traced edge lies within half a cell of the line it stands for, so a run of length
- * `L` is known to within `atan(w / L)` either way, `w` the cell's width across it
- * ([GridFrame.cellAcrossKm]), and its length is spread evenly over that interval before the bins
- * take their shares. That is what keeps the raster's own snapping — a short edge near a grid
- * bearing reads as lying exactly on it — from putting into the grid's bin length that belongs to
- * its neighbours; and every run is counted rather than only long ones, because on a raster the
- * runs near a grid bearing come out longer, and a length threshold would favour them. The
- * sampling spread comes from a block bootstrap, because neighbouring
- * runs along one outline turn together and are not independent trials: runs are grouped
- * [BLOCK_RUNS] at a time along each line, and the blocks resampled.
+ * The bearings are read off chords of one fixed length laid along each line ([measureChords]):
+ * every line sampled every half a cell's height, each sample standing for that much line, and its
+ * bearing the chord to the sample [chordKm] further on. A chord's two ends each lie within half a
+ * cell of the line the raster stands for, so its bearing is known to `atan(w / chord)` either way,
+ * `w` the cell's width across it ([GridFrame.cellAcrossKm]), and each sample's length is spread
+ * evenly over that interval before the bins take their shares. At [chordKm], the widest cell
+ * resolves a bearing to the bins' half-width. The chord is fixed rather than Douglas-Peucker's
+ * run, because on a raster the runs near a grid bearing come out longer than the runs between,
+ * and any reading weighted by run — or cut at a length — favours the grid's bearings by itself:
+ * `GeometryControlTest` reads both ways on the controls, and the runs put 1.2 to 1.9 times their
+ * neighbours' length on the north-south bin of natural outlines and courses where the chords put
+ * 0.9 to 1.1. [measure] keeps the runs' reading for that comparison.
+ *
+ * The sampling spread comes from a block bootstrap, because neighbouring stretches of one line
+ * turn together and are not independent trials. A block is as long as the layer's own correlation
+ * length ([correlationLengthChords]): the lag at which whether a chord lies in a grid bin stops
+ * predicting whether the chord that far on does.
  */
 internal object BearingIsotropy {
 
@@ -60,15 +66,7 @@ internal object BearingIsotropy {
      */
     const val EFFECT_RATIO = 1.5
 
-    /**
-     * How many consecutive runs along one line make a block for the bootstrap.
-     *
-     * Chosen from the controls, not from any world: along the natural outlines of
-     * `GeometryControlTest`, whether one run lies in a grid bin and whether the run eight
-     * further along does are uncorrelated (the lag at which the indicator's autocorrelation falls
-     * below 0.1 is under four runs; eight doubles it), so blocks this long are independent enough
-     * for the bootstrap's spread to be honest.
-     */
+    /** How many consecutive runs along one line make a block, on the runs' reading. */
     const val BLOCK_RUNS = 8
 
     const val BOOTSTRAP_RESAMPLES = 1000
@@ -90,11 +88,17 @@ internal object BearingIsotropy {
         val lowerRatio: Double,
         val blocks: Int,
         val minimumBlocks: Int,
-        val outcome: Outcome
+        val outcome: Outcome,
+        /** How many chords long a block was, on the chord reading; 0 on the runs reading. */
+        val blockChords: Int = 0
     ) {
+        fun withBlockChords(chords: Int) = Result(
+            bearingIndex, gridBearingDegrees, centralKm, flankKm, ratio, lowerRatio, blocks, minimumBlocks, outcome, chords
+        )
+
         override fun toString(): String =
-            "%.1f deg: %.2fx (lower %.2fx) over %d blocks, central %.0f km, flanks %.0f km%s".format(
-                gridBearingDegrees, ratio, lowerRatio, blocks, centralKm, flankKm,
+            "%.1f deg: %.2fx (lower %.2fx) over %d blocks of %d chords, central %.0f km, flanks %.0f km%s".format(
+                gridBearingDegrees, ratio, lowerRatio, blocks, blockChords, centralKm, flankKm,
                 if (outcome == Outcome.INSUFFICIENT) " [insufficient: needs $minimumBlocks]" else ""
             )
     }
@@ -162,12 +166,15 @@ internal object BearingIsotropy {
     ): List<Result> {
         val stepKm = 0.5 * minOf(frame.cellWidthKm, frame.cellHeightKm)
         val stride = kotlin.math.ceil(chordKm / stepKm).toInt()
-        val pieces = ArrayList<Piece>()
+        // Every chord's bearing and length, outline by outline, in order along each.
+        class Chord(val bearingDegrees: Double, val lengthKm: Double, val at: Int)
+        val chordsOf = ArrayList<Pair<Int, List<Chord>>>()
         outlines.forEachIndexed { index, outline ->
             val (xs, ys) = Arcs.resample(outline, stepKm)
             val count = xs.size
             if (count <= stride) return@forEachIndexed
             val last = if (outline.closed) count else count - stride
+            val chords = ArrayList<Chord>(last)
             for (at in 0 until last) {
                 val to = (at + stride) % count
                 if (!outline.closed && to <= at) continue
@@ -175,18 +182,65 @@ internal object BearingIsotropy {
                 val dy = ys[to] - ys[at]
                 val length = lengthOf(dx, dy)
                 if (length <= 0.0) continue
-                val bearing = frame.bearingDegrees(dx, dy)
-                pieces.add(
-                    Piece(
-                        bearing, stepKm,
-                        Math.toDegrees(kotlin.math.atan(frame.cellAcrossKm(bearing) / length)),
-                        (index.toLong() shl 32) or (at / (stride * CHORDS_PER_BLOCK)).toLong()
-                    )
-                )
+                chords.add(Chord(frame.bearingDegrees(dx, dy), length, at))
+            }
+            chordsOf.add(index to chords)
+        }
+        // Blocks as long as the layer's own correlation length: the lag, in whole chords, at which
+        // whether a chord lies in one of the grid's bins stops predicting whether the chord that far
+        // on does. A smooth zonal line stays correlated far longer than a rough coast, and blocks
+        // shorter than that would make its bootstrap spread too narrow.
+        val inABin = chordsOf.map { (_, chords) ->
+            DoubleArray(chords.size) { at ->
+                if (frame.gridBearings.any { frame.bearingGapDegrees(chords[at].bearingDegrees, it) <= BIN_HALF_WIDTH_DEGREES }) 1.0 else 0.0
             }
         }
-        return measurePieces(pieces, frame, familySize, seed, tracedTwice)
+        val blockChords = correlationLengthChords(inABin, stride)
+        val pieces = ArrayList<Piece>()
+        for ((index, chords) in chordsOf) for (chord in chords) {
+            pieces.add(
+                Piece(
+                    chord.bearingDegrees, stepKm,
+                    Math.toDegrees(kotlin.math.atan(frame.cellAcrossKm(chord.bearingDegrees) / chord.lengthKm)),
+                    (index.toLong() shl 32) or (chord.at / (stride * blockChords)).toLong()
+                )
+            )
+        }
+        return measurePieces(pieces, frame, familySize, seed, tracedTwice).map { it.withBlockChords(blockChords) }
     }
+
+    /**
+     * The least whole number of chords, at least one and at most [LONGEST_BLOCK_CHORDS], at which
+     * the autocorrelation of [series] (each sampled every chord over [stride] samples) falls under
+     * [DECORRELATED].
+     */
+    fun correlationLengthChords(series: List<DoubleArray>, stride: Int): Int {
+        val count = series.sumOf { it.size }
+        if (count == 0) return 1
+        val mean = series.sumOf { it.sum() } / count
+        val variance = series.sumOf { values -> values.sumOf { (it - mean) * (it - mean) } } / count
+        if (variance <= 0.0) return 1
+        for (chords in 1..LONGEST_BLOCK_CHORDS) {
+            val lag = chords * stride
+            var sum = 0.0
+            var pairs = 0
+            for (values in series) for (at in 0 until values.size - lag) {
+                sum += (values[at] - mean) * (values[at + lag] - mean)
+                pairs++
+            }
+            if (pairs == 0 || kotlin.math.abs(sum / pairs / variance) < DECORRELATED) return chords
+        }
+        return LONGEST_BLOCK_CHORDS
+    }
+
+    /** Where a layer's chords count as no longer correlated: an autocorrelation under a tenth. */
+    const val DECORRELATED = 0.1
+
+    /**
+     * The longest block, in chords: sixteen, beyond which a layer's lines are a handful of blocks
+     * each and the count of blocks, not their length, is what limits the test.
+     */
+    const val LONGEST_BLOCK_CHORDS = 16
 
     /**
      * The chord the fixed-length reading takes, in km: the length at which a cell's width across a
@@ -194,9 +248,6 @@ internal object BearingIsotropy {
      */
     fun chordKm(frame: GridFrame): Double =
         maxOf(frame.cellWidthKm, frame.cellHeightKm) / tan(Math.toRadians(BIN_HALF_WIDTH_DEGREES))
-
-    /** How many chord lengths of outline make one block for the bootstrap. */
-    const val CHORDS_PER_BLOCK = 2
 
     private class Piece(val bearingDegrees: Double, val lengthKm: Double, val uncertaintyDegrees: Double, val block: Long)
 

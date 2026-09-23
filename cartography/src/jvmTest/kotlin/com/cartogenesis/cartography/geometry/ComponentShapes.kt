@@ -40,6 +40,17 @@ internal object ComponentShapes {
     const val STRAIGHTEST_SHORE_OVER_A_CIRCLE = 3.0
 
     /**
+     * How much longer than a circle's own the longest straight run at any bearing may be.
+     *
+     * Not Tanganyika's three: a run at any bearing is straight to within the tolerance that
+     * swallows a staircase ([StraightRuns.TOLERANCE_CELL_WIDTHS]), which is looser than a shore
+     * "without a bend worth drawing", and natural outlines reach 3.15 times their circle's run under
+     * it (`GeometryControlTest`'s ensemble, isotropic on the sheet). Four stands clear of that; a
+     * nearest-seed partition's cells run their facets further, which the same test shows.
+     */
+    const val FACET_OVER_A_CIRCLE = 4.0
+
+    /**
      * The bar on rectangularity: area over the smallest bounding rectangle.
      *
      * From the control ensemble, not from any world: `GeometryControlTest` prints the largest fill
@@ -87,7 +98,12 @@ internal object ComponentShapes {
         val rectangleShortCells: Double,
         val alignedRectangle: Boolean,
         val longestRunKm: Double,
-        /** Three times the longest run at any bearing a circle of this ring's area makes. */
+        /** The ground bearing of that run, in degrees, 0 east-west. */
+        val longestRunBearingDegrees: Double,
+        /** Where the longest run and the longest aligned side lie, in km: their midpoints. */
+        val longestRunAtKm: Pair<Double, Double>,
+        val longestAlignedAtKm: Pair<Double, Double>,
+        /** [FACET_OVER_A_CIRCLE] times the longest run at any bearing a circle of this ring's area makes. */
         val facetAllowanceKm: Double,
         val longestAlignedKm: Double,
         val longestAlignedBearing: Int,
@@ -105,10 +121,14 @@ internal object ComponentShapes {
         val hasFacets: Boolean get() = measuredForRuns && longestRunKm > facetAllowanceKm
         val hasCornerPair: Boolean get() = measured && cornerPairs > 0
 
-        fun where(frame: GridFrame): String {
-            var column = (centreXKm / frame.cellWidthKm) % frame.cellsAcross
+        fun where(frame: GridFrame): String = cellAt(centreXKm, centreYKm, frame)
+        fun whereRun(frame: GridFrame): String = cellAt(longestRunAtKm.first, longestRunAtKm.second, frame)
+        fun whereSide(frame: GridFrame): String = cellAt(longestAlignedAtKm.first, longestAlignedAtKm.second, frame)
+
+        private fun cellAt(xKm: Double, yKm: Double, frame: GridFrame): String {
+            var column = (xKm / frame.cellWidthKm) % frame.cellsAcross
             if (column < 0) column += frame.cellsAcross
-            return "(%d,%d)".format(column.toInt(), (centreYKm / frame.cellHeightKm).toInt())
+            return "(%d,%d)".format(column.toInt(), (yKm / frame.cellHeightKm).toInt())
         }
 
         fun describe(frame: GridFrame): String =
@@ -136,7 +156,8 @@ internal object ComponentShapes {
                 rectangle.shortSide >= MINIMUM_WIDTH_CELLS &&
                 outline.vertexCount >= MINIMUM_VERTICES
 
-            val longestRun = StraightRuns.of(outline, index, frame, tolerance).maxOfOrNull { it.lengthKm } ?: 0.0
+            val longestRunOf = StraightRuns.of(outline, index, frame, tolerance).maxByOrNull { it.lengthKm }
+            val longestRun = longestRunOf?.lengthKm ?: 0.0
             val stretches = LatticeRuns.of(outline, frame, 0.0)
             val longestStretch = stretches.maxByOrNull { it.lengthKm }
             val corners = LatticeRuns.corners(stretches, outline.vertexCount, true, frame)
@@ -161,7 +182,12 @@ internal object ComponentShapes {
                     rectangleShortCells = rectangle.shortSide,
                     alignedRectangle = offGrid <= tolerated,
                     longestRunKm = longestRun,
-                    facetAllowanceKm = STRAIGHTEST_SHORE_OVER_A_CIRCLE * discs.longestAnyKm(radiusKm),
+                    longestRunBearingDegrees = longestRunOf?.bearingDegrees ?: 0.0,
+                    longestRunAtKm = (longestRunOf?.midXKm ?: centreX) to (longestRunOf?.midYKm ?: centreY),
+                    longestAlignedAtKm = longestStretch?.let {
+                        (outline.xKm[it.first] + outline.xKm[it.last]) / 2 to (outline.yKm[it.first] + outline.yKm[it.last]) / 2
+                    } ?: (centreX to centreY),
+                    facetAllowanceKm = FACET_OVER_A_CIRCLE * discs.longestAnyKm(radiusKm),
                     longestAlignedKm = longestStretch?.lengthKm ?: 0.0,
                     longestAlignedBearing = longestStretch?.bearingIndex ?: -1,
                     alignedAllowanceKm = if (longestStretch == null) Double.MAX_VALUE

@@ -25,7 +25,7 @@ import kotlin.math.sqrt
  * to ten teeth, and a Rayleigh statistic on nine offsets cannot reach the level a census of a
  * thousand tests needs whatever their regularity, so a level would pass every comb this project
  * has drawn. Periodicity alone is not a comb either — Earth's valleys down a mountain front are
- * spaced more regularly than chance (Hovius 1996) — so a comb needs [MINIMUM_TEETH] teeth on distinct
+ * spaced more regularly than chance (Hovius 1996) — so a comb needs [MINIMUM_TEETH] teeth on consecutive
  * multiples of the spacing, each tooth at least [TOOTH_OVER_SPACING] spacings long, and a mean
  * resultant length (how closely the teeth sit on the ideal positions) of [MINIMUM_REGULARITY]. A
  * spacing that is fixed *in cells* across grids, rather than on the ground, is the grid's; that
@@ -60,6 +60,9 @@ internal object Combs {
     private const val SPACING_STEP_CELLS = 0.05
     private const val TILE_CELLS = 64.0
     private const val HARMONIC_TIE = 0.9
+
+    /** How close across two parallel runs lie and are one tooth, in cells: half a cell. */
+    private const val COLLINEAR_CELLS = 0.5
 
     class Comb(
         val anchorXCells: Double,
@@ -136,6 +139,21 @@ internal object Combs {
                 }
             }
             if (offsets.size < MINIMUM_TEETH) continue
+            // Runs along one line — pieces of one tooth, or of one long course — are one tooth and not
+            // several: counted apiece they would make any spacing dividing their gaps look regular.
+            val byOffset = offsets.indices.sortedBy { offsets[it] }
+            val toothOffsets = ArrayList<Double>()
+            val toothLengths = ArrayList<Double>()
+            for (index in byOffset) {
+                val length = teeth[members[index]].lengthCells
+                if (toothOffsets.isEmpty() || offsets[index] - toothOffsets.last() > COLLINEAR_CELLS) {
+                    toothOffsets.add(offsets[index])
+                    toothLengths.add(length)
+                } else if (length > toothLengths.last()) {
+                    toothLengths[toothLengths.size - 1] = length
+                }
+            }
+            if (toothOffsets.size < MINIMUM_TEETH) continue
             // A comb at spacing s scores as highly at s / 2, s / 3 and so on, where every tooth still
             // falls on a whole number of periods; the spacing is the fundamental, the longest one
             // scoring within [HARMONIC_TIE] of the best.
@@ -144,21 +162,29 @@ internal object Combs {
             while (spacing <= LONGEST_SPACING_CELLS) {
                 var c = 0.0
                 var s = 0.0
-                for (offset in offsets) {
+                for (offset in toothOffsets) {
                     val phase = 2 * PI * offset / spacing
                     c += cos(phase)
                     s += sin(phase)
                 }
-                scanned.add(spacing to (c * c + s * s) / offsets.size)
+                scanned.add(spacing to (c * c + s * s) / toothOffsets.size)
                 spacing += SPACING_STEP_CELLS
             }
             val bestZ = scanned.maxOf { it.second }
             val bestSpacing = scanned.last { it.second >= HARMONIC_TIE * bestZ }.first
-            val regularity = sqrt(bestZ / offsets.size)
-            // The teeth that count: long enough to be teeth at this spacing, one per multiple.
-            val distinctMultiples = members.indices
-                .filter { teeth[members[it]].lengthCells >= TOOTH_OVER_SPACING * bestSpacing }
-                .map { Math.round(offsets[it] / bestSpacing) }.distinct().size
+            val regularity = sqrt(bestZ / toothOffsets.size)
+            // The teeth that count: long enough to be teeth at this spacing, one per multiple, and side
+            // by side with no tooth missing — a ruled comb has every tooth, where offsets that fall in
+            // phase by chance among a crowd of lines skip multiples.
+            val multiples = toothOffsets.indices
+                .filter { toothLengths[it] >= TOOTH_OVER_SPACING * bestSpacing }
+                .map { Math.round(toothOffsets[it] / bestSpacing) }.distinct().sorted()
+            var distinctMultiples = if (multiples.isEmpty()) 0 else 1
+            var consecutive = 1
+            for (at in 1 until multiples.size) {
+                consecutive = if (multiples[at] == multiples[at - 1] + 1) consecutive + 1 else 1
+                if (consecutive > distinctMultiples) distinctMultiples = consecutive
+            }
             if (distinctMultiples >= MINIMUM_TEETH && regularity >= MINIMUM_REGULARITY) {
                 members.forEach { claimed[it] = true }
                 combs.add(

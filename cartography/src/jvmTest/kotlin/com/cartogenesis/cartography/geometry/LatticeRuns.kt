@@ -45,11 +45,14 @@ internal object LatticeRuns {
     const val CORNER_GAP_VERTICES = 3
 
     /**
-     * The shortest stretch that can make a right-angle corner, in steps of the grid. From the
-     * controls: the natural ensemble's corners are printed by `GeometryControlTest`, and this
-     * stands above the longest of them.
+     * The shortest stretch that can make a right-angle corner, in steps of the grid.
+     *
+     * From the control ensemble: `GeometryControlTest` prints every corner pair its natural
+     * outlines make with arms of any length, and the longest shortest arm among them is four steps
+     * — the raster's own corner where a curve turns across a row and a column within a few cells.
+     * Six stands clear of it; the stamps' sides run eight steps and more.
      */
-    const val CORNER_STEPS = 4.0
+    const val CORNER_STEPS = 6.0
 
     /** The line's position across each grid bearing, in cells, and its position along it. */
     private fun across(bearingIndex: Int, columns: Double, rows: Double): Double = when (bearingIndex) {
@@ -110,8 +113,14 @@ internal object LatticeRuns {
     }
 
     /** The right-angle corners among [stretches] of one line of [count] vertices, as index pairs. */
-    fun corners(stretches: List<Stretch>, count: Int, closed: Boolean, frame: GridFrame): List<Pair<Stretch, Stretch>> {
-        val long = stretches.filter { it.steps >= CORNER_STEPS }
+    fun corners(
+        stretches: List<Stretch>,
+        count: Int,
+        closed: Boolean,
+        frame: GridFrame,
+        minimumSteps: Double = CORNER_STEPS
+    ): List<Pair<Stretch, Stretch>> {
+        val long = stretches.filter { it.steps >= minimumSteps }
         val found = ArrayList<Pair<Stretch, Stretch>>()
         for (before in long) for (after in long) {
             if (before === after) continue

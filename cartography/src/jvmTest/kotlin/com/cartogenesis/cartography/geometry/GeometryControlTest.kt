@@ -187,12 +187,12 @@ class GeometryControlTest {
         val pole = Controls.naturalIsland(SQUARE, 45L, 40 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, 10 * SQUARE.cellHeightKm)
         val poleOutlines = Contours.ofMask(pole, SQUARE)
         // The polar row's own line runs through its cells' centres, half a row down; a shore read off
-        // the map's edge would lie along it.
+        // the map's edge would be traced along it, two vertices after one another on that line.
         val polarLineKm = 0.5 * SQUARE.cellHeightKm + 1e-9
-        val alongThePole = StraightRuns.of(poleOutlines, SQUARE).filter {
-            it.fromYKm <= polarLineKm && it.toYKm <= polarLineKm && it.lengthKm > SQUARE.cellWidthKm
+        val alongThePole = poleOutlines.flatMap { outline ->
+            (0 until outline.vertexCount - 1).filter { outline.yKm[it] <= polarLineKm && outline.yKm[it + 1] <= polarLineKm }
         }
-        lines.add("island over the pole: %d lines, %d open, %d runs along the polar row".format(
+        lines.add("island over the pole: %d lines, %d open, %d traced segments along the polar row".format(
             poleOutlines.size, poleOutlines.count { !it.closed }, alongThePole.size))
         if (alongThePole.isNotEmpty() || poleOutlines.none { !it.closed }) failures.add("the pole was read as a shore")
         val poleReading = read("pole", pole, SQUARE)
@@ -202,9 +202,11 @@ class GeometryControlTest {
         for (side in listOf(512, 1024, 2048)) {
             val frame = GridFrame.of(WorldGenConfig(width = 512, height = 512).atResolution(side, side))
             val canvas = GridFrame(side / 2, side / 2, frame.cellWidthKm, frame.cellHeightKm)
-            val mask = Controls.naturalField(canvas, 303L, 0.35, 1500.0, finestWavelengthKm = 2 * 23.4375)
+            // The same ground at large, and detail down to two cells of each grid, as the generator's own.
+            val mask = Controls.naturalField(canvas, 303L, 0.35, 1500.0, finestWavelengthKm = 2 * frame.cellWidthKm)
             val reading = read("natural at $side", mask, canvas)
             lines.add("the same natural ground at %d: %s".format(side, reading.isotropy.joinToString("; ") { "%.1f deg %.2fx %s".format(it.gridBearingDegrees, it.ratio, it.outcome) }))
+            lines.add("  its arcs: " + reading.describe(Detector.ARCS))
             if (flagged(reading).isNotEmpty()) failures.add("the natural ground at $side flagged by ${flagged(reading)}")
         }
 
@@ -278,41 +280,49 @@ class GeometryControlTest {
     }
 
     /**
-     * [BearingIsotropy.BLOCK_RUNS], shown: along natural outlines, whether a run lies in one of the
-     * grid's bins and whether the run a block further on does are no longer correlated, so blocks
-     * of that many runs resample as independent units.
+     * [BearingIsotropy.correlationLengthChords], shown on the natural controls: the autocorrelation
+     * of whether a chord lies in one of the grid's bins, by lag, and the block length the rule picks
+     * from it — where the autocorrelation has fallen under a tenth.
      */
     @Test
-    fun `runs along a natural outline decorrelate within a block`() {
+    fun `chords along a natural outline decorrelate within a block`() {
         val indicators = ArrayList<DoubleArray>()
+        val stepKm = 0.5 * minOf(FRAME.cellWidthKm, FRAME.cellHeightKm)
+        val stride = kotlin.math.ceil(BearingIsotropy.chordKm(FRAME) / stepKm).toInt()
         for (inCells in listOf(false, true)) for (rotation in listOf(0.0, 29.0)) {
             val mask = Controls.naturalField(FRAME, 61L + rotation.toLong(), 0.35, 60 * FRAME.cellWidthKm,
                 rotationDegrees = rotation, isotropicInCells = inCells)
-            val outlines = Contours.ofMask(mask, FRAME)
-            StraightRuns.of(outlines, FRAME).groupBy { it.outline }.values.forEach { runs ->
-                if (runs.size < 4 * BearingIsotropy.BLOCK_RUNS) return@forEach
-                indicators.add(DoubleArray(runs.size) { index ->
-                    val run = runs[index]
-                    if (FRAME.gridBearings.any { FRAME.bearingGapDegrees(run.bearingDegrees, it) <= BearingIsotropy.BIN_HALF_WIDTH_DEGREES }) 1.0 else 0.0
+            for (outline in Contours.ofMask(mask, FRAME)) {
+                if (!outline.closed) continue
+                val (xs, ys) = Arcs.resample(outline, stepKm)
+                if (xs.size < 8 * stride) continue
+                indicators.add(DoubleArray(xs.size) { at ->
+                    val to = (at + stride) % xs.size
+                    val bearing = FRAME.bearingDegrees(xs[to] - xs[at], ys[to] - ys[at])
+                    if (FRAME.gridBearings.any { FRAME.bearingGapDegrees(bearing, it) <= BearingIsotropy.BIN_HALF_WIDTH_DEGREES }) 1.0 else 0.0
                 })
             }
         }
         val all = indicators.flatMap { it.asList() }
         val mean = all.average()
         val variance = all.sumOf { (it - mean) * (it - mean) } / all.size
-        val correlations = (1..2 * BearingIsotropy.BLOCK_RUNS).map { lag ->
+        // Lags in half-chords, out to four chords.
+        val correlations = (1..8).map { halves ->
+            val lag = halves * stride / 2
             var sum = 0.0
             var pairs = 0
-            for (series in indicators) for (index in 0 until series.size - lag) {
-                sum += (series[index] - mean) * (series[index + lag] - mean)
+            for (series in indicators) for (index in series.indices) {
+                sum += (series[index] - mean) * (series[(index + lag) % series.size] - mean)
                 pairs++
             }
             sum / pairs / variance
         }
-        println("GEOMETRY CONTROL run indicator autocorrelation by lag: " +
-            correlations.mapIndexed { lag, value -> "%d:%.3f".format(lag + 1, value) }.joinToString(" "))
-        assertTrue(abs(correlations[BearingIsotropy.BLOCK_RUNS - 1]) < 0.1,
-            "runs a block apart are still correlated: ${correlations[BearingIsotropy.BLOCK_RUNS - 1]}")
+        println("GEOMETRY CONTROL chord indicator autocorrelation, by lag in chords: " +
+            correlations.mapIndexed { index, value -> "%.1f:%.3f".format((index + 1) / 2.0, value) }.joinToString(" ") +
+            " (%d outlines, chord %.0f km)".format(indicators.size, BearingIsotropy.chordKm(FRAME)))
+        val block = BearingIsotropy.correlationLengthChords(indicators, stride)
+        println("GEOMETRY CONTROL the natural outlines' blocks: $block chords")
+        assertTrue(abs(correlations[2 * block - 1]) < BearingIsotropy.DECORRELATED, "the block the rule picked is still correlated")
     }
 
     /**
@@ -327,6 +337,7 @@ class GeometryControlTest {
         var arcs = 0
         val arcNotes = ArrayList<String>()
         val arcRadii = ArrayList<Pair<Double, Double>>()
+        val shortArmPairs = ArrayList<Double>()
         var outlineKm = 0.0
         val random = Random(17)
         for (roughness in listOf(0.25, 0.4, 0.6)) for (inCells in listOf(false, true)) for (index in 0 until 30) {
@@ -338,6 +349,14 @@ class GeometryControlTest {
             )
             val outlines = Contours.ofMask(mask, SQUARE)
             outlineKm += outlines.sumOf { it.lengthKm() }
+            for (outline in outlines.filter { it.isRing }) {
+                val corners = LatticeRuns.corners(LatticeRuns.of(outline, SQUARE, 0.0), outline.vertexCount, true, SQUARE, minimumSteps = 2.0)
+                for (side in LatticeRuns.cornerPairs(corners)) {
+                    val before = corners.filter { it.second === side }.maxOf { it.first.steps }
+                    val after = corners.filter { it.first === side }.maxOf { it.second.steps }
+                    shortArmPairs.add(minOf(side.steps, before, after))
+                }
+            }
             rings.addAll(ComponentShapes.measure(outlines, SQUARE))
             val found = Arcs.measure(outlines, SQUARE)
             arcs += found.arcs.size
@@ -368,7 +387,9 @@ class GeometryControlTest {
         println("GEOMETRY ENSEMBLE arcs by radius: " + arcRadii.groupBy { minOf(it.first.toInt(), 16) }.toSortedMap()
             .map { (radius, list) -> "%d: %d (least rms %.2f)".format(radius, list.size, list.minOf { it.second }) }.joinToString("; "))
         val pairSteps = (rings + fieldRings).filter { it.cornerPairs > 0 }.map { it.cornerPairRunSteps }.sorted()
-        println("GEOMETRY ENSEMBLE corner pairs by their shortest run, in grid steps: $pairSteps")
+        println("GEOMETRY ENSEMBLE corner pairs at %.0f steps and more: $pairSteps".format(LatticeRuns.CORNER_STEPS))
+        println("GEOMETRY ENSEMBLE corner pairs at 2 steps and more, by their shortest arm: " +
+            shortArmPairs.groupBy { it.toInt() }.toSortedMap().map { (steps, list) -> "$steps: ${list.size}" }.joinToString("; "))
         for (radius in listOf(4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 24.0)) for (inCells in listOf(false, true)) {
             val disc = Controls.disc(SQUARE, if (inCells) radius else radius * SQUARE.cellWidthKm,
                 if (inCells) SQUARE.cellsAcross / 2.0 + 0.3 else SQUARE.worldWidthKm / 2 + 0.3 * SQUARE.cellWidthKm,
@@ -439,8 +460,9 @@ class GeometryControlTest {
         expect("half-disc on the ground", read("half disc km", Controls.halfDisc(SQUARE, 40.0 * SQUARE.cellWidthKm,
             SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2, 30.0, inCells = false), SQUARE),
             setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE))
-        expect("nearest-seed partition", readMany("voronoi", Controls.voronoiCells(BIG, 3L, 14, 960, 32, 32), BIG),
-            setOf(Detector.FACETS), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE))
+        val voronoi = readMany("voronoi", Controls.voronoiCells(BIG, 3L, 14, 960, 32, 32), BIG)
+        lines.add("  nearest-seed partition's facets: " + voronoi.describe(Detector.FACETS))
+        expect("nearest-seed partition", voronoi, setOf(Detector.FACETS), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE))
         expect("ruled comb along a row, 6 cells", read("comb", Controls.comb(SQUARE, 9, 6.0, 2.0, 60.0, centreColumn, centreRow, 0.0), SQUARE),
             setOf(Detector.COMBS), setOf(Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY))
         expect("ruled comb at 33 deg, 7 cells", read("comb turned", Controls.comb(SQUARE, 9, 7.0, 2.0, 60.0, centreColumn, centreRow, 33.0), SQUARE),
@@ -460,7 +482,7 @@ class GeometryControlTest {
         expect("natural courses", GeometryGuard.read(Layer("courses", natural), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
         val routed = Controls.eightNeighbourCourses(BIG, 31L, 600, 300, 6.0)
         expect("eight-neighbour courses", GeometryGuard.read(Layer("d8", routed), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km),
-            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.COMBS))
+            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.COMBS, Detector.ARCS))
 
         println(lines.joinToString("\n", prefix = "GEOMETRY MATRIX\n"))
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))

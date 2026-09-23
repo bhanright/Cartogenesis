@@ -15,6 +15,9 @@ internal enum class Detector(val label: String) {
  * Every detector's reading of one layer, with the worst component named, and the clause each
  * detector's bar makes of it.
  */
+/** The grid bearings by name, in [GridFrame.gridBearings]' order. */
+internal val BEARING_NAMES = listOf("east-west", "south-east diagonal", "north-south", "north-east diagonal")
+
 internal class LayerReading(
     val layer: String,
     val frame: GridFrame,
@@ -79,7 +82,7 @@ internal class LayerReading(
         }
         Detector.ALIGNED_SIDE -> worstRing(
             true, { it.longestAlignedKm / it.alignedAllowanceKm },
-            { "longest aligned side %.0f km against %.0f allowed at %s".format(it.longestAlignedKm, it.alignedAllowanceKm, it.where(frame)) }
+            { "longest aligned side %.0f km (%s) against %.0f allowed at %s".format(it.longestAlignedKm, BEARING_NAMES.getOrElse(it.longestAlignedBearing) { "none" }, it.alignedAllowanceKm, it.whereSide(frame)) }
         )
         Detector.RECTANGLE -> worstRing(
             false, { it.fill },
@@ -87,7 +90,7 @@ internal class LayerReading(
         )
         Detector.FACETS -> worstRing(
             true, { it.longestRunKm / it.facetAllowanceKm },
-            { "longest run %.0f km against %.0f allowed at %s".format(it.longestRunKm, it.facetAllowanceKm, it.where(frame)) }
+            { "longest run %.0f km at %.1f deg against %.0f allowed at %s".format(it.longestRunKm, it.longestRunBearingDegrees, it.facetAllowanceKm, it.whereRun(frame)) }
         )
         Detector.RIGHT_ANGLES -> {
             val pairs = measuredRings.filter { it.hasCornerPair }
@@ -145,7 +148,7 @@ internal object GeometryGuard {
 
     fun read(layer: Layer, frame: GridFrame, familySize: Int, naturalCornersPer1000Km: Double): LayerReading {
         val runs = StraightRuns.of(layer.outlines, frame)
-        val isotropy = BearingIsotropy.measure(runs, frame, familySize, tracedTwice = layer.tracedTwice)
+        val isotropy = BearingIsotropy.measureChords(layer.outlines, frame, familySize, tracedTwice = layer.tracedTwice)
         val rings = ComponentShapes.measure(layer.outlines, frame)
         val arcs = Arcs.measure(layer.outlines, frame)
         val combs = Combs.measure(runs, frame)

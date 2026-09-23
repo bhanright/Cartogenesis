@@ -97,8 +97,8 @@ internal object MapLayers {
         val land = world.sea.isLand
         val sea = BooleanArray(cells) { !land[it] }
         val layers = ArrayList<Layer>()
-        fun mask(name: String, inside: BooleanArray, valid: BooleanArray? = null, twice: Boolean = false) =
-            layers.add(Layer(name, Contours.ofMask(inside, frame, valid), twice))
+        fun mask(name: String, inside: BooleanArray, valid: BooleanArray? = null, twice: Boolean = false, smooth: Boolean = false) =
+            layers.add(Layer(name, Contours.ofMask(inside, frame, valid), twice, smoothField = smooth))
 
         mask("coast", land)
         val pane = MapSheet.onScreen(PANE_PIXELS_ACROSS / world.width)
@@ -118,7 +118,9 @@ internal object MapLayers {
                 layers.add(Layer(it, emptyList(), absent = "the ice cut nothing on this world"))
             }
         } else {
-            mask("ice occupancy", ice.frozen)
+            // Where the provisional climate's snow balance passes its threshold: a smooth field's
+            // level set, like every climate layer below.
+            mask("ice occupancy", ice.frozen, smooth = true)
             mask("valley glaciers", ice.valleyGlacier)
             mask("ice sheet ground", ice.sheet)
             mask("ice carving", ice.cutByIce)
@@ -127,7 +129,7 @@ internal object MapLayers {
             mask("scour basins", BooleanArray(cells) { ice.basinFloor[it] >= ice.valleyBasinCount })
             layers.add(Layer("ice surface", iceSurface(world, ice.iceThicknessMetres, frame)))
         }
-        mask("ice as drawn", BooleanArray(cells) { world.climate.biome[it] == Biome.ICE_SHEET })
+        mask("ice as drawn", BooleanArray(cells) { world.climate.biome[it] == Biome.ICE_SHEET }, smooth = true)
 
         val deposition = capture.deposition
         if (deposition == null) {
@@ -141,7 +143,8 @@ internal object MapLayers {
         }
 
         layers.add(partition("realm borders", world.nations.nationId, NationResult.UNCLAIMED, land, frame))
-        layers.add(partition("biome edges", IntArray(cells) { world.climate.biome[it].ordinal }, -1, land, frame))
+        // Every biome is a class of the climate's own smooth fields, so its edges are their level lines.
+        layers.add(partition("biome edges", IntArray(cells) { world.climate.biome[it].ordinal }, -1, land, frame, smooth = true))
         layers.add(partition("peoples' borders", world.cultures.cultureId, CultureResult.UNSETTLED, land, frame))
         layers.add(partition("plate boundaries", world.plates.plateId, -1, null, frame))
 
@@ -161,14 +164,21 @@ internal object MapLayers {
      * is itself a region where it is valid (the wilderness between realms is drawn as its own
      * colour), so its edges are borders too.
      */
-    fun partition(name: String, label: IntArray, unlabelled: Int, valid: BooleanArray?, frame: GridFrame): Layer {
+    fun partition(
+        name: String,
+        label: IntArray,
+        unlabelled: Int,
+        valid: BooleanArray?,
+        frame: GridFrame,
+        smooth: Boolean = false
+    ): Layer {
         val labels = HashSet<Int>()
         for (cell in label.indices) if (valid == null || valid[cell]) labels.add(label[cell])
         if (labels.size < 2) return Layer(name, emptyList(), tracedTwice = true, absent = "one region only")
         val outlines = labels.sorted().flatMap { id ->
             Contours.ofMask(BooleanArray(label.size) { label[it] == id }, frame, valid)
         }
-        return Layer(name, outlines, tracedTwice = true)
+        return Layer(name, outlines, tracedTwice = true, smoothField = smooth)
     }
 
     private fun terrainContours(world: WorldMap, frame: GridFrame): List<Outline> {

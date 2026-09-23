@@ -479,6 +479,27 @@ class GeometryControlTest {
         // Populations, for the one detector that reads a layer rather than a component.
         expect("union of 12-cell blocks", read("blocks", Controls.blockUnion(BIG, 21L, 12, 0.35, 90 * BIG.cellWidthKm), BIG),
             setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.COMBS))
+        // A smooth field — nothing finer than sixteen cells, as a blurred climate field is — whose
+        // level lines are round wherever it is locally a paraboloid: read as a rough outline the
+        // arc detector finds them, and read as the smooth field it is, only concentric sets count.
+        val smooth = Controls.naturalField(FRAME, 83L, 0.35, 120 * FRAME.cellWidthKm, finestWavelengthKm = 16 * FRAME.cellWidthKm)
+        val smoothOutlines = Contours.ofMask(smooth, FRAME)
+        val smoothAsRough = GeometryGuard.read(Layer("smooth", smoothOutlines), FRAME, FAMILY, NaturalFigures.of(FRAME).cornersPer1000Km)
+        lines.add("  a smooth field read as a rough outline: " + smoothAsRough.describe(Detector.ARCS))
+        expect("a smooth field, as a smooth field", GeometryGuard.read(Layer("smooth", smoothOutlines, smoothField = true), FRAME, FAMILY,
+            NaturalFigures.of(FRAME).cornersPer1000Km), emptySet())
+
+        // Concentric terraces: a cone stamped into a field, its level lines four circles about one
+        // centre, flagged even where single arcs are forgiven.
+        val cone = FloatArray(SQUARE.cellCount) { cell ->
+            val dx = SQUARE.columnOf(cell) + 0.5 - centreColumn
+            val dy = SQUARE.rowOf(cell) + 0.5 - centreRow
+            kotlin.math.sqrt(dx * dx + dy * dy).toFloat()
+        }
+        val terraces = listOf(12f, 16f, 20f, 24f).flatMap { Contours.ofField(cone, it, SQUARE) }
+        expect("concentric terraces, as a smooth field", GeometryGuard.read(Layer("terraces", terraces, smoothField = true), SQUARE, FAMILY,
+            NaturalFigures.of(SQUARE).cornersPer1000Km), setOf(Detector.ARCS), setOf(Detector.FACETS))
+
         // Lobes: the grid's eight steps against any bearing at all, two thousand of each.
         val lobeRadiusKm = 5.0 * BIG.cellWidthKm
         val gridSteps = doubleArrayOf(0.0, BIG.diagonalDegrees, 90.0, 180.0 - BIG.diagonalDegrees)

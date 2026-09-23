@@ -26,9 +26,28 @@ class GeometryGuardTest {
 
         /**
          * The clauses that fail today, by `seed/layer/DETECTOR`, each under the name of the
-         * finding it records. See the census's printout for the figures and places.
+         * finding it records. See the census's printout for the figures and places, and
+         * `build/geometry-census/512` for a picture of each.
          */
-        val KNOWN = mapOf<String, String>()
+        val KNOWN: Map<String, String> = buildMap {
+            for (seed in SEEDS) put("$seed/coast as inked/FACING", GeometryFindings.COAST_INK)
+            put("7/ice as drawn/ALIGNED_SIDE", GeometryFindings.ICE_EDGE_ALONG_A_ROW)
+            put("99/ice as drawn/ALIGNED_SIDE", GeometryFindings.ICE_EDGE_ALONG_A_ROW)
+            put("1234/ice occupancy/ALIGNED_SIDE", GeometryFindings.ICE_EDGE_ALONG_A_ROW)
+            put("1234/ice sheet ground/ALIGNED_SIDE", GeometryFindings.ICE_EDGE_ALONG_A_ROW)
+            put("1234/ice carving/ALIGNED_SIDE", GeometryFindings.ICE_EDGE_ALONG_A_ROW)
+            put("7/biome edges/ALIGNED_SIDE", GeometryFindings.BIOME_EDGES_ALONG_ROWS)
+            for (seed in listOf(7L, 42L, 1234L)) put("$seed/biome edges/FACETS", GeometryFindings.BIOME_EDGES_ALONG_ROWS)
+            put("42/isotherms/FACETS", GeometryFindings.ISOTHERMS_ALONG_ROWS)
+            put("1234/isotherms/FACETS", GeometryFindings.ISOTHERMS_ALONG_ROWS)
+            put("42/sea temperature anomaly/ALIGNED_SIDE", GeometryFindings.ANOMALY_ALONG_ROWS)
+            put("42/sea temperature anomaly/FACETS", GeometryFindings.ANOMALY_ALONG_ROWS)
+            put("99/sea temperature anomaly/RIGHT_ANGLES", GeometryFindings.ANOMALY_SQUARE_CORNERS)
+            put("42/terrain contours/FACETS", GeometryFindings.STRAIGHT_RANGE_FRONTS)
+            put("1234/terrain contours/FACETS", GeometryFindings.STRAIGHT_RANGE_FRONTS)
+            put("7/plate boundaries/ALIGNED_SIDE", GeometryFindings.PLATE_BOUNDARY_ON_THE_GRID)
+            put("1234/plate boundaries/ARCS", GeometryFindings.PLATE_BOUNDARY_ARC)
+        }
     }
 
     @Test

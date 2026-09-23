@@ -343,7 +343,10 @@
   with Earth's figure beside it and carried as a finding. Note the shape of it before diagnosing:
   the 512 figures did not move at all (59758 1.55x, 42 0.67x, both as on main), so whatever this is,
   it is something the finer grids resolve — which is the same sentence I2's trough needed, and may
-  or may not be the same mechanism. docs/DESIGN_LEDGER.md row F37. 2026-09-19, F35.
+  or may not be the same mechanism. 2026-09-19, F35. Measured again 2026-09-23 (Audit III C-I1):
+  59758 at 2048 reads 0.82 times the share and the world is back in the pool, which reads 1.13
+  over all six (59758 at 512 alone 2.09) and runs as a known failure; the lake is no longer the
+  finer grids' but the pool's.
 - **A shore is still a cell over the bar, and nobody has looked at it.** On the merged tree — S2b's
   flood repair included — `StraightRunTest`'s `report how straight every shore is` finds one body of
   standing water on six worlds outside the bar it derives: a 296-cell lake at (1075,1998) of 364673

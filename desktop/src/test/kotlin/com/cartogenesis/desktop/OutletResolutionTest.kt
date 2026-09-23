@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.extension.ExtendWith
 
@@ -39,37 +40,20 @@ class OutletResolutionTest {
     private val caspianShare = 371_000.0 / 148_940_000.0
 
     /**
-     * Whether this is the one world the pooled clause reports rather than pools.
-     *
-     * F35 made the finer grids the same world as 512 instead of worlds of their own, and 59758 at
-     * 2048 is now a world this guard had never measured: its largest lake in the land reads 1.84
-     * times the Caspian's share of Earth's land, and with it in the pool the six worlds average
-     * 1.12 times where the five without it average 0.98. The bar is Earth's own figure and ground
-     * rule 5 forbids moving one to fit a measurement, so the world is left out of the pool, its
-     * figure printed with Earth's beside it, and carried as a finding until the chunk that repairs
-     * it lands. See docs/DESIGN_LEDGER.md, row F37, and TODO.md.
-     */
-    private fun isTheOpenLargestLake(seed: Long, size: Int): Boolean =
-        seed == 59758L && size == 2048
-
-    /**
      * The least standing water, as a share of the land, a world must hold at every grid before a
      * ratio between its grids is a measurement rather than a ratio between two small numbers.
      */
     private val floor = 0.005
 
     /**
-     * What is asserted: the largest lake in the land, pooled over the worlds at their three grids,
-     * against the Caspian's share of Earth's land; and the one world left out of the pool still
-     * over that share, so that leaving it out cannot hide a repair. The pooled bar is over today
-     * (the S3 finding below), and is kept running as a known failure (Audit III, C-I1) rather than
-     * printed, so the notch that brings it under arms it.
+     * What is asserted: the largest lake in the land, pooled over both worlds at their three grids,
+     * against the Caspian's share of Earth's land. The pooled bar is over today (the S3 finding
+     * below), and is kept running as a known failure (Audit III, C-I1) rather than printed, so the
+     * notch that brings it under arms it.
      */
     @Test
     fun `the largest lake in the land is held to the Caspian's share at every grid`() {
         val largestLandLakeShares = ArrayList<Double>()
-        val openLandLakeShares = ArrayList<Double>()
-        val openLargestLake = ArrayList<String>()
         val overLarge = ArrayList<String>()
         val overLargeDrowned = ArrayList<String>()
         val unmeasured = ArrayList<String>()
@@ -119,16 +103,7 @@ class OutletResolutionTest {
                     "seed $seed at $size has no lakes at all"
                 )
                 val landLakeShare = largest.toDouble() / world.sea.landCellCount
-                if (isTheOpenLargestLake(seed, size)) {
-                    openLandLakeShares.add(landLakeShare)
-                    openLargestLake.add(
-                        "$seed at $size ${"%.2f".format(landLakeShare / caspianShare)}x the" +
-                            " Caspian's share (${"%.4f".format(landLakeShare * 100)}% of its land" +
-                            " against Earth's ${"%.4f".format(caspianShare * 100)}%)"
-                    )
-                } else {
-                    largestLandLakeShares.add(landLakeShare)
-                }
+                largestLandLakeShares.add(landLakeShare)
                 overLarge.add("$seed at $size ${"%.2f".format(landLakeShare / caspianShare)}x")
                 // The drowned basins are reported, not asserted, and W1 is why.
                 //
@@ -217,17 +192,9 @@ class OutletResolutionTest {
                 pooledLargest * 100, pooledLargest / caspianShare, overLarge
             )
         )
-        openLargestLake.forEach {
-            println("OUTLET SCALE FINDING (F37, open, left out of the pool above): $it")
-        }
-        // What stops the pool passing because the world that puts it over was simply removed: the
-        // case [isTheOpenLargestLake] names has to stay measured and has to stay over.
-        assertTrue(openLandLakeShares.isNotEmpty(), "the world F37 is open on was not measured")
-        assertTrue(
-            openLandLakeShares.all { it >= caspianShare },
-            "the world F37 is open on is inside the Caspian's share now (${openLargestLake.joinToString()}), " +
-                "so it should go back into the pool and F37 should close"
-        )
+        // Every world in the pool: an empty pool averages to NaN, which is under no bar and over
+        // none, so a pool that lost its worlds would pass the clause below by saying nothing.
+        assertEquals(6, largestLandLakeShares.size, "the pool holds ${largestLandLakeShares.size} worlds, not six")
         // Over since S3: with the rounds cutting on real rain, the dry interiors that hold these
         // worlds' largest hollows take less discharge, the outlet notch that would open them cuts
         // less, and the largest lake pooled read over the Caspian's share where it read 0.79 of it

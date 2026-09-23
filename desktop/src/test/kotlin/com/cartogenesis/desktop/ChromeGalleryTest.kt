@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
@@ -405,7 +406,11 @@ class ChromeGalleryTest {
             runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
                 setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
                 waitForIdle()
-                onNodeWithText(title).performClick()
+                // The strip's title and nothing else: the toolbar's view menu reads "View" too,
+                // with the view it is showing beside it.
+                onNode(SemanticsMatcher("the menu strip's $title") { node ->
+                    node.config.getOrNull(SemanticsProperties.Text)?.map { it.text } == listOf(title)
+                }).performClick()
                 waitForIdle()
                 items = pressableItems(onAllNodes(isRoot()).fetchSemanticsNodes().last())
             }

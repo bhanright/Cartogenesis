@@ -178,5 +178,6 @@ rule about operators and outputs rather than about any one stage.
   derived from the isotropy of natural outlines, not from what a current world happens to produce.
   The guard is `GeometryGuardTest` at 512 and `GeometryGuardAuditTest` at 2048 (`:cartography:audit`),
   its layers listed in `MapLayers` and its detectors shown on their controls in
-  `GeometryControlTest`, all under `cartography/src/jvmTest`; what fails today is recorded, by
-  finding, in `GeometryFindings`.
+  `GeometryControlTest`, all under `cartography/src/jvmTest`; what fails today is recorded by
+  finding (`GeometryFindings`) and by the place and figure of each violation, and what is too small
+  to measure on today's worlds is listed, in `GeometryExpectations`.

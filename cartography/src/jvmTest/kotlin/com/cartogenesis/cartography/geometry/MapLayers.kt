@@ -49,7 +49,27 @@ internal class Layer(
     val followsLatitude: Boolean = false,
     /** Open lines by construction, river courses: no ring to measure for its shape or its axis. */
     val openLines: Boolean = false
-)
+) {
+    /** The natural controls this layer's places and rates are held to. */
+    val lineClass: LineClass
+        get() = when {
+            smoothField -> LineClass.SMOOTH
+            openLines -> LineClass.COURSE
+            else -> LineClass.ROUGH
+        }
+}
+
+/**
+ * The kinds of natural line a layer is compared with ([NaturalTails]): the edge of a rough region or
+ * a level line of rough relief; a course traced from cell to cell, as a river is, which runs along
+ * a row wherever its heading lies near one and so makes longer aligned stretches than any outline;
+ * and a level line of a smooth field.
+ */
+internal enum class LineClass(val label: String) {
+    ROUGH("rough"),
+    COURSE("course"),
+    SMOOTH("smooth")
+}
 
 /**
  * Every layer the map draws, read off one world and its [LayerCapture].

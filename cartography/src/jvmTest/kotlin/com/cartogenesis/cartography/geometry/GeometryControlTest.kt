@@ -225,7 +225,7 @@ class GeometryControlTest {
         // A stamp turned off the grid: no longer aligned, so no longer rejected as a rectangle or for
         // its sides. Turned on the sheet, a rectangle is a parallelogram on the ground, and it is on
         // the ground that its smallest rectangle is found; a rectangle turned on the ground stays one.
-        val bars = NaturalTails.of(SQUARE, smooth = false).bars(JUDGE.zPlace)
+        val bars = NaturalTails.of(SQUARE, LineClass.ROUGH).bars(JUDGE)
         for (turn in listOf(0.0, 3.0, 7.0, 23.0, 41.0)) {
             val outlines = Contours.ofMask(Controls.rectangle(SQUARE, 60.0, 30.0, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0, turn), SQUARE)
             val ring = ComponentShapes.rings(outlines, SQUARE).single()
@@ -377,16 +377,17 @@ class GeometryControlTest {
     @Test
     fun `the natural ensemble sits below every bar it sets`() {
         val failures = ArrayList<String>()
-        for (smooth in listOf(false, true)) {
-            val tails = NaturalTails.of(FRAME, smooth)
-            val name = if (smooth) "smooth" else "rough"
+        for (lines in LineClass.entries) {
+            val tails = NaturalTails.of(FRAME, lines)
+            val name = lines.label
             println("GEOMETRY TAILS $name: $tails")
-            println("GEOMETRY BARS $name at the per-merge census's level (z %.2f): %s".format(JUDGE.zPlace, tails.bars(JUDGE.zPlace)))
-            println("GEOMETRY BARS $name at the audit census's level (z %.2f): %s".format(AUDIT_JUDGE.zPlace, tails.bars(AUDIT_JUDGE.zPlace)))
+            println("GEOMETRY BARS $name at the per-merge census's level (z %.2f): %s".format(JUDGE.zPlace, tails.bars(JUDGE)))
+            println("GEOMETRY BARS $name at the audit census's level (z %.2f): %s".format(AUDIT_JUDGE.zPlace, tails.bars(AUDIT_JUDGE)))
+            tails.parts.forEach { println("GEOMETRY TAILS $name part $it") }
             if (tails.windowsWithCornerPairs > 0) failures.add("the $name natural controls make ${tails.windowsWithCornerPairs} corner pairs")
-            if (!smooth && tails.arcs > 0) failures.add("the rough natural controls fit ${tails.arcs} arcs")
+            if (lines != LineClass.SMOOTH && tails.arcs > 0) failures.add("the $name natural controls fit ${tails.arcs} arcs")
         }
-        val bars = NaturalTails.of(SQUARE, smooth = false).bars(JUDGE.zPlace)
+        val bars = NaturalTails.of(SQUARE, LineClass.ROUGH).bars(JUDGE)
         val windows = ArrayList<ComponentShapes.Window>()
         val rings = ArrayList<ComponentShapes.Ring>()
         val arcNotes = ArrayList<String>()
@@ -476,8 +477,12 @@ class GeometryControlTest {
         val centreColumn = SQUARE.cellsAcross / 2.0
         val centreRow = SQUARE.cellsDown / 2.0
         expect("rectangle 60x30 on the grid", read("rect", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+        // Turned off the grid, a rectangle is caught by its straight sides once they pass the facet bar,
+        // and not before: at 512 a side of 56 cell widths, 1,300 km, lies within the natural tail.
         expect("rectangle 60x30 turned 23 deg", read("rect turned", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow, 23.0), SQUARE),
+            emptySet(), setOf(Detector.FACETS, Detector.CREASES))
+        expect("rectangle 120x50 turned 23 deg", read("rect turned", Controls.rectangle(SQUARE, 120.0, 50.0, centreColumn, centreRow, 23.0), SQUARE),
             setOf(Detector.FACETS), setOf(Detector.CREASES))
         expect("square window mask", read("window", Controls.squareWindowMask(FRAME, 4L, 9, 40 * FRAME.cellWidthKm), FRAME),
             setOf(Detector.RIGHT_ANGLES), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.ISOTROPY, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
@@ -499,9 +504,21 @@ class GeometryControlTest {
         // along the grid's diagonals and meet square on the sheet, but on the ground it fills only
         // 0.625 of its smallest rectangle, which is not along the grid.
         expect("diamond (four-connected ring)", read("diamond", Controls.diamond(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+            setOf(Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("square (eight-connected ring)", read("chebyshev", Controls.chebyshevSquare(SQUARE, 30.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+        // G4's local subshape: a large natural island with one side cut along a row, and one cut along
+        // the grid's diagonal, each side about ninety steps long, which the aligned-side bar is for.
+        // The stamps above have sides of forty to sixty steps, inside the natural tail at this
+        // census's level, and are caught as rectangles and by their corners instead.
+        val island = Controls.naturalIsland(SQUARE, 64L, 50 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2,
+            roughnessOverRadius = 0.25)
+        expect("natural island cut along a row", read("cut", BooleanArray(SQUARE.cellCount) {
+            island[it] && SQUARE.rowOf(it) >= centreRow - 40
+        }, SQUARE), setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.RECTANGLE) + corners)
+        expect("natural island cut along the diagonal", read("cut", BooleanArray(SQUARE.cellCount) {
+            island[it] && SQUARE.columnOf(it) + SQUARE.rowOf(it) >= centreColumn + centreRow - 30
+        }, SQUARE), setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.RECTANGLE) + corners)
         // Not among the brief's stamps; shown for what catches it, nothing asserted.
         expect("octagonal window", read("octagon", Controls.octagon(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
             emptySet(), Detector.entries.toSet())
@@ -547,10 +564,12 @@ class GeometryControlTest {
         // level lines are round wherever it is locally a paraboloid: read as a rough outline the
         // arc detector finds them, and read as the smooth field it is, its arcs come at the smooth
         // controls' rate.
+        // Read clear of the seam, which the noise does not wrap across.
+        val bigBand = BooleanArray(BIG.cellCount) { BIG.columnOf(it) in 3 until BIG.cellsAcross - 3 }
         for (finest in listOf(16, 32, 64)) {
             val noise = IsotropicNoise(83L, finest * BIG.cellWidthKm, 480 * BIG.cellWidthKm)
             val field = sampled(BIG) { x, y -> noise.at(x, y) }
-            val smoothOutlines = listOf(-1f, -0.5f, 0f, 0.5f, 1f).flatMap { Contours.ofField(field, it, BIG) }
+            val smoothOutlines = listOf(-1f, -0.5f, 0f, 0.5f, 1f).flatMap { Contours.ofField(field, it, BIG, bigBand) }
             lines.add("  a field smooth below $finest cells, its level lines read as rough outlines: " +
                 readLines(Layer("smooth", smoothOutlines), BIG).describe(Detector.ARCS))
             expect("a field smooth below $finest cells, as a smooth field", readLines(Layer("smooth", smoothOutlines, smoothField = true), BIG), emptySet())
@@ -599,8 +618,8 @@ class GeometryControlTest {
         val routed = Controls.eightNeighbourCourses(BIG, 31L, 600, 300, 6.0)
         expect("eight-neighbour courses", readLines(Layer("d8", routed, openLines = true), BIG),
             setOf(Detector.ISOTROPY), setOf(Detector.COMBS, Detector.ARCS, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES) + corners)
-        val alongARow = Outline(DoubleArray(100) { (300 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(100) { 500.5 * BIG.cellHeightKm }, closed = false, belt = false)
-        val alongADiagonal = Outline(DoubleArray(80) { (600 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(80) { (300 + it + 0.5) * BIG.cellHeightKm }, closed = false, belt = false)
+        val alongARow = Outline(DoubleArray(150) { (300 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(150) { 500.5 * BIG.cellHeightKm }, closed = false, belt = false)
+        val alongADiagonal = Outline(DoubleArray(130) { (600 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(130) { (300 + it + 0.5) * BIG.cellHeightKm }, closed = false, belt = false)
         expect("natural courses and one reach along a row", readLines(Layer("courses", natural + alongARow, openLines = true), BIG),
             setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS))
         expect("natural courses and one reach along the diagonal", readLines(Layer("courses", natural + alongADiagonal, openLines = true), BIG),

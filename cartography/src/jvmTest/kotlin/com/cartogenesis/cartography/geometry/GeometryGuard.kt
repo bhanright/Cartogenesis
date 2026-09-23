@@ -38,6 +38,9 @@ internal class Judge(val familySize: Int, val placeFamily: Int) {
     val z: Double = Statistics.zFor(familySize)
     val zPlace: Double = Statistics.zFor(placeFamily)
 
+    /** The chance one natural place may pass its bar: the family error spread over [placeFamily]. */
+    val placeExceedance: Double = Statistics.FAMILY_ERROR_RATE / placeFamily
+
     override fun toString(): String = "layer tests %d at z %.2f; places %d at z %.2f".format(familySize, z, placeFamily, zPlace)
 
     companion object {
@@ -265,8 +268,8 @@ internal object GeometryGuard {
             return LayerReading(layer.name, frame, 0.0, emptyList(), emptyList(), 0, verdicts, null)
         }
 
-        val tails = NaturalTails.of(frame, layer.smoothField)
-        val bars = tails.bars(judge.zPlace)
+        val tails = NaturalTails.of(frame, layer.lineClass)
+        val bars = tails.bars(judge)
         val windows = ComponentShapes.windows(outlines, frame)
         val rings = ComponentShapes.rings(outlines, frame)
         val shortestStepKm = minOf(frame.cellWidthKm, frame.cellHeightKm)
@@ -422,7 +425,7 @@ internal object GeometryGuard {
     }
 
     /** Which class of natural control the layer's places are held to. */
-    private fun tailClass(layer: Layer): String = if (layer.smoothField) "smooth" else "rough"
+    private fun tailClass(layer: Layer): String = layer.lineClass.label
 
     /** Past the bar at any place; insufficient when [eligibility] says the layer cannot reach it. */
     private fun perPlace(places: List<Place>, eligibility: String?, text: String): Verdict = when {

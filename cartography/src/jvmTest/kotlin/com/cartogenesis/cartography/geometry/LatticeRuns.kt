@@ -69,8 +69,8 @@ internal object LatticeRuns {
         val (columns, rows) = outline.inCells(frame)
         val stretches = ArrayList<Stretch>()
         // A ring is walked twice over so a stretch may run through its first vertex; a stretch may
-        // not be longer than the line itself. A belt, closed round the world, is walked once: its
-        // last vertex and its first lie a world's width apart.
+        // not be longer than the line itself. An open line, a belt round the world among them, is
+        // walked once.
         val ring = outline.isRing
         val walked = if (ring) 2 * count else count
         for (bearing in frame.gridBearings.indices) {

@@ -10,8 +10,10 @@ import kotlin.math.sqrt
  * `x` runs east from the western edge of the map and `y` south from its northern edge, and a line
  * that crosses the east-west seam is carried on across it rather than cut, so `x` may run past
  * the world's width or below zero. A [closed] line returns to its first point without repeating
- * it. A [belt] is a closed line that goes once round the world rather than enclosing anything —
- * the edge of a polar cap, or of a band that circles the globe — and has no inside to measure.
+ * it. A [belt] goes once round the world rather than enclosing anything — the edge of a polar
+ * cap, or of a band that circles the globe — and has no inside to measure; it is carried as an open
+ * line whose last point is its first a world's width on, so that nothing reads the jump back
+ * across the seam as a segment of it.
  * An open line ends where the map does, at a pole, or where the layer stops being defined.
  */
 internal class Outline(
@@ -234,8 +236,15 @@ internal object Contours {
                 val next = segmentStartingAt[edge]
                 if (closedLoop && next == first) {
                     val offset = x - xs[0]
-                    val belt = abs(offset) > across / 2.0
-                    lines.add(outlineOf(xs, ys, frame, closed = true, belt = belt))
+                    if (abs(offset) > across / 2.0) {
+                        // A belt: its first point again, a world's width on, ends it as an open
+                        // line, so no reading takes the seam's width as a segment of it.
+                        xs.add(x)
+                        ys.add(crossingY(edge))
+                        lines.add(outlineOf(xs, ys, frame, closed = false, belt = true))
+                    } else {
+                        lines.add(outlineOf(xs, ys, frame, closed = true, belt = false))
+                    }
                     return
                 }
                 xs.add(x)

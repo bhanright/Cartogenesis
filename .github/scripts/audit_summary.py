@@ -96,7 +96,10 @@ def summarise(root, gradle_outcome=None):
                 if case.find("failure") is not None or case.find("error") is not None:
                     failed.append(qualified)
                 elif case.find("skipped") is not None:
-                    skipped.append(qualified)
+                    # A skip the test asked for carries its reason; the case a dying worker was
+                    # running is written as a skip with none, so that one is marked.
+                    reason = case.find("skipped").get("message")
+                    skipped.append(qualified if reason else qualified + " (no reason given)")
 
     not_run = ["%s (%s)" % (entry, task)
                for task, results_directory, entry in planned

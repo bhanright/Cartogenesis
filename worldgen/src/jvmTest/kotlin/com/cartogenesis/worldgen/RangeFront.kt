@@ -18,7 +18,7 @@ import kotlin.math.sqrt
  * The instrument the coastal-valley question needs. The author's report is that the coasts carry
  * closely spaced valleys perpendicular to the shore about ten cells apart, and ten cells is a
  * measure of the grid, not of the landscape. To find out which of the two sets the spacing, it has
- * to be measured in kilometres, on fronts chosen without ever looking at a drawn river, and then
+ * to be measured in kilometres, on fronts chosen without ever looking at a traced river, and then
  * re-measured on the same seed built at another grid and with the two settings that could be
  * imposing it moved.
  *
@@ -29,12 +29,13 @@ import kotlin.math.sqrt
  * different size, climate and rock). That is the figure the numbers here are printed beside, and it
  * is a ratio of trunk basins only.
  *
- * **The fronts, the basins and the trunks never read `RiverResult.rivers`.** The drawn courses are a
- * cartographic selection, so a spacing measured off them would be measuring the pen. What the finder
- * reads is the height field, the land mask and `RiverResult.flowTarget`, which is the routing's own
- * downhill tree and is what a divide is made of. The drawn courses are read for one figure only,
- * the drawn spacing below, which is labelled as the pen's wherever it is printed, because the pen is
- * what the author was looking at.
+ * **The fronts, the basins and the trunks never read `RiverResult.rivers`.** The traced courses are
+ * a selection — the tracer's length rule, and then the cartographic layer's own — so a spacing
+ * measured off them would be measuring the pen. What the finder reads is the height field, the land
+ * mask and `RiverResult.flowTarget`, which is the routing's own downhill tree and is what a divide
+ * is made of. The traced courses are read for one figure only, the traced spacing below, which is
+ * labelled as such wherever it is printed, because an export drew every one of them when the author
+ * looked.
  *
  * ## The definitions, all of them, before a number is collected
  *
@@ -89,8 +90,8 @@ import kotlin.math.sqrt
  * **Catchment floor.** A basin smaller than [SMALLEST_CATCHMENT_KM2] could not hold a course the map
  * draws, by Hack's law, and is set aside. The floor is in square kilometres, so the same ground
  * qualifies at every grid; what it leaves out at a fine grid — a strip too narrow for its own
- * length, which Hack's law says a landscape does not make — is exactly what the drawn spacing still
- * sees if the pen draws it, so a grid-set comb cannot hide behind the floor.
+ * length, which Hack's law says a landscape does not make — is exactly what the traced spacing still
+ * sees if the tracer keeps it, so a grid-set comb cannot hide behind the floor.
  *
  * **Trunk and divide qualification.** A front's basins, corners included, tile a region `R` of
  * belt ground, which is all the ground draining out through this front. The **main divide** is
@@ -109,16 +110,20 @@ import kotlin.math.sqrt
  * spacings are the differences between neighbours, in kilometres. A front with fewer than two trunk
  * outlets contributes no spacing. Beside it, two combs. The **catchment spacing** is the same over
  * every basin leaving by the front that clears the catchment floor, trunk or not: the valleys the
- * ground has cut, large enough to carry a drawn course. The **drawn spacing** is over every outlet,
- * of any size, whose exit cell a drawn course passes through: the comb the map shows. Where the
- * drawn comb is finer than the catchment comb, the pen is drawing courses down strips of ground too
- * narrow to be valleys.
+ * ground has cut, large enough to carry a drawn course. The **traced spacing** is over every
+ * outlet, of any size, whose exit cell a traced course (`RiverResult.rivers`) passes through: the
+ * comb an export drew in full until the cartographic layer began choosing among the traced courses
+ * (docs/DESIGN_LEDGER.md, X1c), and the comb the author saw. Where the traced comb is finer than
+ * the catchment comb, the tracer is keeping courses down strips of ground too narrow to be
+ * valleys.
  *
- * **Bearing.** A front is east-west when its chord lies within 22.5 degrees of a row, north-south
- * within 22.5 of a column, and diagonal otherwise. Every table is split this way because it is the
- * one thing the grid decides about a front: a step along a row is a cell width and a step down a
- * column is half of one, so a spacing counted in cells and a spacing set in kilometres read
- * differently on the two, and which of them agrees across bearings says which of them is real.
+ * **Bearing.** A front is east-west when its line lies within 22.5 degrees of a row, north-south
+ * within 22.5 of a column, and diagonal otherwise. Every table is split this way, because a step
+ * along a row is a cell width and a step down a column is half of one, so a spacing counted in
+ * cells and one set in kilometres read differently on the two. The split was meant to say which
+ * of them is real, and it cannot: measured, the world's own outlines are isotropic in cells and not
+ * in kilometres, so the ground itself reads the same cells both ways (docs/DESIGN_LEDGER.md, X1d).
+ * It is printed, and nothing is concluded from it.
  *
  * **Cross-resolution matching.** Two fronts found on the same seed at different grids are the same
  * front when their chord midpoints lie within [FRONT_MATCH_KM] and their bearings agree within
@@ -144,12 +149,14 @@ internal object RangeFront {
      * Two kilometres. The ground this generator's continents stand on is not Earth's: its land's
      * mean stands 1,200 to 1,700 m above its own sea against Earth's 840 (docs/GEOGRAPHY.md, "Half
      * the land is tundra"), so a floor at or under the mean land level picks out most of a
-     * continent rather than its mountains, and its "fronts" are the continent's upland edge. Two
-     * kilometres is above that mean on every audited world, and below the crest a stock coastal
-     * range reaches (`TectonicsConfig.andeanHeight` of 0.52 on `beltReliefMetres` of 13,000 m is
-     * 6,760 m of stamp before erosion). `CoastalSpacingAuditTest` re-takes two seeds at 1,000,
-     * 1,500, 2,000 and 2,500 m and prints the land share and the spacing at each, because a finder
-     * whose answer walked with its own floor would be measuring the floor.
+     * continent rather than its mountains — a thousand metres takes in 71 and 57 per cent of the
+     * land of 969495 and 718106 at 512 — and its "fronts" are the continent's upland edge. Two
+     * kilometres is above the land's mean on every audited world at every grid (1,159 to 1,788 m),
+     * and below the crest a stock coastal range is stamped to (`TectonicsConfig.andeanHeight` of
+     * 0.52 on `beltReliefMetres` of 13,000 m, 6,760 m at full strength before erosion).
+     * `CoastalSpacingAuditTest` re-takes two seeds at the shoreline and at 1,000, 1,500, 2,000 and
+     * 2,500 m and prints the land share and the spacing at each, because a finder whose answer
+     * walked with its own floor would be measuring the floor.
      */
     const val BELT_FLOOR_METRES = 2_000f
 
@@ -347,10 +354,10 @@ internal object RangeFront {
         /** Basins leaving by the front below the catchment floor, for the census. */
         val cornersSetAside: Int,
         /**
-         * Where along the chord each outlet a drawn course passes through sits, in km, sorted; null
-         * when the caller supplied no drawn courses. The pen's figure, not the ground's.
+         * Where along the chord each outlet a traced course passes through sits, in km, sorted; null
+         * when the caller supplied no traced courses. The tracer's figure, not the ground's.
          */
-        val drawnAlongKm: List<Double>?,
+        val tracedAlongKm: List<Double>?,
         /**
          * The crust pair whose boundary lies nearest most of the front's outlets, where the caller
          * supplied `PlateResult.nearestBoundaryClass`; null otherwise.
@@ -365,14 +372,14 @@ internal object RangeFront {
         /** Differences between neighbouring catchment outlets, trunk or not: the ground's comb. */
         val catchmentSpacingsKm: List<Double> get() = gapsOf(catchments)
 
-        /** Differences between neighbouring drawn outlets: the comb the map shows, or empty. */
-        val drawnSpacingsKm: List<Double>
-            get() = drawnAlongKm?.let { along -> (1 until along.size).map { along[it] - along[it - 1] } }
+        /** Differences between neighbouring traced outlets: the comb an export drew, or empty. */
+        val tracedSpacingsKm: List<Double>
+            get() = tracedAlongKm?.let { along -> (1 until along.size).map { along[it] - along[it - 1] } }
                 ?: emptyList()
 
         val medianSpacingKm: Double? get() = median(spacingsKm)
         val medianCatchmentSpacingKm: Double? get() = median(catchmentSpacingsKm)
-        val medianDrawnSpacingKm: Double? get() = median(drawnSpacingsKm)
+        val medianTracedSpacingKm: Double? get() = median(tracedSpacingsKm)
         val medianDivideToFrontKm: Double? get() = median(trunks.map { it.divideToFrontKm })
 
         /** Hovius's ratio for this front: half-width over outlet spacing, both medians. */
@@ -501,8 +508,8 @@ internal object RangeFront {
         flowTarget = world.rivers.flowTarget,
         beltFloorMetres = beltFloorMetres,
         nearestBoundaryClass = world.plates.nearestBoundaryClass,
-        drawnCourse = BooleanArray(world.width * world.height).also { drawn ->
-            world.rivers.rivers.forEach { river -> river.cells.forEach { drawn[it] = true } }
+        tracedCourse = BooleanArray(world.width * world.height).also { traced ->
+            world.rivers.rivers.forEach { river -> river.cells.forEach { traced[it] = true } }
         },
         keepBasinCells = keepBasinCells
     )
@@ -512,8 +519,8 @@ internal object RangeFront {
      *
      * [isLand] and [metresAboveShoreline] are row-major, one entry per cell; [flowTarget] is the
      * routing's downhill target per cell, -1 where the water leaves the world;
-     * [nearestBoundaryClass], where given, is `PlateResult.nearestBoundaryClass`; [drawnCourse],
-     * where given, marks every cell a drawn course passes through, and is read for the drawn
+     * [nearestBoundaryClass], where given, is `PlateResult.nearestBoundaryClass`; [tracedCourse],
+     * where given, marks every cell a traced course passes through, and is read for the traced
      * spacing and for nothing else. Returns one [Report], whose figures are null rather than zero
      * where there is no sample.
      */
@@ -528,7 +535,7 @@ internal object RangeFront {
         flowTarget: IntArray,
         beltFloorMetres: Float = BELT_FLOOR_METRES,
         nearestBoundaryClass: IntArray? = null,
-        drawnCourse: BooleanArray? = null,
+        tracedCourse: BooleanArray? = null,
         keepBasinCells: Boolean = false
     ): Report {
         val cellCount = cellsAcross * cellsDown
@@ -596,7 +603,7 @@ internal object RangeFront {
 
         val measured = fronts.map { front ->
             measureFront(
-                front, basins, isLand, nearestBoundaryClass, drawnCourse, keepBasinCells,
+                front, basins, isLand, nearestBoundaryClass, tracedCourse, keepBasinCells,
                 cellsAcross, cellsDown, cellWidthKm, cellHeightKm
             )
         }
@@ -1122,7 +1129,7 @@ internal object RangeFront {
         basins: Basins,
         isLand: BooleanArray,
         nearestBoundaryClass: IntArray?,
-        drawnCourse: BooleanArray?,
+        tracedCourse: BooleanArray?,
         keepBasinCells: Boolean,
         cellsAcross: Int,
         cellsDown: Int,
@@ -1176,12 +1183,12 @@ internal object RangeFront {
                 }
             }
         }
-        val drawnAlong = drawnCourse?.let { drawn ->
-            onFront.filter { drawn[basins.outletCell[it]] }
+        val tracedAlong = tracedCourse?.let { traced ->
+            onFront.filter { traced[basins.outletCell[it]] }
                 .map { front.alongAt(nearFront(basins.outletKmX[it]), basins.outletKmY[it]) }
                 .sorted()
         }
-        if (onFront.isEmpty()) return Measured(front, coastal, emptyList(), 0, drawnAlong, null)
+        if (onFront.isEmpty()) return Measured(front, coastal, emptyList(), 0, tracedAlong, null)
 
         // The main divide: how far landward the region draining out through this front reaches,
         // strip by strip along it. Strips are indexed from the region's own westmost `s`, which
@@ -1250,7 +1257,7 @@ internal object RangeFront {
 
         val modalClass = if (nearestBoundaryClass == null || classVotes.all { it == 0 }) null
         else BoundaryClass.entries[classVotes.indices.maxBy { classVotes[it] }]
-        return Measured(front, coastal, catchments, corners, drawnAlong, modalClass)
+        return Measured(front, coastal, catchments, corners, tracedAlong, modalClass)
     }
 
     // ---------------------------------------------------------------- cross-resolution matching

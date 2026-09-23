@@ -232,8 +232,8 @@ class RangeFrontTest {
      * A gully whose head is enclosed by its neighbours is a catchment and not a trunk basin.
      *
      * The range above is re-laid with one extra outlet halfway between two of the others, fed only
-     * by the four rows nearest the front — sixteen cells, 4,400 km2, over the catchment floor — so it
-     * reaches the front and not the divide. Hovius's ratio is over trunk basins, and counting that
+     * by the four rows nearest the front — sixteen cells, 4,400 km2, over the catchment floor — so
+     * it reaches the front and not the divide. Hovius's ratio is over trunk basins, and counting that
      * gully would halve the spacing without the landscape having changed; the comb, which counts
      * every catchment, is where it belongs.
      */

@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * valleys perpendicular to the shore about ten cells apart, each with a river and many with a delta
  * lobe. Ten cells is a measure of the grid. This class asks whether the landscape or the grid is
  * what the ten cells are counting, with [RangeFront] — a finder whose fronts, basins and trunks
- * never read a drawn river, and whose every rule (belt, front eligibility, exit, outlet, catchment
+ * never read a traced river, and whose every rule (belt, front eligibility, exit, outlet, catchment
  * floor, trunk and divide qualification, along-front spacing and the two combs, bearing,
  * cross-resolution matching and what an empty sample reports) is written down at that object before
  * a number is collected here.
@@ -61,6 +61,13 @@ import kotlin.test.assertTrue
  *   measured half-width is printed on every front, so this reading is tested by the ratio itself
  *   rather than by the bearing alone.
  *
+ * Measured, the split cannot be read that way, and the reason is a finding of its own: the world's
+ * outlines are drawn isotropic in cells rather than in kilometres — 969495's coastline projects
+ * about twice as far east-west as north-south — so the ground reads the same cells both ways just
+ * as the grid would, and the finder, being isotropic in kilometres on a world that is not, finds
+ * one to three north-south coasts at each grid against 86 to 120 east-west ones. See
+ * docs/DESIGN_LEDGER.md, X1d.
+ *
  * In the audit tier: twenty-one whole worlds, seven of them at 2048, generated once each and each
  * reduced to its two reports — which carry no grid array — before the next is made, which is T4's
  * rule after the hosted runner went down under three retained 2048 worlds; then ten controlled
@@ -85,8 +92,8 @@ class CoastalSpacingAuditTest {
         /** The author's reported figure, which is what the cell columns are read against. */
         const val REPORTED_SPACING_CELLS = 10.0
 
-        /** A crop is drawn of a front whose drawn comb has at least this many gaps to show. */
-        const val FEWEST_DRAWN_GAPS_TO_CROP = 5
+        /** A crop is drawn of a front whose traced comb has at least this many gaps to show. */
+        const val FEWEST_TRACED_GAPS_TO_CROP = 5
 
         val OUTPUT_DIR = File("build/maps")
     }
@@ -227,15 +234,15 @@ class CoastalSpacingAuditTest {
             }
             println(
                 ("X1d ACROSS seed %d, %s, front at (%.0f, %.0f) km %s: trunk %s km, catchment %s " +
-                    "km, drawn %s km, half-width %s km at %d; trunk %s km, catchment %s km, drawn %s " +
+                    "km, traced %s km, half-width %s km at %d; trunk %s km, catchment %s km, traced %s " +
                     "km, half-width %s km at %d").format(
                     seed, floor.label, match.coarse.front.midKmX, match.coarse.front.midKmY,
                     match.coarse.front.bearing,
                     RangeFront.show(coarseKm), RangeFront.show(match.coarse.medianCatchmentSpacingKm),
-                    RangeFront.show(match.coarse.medianDrawnSpacingKm),
+                    RangeFront.show(match.coarse.medianTracedSpacingKm),
                     RangeFront.show(match.coarse.medianDivideToFrontKm), coarseSide,
                     RangeFront.show(fineKm), RangeFront.show(match.fine.medianCatchmentSpacingKm),
-                    RangeFront.show(match.fine.medianDrawnSpacingKm),
+                    RangeFront.show(match.fine.medianTracedSpacingKm),
                     RangeFront.show(match.fine.medianDivideToFrontKm), fineSide
                 )
             )
@@ -252,18 +259,18 @@ class CoastalSpacingAuditTest {
             val front = measured.front
             println(
                 ("X1d FRONT %s: %.0f km %s%s at (%.0f, %.0f) km on %s; %d catchments, %d trunks, %d " +
-                    "set aside, %d drawn outlets; trunk %s km = %s cells, catchment %s km = %s " +
-                    "cells, drawn %s km = %s cells; half-width %s km against a stamp of %s km; " +
+                    "set aside, %d traced outlets; trunk %s km = %s cells, catchment %s km = %s " +
+                    "cells, traced %s km = %s cells; half-width %s km against a stamp of %s km; " +
                     "ratio %s").format(
                     label, front.lengthKm, front.bearing, if (measured.coastal) " coastal" else "",
                     front.midKmX, front.midKmY, measured.boundaryClass ?: "-",
                     measured.catchments.size, measured.trunks.size, measured.cornersSetAside,
-                    measured.drawnAlongKm?.size ?: 0,
+                    measured.tracedAlongKm?.size ?: 0,
                     RangeFront.show(measured.medianSpacingKm), cells(measured, measured.medianSpacingKm),
                     RangeFront.show(measured.medianCatchmentSpacingKm),
                     cells(measured, measured.medianCatchmentSpacingKm),
-                    RangeFront.show(measured.medianDrawnSpacingKm),
-                    cells(measured, measured.medianDrawnSpacingKm),
+                    RangeFront.show(measured.medianTracedSpacingKm),
+                    cells(measured, measured.medianTracedSpacingKm),
                     RangeFront.show(measured.medianDivideToFrontKm),
                     RangeFront.show(RangeFront.stampedHalfWidthKm(config, measured)),
                     RangeFront.show(measured.hoviusRatio, 2)
@@ -300,7 +307,7 @@ class CoastalSpacingAuditTest {
             val halfWidths = ArrayList<Double>()
             val trunkGaps = Gaps()
             val catchmentGaps = Gaps()
-            val drawnGaps = Gaps()
+            val tracedGaps = Gaps()
             reports.forEach { report ->
                 report.measured.filter(keep).forEach { measured ->
                     measured.medianSpacingKm?.let { frontSpacingKm.add(it) }
@@ -311,14 +318,14 @@ class CoastalSpacingAuditTest {
                     }
                     trunkGaps.add(report, measured, measured.spacingsKm)
                     catchmentGaps.add(report, measured, measured.catchmentSpacingsKm)
-                    drawnGaps.add(report, measured, measured.drawnSpacingsKm)
+                    tracedGaps.add(report, measured, measured.tracedSpacingsKm)
                 }
             }
             val fronts = reports.sumOf { report -> report.measured.count(keep) }
             println(
                 ("X1d POOLED %s, %s: %d fronts, %d with a trunk spacing: trunk %s km (IQR %s) = %s " +
                     "cells by front, %s by gap over %d gaps; half-width %s km over %d trunks; ratio %s " +
-                    "(IQR %s) against Hovius's %.1f; catchment comb %s; drawn comb %s (the author " +
+                    "(IQR %s) against Hovius's %.1f; catchment comb %s; traced comb %s (the author " +
                     "read %.0f cells)").format(
                     label, name, fronts, frontSpacingKm.size,
                     RangeFront.show(RangeFront.median(frontSpacingKm)),
@@ -328,7 +335,7 @@ class CoastalSpacingAuditTest {
                     RangeFront.show(RangeFront.median(halfWidths)), halfWidths.size,
                     RangeFront.show(RangeFront.median(frontRatios), 2),
                     showRange(RangeFront.quartiles(frontRatios), 2), RangeFront.HOVIUS_RATIO,
-                    catchmentGaps.summary(), drawnGaps.summary(), REPORTED_SPACING_CELLS
+                    catchmentGaps.summary(), tracedGaps.summary(), REPORTED_SPACING_CELLS
                 )
             )
         }
@@ -366,9 +373,9 @@ class CoastalSpacingAuditTest {
      * The two suspects moved directly — the relief band's wavelength and the belt's half-width —
      * and a third the bearing split cannot tell from the grid, the terrain noise's finest octave.
      *
-     * On two seeds, at 512, where the brief asks for them and a controlled world costs seconds,
-     * and again at 2048, because at 512 the comb sits at two to four cells, the grid's own limit,
-     * where nothing could be seen to track anything. The relief wavelength is
+     * On two seeds, at 512, where a controlled world costs seconds, and again at 2048, because at
+     * 512 the comb sits at two to four cells, the grid's own limit, where nothing could be seen to
+     * track anything. The relief wavelength is
      * `TerrainConfig.reliefCornerKm`, which `TerrainStage.ReliefBand` turns into the scale the base
      * relief is loudest at; the belt's half-width is `TectonicsConfig.andeanWidthCells` for a coastal
      * range and `collisionWidthCells` for a plateau, moved together so a world's belts are all
@@ -438,12 +445,12 @@ class CoastalSpacingAuditTest {
                 }
                 println(
                     ("X1d CONTROL seed %d at %d, %s, %s: trunk %s; half-width %s; catchment comb %s; " +
-                        "drawn comb %s").format(
+                        "traced comb %s").format(
                         seed, side, floor.label, label,
                         moved { it.gapsKm(trunksOnly = true) },
                         moved { it.halfWidthsKm() },
                         moved { r -> r.measured.flatMap { it.catchmentSpacingsKm } },
-                        moved { r -> r.measured.flatMap { it.drawnSpacingsKm } }
+                        moved { r -> r.measured.flatMap { it.tracedSpacingsKm } }
                     )
                 )
             }
@@ -563,9 +570,9 @@ class CoastalSpacingAuditTest {
      *
      * Not a measurement: the eye's half of one. A whole-world sheet with every front's chord (coasts
      * red, range fronts orange), and three crops at twice the grid's pixels: the three coasts
-     * carrying a trunk spacing whose drawn comb is finest, among those with at least
-     * [FEWEST_DRAWN_GAPS_TO_CROP] drawn gaps, since the finest comb is the author's complaint. Over
-     * the Fantasy render with the drawn courses inked on it in blue — the render reads the drawn
+     * carrying a trunk spacing whose traced comb is finest, among those with at least
+     * [FEWEST_TRACED_GAPS_TO_CROP] traced gaps, since the finest comb is the author's complaint. Over
+     * the Fantasy render with the traced courses inked on it in blue — the render reads the traced
      * rivers, the finder's fronts and trunks do not — the chord is red, each trunk basin is tinted,
      * each trunk outlet is a yellow mark and every other catchment's outlet a smaller cyan one.
      */
@@ -598,11 +605,11 @@ class CoastalSpacingAuditTest {
         ImageIO.write(sheet, "png", File(OUTPUT_DIR, "x1d-969495-2048-fronts.png"))
 
         val chosen = coast.sample
-            .filter { it.drawnSpacingsKm.size >= FEWEST_DRAWN_GAPS_TO_CROP }
-            .sortedBy { it.medianDrawnSpacingKm }
+            .filter { it.tracedSpacingsKm.size >= FEWEST_TRACED_GAPS_TO_CROP }
+            .sortedBy { it.medianTracedSpacingKm }
             .take(3)
         if (chosen.isEmpty()) {
-            println("X1d RENDER: no coast carried a trunk spacing and a drawn comb, no crop drawn")
+            println("X1d RENDER: no coast carried a trunk spacing and a traced comb, no crop drawn")
             return
         }
         chosen.forEachIndexed { index, measured ->
@@ -611,7 +618,7 @@ class CoastalSpacingAuditTest {
             println(
                 ("X1d RENDER %s: a %.0f km %s coast at (%.0f, %.0f) km, columns %d to %d and rows %d " +
                     "to %d, on %s; %d trunks and %d catchments; trunk %s km (%s cells), catchment " +
-                    "comb %s km, drawn comb %s km (%s cells), half-width %s km, ratio %s").format(
+                    "comb %s km, traced comb %s km (%s cells), half-width %s km, ratio %s").format(
                     name, measured.front.lengthKm, measured.front.bearing,
                     measured.front.midKmX, measured.front.midKmY,
                     (min(measured.front.startKmX, measured.front.endKmX) / world.config.cellWidthKm).roundToInt(),
@@ -622,8 +629,8 @@ class CoastalSpacingAuditTest {
                     RangeFront.show(measured.medianSpacingKm),
                     RangeFront.show(coast.spacingInCells(measured)),
                     RangeFront.show(measured.medianCatchmentSpacingKm),
-                    RangeFront.show(measured.medianDrawnSpacingKm),
-                    RangeFront.show(measured.medianDrawnSpacingKm?.let {
+                    RangeFront.show(measured.medianTracedSpacingKm),
+                    RangeFront.show(measured.medianTracedSpacingKm?.let {
                         measured.front.cellsAlong(it, world.config.cellWidthKm, world.config.cellHeightKm)
                     }),
                     RangeFront.show(measured.medianDivideToFrontKm),

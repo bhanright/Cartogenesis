@@ -1,10 +1,17 @@
 package com.cartogenesis.ui
 
+import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.MapSheet
+import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.RiverSelection
+import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -20,6 +27,79 @@ import kotlinx.coroutines.test.runTest
  */
 class SettingsTest {
 
+    /**
+     * The river-density slider, from the knob to the rasterizer and through the settings codec.
+     *
+     * On a generated world, because "reaches the rasterizer" means the overlay's river count moves
+     * with the mark, and only a real network can show that. 128 cells, the size
+     * `GenerationProgressTest` already runs in the browser, and a sheet at a cell to the pixel, which
+     * is the export's. What is followed is the functions the application calls, one by one: the
+     * knob, `SettingsEffects.settingsAfterDrawing` which the window calls when the mark moves, the
+     * codec, and `SettingsEffects.startingRenderOptions` which a fresh window starts from.
+     *
+     * What it does not prove: the store here is [FakePlatform]'s, held in memory, so neither the
+     * desktop's file nor the browser's local storage is exercised, and no window is actually closed
+     * and reopened. The desktop file under a burst of writes is `FileSettingsTest` in `:desktop`.
+     * A world save is not on the path either way: it carries no setting of the drawing.
+     */
+    @Test
+    fun `the river density slider reaches the rasterizer and round-trips the settings codec`() =
+        runTest(timeout = LONGEST_WAIT) {
+            val world = WorldGenerationEngine.generate(SMALL_WORLD)
+            val platform = FakePlatform()
+            fun riversDrawn(options: RenderOptions) =
+                MapRasterizer.overlay(world, options, MapSheet.UNGENERALISED).riversDrawn
+
+            // The reader turns the slider to its bottom mark; the knob writes that field and no other.
+            val bottom = RiverSelection.INK_STEPS.first
+            val turned = Knobs.riverDensity.set(RenderOptions(), bottom)
+            assertEquals(RenderOptions(riverInkStep = bottom), turned)
+            assertEquals(RiverSelection.EARTH_DENSITY_STEP, Knobs.riverDensity.read(RenderOptions()))
+
+            // The rasterizer draws by it: fewer courses at the bottom than at Earth's mark, and
+            // every traced one at the top.
+            val atBottom = riversDrawn(turned)
+            val atEarth = riversDrawn(RenderOptions())
+            val atTop = riversDrawn(RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP))
+            println(
+                "X1C slider on seed ${SMALL_WORLD.seed} at ${SMALL_WORLD.width}: bottom $atBottom, " +
+                    "Earth's mark $atEarth, top $atTop of ${world.rivers.rivers.size} traced"
+            )
+            assertTrue(atBottom in 1 until atEarth, "the bottom mark did not thin the drawing")
+            assertTrue(atEarth < atTop, "the top mark did not add to the drawing")
+            assertEquals(world.rivers.rivers.size, atTop, "the top mark left a traced course off")
+
+            // The window stores the mark as it moves, and only the mark.
+            val stored = SettingsEffects.settingsAfterDrawing(AppSettings(), turned)
+            assertEquals(AppSettings(riverInkStep = bottom), stored)
+            assertEquals(
+                AppSettings(),
+                SettingsEffects.settingsAfterDrawing(AppSettings(), RenderOptions()),
+                "an untouched slider changed the preferences"
+            )
+            platform.settingsStore.write(SettingsCodec.encode(stored))
+
+            // What a fresh window would start from, given what the store holds: the same map.
+            val reopened =
+                SettingsEffects.startingRenderOptions(SettingsCodec.decode(platform.settingsStore.read()))
+            assertEquals(turned, reopened, "the reopened window starts from another drawing")
+            assertEquals(atBottom, riversDrawn(reopened), "the reopened window drew other rivers")
+
+            // A reader who never touched the slider opens on the default drawing, a file written
+            // before the slider existed opens at Earth's mark, and a hand-edited one cannot ask for
+            // a mark the scale does not have.
+            assertEquals(RenderOptions(), SettingsEffects.startingRenderOptions(AppSettings()))
+            assertEquals(
+                RiverSelection.EARTH_DENSITY_STEP,
+                SettingsCodec.decode("{\"theme\": \"MARS\"}").riverInkStep
+            )
+            assertEquals(
+                RiverSelection.EVERY_COURSE_STEP,
+                SettingsCodec.decode("{\"riverInkStep\": 40}").riverInkStep
+            )
+            assertEquals(bottom, SettingsCodec.decode("{\"riverInkStep\": -7}").riverInkStep)
+        }
+
     @Test
     fun `every setting survives a trip through the platform seam`() = runTest {
         val platform = FakePlatform()
@@ -31,7 +111,8 @@ class SettingsTest {
             exportSize = 4096,
             libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
-            checkForUpdatesOnLaunch = true
+            checkForUpdatesOnLaunch = true,
+            riverInkStep = RiverSelection.EVERY_COURSE_STEP
         )
 
         platform.settingsStore.write(SettingsCodec.encode(chosen))
@@ -181,5 +262,13 @@ class SettingsTest {
         assertEquals(AppSettings.FOLLOW_PLATFORM, AppSettings().workingResolution)
         assertFalse(AppSettings().graphicsAccelerationAtLaunch)
         assertFalse(AppSettings().checkForUpdatesOnLaunch)
+    }
+
+    private companion object {
+        /** The world `GenerationProgressTest` generates, for the same reason: every stage runs. */
+        val SMALL_WORLD = WorldGenConfig(seed = 42L, width = 128, height = 128)
+
+        /** `GenerationProgressTest`'s allowance for one 128-cell generation in the browser. */
+        val LONGEST_WAIT = 210.seconds
     }
 }

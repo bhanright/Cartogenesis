@@ -90,9 +90,11 @@ import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -116,12 +118,22 @@ import kotlinx.coroutines.withContext
 @Composable
 fun CartogenesisRoot(platform: Platform) {
     var settings by remember { mutableStateOf<AppSettings?>(null) }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(platform) {
         settings = SettingsCodec.decode(
             runCatching { platform.settingsStore.read() }.getOrNull()
         )
+    }
+
+    // One writer, fed the newest preferences and nothing older. The river density slider changes
+    // them on every mark it passes, and a write launched per change let an older write land last;
+    // here the writes are made one after another, and a change that arrives while one is under way
+    // replaces anything still waiting, so the last preferences set are the last ones written.
+    val unwritten = remember { Channel<AppSettings>(Channel.CONFLATED) }
+    LaunchedEffect(platform) {
+        for (updated in unwritten) {
+            runCatching { platform.settingsStore.write(SettingsCodec.encode(updated)) }
+        }
     }
 
     val current = settings ?: return
@@ -141,9 +153,7 @@ fun CartogenesisRoot(platform: Platform) {
                 // Written straight through rather than on a Save button: every control in the
                 // dialog is a preference that has already taken effect, so a dialog that could be
                 // cancelled would be offering to undo something already done.
-                scope.launch {
-                    runCatching { platform.settingsStore.write(SettingsCodec.encode(updated)) }
-                }
+                unwritten.trySend(updated)
             }
         )
     }
@@ -191,7 +201,15 @@ private fun Application(
             SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
         )
     }
-    var options by remember { mutableStateOf(RenderOptions()) }
+    var options by remember { mutableStateOf(SettingsEffects.startingRenderOptions(settings)) }
+
+    // The river density is stored with the preferences as soon as it moves, so the next window -
+    // and every world opened in it - is drawn at the reader's own mark. See
+    // `SettingsEffects.settingsAfterDrawing` for why it is the only setting of the drawing kept.
+    LaunchedEffect(options.riverInkStep) {
+        val remembered = SettingsEffects.settingsAfterDrawing(settings, options)
+        if (remembered != settings) onSettings(remembered)
+    }
     var world by remember { mutableStateOf<WorldMap?>(null) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     /**
@@ -203,6 +221,13 @@ private fun Application(
      * Holding it costs four bytes a cell, which beside a whole world's fields is nothing.
      */
     var raster by remember { mutableStateOf<RasterSheet?>(null) }
+    /** What [image] shows: which world, drawn with which options, on which sheet. */
+    var imageShows by remember { mutableStateOf<DrawnSheet?>(null) }
+    /**
+     * Bumped when a generation has put a new picture up, so that any redraw of the old world still
+     * under way is cancelled rather than landing on top of it. See the render effect below.
+     */
+    var generationsShown by remember { mutableStateOf(0) }
     var stage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     /**
@@ -476,14 +501,17 @@ private fun Application(
                 }
             }
             val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+            val drawnOptions = options
             val (drawnRaster, drawnImage) = withContext(Dispatchers.Default) {
-                val pixels = MapRasterizer.rasterize(generated, options)
-                RasterSheet(generated, options, pixels) to
-                    MapImage.render(generated, options, pixels, sheet)
+                val pixels = MapRasterizer.rasterize(generated, drawnOptions)
+                RasterSheet(generated, drawnOptions, pixels) to
+                    MapImage.render(generated, drawnOptions, pixels, sheet)
             }
             world = generated
             raster = drawnRaster
             image = drawnImage
+            imageShows = DrawnSheet(generated, drawnOptions, sheet)
+            generationsShown++
             generationMillis = epochMillis() - started
             // A world nobody has named yet, or a world at a seed this name was not given to, takes
             // the name its largest people would give it. A settings edit at the same seed keeps
@@ -508,16 +536,6 @@ private fun Application(
         }
     }
 
-    LaunchedEffect(options) {
-        val current = world ?: return@LaunchedEffect
-        val sheet = MapSheet.onScreen(camera.pixelsPerCell)
-        val pixels = withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
-        raster = RasterSheet(current, options, pixels)
-        image = withContext(Dispatchers.Default) {
-            MapImage.render(current, options, pixels, sheet)
-        }
-    }
-
     /**
      * How much of a cell one screen pixel covers, in half-octave steps. See [MapSheet.onScreen].
      *
@@ -527,12 +545,31 @@ private fun Application(
      */
     val sheet by remember { derivedStateOf { MapSheet.onScreen(camera.pixelsPerCell) } }
 
-    // Only the band: whoever replaced the raster has already drawn the picture that goes with it.
-    LaunchedEffect(sheet) {
-        val drawn = raster ?: return@LaunchedEffect
-        image = withContext(Dispatchers.Default) {
-            MapImage.render(drawn.world, drawn.options, drawn.pixels, sheet)
+    // One effect draws the world on screen again, whatever moved: the drawing's options, the zoom
+    // band, or a generation putting up a new picture. Two effects used to share [image] - one for
+    // the options, one for the band - and a zoom redraw taken with the previous river density could
+    // finish after the slider's and put the old mark back. As one effect, a change of any key
+    // cancels the redraw under way before it can publish, and [imageShows] lets it skip a picture
+    // that is already the one wanted.
+    LaunchedEffect(options, sheet, generationsShown) {
+        val current = world ?: return@LaunchedEffect
+        if (imageShows?.shows(current, options, sheet) == true) return@LaunchedEffect
+        // Only the ink changes with the river density or the zoom band, so the ground is kept
+        // whenever the raster under it was drawn from this world with these options but for the
+        // river mark: at 2048 the raster is the better part of half a second and the overlay
+        // twenty milliseconds, and a drag of the slider redraws on every notch.
+        val standing = raster
+        val keptGround = standing?.pixels?.takeIf {
+            standing.world === current &&
+                standing.options.copy(riverInkStep = options.riverInkStep) == options
         }
+        val pixels = keptGround
+            ?: withContext(Dispatchers.Default) { MapRasterizer.rasterize(current, options) }
+        raster = RasterSheet(current, options, pixels)
+        image = withContext(Dispatchers.Default) {
+            MapImage.render(current, options, pixels, sheet)
+        }
+        imageShows = DrawnSheet(current, options, sheet)
     }
 
     LaunchedEffect(pendingExport) {
@@ -1232,6 +1269,13 @@ private class RasterSheet(
     val pixels: IntArray
 )
 
+/** The world, options and sheet a picture on screen was drawn from, so a redraw can tell it is due. */
+private class DrawnSheet(val world: WorldMap, val options: RenderOptions, val sheet: MapSheet) {
+    /** Whether this is [world] - the same object, not an equal one - drawn with [options] on [sheet]. */
+    fun shows(world: WorldMap, options: RenderOptions, sheet: MapSheet): Boolean =
+        this.world === world && this.options == options && this.sheet == sheet
+}
+
 /**
  * The map itself: pan and zoom over the rendered picture, with labels drawn on top.
  *
@@ -1765,6 +1809,24 @@ private fun KnobControl(
         }
 
         is Mark -> Toggle(knob.label, knob.read(options)) { onOptions(knob.set(options, it)) }
+
+        is Gauge -> {
+            val value = knob.read(options)
+            Labelled(knob.label, knob.show(value)) {
+                Slider(
+                    value = value.toFloat(),
+                    onValueChange = { onOptions(knob.set(options, it.roundToInt())) },
+                    valueRange = knob.marks.first.toFloat()..knob.marks.last.toFloat(),
+                    // One fewer than the marks: Compose counts the stops *between* the ends.
+                    steps = knob.marks.last - knob.marks.first - 1
+                )
+                Text(
+                    knob.note(value),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

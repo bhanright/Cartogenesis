@@ -22,7 +22,11 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -236,26 +240,60 @@ internal fun configDirectory(): File {
  * previous settings rather than half a document — a settings file is small enough that this costs
  * nothing, and it is the difference between "your preferences are as they were" and "the
  * application opens with everything reset".
+ *
+ * Writes are taken one at a time and the newest asked for wins. The river density slider writes on
+ * every mark it passes, so a quick drag is a burst of writes, and unordered they raced through the
+ * one temporary file: an older one could land last, or two could interleave. Each call is numbered
+ * as it arrives, before it suspends; under the lock a call writes the newest text asked for so far
+ * and skips outright if a later call has already written, so the file ends on the last call's text
+ * whichever order the waiters are let in, and a burst that arrives during one write costs one more
+ * write rather than one each. `FileSettingsTest` fires such a burst at a real file.
  */
 internal class FileSettings(private val file: File) : SettingsStore {
 
     override val location: String get() = file.absolutePath
+
+    /** One writer at a time, so the temporary file is never shared. */
+    private val writing = Mutex()
+
+    /** How many writes have been asked for; the number a call is given is its place in line. */
+    private val asked = AtomicLong()
+
+    /** The newest text asked for and its number, read and replaced together. */
+    private val newest = AtomicReference(Asked(number = 0L, text = ""))
+
+    /** The number of the text now on disk, touched only while [writing] is held. */
+    private var writtenNumber = 0L
 
     override suspend fun read(): String? = withContext(Dispatchers.IO) {
         runCatching { file.takeIf { it.isFile }?.readText() }.getOrNull()
     }
 
     override suspend fun write(text: String) {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                file.parentFile?.mkdirs()
-                val temporary = File(file.parentFile, file.name + ".tmp")
-                temporary.writeText(text)
-                if (!temporary.renameTo(file)) {
-                    // Windows refuses a rename onto an existing file, so fall back to the obvious.
-                    file.writeText(text)
-                    temporary.delete()
-                }
+        val number = asked.incrementAndGet()
+        newest.accumulateAndGet(Asked(number, text)) { held, offered ->
+            if (offered.number > held.number) offered else held
+        }
+        writing.withLock {
+            val pending = newest.get()
+            if (pending.number <= writtenNumber) return
+            withContext(Dispatchers.IO) { replaceWhole(pending.text) }
+            writtenNumber = pending.number
+        }
+    }
+
+    /** A write asked for: its place in line and the whole document it asked to store. */
+    private class Asked(val number: Long, val text: String)
+
+    private fun replaceWhole(text: String) {
+        runCatching {
+            file.parentFile?.mkdirs()
+            val temporary = File(file.parentFile, file.name + ".tmp")
+            temporary.writeText(text)
+            if (!temporary.renameTo(file)) {
+                // Windows refuses a rename onto an existing file, so fall back to the obvious.
+                file.writeText(text)
+                temporary.delete()
             }
         }
     }

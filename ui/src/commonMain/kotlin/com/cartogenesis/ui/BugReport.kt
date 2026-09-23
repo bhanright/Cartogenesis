@@ -225,6 +225,9 @@ internal object BugReport {
 
                 is Mark -> knob.read(options).takeIf { it != knob.read(plainOptions) }
                     ?.let { "${knob.label} ${onOrOff(it)}" }
+
+                is Gauge -> knob.read(options).takeIf { it != knob.read(plainOptions) }
+                    ?.let { "${knob.label} ${knob.show(it)}" }
             }
         }
     }

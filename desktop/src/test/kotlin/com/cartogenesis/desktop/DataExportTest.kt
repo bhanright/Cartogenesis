@@ -604,8 +604,18 @@ class DataExportTest {
          * different thin lines, and WebP's figure on the new picture is 69 against 61. The bound
          * follows it by the same rule, WebP plus seven: JPEG at quality 90 reads 72 and sits
          * inside it, quality 30 reads 82 and still misses it.
+         *
+         * Re-derived a third time when the sheet stopped drawing every traced course (X1c). The
+         * map now carries a fifth of the river line it did, so there is a fifth of the thin ink a
+         * lossy codec pays for, and **every figure fell rather than the relation between them**:
+         * WebP 36 against 69, JPEG at quality 90 **38**, at quality 30 **53**. At 76 both sat
+         * inside the bound and the control clause — that a poor quality must miss it — failed,
+         * which is the bar saying it had stopped being a bar. **45** is halfway between the two
+         * measured drifts, which is the only place a bar whose whole meaning is that one passes
+         * and the other does not can honestly sit; the relation against WebP below is the half of
+         * this guard that survives the picture changing, and it did not move.
          */
-        const val MAX_JPEG_DRIFT = 76
+        const val MAX_JPEG_DRIFT = 45
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

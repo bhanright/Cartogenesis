@@ -1003,7 +1003,7 @@ class ChromeGalleryTest {
             "Climate", "Seasonal tilt", "Rain shadow", "Ice sheets and glaciers",
             "Water", "Rivers", "Lakes", "Dry basins hold less water",
             "Peoples", "Realms", "Leave wilderness unclaimed", "Realm borders",
-            "Cartography", "Relief shading", "Coastline", "Graticule"
+            "Cartography", "Relief shading", "Coastline", "Graticule", "River density"
         )
     }
 }

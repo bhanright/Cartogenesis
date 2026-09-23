@@ -22,7 +22,12 @@ import kotlin.test.assertTrue
  *    keeping every n'th vertex — which throws away the same number of points and misses the bar by
  *    a wide margin, because it has no idea which points were carrying the shape.
  *  - **Fewer rivers at whole-world scale than at four times zoom.** The control is the renderer as
- *    it stood: one overlay whatever the zoom, so the two counts were equal.
+ *    it stood: one overlay whatever the zoom, so the two counts were equal. These two clauses are
+ *    now asked at the top mark of [RiverSelection]'s density scale, because the law is no
+ *    longer what chooses the
+ *    rivers a sheet draws: it is a share of the traced count and so has no answer in kilometres of
+ *    ink per square kilometre of land, which is what X1c measures a map by. Nothing about the law
+ *    itself has changed, and neither have the figures here. See `RiverSelectionTest`.
  *  - **The scale bar measures what the world says it measures.** Against
  *    `WorldScale.cellWidthKm`, which is the same arithmetic the heightmap sidecar
  *    writes, so the bar and the exported metadata cannot drift apart.
@@ -156,7 +161,9 @@ class GeneralisationTest {
     @Test
     fun `fewer rivers are drawn at whole-world scale than at four times zoom`() {
         val map = world(42L)
-        val options = RenderOptions()
+        // The radical law by name: it is a setting now, and these are its guards. See the class
+        // comment, and `RiverSelectionTest` for what the default rule is measured against instead.
+        val options = RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP)
 
         // The control is the call every front end made before generalisation existed: no sheet,
         // so nothing to generalise for, and the same overlay whatever the reader was looking at.
@@ -186,7 +193,9 @@ class GeneralisationTest {
     @Test
     fun `the rivers that survive are the ones carrying the most water`() {
         val map = world(42L)
-        val drawn = MapRasterizer.overlay(map, RenderOptions(), MapSheet.onScreen(AT_FIT))
+        val drawn = MapRasterizer.overlay(
+            map, RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP), MapSheet.onScreen(AT_FIT)
+        )
         // Every drawn segment's width comes from a ratio, and the smallest ratio still on the map
         // has to be at least as big as the biggest one that was dropped.
         val peaks = map.rivers.rivers.map { river -> river.widthRatio.maxOrNull() ?: 0f }

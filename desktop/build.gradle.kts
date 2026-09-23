@@ -100,7 +100,12 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.NaturalGalleryTest",
     // W2's review: the same two worlds at 2048 with the pressure wind off and on, in the Winds,
     // Rainfall and Fantasy views. Four worlds at 2048 for pictures only a person can judge.
-    "com.cartogenesis.desktop.PressureWindRenderTest"
+    "com.cartogenesis.desktop.PressureWindRenderTest",
+    // X1c: the author's world at 2048 and one seed at 512, 1024 and 2048, for the figure that
+    // says one pane draws one map whatever grid it was generated on, and for the before-and-after
+    // sheets. Four worlds, three of them above 512. Its 512 guards are `:cartography`'s
+    // `RiverSelectionTest` and run on every merge.
+    "com.cartogenesis.desktop.RiverSelectionAuditTest"
 )
 
 /**

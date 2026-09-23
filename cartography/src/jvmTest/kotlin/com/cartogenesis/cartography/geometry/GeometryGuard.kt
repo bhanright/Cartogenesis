@@ -168,7 +168,7 @@ internal object GeometryGuard {
         val isotropy = BearingIsotropy.measureChords(layer.outlines, frame, familySize, tracedTwice = layer.tracedTwice)
         val rings = ComponentShapes.measure(layer.outlines, frame)
         val arcs = Arcs.measure(layer.outlines, frame)
-        val combs = Combs.measure(runs, frame)
+        val combs = Combs.measure(runs, frame) { layer.outlines[it].level }
         val rightAngles = ComponentShapes.rightAnglesOf(layer.outlines, frame)
         val outlineKm = layer.outlines.sumOf { it.lengthKm() } / if (layer.tracedTwice) 2.0 else 1.0
         val counted = if (layer.tracedTwice) rightAngles / 2.0 else rightAngles.toDouble()

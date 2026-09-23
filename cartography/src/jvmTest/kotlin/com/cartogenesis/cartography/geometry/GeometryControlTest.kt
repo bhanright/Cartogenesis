@@ -482,12 +482,18 @@ class GeometryControlTest {
         // A smooth field — nothing finer than sixteen cells, as a blurred climate field is — whose
         // level lines are round wherever it is locally a paraboloid: read as a rough outline the
         // arc detector finds them, and read as the smooth field it is, only concentric sets count.
-        val smooth = Controls.naturalField(FRAME, 83L, 0.35, 120 * FRAME.cellWidthKm, finestWavelengthKm = 16 * FRAME.cellWidthKm)
-        val smoothOutlines = Contours.ofMask(smooth, FRAME)
-        val smoothAsRough = GeometryGuard.read(Layer("smooth", smoothOutlines), FRAME, FAMILY, NaturalFigures.of(FRAME).cornersPer1000Km)
-        lines.add("  a smooth field read as a rough outline: " + smoothAsRough.describe(Detector.ARCS))
-        expect("a smooth field, as a smooth field", GeometryGuard.read(Layer("smooth", smoothOutlines, smoothField = true), FRAME, FAMILY,
-            NaturalFigures.of(FRAME).cornersPer1000Km), emptySet())
+        for (finest in listOf(16, 32, 64)) {
+            val field = FloatArray(BIG.cellCount)
+            val noise = IsotropicNoise(83L, finest * BIG.cellWidthKm, 480 * BIG.cellWidthKm)
+            for (cell in field.indices) {
+                field[cell] = noise.at((BIG.columnOf(cell) + 0.5) * BIG.cellWidthKm, (BIG.rowOf(cell) + 0.5) * BIG.cellHeightKm).toFloat()
+            }
+            val smoothOutlines = listOf(-1f, -0.5f, 0f, 0.5f, 1f).flatMap { Contours.ofField(field, it, BIG) }
+            val smoothAsRough = GeometryGuard.read(Layer("smooth", smoothOutlines), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km)
+            lines.add("  a field smooth below $finest cells, its level lines read as rough outlines: " + smoothAsRough.describe(Detector.ARCS))
+            expect("a field smooth below $finest cells, as a smooth field", GeometryGuard.read(Layer("smooth", smoothOutlines, smoothField = true),
+                BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
+        }
 
         // Concentric terraces: a cone stamped into a field, its level lines four circles about one
         // centre, flagged even where single arcs are forgiven.

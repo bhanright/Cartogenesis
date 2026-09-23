@@ -155,9 +155,15 @@ internal object MapLayers {
         return layers
     }
 
-    /** Level lines of [field] at each of [levels], where [valid] allows. */
+    /**
+     * Level lines of [field] at each of [levels], where [valid] allows, each marked with its level:
+     * the lines of one level are a family of their own, and lines of successive levels down an even
+     * slope lie side by side at an even spacing by the slope's nature, not the grid's.
+     */
     fun levelLines(field: FloatArray, levels: FloatArray, frame: GridFrame, valid: BooleanArray?): List<Outline> =
-        levels.flatMap { Contours.ofField(field, it, frame, valid) }
+        levels.withIndex().flatMap { (index, level) ->
+            Contours.ofField(field, level, frame, valid).map { it.atLevel(index + 1) }
+        }
 
     /**
      * A partition's borders: each labelled region's outline, where [valid] allows. [unlabelled]

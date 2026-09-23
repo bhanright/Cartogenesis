@@ -18,8 +18,13 @@ internal class Outline(
     val xKm: DoubleArray,
     val yKm: DoubleArray,
     val closed: Boolean,
-    val belt: Boolean
+    val belt: Boolean,
+    /** Which level of a family of level lines this is, or 0 for a region's boundary. */
+    val level: Int = 0
 ) {
+    /** The same line, marked as the [level]th of its family. */
+    fun atLevel(level: Int): Outline = Outline(xKm, yKm, closed, belt, level)
+
     val vertexCount: Int get() = xKm.size
 
     /** A ring that encloses something: closed, and not a belt. */

@@ -88,11 +88,17 @@ internal object Combs {
         val directionDegrees: Double,
         val lengthCells: Double,
         val ux: Double,
-        val uy: Double
+        val uy: Double,
+        val family: Int
     )
 
-    /** The combs among [runs]. */
-    fun measure(runs: List<Run>, frame: GridFrame): List<Comb> {
+    /**
+     * The combs among [runs]. [familyOf] names the family each run's line belongs to, and teeth
+     * are gathered within one family: the level lines of successive levels down an even slope lie
+     * side by side at an even spacing by the slope's nature, so a family of level lines is one
+     * level and not the stack of them.
+     */
+    fun measure(runs: List<Run>, frame: GridFrame, familyOf: (Int) -> Int = { 0 }): List<Comb> {
         val teeth = runs.mapNotNull { run ->
             val dx = (run.toXKm - run.fromXKm) / frame.cellWidthKm
             val dy = (run.toYKm - run.fromYKm) / frame.cellHeightKm
@@ -100,7 +106,7 @@ internal object Combs {
             if (length < TOOTH_OVER_SPACING * SHORTEST_SPACING_CELLS) return@mapNotNull null
             var direction = Math.toDegrees(atan2(dy, dx))
             if (direction < 0) direction += 360.0
-            Tooth(run.midXKm / frame.cellWidthKm, run.midYKm / frame.cellHeightKm, direction, length, dx / length, dy / length)
+            Tooth(run.midXKm / frame.cellWidthKm, run.midYKm / frame.cellHeightKm, direction, length, dx / length, dy / length, familyOf(run.outline))
         }
         if (teeth.size < MINIMUM_TEETH) return emptyList()
         // Tiles of the sheet, for finding an anchor's neighbours without looking at every run.
@@ -123,6 +129,7 @@ internal object Combs {
                 val list = tiles[(tx shl 32) or (ty and 0xFFFFFFFFL)] ?: continue
                 for (other in list) {
                     val tooth = teeth[other]
+                    if (tooth.family != anchor.family) continue
                     var turn = abs(tooth.directionDegrees - anchor.directionDegrees) % 360.0
                     if (turn > 180.0) turn = 360.0 - turn
                     if (turn > PARALLEL_DEGREES) continue

@@ -417,6 +417,29 @@ internal object Controls {
         return if (inCells) rasteriseInCells(frame, test) else rasterise(frame, test)
     }
 
+    /**
+     * A field of lobes: half-discs of [radiusKm] on the ground, one to each [spacingCells]-cell
+     * square, each facing the bearing [facing] draws for it — the grid's eight steps for a fan
+     * grown in front of a river that arrived along one of them, any bearing at all for the control.
+     */
+    fun lobeField(frame: GridFrame, seed: Long, spacingCells: Int, radiusKm: Double, facing: (Random) -> Double): BooleanArray {
+        val random = Random(seed)
+        val lobesAcross = frame.cellsAcross / spacingCells
+        val lobesDown = frame.cellsDown / spacingCells
+        val facings = DoubleArray(lobesAcross * lobesDown) { Math.toRadians(facing(random)) }
+        return BooleanArray(frame.cellCount) { cell ->
+            val column = frame.columnOf(cell)
+            val row = frame.rowOf(cell)
+            val lobeColumn = column / spacingCells
+            val lobeRow = row / spacingCells
+            if (lobeColumn >= lobesAcross || lobeRow >= lobesDown) return@BooleanArray false
+            val direction = facings[lobeRow * lobesAcross + lobeColumn]
+            val dx = (column + 0.5 - (lobeColumn + 0.5) * spacingCells) * frame.cellWidthKm
+            val dy = (row + 0.5 - (lobeRow + 0.5) * spacingCells) * frame.cellHeightKm
+            dx * dx + dy * dy <= radiusKm * radiusKm && dx * cos(direction) + dy * sin(direction) >= 0.0
+        }
+    }
+
     /** A full disc, the same two ways. */
     fun disc(frame: GridFrame, radius: Double, centreX: Double, centreY: Double, inCells: Boolean): BooleanArray {
         val test = { x: Double, y: Double ->

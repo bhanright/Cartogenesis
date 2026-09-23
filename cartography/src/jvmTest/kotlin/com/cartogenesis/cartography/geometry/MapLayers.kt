@@ -1,7 +1,10 @@
 package com.cartogenesis.cartography.geometry
 
 import com.cartogenesis.cartography.Isobaths
+import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
+import com.cartogenesis.cartography.MapView
+import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.Shoreline
 import com.cartogenesis.worldgen.DepositionLayers
@@ -26,7 +29,16 @@ internal class Layer(
     val name: String,
     val outlines: List<Outline>,
     val tracedTwice: Boolean = false,
-    val absent: String? = null
+    val absent: String? = null,
+    /** For a line drawn into the raster, which way the shores it draws face; see [FacingShares]. */
+    val facing: FacingShares? = null,
+    /**
+     * A climate field, smooth by construction — the rainfall is box-blurred, the temperatures
+     * read a box-blurred exposure and a spread anomaly, and the sea's anomaly is a solved
+     * advection — whose single level lines are round wherever the field is locally a paraboloid,
+     * as a fractal outline's never are. On such a layer only concentric sets count as arcs.
+     */
+    val smoothField: Boolean = false
 )
 
 /**
@@ -37,7 +49,10 @@ internal class Layer(
  *  - **coast**: the land mask, `SeaLevelResult.isLand`.
  *  - **coast as drawn**: the pane's generalised shoreline, [Shoreline.of] on a 900-pixel pane's
  *    sheet, which is what the overlay strokes.
- *  - **lakes**: every cell `LakeResult.lakeId` names.
+ *  - **coast as inked**: the raster's own coast line, read off the rendering, for which way the
+ *    shores it draws face ([FacingShares]); its shapes are the coast's and are read there.
+ *  - **lakes**: every cell `LakeResult.lakeId` names, and **lakes' open water**, the part a drawn
+ *    river stops at (`LakeResult.openWater`).
  *  - **river courses**: every traced course, drawn where it is on land and not in open lake water
  *    (the overlay's own rule), and **rivers as drawn**: the pane's selection,
  *    [RiverSelection.drawnOn] at Earth's density.
@@ -88,7 +103,9 @@ internal object MapLayers {
         mask("coast", land)
         val pane = MapSheet.onScreen(PANE_PIXELS_ACROSS / world.width)
         layers.add(Layer("coast as drawn", shorelineAsDrawn(world, frame, pane)))
+        layers.add(Layer("coast as inked", emptyList(), facing = coastInk(world, frame)))
         mask("lakes", BooleanArray(cells) { world.rivers.lakes.lakeId[it] != LakeResult.NO_LAKE })
+        mask("lakes' open water", world.rivers.lakes.openWater)
         layers.add(Layer("river courses", courses(world, world.rivers.rivers, frame)))
         layers.add(Layer("rivers as drawn", courses(world, RiverSelection.drawnOn(world, pane, RiverSelection.EARTH_DENSITY_STEP), frame)))
         layers.add(Layer("isobaths", isobaths(world, frame)))
@@ -129,9 +146,9 @@ internal object MapLayers {
         layers.add(partition("plate boundaries", world.plates.plateId, -1, null, frame))
 
         layers.add(Layer("isotherms", levelLines(world.climate.temperature.data,
-            (-6..6).map { it * ISOTHERM_STEP_C }.toFloatArray(), frame, null)))
-        layers.add(Layer("isohyets", levelLines(world.climate.precipitationMm.data, ISOHYET_LEVELS_MM, frame, land)))
-        layers.add(Layer("sea temperature anomaly", levelLines(world.ocean.anomaly.data, ANOMALY_LEVELS_C, frame, sea)))
+            (-6..6).map { it * ISOTHERM_STEP_C }.toFloatArray(), frame, null), smoothField = true))
+        layers.add(Layer("isohyets", levelLines(world.climate.precipitationMm.data, ISOHYET_LEVELS_MM, frame, land), smoothField = true))
+        layers.add(Layer("sea temperature anomaly", levelLines(world.ocean.anomaly.data, ANOMALY_LEVELS_C, frame, sea), smoothField = true))
         return layers
     }
 
@@ -205,6 +222,17 @@ internal object MapLayers {
             depth += interval
         }
         return levelLines(elevation.data, levels.toFloatArray(), frame, inked)
+    }
+
+    /**
+     * Which shores the raster's own coast ink covers, read off the rendering: the atlas drawn with
+     * its coast and without, and the cells whose colour the coast changed.
+     */
+    private fun coastInk(world: WorldMap, frame: GridFrame): FacingShares {
+        val withCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = true))
+        val withoutCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = false))
+        val inked = BooleanArray(frame.cellCount) { withCoast[it] != withoutCoast[it] }
+        return FacingShares.of(world.sea.isLand, inked, frame)
     }
 
     /** The pane's stroked coast, in kilometres; a ring the tracer closed by repeating its start is closed. */

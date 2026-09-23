@@ -13,7 +13,10 @@ internal enum class Outcome {
     VIOLATION,
 
     /** Too little of the layer to measure at the stated power: reported, and never a pass. */
-    INSUFFICIENT
+    INSUFFICIENT,
+
+    /** The detector asks nothing of this kind of layer: which way a region's shores face, say. */
+    NOT_APPLICABLE
 }
 
 /**

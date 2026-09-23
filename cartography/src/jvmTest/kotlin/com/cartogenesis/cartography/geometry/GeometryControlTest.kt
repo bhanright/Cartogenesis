@@ -39,7 +39,7 @@ class GeometryControlTest {
          * [GeometryGuard.TESTS_PER_LAYER] tests on each. The controls are held to the same
          * corrected level a world is.
          */
-        const val FAMILY = 4 * 26 * GeometryGuard.TESTS_PER_LAYER
+        val FAMILY = Census.familySize(4)
 
         /** A smaller square of the same cells, for the per-component controls. */
         val SQUARE = GridFrame(256, 256, FRAME.cellWidthKm, FRAME.cellHeightKm)
@@ -63,6 +63,7 @@ class GeometryControlTest {
                 Outcome.VIOLATION -> "  X  "
                 Outcome.CLEAN -> "  .  "
                 Outcome.INSUFFICIENT -> "  -  "
+                Outcome.NOT_APPLICABLE -> "     "
             }
         })
 
@@ -478,6 +479,31 @@ class GeometryControlTest {
         // Populations, for the one detector that reads a layer rather than a component.
         expect("union of 12-cell blocks", read("blocks", Controls.blockUnion(BIG, 21L, 12, 0.35, 90 * BIG.cellWidthKm), BIG),
             setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.COMBS))
+        // Lobes: the grid's eight steps against any bearing at all, two thousand of each.
+        val lobeRadiusKm = 5.0 * BIG.cellWidthKm
+        val gridSteps = doubleArrayOf(0.0, BIG.diagonalDegrees, 90.0, 180.0 - BIG.diagonalDegrees)
+        expect("lobes facing the grid's eight steps", read("lobes", Controls.lobeField(BIG, 41L, 22, lobeRadiusKm) { random ->
+            gridSteps[random.nextInt(4)] + if (random.nextBoolean()) 180.0 else 0.0
+        }, BIG), setOf(Detector.ORIENTATION), setOf(Detector.ARCS, Detector.RECTANGLE, Detector.ISOTROPY))
+        expect("lobes facing any bearing", read("lobes", Controls.lobeField(BIG, 41L, 22, lobeRadiusKm) { random ->
+            random.nextDouble() * 360.0
+        }, BIG), emptySet(), setOf(Detector.ARCS, Detector.RECTANGLE))
+
+        // A coast inked on every shore, and one inked only where the water lies east or south.
+        val land = Controls.naturalField(FRAME, 71L, 0.4, 60 * FRAME.cellWidthKm)
+        fun water(cell: Int, dx: Int, dy: Int): Boolean {
+            val row = FRAME.rowOf(cell) + dy
+            if (row < 0 || row >= FRAME.cellsDown) return false
+            return !land[row * FRAME.cellsAcross + (FRAME.columnOf(cell) + dx + FRAME.cellsAcross) % FRAME.cellsAcross]
+        }
+        val everyShore = BooleanArray(FRAME.cellCount) { land[it] && (water(it, 1, 0) || water(it, -1, 0) || water(it, 0, 1) || water(it, 0, -1)) }
+        val eastAndSouth = BooleanArray(FRAME.cellCount) { land[it] && (water(it, 1, 0) || water(it, 0, 1)) }
+        fun inked(name: String, ink: BooleanArray) =
+            GeometryGuard.read(Layer(name, emptyList(), facing = FacingShares.of(land, ink, FRAME)), FRAME, FAMILY, 1.0)
+        expect("a coast inked on every shore", inked("every shore", everyShore), emptySet())
+        expect("a coast inked east and south only", inked("east and south", eastAndSouth), setOf(Detector.FACING))
+        lines.add("  " + inked("east and south", eastAndSouth).describe(Detector.FACING))
+
         val natural = Controls.naturalCourses(BIG, 31L, 600, 300, 6.0)
         expect("natural courses", GeometryGuard.read(Layer("courses", natural), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
         val routed = Controls.eightNeighbourCourses(BIG, 31L, 600, 300, 6.0)

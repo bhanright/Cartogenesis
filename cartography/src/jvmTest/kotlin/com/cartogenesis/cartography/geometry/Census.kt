@@ -67,7 +67,7 @@ internal class Census(val side: Int, val familySize: Int) {
     fun summary(): String {
         val lines = ArrayList<String>()
         val layers = worlds.first().readings.map { it.layer }
-        lines.add("%-26s %s".format("layer \\ detector (V violation, . clean, - insufficient)",
+        lines.add("%-26s %s".format("layer \\ detector (V violation, . clean, - insufficient, blank not asked)",
             Detector.entries.joinToString(" ") { it.name.take(8).padEnd(8) }))
         val clean = ArrayList<String>()
         for (layer in layers) {
@@ -77,6 +77,7 @@ internal class Census(val side: Int, val familySize: Int) {
                         Outcome.VIOLATION -> "V"
                         Outcome.CLEAN -> "."
                         Outcome.INSUFFICIENT -> "-"
+                        Outcome.NOT_APPLICABLE -> " "
                     }
                 }.padEnd(8)
             }
@@ -106,7 +107,8 @@ internal class Census(val side: Int, val familySize: Int) {
         for (world in worlds) for (reading in world.readings) for (detector in Detector.entries) {
             val key = key(world.seed, reading.layer, detector)
             val finding = known[key]
-            if (finding == null && reading.outcome(detector) == Outcome.INSUFFICIENT) continue
+            val outcome = reading.outcome(detector)
+            if (finding == null && (outcome == Outcome.INSUFFICIENT || outcome == Outcome.NOT_APPLICABLE)) continue
             try {
                 if (finding == null) reading.assertClean(detector, world.name)
                 else KnownFailures.expect(finding) { reading.assertClean(detector, world.name) }
@@ -128,6 +130,6 @@ internal class Census(val side: Int, val familySize: Int) {
         fun familySize(worlds: Int): Int = worlds * LAYERS * GeometryGuard.TESTS_PER_LAYER
 
         /** How many layers [MapLayers.of] returns; `GeometryGuardTest` checks it against a world. */
-        const val LAYERS = 26
+        const val LAYERS = 28
     }
 }

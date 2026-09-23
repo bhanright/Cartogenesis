@@ -99,7 +99,7 @@ internal object CensusImages {
                 if (column < 0) column += frame.cellsAcross
                 column.toInt() to it.anchorYCells.toInt()
             }
-            Detector.ISOTROPY -> frame.cellsAcross / 2 to frame.cellsDown / 2
+            Detector.ISOTROPY, Detector.ORIENTATION, Detector.FACING -> frame.cellsAcross / 2 to frame.cellsDown / 2
         }
     }
 }

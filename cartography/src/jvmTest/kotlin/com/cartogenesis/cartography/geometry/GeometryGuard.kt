@@ -8,16 +8,18 @@ internal enum class Detector(val label: String) {
     FACETS("straight facets"),
     RIGHT_ANGLES("right-angle corners"),
     ARCS("circles and arcs"),
-    COMBS("ruled lines")
+    COMBS("ruled lines"),
+    ORIENTATION("components' axes by bearing"),
+    FACING("shores drawn by facing")
 }
+
+/** The grid bearings by name, in [GridFrame.gridBearings]' order. */
+internal val BEARING_NAMES = listOf("east-west", "south-east diagonal", "north-south", "north-east diagonal")
 
 /**
  * Every detector's reading of one layer, with the worst component named, and the clause each
  * detector's bar makes of it.
  */
-/** The grid bearings by name, in [GridFrame.gridBearings]' order. */
-internal val BEARING_NAMES = listOf("east-west", "south-east diagonal", "north-south", "north-east diagonal")
-
 internal class LayerReading(
     val layer: String,
     val frame: GridFrame,
@@ -30,13 +32,25 @@ internal class LayerReading(
     val rightAngles: Int,
     val cornerRateBar: Double,
     val cornerLowerRate: Double,
-    val absent: String?
+    val absent: String?,
+    val axes: List<ComponentAxes.Result> = emptyList(),
+    val facing: FacingShares? = null,
+    /** See [Layer.smoothField]: only concentric sets count as arcs. */
+    val smoothField: Boolean = false
 ) {
     private val measuredRings get() = rings.filter { it.measured }
 
     fun outcome(detector: Detector): Outcome = when {
+        detector == Detector.FACING -> facing?.outcome() ?: Outcome.NOT_APPLICABLE
+        facing != null && outlineKm <= 0.0 -> Outcome.NOT_APPLICABLE
         absent != null -> Outcome.INSUFFICIENT
         else -> when (detector) {
+            Detector.FACING -> Outcome.NOT_APPLICABLE
+            Detector.ORIENTATION -> when {
+                axes.any { it.outcome == Outcome.VIOLATION } -> Outcome.VIOLATION
+                axes.any { it.outcome == Outcome.CLEAN } -> Outcome.CLEAN
+                else -> Outcome.INSUFFICIENT
+            }
             Detector.ISOTROPY -> when {
                 isotropy.any { it.outcome == Outcome.VIOLATION } -> Outcome.VIOLATION
                 isotropy.any { it.outcome == Outcome.CLEAN } -> Outcome.CLEAN
@@ -53,7 +67,8 @@ internal class LayerReading(
             }
             Detector.ARCS -> when {
                 outlineKm <= 0.0 -> Outcome.INSUFFICIENT
-                arcs.arcs.isNotEmpty() || arcs.concentricSets.isNotEmpty() -> Outcome.VIOLATION
+                arcs.concentricSets.isNotEmpty() -> Outcome.VIOLATION
+                arcs.arcs.isNotEmpty() && !smoothField -> Outcome.VIOLATION
                 else -> Outcome.CLEAN
             }
             Detector.COMBS -> when {
@@ -109,6 +124,8 @@ internal class LayerReading(
             val shown = combs.sortedByDescending { it.teeth }.take(3).joinToString("; ") { it.describe(frame) }
             "%d combs%s".format(combs.size, if (shown.isEmpty()) "" else ": $shown")
         }
+        Detector.ORIENTATION -> axes.joinToString("; ") { it.toString() }
+        Detector.FACING -> facing?.describe() ?: "not a drawn line"
     }
 
     private fun worstRing(forRuns: Boolean, score: (ComponentShapes.Ring) -> Double, text: (ComponentShapes.Ring) -> String): String {
@@ -121,7 +138,7 @@ internal class LayerReading(
     /** The clause: throws [GeometryViolation] past the bar, [InsufficientSample] when unmeasurable. */
     fun assertClean(detector: Detector, world: String) {
         when (outcome(detector)) {
-            Outcome.CLEAN -> Unit
+            Outcome.CLEAN, Outcome.NOT_APPLICABLE -> Unit
             Outcome.INSUFFICIENT -> throw InsufficientSample(
                 "$world $layer ${detector.label}: insufficient — ${absent ?: describe(detector)}"
             )
@@ -140,11 +157,11 @@ internal object GeometryGuard {
 
     /**
      * How many independent tests one layer of one world makes, for the census's multiplicity: four
-     * grid bearings of isotropy and the right-angle rate. The per-component bars and the combs'
-     * geometric bar are not tests at a level; they are held against the natural ensemble with the census's
-     * size in view (see `GeometryControlTest`).
+     * grid bearings of the lines' isotropy, four of the components' axes, the right-angle rate and
+     * the shores' facing. The per-component bars and the combs' geometric bar are not tests at a
+     * level; they are held against the natural ensemble (see `GeometryControlTest`).
      */
-    const val TESTS_PER_LAYER = 5
+    const val TESTS_PER_LAYER = 10
 
     fun read(layer: Layer, frame: GridFrame, familySize: Int, naturalCornersPer1000Km: Double): LayerReading {
         val runs = StraightRuns.of(layer.outlines, frame)
@@ -164,7 +181,10 @@ internal object GeometryGuard {
             layer.name, frame, outlineKm, runs.size, isotropy, rings, arcs, combs, rightAngles,
             cornerRateBar = naturalCornersPer1000Km * CORNER_RATE_OVER_NATURAL,
             cornerLowerRate = lowerRate,
-            absent = layer.absent ?: if (layer.outlines.isEmpty()) "nothing drawn" else null
+            absent = layer.absent ?: if (layer.outlines.isEmpty() && layer.facing == null) "nothing drawn" else null,
+            axes = ComponentAxes.measure(layer.outlines, rings, frame, familySize),
+            facing = layer.facing,
+            smoothField = layer.smoothField
         )
     }
 

@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
@@ -77,6 +79,10 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         /** How far the haze sweep goes, and in what steps: a clear sky to a thick overcast. */
         const val HAZE_SWEEP_TO = 0.6f
         const val HAZE_SWEEP_STEP = 0.02f
+
+        /** The known failure the haze clause records. */
+        const val HAZE_ONE_STEP_OFF =
+            "Audit III F-I3: the declared haze is a step off the haze at which the relief keeps the lamp's contrast"
 
         /** How far the declared ordinary ground may sit from the measured median. */
         const val MAX_GROUND_DRIFT = 0.004f
@@ -291,15 +297,29 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "RELIEF it is matched at haze %.2f, where ordinary ground sits at %.3f"
                 .format(bestHaze, bestGround)
         )
+        // The declared haze is a point of the sweep, so the match must land on it: within half a
+        // step, the sweep's own resolution, where a step and a half let a constant one step off
+        // pass. It lands a step off today (Audit III, F-I3), and the clause runs as a known
+        // failure recorded by where the match lands, until the haze and the shader's copy of the
+        // sky are re-derived together.
+        val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
+        val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
+        KnownFailures.expect(HAZE_ONE_STEP_OFF, "the contrasts match at haze 0.08, not at the declared 0.10") {
+            if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
+                throw RecordedViolation(
+                    "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared",
+                    "the contrasts match at haze $matched, not at the declared $declared"
+                )
+            }
+        }
+        // Ordinary ground is the median light under the sky the map is drawn under — the declared
+        // one — and not under whichever haze the sweep matched.
+        val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
+        println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
         assertTrue(
-            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP * 1.5f,
-            "the contrasts match at haze ${"%.2f".format(bestHaze)}, not at the declared " +
-                "${ReliefShading.HAZE}"
-        )
-        assertTrue(
-            kotlin.math.abs(bestGround - ReliefShading.ordinaryGround) <= MAX_GROUND_DRIFT,
-            "ordinary ground measures ${"%.4f".format(bestGround)} at that haze, against the " +
-                "declared ${ReliefShading.ordinaryGround}"
+            kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) <= MAX_GROUND_DRIFT,
+            "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +
+                "against the declared ${ReliefShading.ordinaryGround}"
         )
     }
 

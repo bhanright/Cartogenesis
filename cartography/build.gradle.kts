@@ -45,10 +45,12 @@ java {
 /**
  * A 1024 world and the pictures drawn from it do not fit in a test worker's default half gigabyte.
  * `WorldLibraryTest` saves one, and the drawing guards hold a 512 world and several rasters of it
- * at once; four gigabytes is what `:desktop` gives the same work, less the export sizes.
+ * at once; four gigabytes is what `:desktop` gives the same work, less the export sizes. The
+ * per-merge suite takes its heap from the root build script's budget instead: see below.
  */
 tasks.withType<Test>().configureEach {
-    maxHeapSize = "4g"
+    // Except the audit tier, which holds worlds at 2048: see below.
+    maxHeapSize = if (name == "audit") "8g" else "4g"
 }
 
 /**

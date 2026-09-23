@@ -318,6 +318,39 @@ class RangeFrontTest {
         assertTrue(abs(acrossNorthSouth - 14 * CELL_WIDTH_KM) < 1.0, "$acrossNorthSouth km")
     }
 
+    /**
+     * One stretch of outline seen at two grids pairs; the two coasts of a peninsula, and two
+     * neighbouring stretches with close midpoints, do not.
+     *
+     * The matching compares a front's spacing at one grid with the same front's at another, so a
+     * pair that is not one stretch of ground makes the comparison meaningless. Four lines 400 km
+     * long running east-west: the reference, landward to the south; the same stretch 10 km off
+     * and 3 degrees round, as another grid would place it; the far coast of a peninsula 50 km
+     * across, landward to the north; and a stretch of the same coast starting 300 km further east.
+     */
+    @Test
+    fun `a front pairs with itself at another grid and not with the far coast of a peninsula`() {
+        fun line(startKmX: Double, startKmY: Double, degrees: Double, landwardSouth: Boolean): RangeFront.Front {
+            val alongX = kotlin.math.cos(Math.toRadians(degrees))
+            val alongY = kotlin.math.sin(Math.toRadians(degrees))
+            val side = if (landwardSouth) 1.0 else -1.0
+            return RangeFront.Front(
+                startKmX, startKmY, startKmX + 400 * alongX, startKmY + 400 * alongY,
+                alongX, alongY, -alongY * side, alongX * side, 400.0
+            )
+        }
+        val reference = line(1_000.0, 1_000.0, 0.0, landwardSouth = true)
+        assertTrue(RangeFront.sameFront(reference, line(1_005.0, 1_010.0, 3.0, landwardSouth = true)))
+        assertTrue(
+            !RangeFront.sameFront(reference, line(1_000.0, 1_050.0, 0.0, landwardSouth = false)),
+            "the far coast of a peninsula faces the other way"
+        )
+        assertTrue(
+            !RangeFront.sameFront(reference, line(1_300.0, 1_000.0, 0.0, landwardSouth = true)),
+            "a stretch sharing only a quarter of its length is a neighbour, not the same front"
+        )
+    }
+
     private fun southernEastWestFront(report: RangeFront.Report): RangeFront.Measured {
         val fronts = report.measured.filter { it.front.bearing == RangeFront.Bearing.EAST_WEST }
         assertTrue(fronts.isNotEmpty(), "an east-west front was found: ${report.census}")

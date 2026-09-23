@@ -73,51 +73,61 @@
   lengths, which the selection cannot do because it runs before the overlay is laid out; the
   honest cure is to measure both in a guard and record the gap. 2026-09-22, X1c.
 
-- **On a smooth steep coastal slope the grid spaces the valleys.** X1d measured the author's comb on
-  969495's eastern peninsula, a 367 km coast where a plateau at 1,100 to 1,900 m falls to the sea
-  over 100 to 150 km: catchments of at least 1,440 km2 (Hack's area for the shortest traced course)
-  reach that coast 62 km apart at 512 and at 1024 and 19.4 km apart at 2048, and at both finer
-  grids they are 2.6 cells wide, 30 km and then 15 km. Coasts pooled over seven worlds hold their
-  spacing in kilometres (0.83 to 0.97 coast by coast); this one holds it in cells. The hypothesis,
-  not established: the hillslope process is the thermal pass at
-  `ErosionConfig.criticalFallMetresPerKm`, a slope threshold with no length of its own, where
-  Earth's first-order valley spacing is set by the ratio of hillslope transport to incision
+- **On a smooth steep coastal slope the valleys' spacing falls as the grid refines, and faster
+  than a spacing fixed in cells would.** X1d measured the author's comb on 969495's eastern peninsula on one line fixed in
+  kilometres (`RangeFront.measureLine`, printed by `CoastalSpacingAuditTest` as AUTHORS COAST), a
+  367 km coast where a plateau at 1,100 to 1,900 m falls to the sea over 100 to 150 km: catchments
+  of at least 1,440 km2 reach it 62.3 km apart at 512 and at 1024 and 24.2 km apart at 2048, over
+  2, 5 and 11 gaps, and the traced courses 124.5, 62.3 and 19.4 km over 1, 5 and 12. From 1024 to
+  2048 that is 0.39 and 0.31 of the coarser figure, where a spacing fixed in cells keeps 0.50 and
+  one fixed on the ground 1.00; matched coasts elsewhere keep 0.89 (catchments, interquartile 0.69
+  to 1.28) and 0.86 (traced). The hypothesis, not established: the hillslope process is the thermal
+  pass at `ErosionConfig.criticalFallMetresPerKm`, a slope threshold with no length of its own,
+  where Earth's first-order valley spacing is set by the ratio of hillslope transport to incision
   (Perron, Kirchner and Dietrich 2009, Nature 460), so on ground smooth enough that nothing else
-  converges the flow, the cell is the only length left. The fix
-  chunk would first confirm that on this chord (a 4096 world if the heap allows, or the same slope
-  in a synthetic fixture at two grids), then give the hillslopes a transport length in kilometres,
-  with GPU parity under the erosion seam. Its guard is this measurement: on that chord the
-  catchment spacing and the catchments' mean width in kilometres hold from 1024 to 2048 within the
-  matched-coast spread (interquartile 0.71 to 1.28 there), shown failing on today's 0.31.
-  `CoastalSpacingAuditTest` and `RangeFront` are the instrument. 2026-09-22, X1d.
-- **What spaces the valleys that reach the divide is not known.** X1d found them about 70 km apart
-  on straight coasts and mountain fronts at every grid (65 to 71 km pooled, the same in kilometres
-  front by front across 512, 1024 and 2048), and found it moved by none of the three named suspects:
-  halving and doubling `TerrainConfig.reliefCornerKm`, the belts' half-widths and the noise's
-  octave count left it at 0.82 to 1.27 of stock in no consistent direction. It barely follows the
-  depth of the ground behind the front either (log-log slope 0.21 to 0.31 on coasts), and Hovius's
-  ratio of half-width to spacing reads 0.86 to 1.05 on coasts and 0.61 to 0.95 on mountain fronts
-  against Earth's 2.1. Untested candidates: the crust margin's 300 km band
-  (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`, `deltaReachKm`,
-  `outletReachKm`), and the instrument's own 25 km strips, which a controlled run of the strip
-  width would clear. 2026-09-22, X1d.
-- **The land is drawn isotropic in cells, not in kilometres.** On 969495 the coastline projects
-  1.82 times as far east-west as north-south at 512 and 2.12 times at 2048, the 2,000 m contour 1.99
-  and 2.09, where land isotropic on the ground gives 1. Two known inputs draw it so: the terrain
-  noise's lattice has as many cycles down the map as across it (`TerrainStage.buildNormalField`),
-  and `PlateStage`'s boundary distance counts cells with no row scale (the `JumpFloodDistance` entry
-  below). A kilometre-isotropic noise would take half the cycles down the map that it takes across
-  it, and would move every world; measure the coastline's two projections before and after, per
-  seed, as the guard. Found by X1d, whose straight-front finder saw one to three north-south
-  coasts against 86 to 120 east-west ones at each grid for this reason. 2026-09-22, X1d.
+  converges the flow the cell may be the only length left. The fix chunk would first test that on
+  this line (a synthetic ramp at two grids, or a 4096 world if the heap allows) and widen the
+  sample to the other smooth coastal ramps, since five gaps at 1024 is a weak discriminator; then
+  give the hillslopes a transport length in kilometres, with GPU parity under the erosion seam. Its
+  guard is the measured figure: the line's catchment spacing at 2048 over 1024, 0.39 today, inside
+  the matched coasts' interquartile range between those grids, 0.69 to 1.28, shown failing on
+  today's world first. 2026-09-22, X1d.
+- **What spaces the valleys that reach the divide is not known, and the instrument's own floor
+  sets the figure X1d reads.** Under X1d's instrument they are about 70 km apart on straight coasts
+  and mountain fronts at every grid (66 to 71 km pooled), steady in kilometres front by front across
+  512, 1024 and 2048; but halving the catchment floor takes that to 47 to 52 km and doubling it to
+  76 to 101 (the divide's strip width barely moves it), so the value is the floor's and the
+  steadiness across grids is what a floor in square kilometres would impose anyway. Halving and
+  doubling `TerrainConfig.reliefCornerKm` and the belts' half-widths, and changing
+  `TerrainConfig.octaves` by one (doubling and halving the finest wavelength), drew no consistent
+  proportional response (0.82 to 1.18 of stock at 2048). The spacing barely follows the divide
+  proxy's half-width (log-log slope 0.21 to 0.32 on coasts). What would settle it is a measure with
+  no area floor: the spacing spectrum of valley axes along a coast (the dominant wavelength of the
+  elevation profile a fixed distance inland), taken at three grids. Untested: the crust margin's
+  300 km band (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`,
+  `deltaReachKm`, `outletReachKm`), and the instrument's reference grid and shortest front, which
+  were not varied. 2026-09-22, X1d.
+- **The land's outlines are consistent with cell-space anisotropy in the kilometre metric.** Over
+  seven worlds the coastline projects 1.93, 1.99 and 2.06 times as far east-west as north-south at
+  512, 1024 and 2048 (1.82 to 2.14 by world), the 2,000 m contour 1.99, 2.00 and 2.04 (1.83 to
+  2.24), where land isotropic on the ground gives 1; `CoastalSpacingAuditTest` prints both for every
+  world. Two known inputs could draw it so: the terrain noise's lattice has as many cycles down the
+  map as across it (`TerrainStage.buildNormalField`), and `PlateStage`'s boundary distance counts
+  cells with no row scale (the `JumpFloodDistance` entry below); which carries it is not measured.
+  A kilometre-isotropic noise would take half the cycles down the map that it takes across it, and
+  would move every world; the two projections per seed are the guard. Found by X1d, whose
+  straight-front finder saw one to three north-south coasts against 86 to 121 east-west ones at
+  each grid. 2026-09-22, X1d.
 - **The incision and the routing measure a step in cell widths whichever way it runs.**
-  `HydraulicErosion.cut` divides a drop by 1 for a cardinal step and by the square root of 2 for a
-  diagonal one and multiplies by the column count, so on a grid whose cells are twice as wide as
-  they are tall it reads a north-south slope at 0.50 of the ground's and a diagonal one at 0.79,
-  where `RiverStage.stepKilometres` measures the same step in true kilometres;
-  `FlowRouting.flowDirections` compares its facets on the same square ruler. On 969495 at 512,
-  29.4% of land steps run down a column and 37.7% diagonally. X1d recorded it and did not find it
-  setting a spacing; a fix moves every world and wants `GpuErosionTest` in step. 2026-09-22, X1d.
+  `FlowRouting.flowDirections` compares its facets over one cell or `DIAGONAL_STEP_CELLS`, and on a
+  plane falling equally per kilometre east and south, 45 degrees on the ground, it routes 14.1
+  degrees south of east — the 14.0 a square ruler predicts (measured by `CoastalSpacingAuditTest`,
+  which asserts the disagreement and so fails once it is fixed). `HydraulicErosion.cut` divides a
+  drop by 1 or the square root of 2 cells and multiplies by the column count, so by the source's
+  arithmetic it reads a north-south slope at 0.50 of the ground's and a diagonal one at 0.79, where
+  `RiverStage.stepKilometres` measures true kilometres. On 969495 at 512, 29.4% of land steps run
+  down a column and 37.7% diagonally. X1d recorded it and did not find it setting a spacing; a fix
+  moves every world and wants `GpuErosionTest` in step. 2026-09-22, X1d.
 - **The moisture march does not conserve its water, in two places.** In `ClimateStage.marchLandStep` the parcel's stock is capped to the cold cap *after* its rain for the cell has been taken, so the water the cap removes over cold ground is neither rained nor carried: it leaves the budget silently. In `marchSeaStep` the rain over open water is reported (`moisture * seaRainPerCell`) but never subtracted from the stock handed to the next cell, so the ocean reservoir approaches saturation whatever the sea rain rate is set to. Both were found by reading the code against the ledger's recycling figure, which therefore does not by itself show the budget is right. The fix is an instrumented budget first (every source, every sink, the storage change and the boundary flux summing to zero per lap), then the two corrections, then re-measuring recycling and the interior mean; it belongs to the chunk on wetter interiors, because closing the sea leak alone will move every coast. Beside it: the 1,000 km depletion length cites van der Ent and Savenije (2011) for a figure that paper gives as 500-2,000 km for tropical and mountain recycling, with 3,000-5,000 km in temperate climates and over 7,000 in deserts, so the constant's justification is misread and the transport time and the rain lifetime want testing separately. 2026-09-21.
 - **A lake fan outlives its lake, and what it leaves is a sill.** On 718106 at 2048 the deposited world holds 23,362 cells of standing water (graded) and 24,421 (ungraded) against 20,998 with no deposition at all, and the window where deposition ponds the most - `[48,400,203,650]`, found by `BayHeadDeltaAuditTest` - holds one lake of 1,038 cells the no-deposition world does not have. `DepositionLog` says its shore is ringed with lake-fan spoil, and a render of the log's mechanism over the window (looked at during T4, not kept) shows that spoil lying in a ring well outside the present shore. The reading of that picture, which is an inference and not a measurement: the rounds ponded a far larger basin there, fans were built into it, the basin's rim was cut and it drained, and the spoil laid across its floor was left standing across the hollow in the middle. A fan is stopped two pond depths short of the surface it is built toward (`HydraulicErosion`, the lake inflow branch) so that every cell it touches is still water afterwards, and that is true of the surface it was built toward and not of the one the basin drains to later; sediment sits in its own array until `settle` adds it to the terrain at the end, so the per-round breaches lower the rock under it and not it. Nothing forbids cutting it afterwards: the closing breach is blind to mechanism and `openMouths` cuts any spoil under a drawn course, so what preserved these lakes is one of their limits - the closing breach's stream power, floor and reach, or `openMouths`' discharge threshold, which a small basin's outflow does not meet - and which one is not yet measured. The graded rule has no say in any of it, which is why the two settings hold nearly the same water in that window (3,699 and 3,687); over the whole world they make fourteen and thirteen lakes the no-deposition world lacks, 5,600 and 6,100 cells, and the audit case prints, for each, the gross deposition on its shore by mechanism. The audit's water clause is therefore printed as a census and not asserted. What would answer it: find which limit preserved the lakes (a round-by-round trace of one basin's spill and floor), then either stop a fan short of the floor of the basin's outlet rather than of its surface or give the closing breach a drained basin's former discharge, and measure whole-world standing water against the no-deposition world on both authored seeds at 1024 and 2048. With it, a discriminating guard for the graded rule itself, which no per-merge test has: a controlled channel whose upstream margin leaves the ungraded rule headroom to deposit and the graded rule none, shown failing by forcing the graded branch to a zero grade. Whole-world standing water on deposited worlds has stood at or above the no-deposition figure since E6 (1.04x and 1.16x at 1024 then; 1.26x and 0.99x at 1024 and 1.11x and 1.16x at 2048 on the 3.2 tree), so this is not new, only named. 2026-09-22.
 - **The audit tier cannot be finished on the machine T3 ran it on, and the fault is the machine.**

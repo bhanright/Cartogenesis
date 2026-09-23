@@ -1,7 +1,9 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.FlowRouting
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.RenderingHints
@@ -9,7 +11,9 @@ import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -18,16 +22,16 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * How far apart the coastal valleys are, in kilometres, and what sets the figure.
+ * How far apart the coastal valleys are, in kilometres, and what the figure responds to.
  *
  * The author generated seed 969495 at 2048 and reported that the coasts carry closely spaced
  * valleys perpendicular to the shore about ten cells apart, each with a river and many with a delta
  * lobe. Ten cells is a measure of the grid. This class asks whether the landscape or the grid is
  * what the ten cells are counting, with [RangeFront] — a finder whose fronts, basins and trunks
  * never read a traced river, and whose every rule (belt, front eligibility, exit, outlet, catchment
- * floor, trunk and divide qualification, along-front spacing and the two combs, bearing,
- * cross-resolution matching and what an empty sample reports) is written down at that object before
- * a number is collected here.
+ * floor, trunk and divide qualification and the proxy's limits, along-front spacing and the two
+ * combs, bearing, cross-resolution matching and what an empty sample reports) is written down at
+ * that object before a number is collected here.
  *
  * **A measurement.** Nothing in the generator is changed by it; the finding is in
  * docs/DESIGN_LEDGER.md, X1d, and in `docs/GEOGRAPHY.md`.
@@ -47,31 +51,24 @@ import kotlin.test.assertTrue
  * Resolution alone cannot separate the second from the third, because at fixed settings both the
  * belt's width and the relief wavelength are constants in kilometres and do not move with the grid
  * (`WorldGenConfig.atResolution` rescales every cell-valued width). So the grid sweep is joined by
- * controlled runs that move those two settings directly, and every table is split by the front's
- * bearing, which the grid *does* decide: a cell is twice as wide as it is tall, so each reading
- * predicts its own ratio between a front running east-west and one running north-south.
+ * controlled runs that move those two settings directly. Neither can resolution alone clear the
+ * instrument, whose own scales — the reference grid, the shortest front, the divide's strips and
+ * the catchment floor — are kilometre constants too and could steady a spacing across grids by
+ * themselves; so the strips and the floor are moved as well.
  *
- * - Set by the grid: the same count of cells on both, so twice the kilometres east-west.
- * - Set by the relief band: the same kilometres on both, so half the cells east-west; the band is
- *   isotropic in kilometres (`TerrainStage.ReliefBand`), though the noise it filters is drawn on a
- *   lattice with as many cycles down the map as across it.
- * - Set by the belt: `PlateStage` counts a belt's half-width in cells with no row scale, so an
- *   east-west belt is half as wide in kilometres as a north-south one, and a spacing that followed
- *   the half-width would be half the kilometres, and a quarter of the cells, east-west. The
- *   measured half-width is printed on every front, so this reading is tested by the ratio itself
- *   rather than by the bearing alone.
- *
- * Measured, the split cannot be read that way, and the reason is a finding of its own: the world's
- * outlines are drawn isotropic in cells rather than in kilometres — 969495's coastline projects
- * about twice as far east-west as north-south — so the ground reads the same cells both ways just
- * as the grid would, and the finder, being isotropic in kilometres on a world that is not, finds
- * one to three north-south coasts at each grid against 86 to 120 east-west ones. See
- * docs/DESIGN_LEDGER.md, X1d.
+ * Every table is also split by the front's bearing, because a cell is twice as wide as it is tall
+ * and each reading was expected to predict its own ratio between a front running east-west and one
+ * running north-south. Measured, the split cannot be read that way: the world's outlines are
+ * consistent with cell-space anisotropy in the kilometre metric — 969495's coastline projects about
+ * twice as far east-west as north-south, which this class prints for every world — so the ground
+ * reads much as the grid would in both directions, and the finder, isotropic in kilometres on a
+ * world that is not, finds few north-south coasts. See docs/DESIGN_LEDGER.md, X1d.
  *
  * In the audit tier: twenty-one whole worlds, seven of them at 2048, generated once each and each
- * reduced to its two reports — which carry no grid array — before the next is made, which is T4's
- * rule after the hosted runner went down under three retained 2048 worlds; then ten controlled
- * worlds at 512 and fourteen at 2048, and three more at 512 for the floor and the rulers.
+ * reduced to reports — which carry no grid array — before the next is made, which is T4's rule
+ * after the nightly machine went down under three retained 2048 worlds; six more for the
+ * instrument's sensitivity; ten controlled worlds at 512 and fourteen at 2048; and three more at
+ * 512 for the floor and the rulers.
  */
 class CoastalSpacingAuditTest {
 
@@ -84,6 +81,7 @@ class CoastalSpacingAuditTest {
         val AUDITED_SEEDS = listOf(7L, 42L, 1234L, 99L, 718_106L, 59_758L)
         val ALL_SEEDS = listOf(AUTHORS_SEED) + AUDITED_SEEDS
         val SIDES = listOf(512, 1024, 2048)
+        val GRID_PAIRS = listOf(512 to 1024, 512 to 2048, 1024 to 2048)
 
         /** The two seeds the controlled runs are made on: the author's and the largest-belt one. */
         val CONTROL_SEEDS = listOf(AUTHORS_SEED, 718_106L)
@@ -94,6 +92,20 @@ class CoastalSpacingAuditTest {
 
         /** A crop is drawn of a front whose traced comb has at least this many gaps to show. */
         const val FEWEST_TRACED_GAPS_TO_CROP = 5
+
+        /**
+         * The author's own coast, on 969495's eastern peninsula, as a line fixed in kilometres: the
+         * front the finder chose there at 2048, its ends rounded to that grid's cells (columns 1731
+         * and 1685, rows 678 and 763, at 5.859375 by 2.9296875 km). Fixed, so the same stretch is
+         * measured at every grid whatever each grid's outline makes of it.
+         */
+        const val AUTHORS_COAST_START_KM_X = 1731 * 5.859375
+        const val AUTHORS_COAST_START_KM_Y = 678 * 2.9296875
+        const val AUTHORS_COAST_END_KM_X = 1685 * 5.859375
+        const val AUTHORS_COAST_END_KM_Y = 763 * 2.9296875
+
+        /** The altitude whose contour is measured for isotropy beside the coast's, in metres. */
+        const val CONTOUR_METRES = 2_000f
 
         val OUTPUT_DIR = File("build/maps")
     }
@@ -106,38 +118,55 @@ class CoastalSpacingAuditTest {
         val label: String get() = if (this == COAST) "coast" else "range at ${metres.toInt()} m"
     }
 
+    /** The three spacings along a front, each with the per-front median the matching compares. */
+    private enum class Spacing(val label: String, val medianKm: (RangeFront.Measured) -> Double?) {
+        TRUNK("trunk", { it.medianSpacingKm }),
+        CATCHMENT("catchment comb", { it.medianCatchmentSpacingKm }),
+        TRACED("traced comb", { it.medianTracedSpacingKm })
+    }
+
     private fun config(seed: Long, side: Int, edit: (WorldGenConfig) -> WorldGenConfig = { it }) =
         edit(WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side))
 
     /**
-     * Generates one world, reduces it to a report at each floor, hands it to [whileHeld] if the
-     * caller wants to draw it, and lets it go before anything else is generated.
+     * Generates one world, hands it to [use], and lets it go before anything else is generated:
+     * whatever [use] returns must hold no grid-sized array of the world's.
      */
-    private fun reportsOf(
+    private fun <T> withWorld(
         seed: Long,
         side: Int,
         edit: (WorldGenConfig) -> WorldGenConfig = { it },
-        whileHeld: ((WorldMap) -> Unit)? = null
-    ): Map<Floor, RangeFront.Report> {
+        use: (WorldMap) -> T
+    ): T {
         val beforeGeneration = System.nanoTime()
         var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(seed, side, edit))
-        val beforeFinder = System.nanoTime()
-        val reports = Floor.entries.associateWith { RangeFront.measure(held!!, it.metres) }
+        val beforeUse = System.nanoTime()
+        val result = use(held!!)
         val after = System.nanoTime()
-        whileHeld?.invoke(held!!)
         held = null
         System.gc()
         println(
-            "X1d COST seed %d at %d: %.1f s to generate, %.1f s to find the fronts at two floors"
-                .format(seed, side, (beforeFinder - beforeGeneration) / 1e9, (after - beforeFinder) / 1e9)
+            "X1d COST seed %d at %d: %.1f s to generate, %.1f s to measure".format(
+                seed, side, (beforeUse - beforeGeneration) / 1e9, (after - beforeUse) / 1e9
+            )
         )
-        return reports
+        return result
+    }
+
+    /** One world reduced to a report at each floor. */
+    private fun reportsOf(
+        seed: Long,
+        side: Int,
+        edit: (WorldGenConfig) -> WorldGenConfig = { it }
+    ): Map<Floor, RangeFront.Report> = withWorld(seed, side, edit) { world ->
+        Floor.entries.associateWith { RangeFront.measure(world, it.metres) }
     }
 
     // ------------------------------------------------------------------ the table
 
     /**
-     * Every seed at every grid, front by front, and the same front matched across the grids.
+     * Every seed at every grid, front by front; the same front matched across the grids; the
+     * author's coast followed on one fixed line; and the outline's isotropy of every world.
      *
      * Each seed's three worlds are generated one after another and reduced to reports, so the
      * matching reads reports and never two worlds. The author's own world at 2048 is drawn while it
@@ -151,11 +180,17 @@ class CoastalSpacingAuditTest {
     fun `the outlet spacing on every straight front, at 512, 1024 and 2048, and across them`() {
         val pooled = HashMap<Pair<Floor, Int>, ArrayList<RangeFront.Report>>()
         val across = HashMap<String, Pair<ArrayList<Double>, ArrayList<Double>>>()
+        val isotropy = HashMap<Int, ArrayList<Pair<Double, Double>>>()
 
         ALL_SEEDS.forEach { seed ->
             val reports = SIDES.associateWith { side ->
-                val draw = seed == AUTHORS_SEED && side == AUTHORS_SIDE
-                reportsOf(seed, side, whileHeld = if (draw) ::drawTheAuthorsWorld else null)
+                withWorld(seed, side) { world ->
+                    val coastRatio = printIsotropy(world, seed, side)
+                    isotropy.getOrPut(side) { ArrayList() }.add(coastRatio)
+                    if (seed == AUTHORS_SEED) printTheAuthorsCoast(world, side)
+                    if (seed == AUTHORS_SEED && side == AUTHORS_SIDE) drawTheAuthorsWorld(world)
+                    Floor.entries.associateWith { RangeFront.measure(world, it.metres) }
+                }
             }
             Floor.entries.forEach { floor ->
                 reports.forEach { (side, byFloor) ->
@@ -163,39 +198,47 @@ class CoastalSpacingAuditTest {
                     pooled.getOrPut(floor to side) { ArrayList() }.add(report)
                     printFronts(report, "seed $seed at $side, ${floor.label}", config(seed, side))
                 }
-                listOf(512 to 1024, 512 to 2048, 1024 to 2048).forEach { (coarseSide, fineSide) ->
-                    val (kilometres, cells) = across.getOrPut("${floor.label}, $coarseSide to $fineSide") {
-                        ArrayList<Double>() to ArrayList()
+                GRID_PAIRS.forEach { (coarseSide, fineSide) ->
+                    Spacing.entries.forEach { spacing ->
+                        val (kilometres, cells) =
+                            across.getOrPut("${floor.label}, ${spacing.label}, $coarseSide to $fineSide") {
+                                ArrayList<Double>() to ArrayList()
+                            }
+                        printMatches(
+                            seed, floor, spacing, coarseSide, fineSide,
+                            reports.getValue(coarseSide).getValue(floor),
+                            reports.getValue(fineSide).getValue(floor),
+                            kilometres, cells
+                        )
                     }
-                    printMatches(
-                        seed, floor, coarseSide, fineSide,
-                        reports.getValue(coarseSide).getValue(floor),
-                        reports.getValue(fineSide).getValue(floor),
-                        kilometres, cells
-                    )
                 }
             }
         }
 
         Floor.entries.forEach { floor ->
             SIDES.forEach { side -> printPooled(pooled.getValue(floor to side), "${floor.label} at $side") }
-            listOf(512 to 1024, 512 to 2048, 1024 to 2048).forEach { (coarseSide, fineSide) ->
-                val key = "${floor.label}, $coarseSide to $fineSide"
-                val (kilometres, cells) = across[key] ?: Pair(emptyList<Double>(), emptyList<Double>())
-                val grid = fineSide.toDouble() / coarseSide
-                println(
-                    ("X1d ACROSS POOLED %s over %d matched fronts carrying a trunk spacing at both: " +
-                        "the fine spacing is %s of the coarse in kilometres (IQR %s) and %s in cells " +
-                        "(IQR %s); a spacing set by the grid reads %.2f and 1.00, one set on the " +
-                        "ground 1.00 and %.2f").format(
-                        key, kilometres.size,
-                        RangeFront.show(RangeFront.median(kilometres), 2),
-                        showRange(RangeFront.quartiles(kilometres), 2),
-                        RangeFront.show(RangeFront.median(cells), 2),
-                        showRange(RangeFront.quartiles(cells), 2), 1.0 / grid, grid
-                    )
-                )
+            Spacing.entries.forEach { spacing ->
+                GRID_PAIRS.forEach { (coarseSide, fineSide) ->
+                    val key = "${floor.label}, ${spacing.label}, $coarseSide to $fineSide"
+                    val (kilometres, cells) = across[key] ?: Pair(emptyList<Double>(), emptyList<Double>())
+                    printAcross(key, kilometres, cells, fineSide.toDouble() / coarseSide)
+                }
             }
+        }
+        SIDES.forEach { side ->
+            val ratios = isotropy.getValue(side)
+            println(
+                ("X1d ISOTROPY POOLED at %d over %d worlds: the coastline's east-west over north-south " +
+                    "projection %s (range %s to %s), the %d m contour's %s (range %s to %s); land " +
+                    "isotropic on the ground reads 1").format(
+                    side, ratios.size,
+                    RangeFront.show(RangeFront.median(ratios.map { it.first }), 2),
+                    RangeFront.show(ratios.minOf { it.first }, 2), RangeFront.show(ratios.maxOf { it.first }, 2),
+                    CONTOUR_METRES.toInt(),
+                    RangeFront.show(RangeFront.median(ratios.map { it.second }), 2),
+                    RangeFront.show(ratios.minOf { it.second }, 2), RangeFront.show(ratios.maxOf { it.second }, 2)
+                )
+            )
         }
 
         SIDES.forEach { side ->
@@ -207,10 +250,31 @@ class CoastalSpacingAuditTest {
         }
     }
 
-    /** One seed's fronts at two grids, paired, with the three spacings of each pair side by side. */
+    /** One pooled line of fine-over-coarse ratios for one spacing between two grids. */
+    private fun printAcross(key: String, kilometres: List<Double>, cells: List<Double>, grid: Double) {
+        println(
+            ("X1d ACROSS POOLED %s over %d matched fronts: the fine spacing is %s of the coarse in " +
+                "kilometres (IQR %s) and %s in cells (IQR %s); a spacing set by the grid reads %.2f " +
+                "and 1.00, one set on the ground 1.00 and %.2f").format(
+                key, kilometres.size,
+                RangeFront.show(RangeFront.median(kilometres), 2),
+                showRange(RangeFront.quartiles(kilometres), 2),
+                RangeFront.show(RangeFront.median(cells), 2),
+                showRange(RangeFront.quartiles(cells), 2), 1.0 / grid, grid
+            )
+        )
+    }
+
+    /**
+     * One seed's fronts at two grids, paired for one spacing, with each pair's figures.
+     *
+     * The pairing is [RangeFront.match]'s over the fronts carrying this spacing at both grids, so
+     * each of the three spacings has its own set of pairs.
+     */
     private fun printMatches(
         seed: Long,
         floor: Floor,
+        spacing: Spacing,
         coarseSide: Int,
         fineSide: Int,
         coarse: RangeFront.Report,
@@ -218,32 +282,28 @@ class CoastalSpacingAuditTest {
         pooledKm: MutableList<Double>,
         pooledCells: MutableList<Double>
     ) {
-        val matches = RangeFront.match(coarse, fine)
+        val matches = RangeFront.match(coarse, fine) { spacing.medianKm(it) != null }
         println(
-            "X1d ACROSS seed %d, %s, %d against %d: %d of %d and %d fronts matched".format(
-                seed, floor.label, coarseSide, fineSide, matches.size,
-                coarse.measured.size, fine.measured.size
+            "X1d ACROSS seed %d, %s, %s, %d against %d: %d pairs of %d and %d fronts carrying it".format(
+                seed, floor.label, spacing.label, coarseSide, fineSide, matches.size,
+                coarse.measured.count { spacing.medianKm(it) != null },
+                fine.measured.count { spacing.medianKm(it) != null }
             )
         )
         matches.forEach { match ->
-            val coarseKm = match.coarse.medianSpacingKm
-            val fineKm = match.fine.medianSpacingKm
-            if (coarseKm != null && fineKm != null) {
-                pooledKm.add(fineKm / coarseKm)
-                pooledCells.add(fine.spacingInCells(match.fine)!! / coarse.spacingInCells(match.coarse)!!)
-            }
+            val coarseKm = spacing.medianKm(match.coarse)!!
+            val fineKm = spacing.medianKm(match.fine)!!
+            val coarseCells = match.coarse.front.cellsAlong(coarseKm, coarse.cellWidthKm, coarse.cellHeightKm)
+            val fineCells = match.fine.front.cellsAlong(fineKm, fine.cellWidthKm, fine.cellHeightKm)
+            pooledKm.add(fineKm / coarseKm)
+            pooledCells.add(fineCells / coarseCells)
             println(
-                ("X1d ACROSS seed %d, %s, front at (%.0f, %.0f) km %s: trunk %s km, catchment %s " +
-                    "km, traced %s km, half-width %s km at %d; trunk %s km, catchment %s km, traced %s " +
-                    "km, half-width %s km at %d").format(
-                    seed, floor.label, match.coarse.front.midKmX, match.coarse.front.midKmY,
-                    match.coarse.front.bearing,
-                    RangeFront.show(coarseKm), RangeFront.show(match.coarse.medianCatchmentSpacingKm),
-                    RangeFront.show(match.coarse.medianTracedSpacingKm),
-                    RangeFront.show(match.coarse.medianDivideToFrontKm), coarseSide,
-                    RangeFront.show(fineKm), RangeFront.show(match.fine.medianCatchmentSpacingKm),
-                    RangeFront.show(match.fine.medianTracedSpacingKm),
-                    RangeFront.show(match.fine.medianDivideToFrontKm), fineSide
+                ("X1d ACROSS seed %d, %s, %s, front at (%.0f, %.0f) km %s: %.1f km (%.2f cells, " +
+                    "half-width %s km) at %d; %.1f km (%.2f cells, half-width %s km) at %d").format(
+                    seed, floor.label, spacing.label, match.coarse.front.midKmX,
+                    match.coarse.front.midKmY, match.coarse.front.bearing,
+                    coarseKm, coarseCells, RangeFront.show(match.coarse.medianDivideToFrontKm), coarseSide,
+                    fineKm, fineCells, RangeFront.show(match.fine.medianDivideToFrontKm), fineSide
                 )
             )
         }
@@ -258,13 +318,14 @@ class CoastalSpacingAuditTest {
         report.measured.forEach { measured ->
             val front = measured.front
             println(
-                ("X1d FRONT %s: %.0f km %s%s at (%.0f, %.0f) km on %s; %d catchments, %d trunks, %d " +
-                    "set aside, %d traced outlets; trunk %s km = %s cells, catchment %s km = %s " +
-                    "cells, traced %s km = %s cells; half-width %s km against a stamp of %s km; " +
-                    "ratio %s").format(
+                ("X1d FRONT %s: %.0f km %s%s at (%.0f, %.0f) km on %s; %d catchments, %d trunks (%d " +
+                    "alone in their strip), %d set aside, %d traced outlets; trunk %s km = %s cells, " +
+                    "catchment %s km = %s cells, traced %s km = %s cells; half-width %s km against a " +
+                    "stamp of %s km; ratio %s").format(
                     label, front.lengthKm, front.bearing, if (measured.coastal) " coastal" else "",
                     front.midKmX, front.midKmY, measured.boundaryClass ?: "-",
-                    measured.catchments.size, measured.trunks.size, measured.cornersSetAside,
+                    measured.catchments.size, measured.trunks.size,
+                    measured.trunks.count { it.aloneInItsStrip }, measured.cornersSetAside,
                     measured.tracedAlongKm?.size ?: 0,
                     RangeFront.show(measured.medianSpacingKm), cells(measured, measured.medianSpacingKm),
                     RangeFront.show(measured.medianCatchmentSpacingKm),
@@ -284,8 +345,11 @@ class CoastalSpacingAuditTest {
      *
      * The trunk spacing twice: over fronts (each front's own median, each front once) and over gaps
      * (every gap once), with the count behind each. The ratio is the median of the fronts' own
-     * ratios, which is Hovius's statistic; the half-width is the median of every trunk's. The two
-     * combs are over gaps.
+     * ratios, which is Hovius's statistic read on this instrument's divide proxy; the half-width is
+     * the median of every trunk's. The two combs are over gaps. Then the proportionality test: over
+     * the fronts carrying a trunk spacing and a positive median half-width, an ordinary
+     * least-squares fit of the log of the front's median trunk spacing on the log of its median
+     * half-width, whose slope is 1 where spacing is proportional to half-width as on Hovius's belts.
      */
     private fun printPooled(reports: List<RangeFront.Report>, label: String) {
         val groups = listOf<Pair<String, (RangeFront.Measured) -> Boolean>>(
@@ -305,6 +369,10 @@ class CoastalSpacingAuditTest {
             val frontSpacingCells = ArrayList<Double>()
             val frontRatios = ArrayList<Double>()
             val halfWidths = ArrayList<Double>()
+            var trunks = 0
+            var trunksAlone = 0
+            val logHalfWidth = ArrayList<Double>()
+            val logSpacing = ArrayList<Double>()
             val trunkGaps = Gaps()
             val catchmentGaps = Gaps()
             val tracedGaps = Gaps()
@@ -315,6 +383,14 @@ class CoastalSpacingAuditTest {
                     measured.hoviusRatio?.let { frontRatios.add(it) }
                     if (measured.spacingsKm.isNotEmpty()) {
                         measured.trunks.forEach { halfWidths.add(it.divideToFrontKm) }
+                        trunks += measured.trunks.size
+                        trunksAlone += measured.trunks.count { it.aloneInItsStrip }
+                    }
+                    val spacing = measured.medianSpacingKm
+                    val halfWidth = measured.medianDivideToFrontKm
+                    if (spacing != null && halfWidth != null && halfWidth > 0.0) {
+                        logHalfWidth.add(ln(halfWidth))
+                        logSpacing.add(ln(spacing))
                     }
                     trunkGaps.add(report, measured, measured.spacingsKm)
                     catchmentGaps.add(report, measured, measured.catchmentSpacingsKm)
@@ -322,23 +398,43 @@ class CoastalSpacingAuditTest {
                 }
             }
             val fronts = reports.sumOf { report -> report.measured.count(keep) }
+            val fit = leastSquares(logHalfWidth, logSpacing)
             println(
                 ("X1d POOLED %s, %s: %d fronts, %d with a trunk spacing: trunk %s km (IQR %s) = %s " +
-                    "cells by front, %s by gap over %d gaps; half-width %s km over %d trunks; ratio %s " +
-                    "(IQR %s) against Hovius's %.1f; catchment comb %s; traced comb %s (the author " +
-                    "read %.0f cells)").format(
+                    "cells by front, %s by gap; half-width %s km over %d trunks, %d of them alone in " +
+                    "their strip; ratio %s (IQR %s) against Hovius's %.1f; log spacing on log " +
+                    "half-width slope %s, r %s over %d fronts; catchment comb %s; traced comb %s (the " +
+                    "author read %.0f cells)").format(
                     label, name, fronts, frontSpacingKm.size,
                     RangeFront.show(RangeFront.median(frontSpacingKm)),
                     showRange(RangeFront.quartiles(frontSpacingKm)),
                     RangeFront.show(RangeFront.median(frontSpacingCells)),
-                    trunkGaps.summary(), trunkGaps.kilometres.size,
-                    RangeFront.show(RangeFront.median(halfWidths)), halfWidths.size,
+                    trunkGaps.summary(),
+                    RangeFront.show(RangeFront.median(halfWidths)), trunks, trunksAlone,
                     RangeFront.show(RangeFront.median(frontRatios), 2),
                     showRange(RangeFront.quartiles(frontRatios), 2), RangeFront.HOVIUS_RATIO,
+                    RangeFront.show(fit?.first, 2), RangeFront.show(fit?.second, 2), logSpacing.size,
                     catchmentGaps.summary(), tracedGaps.summary(), REPORTED_SPACING_CELLS
                 )
             )
         }
+    }
+
+    /** Slope and correlation of an ordinary least-squares line of [y] on [x], or null under three. */
+    private fun leastSquares(x: List<Double>, y: List<Double>): Pair<Double, Double>? {
+        if (x.size < 3) return null
+        val meanX = x.average()
+        val meanY = y.average()
+        var spreadXX = 0.0
+        var spreadYY = 0.0
+        var spreadXY = 0.0
+        for (index in x.indices) {
+            spreadXX += (x[index] - meanX) * (x[index] - meanX)
+            spreadYY += (y[index] - meanY) * (y[index] - meanY)
+            spreadXY += (x[index] - meanX) * (y[index] - meanY)
+        }
+        if (spreadXX <= 0.0 || spreadYY <= 0.0) return null
+        return spreadXY / spreadXX to spreadXY / sqrt(spreadXX * spreadYY)
     }
 
     /** Gaps pooled over fronts, each kept in kilometres and in its own front's cells. */
@@ -367,6 +463,144 @@ class CoastalSpacingAuditTest {
             "${RangeFront.show(it.first, decimals)} to ${RangeFront.show(it.second, decimals)}"
         } ?: "-"
 
+    // ------------------------------------------------------------------ the author's coast
+
+    /**
+     * The author's coast measured on one fixed line at this grid, whatever this grid's outline
+     * makes of it: the three spacings and how many gaps stand behind each.
+     */
+    private fun printTheAuthorsCoast(world: WorldMap, side: Int) {
+        val measured = RangeFront.measureLine(
+            world, AUTHORS_COAST_START_KM_X, AUTHORS_COAST_START_KM_Y,
+            AUTHORS_COAST_END_KM_X, AUTHORS_COAST_END_KM_Y
+        )
+        fun cells(kilometres: Double?) = RangeFront.show(
+            kilometres?.let { measured.front.cellsAlong(it, world.config.cellWidthKm, world.config.cellHeightKm) }
+        )
+        println(
+            ("X1d AUTHORS COAST at %d: a %.0f km line; catchment comb %s km = %s cells over %d gaps; " +
+                "traced comb %s km = %s cells over %d gaps; trunk %s km over %d gaps; %d catchments of " +
+                "median area %s km2").format(
+                side, measured.front.lengthKm,
+                RangeFront.show(measured.medianCatchmentSpacingKm), cells(measured.medianCatchmentSpacingKm),
+                measured.catchmentSpacingsKm.size,
+                RangeFront.show(measured.medianTracedSpacingKm), cells(measured.medianTracedSpacingKm),
+                measured.tracedSpacingsKm.size,
+                RangeFront.show(measured.medianSpacingKm), measured.spacingsKm.size,
+                measured.catchments.size,
+                RangeFront.show(RangeFront.median(measured.catchments.map { it.areaKm2 }), 0)
+            )
+        )
+    }
+
+    // ------------------------------------------------------------------ isotropy
+
+    /**
+     * How far a world's coastline and its [CONTOUR_METRES] contour run east-west against
+     * north-south, in kilometres, printed and returned as the two ratios.
+     *
+     * Every boundary between two vertically adjacent cells on either side of the line is a segment
+     * running east-west one cell width long, and every boundary between horizontally adjacent ones,
+     * the seam included, a segment running north-south one cell height long. Summed, those are the
+     * outline's projections on the two axes, and an outline isotropic on the ground projects as far
+     * on one as on the other.
+     */
+    private fun printIsotropy(world: WorldMap, seed: Long, side: Int): Pair<Double, Double> {
+        val isLand = world.sea.isLand
+        val coast = projectedOutlineKm(world, isLand)
+        val high = BooleanArray(isLand.size) {
+            isLand[it] && world.config.scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) >=
+                CONTOUR_METRES
+        }
+        val contour = projectedOutlineKm(world, high)
+        println(
+            ("X1d ISOTROPY seed %d at %d: the coastline projects %.0f km east-west and %.0f km " +
+                "north-south, %.2f to 1; the %d m contour %.0f and %.0f km, %.2f to 1").format(
+                seed, side, coast.first, coast.second, coast.first / coast.second,
+                CONTOUR_METRES.toInt(), contour.first, contour.second, contour.first / contour.second
+            )
+        )
+        return coast.first / coast.second to contour.first / contour.second
+    }
+
+    private fun projectedOutlineKm(world: WorldMap, inside: BooleanArray): Pair<Double, Double> {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        var rowBoundaries = 0L
+        var columnBoundaries = 0L
+        for (row in 0 until cellsDown) {
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                if (row + 1 < cellsDown && inside[cell] != inside[cell + cellsAcross]) rowBoundaries++
+                val east = row * cellsAcross + (column + 1) % cellsAcross
+                if (inside[cell] != inside[east]) columnBoundaries++
+            }
+        }
+        return rowBoundaries * world.config.cellWidthKm to columnBoundaries * world.config.cellHeightKm
+    }
+
+    // ------------------------------------------------------------------ the instrument's own scales
+
+    /**
+     * Whether the instrument's own scales steady the spacing: the divide's strip width and the
+     * catchment floor halved and doubled, on two seeds at all three grids.
+     *
+     * Moving an instrument scale needs no new world, so each world is generated once and measured
+     * five ways at each floor. Printed for each setting: the pooled trunk and catchment spacing at
+     * each grid, and the fine-over-coarse ratio of matched fronts, which is the figure a scale that
+     * held the spacing steady across grids would move toward 1.
+     */
+    @Test
+    fun `the divide's strips and the catchment floor moved, with the spacing beside them`() {
+        val settings = linkedMapOf(
+            "stock" to RangeFront.InstrumentScales(),
+            "strips x0.5" to RangeFront.InstrumentScales(divideStripKm = RangeFront.DIVIDE_STRIP_KM * 0.5),
+            "strips x2" to RangeFront.InstrumentScales(divideStripKm = RangeFront.DIVIDE_STRIP_KM * 2),
+            "floor x0.5" to RangeFront.InstrumentScales(catchmentFloorKm2 = RangeFront.SMALLEST_CATCHMENT_KM2 * 0.5),
+            "floor x2" to RangeFront.InstrumentScales(catchmentFloorKm2 = RangeFront.SMALLEST_CATCHMENT_KM2 * 2)
+        )
+        val reports = HashMap<String, RangeFront.Report>()
+        fun key(seed: Long, side: Int, floor: Floor, setting: String) = "$seed $side ${floor.name} $setting"
+        CONTROL_SEEDS.forEach { seed ->
+            SIDES.forEach { side ->
+                withWorld(seed, side) { world ->
+                    Floor.entries.forEach { floor ->
+                        settings.forEach { (setting, scales) ->
+                            reports[key(seed, side, floor, setting)] =
+                                RangeFront.measure(world, floor.metres, scales = scales)
+                        }
+                    }
+                }
+            }
+        }
+        Floor.entries.forEach { floor ->
+            settings.keys.forEach { setting ->
+                val bySide = SIDES.joinToString("; ") { side ->
+                    val group = CONTROL_SEEDS.map { reports.getValue(key(it, side, floor, setting)) }
+                    val trunk = group.flatMap { it.gapsKm(trunksOnly = true) }
+                    val comb = group.flatMap { it.gapsKm(trunksOnly = false) }
+                    "%d: trunk %s km over %d gaps, catchment comb %s km over %d".format(
+                        side, RangeFront.show(RangeFront.median(trunk)), trunk.size,
+                        RangeFront.show(RangeFront.median(comb)), comb.size
+                    )
+                }
+                val acrossGrids = GRID_PAIRS.joinToString("; ") { (coarseSide, fineSide) ->
+                    val ratios = CONTROL_SEEDS.flatMap { seed ->
+                        RangeFront.match(
+                            reports.getValue(key(seed, coarseSide, floor, setting)),
+                            reports.getValue(key(seed, fineSide, floor, setting))
+                        ) { it.medianSpacingKm != null }
+                            .map { it.fine.medianSpacingKm!! / it.coarse.medianSpacingKm!! }
+                    }
+                    "%d to %d %s over %d".format(
+                        coarseSide, fineSide, RangeFront.show(RangeFront.median(ratios), 2), ratios.size
+                    )
+                }
+                println("X1d SENSITIVITY ${floor.label}, $setting: $bySide; matched trunk fine over coarse $acrossGrids")
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ the controlled runs
 
     /**
@@ -375,20 +609,20 @@ class CoastalSpacingAuditTest {
      *
      * On two seeds, at 512, where a controlled world costs seconds, and again at 2048, because at
      * 512 the comb sits at two to four cells, the grid's own limit, where nothing could be seen to
-     * track anything. The relief wavelength is
-     * `TerrainConfig.reliefCornerKm`, which `TerrainStage.ReliefBand` turns into the scale the base
-     * relief is loudest at; the belt's half-width is `TectonicsConfig.andeanWidthCells` for a coastal
-     * range and `collisionWidthCells` for a plateau, moved together so a world's belts are all
-     * narrower or all broader rather than one kind of them. A halving and a doubling of each, a full
-     * octave either side of the stock figure: enough that a spacing which tracked either setting
-     * could not be mistaken for noise, and not so much that the world stops being the same world.
+     * track anything. The relief wavelength is `TerrainConfig.reliefCornerKm`, which
+     * `TerrainStage.ReliefBand` turns into the scale the base relief is loudest at; the belt's
+     * half-width is `TectonicsConfig.andeanWidthCells` for a coastal range and `collisionWidthCells`
+     * for a plateau, moved together so a world's belts are all narrower or all broader rather than
+     * one kind of them. A halving and a doubling of each, a full octave either side of the stock
+     * figure: enough that a spacing which tracked either setting could not be mistaken for noise,
+     * and not so much that the world stops being the same world.
      *
-     * The octave count is `TerrainConfig.octaves`. The noise is drawn on a lattice with as many
+     * The octave count is `TerrainConfig.octaves`, changed by one either way, which doubles and
+     * halves the finest wavelength the noise carries. The noise is drawn on a lattice with as many
      * cycles down the map as across it, so its finest octave is the same count of cells in both
-     * directions and twice the kilometres east-west — exactly the bearing signature a grid-set
-     * spacing has. Eight octaves put the finest at 512 cycles, 23 km across and 12 km down, which is
-     * four cells at 2048; seven octaves stop at twice that wavelength and nine at half of it. At 512
-     * a ninth octave would fall between the cells, so it is moved at 2048 only.
+     * directions and twice the kilometres east-west — the bearing signature a grid-set spacing has.
+     * Eight octaves put the finest at 512 cycles, 23 km across and 12 km down, which is four cells
+     * at 2048. At 512 a ninth octave would fall between the cells, so it is moved at 2048 only.
      *
      * A changed setting is a different world — the plates are the same, but the ground they carry
      * is not — so no front is matched from one run to another; each run's pooled gaps are read
@@ -467,11 +701,10 @@ class CoastalSpacingAuditTest {
     @Test
     fun `the belt floor the fronts are found at does not decide the spacing`() {
         CONTROL_SEEDS.forEach { seed ->
-            var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(seed, CONTROL_SIDE))
             val floors = listOf(0f, 1_000f, 1_500f, 2_000f, 2_500f)
-            val reports = floors.associateWith { floor -> RangeFront.measure(held!!, floor) }
-            held = null
-            System.gc()
+            val reports = withWorld(seed, CONTROL_SIDE) { world ->
+                floors.associateWith { floor -> RangeFront.measure(world, floor) }
+            }
             reports.forEach { (floor, report) ->
                 println("X1d FLOOR seed $seed at $CONTROL_SIDE, floor ${floor.toInt()} m: ${report.census}")
                 printPooled(listOf(report), "seed $seed at $CONTROL_SIDE, floor ${floor.toInt()} m")
@@ -482,40 +715,74 @@ class CoastalSpacingAuditTest {
     // ------------------------------------------------------------------ the two rulers
 
     /**
-     * The incision's cell metric against the tracer's rectangular kilometres, measured.
+     * The routing's ruler measured, and the incision's printed beside it as arithmetic.
      *
-     * `HydraulicErosion.cut` takes the distance to a cell's receiver as 1 for a cardinal step and
-     * the square root of 2 for a diagonal one, in *cells*, and turns the drop into a slope by
-     * multiplying by the number of columns, so every step is charged in cell widths.
-     * `RiverStage.stepKilometres` measures the same step as `cellWidthKm` east or west,
-     * `cellHeightKm` north or south, and the hypotenuse of the two on a diagonal. On this grid those
-     * two rulers disagree by construction: a row step covers half the ground a column step does, so
-     * the slope the incision computes for a step down a column is *half* the slope the ground has,
-     * and a diagonal step's true length is `sqrt(1 + 0.25)` cell widths against the `sqrt(2)` the
-     * incision charges it. `FlowRouting.flowDirections` compares its facets on the same square
-     * ruler, so the routing, too, reads a north-south fall as a fall over one cell width.
+     * `FlowRouting.flowDirections` compares the falls to its neighbours over one cell for a cardinal
+     * step and `DIAGONAL_STEP_CELLS` for a diagonal one, whichever way the step runs, where
+     * `RiverStage.stepKilometres` measures a step in true kilometres. On a grid whose cells are
+     * twice as wide as they are tall those two rulers disagree, and this case measures what the
+     * routing does about it: a plane falling equally fast, per kilometre, eastward and southward —
+     * steepest descent at 45 degrees on the ground — routed by the production function, and the
+     * mean bearing of the steps it chooses read in kilometres. A router isotropic on the ground
+     * returns 45 degrees; one reading every step in cell widths takes the east-to-south-east facet
+     * with half its weight on the diagonal, whose mean step is one cell width east and half a cell
+     * height south, 14.0 degrees.
      *
-     * The consequence is anisotropy in what the rounds cut, by direction of flow, and it is a real
-     * inconsistency to record. It is not by itself an explanation of a spacing — that is what the
-     * bearing split in the table is for — so this case prints the factor by direction and how much
-     * of one world's drainage runs in each, and asserts only that the two rulers disagree, which is
-     * the fact the ledger row states.
+     * Asserted: that the routing's mean bearing lies more than fifteen degrees from the plane's,
+     * which is the fact the ledger row states. Fifteen is half the thirty-one degrees the square
+     * ruler predicts, and far outside what a draw over a quarter of a million cells scatters by.
+     * The case fails once the routing measures in kilometres, and the row goes stale with it.
+     *
+     * `HydraulicErosion.cut` is private and charges the same square ruler — a drop over 1 or the
+     * square root of 2 cells, times the column count — so the incision reads a north-south slope at
+     * half the ground's and a diagonal one at `sqrt(1.25) / sqrt(2)`, 0.79; that is printed as the
+     * source's arithmetic, not measured. The share of one world's land steps in each direction is
+     * printed beside it.
      */
     @Test
-    fun `the incision's ruler against the tracer's, by direction of flow`() {
-        var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(AUTHORS_SEED, CONTROL_SIDE))
-        val world = held!!
-        val cellsAcross = world.width
-        val cellWidthKm = world.config.cellWidthKm
-        val cellHeightKm = world.config.cellHeightKm
-        val diagonalKm = hypot(cellWidthKm, cellHeightKm)
+    fun `the routing's ruler measured, and the incision's beside it`() {
+        val cellsAcross = 512
+        val cellsDown = 512
+        val probe = config(AUTHORS_SEED, CONTROL_SIDE)
+        val cellWidthKm = probe.cellWidthKm
+        val cellHeightKm = probe.cellHeightKm
+        val fallPerKm = 1e-5
+        val plane = FloatField(cellsAcross, cellsDown, FloatArray(cellsAcross * cellsDown) { cell ->
+            (1.0 - fallPerKm * ((cell % cellsAcross) * cellWidthKm + (cell / cellsAcross) * cellHeightKm)).toFloat()
+        })
+        val receiver = FlowRouting.flowDirections(
+            cellsAcross, cellsDown, BooleanArray(cellsAcross * cellsDown) { true }, plane, plane,
+            AUTHORS_SEED, byFacet = true, overPotential = false
+        )
+        // Away from the seam, where the plane is not periodic and the wrap would drain west.
+        val margin = 16
+        var sumKmX = 0.0
+        var sumKmY = 0.0
+        var steps = 0
+        for (row in margin until cellsDown - margin) {
+            for (column in margin until cellsAcross - margin) {
+                val target = receiver[row * cellsAcross + column]
+                if (target < 0) continue
+                sumKmX += ((target % cellsAcross) - column) * cellWidthKm
+                sumKmY += ((target / cellsAcross) - row) * cellHeightKm
+                steps++
+            }
+        }
+        val routedDegrees = Math.toDegrees(atan2(sumKmY, sumKmX))
+        val squareRulerDegrees = Math.toDegrees(atan2(cellHeightKm / 2, cellWidthKm))
+        println(
+            ("X1d METRIC routing: on a plane falling equally per kilometre east and south (45.0 degrees " +
+                "on the ground), %d routed steps average %.1f degrees south of east, against %.1f for a " +
+                "router reading every step in cell widths").format(steps, routedDegrees, squareRulerDegrees)
+        )
 
+        val flowTarget = withWorld(AUTHORS_SEED, CONTROL_SIDE) { world ->
+            IntArray(world.width * world.height) { if (world.sea.isLand[it]) world.rivers.flowTarget[it] else -1 }
+        }
         var alongRow = 0L
         var downColumn = 0L
         var diagonal = 0L
-        val flowTarget = world.rivers.flowTarget
         for (cell in flowTarget.indices) {
-            if (!world.sea.isLand[cell]) continue
             val target = flowTarget[cell]
             if (target < 0) continue
             var columnStep = (target % cellsAcross) - (cell % cellsAcross)
@@ -528,38 +795,19 @@ class CoastalSpacingAuditTest {
                 else -> downColumn++
             }
         }
-        held = null
-        System.gc()
-        val steps = (alongRow + downColumn + diagonal).coerceAtLeast(1)
-
-        // What the incision charges a step, in cell widths, against what the step really covers.
-        val chargedAlongRow = 1.0
-        val chargedDownColumn = 1.0
-        val chargedDiagonal = sqrt(2.0)
-        val trueAlongRow = 1.0
-        val trueDownColumn = cellHeightKm / cellWidthKm
-        val trueDiagonal = diagonalKm / cellWidthKm
-
+        val allSteps = (alongRow + downColumn + diagonal).coerceAtLeast(1)
         println(
-            ("X1d METRIC seed %d at %d: a step along a row is charged %.3f cell widths and covers " +
-                "%.3f, so the incision reads its slope at x%.2f of the ground's; down a column %.3f " +
-                "against %.3f, x%.2f; diagonally %.3f against %.3f, x%.2f").format(
-                AUTHORS_SEED, CONTROL_SIDE,
-                chargedAlongRow, trueAlongRow, trueAlongRow / chargedAlongRow,
-                chargedDownColumn, trueDownColumn, trueDownColumn / chargedDownColumn,
-                chargedDiagonal, trueDiagonal, trueDiagonal / chargedDiagonal
-            )
-        )
-        println(
-            ("X1d METRIC seed %d at %d: of %d land steps, %.1f%% run along a row, %.1f%% down a " +
-                "column and %.1f%% diagonally").format(
-                AUTHORS_SEED, CONTROL_SIDE, steps,
-                100.0 * alongRow / steps, 100.0 * downColumn / steps, 100.0 * diagonal / steps
+            ("X1d METRIC incision, from the source's arithmetic: a slope down a column read at %.2f " +
+                "of the ground's and a diagonal one at %.2f; of %d land steps on seed %d at %d, %.1f%% " +
+                "run along a row, %.1f%% down a column and %.1f%% diagonally").format(
+                cellHeightKm / cellWidthKm, hypot(cellWidthKm, cellHeightKm) / cellWidthKm / sqrt(2.0),
+                allSteps, AUTHORS_SEED, CONTROL_SIDE,
+                100.0 * alongRow / allSteps, 100.0 * downColumn / allSteps, 100.0 * diagonal / allSteps
             )
         )
         assertTrue(
-            abs(chargedDownColumn / trueDownColumn - 1.0) > 0.01,
-            "the two rulers disagree down a column, which is the fact the ledger row records"
+            abs(routedDegrees - 45.0) > 15.0,
+            "the routing's mean bearing on the plane, $routedDegrees degrees, is far from the ground's 45"
         )
     }
 

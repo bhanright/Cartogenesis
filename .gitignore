@@ -38,3 +38,6 @@ keystore.properties
 
 # Working notes for the maintainer; not part of the repository.
 /notes/
+
+# Python bytecode, written beside .github/scripts/audit_summary.py whenever something imports it.
+__pycache__/

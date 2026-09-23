@@ -23,8 +23,9 @@ import kotlinx.coroutines.withTimeout
  *
  * Neither number can be asserted tightly. The speed belongs to whatever device is present, and the
  * agreement with the CPU is deliberately not exact — that is the premise of the whole feature. So
- * this measures both and holds them only to the claims the UI makes: that it is substantially
- * faster, and that the world is the same world.
+ * this measures both and holds them to the claims the UI makes, that the work on the card runs
+ * many times faster and makes the same world, and holds the kernel's own sweeps, with nothing
+ * after them to add chaos, to the processor's within rounding.
  *
  * On a machine with no usable device the accelerator reports itself unavailable and every case here
  * is skipped: a headless CI runner is not a broken build, and it has not checked the kernel either.
@@ -126,7 +127,7 @@ class GpuErosionTest {
             sweepSpeedUp >= MIN_SWEEP_SPEED_UP,
             "the sweeps ran only ${"%.1f".format(sweepSpeedUp)}x faster on the card " +
                 "(${sweepGpuMs}ms against ${sweepCpuMs}ms), which is under the " +
-                "${MIN_SWEEP_SPEED_UP}x a kernel that ran at all clears with room to spare"
+                "${MIN_SWEEP_SPEED_UP}x the switch's \"many times faster\" can mean at the least"
         )
         // Two bounds, and the mean is the one that would catch a wrong kernel.
         //
@@ -274,17 +275,19 @@ class GpuErosionTest {
         const val TIMED_RUNS = 3
 
         /**
-         * The least speed-up on the sweeps alone that is still a speed-up.
+         * The least speed-up on the sweeps alone that the interface's sentence allows.
          *
          * Whether the card did the work at all is no longer this clause's question:
-         * `ErosionResult.sweptOnDevice` answers it. What is left to guard is that the kernel is
-         * not slower than the processor it replaces, and one is the only figure that question
-         * has. The bar this replaced was five, chosen as far below the tens of times measured on
-         * this device; it still raced, at 4.9 against 5.0, in a full tier with the browser and
-         * the other GPU tests on the same machine, because a shared machine can slow both sides
-         * unequally. Under that load the quickest of three runs still read nearly five times.
+         * `ErosionResult.sweptOnDevice` answers it. What is left is the claim the switch prints,
+         * that the work on the device runs "many times faster" than on the processor, and the
+         * least that can mean is twice. The sweeps are the erosion's share of that work; the
+         * stage as a whole is not held to it, for the reason printed beside its timing. A bar of
+         * five, taken as far below the tens of times measured here, raced at 4.9 in a full tier
+         * with the browser and the other graphics tests on the same machine, because a shared
+         * machine can slow both sides unequally; two is the sentence's figure and not a margin
+         * under a measurement.
          */
-        const val MIN_SWEEP_SPEED_UP = 1.0
+        const val MIN_SWEEP_SPEED_UP = 2.0
 
         /**
          * How far the kernel's sweeps may differ from the processor's, at the worst cell and on

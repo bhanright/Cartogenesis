@@ -158,6 +158,7 @@ class SettingsEffectTest {
             graphicsAccelerationAtLaunch = true,
             exportFormat = ExportFormat.WEBP,
             exportSize = 4096,
+            libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
             checkForUpdatesOnLaunch = true,
             riverInkStep = 0

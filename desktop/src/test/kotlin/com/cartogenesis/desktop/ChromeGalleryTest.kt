@@ -395,7 +395,7 @@ class ChromeGalleryTest {
     /**
      * The three menus of the strip, folded into one button on a phone, with nothing dropped on the
      * way: every item File, View and Help offer at 1440x900 is an item of the phone's folded menu.
-     * Read off the menus as they open, by the first word of every item that can be pressed, since
+     * Read off the menus as they open, by the first text of every item that can be pressed, since
      * the two arrangements draw the same lists (`Menus`) through two different composables.
      */
     @OptIn(ExperimentalTestApi::class)
@@ -435,7 +435,7 @@ class ChromeGalleryTest {
         assertTrue(dropped.isEmpty(), "the phone's folded menu drops $dropped")
     }
 
-    /** The first word of every node under [layer] that can be pressed: a menu's items, by name. */
+    /** The first text of every node under [layer] that can be pressed: a menu's items, by name. */
     private fun pressableItems(layer: SemanticsNode): List<String> {
         val items = ArrayList<String>()
         fun walk(node: SemanticsNode) {

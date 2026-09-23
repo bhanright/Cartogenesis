@@ -44,9 +44,10 @@ internal object ComponentShapes {
      *
      * Not Tanganyika's three: a run at any bearing is straight to within the tolerance that
      * swallows a staircase ([StraightRuns.TOLERANCE_CELL_WIDTHS]), which is looser than a shore
-     * "without a bend worth drawing", and natural outlines reach 3.15 times their circle's run under
-     * it (`GeometryControlTest`'s ensemble, isotropic on the sheet). Four stands clear of that; a
-     * nearest-seed partition's cells run their facets further, which the same test shows.
+     * "without a bend worth drawing", and a natural control field isotropic on the sheet reached
+     * 3.15 times its circle's run under it while this bar was being set (`GeometryControlTest`).
+     * Four stands clear of that; a nearest-seed partition's cells run their facets 1.8 times past
+     * four, which the same test shows.
      */
     const val FACET_OVER_A_CIRCLE = 4.0
 

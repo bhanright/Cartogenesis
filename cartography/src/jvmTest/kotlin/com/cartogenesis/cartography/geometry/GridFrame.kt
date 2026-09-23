@@ -1,7 +1,6 @@
 package com.cartogenesis.cartography.geometry
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.atan2
@@ -111,7 +110,5 @@ internal class GridFrame(
     companion object {
         fun of(config: WorldGenConfig): GridFrame =
             GridFrame(config.width, config.height, config.cellWidthKm, config.cellHeightKm)
-
-        const val DEGREES_PER_RADIAN = 180.0 / PI
     }
 }

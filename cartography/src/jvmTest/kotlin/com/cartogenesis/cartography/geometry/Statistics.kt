@@ -1,6 +1,5 @@
 package com.cartogenesis.cartography.geometry
 
-import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sqrt
 
@@ -76,22 +75,7 @@ internal object Statistics {
         }
     }
 
-    /** The standard normal upper tail, `P(Z > z)`, by Abramowitz and Stegun 26.2.17 (error < 7.5e-8). */
-    fun normalUpperTail(z: Double): Double {
-        if (z < 0) return 1.0 - normalUpperTail(-z)
-        val t = 1.0 / (1.0 + 0.2316419 * z)
-        val density = 0.3989422804014327 * kotlin.math.exp(-z * z / 2)
-        return density * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
-    }
-
-    /** Median of a list, for reports. */
-    fun median(values: List<Double>): Double {
-        if (values.isEmpty()) return Double.NaN
-        val sorted = values.sorted()
-        return if (sorted.size % 2 == 1) sorted[sorted.size / 2]
-        else (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
-    }
-
+    /** The sample standard deviation. */
     fun standardDeviation(values: DoubleArray): Double {
         if (values.size < 2) return 0.0
         val mean = values.average()
@@ -99,6 +83,4 @@ internal object Statistics {
         values.forEach { sum += (it - mean) * (it - mean) }
         return sqrt(sum / (values.size - 1))
     }
-
-    fun closeTo(a: Double, b: Double, tolerance: Double): Boolean = abs(a - b) <= tolerance
 }

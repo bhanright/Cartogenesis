@@ -20,9 +20,10 @@ internal object ComponentAxes {
 
     /**
      * How much longer than wide a ring must be for its axis to count, as the ratio of the square
-     * roots of its second moments' two principal values. At 1.3 a ring's axis stands clear of
-     * the raster's own rounding for any ring the component detectors measure: an 8-by-8-cell ring
-     * rasterised off a true circle carries an elongation under 1.1.
+     * roots of its second moments' two principal values. A round ring has no axis and a lumpy one
+     * an axis its lumps choose, so the bar stands well above 1; a half-disc, the lobe a fan grows,
+     * is 1.89 (its second moments are `R^2 / 4` along its straight side and `0.0699 R^2` across
+     * it), and 1.3 keeps every lobe while leaving out rings within a third of round.
      */
     const val ELONGATION_FOR_AN_AXIS = 1.3
 

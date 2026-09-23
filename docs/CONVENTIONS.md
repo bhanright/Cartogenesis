@@ -176,3 +176,7 @@ rule about operators and outputs rather than about any one stage.
   rectangularity, right angles and concentric rings, per merge at 512 and in the nightly tier at
   2048, where the artefacts show. The chunk that adds a layer adds it to the guard. A bar there is
   derived from the isotropy of natural outlines, not from what a current world happens to produce.
+  The guard is `GeometryGuardTest` at 512 and `GeometryGuardAuditTest` at 2048 (`:cartography:audit`),
+  its layers listed in `MapLayers` and its detectors shown on their controls in
+  `GeometryControlTest`, all under `cartography/src/jvmTest`; what fails today is recorded, by
+  finding, in `GeometryFindings`.

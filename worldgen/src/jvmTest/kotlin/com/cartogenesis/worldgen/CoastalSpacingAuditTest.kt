@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import java.awt.BasicStroke
 import java.awt.Color
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
@@ -17,38 +18,47 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * X1d: how far apart the coastal valleys are, in kilometres, and what sets the figure.
+ * How far apart the coastal valleys are, in kilometres, and what sets the figure.
  *
  * The author generated seed 969495 at 2048 and reported that the coasts carry closely spaced
  * valleys perpendicular to the shore about ten cells apart, each with a river and many with a delta
  * lobe. Ten cells is a measure of the grid. This class asks whether the landscape or the grid is
- * what the ten cells are counting, and it asks it with [RangeFront] — a finder that never reads a
- * drawn river, whose every rule is written down at that object before a number is collected here.
+ * what the ten cells are counting, with [RangeFront] — a finder that never reads a drawn river, and
+ * whose every rule (belt, front eligibility, exit, outlet, catchment floor, trunk and divide
+ * qualification, along-front spacing, bearing, cross-resolution matching and what an empty sample
+ * reports) is written down at that object before a number is collected here.
  *
- * **A measurement chunk.** Nothing in the generator is changed by it. Where a figure would have to
- * move the landscape, the figure is printed and the chunk stops at the report; the ledger row and
- * `docs/GEOGRAPHY.md` carry what was found.
+ * **A measurement.** Nothing in the generator is changed by it; the finding is in
+ * docs/DESIGN_LEDGER.md, X1d, and in `docs/GEOGRAPHY.md`.
  *
- * **Three classifications, decided in advance** (the brief's, kept verbatim so the answer is not
- * chosen after the numbers are in):
+ * **Three readings, decided before the numbers:**
  *
- * - a spacing that stays near ten cells as the grid changes implicates the grid or the routing;
+ * - a spacing that stays near a fixed count of cells as the grid changes implicates the grid or
+ *   the routing;
  * - a spacing that tracks the terrain stage's relief wavelength implicates the input;
  * - a spacing that scales with the front's half-width is physical.
  *
  * Resolution alone cannot separate the second from the third, because at fixed settings both the
  * belt's width and the relief wavelength are constants in kilometres and do not move with the grid
  * (`WorldGenConfig.atResolution` rescales every cell-valued width). So the grid sweep is joined by
- * controlled runs that move those two settings directly, and by the one thing the grid *does*
- * decide on this map: a cell is twice as wide as it is tall, so a spacing counted in cells is the
- * same number along a front that runs east-west and along one that runs north-south, while a
- * spacing set on the ground is the same *kilometres* along both. Every table below is therefore
- * split by the front's bearing.
+ * controlled runs that move those two settings directly, and every table is split by the front's
+ * bearing, which the grid *does* decide: a cell is twice as wide as it is tall, so each reading
+ * predicts its own ratio between a front running east-west and one running north-south.
  *
- * In the audit tier: twenty-one whole worlds, seven of them at 2048, plus ten controlled ones at
- * 512. One world is held at a time and reduced to its [RangeFront.Report] — which carries no grid
- * array — before the next is generated, which is T4's rule after the hosted runner went down under
- * three retained 2048 worlds.
+ * - Set by the grid: the same count of cells on both, so twice the kilometres east-west.
+ * - Set by the relief band: the same kilometres on both, so half the cells east-west; the band is
+ *   isotropic in kilometres (`TerrainStage.ReliefBand`), though the noise it filters is drawn on a
+ *   lattice with as many cycles down the map as across it.
+ * - Set by the belt: `PlateStage` counts a belt's half-width in cells with no row scale, so an
+ *   east-west belt is half as wide in kilometres as a north-south one, and a spacing that followed
+ *   the half-width would be half the kilometres, and a quarter of the cells, east-west. The
+ *   measured half-width is printed on every front, so this reading is tested by the ratio itself
+ *   rather than by the bearing alone.
+ *
+ * In the audit tier: twenty-one whole worlds, seven of them at 2048, generated once each and each
+ * reduced to its [RangeFront.Report] — which carries no grid array — before the next is made, which
+ * is T4's rule after the hosted runner went down under three retained 2048 worlds; then ten
+ * controlled worlds and two floor and metric worlds at 512.
  */
 class CoastalSpacingAuditTest {
 
@@ -60,10 +70,10 @@ class CoastalSpacingAuditTest {
         /** The six audited seeds, and the author's makes seven. */
         val AUDITED_SEEDS = listOf(7L, 42L, 1234L, 99L, 718_106L, 59_758L)
         val ALL_SEEDS = listOf(AUTHORS_SEED) + AUDITED_SEEDS
+        val SIDES = listOf(512, 1024, 2048)
 
         /** The two seeds the controlled runs are made on: the author's and the largest-belt one. */
         val CONTROL_SEEDS = listOf(AUTHORS_SEED, 718_106L)
-
         const val CONTROL_SIDE = 512
 
         /** The author's reported figure, which is what the cell columns are read against. */
@@ -72,23 +82,26 @@ class CoastalSpacingAuditTest {
         val OUTPUT_DIR = File("build/maps")
     }
 
-    private fun world(seed: Long, side: Int, edit: (WorldGenConfig) -> WorldGenConfig = { it }) =
-        WorldGenerationEngine.generateBlocking(
-            edit(WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side))
-        )
+    private fun config(seed: Long, side: Int, edit: (WorldGenConfig) -> WorldGenConfig) =
+        edit(WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side))
 
-    /** Generates a world, reduces it to the report, and lets the world go before the next. */
+    /**
+     * Generates one world, reduces it to its report, hands it to [whileHeld] if the caller wants to
+     * draw it, and lets it go before anything else is generated.
+     */
     private fun reportOf(
         seed: Long,
         side: Int,
         beltFloorMetres: Float = RangeFront.BELT_FLOOR_METRES,
-        edit: (WorldGenConfig) -> WorldGenConfig = { it }
+        edit: (WorldGenConfig) -> WorldGenConfig = { it },
+        whileHeld: ((WorldMap) -> Unit)? = null
     ): RangeFront.Report {
         val beforeGeneration = System.nanoTime()
-        var held: WorldMap? = world(seed, side, edit)
+        var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(seed, side, edit))
         val beforeFinder = System.nanoTime()
         val report = RangeFront.measure(held!!, beltFloorMetres)
         val after = System.nanoTime()
+        whileHeld?.invoke(held)
         held = null
         System.gc()
         println(
@@ -99,141 +112,206 @@ class CoastalSpacingAuditTest {
         return report
     }
 
-    // ------------------------------------------------------------------ the three grids
-
-    @Test
-    fun `the outlet spacing on every straight front at 512`() = sweep(512)
-
-    @Test
-    fun `the outlet spacing on every straight front at 1024`() = sweep(1024)
-
-    @Test
-    fun `the outlet spacing on every straight front at 2048`() = sweep(2048)
+    // ------------------------------------------------------------------ the table
 
     /**
-     * The table for one grid: every seed's fronts, their spacing in kilometres and in cells, the
-     * divide-to-front distance and Hovius's ratio beside Earth's 2.1.
+     * Every seed at every grid, front by front, and the same front matched across the grids.
      *
-     * Asserted: that the finder has a subject at all, on at least half the seeds. Everything else
-     * is printed, because a spacing is what this chunk was sent to find out and not something it
-     * was sent to hold to a bar.
+     * Each seed's three worlds are generated one after another and reduced to reports, so the
+     * matching reads three reports and never two worlds. The author's own world at 2048 is drawn
+     * while it is held, which is the render half of the measurement.
+     *
+     * Asserted: only that the finder has a subject on at least half the seeds at every grid.
+     * Everything else is printed, because a spacing is what this was sent to find out and not
+     * something it was sent to hold to a bar.
      */
-    private fun sweep(side: Int) {
-        val pooled = ArrayList<Double>()
-        val pooledCells = ArrayList<Double>()
-        val pooledEvery = ArrayList<Double>()
-        val pooledEveryCells = ArrayList<Double>()
-        val pooledRatio = ArrayList<Double>()
-        val byBearing = RangeFront.Bearing.entries.associateWith { ArrayList<Double>() }
-        val byBearingCells = RangeFront.Bearing.entries.associateWith { ArrayList<Double>() }
-        var seedsWithSample = 0
+    @Test
+    fun `the outlet spacing on every straight front, at 512, 1024 and 2048, and across them`() {
+        val pooled = SIDES.associateWith { ArrayList<RangeFront.Report>() }
+        val acrossKm = HashMap<String, ArrayList<Double>>()
+        val acrossCells = HashMap<String, ArrayList<Double>>()
 
         ALL_SEEDS.forEach { seed ->
-            val report = reportOf(seed, side)
-            println("X1d SPACING ${report.line("seed $seed at $side")}")
-            println("X1d SPACING ${report.bearingLine("seed $seed at $side")}")
-            if (report.sample.isEmpty()) {
-                println("X1d SPACING seed $seed at $side census: ${report.census}")
-            } else {
-                seedsWithSample++
-                report.sample.forEach { front ->
-                    pooled.add(front.medianSpacingKm!!)
-                    report.spacingInCells(front)?.let { cells ->
-                        pooledCells.add(cells)
-                        byBearingCells.getValue(front.front.bearing).add(cells)
-                    }
-                    byBearing.getValue(front.front.bearing).add(front.medianSpacingKm!!)
-                    front.hoviusRatio?.let { pooledRatio.add(it) }
-                    front.medianEveryOutletSpacingKm?.let { pooledEvery.add(it) }
-                    report.everyOutletSpacingInCells(front)?.let { pooledEveryCells.add(it) }
-                }
+            val reports = SIDES.associateWith { side ->
+                val draw = seed == AUTHORS_SEED && side == AUTHORS_SIDE
+                reportOf(seed, side, whileHeld = if (draw) ::drawTheAuthorsWorld else null)
             }
-        }
-
-        println(
-            ("X1d SPACING POOLED at %d over %d seeds and %d fronts: trunk spacing %s km, %s " +
-                "cells; every-outlet spacing %s km, %s cells (the author read %.0f cells); " +
-                "Hovius %s against %.1f")
-                .format(
-                    side, seedsWithSample, pooled.size,
-                    RangeFront.show(RangeFront.median(pooled)),
-                    RangeFront.show(RangeFront.median(pooledCells)),
-                    RangeFront.show(RangeFront.median(pooledEvery)),
-                    RangeFront.show(RangeFront.median(pooledEveryCells)),
-                    REPORTED_SPACING_CELLS,
-                    RangeFront.show(RangeFront.median(pooledRatio)), RangeFront.HOVIUS_RATIO
-                )
-        )
-        RangeFront.Bearing.entries.forEach { bearing ->
-            val kilometres = byBearing.getValue(bearing)
-            val cells = byBearingCells.getValue(bearing)
-            if (kilometres.isEmpty()) {
-                println("X1d SPACING POOLED at $side, $bearing fronts: no sample")
-            } else {
-                println(
-                    "X1d SPACING POOLED at %d, %s fronts: %d fronts, %s km, %s cells".format(
-                        side, bearing, kilometres.size,
-                        RangeFront.show(RangeFront.median(kilometres)),
-                        RangeFront.show(RangeFront.median(cells))
-                    )
-                )
+            reports.forEach { (side, report) ->
+                pooled.getValue(side).add(report)
+                printFronts(report, "seed $seed at $side", config(seed, side) { it })
             }
-        }
-        assertTrue(
-            seedsWithSample * 2 >= ALL_SEEDS.size,
-            "the finder has a subject on at least half the seeds at $side: $seedsWithSample"
-        )
-    }
-
-    // ------------------------------------------------------------------ across the grids
-
-    /**
-     * The author's seed and one other at all three grids, front by matched front.
-     *
-     * The matching rule is [RangeFront.match]'s and is stated there. What it is for: a front's
-     * spacing at 512 and its spacing at 2048 are only comparable if they are the same front, and
-     * courses are traced independently at each resolution with no identity shared between them, so
-     * the fronts are paired by where they lie on the ground and by which way they run.
-     *
-     * Two worlds at 2048 and two at each of the others: the sweeps above already print the pooled
-     * figures, and this case exists for the paired ones.
-     */
-    @Test
-    fun `the same front measured at 512, 1024 and 2048`() {
-        listOf(AUTHORS_SEED, 718_106L).forEach { seed ->
-            val reports = listOf(512, 1024, 2048).associateWith { reportOf(seed, it) }
-            val coarse = reports.getValue(512)
-            listOf(1024, 2048).forEach { side ->
-                val fine = reports.getValue(side)
+            listOf(512 to 1024, 512 to 2048, 1024 to 2048).forEach { (coarseSide, fineSide) ->
+                val coarse = reports.getValue(coarseSide)
+                val fine = reports.getValue(fineSide)
                 val matches = RangeFront.match(coarse, fine)
                 println(
-                    "X1d ACROSS seed %d, 512 against %d: %d of %d and %d fronts matched".format(
-                        seed, side, matches.size, coarse.measured.size, fine.measured.size
+                    "X1d ACROSS seed %d, %d against %d: %d of %d and %d fronts matched".format(
+                        seed, coarseSide, fineSide, matches.size,
+                        coarse.measured.size, fine.measured.size
                     )
                 )
-                val moved = ArrayList<Double>()
                 matches.forEach { match ->
-                    val coarseKm = match.coarse.medianSpacingKm
-                    val fineKm = match.fine.medianSpacingKm
-                    if (coarseKm == null || fineKm == null) return@forEach
-                    moved.add(fineKm / coarseKm)
+                    val coarseKm = match.coarse.medianSpacingKm ?: return@forEach
+                    val fineKm = match.fine.medianSpacingKm ?: return@forEach
+                    val coarseCells = coarse.spacingInCells(match.coarse)!!
+                    val fineCells = fine.spacingInCells(match.fine)!!
+                    val key = "$coarseSide to $fineSide"
+                    acrossKm.getOrPut(key) { ArrayList() }.add(fineKm / coarseKm)
+                    acrossCells.getOrPut(key) { ArrayList() }.add(fineCells / coarseCells)
                     println(
-                        ("X1d ACROSS seed %d front at (%.0f, %.0f) km, %s: %.1f km at 512 " +
-                            "(%.2f cells) against %.1f km at %d (%.2f cells)").format(
+                        ("X1d ACROSS seed %d front at (%.0f, %.0f) km, %s%s: %.1f km (%.2f cells, " +
+                            "half-width %s km) at %d against %.1f km (%.2f cells, half-width %s km) " +
+                            "at %d").format(
                             seed, match.coarse.front.midKmX, match.coarse.front.midKmY,
-                            match.coarse.front.bearing, coarseKm,
-                            coarse.spacingInCells(match.coarse) ?: Double.NaN,
-                            fineKm, side, fine.spacingInCells(match.fine) ?: Double.NaN
+                            match.coarse.front.bearing, if (match.coarse.coastal) ", coastal" else "",
+                            coarseKm, coarseCells, RangeFront.show(match.coarse.medianDivideToFrontKm),
+                            coarseSide, fineKm, fineCells,
+                            RangeFront.show(match.fine.medianDivideToFrontKm), fineSide
                         )
                     )
                 }
-                println(
-                    "X1d ACROSS seed %d, 512 to %d: %d matched fronts carry a spacing, median %s of the 512 figure"
-                        .format(seed, side, moved.size, RangeFront.show(RangeFront.median(moved)))
-                )
             }
         }
+
+        SIDES.forEach { side -> printPooled(pooled.getValue(side), "at $side") }
+        listOf("512 to 1024", "512 to 2048", "1024 to 2048").forEach { key ->
+            val kilometres = acrossKm[key].orEmpty()
+            val cells = acrossCells[key].orEmpty()
+            val grid = key.split(" to ").let { it[1].toDouble() / it[0].toDouble() }
+            println(
+                ("X1d ACROSS POOLED %s over %d matched fronts carrying a spacing at both: the fine " +
+                    "spacing is %s of the coarse in kilometres (IQR %s) and %s in cells (IQR %s); a " +
+                    "spacing set by the grid reads %.2f and 1.00, one set on the ground 1.00 and %.2f")
+                    .format(
+                        key, kilometres.size,
+                        RangeFront.show(RangeFront.median(kilometres), 2),
+                        showRange(RangeFront.quartiles(kilometres)),
+                        RangeFront.show(RangeFront.median(cells), 2),
+                        showRange(RangeFront.quartiles(cells)), 1.0 / grid, grid
+                    )
+            )
+        }
+
+        SIDES.forEach { side ->
+            val withSample = pooled.getValue(side).count { it.sample.isNotEmpty() }
+            assertTrue(
+                withSample * 2 >= ALL_SEEDS.size,
+                "the finder has a subject on at least half the seeds at $side: $withSample"
+            )
+        }
     }
+
+    /** One line per front, then the world's census. */
+    private fun printFronts(report: RangeFront.Report, label: String, config: WorldGenConfig) {
+        println("X1d FRONTS $label: ${report.census}")
+        report.measured.forEach { measured ->
+            val front = measured.front
+            println(
+                ("X1d FRONT %s: %.0f km %s%s at (%.0f, %.0f) km on %s, %d catchments (%d trunks, " +
+                    "%d corners set aside); trunk spacing %s km = %s cells; catchment spacing %s km " +
+                    "= %s cells; half-width %s km against a stamp of %s km; ratio %s").format(
+                    label, front.lengthKm, front.bearing, if (measured.coastal) " coastal" else "",
+                    front.midKmX, front.midKmY, measured.boundaryClass ?: "-",
+                    measured.catchments.size, measured.trunks.size, measured.cornersSetAside,
+                    RangeFront.show(measured.medianSpacingKm),
+                    RangeFront.show(report.spacingInCells(measured)),
+                    RangeFront.show(measured.medianCatchmentSpacingKm),
+                    RangeFront.show(measured.medianCatchmentSpacingKm?.let {
+                        front.cellsAlong(it, report.cellWidthKm, report.cellHeightKm)
+                    }),
+                    RangeFront.show(measured.medianDivideToFrontKm),
+                    RangeFront.show(RangeFront.stampedHalfWidthKm(config, measured)),
+                    RangeFront.show(measured.hoviusRatio, 2)
+                )
+            )
+        }
+    }
+
+    /**
+     * The pooled table for one group of reports, by bearing and for the coastal fronts alone.
+     *
+     * Two medians of the spacing: over fronts (each front's own median, each front once) and over
+     * gaps (every gap once), with the count behind each. The ratio is the median of the fronts'
+     * own ratios, which is Hovius's statistic; the half-width is the median of every trunk's.
+     */
+    private fun printPooled(reports: List<RangeFront.Report>, label: String) {
+        val groups = listOf<Pair<String, (RangeFront.Measured) -> Boolean>>(
+            "all fronts" to { _ -> true },
+            "coastal fronts" to { it.coastal },
+            "east-west fronts" to { it.front.bearing == RangeFront.Bearing.EAST_WEST },
+            "north-south fronts" to { it.front.bearing == RangeFront.Bearing.NORTH_SOUTH },
+            "diagonal fronts" to { it.front.bearing == RangeFront.Bearing.DIAGONAL },
+            "coastal east-west" to {
+                it.coastal && it.front.bearing == RangeFront.Bearing.EAST_WEST
+            },
+            "coastal north-south" to {
+                it.coastal && it.front.bearing == RangeFront.Bearing.NORTH_SOUTH
+            }
+        )
+        val seedsWithSample = reports.count { it.sample.isNotEmpty() }
+        println(
+            "X1d POOLED %s: %d of %d worlds carry a front with a trunk spacing".format(
+                label, seedsWithSample, reports.size
+            )
+        )
+        groups.forEach { (name, keep) ->
+            val frontSpacingKm = ArrayList<Double>()
+            val frontSpacingCells = ArrayList<Double>()
+            val frontRatios = ArrayList<Double>()
+            val gapKm = ArrayList<Double>()
+            val gapCells = ArrayList<Double>()
+            val halfWidths = ArrayList<Double>()
+            val combKm = ArrayList<Double>()
+            val combCells = ArrayList<Double>()
+            reports.forEach { report ->
+                report.measured.filter(keep).forEach { measured ->
+                    measured.medianSpacingKm?.let { frontSpacingKm.add(it) }
+                    report.spacingInCells(measured)?.let { frontSpacingCells.add(it) }
+                    measured.hoviusRatio?.let { frontRatios.add(it) }
+                    val front = measured.front
+                    measured.spacingsKm.forEach {
+                        gapKm.add(it)
+                        gapCells.add(front.cellsAlong(it, report.cellWidthKm, report.cellHeightKm))
+                    }
+                    if (measured.spacingsKm.isNotEmpty()) {
+                        measured.trunks.forEach { halfWidths.add(it.divideToFrontKm) }
+                    }
+                    measured.catchmentSpacingsKm.forEach {
+                        combKm.add(it)
+                        combCells.add(front.cellsAlong(it, report.cellWidthKm, report.cellHeightKm))
+                    }
+                }
+            }
+            if (frontSpacingKm.isEmpty()) {
+                println("X1d POOLED $label, $name: no sample")
+                return@forEach
+            }
+            println(
+                ("X1d POOLED %s, %s: %d fronts, trunk spacing %s km (IQR %s) = %s cells; over %d " +
+                    "gaps %s km = %s cells; half-width %s km over %d trunks; ratio %s (IQR %s) " +
+                    "against Hovius's %.1f; comb %s km = %s cells over %d gaps (the author read " +
+                    "%.0f cells)").format(
+                    label, name, frontSpacingKm.size,
+                    RangeFront.show(RangeFront.median(frontSpacingKm)),
+                    showRange(RangeFront.quartiles(frontSpacingKm)),
+                    RangeFront.show(RangeFront.median(frontSpacingCells)),
+                    gapKm.size, RangeFront.show(RangeFront.median(gapKm)),
+                    RangeFront.show(RangeFront.median(gapCells)),
+                    RangeFront.show(RangeFront.median(halfWidths)), halfWidths.size,
+                    RangeFront.show(RangeFront.median(frontRatios), 2),
+                    showRange(RangeFront.quartiles(frontRatios), 2), RangeFront.HOVIUS_RATIO,
+                    RangeFront.show(RangeFront.median(combKm)),
+                    RangeFront.show(RangeFront.median(combCells)), combKm.size,
+                    REPORTED_SPACING_CELLS
+                )
+            )
+        }
+    }
+
+    private fun showRange(range: Pair<Double, Double>?, decimals: Int = 1): String =
+        range?.let {
+            "${RangeFront.show(it.first, decimals)} to ${RangeFront.show(it.second, decimals)}"
+        } ?: "-"
 
     // ------------------------------------------------------------------ the controlled runs
 
@@ -242,14 +320,16 @@ class CoastalSpacingAuditTest {
      *
      * At 512 on two seeds, because a controlled run has to be affordable and the grid sweep already
      * says what the grid does. The relief wavelength is `TerrainConfig.reliefCornerKm`, which
-     * `TerrainStage.ReliefBand` turns into the scale the base relief lives at; the belt's
-     * half-width is `TectonicsConfig.andeanWidthCells` for a coastal range and `collisionWidthCells`
-     * for a plateau, moved together so a world's belts are all narrower or all broader rather than
-     * one kind of them.
+     * `TerrainStage.ReliefBand` turns into the scale the base relief is loudest at; the belt's
+     * half-width is `TectonicsConfig.andeanWidthCells` for a coastal range and
+     * `collisionWidthCells` for a plateau, moved together so a world's belts are all narrower or all
+     * broader rather than one kind of them. A halving and a doubling of each, a full octave either
+     * side of the stock figure: enough that a spacing which tracked either setting could not be
+     * mistaken for noise, and not so much that the world stops being the same world.
      *
-     * A halving and a doubling of each, which is a full octave either side of the stock figure —
-     * enough that a spacing which tracked either setting could not be mistaken for noise, and not
-     * so much that the world stops being the same world.
+     * A changed setting is a different world — the plates are the same, but the ground they carry
+     * is not — so no front is matched from one run to another; each run's pooled figures are read
+     * against the stock run's.
      */
     @Test
     fun `the relief wavelength and the belt width moved, with the spacing beside them`() {
@@ -257,88 +337,101 @@ class CoastalSpacingAuditTest {
             val runs = LinkedHashMap<String, RangeFront.Report>()
             runs["stock"] = reportOf(seed, CONTROL_SIDE)
             listOf(0.5, 2.0).forEach { factor ->
-                runs["relief wavelength x$factor"] = reportOf(seed, CONTROL_SIDE) { config ->
+                runs["relief wavelength x$factor"] = reportOf(seed, CONTROL_SIDE, edit = { config ->
                     config.copy(
                         terrain = config.terrain.copy(
                             reliefCornerKm = config.terrain.reliefCornerKm * factor
                         )
                     )
-                }
+                })
             }
             listOf(0.5, 2.0).forEach { factor ->
-                runs["belt half-width x$factor"] = reportOf(seed, CONTROL_SIDE) { config ->
+                runs["belt half-width x$factor"] = reportOf(seed, CONTROL_SIDE, edit = { config ->
                     config.copy(
                         tectonics = config.tectonics.copy(
-                            andeanWidthCells =
-                                (config.tectonics.andeanWidthCells * factor).toFloat(),
+                            andeanWidthCells = (config.tectonics.andeanWidthCells * factor).toFloat(),
                             collisionWidthCells =
                                 (config.tectonics.collisionWidthCells * factor).toFloat()
                         )
                     )
-                }
+                })
             }
             runs.forEach { (label, report) ->
-                println("X1d CONTROL ${report.line("seed $seed at $CONTROL_SIDE, $label")}")
-                println("X1d CONTROL ${report.bearingLine("seed $seed at $CONTROL_SIDE, $label")}")
+                printFronts(report, "seed $seed at $CONTROL_SIDE, $label", config(seed, CONTROL_SIDE) { it })
+                printPooled(listOf(report), "seed $seed at $CONTROL_SIDE, $label")
             }
-            val stock = runs.getValue("stock").pooledSpacingKm
+            val stock = runs.getValue("stock")
+            val stockSpacing = RangeFront.median(stock.gapsKm(trunksOnly = true))
+            val stockHalfWidth = RangeFront.median(stock.halfWidthsKm())
             runs.forEach { (label, report) ->
-                val moved = report.pooledSpacingKm
-                if (stock == null || moved == null) {
-                    println("X1d CONTROL seed $seed, $label: no sample either side, no ratio")
-                } else {
-                    println(
-                        "X1d CONTROL seed %d, %s: spacing %.2f of the stock world's".format(
-                            seed, label, moved / stock
-                        )
+                val spacing = RangeFront.median(report.gapsKm(trunksOnly = true))
+                val halfWidth = RangeFront.median(report.halfWidthsKm())
+                println(
+                    ("X1d CONTROL seed %d, %s: trunk spacing %s km over %d gaps (%s of stock), " +
+                        "half-width %s km (%s of stock), comb %s km over %d gaps").format(
+                        seed, label, RangeFront.show(spacing), report.gapsKm(true).size,
+                        RangeFront.show(ratioOf(spacing, stockSpacing), 2),
+                        RangeFront.show(halfWidth),
+                        RangeFront.show(ratioOf(halfWidth, stockHalfWidth), 2),
+                        RangeFront.show(RangeFront.median(report.gapsKm(trunksOnly = false))),
+                        report.gapsKm(trunksOnly = false).size
                     )
-                }
+                )
             }
         }
     }
+
+    private fun ratioOf(value: Double?, reference: Double?): Double? =
+        if (value == null || reference == null || reference == 0.0) null else value / reference
 
     /**
      * Whether the belt floor the fronts are found at is what decides the spacing.
      *
-     * [RangeFront.BELT_FLOOR_METRES] is derived rather than tuned, but a finder whose answer walked
-     * with its own threshold would not be measuring the landscape. One world, three floors, the
-     * same three numbers printed.
+     * [RangeFront.BELT_FLOOR_METRES] is argued rather than tuned, but a finder whose answer walked
+     * with its own threshold would not be measuring the landscape. Two worlds, four floors, the
+     * same figures printed at each.
      */
     @Test
     fun `the belt floor the fronts are found at does not decide the spacing`() {
-        var held: WorldMap? = world(AUTHORS_SEED, CONTROL_SIDE)
-        val world = held!!
-        listOf(700f, RangeFront.BELT_FLOOR_METRES, 1_500f).forEach { floor ->
-            val report = RangeFront.measure(world, floor)
-            println("X1d FLOOR ${report.line("seed $AUTHORS_SEED at $CONTROL_SIDE, floor ${floor.toInt()} m")}")
+        CONTROL_SEEDS.forEach { seed ->
+            var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(seed, CONTROL_SIDE) { it })
+            val reports = listOf(1_000f, 1_500f, 2_000f, 2_500f).associateWith { floor ->
+                RangeFront.measure(held!!, floor)
+            }
+            held = null
+            System.gc()
+            reports.forEach { (floor, report) ->
+                printPooled(listOf(report), "seed $seed at $CONTROL_SIDE, floor ${floor.toInt()} m")
+                println("X1d FLOOR seed $seed at $CONTROL_SIDE, floor ${floor.toInt()} m: ${report.census}")
+            }
         }
-        held = null
-        System.gc()
     }
 
-    // ------------------------------------------------------------------ the incision's metric
+    // ------------------------------------------------------------------ the two rulers
 
     /**
      * The incision's cell metric against the tracer's rectangular kilometres, measured.
      *
      * `HydraulicErosion.cut` takes the distance to a cell's receiver as 1 for a cardinal step and
      * the square root of 2 for a diagonal one, in *cells*, and turns the drop into a slope by
-     * multiplying by the number of columns. `RiverStage.stepKilometres` measures the same step as
-     * `cellWidthKm` east or west, `cellHeightKm` north or south, and the hypotenuse of the two on a
-     * diagonal. On this project's equirectangular grid those two rulers disagree by construction: a
-     * row step covers half the ground a column step does, so a slope the incision computes down a
-     * column is *half* the slope the ground has, and a diagonal step's true length is
-     * `sqrt(1 + 0.25)` cell widths against the `sqrt(2)` the incision charges it.
+     * multiplying by the number of columns, so every step is charged in cell widths.
+     * `RiverStage.stepKilometres` measures the same step as `cellWidthKm` east or west,
+     * `cellHeightKm` north or south, and the hypotenuse of the two on a diagonal. On this grid those
+     * two rulers disagree by construction: a row step covers half the ground a column step does, so
+     * the slope the incision computes for a step down a column is *half* the slope the ground has,
+     * and a diagonal step's true length is `sqrt(1 + 0.25)` cell widths against the `sqrt(2)` the
+     * incision charges it. `FlowRouting.flowDirections` compares its facets on the same square
+     * ruler, so the routing, too, reads a north-south fall as a fall over one cell width.
      *
      * The consequence is anisotropy in what the rounds cut, by direction of flow, and it is a real
-     * inconsistency to record. It is not by itself an explanation of a spacing — that is what this
-     * chunk's classification is for — so what this case does is print the factor by direction and
-     * how much of one world's drainage runs in each, and assert only that the two rulers disagree,
-     * which is the fact the ledger row states.
+     * inconsistency to record. It is not by itself an explanation of a spacing — that is what the
+     * bearing split in the table is for — so this case prints the factor by direction and how much
+     * of one world's drainage runs in each, and asserts only that the two rulers disagree, which is
+     * the fact the ledger row states.
      */
     @Test
     fun `the incision's ruler against the tracer's, by direction of flow`() {
-        var held: WorldMap? = world(AUTHORS_SEED, CONTROL_SIDE)
+        var held: WorldMap? = WorldGenerationEngine.generateBlocking(config(AUTHORS_SEED, CONTROL_SIDE) { it })
         val world = held!!
         val cellsAcross = world.width
         val cellWidthKm = world.config.cellWidthKm
@@ -363,6 +456,8 @@ class CoastalSpacingAuditTest {
                 else -> downColumn++
             }
         }
+        held = null
+        System.gc()
         val steps = (alongRow + downColumn + diagonal).coerceAtLeast(1)
 
         // What the incision charges a step, in cell widths, against what the step really covers.
@@ -375,12 +470,12 @@ class CoastalSpacingAuditTest {
 
         println(
             ("X1d METRIC seed %d at %d: a step along a row is charged %.3f cell widths and covers " +
-                "%.3f (x%.2f); down a column %.3f against %.3f (x%.2f); diagonally %.3f against " +
-                "%.3f (x%.2f)").format(
+                "%.3f, so its slope reads x%.2f; down a column %.3f against %.3f, x%.2f; diagonally " +
+                "%.3f against %.3f, x%.2f").format(
                 AUTHORS_SEED, CONTROL_SIDE,
-                chargedAlongRow, trueAlongRow, chargedAlongRow / trueAlongRow,
-                chargedDownColumn, trueDownColumn, chargedDownColumn / trueDownColumn,
-                chargedDiagonal, trueDiagonal, chargedDiagonal / trueDiagonal
+                chargedAlongRow, trueAlongRow, trueAlongRow / chargedAlongRow,
+                chargedDownColumn, trueDownColumn, trueDownColumn / chargedDownColumn,
+                chargedDiagonal, trueDiagonal, trueDiagonal / chargedDiagonal
             )
         )
         println(
@@ -390,9 +485,6 @@ class CoastalSpacingAuditTest {
                 100.0 * alongRow / steps, 100.0 * downColumn / steps, 100.0 * diagonal / steps
             )
         )
-        held = null
-        System.gc()
-
         assertTrue(
             abs(chargedDownColumn / trueDownColumn - 1.0) > 0.01,
             "the two rulers disagree down a column, which is the fact the ledger row records"
@@ -402,70 +494,68 @@ class CoastalSpacingAuditTest {
     // ------------------------------------------------------------------ the renders
 
     /**
-     * Three coastal crops on the author's world with the fronts and outlets the finder chose on them.
+     * The author's world with the fronts and outlets the finder chose drawn over it.
      *
-     * Not a test: the eye's half of the measurement. The three crops are the three longest fronts
-     * that carry a spacing and lie within a cell of the coast, so what is drawn is the ground the
-     * author was looking at. The chord is drawn as a line, each trunk outlet as a mark on it, and
-     * each trunk basin tinted, over the Fantasy render the application draws.
+     * Not a measurement: the eye's half of one. A whole-world sheet with every front's chord, and
+     * three crops, the three longest coastal fronts that carry a trunk spacing, each at twice the
+     * grid's pixels. Over the Fantasy render with the drawn courses inked on it in blue — the render
+     * reads the drawn rivers, the finder does not — the chord is red, each trunk basin is tinted,
+     * each trunk outlet is a yellow mark and every other catchment's outlet a smaller cyan one.
      */
-    @Test
-    fun `three coastal crops with the fronts and outlets drawn`() {
+    private fun drawTheAuthorsWorld(world: WorldMap) {
         OUTPUT_DIR.mkdirs()
-        val world = world(AUTHORS_SEED, AUTHORS_SIDE)
-        val report = RangeFront.measure(world)
-        val coastal = report.sample
-            .filter { nearTheCoast(world, it.front) }
-            .sortedByDescending { it.front.lengthKm }
-            .take(3)
-        if (coastal.isEmpty()) {
-            println("X1d RENDER: no coastal front carried a spacing, nothing drawn")
-            return
-        }
+        val report = RangeFront.measure(world, keepBasinCells = true)
         val base = DebugMapDump().render(world, DebugMapDump.Mode.FANTASY)
-        coastal.forEachIndexed { index, measured ->
-            val name = "x1d-969495-2048-front${index + 1}.png"
-            write(crop(world, base, measured), name)
-            println(
-                ("X1d RENDER %s: a %.0f km %s front at (%.0f, %.0f) km, %d trunk outlets, " +
-                    "spacing %.1f km (%.2f cells), divide-to-front %.1f km").format(
-                    name, measured.front.lengthKm, measured.front.bearing,
-                    measured.front.midKmX, measured.front.midKmY, measured.trunks.size,
-                    measured.medianSpacingKm ?: Double.NaN,
-                    report.spacingInCells(measured) ?: Double.NaN,
-                    measured.medianDivideToFrontKm ?: Double.NaN
-                )
+        world.rivers.rivers.forEach { river ->
+            river.cells.forEach { cell -> base.setRGB(cell % world.width, cell / world.width, 0x1F4FD0) }
+        }
+
+        val sheet = BufferedImage(world.width, world.height, BufferedImage.TYPE_INT_RGB)
+        sheet.graphics.drawImage(base, 0, 0, null)
+        val pen = sheet.createGraphics()
+        pen.stroke = BasicStroke(3f)
+        report.measured.forEach { measured ->
+            pen.color = if (measured.coastal) Color(255, 40, 40) else Color(255, 160, 0)
+            val front = measured.front
+            pen.drawLine(
+                (front.startKmX / world.config.cellWidthKm).roundToInt(),
+                (front.startKmY / world.config.cellHeightKm).roundToInt(),
+                (front.endKmX / world.config.cellWidthKm).roundToInt(),
+                (front.endKmY / world.config.cellHeightKm).roundToInt()
             )
         }
-        println("X1d RENDER crops written to ${OUTPUT_DIR.absolutePath}")
-    }
+        pen.dispose()
+        ImageIO.write(sheet, "png", File(OUTPUT_DIR, "x1d-969495-2048-fronts.png"))
 
-    /** Whether a front's chord passes within a belt's own straightness bar of open water. */
-    private fun nearTheCoast(world: WorldMap, front: RangeFront.Front): Boolean {
-        val cellWidthKm = world.config.cellWidthKm
-        val cellHeightKm = world.config.cellHeightKm
-        val samples = max(8, (front.lengthKm / RangeFront.FRONT_STRAIGHTNESS_KM).roundToInt())
-        for (sample in 0..samples) {
-            val at = front.lengthKm * sample / samples
-            for (step in -2..2) {
-                val away = step * RangeFront.FRONT_STRAIGHTNESS_KM
-                val kmX = front.startKmX + front.alongX * at + front.landwardX * away
-                val kmY = front.startKmY + front.alongY * at + front.landwardY * away
-                val column = (kmX / cellWidthKm).roundToInt()
-                val row = (kmY / cellHeightKm).roundToInt()
-                if (column < 0 || column >= world.width || row < 0 || row >= world.height) continue
-                if (!world.sea.isLand[row * world.width + column]) return true
-            }
+        val coastal = report.sample.filter { it.coastal }.sortedByDescending { it.front.lengthKm }.take(3)
+        if (coastal.isEmpty()) {
+            println("X1d RENDER: no coastal front carried a spacing, no crop drawn")
+            return
         }
-        return false
+        coastal.forEachIndexed { index, measured ->
+            val name = "x1d-969495-2048-front${index + 1}.png"
+            val crop = crop(world, base, measured)
+            ImageIO.write(crop, "png", File(OUTPUT_DIR, name))
+            println(
+                ("X1d RENDER %s: a %.0f km %s front at (%.0f, %.0f) km on %s, %d trunks and %d " +
+                    "catchments, trunk spacing %s km (%s cells), comb %s km, half-width %s km, ratio %s")
+                    .format(
+                        name, measured.front.lengthKm, measured.front.bearing,
+                        measured.front.midKmX, measured.front.midKmY, measured.boundaryClass ?: "-",
+                        measured.trunks.size, measured.catchments.size,
+                        RangeFront.show(measured.medianSpacingKm),
+                        RangeFront.show(report.spacingInCells(measured)),
+                        RangeFront.show(measured.medianCatchmentSpacingKm),
+                        RangeFront.show(measured.medianDivideToFrontKm),
+                        RangeFront.show(measured.hoviusRatio, 2)
+                    )
+            )
+        }
+        println("X1d RENDER written to ${OUTPUT_DIR.absolutePath}")
     }
 
-    /** One front's neighbourhood, with the chord, its outlets and the basins' reach drawn on. */
-    private fun crop(
-        world: WorldMap,
-        base: BufferedImage,
-        measured: RangeFront.Measured
-    ): BufferedImage {
+    /** One front's neighbourhood at twice the grid's pixels, with the finder's choices on it. */
+    private fun crop(world: WorldMap, base: BufferedImage, measured: RangeFront.Measured): BufferedImage {
         val cellWidthKm = world.config.cellWidthKm
         val cellHeightKm = world.config.cellHeightKm
         val front = measured.front
@@ -473,40 +563,58 @@ class CoastalSpacingAuditTest {
         fun columnOf(kmX: Double) = (kmX / cellWidthKm).roundToInt()
         fun rowOf(kmY: Double) = (kmY / cellHeightKm).roundToInt()
 
-        // A margin of the front's own divide-to-front distance either side, so the basins are in.
-        val marginKm = max(measured.medianDivideToFrontKm ?: 0.0, RangeFront.SHORTEST_FRONT_KM / 4)
+        // A margin of the front's own half-width either side, so the trunk basins are in.
+        val marginKm = max(measured.medianDivideToFrontKm ?: 0.0, RangeFront.SHORTEST_FRONT_KM / 4) +
+            RangeFront.FRONT_STRAIGHTNESS_KM
         val columns = listOf(front.startKmX, front.endKmX).map { columnOf(it) }
         val rows = listOf(front.startKmY, front.endKmY).map { rowOf(it) }
-        val marginColumns = (marginKm / cellWidthKm).roundToInt()
-        val marginRows = (marginKm / cellHeightKm).roundToInt()
-        val left = max(0, columns.min() - marginColumns)
-        val right = min(world.width - 1, columns.max() + marginColumns)
-        val top = max(0, rows.min() - marginRows)
-        val bottom = min(world.height - 1, rows.max() + marginRows)
+        val left = max(0, columns.min() - (marginKm / cellWidthKm).roundToInt())
+        val right = min(world.width - 1, columns.max() + (marginKm / cellWidthKm).roundToInt())
+        val top = max(0, rows.min() - (marginKm / cellHeightKm).roundToInt())
+        val bottom = min(world.height - 1, rows.max() + (marginKm / cellHeightKm).roundToInt())
 
-        val width = right - left + 1
-        val height = bottom - top + 1
-        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-        image.graphics.drawImage(base, -left, -top, null)
-
-        val graphics = image.createGraphics()
-        graphics.stroke = BasicStroke(2f)
-        graphics.color = Color(255, 64, 64)
-        graphics.drawLine(
-            columnOf(front.startKmX) - left, rowOf(front.startKmY) - top,
-            columnOf(front.endKmX) - left, rowOf(front.endKmY) - top
-        )
-        graphics.color = Color(255, 232, 64)
-        measured.trunks.forEach { trunk ->
-            val column = trunk.outletCell % world.width - left
-            val row = trunk.outletCell / world.width - top
-            graphics.fillOval(column - 4, row - 4, 9, 9)
+        val tinted = BufferedImage(right - left + 1, bottom - top + 1, BufferedImage.TYPE_INT_RGB)
+        tinted.graphics.drawImage(base, -left, -top, null)
+        val tints = intArrayOf(0xE04040, 0x40A040, 0x8040E0, 0xE0A020)
+        measured.trunks.forEachIndexed { index, trunk ->
+            trunk.cells?.forEach { cell ->
+                val column = cell % world.width - left
+                val row = cell / world.width - top
+                if (column in 0 until tinted.width && row in 0 until tinted.height) {
+                    tinted.setRGB(column, row, blend(tinted.getRGB(column, row), tints[index % tints.size]))
+                }
+            }
         }
-        graphics.dispose()
+
+        val scale = 2
+        val image = BufferedImage(tinted.width * scale, tinted.height * scale, BufferedImage.TYPE_INT_RGB)
+        val pen = image.createGraphics()
+        pen.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
+        pen.drawImage(tinted, 0, 0, image.width, image.height, null)
+        pen.stroke = BasicStroke(2f)
+        pen.color = Color(255, 40, 40)
+        pen.drawLine(
+            (columnOf(front.startKmX) - left) * scale, (rowOf(front.startKmY) - top) * scale,
+            (columnOf(front.endKmX) - left) * scale, (rowOf(front.endKmY) - top) * scale
+        )
+        measured.catchments.forEach { outlet ->
+            val column = (outlet.outletCell % world.width - left) * scale
+            val row = (outlet.outletCell / world.width - top) * scale
+            if (outlet.isTrunk) {
+                pen.color = Color(255, 232, 64)
+                pen.fillOval(column - 5, row - 5, 11, 11)
+            } else {
+                pen.color = Color(64, 232, 255)
+                pen.fillOval(column - 3, row - 3, 7, 7)
+            }
+        }
+        pen.dispose()
         return image
     }
 
-    private fun write(image: BufferedImage, name: String) {
-        ImageIO.write(image, "png", File(OUTPUT_DIR, name))
+    /** Half the base colour and half the tint, so the ground still reads through a basin. */
+    private fun blend(base: Int, tint: Int): Int {
+        fun channel(shift: Int) = (((base shr shift) and 0xFF) + ((tint shr shift) and 0xFF)) / 2
+        return (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }
 }

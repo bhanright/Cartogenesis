@@ -33,7 +33,10 @@ class RangeFrontTest {
         const val BELT_METRES = 2_000f
         const val LOWLAND_METRES = 100f
 
-        /** Outlets every five cells along the front, which is the author's reported figure. */
+        /**
+         * Outlets every five cells along the front: half the author's reported ten, so a range
+         * forty rows deep still carries a dozen of them along a front of fifty columns.
+         */
         const val OUTLET_SPACING_CELLS = 5
     }
 
@@ -217,27 +220,29 @@ class RangeFrontTest {
         )
         assertEquals(0, report.census.beltCells)
         assertEquals(0, report.census.fronts)
-        assertNull(report.pooledSpacingKm)
-        assertNull(report.pooledHoviusRatio)
-        assertTrue(report.line("no belt").contains("no sample"))
+        assertTrue(report.sample.isEmpty(), "no front carries a spacing")
+        assertNull(RangeFront.median(report.gapsKm(trunksOnly = true)))
+        assertNull(RangeFront.median(report.halfWidthsKm()))
+        assertTrue(report.census.toString().contains("0 over 300 km"), "${report.census}")
     }
 
     /**
-     * A gully whose head is enclosed by its neighbours is not a trunk basin.
+     * A gully whose head is enclosed by its neighbours is a catchment and not a trunk basin.
      *
      * The range above is re-laid with one extra outlet halfway between two of the others, fed only
-     * by the two rows nearest the front, so it reaches the front and not the divide. Hovius's ratio
-     * is over trunk basins, and counting that gully would halve the spacing without the landscape
-     * having changed.
+     * by the four rows nearest the front — twelve cells, over the nine-cell catchment floor — so it
+     * reaches the front and not the divide. Hovius's ratio is over trunk basins, and counting that
+     * gully would halve the spacing without the landscape having changed; the comb, which counts
+     * every catchment, is where it belongs.
      */
     @Test
-    fun `a basin that does not reach the divide is not counted`() {
+    fun `a basin that does not reach the divide is a catchment and not a trunk`() {
         val plain = report(rectangularRange(100, 150, 10, 49, frontOnSouthEdge = true))
         val plainFront = southernEastWestFront(plain)
 
         val fixture = rectangularRange(100, 150, 10, 49, frontOnSouthEdge = true)
-        // Two rows either side of column 122 now leave by a gully of their own at the front.
-        for (row in 48..49) {
+        // Four rows either side of column 122 now leave by a gully of their own at the front.
+        for (row in 46..49) {
             for (column in 121..123) {
                 val cell = row * CELLS_ACROSS + column
                 fixture.flowTarget[cell] = when {
@@ -254,10 +259,61 @@ class RangeFrontTest {
             plainFront.trunks.size, gulliedFront.trunks.size,
             "the gully reached the front but not the divide, so it is not a trunk"
         )
-        assertTrue(
-            gulliedFront.outletsAtFront > gulliedFront.trunks.size,
-            "the gully is counted as an outlet at the front and then filtered"
+        assertEquals(
+            plainFront.catchments.size + 1, gulliedFront.catchments.size,
+            "the gully is a catchment of its own, so the comb counts it"
         )
+        assertTrue(
+            RangeFront.median(gulliedFront.catchmentSpacingsKm)!! <
+                RangeFront.median(gulliedFront.spacingsKm)!! + 1e-9,
+            "the comb's spacing is no wider than the trunks'"
+        )
+    }
+
+    /**
+     * A basin under the catchment floor is set aside as a corner of the grid, not counted.
+     *
+     * Two cells at the front given an exit of their own: a real routing leaves such pairs all along
+     * a belt's edge, and counted as outlets they would put the comb at a cell or two whatever the
+     * landscape did.
+     */
+    @Test
+    fun `a basin under the catchment floor is a corner and not a catchment`() {
+        val plain = report(rectangularRange(100, 150, 10, 49, frontOnSouthEdge = true))
+        val plainFront = southernEastWestFront(plain)
+
+        val fixture = rectangularRange(100, 150, 10, 49, frontOnSouthEdge = true)
+        val corner = 49 * CELLS_ACROSS + 123
+        fixture.flowTarget[corner] = corner + CELLS_ACROSS
+        fixture.flowTarget[corner - CELLS_ACROSS] = corner
+        val cornered = report(fixture)
+        val corneredFront = southernEastWestFront(cornered)
+
+        assertEquals(plainFront.catchments.size, corneredFront.catchments.size)
+        assertEquals(plainFront.cornersSetAside + 1, corneredFront.cornersSetAside)
+    }
+
+    /**
+     * The stamp's half-width in kilometres depends on which way the front runs.
+     *
+     * `PlateStage` counts a belt's half-width in cells with no row scale, so fourteen cells across
+     * a front running east-west is fourteen cell heights and across one running north-south is
+     * fourteen cell widths — 164 and 328 km on the 512 grid. The audit prints the measured
+     * half-width beside this figure, and it has to be the right figure for the front's bearing.
+     */
+    @Test
+    fun `the stamped half-width is converted along the front's own normal`() {
+        val eastWest = southernEastWestFront(
+            report(rectangularRange(100, 150, 10, 49, frontOnSouthEdge = true))
+        ).front
+        val northSouth = easternNorthSouthFront(
+            report(rectangularRange(200, 239, 100, 200, frontOnSouthEdge = false))
+        ).front
+        val acrossEastWest = eastWest.kilometresOfCellsAcross(14.0, CELL_WIDTH_KM, CELL_HEIGHT_KM)
+        val acrossNorthSouth =
+            northSouth.kilometresOfCellsAcross(14.0, CELL_WIDTH_KM, CELL_HEIGHT_KM)
+        assertTrue(abs(acrossEastWest - 14 * CELL_HEIGHT_KM) < 1.0, "$acrossEastWest km")
+        assertTrue(abs(acrossNorthSouth - 14 * CELL_WIDTH_KM) < 1.0, "$acrossNorthSouth km")
     }
 
     private fun southernEastWestFront(report: RangeFront.Report): RangeFront.Measured {

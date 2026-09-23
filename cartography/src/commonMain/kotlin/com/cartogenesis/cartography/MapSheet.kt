@@ -46,9 +46,20 @@ data class MapSheet(
      * the cell, so the ratio of the two scales is [pixelsPerCell] itself and the share that
      * survives is its square root.
      *
-     * A 2048 world at fit in a 900-pixel pane is at 0.44, so 66% of the rivers are drawn; at four
-     * times zoom it is at 1.76, the law asks for more features than exist, and every river is
-     * drawn. Never below one, because a map with rivers on it should not lose all of them.
+     * A 2048 world at fit in a 900-pixel pane is at 0.44, which [onScreen] quantises to 0.5, so 71%
+     * of the rivers are drawn; at four times zoom it is at 1.76, quantised to 2.0, the law asks for
+     * more features than exist, and every river is drawn. Never below one, because a map with
+     * rivers on it should not lose all of them.
+     *
+     * **This is a share and not a density**, which is why the rivers are no longer selected by it:
+     * the law relates a derived map to a source map, so what it puts on the page depends on how
+     * many courses the generator traced, and the same country drawn from a 512 world and from a
+     * 2048 world comes out at two densities. It survives as the top mark of
+     * [RiverSelection]'s density scale, [RiverSelection.EVERY_COURSE_STEP], which is the control
+     * that scale's Earth figure is measured against and the answer a reader gets by asking for
+     * every river there is. The coast is still generalised by the
+     * sheet, through [simplifyToleranceCells], which is a tolerance in the plane of the drawing and
+     * has no such problem.
      */
     fun featuresKept(total: Int): Int {
         if (total <= 0) return 0
@@ -75,10 +86,13 @@ data class MapSheet(
 
     companion object {
         /**
-         * A cell to a pixel, where nothing is dropped and nothing is simplified.
+         * A cell to a pixel: the largest a sheet of this world is ever drawn at.
          *
-         * What an export and every offline render draw on: the world was generated at the size it
-         * is being drawn at, so the scale is 1 and Töpfer's law asks for every feature there is.
+         * What an export and every offline render draw on, the world having been generated at the
+         * size it is being drawn at. Nothing is simplified here — the coast keeps every vertex it
+         * has — but the rivers are still selected, because a sheet at a cell to a pixel still has
+         * a scale (about 1:22 000 000 for a 2048 world, 1:88 000 000 for a 512 one) and
+         * [RiverSelection] answers to that rather than to the grid.
          */
         val UNGENERALISED: MapSheet = MapSheet(1f)
 

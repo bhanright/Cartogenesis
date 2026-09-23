@@ -1,5 +1,78 @@
 # To do
 
+- **The Earth reference behind the river density is one dataset.** The Cartography panel's River
+  density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale
+  allows, with Earth's figure as the default mark, so the reader can now have the old drawing back
+  or a barer one; what stands is the figure the default is measured against. **It is one atlas.**
+  Natural Earth's linework is hand-smoothed and hand-ranked and its own
+  documentation recommends the 1:10M tier around 1:30M with supplements elsewhere, so 0.001707
+  km/km2 at 1:50M is a chosen benchmark and not a constant of cartography; a named printed atlas
+  sheet counted at 1:25M to 1:35M would be the independent check the brief asked for and was not
+  found. **The count exponent is two points.** 0.751 between the 1:10M and 1:50M tiers, used for
+  the crowding lattice's pitch and nothing else, with no published law behind it; the 1:110M tier
+  is thirteen rivers and is a token selection rather than a third point, though it does set the
+  slider's bottom mark (it draws a quarter of what the law asks of its scale). **The two rulers
+  differ.** The reference is measured on the sphere over Earth's real land area and this map is
+  measured in the generator's planar equirectangular kilometres over a rectangular cell area, so the
+  agreement is a calibration in this map's own units and not a claim that the two draw the same
+  physical length of river. 2026-09-22, X1c.
+
+- **The river crowding lattice is a square grid, and CONVENTIONS rule 13 has not measured it.** The
+  selection's first pass takes one candidate per square of a lattice laid out in ground kilometres
+  (`RiverSelection.crowdingPitchKilometres`). It draws no shape - it decides which traced courses
+  are inked, and every course keeps its own traced line - but it is a fixed-block operator of the
+  kind rule 13 names, and it could in principle space the drawn mouths at the lattice's pitch along
+  the rows and columns. Nothing has looked. What would settle it: add the drawn river mouths to the
+  geometry guard (spacing by bearing, the nearest-neighbour distances of drawn mouths against the
+  same count drawn from the traced set at random), and if the lattice shows, replace it with an
+  isotropic spacing rule such as a minimum ground distance between drawn mouths. 2026-09-23, X1c.
+
+- **No setting of the drawing is saved with a world.** The river density slider was asked for
+  "saved with the world's render options as the other cartography settings are", and there are no
+  such options: `WorldDocument` holds the config, the edits, the labels and the terrain, and every
+  Cartography mark - style, view, relief shading, lamp, coastline, graticule - starts at its default
+  in every new window. The slider's mark is kept in the application's preferences instead
+  (`AppSettings.riverInkStep`), so it outlives the window and applies to every world opened after,
+  which is a reader's standing preference rather than one world's. If the author wants the drawing
+  saved per world, it is `RenderOptions` made `@Serializable`, a section in the save, a
+  `WorldCodec.FORMAT_VERSION` bump and the gzip fixture regenerated (CONVENTIONS rule 11), and a
+  decision about which wins when a world's own mark and the reader's preference disagree.
+  2026-09-22, X1c.
+
+- **The top of the river density scale is the coastal comb again, by construction.** The top mark
+  was asked to reproduce the old rule's drawing exactly, and the old rule drew the comb; so the
+  crowding lattice, which runs at every mark, decides only the order there and the fullest square
+  is the radical law's own (the figures are in the X1c row). Below the top the lattice still takes
+  one eligible, affordable candidate per square before the extra ink goes anywhere (closure can put
+  a candidate's trunks in squares already taken), but its lead shrinks as the mark rises: on
+  the four standard seeds the fullest square is 2 against 7-12 without it at Earth's mark and 18-25
+  against 19-26 at four times, before the top's 49-70. If the author wants a top mark that draws every river
+  and still thins a straight front, it has to stop being the old rule: a cap per lattice square
+  that the top keeps would do it, at the price of the exact reproduction. 2026-09-22, X1c.
+
+- **The crowding measure is printed against a control and not against Earth, because a coastline's
+  length is fractal.** X1c's lattice is shown to work by the same selection with the lattice
+  switched off - the fullest square holds fewer drawn courses with it on, on every standard seed -
+  and that is a control, not a bar. The Earth figure the brief asked for, courses per unit of
+  coast, is measurable on the same dataset: Natural Earth draws 0.60 river courses per 1000 km of
+  its own 595,193 km of 1:50M coastline, and 1.31 per 1000 km of the 918,344 km it draws at 1:10M,
+  a mean spacing of 1,658 km and 764 km respectively, which is itself a Töpfer-like 0.48 power of
+  the scale. It is not used as a bar because a coastline's length is a property of the scale it was
+  traced at: this map's coast is traced off the cell mask and simplified by Douglas-Peucker at half
+  a drawn pixel, which is not the generalisation Natural Earth's coastline had, so the two
+  denominators are not the same quantity. What would earn it: measure both coastlines at one
+  representative fraction under one simplification, then the ratio is a bar. 2026-09-22, X1c.
+
+- **The ink budget is spent in traced centreline kilometres, not in the kilometres the reader
+  sees.** `RiverSelection.courseKilometres` sums the traced polyline including the step into the
+  water, which is the same quantity the Earth reference measures, while the rasterizer cuts the
+  last stroke back by half the mouth step plus half a pen width (`MapRasterizer.trimmedAtTheShore`)
+  and skips any segment lying inside open water. The difference is a few parts in a thousand on
+  these worlds and it depends on the resolution, the course count and the pen, so the density is
+  reported in a unit slightly above the ink. Closing it means measuring the overlay's own segment
+  lengths, which the selection cannot do because it runs before the overlay is laid out; the
+  honest cure is to measure both in a guard and record the gap. 2026-09-22, X1c.
+
 - **On a smooth steep coastal slope the grid spaces the valleys.** X1d measured the author's comb on
   969495's eastern peninsula, a 367 km coast where a plateau at 1,100 to 1,900 m falls to the sea
   over 100 to 150 km: catchments of at least 1,440 km2 (Hack's area for the shortest traced course)

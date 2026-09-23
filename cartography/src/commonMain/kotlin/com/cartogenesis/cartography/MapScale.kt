@@ -108,6 +108,27 @@ object MapScale {
         else "${(kilometres * 1_000.0).roundToLong()} m"
 
     /**
+     * The denominator of this sheet's representative fraction: the `22 000 000` of `1:22 000 000`.
+     *
+     * One ground length over one drawn length, both in the same unit. The drawn length needs a
+     * physical size for a picture that has none, so it is [MILLIMETRES_PER_PIXEL] — the CSS
+     * reference pixel, ninety-six to the inch — and the fraction is only ever quoted with that
+     * stated. [pixelsPerCell] is the sheet's, so an export of a 2048 world is about 1:22 000 000
+     * and the same world fitted into a 900-pixel pane is about 1:50 000 000; the generation
+     * resolution on its own fixes neither, because it says nothing about how big the drawing is.
+     *
+     * Returned as a `Double` and not rounded: [cartoucheLine] is what rounds it for a reader, and
+     * [RiverSelection] wants the whole figure to derive a density from.
+     */
+    fun representativeFractionDenominator(
+        scale: WorldScale,
+        cellsAcross: Int,
+        pixelsPerCell: Float
+    ): Double =
+        kilometresPerPixel(scale, cellsAcross, pixelsPerCell) *
+            MILLIMETRES_PER_KILOMETRE / MILLIMETRES_PER_PIXEL
+
+    /**
      * The line the cartouche carries: how far a pixel of this sheet reaches, and the fraction.
      *
      * `5.9 km per pixel · about 1:22 000 000 at the equator`. The fraction is quoted to two
@@ -117,7 +138,7 @@ object MapScale {
      */
     fun cartoucheLine(scale: WorldScale, cellsAcross: Int): String {
         val perPixel = kilometresPerPixel(scale, cellsAcross, 1f)
-        val denominator = perPixel * MILLIMETRES_PER_KILOMETRE / MILLIMETRES_PER_PIXEL
+        val denominator = representativeFractionDenominator(scale, cellsAcross, 1f)
         return "${oneDecimal(perPixel)} km per pixel · about 1:${grouped(twoFigures(denominator))} " +
             "at the equator"
     }

@@ -147,17 +147,73 @@ that land touching corner to corner stays one coast, which is the same assumptio
 makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
 is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
 
-**A map drawn smaller carries fewer features.** Töpfer and Pillewizer measured what cartographers
-actually kept when they derived one map from another (*The principles of selection*, The
-Cartographic Journal 3(1), 1966) and found the count went as the square root of the change in
-scale. So the number of rivers drawn is the traced count times the square root of the pixels one
-cell covers on the surface the reader is looking at: at 2048 in a laptop's pane that is about 0.44,
-and 198 of 718106's 279 rivers are drawn; at four times zoom all 279 are back; an export is drawn
-cell for pixel and never loses one. The cut is on the peak width ratio, which is the square root of
-discharge normalised over the network, so it is a cut on discharge — and because a trunk's peak is
-never below its tributaries', it can never leave a tributary hanging off a river that is not there.
-The coast is generalised the same way, by Douglas–Peucker at half a drawn pixel: 19,634 vertices at
-fit against 51,749 at four times on the same world.
+**A map draws as much river as a published map at its scale draws, and no more.** How much that is
+is an Earth figure and not a share of what the generator traced. Natural Earth's river layer, the
+public-domain data built for small-scale mapping at three stated scales, draws **0.001707 km of
+river line per km² of land at 1:50 000 000** (359 courses, 254,284 km over Earth's 148.94 million
+km²) and **0.004025 at 1:10 000 000** (1,202 courses, 599,507 km). Between those two tiers the
+drawn *length* goes as the 0.533 power of the change in scale, which is Töpfer and Pillewizer's
+square root (*The principles of selection*, The Cartographic Journal 3(1), 1966) to within a
+thirtieth — so the ink is carried between scales by their law, anchored on the 1:50M tier. Their
+law counted features rather than measuring length, so carrying a length by it is an assumption;
+Wilmer and Brewer (*Application of the radical law in generalization of national hydrography data
+for multiscale mapping*, ISPRS Archives XXXVIII-4, 2010) make the same one for hydrography measured
+as flowline length per square kilometre and find it needs a correction of its own, and between
+these two tiers 0.5 is interpolation while anything outside them is extrapolation. Natural Earth is
+a chosen benchmark and not a physical constant: its linework is hand-smoothed and hand-ranked, and
+a different atlas would give a different figure. The
+drawn *count* goes as the 0.751 power instead, which is what small-scale generalisation actually
+does: it drops short courses outright rather than drawing half-length rivers, and the mean drawn
+course is 499 km at 1:10M against 708 km at 1:50M. So the budget is in kilometres of ink, which the
+law carries and which does not turn on where one course is cut from the next.
+
+A sheet's scale is its representative fraction, which needs the drawing's physical size and not the
+grid: at a 12,000 km world width and the CSS reference pixel, a 2048 export is about 1:22 000 000
+and the same world fitted into a 900-pixel pane about 1:50 400 000 — which the pane's own
+half-octave zoom bands round to 1:44 300 000, the scale the selection is actually made at and the
+scale quoted below. Seed 969495 at 2048 traces
+2,081 courses and 471,294 km of watercourse; its export draws **107 courses and 70,294 km over 27.4
+million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 62
+courses and 49,705 km. The rule that preceded this one kept a share of the traced count by the same
+law of Töpfer's, which relates a derived map to a source map and so has no absolute answer: it drew
+6.7 times that ink on the export and 7.7 times on the pane, and the *same country at the same size
+on the same screen* came out at three densities depending on whether the world behind it had been
+generated at 512, 1024 or 2048 — 0.010182, 0.012508 and 0.012781 km/km² on seed 7, a spread of
+20.3%, against 0.001814, 0.001813 and 0.001814 now, a spread under a tenth of a per cent.
+
+Which courses survive is decided by discharge, largest first, on the peak width ratio — the square
+root of discharge normalised over the network. Two rules sit on top of that. The budget is spread by
+a crowding lattice whose pitch is the mean spacing the reference's own course density implies (645
+km at 1:50M, 475 km at 1:22M): the first pass takes at most one course per square, the second
+spends what is left, and the fullest square on the four standard seeds falls from 49–70 drawn
+courses to 2 — which is what stops a straight coastal front from keeping every gully it has cut.
+And a drawn tributary's trunk is drawn, always: ranking by discharge alone would give that for
+nothing, because a trunk's peak is never below its tributaries', but the crowding pass can defer a
+trunk and reach its tributary afterwards, so the chain below a course is taken with it and charged
+to the budget.
+
+**The reader can turn the ink up or down, and Earth's figure is the default mark.** The Cartography
+panel's River density slider multiplies the budget in half-octave steps, √2 a mark, from a quarter
+of Earth's figure to four times it, with a tenth mark at the top that removes the budget. The bottom
+is the reference's own sparsest sheet: Natural Earth's 1:110 000 000 tier draws 13 courses and
+42,873 km, 0.000288 km/km², where the law carried from the 1:50M anchor asks 0.001151 of that scale
+— a quarter. The top is the rule that preceded this one, to the course, because there the budget
+gives way to the radical law's cut on the traced count: every course on an export, 71% of them in a
+pane at half a pixel to the cell, every course tied at the cut kept. The cut applies at the top
+alone. The largest river and the trunks below it are drawn at every mark, since the budget never
+falls below that chain, so Earth's mark is the selection described above to the course wherever
+that chain fits Earth's budget. Nothing bounds the chain, so the floor could bind at any mark, the
+default included; on the worlds measured - the six audited seeds at 512 on the export and in the
+pane, and 969495 at 2048 - it binds at none, the longest such chain being 5,755 km against a
+smallest bottom-mark budget of 8,791 km. The lattice runs at every mark, and it spreads rather than
+caps: on the four standard seeds at 512 the fullest square
+holds one or two drawn courses up to Earth's mark, 7–12 at twice it, 18–25 at four times, and 49–70
+at the top, which is the law's own. So a reader who asks for every river asks for the coastal comb
+back, and the mark says so.
+
+**The coast is generalised by its own rule**, Douglas–Peucker at half a drawn pixel, which is a
+tolerance in the plane of the drawing and needs no reference outside it: 19,634 vertices at fit
+against 51,749 at four times zoom on seed 718106 at 2048.
 
 **Mountains come from plate tectonics, in ranges.** Uplift is applied along classified plate
 boundaries — convergent belts, subduction trenches, divergent ridges — rather than scattered. Belts

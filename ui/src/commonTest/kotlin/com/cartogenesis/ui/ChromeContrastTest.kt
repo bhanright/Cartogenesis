@@ -24,7 +24,8 @@ import kotlin.test.assertTrue
  * Roman and Hitchcock — and the two two-colour rooms, Lemon Blueberry and Blacklight, make a
  * quieter promise of the same kind: a chrome is a room somebody works in for an hour, and one
  * whose secondary text or whose armed button sat under WCAG AA would be a room nobody could work
- * in, however good it looked.
+ * in, however good it looked. That holds of every chrome, so every one is measured at AA as well,
+ * and the four that fail today are kept running as known failures.
  *
  * So each is measured with [ColorVision], which is also what `ClearStyleTest` measures the map style
  * with, so the two guards cannot come to mean different things by the same number.
@@ -122,6 +123,23 @@ class ChromeContrastTest {
          * is still far too tight for a tone to have been re-picked by eye.
          */
         const val HUE_DRIFT = 1.0
+
+        /**
+         * The chromes under AA today, by the name the every-chrome clause gives them: the finding
+         * each records and the pairs short of the bar with what they measure (Audit III, G-I5).
+         */
+        val CHROMES_UNDER_AA: Map<String, Pair<String, String>> = mapOf(
+            "Dark" to ("Audit III G-I5: Dark's error ink, which the seed field letters its label in, is under AA" to
+                "an error, on a panel 1.63"),
+            "System (dark host)" to ("Audit III G-I5: System's dark chrome letters the seed field's error label under AA" to
+                "an error, on a panel 1.63"),
+            "Mars" to ("Audit III G-I5: Mars's armed button and its error word are under AA" to
+                "the armed button's label 3.9; an error, on a panel 4.44"),
+            "Allied" to ("Audit III G-I5: Allied's accent as a word is under AA" to
+                "the accent as a word, on a panel 4.14"),
+            "Hallowed" to ("Audit III G-I5: Hallowed's accent word, armed button and label on the accent are under AA" to
+                "the accent as a word, on a panel 4.17; the armed button's label 3.88; a label on the accent 4.17")
+        )
 
         /**
          * The eleven older chromes, role by role, as they are meant to be.
@@ -494,31 +512,27 @@ class ChromeContrastTest {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * The two roles the dark chrome declares and never letters.
+     * The one role the dark chrome declares and never letters.
      *
      * Material's `ColorScheme` has thirty-six roles and this application paints words with about a
-     * dozen; [highContrastPairs] already says so and leaves two out for the same reason. These two
-     * are left out of the dark chrome's measurement, and only the dark chrome's:
+     * dozen; [highContrastPairs] already says so and leaves two out for the same reason. This one
+     * is left out of the dark chrome's measurement, and only the dark chrome's: `secondary` is
+     * brass-dim after dark, and brass-dim is a **rule** colour by decision, not an ink.
+     * `SitePaletteContrastTest` guards the same colour on the website the opposite way round — it
+     * fails if a rule on the page ever letters in it — precisely because it measures under AA on
+     * every ground the palette has. On a dark panel it is 3.76:1, and nothing in `:ui` reads
+     * `colorScheme.secondary`.
      *
-     *  - `secondary` is brass-dim after dark, and brass-dim is a **rule** colour by decision, not
-     *    an ink. `SitePaletteContrastTest` guards the same colour on the website the opposite way
-     *    round — it fails if a rule on the page ever letters in it — precisely because it measures
-     *    under AA on every ground the palette has. On a dark panel it is 3.76:1.
-     *  - `error` is oxblood-lit, which is a **fill** a parchment label sits on at 8.57:1. As a word
-     *    on a panel it would be 1.63:1, and no composable asks for it: nothing in `:ui` reads
-     *    `colorScheme.error` or `colorScheme.secondary` at all.
-     *
-     * Both measured 3.90:1 and 1.69:1 before F29, so this is not a bar F29 lowered. It is a bar
-     * that had never been set for Light or Dark at all, being set now around the pairs that are
-     * really drawn. The light chrome is held to the whole list, including these two.
+     * `error` was left out beside it as a fill nothing letters in. The seed field letters its label
+     * in `colorScheme.error` when what is typed is not a seed (Material's outlined field does, and
+     * `SeedField` sets `isError`), so it is measured like every other ink.
      */
     private val neverLettered = setOf(
-        "the secondary as a word, on a panel",
-        "an error, on a panel"
+        "the secondary as a word, on a panel"
     )
 
     /**
-     * Light and Dark at WCAG AA, which is what F29 had to leave standing.
+     * Light at WCAG AA, which is what F29 had to leave standing.
      *
      * F29 replaced the warm brown-black of the dark grounds with a neutral charcoal and Vellum's
      * yellow paper with an atlas plate's off-white, and moved no ink and no accent. A palette
@@ -529,12 +543,62 @@ class ChromeContrastTest {
      * The light chrome's selection wash and its two hairline weights were re-derived a second time
      * after the first captures were looked at, and both moves raised a pair rather than lowering
      * one: the armed button's label reads 6.67:1 on the wash, against 6.47 on the first derivation
-     * and 5.92 before F29. `Theme.kt`'s `SepiaWash` and `Rule` say why they moved.
+     * and 5.92 before F29. `Theme.kt`'s `SepiaWash` and `Rule` say why they moved. Dark is measured
+     * with every other chrome, below.
      */
     @Test
-    fun `every text pair in the two standard chromes clears WCAG AA`() {
+    fun `every text pair in the light chrome clears WCAG AA`() {
         assertAA(ThemeChoice.LIGHT)
-        assertAA(ThemeChoice.DARK, omit = neverLettered)
+    }
+
+    /**
+     * Every chrome at WCAG AA, not only those that promised it in so many words.
+     *
+     * A chrome is a room somebody works in for an hour, and the README says every text pair in
+     * every theme is measured; until this clause, seven of the seventeen were not. Each is held to
+     * AA over the same pairs [textPairs] lists, Hessian's with its weave under the words, and System
+     * in both of the hosts it follows. Four fail today on pairs the audit computed (Audit III, G-I5)
+     * — Dark's error label on the seed field, Mars's and Hallowed's armed button, and the accent as
+     * a word in Allied and Hallowed — and each is kept running as a known failure recorded by the
+     * pairs under the bar and what they measure, so the chrome that is mended arms its clause and a
+     * chrome that loses another pair fails.
+     */
+    @Test
+    fun `every text pair in every chrome clears WCAG AA`() {
+        val measured = ArrayList<String>()
+        for (choice in ThemeChoice.entries) {
+            val hosts = if (choice == ThemeChoice.SYSTEM) listOf(true, false) else listOf(true)
+            for (systemDark in hosts) {
+                val ground: (Color) -> Color = if (choice == ThemeChoice.HESSIAN) ::woven else { colour -> colour }
+                val omit = if (choice == ThemeChoice.DARK || (choice == ThemeChoice.SYSTEM && systemDark)) neverLettered else emptySet()
+                val short = pairsUnderAA(choice, systemDark, ground, omit)
+                val name = choice.label + if (choice == ThemeChoice.SYSTEM) (if (systemDark) " (dark host)" else " (light host)") else ""
+                measured.add("$name ${short.size}")
+                val signature = short.joinToString("; ") { (where, ratio) -> "$where ${ratio.rounded()}" }
+                val known = CHROMES_UNDER_AA[name]
+                if (known == null) {
+                    assertTrue(short.isEmpty(), "$name: $signature, short of AA's $AA:1")
+                } else {
+                    KnownFailures.expect(known.first, known.second) {
+                        if (short.isNotEmpty()) throw RecordedViolation("$name: $signature, short of AA's $AA:1", signature)
+                    }
+                }
+            }
+        }
+        println("CHROME every chrome at AA, pairs short of it: ${measured.joinToString()}")
+    }
+
+    /** The pairs of [choice]'s scheme under AA, each with what it measures. */
+    private fun pairsUnderAA(
+        choice: ThemeChoice,
+        systemDark: Boolean,
+        ground: (Color) -> Color,
+        omit: Set<String>
+    ): List<Pair<String, Double>> {
+        val scheme = choice.scheme(systemDark = systemDark)
+        return textPairs(scheme, choice.detail(), ground).filterNot { it.first in omit }
+            .map { (where, ink, background) -> where to ColorVision.contrast(ink.toArgb(), background.toArgb()) }
+            .filter { it.second < AA }
     }
 
     @Test
@@ -1063,23 +1127,8 @@ class ChromeContrastTest {
         println("CHROME identity: ${RECORDED_ROLES.size} chromes x 36 roles unchanged")
     }
 
-    /** Every role the application reads, in the order the probe wrote them. */
-    private fun roles(scheme: ColorScheme): String = listOf(
-        scheme.primary, scheme.onPrimary, scheme.primaryContainer, scheme.onPrimaryContainer,
-        scheme.inversePrimary,
-        scheme.secondary, scheme.onSecondary, scheme.secondaryContainer,
-        scheme.onSecondaryContainer,
-        scheme.tertiary, scheme.onTertiary, scheme.tertiaryContainer,
-        scheme.onTertiaryContainer,
-        scheme.background, scheme.onBackground, scheme.surface, scheme.onSurface,
-        scheme.surfaceVariant, scheme.onSurfaceVariant, scheme.surfaceTint,
-        scheme.inverseSurface, scheme.inverseOnSurface,
-        scheme.error, scheme.onError, scheme.errorContainer, scheme.onErrorContainer,
-        scheme.outline, scheme.outlineVariant, scheme.scrim,
-        scheme.surfaceBright, scheme.surfaceDim,
-        scheme.surfaceContainerLowest, scheme.surfaceContainerLow, scheme.surfaceContainer,
-        scheme.surfaceContainerHigh, scheme.surfaceContainerHighest
-    ).joinToString(",") { it.toArgb().toUInt().toString(16).padStart(8, '0') }
+    /** Every role the application reads, in the order the probe wrote them: see [rolesOf]. */
+    private fun roles(scheme: ColorScheme): String = rolesOf(scheme)
 
     private fun Double.rounded(): String {
         val scaled = kotlin.math.round(this * 100.0) / 100.0

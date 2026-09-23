@@ -20,10 +20,11 @@ import kotlinx.coroutines.test.runTest
  *
  * The second is the one worth having. A preferences dialog is the easiest place in an application
  * to leave a control that writes a field nobody reads — it looks right, it persists, and it does
- * nothing — and there is no compiler warning for it. So there is a case here per setting, each
- * asserting the *effect* rather than the stored value, and each of them goes through the same
- * [SettingsEffects] function the application goes through. A setting whose effect were deleted
- * would take its case with it rather than leaving a green test.
+ * nothing — and there is no compiler warning for it. So there is a case here per setting whose
+ * effect a function decides, each asserting the *effect* rather than the stored value through the
+ * same function the application calls. The effects only a running window shows — the stored
+ * chrome, scale and export format reaching it, the library moving to the stored folder, and what
+ * Reset writes back — are `SettingsEffectTest`'s, in `:desktop`.
  */
 class SettingsTest {
 
@@ -155,24 +156,30 @@ class SettingsTest {
         assertEquals(0.8f, SettingsCodec.decode("""{"interfaceScale":0.01}""").interfaceScale)
     }
 
+    /**
+     * The chrome, read where the application reads it: `CartogenesisTheme` hands Material
+     * `choice.scheme(dark)`, with `dark` the host's own answer, so that is what is compared here,
+     * by the colours each scheme holds ([rolesOf]) rather than by the object it is — a
+     * `ColorScheme` has no `equals`, and two choices holding the same colours in two objects would
+     * count as two chromes to a set of schemes.
+     */
     @Test
     fun `theme decides the chrome, and only System asks the host`() {
-        assertTrue(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.SYSTEM), true))
-        assertFalse(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.SYSTEM), false))
-        // The four named ones answer for themselves, whatever the host says.
-        assertFalse(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.LIGHT), true))
-        assertTrue(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.DARK), false))
-        assertFalse(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.NAUTICAL), true))
-        assertTrue(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.MIDNIGHT), false))
-        assertTrue(SettingsEffects.isDark(AppSettings(theme = ThemeChoice.MARS), false))
+        fun colours(choice: ThemeChoice, hostDark: Boolean) = rolesOf(choice.scheme(systemDark = hostDark))
+        assertEquals(colours(ThemeChoice.DARK, false), colours(ThemeChoice.SYSTEM, true), "System in a dark host is not the dark chrome")
+        assertEquals(colours(ThemeChoice.LIGHT, false), colours(ThemeChoice.SYSTEM, false), "System in a light host is not the light chrome")
+        // Every named chrome answers for itself, whatever the host says.
+        val named = ThemeChoice.entries.filter { it != ThemeChoice.SYSTEM }
+        named.forEach { choice ->
+            assertEquals(colours(choice, true), colours(choice, false), "${choice.label} follows the host")
+        }
 
-        // Every chrome is a different chrome: two choices resolving to the same scheme would mean
+        // Every chrome is a different chrome: two choices resolving to the same colours would mean
         // one of them silently did nothing.
-        val schemes = ThemeChoice.entries.map { it.scheme(systemDark = false) }
-        assertEquals(
-            ThemeChoice.entries.size - 1,
-            schemes.toSet().size,
-            "two theme choices produced the same colour scheme"
+        val distinct = named.groupBy { colours(it, false) }.values.filter { it.size > 1 }
+        assertTrue(
+            distinct.isEmpty(),
+            "theme choices with the same colours: " + distinct.joinToString { group -> group.joinToString("/") { it.label } }
         )
     }
 
@@ -215,16 +222,16 @@ class SettingsTest {
         )
     }
 
+    /**
+     * The export size's effect. The export format's is what the export row starts on, which only a
+     * running window shows: `SettingsEffectTest` in `:desktop` reads it there.
+     */
     @Test
     fun `the default export size is clamped by what this build can finish`() {
         val big = AppSettings(exportSize = 4096)
         assertEquals(4096, SettingsEffects.exportSizeWithin(big, ceiling = 4096))
         // A preference written by a build with a higher ceiling, opened by one without it.
         assertEquals(2048, SettingsEffects.exportSizeWithin(big, ceiling = 2048))
-        assertEquals(
-            ExportFormat.WEBP,
-            AppSettings(exportFormat = ExportFormat.WEBP).exportFormat
-        )
     }
 
     @Test
@@ -252,16 +259,14 @@ class SettingsTest {
         )
     }
 
+    /**
+     * The scales the dialog offers straddle the reader's own size. What a stored scale does to the
+     * window, and what Reset writes back, are asked of a running window in `SettingsEffectTest`.
+     */
     @Test
-    fun `interface scale is a real range and Reset returns every setting to its default`() {
+    fun `interface scale is a real range around the reader's own size`() {
         assertTrue(AppSettings.SCALES.contains(1f))
         assertTrue(AppSettings.SCALES.first() < 1f && AppSettings.SCALES.last() > 1f)
-        // "Reset to defaults" is `AppSettings()` and nothing else, so this is the whole of it.
-        assertEquals(ThemeChoice.SYSTEM, AppSettings().theme)
-        assertEquals(1f, AppSettings().interfaceScale)
-        assertEquals(AppSettings.FOLLOW_PLATFORM, AppSettings().workingResolution)
-        assertFalse(AppSettings().graphicsAccelerationAtLaunch)
-        assertFalse(AppSettings().checkForUpdatesOnLaunch)
     }
 
     private companion object {

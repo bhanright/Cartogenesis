@@ -507,43 +507,48 @@ class PanelKnobsTest {
     }
 
     /**
-     * The sheet on a phone can set everything the 320 dp column can.
+     * Every knob belongs to a section the panel draws: the header and the six sections in
+     * [PANEL_SECTIONS], in the order the generator runs, cover every knob [Knobs] declares but the
+     * atlas's own.
      *
-     * [Arrangements] declares the two arrangements as two independently written lists, and the
-     * composables draw from those lists — so a control dropped from the compact arrangement is
-     * dropped from this comparison too. Deleting a section from `Arrangements.compact`, or
-     * shortening its style list to the six that fit, fails here.
+     * The panel is one composable in both arrangements, drawing `Arrangements.headerKnobs` and then
+     * `Arrangements.knobsIn` section by section, so whether the phone's sheet actually shows what
+     * the column shows is a question about a composition, not about a declaration: it is asked of
+     * a real one by `ChromeGalleryTest` in `:desktop` ("the phone's sheet holds every control the
+     * wide panel does"). Comparing `Reachable.knobs` between the two arrangements, as this case once
+     * did, compared one expression with a copy of itself that no composable reads.
      */
     @Test
-    fun `the compact arrangement exposes every knob the wide one does`() {
+    fun `every knob is in a section the panel draws`() {
         val platform = FakePlatform(accelerator = FakeAccelerator)
-        val wide = Arrangements.of(WindowShape.WIDE, platform)
-        val compact = Arrangements.of(WindowShape.COMPACT, platform)
-
-        assertEquals(
-            wide.knobs.map { it.label },
-            compact.knobs.map { it.label },
-            "the compact panel cannot reach every knob the wide one can"
-        )
-        // And what both reach is the whole panel: the header's knob and all six sections, in the
-        // order the generator runs. Spelled out against [Knobs] rather than against each other, or
-        // two arrangements that had both lost the same knob would agree with one another.
+        val drawn = Arrangements.headerKnobs(platform) + PANEL_SECTIONS.flatMap { Arrangements.knobsIn(it, platform) }
         assertEquals(
             Knobs.all.filterNot { it.section == PanelSection.ATLAS }.map { it.label },
-            wide.knobs.map { it.label }
+            drawn.map { it.label }
         )
     }
 
+    /**
+     * What the toolbar, the export row and the legend are drawn from, in both arrangements: the
+     * composables read these lists off [Reachable] (`reachable.styles`, `.views`, `.exportSizes`,
+     * `.pictureFormats`, `.dataLayers`), so comparing the two arrangements' lists is comparing what
+     * the two windows draw.
+     *
+     * The menu commands are not among them. The strip and the folded menu both draw [Menus.file],
+     * [Menus.help] and the rest directly, so their comparison belongs to a composition: the phone's
+     * folded menu is opened beside the strip's three by `ChromeGalleryTest` in `:desktop` ("the
+     * phone's folded menu offers every item the three menus do").
+     */
     @Test
-    fun `the compact arrangement reaches every style, view, size and menu command`() {
+    fun `the compact arrangement reaches every style, view, size and export kind`() {
         val platform = FakePlatform(canQuit = true, accelerator = FakeAccelerator)
         val wide = Arrangements.of(WindowShape.WIDE, platform)
         val compact = Arrangements.of(WindowShape.COMPACT, platform)
 
-        // Ten styles: a segmented row when there is room for one, a menu when there is not.
+        // Every style: a segmented row when there is room for one, a menu when there is not.
         assertEquals(wide.styles, compact.styles)
         assertEquals(MapChrome.styles, compact.styles)
-        // Fifteen views, a menu in both.
+        // Every view, a menu in both.
         assertEquals(wide.views, compact.views)
         // Three export sizes, whichever of them this build can finish.
         assertEquals(wide.exportSizes, compact.exportSizes)
@@ -551,11 +556,6 @@ class PanelKnobsTest {
         // column: the ceiling decides how large an export may be, not what kinds there are.
         assertEquals(wide.pictureFormats, compact.pictureFormats)
         assertEquals(wide.dataLayers, compact.dataLayers)
-        // Three menus folded into one button, with nothing dropped on the way.
-        assertEquals(wide.commands, compact.commands)
-        assertTrue(MenuCommand.SETTINGS in compact.commands)
-        assertTrue(MenuCommand.ABOUT in compact.commands)
-        assertTrue(MenuCommand.QUIT in compact.commands)
     }
 
     // ---- the data exports, which are the second kind ---------------------------------------------

@@ -26,20 +26,13 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
 
+    // The browser tests run through Karma, which reads mocha's timeout from
+    // `karma.config.d/mocha-timeout.js` beside this file and nowhere else; see that file. A
+    // `useMocha { timeout }` here reaches nothing on a Wasm target: the Kotlin plugin logs that
+    // Mocha is not supported for Wasm and never applies the block.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
-        browser {
-            testTask {
-                useMocha {
-                    // This figure reaches the Node runner only. The browser tests run through
-                    // Karma, which reads mocha's timeout from `karma.config.d/mocha-timeout.js`
-                    // beside this file and nowhere else; the sixty seconds once set here never
-                    // applied to them, and the two-second default it left in place is what cut
-                    // `GenerationProgressTest` off on the hosted runner. See that file.
-                    timeout = "300s"
-                }
-            }
-        }
+        browser()
     }
 
     sourceSets {
@@ -88,6 +81,20 @@ tasks.named<Test>("jvmTest") {
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
+
+    // The known failures the tests record (`KnownFailures`, a twin of `:cartography`'s): a file
+    // handed to the tests, cleared before the task runs and printed once it has, pass or fail, as
+    // `:cartography`'s build script does for its own.
+    val report = layout.buildDirectory.file("known-failures/$name.txt").get().asFile
+    systemProperty("cartogenesis.knownFailures", report.absolutePath)
+    doFirst { report.delete() }
+    afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
+        if (suite.parent == null && report.exists()) {
+            val lines = report.readLines()
+            println("Known failures in $name (${lines.count { it.startsWith("KNOWN FAILURE") }}):")
+            lines.forEach { println("  $it") }
+        }
+    }))
 }
 
 /*

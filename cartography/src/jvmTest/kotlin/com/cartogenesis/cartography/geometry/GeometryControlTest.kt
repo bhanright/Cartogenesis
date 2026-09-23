@@ -1,0 +1,212 @@
+package com.cartogenesis.cartography.geometry
+
+import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.random.Random
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+/**
+ * The geometry guard's detectors, shown failing on the stamps this project's past causes drew and
+ * passing on natural outlines, before they are let near a world.
+ *
+ * Natural means [IsotropicNoise] thresholded: fractional Brownian relief of Hurst 0.75, whose level
+ * lines are Mandelbrot's coast of dimension 1.25, generated in continuous coordinates at arbitrary
+ * rotations and only then rasterised onto a grid of this map's own cells. Its isotropy is shown
+ * directly first, off the gradient at its level line at random points of the plane, since a noise
+ * generated on the grid would not be isotropic by construction.
+ *
+ * The stamps are the causes the rule lists: a rectangle, a square window's thresholded mask, the
+ * depression fill's chessboard staircase, a half-disc lobe, a nearest-seed partition, a ruled comb,
+ * and the square, diamond and octagon a breadth-first or windowed operator draws. Not every
+ * detector is asked to catch every stamp: the matrix printed below says which catches which, and
+ * the assertions hold each stamp to the detectors built for it and every natural control to none.
+ */
+class GeometryControlTest {
+
+    private companion object {
+        /** The default world's grid at 512: 12,000 km by 6,000 km over 512 cells each way. */
+        val FRAME = GridFrame.of(WorldGenConfig(width = 512, height = 512))
+
+        /**
+         * The census the per-merge tier runs: four worlds, the layers `MapLayers` lists, and
+         * [GeometryGuard.TESTS_PER_LAYER] tests on each. The controls are held to the same
+         * corrected level a world is.
+         */
+        const val FAMILY = 4 * 26 * GeometryGuard.TESTS_PER_LAYER
+
+        /** A smaller square of the same cells, for the per-component controls. */
+        val SQUARE = GridFrame(256, 256, FRAME.cellWidthKm, FRAME.cellHeightKm)
+    }
+
+    private fun read(name: String, mask: BooleanArray, frame: GridFrame, twice: Boolean = false): LayerReading =
+        GeometryGuard.read(Layer(name, Contours.ofMask(mask, frame), twice), frame, FAMILY, NaturalFigures.of(frame).cornersPer1000Km)
+
+    private fun readMany(name: String, masks: List<BooleanArray>, frame: GridFrame): LayerReading =
+        GeometryGuard.read(Layer(name, masks.flatMap { Contours.ofMask(it, frame) }), frame, FAMILY, NaturalFigures.of(frame).cornersPer1000Km)
+
+    private fun flagged(reading: LayerReading): Set<Detector> =
+        Detector.entries.filter { reading.outcome(it) == Outcome.VIOLATION }.toSet()
+
+    private fun row(name: String, reading: LayerReading): String =
+        "%-44s %s".format(name, Detector.entries.joinToString(" ") { detector ->
+            when (reading.outcome(detector)) {
+                Outcome.VIOLATION -> "  X  "
+                Outcome.CLEAN -> "  .  "
+                Outcome.INSUFFICIENT -> "  -  "
+            }
+        })
+
+    @Test
+    fun `the grid's bearings and lattice are read off the configuration at every grid`() {
+        listOf(512, 1024, 2048).forEach { side ->
+            val config = WorldGenConfig(width = 512, height = 512).atResolution(side, side)
+            val frame = GridFrame.of(config)
+            println("GEOMETRY FRAME $side: $frame")
+            assertEquals(0.5, frame.cellHeightKm / frame.cellWidthKm, 1e-12, "cell aspect at $side")
+            assertEquals(26.565, frame.diagonalDegrees, 1e-3, "diagonal bearing at $side")
+            assertEquals(153.435, frame.gridBearings[3], 1e-3)
+        }
+    }
+
+    @Test
+    fun `the natural controls have no preferred bearing before any detector reads them`() {
+        // The direction of the gradient where the field crosses its level is the normal of the
+        // level line there; over an isotropic field it is uniform round the half-circle. Sampled at
+        // random points of the plane, never at a grid's.
+        val random = Random(5)
+        listOf(false, true).forEach { inCells ->
+            val noise = IsotropicNoise(
+                seed = 3L, shortestWavelength = 2.0, longestWavelength = 200.0, rotationDegrees = 0.0,
+                unitsAcross = if (inCells) FRAME.cellWidthKm else 1.0,
+                unitsDown = if (inCells) FRAME.cellHeightKm else 1.0
+            )
+            val bins = IntArray(ISOTROPY_BINS)
+            var kept = 0
+            while (kept < ISOTROPY_SAMPLES) {
+                val x = random.nextDouble() * 20000.0
+                val y = random.nextDouble() * 20000.0
+                if (abs(noise.at(x, y)) > NEAR_LEVEL) continue
+                var (gx, gy) = noise.gradientAt(x, y)
+                // On the sheet, a field isotropic in cells is read in cells.
+                if (inCells) { gx *= FRAME.cellWidthKm; gy *= FRAME.cellHeightKm }
+                var angle = atan2(gy, gx)
+                if (angle < 0) angle += PI
+                if (angle >= PI) angle -= PI
+                bins[(angle / PI * ISOTROPY_BINS).toInt().coerceAtMost(ISOTROPY_BINS - 1)]++
+                kept++
+            }
+            val expected = ISOTROPY_SAMPLES.toDouble() / ISOTROPY_BINS
+            val chiSquare = bins.sumOf { (it - expected) * (it - expected) / expected }
+            val worst = bins.maxOf { abs(it - expected) / expected }
+            println("GEOMETRY CONTROL isotropy (%s): chi-square %.1f on %d degrees of freedom, worst bin %.1f%% off".format(
+                if (inCells) "in cells" else "on the ground", chiSquare, ISOTROPY_BINS - 1, worst * 100))
+            // 36 bins: the 0.1% point of chi-square on 35 degrees of freedom is 66.6.
+            assertTrue(chiSquare < 66.6, "the natural control is not isotropic: chi-square $chiSquare")
+        }
+    }
+
+    @Test
+    fun `a straight edge at any bearing comes out as one run at that bearing`() {
+        val frame = SQUARE
+        val random = Random(9)
+        repeat(24) {
+            val bearing = random.nextDouble() * 180.0
+            // A half-plane through the square's centre, on the ground, with its edge at `bearing`.
+            val ux = cos(Math.toRadians(bearing))
+            val uy = sin(Math.toRadians(bearing))
+            val cx = frame.cellsAcross * frame.cellWidthKm / 2
+            val cy = frame.cellsDown * frame.cellHeightKm / 2
+            val reach = 90.0 * frame.cellHeightKm
+            val mask = Controls.rasterise(frame) { x, y ->
+                val along = (x - cx) * ux + (y - cy) * uy
+                val across = -(x - cx) * uy + (y - cy) * ux
+                abs(along) < reach && across > 0 && across < reach
+            }
+            val runs = StraightRuns.of(Contours.ofMask(mask, frame), frame)
+            val edge = runs.maxBy { run -> run.lengthKm * if (frame.bearingGapDegrees(run.bearingDegrees, bearing) < 3.0) 1.0 else 0.0 }
+            val gap = frame.bearingGapDegrees(edge.bearingDegrees, bearing)
+            assertTrue(edge.lengthKm > 1.8 * reach * 0.9 && gap < 1.0,
+                "an edge at %.1f deg came out as %.0f km at %.2f deg".format(bearing, edge.lengthKm, edge.bearingDegrees))
+        }
+    }
+
+    @Test
+    fun `the detector and control matrix`() {
+        val lines = ArrayList<String>()
+        lines.add("%-44s %s".format("control", Detector.entries.joinToString(" ") { it.name.take(5).padEnd(5) }))
+        val failures = ArrayList<String>()
+        fun expect(name: String, reading: LayerReading, mustFlag: Set<Detector>, mayFlag: Set<Detector> = emptySet()) {
+            lines.add(row(name, reading))
+            val flags = flagged(reading)
+            val missed = mustFlag - flags
+            val extra = flags - mustFlag - mayFlag
+            if (missed.isNotEmpty()) failures.add("$name: missed by ${missed.joinToString()}")
+            if (extra.isNotEmpty()) failures.add("$name: flagged by ${extra.joinToString()} — " +
+                extra.joinToString(" | ") { reading.describe(it) })
+        }
+
+        // Natural controls: nothing may flag them.
+        for (inCells in listOf(false, true)) for (rotation in listOf(0.0, 17.0, 45.0, 71.0)) {
+            val mask = Controls.naturalField(FRAME, 101L + rotation.toLong(), 0.35, 60 * FRAME.cellWidthKm,
+                rotationDegrees = rotation, isotropicInCells = inCells)
+            expect("natural field ${if (inCells) "cells" else "ground"} ${rotation.toInt()} deg", read("natural", mask, FRAME), emptySet())
+        }
+        val islands = (0 until 24).map { index ->
+            val radius = (6.0 + index * 3.0) * FRAME.cellWidthKm
+            Controls.naturalIsland(SQUARE, 500L + index, radius / 2.2, SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2,
+                rotationDegrees = index * 13.0)
+        }
+        expect("natural islands, 24 sizes", readMany("islands", islands, SQUARE), emptySet())
+        val seam = Controls.naturalIsland(SQUARE, 77L, 30 * SQUARE.cellWidthKm, 0.0, SQUARE.cellsDown * SQUARE.cellHeightKm / 2)
+        expect("natural island across the seam", read("seam", seam, SQUARE), emptySet())
+        val pole = Controls.naturalIsland(SQUARE, 78L, 30 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, 0.0)
+        expect("natural island over the pole", read("pole", pole, SQUARE), emptySet())
+
+        // Stamps.
+        val centreColumn = SQUARE.cellsAcross / 2.0
+        val centreRow = SQUARE.cellsDown / 2.0
+        expect("rectangle 60x30 on the grid", read("rect", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow), SQUARE),
+            setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES), setOf(Detector.FACETS))
+        expect("rectangle 60x30 turned 23 deg", read("rect turned", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow, 23.0), SQUARE),
+            setOf(Detector.RECTANGLE), setOf(Detector.FACETS))
+        expect("square window mask", read("window", Controls.squareWindowMask(FRAME, 4L, 9, 40 * FRAME.cellWidthKm), FRAME),
+            setOf(Detector.RIGHT_ANGLES), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.ISOTROPY, Detector.FACETS))
+        expect("chessboard staircase, steps of 8", read("stairs", Controls.chessboardStaircase(SQUARE, 8, 120, 60, 60), SQUARE),
+            setOf(Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.COMBS, Detector.RECTANGLE, Detector.FACETS))
+        expect("half-disc on the sheet", read("half disc", Controls.halfDisc(SQUARE, 40.0, centreColumn, centreRow, 30.0, inCells = true), SQUARE),
+            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE))
+        expect("half-disc on the ground", read("half disc km", Controls.halfDisc(SQUARE, 40.0 * SQUARE.cellWidthKm,
+            SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2, 30.0, inCells = false), SQUARE),
+            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE))
+        expect("nearest-seed partition", readMany("voronoi", Controls.voronoiCells(SQUARE, 3L, 40, 220, 18, 18), SQUARE),
+            setOf(Detector.FACETS), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE))
+        expect("ruled comb along a row, 6 cells", read("comb", Controls.comb(SQUARE, 9, 6.0, 2.0, 60.0, centreColumn, centreRow, 0.0), SQUARE),
+            setOf(Detector.COMBS), setOf(Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY))
+        expect("ruled comb at 33 deg, 7 cells", read("comb turned", Controls.comb(SQUARE, 9, 7.0, 2.0, 60.0, centreColumn, centreRow, 33.0), SQUARE),
+            setOf(Detector.COMBS), setOf(Detector.RECTANGLE, Detector.FACETS))
+        expect("diamond (four-connected ring)", read("diamond", Controls.diamond(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS))
+        expect("square (eight-connected ring)", read("chebyshev", Controls.chebyshevSquare(SQUARE, 30.0, centreColumn, centreRow), SQUARE),
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS))
+        expect("octagonal window", read("octagon", Controls.octagon(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
+            setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.RECTANGLE))
+
+        println(lines.joinToString("\n", prefix = "GEOMETRY MATRIX\n"))
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    private val ISOTROPY_BINS = 36
+    private val ISOTROPY_SAMPLES = 36_000
+    private val NEAR_LEVEL = 0.02
+
+    @Suppress("unused")
+    private fun unusedSquareRoot(value: Double) = sqrt(value)
+}

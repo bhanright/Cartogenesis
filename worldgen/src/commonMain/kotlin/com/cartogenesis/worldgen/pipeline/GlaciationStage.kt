@@ -79,6 +79,18 @@ internal data class GlacialMass(
      * the hypsometry of its floor off this — and nothing in the pipeline reads it at all.
      */
     val basinFloor: IntArray,
+    /** Where the snow balance put ice, one entry per cell, row-major: the ice's occupancy. */
+    val frozen: BooleanArray,
+    /** The cells a valley glacier's trough runs down, the axis the U is cut across. */
+    val valleyGlacier: BooleanArray,
+    /**
+     * Every cell whose rock the ice lowered — troughs, cirques, both sets of basins, the sheet's
+     * scour and the outlets — read before the till, the load's bend and the ice surface go back
+     * on. The carving's footprint, for the geometry guard; nothing in the pipeline reads it.
+     */
+    val cutByIce: BooleanArray,
+    /** The part of [cutByIce] the sheet's outlet troughs cut, read as the difference they made. */
+    val cutByOutlets: BooleanArray,
     val cirques: Int,
     val moraines: Int,
     val riegels: Int,
@@ -712,10 +724,19 @@ object GlaciationStage {
         // trough is a valley cross-section and has to be able to cut through ground the scour has
         // already lowered rather than be undone by it.
         stopIfAsked()
+        // Only for an observer: the outlet troughs are the one cut that no mask here records, so
+        // their footprint is read as the difference they make. Null, and no copy, otherwise.
+        val carvedBeforeOutlets = if (onBudget != null) carved.copyOf() else null
         val outlets = cutOutletTroughs(
             glaciation, carving, config.scale, cellsAcross, cellsDown, sheet, sheetCells,
             surfaceFlow, iceThicknessMetres, directions, isLand, relative, carved
         )
+        // What the ice cut, taken here because everything after this line puts material back
+        // (till, the load's bend, the ice itself) and would blur the footprint of the cutting.
+        val cutByIce = if (onBudget != null) BooleanArray(cellCount) { carved[it] < relative[it] } else null
+        val cutByOutlets = carvedBeforeOutlets?.let { before ->
+            BooleanArray(cellCount) { carved[it] < before[it] }
+        }
 
         if (glacierCells == 0 && scourCells == 0 && outlets.cells == 0) return sea
 
@@ -849,6 +870,10 @@ object GlaciationStage {
                 scourCells = scourCells,
                 scourBasins = scourBasins,
                 basinFloor = basinFloor,
+                frozen = frozen,
+                valleyGlacier = glacier,
+                cutByIce = cutByIce!!,
+                cutByOutlets = cutByOutlets!!,
                 cirques = cirques,
                 moraines = moraines,
                 riegels = riegels,

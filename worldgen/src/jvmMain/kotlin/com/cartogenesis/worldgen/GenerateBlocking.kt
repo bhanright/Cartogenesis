@@ -26,7 +26,8 @@ fun WorldGenerationEngine.generateBlocking(
     accelerator: ErosionAccelerator? = null,
     oceanAccelerator: OceanAccelerator? = null,
     iceAccelerator: IceSheetAccelerator? = null,
+    capture: LayerCapture? = null,
     progress: GenerationProgress = GenerationProgress { _, _, _ -> }
 ): WorldMap = runBlocking {
-    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, progress)
+    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, capture, progress)
 }

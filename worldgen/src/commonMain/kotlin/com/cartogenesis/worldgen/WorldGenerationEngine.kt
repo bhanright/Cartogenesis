@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.CultureStage
+import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
@@ -113,6 +114,11 @@ object WorldGenerationEngine {
         oceanAccelerator: OceanAccelerator? = null,
         /** The same preference again, for the ice sheet's profile and surface flow; see rule 8. */
         iceAccelerator: IceSheetAccelerator? = null,
+        /**
+         * Filled in with the layers the map draws that no stage's result carries, for the geometry
+         * guard; null, the default, allocates nothing and changes nothing. See [LayerCapture].
+         */
+        capture: LayerCapture? = null,
         progress: GenerationProgress = NO_PROGRESS
     ): WorldMap {
         val reusable = previous?.takeIf { it.config.sameResolutionAndSeed(config) }
@@ -204,7 +210,15 @@ object WorldGenerationEngine {
                     (!config.erosion.climateFeed || it.config.vegetation == config.vegetation)
             }
             ?.erosion
-            ?: ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator)
+            ?: if (capture == null) {
+                ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator)
+            } else {
+                val log = DepositionLog(config.width * config.height)
+                ErosionStage.apply(
+                    config, plates.height, plates.upliftRateMmPerYear, accelerator,
+                    onRound = null, log = log
+                ).also { capture.deposition = DepositionLayers(log.mechanism) }
+            }
 
         report(GenerationStage.SEA_LEVEL)
         val sea = reusable
@@ -259,7 +273,22 @@ object WorldGenerationEngine {
                             config, cut, OceanStage.withoutCurrents(config, cut)
                         )
                     } else null
-                GlaciationStage.apply(config, cut, provisional, iceAccelerator)
+                if (capture == null) {
+                    GlaciationStage.apply(config, cut, provisional, iceAccelerator)
+                } else {
+                    GlaciationStage.apply(config, cut, provisional, iceAccelerator) { mass ->
+                        capture.ice = IceLayers(
+                            frozen = mass.frozen,
+                            valleyGlacier = mass.valleyGlacier,
+                            sheet = mass.onTheSheet,
+                            cutByIce = mass.cutByIce,
+                            cutByOutlets = mass.cutByOutlets,
+                            basinFloor = mass.basinFloor,
+                            valleyBasinCount = mass.basins,
+                            iceThicknessMetres = mass.iceThicknessMetres
+                        )
+                    }
+                }
             }
 
         report(GenerationStage.OCEAN)

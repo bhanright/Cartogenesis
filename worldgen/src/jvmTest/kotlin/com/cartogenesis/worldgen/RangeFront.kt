@@ -29,10 +29,12 @@ import kotlin.math.sqrt
  * different size, climate and rock). That is the figure the numbers here are printed beside, and it
  * is a ratio of trunk basins only.
  *
- * **Nothing here reads `RiverResult.rivers`.** The drawn courses are a cartographic selection, so a
- * spacing measured off them would be measuring the pen. What the finder reads is the height field,
- * the land mask and `RiverResult.flowTarget`, which is the routing's own downhill tree and is what
- * a divide is made of.
+ * **The fronts, the basins and the trunks never read `RiverResult.rivers`.** The drawn courses are a
+ * cartographic selection, so a spacing measured off them would be measuring the pen. What the finder
+ * reads is the height field, the land mask and `RiverResult.flowTarget`, which is the routing's own
+ * downhill tree and is what a divide is made of. The drawn courses are read for one figure only,
+ * the drawn spacing below, which is labelled as the pen's wherever it is printed, because the pen is
+ * what the author was looking at.
  *
  * ## The definitions, all of them, before a number is collected
  *
@@ -42,10 +44,15 @@ import kotlin.math.sqrt
  * and never a cell count; where a cell count is printed it is printed *beside* the kilometres and
  * labelled, because the whole question is which of the two stays constant as the grid changes.
  *
- * **Belt.** A land cell standing at or above [BELT_FLOOR_METRES] is belt ground, and belt cells are
- * grouped into components by 8-connectivity. The finder does **not** wrap east to west: a belt
- * crossing the seam is traced as two, and [Census.beltsOnTheSeam] counts how many components touch
- * the seam so a reader can see whether it mattered.
+ * **Belt.** A land cell standing at or above a floor is belt ground, and belt cells are grouped into
+ * components by 8-connectivity. Two floors are measured: [BELT_FLOOR_METRES], whose fronts are
+ * mountain fronts, and [SHORELINE_FLOOR_METRES], at which every land cell is belt ground and the
+ * fronts are straight coasts. The second is the author's complaint read literally: a valley reaching
+ * the sea across a straight coast, whatever the ground behind it is made of. The finder does
+ * **not** wrap east to west: a belt crossing the seam is traced as two, and [Census.beltsOnTheSeam]
+ * counts how many components touch the seam so a reader can see whether it mattered. The routing
+ * does wrap, so a basin may reach across the seam from a front that does not, and every position
+ * a front reads is taken as the copy of itself nearest the front's midpoint.
  *
  * **Front eligibility.** Each component's outer boundary is traced as a closed chain of cell
  * centres. Along that chain a *front* is a maximal run of points every one of which lies within
@@ -64,31 +71,38 @@ import kotlin.math.sqrt
  *
  * **Outlet.** An exit is an outlet of a given front when its `s` lies inside the chord, its `|t|`
  * is at most [FRONT_STRAIGHTNESS_KM] — the line has the width its own straightness bar gives it —
- * and the cell it drains into lies seaward of it, so a course crossing the line inward is not
- * counted as leaving by it.
+ * and the cell it drains into does not lie landward of that band, so a course leaving the belt
+ * into a hollow behind the front is not counted as leaving by it. Which way the step points
+ * inside the band is not asked: on a coast that wanders within its bar, a mouth draining along
+ * the shore into the sea beside it is still a mouth on that coast.
  *
- * **Catchment floor.** A basin of fewer than [SMALLEST_CATCHMENT_CELLS] cells *of the grid being
- * measured* is a corner of the grid rather than a catchment and is set aside. The floor is in cells
- * of the working grid on purpose: a floor fixed in square kilometres at the coarsest grid's cell
- * would, at the finest, censor exactly the small basins a grid-set spacing produces, and bias the
- * test toward the answer that the spacing is physical.
+ * **Catchment floor.** A basin smaller than [SMALLEST_CATCHMENT_KM2] could not hold a course the map
+ * draws, by Hack's law, and is set aside. The floor is in square kilometres, so the same ground
+ * qualifies at every grid; what it leaves out at a fine grid — a strip too narrow for its own
+ * length, which Hack's law says a landscape does not make — is exactly what the drawn spacing still
+ * sees if the pen draws it, so a grid-set comb cannot hide behind the floor.
  *
- * **Trunk and divide qualification.** A front's basins tile a region `R` of belt ground. A basin
- * clearing the catchment floor is a **trunk basin** when it touches the *landward rim* of `R`: it
- * holds a cell with an 8-neighbour outside `R` whose `t` exceeds a straightness bar and whose `s`
- * lies within the chord. The rim is what the region draining through this front shares with ground
- * draining some other way, which is the main divide; the `s` condition keeps the two basins at the
- * chord's ends from qualifying by touching the ground beyond the front's own end. A basin whose
- * head is enclosed by its larger neighbours reaches the front and not the divide, and is not a
- * trunk. The basin's **divide-to-front distance** is the largest `t` over its own cells, which is
- * Hovius's half-width measured normal to the front at that basin; a front's half-width is the
- * median of its trunks'.
+ * **Trunk and divide qualification.** A front's basins, corners included, tile a region `R` of
+ * belt ground, which is all the ground draining out through this front. The **main divide** is
+ * where `R` ends landward: cut `R` into strips a straightness bar wide along `s`, and the divide's
+ * distance in each strip is the largest `t` of any cell of `R` in it. A basin's *head* is its cell
+ * of largest `t`, and a basin clearing the catchment floor is a **trunk basin** when its head
+ * lies within a straightness bar of the divide in the head's own strip. A basin whose head is
+ * enclosed by its larger neighbours reaches the front and not the divide, and is not a trunk. The
+ * rule is a distance and not a contact because `R` has holes — a mouth in a bay deeper than the
+ * bar is not an outlet of the front, so its basin is not in `R` — and a rule that asked for
+ * contact with ground outside `R` would find the divide at the edge of every such hole. The
+ * basin's **divide-to-front distance** is its head's `t`, which is Hovius's half-width measured
+ * normal to the front at that basin; a front's half-width is the median of its trunks'.
  *
  * **Along-front spacing.** The outlets of a front's trunk basins are sorted by `s`, and the
  * spacings are the differences between neighbours, in kilometres. A front with fewer than two trunk
- * outlets contributes no spacing. Beside it, the **catchment spacing** is the same over every basin
- * leaving by the front that clears the catchment floor, trunk or not: the nearest thing this
- * instrument has to the comb the map draws, since a drawn course needs a catchment of its own.
+ * outlets contributes no spacing. Beside it, two combs. The **catchment spacing** is the same over
+ * every basin leaving by the front that clears the catchment floor, trunk or not: the valleys the
+ * ground has cut, large enough to carry a drawn course. The **drawn spacing** is over every outlet,
+ * of any size, whose exit cell a drawn course passes through: the comb the map shows. Where the
+ * drawn comb is finer than the catchment comb, the pen is drawing courses down strips of ground too
+ * narrow to be valleys.
  *
  * **Bearing.** A front is east-west when its chord lies within 22.5 degrees of a row, north-south
  * within 22.5 of a column, and diagonal otherwise. Every table is split this way because it is the
@@ -110,8 +124,12 @@ import kotlin.math.sqrt
  */
 internal object RangeFront {
 
+    /** The floor at which every land cell is belt ground, so that a front is a straight coast. */
+    const val SHORELINE_FLOOR_METRES = 0f
+
     /**
-     * Ground at or above this altitude is belt ground, in metres above the shoreline.
+     * Ground at or above this altitude is belt ground on a mountain front, in metres above the
+     * shoreline.
      *
      * Two kilometres. The ground this generator's continents stand on is not Earth's: its land's
      * mean stands 1,200 to 1,700 m above its own sea against Earth's 840 (docs/GEOGRAPHY.md, "Half
@@ -161,14 +179,16 @@ internal object RangeFront {
     const val LONGEST_FRONT_KM = 1_500.0
 
     /**
-     * The fewest cells of the working grid a basin needs to count as a catchment at all.
+     * The smallest basin that counts as a catchment, in square kilometres.
      *
-     * Nine, a block three cells on a side: the smallest patch in which eight-neighbour routing has
-     * had room to gather water from more than one direction, so anything smaller is a cell or two
-     * at the belt's edge draining straight off it rather than a catchment. See the definitions
-     * above for why the floor is in cells of the working grid and not in square kilometres.
+     * The area a basin needs to hold a course the map draws. Hack (1957) found a stream's length
+     * growing as `L = 1.4 A^0.6` in miles and square miles, which in kilometres is
+     * `L = 2.253 (A / 2.590)^0.6`; the shortest course drawn is `RiverConfig.shortestDrawnCourseKm`,
+     * 100 km, and solving for it gives 1,441 km2. That is five and a quarter cells at 512 and
+     * eighty-four at 2048, so the same ground qualifies at both, and a cell or two at a belt's edge
+     * draining straight off it — a corner of the grid, not a catchment — never does.
      */
-    const val SMALLEST_CATCHMENT_CELLS = 9
+    const val SMALLEST_CATCHMENT_KM2 = 1_440.0
 
     /**
      * How close open water must come seaward of a chord for the front to be coastal, in km.
@@ -283,7 +303,7 @@ internal object RangeFront {
         val areaKm2: Double,
         /** The largest perpendicular distance from the chord any cell of the basin reaches, in km. */
         val divideToFrontKm: Double,
-        /** Whether the basin reaches the landward rim; see the definitions. */
+        /** Whether the basin's head reaches the main divide; see the definitions. */
         val isTrunk: Boolean,
         /** The basin's own cells, kept only when the caller asked for them, for drawing. */
         val cells: IntArray?
@@ -298,6 +318,11 @@ internal object RangeFront {
         /** Basins leaving by the front below the catchment floor, for the census. */
         val cornersSetAside: Int,
         /**
+         * Where along the chord each outlet a drawn course passes through sits, in km, sorted; null
+         * when the caller supplied no drawn courses. The pen's figure, not the ground's.
+         */
+        val drawnAlongKm: List<Double>?,
+        /**
          * The crust pair whose boundary lies nearest most of the front's outlets, where the caller
          * supplied `PlateResult.nearestBoundaryClass`; null otherwise.
          */
@@ -308,11 +333,17 @@ internal object RangeFront {
         /** Differences between neighbouring trunk outlets along the chord, in kilometres. */
         val spacingsKm: List<Double> get() = gapsOf(trunks)
 
-        /** Differences between neighbouring catchment outlets, trunk or not: the comb. */
+        /** Differences between neighbouring catchment outlets, trunk or not: the ground's comb. */
         val catchmentSpacingsKm: List<Double> get() = gapsOf(catchments)
+
+        /** Differences between neighbouring drawn outlets: the comb the map shows, or empty. */
+        val drawnSpacingsKm: List<Double>
+            get() = drawnAlongKm?.let { along -> (1 until along.size).map { along[it] - along[it - 1] } }
+                ?: emptyList()
 
         val medianSpacingKm: Double? get() = median(spacingsKm)
         val medianCatchmentSpacingKm: Double? get() = median(catchmentSpacingsKm)
+        val medianDrawnSpacingKm: Double? get() = median(drawnSpacingsKm)
         val medianDivideToFrontKm: Double? get() = median(trunks.map { it.divideToFrontKm })
 
         /** Hovius's ratio for this front: half-width over outlet spacing, both medians. */
@@ -330,6 +361,8 @@ internal object RangeFront {
     /** What survived each filter, so an empty sample can say which filter emptied it. */
     class Census(
         val landCells: Int,
+        /** The land's mean altitude above the shoreline, in metres: what the floor is read against. */
+        val meanLandMetres: Double,
         val beltCells: Int,
         val beltComponents: Int,
         val beltsOnTheSeam: Int,
@@ -340,10 +373,11 @@ internal object RangeFront {
         val frontsWithTwoTrunks: Int
     ) {
         override fun toString(): String =
-            ("belt %.1f%% of land (%d cells) in %d components (%d touching the seam), %d outer " +
-                "boundaries, %d straight runs, %d over %d km (%d coastal), %d with two trunk outlets")
+            ("land's mean %.0f m; belt %.1f%% of land (%d cells) in %d components (%d touching " +
+                "the seam), %d outer boundaries, %d straight runs, %d over %d km (%d coastal), %d " +
+                "with two trunk outlets")
                 .format(
-                    100.0 * beltCells / max(1, landCells), beltCells, beltComponents,
+                    meanLandMetres, 100.0 * beltCells / max(1, landCells), beltCells, beltComponents,
                     beltsOnTheSeam, boundaryChains, straightRuns, fronts,
                     SHORTEST_FRONT_KM.toInt(), coastalFronts, frontsWithTwoTrunks
                 )
@@ -438,6 +472,9 @@ internal object RangeFront {
         flowTarget = world.rivers.flowTarget,
         beltFloorMetres = beltFloorMetres,
         nearestBoundaryClass = world.plates.nearestBoundaryClass,
+        drawnCourse = BooleanArray(world.width * world.height).also { drawn ->
+            world.rivers.rivers.forEach { river -> river.cells.forEach { drawn[it] = true } }
+        },
         keepBasinCells = keepBasinCells
     )
 
@@ -446,8 +483,10 @@ internal object RangeFront {
      *
      * [isLand] and [metresAboveShoreline] are row-major, one entry per cell; [flowTarget] is the
      * routing's downhill target per cell, -1 where the water leaves the world;
-     * [nearestBoundaryClass], where given, is `PlateResult.nearestBoundaryClass`. Returns one
-     * [Report], whose figures are null rather than zero where there is no sample.
+     * [nearestBoundaryClass], where given, is `PlateResult.nearestBoundaryClass`; [drawnCourse],
+     * where given, marks every cell a drawn course passes through, and is read for the drawn
+     * spacing and for nothing else. Returns one [Report], whose figures are null rather than zero
+     * where there is no sample.
      */
     fun measure(
         seed: Long,
@@ -460,6 +499,7 @@ internal object RangeFront {
         flowTarget: IntArray,
         beltFloorMetres: Float = BELT_FLOOR_METRES,
         nearestBoundaryClass: IntArray? = null,
+        drawnCourse: BooleanArray? = null,
         keepBasinCells: Boolean = false
     ): Report {
         val cellCount = cellsAcross * cellsDown
@@ -468,6 +508,8 @@ internal object RangeFront {
         }
         val beltCells = belt.count { it }
         val landCells = isLand.count { it }
+        var landMetres = 0.0
+        for (cell in 0 until cellCount) if (isLand[cell]) landMetres += metresAboveShoreline[cell]
 
         val component = componentsOf(belt, cellsAcross, cellsDown)
         var componentCount = 0
@@ -496,10 +538,9 @@ internal object RangeFront {
             }
         }
 
-        val stamp = IntArray(cellCount)
-        val measured = fronts.mapIndexed { index, front ->
+        val measured = fronts.map { front ->
             measureFront(
-                front, basins, stamp, index + 1, isLand, nearestBoundaryClass, keepBasinCells,
+                front, basins, isLand, nearestBoundaryClass, drawnCourse, keepBasinCells,
                 cellsAcross, cellsDown, cellWidthKm, cellHeightKm
             )
         }
@@ -512,6 +553,7 @@ internal object RangeFront {
             measured = measured,
             census = Census(
                 landCells = landCells,
+                meanLandMetres = landMetres / max(1, landCells),
                 beltCells = beltCells,
                 beltComponents = componentCount,
                 beltsOnTheSeam = seamComponents.size,
@@ -953,26 +995,29 @@ internal object RangeFront {
 
     // ---------------------------------------------------------------- one front
 
-    /**
-     * The catchments and trunk basins of one front.
-     *
-     * [stamp] is one array reused by every front, marked with this front's own [token] instead of
-     * being cleared, so the cost of a front is its own basins rather than the whole grid.
-     */
+    /** The catchments and trunk basins of one front. */
     private fun measureFront(
         front: Front,
         basins: Basins,
-        stamp: IntArray,
-        token: Int,
         isLand: BooleanArray,
         nearestBoundaryClass: IntArray?,
+        drawnCourse: BooleanArray?,
         keepBasinCells: Boolean,
         cellsAcross: Int,
         cellsDown: Int,
         cellWidthKm: Double,
         cellHeightKm: Double
     ): Measured {
-        fun kmXOf(cell: Int) = (cell % cellsAcross) * cellWidthKm
+        // The routing wraps east to west, so a basin can reach across the seam from a front that
+        // does not: every position is read as the copy of itself nearest the front's midpoint.
+        val worldWidthKm = cellsAcross * cellWidthKm
+        fun nearFront(kmX: Double): Double {
+            var offset = kmX - front.midKmX
+            if (offset > worldWidthKm / 2) offset -= worldWidthKm
+            if (offset < -worldWidthKm / 2) offset += worldWidthKm
+            return front.midKmX + offset
+        }
+        fun kmXOf(cell: Int) = nearFront((cell % cellsAcross) * cellWidthKm)
         fun kmYOf(cell: Int) = (cell / cellsAcross) * cellHeightKm
 
         val coastal = isCoastal(front, isLand, cellsAcross, cellsDown, cellWidthKm, cellHeightKm)
@@ -995,27 +1040,49 @@ internal object RangeFront {
                 val bucket = bucketRow * basins.bucketsAcross + bucketColumn
                 for (index in basins.bucketStart[bucket] until basins.bucketStart[bucket + 1]) {
                     val basin = basins.bucketMember[index]
-                    val kmX = basins.outletKmX[basin]
+                    val kmX = nearFront(basins.outletKmX[basin])
                     val kmY = basins.outletKmY[basin]
                     val along = front.alongAt(kmX, kmY)
                     if (along < 0.0 || along > front.lengthKm) continue
                     val landward = front.landwardAt(kmX, kmY)
                     if (abs(landward) > FRONT_STRAIGHTNESS_KM) continue
-                    // A course crossing the line inward is not leaving the belt by this front.
+                    // A course leaving into a hollow behind the band is not leaving by this front.
                     val receiver = front.landwardAt(
-                        basins.receiverKmX[basin], basins.receiverKmY[basin]
+                        nearFront(basins.receiverKmX[basin]), basins.receiverKmY[basin]
                     )
-                    if (receiver >= landward) continue
+                    if (receiver > FRONT_STRAIGHTNESS_KM) continue
                     onFront.add(basin)
                 }
             }
         }
-        if (onFront.isEmpty()) return Measured(front, coastal, emptyList(), 0, null)
+        val drawnAlong = drawnCourse?.let { drawn ->
+            onFront.filter { drawn[basins.outletCell[it]] }
+                .map { front.alongAt(nearFront(basins.outletKmX[it]), basins.outletKmY[it]) }
+                .sorted()
+        }
+        if (onFront.isEmpty()) return Measured(front, coastal, emptyList(), 0, drawnAlong, null)
 
-        // The region this front's basins tile, stamped once so the rim test can read it.
+        // The main divide: how far landward the region draining out through this front reaches,
+        // strip by strip along it. Strips are indexed from the region's own westmost `s`, which
+        // may lie before the chord's start where a basin's head fans out past the front's end.
+        var lowestAlong = Double.MAX_VALUE
+        var highestAlong = -Double.MAX_VALUE
         onFront.forEach { basin ->
             for (index in basins.start[basin] until basins.start[basin + 1]) {
-                stamp[basins.member[index]] = token
+                val cell = basins.member[index]
+                val along = front.alongAt(kmXOf(cell), kmYOf(cell))
+                if (along < lowestAlong) lowestAlong = along
+                if (along > highestAlong) highestAlong = along
+            }
+        }
+        fun stripOf(along: Double) = ((along - lowestAlong) / FRONT_STRAIGHTNESS_KM).toInt()
+        val divideKm = DoubleArray(stripOf(highestAlong) + 1) { -Double.MAX_VALUE }
+        onFront.forEach { basin ->
+            for (index in basins.start[basin] until basins.start[basin + 1]) {
+                val cell = basins.member[index]
+                val strip = stripOf(front.alongAt(kmXOf(cell), kmYOf(cell)))
+                val landward = front.landwardAt(kmXOf(cell), kmYOf(cell))
+                if (landward > divideKm[strip]) divideKm[strip] = landward
             }
         }
 
@@ -1026,41 +1093,22 @@ internal object RangeFront {
         onFront.forEach { basin ->
             val from = basins.start[basin]
             val to = basins.start[basin + 1]
-            if (to - from < SMALLEST_CATCHMENT_CELLS) {
+            if ((to - from) * areaKm2PerCell < SMALLEST_CATCHMENT_KM2) {
                 corners++
                 return@forEach
             }
-            var reach = 0.0
-            var atRim = false
+            var headLandwardKm = -Double.MAX_VALUE
+            var headAlongKm = 0.0
             for (index in from until to) {
                 val cell = basins.member[index]
                 val landward = front.landwardAt(kmXOf(cell), kmYOf(cell))
-                if (landward > reach) reach = landward
-                if (atRim) continue
-                val column = cell % cellsAcross
-                val row = cell / cellsAcross
-                for (stepRow in -1..1) {
-                    for (stepColumn in -1..1) {
-                        if (stepRow == 0 && stepColumn == 0) continue
-                        val neighbourColumn = column + stepColumn
-                        val neighbourRow = row + stepRow
-                        if (neighbourColumn < 0 || neighbourColumn >= cellsAcross) continue
-                        if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
-                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
-                        if (stamp[neighbour] == token) continue
-                        val neighbourKmX = neighbourColumn * cellWidthKm
-                        val neighbourKmY = neighbourRow * cellHeightKm
-                        if (front.landwardAt(neighbourKmX, neighbourKmY) <= FRONT_STRAIGHTNESS_KM) {
-                            continue
-                        }
-                        val neighbourAlong = front.alongAt(neighbourKmX, neighbourKmY)
-                        if (neighbourAlong < 0.0 || neighbourAlong > front.lengthKm) continue
-                        atRim = true
-                        break
-                    }
-                    if (atRim) break
+                if (landward > headLandwardKm) {
+                    headLandwardKm = landward
+                    headAlongKm = front.alongAt(kmXOf(cell), kmYOf(cell))
                 }
             }
+            val reachesTheDivide =
+                headLandwardKm >= divideKm[stripOf(headAlongKm)] - FRONT_STRAIGHTNESS_KM
             val outlet = basins.outletCell[basin]
             nearestBoundaryClass?.let { classes ->
                 val ordinal = classes[outlet]
@@ -1071,8 +1119,8 @@ internal object RangeFront {
                     outletCell = outlet,
                     alongFrontKm = front.alongAt(kmXOf(outlet), kmYOf(outlet)),
                     areaKm2 = (to - from) * areaKm2PerCell,
-                    divideToFrontKm = reach,
-                    isTrunk = atRim,
+                    divideToFrontKm = headLandwardKm,
+                    isTrunk = reachesTheDivide,
                     cells = if (keepBasinCells) basins.member.copyOfRange(from, to) else null
                 )
             )
@@ -1081,7 +1129,7 @@ internal object RangeFront {
 
         val modalClass = if (nearestBoundaryClass == null || classVotes.all { it == 0 }) null
         else BoundaryClass.entries[classVotes.indices.maxBy { classVotes[it] }]
-        return Measured(front, coastal, catchments, corners, modalClass)
+        return Measured(front, coastal, catchments, corners, drawnAlong, modalClass)
     }
 
     // ---------------------------------------------------------------- cross-resolution matching

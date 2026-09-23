@@ -124,8 +124,9 @@ class WorldGuard(private val world: WorldMap) {
  * if there are no variants, the least recently lent plain world only one class has asked for; then
  * the least recently lent of all. Most of what a tier generates is a variant — a seed with one
  * setting moved — that the class moving it asks for and nobody else, while a plain world, a seed at
- * its default settings, is what the next class asks for too; a plain least-recently-used rule let a
- * run of variants push the standard worlds out, and seed 99 was generated in ten classes of one run.
+ * its default settings, is what the next class asks for too. Counting the classes that have asked
+ * is not enough on its own: a standard world only its first class has reached yet counts one, and
+ * a run of variants would push it out. See docs/DESIGN_LEDGER.md, T5, for what that cost.
  * Every world is checked when lent again and before it goes.
  */
 class WorldLender(

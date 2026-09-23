@@ -18,7 +18,11 @@ import kotlin.math.sqrt
  * 1. A budget of [drawnRiverKmPerSquareKm] kilometres of drawn river per square kilometre of this
  *    world's land, which is Natural Earth's measured figure carried by Töpfer's law, times
  *    [inkScaleAt] for the mark the reader has the density scale set to - and never less than the
- *    largest river and the trunks below it, so that river is on every map at every mark.
+ *    largest river and the trunks below it, so that river is on every map at every mark. The floor
+ *    holds at Earth's mark too: a map without its largest river is worse than one a chain over
+ *    Earth's figure, so where that chain is longer than Earth's budget the default is not the
+ *    selection Earth's figure alone would make. Where it binds on the audited worlds is printed by
+ *    `RiverSelectionAuditTest` and recorded in the ledger row X1c.
  * 2. At the top mark of the density scale only, where the budget is removed, a limit of another
  *    kind: no course below the peak discharge of the [MapSheet.featuresKept]'th largest is drawn.
  *    That is Töpfer's law read the way F14 read it, on the traced count, and it makes the top
@@ -44,9 +48,10 @@ import kotlin.math.sqrt
  * switched off.
  *
  * The density scale is the reader's, and the lattice runs at every mark of it: above Earth's mark
- * the first pass still serves every square once before the second pass spends the extra ink, so a
- * larger budget goes to the next-largest river anywhere on the map before it goes to a second gully
- * on one front. At the top mark nothing above the law's cut is refused, which is what the top is
+ * the first pass still takes one eligible, affordable candidate per square before the second pass
+ * spends the extra ink, so a larger budget goes to the next-largest river elsewhere on the map
+ * before it goes to a second gully on one front - though not strictly one per square, since the
+ * trunks a candidate brings with it can land in squares already taken. At the top mark nothing above the law's cut is refused, which is what the top is
  * for - every course the scale has room for, F14's drawing - and there the lattice decides only the
  * order, so the fullest square is the radical law's own.
  *
@@ -293,9 +298,9 @@ object RiverSelection {
 
         // The largest river is the first thing the ranking reaches, so a budget that covers it and
         // its trunks is a budget that draws it: the lattice has nothing taken yet, and its peak is
-        // the highest there is, so no cut below can refuse it. At Earth's mark the budget is tens
-        // of thousands of kilometres and this never binds; it is there for the bottom of the scale
-        // on a small sheet, where a quarter of Earth's ink could fall below one long trunk.
+        // the highest there is, so no cut below can refuse it. Nothing bounds the chain against
+        // the budget, so this can bind at any mark, Earth's included; the class comment says what
+        // that costs the default, and the audit prints where it binds.
         var largestRiverChainKm = 0.0
         if (byDischarge.isNotEmpty()) {
             chainDownTo(drawn, trunkOf, decodeCourse(byDischarge[0]), chain)

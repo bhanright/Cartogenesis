@@ -469,7 +469,8 @@ internal object Knobs {
                 RiverSelection.EARTH_DENSITY_STEP ->
                     "As much river as a published map at this scale draws."
                 RiverSelection.EVERY_COURSE_STEP ->
-                    "Every river the generator traced that this scale has room for."
+                    "Brings back every traced river this scale has room for, including the " +
+                        "combs of short parallel courses along steep coasts."
                 in RiverSelection.INK_STEPS.first until RiverSelection.EARTH_DENSITY_STEP ->
                     "Fewer than a published map at this scale draws: the largest rivers only."
                 else ->

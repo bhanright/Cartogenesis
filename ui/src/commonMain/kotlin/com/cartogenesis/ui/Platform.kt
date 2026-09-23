@@ -372,7 +372,13 @@ interface SettingsStore {
     /** The stored text, or null if nothing has been written yet or it could not be read. */
     suspend fun read(): String?
 
-    /** Writes [text], replacing whatever was there. Failures are swallowed by the caller. */
+    /**
+     * Writes [text], replacing whatever was there. Failures are swallowed by the caller.
+     *
+     * When calls overlap, the text of the last call made is what is left stored: the application
+     * writes the preferences on every mark a slider passes, so overlapping calls are the ordinary
+     * case and not a corner of one.
+     */
     suspend fun write(text: String)
 
     /** Where this is kept, in the host's own terms, for the dialog's small print. */

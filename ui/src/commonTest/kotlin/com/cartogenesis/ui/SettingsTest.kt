@@ -28,21 +28,22 @@ import kotlinx.coroutines.test.runTest
 class SettingsTest {
 
     /**
-     * The river-density slider, end to end: the panel writes it, the rasterizer draws by it, the
-     * preferences keep it, and a window opened afterwards draws the same map.
+     * The river-density slider, from the knob to the rasterizer and through the settings codec.
      *
      * On a generated world, because "reaches the rasterizer" means the overlay's river count moves
      * with the mark, and only a real network can show that. 128 cells, the size
      * `GenerationProgressTest` already runs in the browser, and a sheet at a cell to the pixel, which
-     * is the export's. What is asserted is the path the application takes, function by function:
-     * the knob, `SettingsEffects.settingsAfterDrawing` which the window calls when the mark moves,
-     * the codec through the platform's store, and `SettingsEffects.startingRenderOptions` which a
-     * fresh window starts from. A world save is not on the path: it carries no setting of the
-     * drawing, so a saved world reopened in the new window is drawn at the stored mark like any
-     * other.
+     * is the export's. What is followed is the functions the application calls, one by one: the
+     * knob, `SettingsEffects.settingsAfterDrawing` which the window calls when the mark moves, the
+     * codec, and `SettingsEffects.startingRenderOptions` which a fresh window starts from.
+     *
+     * What it does not prove: the store here is [FakePlatform]'s, held in memory, so neither the
+     * desktop's file nor the browser's local storage is exercised, and no window is actually closed
+     * and reopened. The desktop file under a burst of writes is `FileSettingsTest` in `:desktop`.
+     * A world save is not on the path either way: it carries no setting of the drawing.
      */
     @Test
-    fun `the river density slider reaches the rasterizer and survives a save and a reopen`() =
+    fun `the river density slider reaches the rasterizer and round-trips the settings codec`() =
         runTest(timeout = LONGEST_WAIT) {
             val world = WorldGenerationEngine.generate(SMALL_WORLD)
             val platform = FakePlatform()
@@ -78,7 +79,7 @@ class SettingsTest {
             )
             platform.settingsStore.write(SettingsCodec.encode(stored))
 
-            // Reopen: a fresh window starts from what the store holds, and draws the same map.
+            // What a fresh window would start from, given what the store holds: the same map.
             val reopened =
                 SettingsEffects.startingRenderOptions(SettingsCodec.decode(platform.settingsStore.read()))
             assertEquals(turned, reopened, "the reopened window starts from another drawing")

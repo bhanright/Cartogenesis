@@ -32,8 +32,9 @@
 - **The top of the river density scale is the coastal comb again, by construction.** The top mark
   was asked to reproduce the old rule's drawing exactly, and the old rule drew the comb; so the
   crowding lattice, which runs at every mark, decides only the order there and the fullest square
-  is the radical law's own (the figures are in the X1c row). Below the top the lattice still serves
-  every square once before the extra ink goes anywhere, but its lead shrinks as the mark rises: on
+  is the radical law's own (the figures are in the X1c row). Below the top the lattice still takes
+  one eligible, affordable candidate per square before the extra ink goes anywhere (closure can put
+  a candidate's trunks in squares already taken), but its lead shrinks as the mark rises: on
   the four standard seeds the fullest square is 2 against 7-12 without it at Earth's mark and 18-25
   against 19-26 at four times, before the top's 49-70. If the author wants a top mark that draws every river
   and still thins a straight front, it has to stop being the old rule: a cap per lattice square

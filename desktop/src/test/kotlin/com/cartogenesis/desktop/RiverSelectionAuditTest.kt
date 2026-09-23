@@ -55,6 +55,9 @@ class RiverSelectionAuditTest {
         /** The four standard seeds, drawn at the grid the web and the phone default to. */
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
 
+        /** The standard four and the two the ice chunks are read on: the six audited seeds. */
+        val AUDITED_SEEDS = STANDARD_SEEDS + listOf(718106L, 59758L)
+
         /** See `RiverSelectionTest`: the same figure, for the same reason. */
         const val ACROSS_RESOLUTIONS_BAND = 0.05
 
@@ -211,6 +214,7 @@ class RiverSelectionAuditTest {
                     assertTrue(sparsest.drawn[link], "the sparsest $where lost the largest river")
                     link = sparsest.trunkOf[link]
                 }
+                println(floorReport(AUTHORS_SEED, AUTHORS_SIDE, where, map, sheet))
             }
 
         // Rule 8: the selection walks every cell of the grid once, to find out which course owns
@@ -253,6 +257,47 @@ class RiverSelectionAuditTest {
                 }
             }
         written.forEach { println("X1C RENDER $it") }
+    }
+
+    /**
+     * Whether the budget's floor binds anywhere the application draws: the six audited seeds at
+     * 512, on the export and in the pane. The author's world at 2048 is printed by the case above,
+     * which already holds it.
+     *
+     * The floor keeps the largest river and its trunks on every map by never letting the budget
+     * fall below that chain. Where it binds at Earth's mark, the default is not X1c's selection to
+     * the course, so this is printed on every audited world rather than argued.
+     */
+    @Test
+    fun `where the largest river's floor binds, on the six audited seeds`() {
+        AUDITED_SEEDS.forEach { seed ->
+            val map = world(seed, 512)
+            listOf("export" to MapSheet.UNGENERALISED, "pane" to paneSheet(512))
+                .forEach { (where, sheet) -> println(floorReport(seed, 512, where, map, sheet)) }
+        }
+    }
+
+    /**
+     * One line: the largest river's chain against the budget Earth's figure sets at each finite
+     * mark of the density scale on [sheet], and the marks where the chain is the longer.
+     */
+    private fun floorReport(seed: Long, side: Int, where: String, map: WorldMap, sheet: MapSheet): String {
+        val chosen = RiverSelection.select(map, sheet)
+        val rivers = map.rivers.rivers
+        var link = rivers.indices.maxByOrNull { RiverSelection.peakWidthRatio(rivers[it]) }!!
+        var chainKm = 0.0
+        while (link != RiverSelection.NO_TRUNK) {
+            chainKm += chosen.courseKilometres[link]
+            link = chosen.trunkOf[link]
+        }
+        val earthKm = RiverSelection.drawnRiverKmPerSquareKm(chosen.denominator) *
+            chosen.landAreaSquareKm
+        val finiteMarks = RiverSelection.INK_STEPS.filter { RiverSelection.inkScaleAt(it).isFinite() }
+        val binding = finiteMarks.filter { earthKm * RiverSelection.inkScaleAt(it) < chainKm }
+        return "X1C FLOOR $seed at $side, $where: the largest river's chain is ${chainKm.round()} km " +
+            "against Earth's budget of ${earthKm.round()} km at the default mark and " +
+            "${(earthKm * RiverSelection.LEAST_INK_SCALE).round()} km at the bottom; the floor " +
+            "binds at ${if (binding.isEmpty()) "no mark" else "marks $binding"}"
     }
 
     /** The four standard seeds at 512, at each of the scale's three marks, whole. */

@@ -172,14 +172,14 @@ grid: at a 12,000 km world width and the CSS reference pixel, a 2048 export is a
 and the same world fitted into a 900-pixel pane about 1:50 400 000 — which the pane's own
 half-octave zoom bands round to 1:44 300 000, the scale the selection is actually made at and the
 scale quoted below. Seed 969495 at 2048 traces
-2,077 courses and 470,806 km of watercourse; its export draws **107 courses and 70,292 km over 27.4
-million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 66
-courses and 49,701 km. The rule that preceded this one kept a share of the traced count by the same
+2,081 courses and 471,294 km of watercourse; its export draws **107 courses and 70,294 km over 27.4
+million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 62
+courses and 49,705 km. The rule that preceded this one kept a share of the traced count by the same
 law of Töpfer's, which relates a derived map to a source map and so has no absolute answer: it drew
 6.7 times that ink on the export and 7.7 times on the pane, and the *same country at the same size
 on the same screen* came out at three densities depending on whether the world behind it had been
-generated at 512, 1024 or 2048 — 0.01019, 0.01252 and 0.012786 km/km² on seed 7, a spread of
-20.3%, against 0.001813 three times over now, a spread under a tenth of a per cent.
+generated at 512, 1024 or 2048 — 0.010182, 0.012508 and 0.012781 km/km² on seed 7, a spread of
+20.3%, against 0.001814, 0.001813 and 0.001814 now, a spread under a tenth of a per cent.
 
 Which courses survive is decided by discharge, largest first, on the peak width ratio — the square
 root of discharge normalised over the network. Two rules sit on top of that. The budget is spread by
@@ -200,10 +200,13 @@ is the reference's own sparsest sheet: Natural Earth's 1:110 000 000 tier draws 
 — a quarter. The top is the rule that preceded this one, to the course, because there the budget
 gives way to the radical law's cut on the traced count: every course on an export, 71% of them in a
 pane at half a pixel to the cell, every course tied at the cut kept. The cut applies at the top
-alone, so Earth's mark is the selection described above to the course. The largest river and the
-trunks below it are drawn at every mark, since the budget never falls below that chain; at the
-bottom that binds only on a sheet far smaller than any the application draws. The lattice runs at
-every mark, and it spreads rather than caps: on the four standard seeds at 512 the fullest square
+alone. The largest river and the trunks below it are drawn at every mark, since the budget never
+falls below that chain, so Earth's mark is the selection described above to the course wherever
+that chain fits Earth's budget. Nothing bounds the chain, so the floor could bind at any mark, the
+default included; on the worlds measured - the six audited seeds at 512 on the export and in the
+pane, and 969495 at 2048 - it binds at none, the longest such chain being 5,755 km against a
+smallest bottom-mark budget of 8,791 km. The lattice runs at every mark, and it spreads rather than
+caps: on the four standard seeds at 512 the fullest square
 holds one or two drawn courses up to Earth's mark, 7–12 at twice it, 18–25 at four times, and 49–70
 at the top, which is the law's own. So a reader who asks for every river asks for the coastal comb
 back, and the mark says so.

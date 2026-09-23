@@ -141,7 +141,10 @@ object RiverSelection {
      */
     const val LEAST_INK_SCALE: Double = 0.25
 
-    /** The mark the scale starts at: Earth's figure for this sheet's scale, exactly. */
+    /**
+     * The mark the scale starts at: Earth's figure for this sheet's scale, which only the largest
+     * river's floor can raise.
+     */
     const val EARTH_DENSITY_STEP: Int = 4
 
     /**

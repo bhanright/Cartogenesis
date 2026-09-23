@@ -17,6 +17,16 @@
   agreement is a calibration in this map's own units and not a claim that the two draw the same
   physical length of river. 2026-09-22, X1c.
 
+- **The river crowding lattice is a square grid, and CONVENTIONS rule 13 has not measured it.** The
+  selection's first pass takes one candidate per square of a lattice laid out in ground kilometres
+  (`RiverSelection.crowdingPitchKilometres`). It draws no shape - it decides which traced courses
+  are inked, and every course keeps its own traced line - but it is a fixed-block operator of the
+  kind rule 13 names, and it could in principle space the drawn mouths at the lattice's pitch along
+  the rows and columns. Nothing has looked. What would settle it: add the drawn river mouths to the
+  geometry guard (spacing by bearing, the nearest-neighbour distances of drawn mouths against the
+  same count drawn from the traced set at random), and if the lattice shows, replace it with an
+  isotropic spacing rule such as a minimum ground distance between drawn mouths. 2026-09-23, X1c.
+
 - **No setting of the drawing is saved with a world.** The river density slider was asked for
   "saved with the world's render options as the other cartography settings are", and there are no
   such options: `WorldDocument` holds the config, the edits, the labels and the terrain, and every

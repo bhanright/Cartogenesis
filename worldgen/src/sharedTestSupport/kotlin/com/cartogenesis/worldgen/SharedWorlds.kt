@@ -28,18 +28,20 @@ import org.junit.runners.model.Statement
 object SharedWorlds {
 
     /**
-     * The retained worlds' arrays, in bytes, before the least recently used goes.
+     * The retained worlds' arrays, in bytes, before one goes.
      *
-     * A 512 world holds about 45 MB of arrays and a 1024 one four times that, so this keeps the
-     * sixteen or so distinct 512 worlds the per-merge tier asks for most with room for a few
-     * larger ones. It is a share of the worker heap, which the build sizes with this in it.
+     * A 512 world holds 39 MB of arrays and a 1024 one four times that, so this keeps the four
+     * standard worlds with room for a dozen variants or three 1024 worlds. It is what a worker can
+     * spare: the largest thing a per-merge worker does is generate a 2048 world, which stood at
+     * 2.5 GB live at its peak (3.7 GB after a collection with 1.2 GB retained), so 600 MB keeps
+     * that peak inside the 3.5 GB the root build script gives a `:worldgen` worker.
      */
-    private const val RETAINED_ARRAY_BYTES = 1_200_000_000L
+    private const val RETAINED_ARRAY_BYTES = 600_000_000L
 
     /**
      * The largest world kept once its borrower is done with it, in cells.
      *
-     * Larger worlds are generated for the test that asks and not retained: a 2048 world is 700 MB
+     * Larger worlds are generated for the test that asks and not retained: a 2048 world is 620 MB
      * of arrays, one class at a time uses it, and holding it past that class would crowd out a
      * dozen 512 worlds that many classes share.
      */
@@ -133,6 +135,7 @@ class WorldLender(
         val guard = WorldGuard(world)
         val arrayBytes: Long = ReachableState.arrayBytes(world)
         var lastBorrower: String = ""
+        var lastLentInTest = 0
         val borrowingClasses = HashSet<String>()
     }
 
@@ -143,16 +146,18 @@ class WorldLender(
     private var activeClass: String? = null
     private var activeBorrower: String? = null
 
-    /** What this lender has done, for the report at the end of a tier. */
+    /** Counts tests begun, so a loan can tell a second request from the same test run apart. */
+    private var testsBegun = 0
+
+    /** How many worlds this lender has generated, retained or not. */
     var generated = 0
-        private set
-    var lent = 0
         private set
 
     @Synchronized
     fun beginTest(testClass: String, borrower: String) {
         activeClass = testClass
         activeBorrower = borrower
+        testsBegun++
     }
 
     /** Checks every retained world [testClass] has borrowed, failing on the first that changed. */
@@ -185,7 +190,6 @@ class WorldLender(
     @Synchronized
     fun world(config: WorldGenConfig): WorldMap {
         val started = System.nanoTime()
-        lent++
         val borrower = activeBorrower
         if (borrower == null) {
             generated++
@@ -195,10 +199,19 @@ class WorldLender(
         }
         val testClass = activeClass!!
         if (config.width.toLong() * config.height > largestRetainedCells) {
+            // The generation about to run is the largest thing a worker does, so the variants
+            // nobody else has asked for make way for it first.
+            loans.values.filter { it.borrowingClasses.size < 2 }.forEach { dropToMakeRoom(it, borrower) }
             generated++
             return generate(config).also { report("generated, too large to keep", config, borrower, started) }
         }
         val existing = loans[config]
+        if (existing != null && existing.lastLentInTest == testsBegun) {
+            // Asked for again by the test that already holds it — a getter read in a loop, say.
+            // Nothing else has held it since it was last checked, and the check after this test
+            // covers whatever this test does to it, so it is handed straight back.
+            return existing.world
+        }
         val loan = if (existing != null) {
             requireUnchanged(existing, "when lent to $borrower") { changed ->
                 "the shared world for ${describe(config)} was written to while " +
@@ -215,6 +228,7 @@ class WorldLender(
             }
         }
         loan.lastBorrower = borrower
+        loan.lastLentInTest = testsBegun
         loan.borrowingClasses.add(testClass)
         loansByClass.getOrPut(testClass) { HashSet() }.add(config)
         return loan.world
@@ -239,16 +253,20 @@ class WorldLender(
 
     private fun admit(loan: Loan, borrower: String) {
         while (retainedBytes + loan.arrayBytes > retainedArrayBytes && loans.isNotEmpty()) {
-            val leaving = loans.values.firstOrNull { it.borrowingClasses.size < 2 } ?: loans.values.first()
-            requireUnchanged(leaving, "before it was dropped to make room for $borrower's") { changed ->
-                "the shared world for ${describe(leaving.config)} was written to while " +
-                    "${leaving.lastBorrower} held it: ${changed.joinToString()} changed. Found " +
-                    "when it was dropped to make room, so $borrower fails in its place."
-            }
-            forget(leaving)
+            dropToMakeRoom(loans.values.firstOrNull { it.borrowingClasses.size < 2 } ?: loans.values.first(), borrower)
         }
         loans[loan.config] = loan
         retainedBytes += loan.arrayBytes
+    }
+
+    /** Checks [leaving] one last time and lets it go, failing [borrower]'s test if it changed. */
+    private fun dropToMakeRoom(leaving: Loan, borrower: String) {
+        requireUnchanged(leaving, "before it was dropped to make room for $borrower's") { changed ->
+            "the shared world for ${describe(leaving.config)} was written to while " +
+                "${leaving.lastBorrower} held it: ${changed.joinToString()} changed. Found " +
+                "when it was dropped to make room, so $borrower fails in its place."
+        }
+        forget(leaving)
     }
 
     private fun forget(loan: Loan) {

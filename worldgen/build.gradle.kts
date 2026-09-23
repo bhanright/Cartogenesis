@@ -173,14 +173,16 @@ val auditOnlyClasses = listOf(
 )
 
 /*
- * T5: the per-merge tier in workers side by side, each with the heap and the thread pool the root
- * build script's budget gives it (see there for why those add up as they do). The audit task below
- * keeps the eight gigabytes and the one worker above, which its 2048 and 4096 cases were sized for.
+ * T5: the per-merge tier in workers side by side, each with the heap and the share of the processor
+ * the root build script's budget gives it (see there for why those add up as they do). The audit
+ * task below keeps the eight gigabytes and the one worker above, which its 2048 and 4096 cases were
+ * sized for.
  *
- * Three workers take a third of the classes each, and every class that asks `SharedWorlds` for a
- * world is handed the one its worker already holds, so a standard world is generated once a worker
- * rather than once a class. Which classes share a worker is Gradle's choice — it deals them out in
- * the order it finds them — so a world many classes ask for is made at most three times.
+ * The workers share the classes out, and every class that asks `SharedWorlds` for a world is
+ * handed the one its worker already holds, so a standard world is generated once a worker rather
+ * than once a class. Which classes share a worker is Gradle's choice — it deals them out in the
+ * order it finds them and does not look at what they cost — so a world many classes ask for is
+ * made at most once in each worker, and how evenly the time falls is left to chance.
  *
  * `mustRunAfter` is for the project lock. Without the configuration cache Gradle runs no two tasks
  * of one project at once, and this one holds the lock for as long as its tests run; the Wasm
@@ -195,7 +197,11 @@ tasks.named<Test>("jvmTest") {
     val budget = rootProject.extra
     maxParallelForks = budget["worldgenTestForks"] as Int
     maxHeapSize = budget["worldgenTestHeap"] as String
-    jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=${budget["worldgenTestPoolThreads"]}")
+    val processors = budget["worldgenTestProcessors"] as Int
+    jvmArgs(
+        "-XX:ActiveProcessorCount=$processors",
+        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
+    )
     mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
 }
 

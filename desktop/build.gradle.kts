@@ -141,7 +141,11 @@ tasks.named<Test>("test") {
     }
     val budget = rootProject.extra
     maxHeapSize = budget["desktopTestHeap"] as String
-    jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=${budget["desktopTestPoolThreads"]}")
+    val processors = budget["desktopTestProcessors"] as Int
+    jvmArgs(
+        "-XX:ActiveProcessorCount=$processors",
+        "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
+    )
 }
 
 tasks.register<Test>("audit") {

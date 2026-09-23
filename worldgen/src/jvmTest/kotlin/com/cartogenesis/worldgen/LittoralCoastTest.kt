@@ -53,8 +53,14 @@ class LittoralCoastTest {
      * third is not a world anybody would ship — it fills the Chesapeake along with the ditches — and
      * exists only so that the guard below can ask how much of the coast's roughness at the cell is
      * channels at all.
+     *
+     * Made once for the class and kept: every guard below reads the same cuts, none writes to
+     * them, and making them is five erosions a grid, which six guards used to pay for six times.
      */
-    private fun cutsAt(cellsAcross: Int): Map<Long, Cut> = seeds.associateWith { seed ->
+    private fun cutsAt(cellsAcross: Int): Map<Long, Cut> =
+        cutsByGrid.getOrPut(cellsAcross) { makeCutsAt(cellsAcross) }
+
+    private fun makeCutsAt(cellsAcross: Int): Map<Long, Cut> = seeds.associateWith { seed ->
         val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             .atResolution(cellsAcross, cellsAcross)
         val terrain = TerrainStage.generate(config)
@@ -385,6 +391,9 @@ class LittoralCoastTest {
     private companion object {
         /** The rulers the coast is walked with, in cells. */
         val RULERS = listOf(1, 2, 4, 8, 16)
+
+        /** [cutsAt]'s cuts, by grid, made the first time a guard asks. */
+        val cutsByGrid = HashMap<Int, Map<Long, Cut>>()
 
         /**
          * A valley bar no drowned notch can clear, for the arm of [cutsAt] that fills all of them.

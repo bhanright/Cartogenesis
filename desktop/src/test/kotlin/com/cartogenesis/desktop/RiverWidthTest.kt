@@ -8,6 +8,8 @@ import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.SharedWorlds
+import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -588,7 +590,11 @@ class RiverWidthTest {
     fun `how long the widths cost`() {
         val options = RenderOptions()
         var world: WorldMap? = null
-        val generateMs = measureTimeMillis { world = world(42L) }
+        // Generated here rather than borrowed from `SharedWorlds`, because the generation's time
+        // is one of the two figures printed.
+        val generateMs = measureTimeMillis {
+            world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = SIDE, height = SIDE))
+        }
         val ready = world!!
         MapRasterizer.overlay(ready, options)
         var segments = 0

@@ -49,8 +49,30 @@ java {
  * per-merge suite takes its heap from the root build script's budget instead: see below.
  */
 tasks.withType<Test>().configureEach {
-    // Except the audit tier, which holds worlds at 2048: see below.
+    // Except the audit tier, which holds worlds at 2048 and the geometry census's layers: see below.
     maxHeapSize = if (name == "audit") "8g" else "4g"
+}
+
+/*
+ * The geometry guard's known failures: clauses that fail today and are kept running under the
+ * name of the finding each records (`KnownFailures` in the tests), and the clauses too small to
+ * measure on today's worlds. Each test task hands the tests a file to append them to, clears it
+ * before it runs and prints it once the whole task has run, pass or fail — so the list of what is
+ * known to be wrong, and of what the tier could not see, is at the foot of every tier's output.
+ */
+tasks.withType<Test>().configureEach {
+    val report = layout.buildDirectory.file("known-failures/$name.txt").get().asFile
+    systemProperty("cartogenesis.knownFailures", report.absolutePath)
+    doFirst { report.delete() }
+    afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
+        if (suite.parent == null && report.exists()) {
+            val lines = report.readLines()
+            val known = lines.count { it.startsWith("KNOWN FAILURE") }
+            val insufficient = lines.count { it.startsWith("INSUFFICIENT") }
+            println("Known failures in $name ($known), and clauses too small to measure ($insufficient):")
+            lines.forEach { println("  $it") }
+        }
+    }))
 }
 
 /**
@@ -63,13 +85,18 @@ tasks.withType<Test>().configureEach {
  * and skip or return otherwise; they are here because a render harness is an audit's job
  * whatever it costs, so that the per-merge list is guards and nothing else. The two classes that
  * regenerate checked-in fixtures on request stay where they are: they are tools, not measurements.
+ *
+ * And the geometry guard's census at 2048: seven worlds, each generated with its layers captured
+ * and every layer read by every detector, and each paired with the same world at 1024 wherever a
+ * ruled comb is found. It is one world at a time and wants the heap a 2048 world does.
  */
 val auditOnlyClasses = listOf(
     "com.cartogenesis.cartography.W4RenderDump",
     "com.cartogenesis.cartography.F30bRenderDump",
     "com.cartogenesis.cartography.I3RenderDump",
     "com.cartogenesis.cartography.R1RenderDump",
-    "com.cartogenesis.cartography.S3RenderDump"
+    "com.cartogenesis.cartography.S3RenderDump",
+    "com.cartogenesis.cartography.geometry.GeometryGuardAuditTest"
 )
 
 /*
@@ -92,7 +119,8 @@ tasks.named<Test>("jvmTest") {
 
 tasks.register<Test>("audit") {
     group = "verification"
-    description = "Runs the on-demand / nightly audit tier: the render harnesses excluded from jvmTest."
+    description = "Runs the on-demand / nightly audit tier: the render harnesses excluded from " +
+        "jvmTest, and the 2048-scale geometry census."
     val jvmTestTask = tasks.named<Test>("jvmTest").get()
     testClassesDirs = jvmTestTask.testClassesDirs
     classpath = jvmTestTask.classpath

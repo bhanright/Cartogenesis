@@ -36,10 +36,14 @@ class GeometryControlTest {
 
         /**
          * The census the per-merge tier runs: four worlds, the layers `MapLayers` lists, and
-         * [GeometryGuard.TESTS_PER_LAYER] tests on each. The controls are held to the same
-         * corrected level a world is.
+         * [GeometryGuard.TESTS_PER_LAYER] tests and the place family on each. The controls are held
+         * to the same corrected levels a world is.
          */
-        val FAMILY = Census.familySize(4)
+        val JUDGE = Judge.forCensus(4)
+        val FAMILY = JUDGE.familySize
+
+        /** The audit tier's census, seven worlds, whose bars sit a little higher. */
+        val AUDIT_JUDGE = Judge.forCensus(7)
 
         /** A smaller square of the same cells, for the per-component controls. */
         val SQUARE = GridFrame(256, 256, FRAME.cellWidthKm, FRAME.cellHeightKm)
@@ -49,10 +53,12 @@ class GeometryControlTest {
     }
 
     private fun read(name: String, mask: BooleanArray, frame: GridFrame, twice: Boolean = false): LayerReading =
-        GeometryGuard.read(Layer(name, Contours.ofMask(mask, frame), twice), frame, FAMILY, NaturalFigures.of(frame).cornersPer1000Km)
+        GeometryGuard.read(Layer(name, Contours.ofMask(mask, frame), twice), frame, JUDGE)
 
     private fun readMany(name: String, masks: List<BooleanArray>, frame: GridFrame): LayerReading =
-        GeometryGuard.read(Layer(name, masks.flatMap { Contours.ofMask(it, frame) }), frame, FAMILY, NaturalFigures.of(frame).cornersPer1000Km)
+        GeometryGuard.read(Layer(name, masks.flatMap { Contours.ofMask(it, frame) }), frame, JUDGE)
+
+    private fun readLines(layer: Layer, frame: GridFrame): LayerReading = GeometryGuard.read(layer, frame, JUDGE)
 
     private fun flagged(reading: LayerReading): Set<Detector> =
         Detector.entries.filter { reading.outcome(it) == Outcome.VIOLATION }.toSet()
@@ -174,14 +180,19 @@ class GeometryControlTest {
         // The seam: the same island centred on it and centred on the middle of the map.
         val middle = Controls.naturalIsland(SQUARE, 44L, 40 * SQUARE.cellWidthKm, SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2)
         val onSeam = Controls.naturalIsland(SQUARE, 44L, 40 * SQUARE.cellWidthKm, 0.0, SQUARE.cellsDown * SQUARE.cellHeightKm / 2)
-        val middleRings = ComponentShapes.measure(Contours.ofMask(middle, SQUARE), SQUARE).filter { it.measured }
-        val seamRings = ComponentShapes.measure(Contours.ofMask(onSeam, SQUARE), SQUARE).filter { it.measured }
-        val middleBig = middleRings.maxBy { it.areaCells }
-        val seamBig = seamRings.maxBy { it.areaCells }
-        lines.add("island in the middle: ${middleBig.describe(SQUARE)}")
-        lines.add("island on the seam:   ${seamBig.describe(SQUARE)}")
+        val middleOutlines = Contours.ofMask(middle, SQUARE)
+        val seamOutlines = Contours.ofMask(onSeam, SQUARE)
+        val middleBig = ComponentShapes.rings(middleOutlines, SQUARE).filter { it.measured }.maxBy { it.areaCells }
+        val seamBig = ComponentShapes.rings(seamOutlines, SQUARE).filter { it.measured }.maxBy { it.areaCells }
+        val middleWindows = ComponentShapes.windows(middleOutlines, SQUARE)
+        val seamWindows = ComponentShapes.windows(seamOutlines, SQUARE)
+        fun local(windows: List<ComponentShapes.Window>) = "longest aligned %.2f steps, longest run %.3f cell widths, strongest crease %.3f".format(
+            windows.maxOf { it.alignedSteps }, windows.maxOf { it.runCellWidths }, windows.maxOf { it.creaseStrength })
+        lines.add("island in the middle: ${middleBig.describe(SQUARE)}; ${local(middleWindows)}")
+        lines.add("island on the seam:   ${seamBig.describe(SQUARE)}; ${local(seamWindows)}")
         if (abs(middleBig.areaCells - seamBig.areaCells) > 1e-6 || abs(middleBig.fill - seamBig.fill) > 1e-9 ||
-            abs(middleBig.longestRunKm - seamBig.longestRunKm) > 1e-6
+            abs(middleWindows.maxOf { it.alignedSteps } - seamWindows.maxOf { it.alignedSteps }) > 1e-6 ||
+            abs(middleWindows.maxOf { it.runCellWidths } - seamWindows.maxOf { it.runCellWidths }) > 1e-6
         ) failures.add("the island reads differently across the seam")
 
         // A pole: an island run off the top of the map leaves an open line and no run along the row.
@@ -211,16 +222,38 @@ class GeometryControlTest {
             if (flagged(reading).isNotEmpty()) failures.add("the natural ground at $side flagged by ${flagged(reading)}")
         }
 
-        // A stamp turned off the grid: still a rectangle, no longer aligned.
+        // A stamp turned off the grid: no longer aligned, so no longer rejected as a rectangle or for
+        // its sides. Turned on the sheet, a rectangle is a parallelogram on the ground, and it is on
+        // the ground that its smallest rectangle is found; a rectangle turned on the ground stays one.
+        val bars = NaturalTails.of(SQUARE, smooth = false).bars(JUDGE.zPlace)
         for (turn in listOf(0.0, 3.0, 7.0, 23.0, 41.0)) {
-            val ring = ComponentShapes.measure(Contours.ofMask(
-                Controls.rectangle(SQUARE, 60.0, 30.0, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0, turn), SQUARE), SQUARE).single()
-            lines.add("rectangle turned %4.1f deg: fill %.3f, %s, aligned side %s, %d corner pairs".format(
-                turn, ring.fill, if (ring.alignedRectangle) "aligned" else "not aligned",
-                if (ring.hasLongAlignedSide) "flagged" else "clear", ring.cornerPairs))
-            if (!ring.isRectangle) failures.add("the rectangle turned $turn deg is no longer read as a rectangle")
-            if (turn == 0.0 && !ring.isAlignedStamp) failures.add("the rectangle on the grid is not flagged as aligned")
-            if (turn >= 3.0 && (ring.alignedRectangle || ring.hasCornerPair)) failures.add("the rectangle turned $turn deg is still flagged for alignment")
+            val outlines = Contours.ofMask(Controls.rectangle(SQUARE, 60.0, 30.0, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0, turn), SQUARE)
+            val ring = ComponentShapes.rings(outlines, SQUARE).single()
+            val windows = ComponentShapes.windows(outlines, SQUARE)
+            val reading = read("rectangle turned", Controls.rectangle(SQUARE, 60.0, 30.0, SQUARE.cellsAcross / 2.0, SQUARE.cellsDown / 2.0, turn), SQUARE)
+            lines.add("rectangle turned %4.1f deg on the sheet: %s; longest aligned side %.1f steps; %d corner pairs; flagged by %s".format(
+                turn, ring.describe(SQUARE), windows.maxOf { it.alignedSteps }, windows.sumOf { it.cornerPairs }, flagged(reading)))
+            if (turn == 0.0 && (!ring.alignedRectangle || ring.fill <= bars.fill || Detector.RECTANGLE !in flagged(reading))) {
+                failures.add("the rectangle on the grid is not flagged as an aligned rectangle")
+            }
+            if (turn >= 3.0 && (ring.alignedRectangle || windows.any { it.cornerPairs > 0 } ||
+                    flagged(reading).any { it in setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES) })
+            ) failures.add("the rectangle turned $turn deg is still flagged for alignment")
+        }
+        for (turn in listOf(0.0, 11.0, 37.0)) {
+            // Turned on the ground: in kilometres about the centre, then rasterised.
+            val radians = Math.toRadians(turn)
+            val cx = SQUARE.worldWidthKm / 2
+            val cy = SQUARE.cellsDown * SQUARE.cellHeightKm / 2
+            val mask = Controls.rasterise(SQUARE) { x, y ->
+                val along = (x - cx) * cos(radians) + (y - cy) * sin(radians)
+                val across = -(x - cx) * sin(radians) + (y - cy) * cos(radians)
+                abs(along) <= 30 * SQUARE.cellWidthKm && abs(across) <= 12 * SQUARE.cellWidthKm
+            }
+            val ring = ComponentShapes.rings(Contours.ofMask(mask, SQUARE), SQUARE).single()
+            lines.add("rectangle turned %4.1f deg on the ground: %s".format(turn, ring.describe(SQUARE)))
+            if (ring.fill <= ComponentShapes.RECTANGLE_FILL) failures.add("a rectangle turned $turn deg on the ground no longer fills its rectangle")
+            if ((turn == 0.0) != ring.alignedRectangle) failures.add("a rectangle turned $turn deg on the ground reads aligned ${ring.alignedRectangle}")
         }
 
         // Sizes and roughening: where each detector stops seeing a rectangle.
@@ -260,22 +293,31 @@ class GeometryControlTest {
     fun `the known-failure helper catches the guard's own violation and nothing else`() {
         val recorded = ArrayList<String>()
         val sink = { finding: String, detail: String -> recorded.add("$finding: $detail"); Unit }
-        // A violation is recorded under its finding, and the clause passes.
-        KnownFailures.expect("control finding", { throw GeometryViolation("a stamped rectangle") }, sink)
+        val stamp = Signature(1, 30, 40, 12.5)
+        // A violation with the recorded signature is recorded under its finding, and the clause passes.
+        KnownFailures.expect("control finding", stamp, { throw GeometryViolation("a stamped rectangle", Signature(1, 31, 39, 12.6)) }, sink)
         assertEquals(listOf("control finding: a stamped rectangle"), recorded)
+        // Another violation in the same slot fails: moved, grown, or joined by a second place.
+        for (other in listOf(Signature(1, 90, 40, 12.5), Signature(1, 30, 40, 14.0), Signature(2, 30, 40, 12.5), null)) {
+            val different = assertFailsWith<AssertionError> {
+                KnownFailures.expect("control finding", stamp, { throw GeometryViolation("another stamp", other) }, sink)
+            }
+            assertTrue(different !is GeometryViolation && different.message!!.contains("a different violation"), "$other passed as $stamp")
+        }
+        assertEquals(Signature.parse(stamp.toString()).toString(), stamp.toString(), "a signature reads back as written")
         // A clause that no longer fails fails the helper, naming the finding.
-        val fixed = assertFailsWith<AssertionError> { KnownFailures.expect("control finding", { }, sink) }
+        val fixed = assertFailsWith<AssertionError> { KnownFailures.expect("control finding", stamp, { }, sink) }
         assertEquals("control finding fixed: arm this clause", fixed.message)
         // Everything else goes through untouched: too little data, another assertion, a setup error.
         assertFailsWith<InsufficientSample> {
-            KnownFailures.expect("control finding", { throw InsufficientSample("three runs") }, sink)
+            KnownFailures.expect("control finding", stamp, { throw InsufficientSample("three runs") }, sink)
         }
         val other = assertFailsWith<AssertionError> {
-            KnownFailures.expect("control finding", { assertEquals(1, 2) }, sink)
+            KnownFailures.expect("control finding", stamp, { assertEquals(1, 2) }, sink)
         }
         assertTrue(other !is GeometryViolation && other.message?.contains("fixed") != true)
         assertFailsWith<IllegalStateException> {
-            KnownFailures.expect("control finding", { error("the world did not generate") }, sink)
+            KnownFailures.expect("control finding", stamp, { error("the world did not generate") }, sink)
         }
         assertEquals(1, recorded.size, "only the violation was recorded")
     }
@@ -327,19 +369,28 @@ class GeometryControlTest {
     }
 
     /**
-     * The per-component bars that are taken from the control ensemble, shown against it: every
-     * ring of an ensemble of natural islands — three sizes of roughness, isotropic on the ground
-     * and on the sheet, at many rotations and radii — measured, and the largest figure any of them
-     * reaches printed beside the bar it sets.
+     * The per-place bars the natural controls set ([NaturalTails]), printed beside the tails they
+     * come from, and shown on natural shapes the tails were not read from: natural islands — three
+     * roughnesses, isotropic on the ground and on the sheet, at many rotations and radii — none of
+     * whose windows or rings may reach a bar, and which may fit no arc and make no corner pair.
      */
     @Test
     fun `the natural ensemble sits below every bar it sets`() {
+        val failures = ArrayList<String>()
+        for (smooth in listOf(false, true)) {
+            val tails = NaturalTails.of(FRAME, smooth)
+            val name = if (smooth) "smooth" else "rough"
+            println("GEOMETRY TAILS $name: $tails")
+            println("GEOMETRY BARS $name at the per-merge census's level (z %.2f): %s".format(JUDGE.zPlace, tails.bars(JUDGE.zPlace)))
+            println("GEOMETRY BARS $name at the audit census's level (z %.2f): %s".format(AUDIT_JUDGE.zPlace, tails.bars(AUDIT_JUDGE.zPlace)))
+            if (tails.windowsWithCornerPairs > 0) failures.add("the $name natural controls make ${tails.windowsWithCornerPairs} corner pairs")
+            if (!smooth && tails.arcs > 0) failures.add("the rough natural controls fit ${tails.arcs} arcs")
+        }
+        val bars = NaturalTails.of(SQUARE, smooth = false).bars(JUDGE.zPlace)
+        val windows = ArrayList<ComponentShapes.Window>()
         val rings = ArrayList<ComponentShapes.Ring>()
-        var arcs = 0
         val arcNotes = ArrayList<String>()
-        val arcRadii = ArrayList<Pair<Double, Double>>()
-        val shortArmPairs = ArrayList<Double>()
-        var outlineKm = 0.0
+        var arcs = 0
         val random = Random(17)
         for (roughness in listOf(0.25, 0.4, 0.6)) for (inCells in listOf(false, true)) for (index in 0 until 30) {
             val radiusCells = 4.0 + random.nextDouble() * 41.0
@@ -349,48 +400,27 @@ class GeometryControlTest {
                 rotationDegrees = random.nextDouble() * 180.0, isotropicInCells = inCells, roughnessOverRadius = roughness
             )
             val outlines = Contours.ofMask(mask, SQUARE)
-            outlineKm += outlines.sumOf { it.lengthKm() }
-            for (outline in outlines.filter { it.isRing }) {
-                val corners = LatticeRuns.corners(LatticeRuns.of(outline, SQUARE, 0.0), outline.vertexCount, true, SQUARE, minimumSteps = 2.0)
-                for (side in LatticeRuns.cornerPairs(corners)) {
-                    val before = corners.filter { it.second === side }.maxOf { it.first.steps }
-                    val after = corners.filter { it.first === side }.maxOf { it.second.steps }
-                    shortArmPairs.add(minOf(side.steps, before, after))
-                }
-            }
-            rings.addAll(ComponentShapes.measure(outlines, SQUARE))
+            windows.addAll(ComponentShapes.windows(outlines, SQUARE))
+            rings.addAll(ComponentShapes.rings(outlines, SQUARE))
             val found = Arcs.measure(outlines, SQUARE)
             arcs += found.arcs.size
-            found.arcs.forEach {
-                arcNotes.add("r=%.1f roughness %.2f: %s".format(radiusCells, roughness, it.describe(SQUARE)))
-                arcRadii.add(it.radiusCells to it.rmsCells)
-            }
-        }
-        val fieldRings = ArrayList<ComponentShapes.Ring>()
-        for (inCells in listOf(false, true)) for (rotation in listOf(0.0, 17.0, 45.0, 71.0)) {
-            val mask = Controls.naturalField(FRAME, 101L + rotation.toLong(), 0.35, 60 * FRAME.cellWidthKm,
-                rotationDegrees = rotation, isotropicInCells = inCells)
-            fieldRings.addAll(ComponentShapes.measure(Contours.ofMask(mask, FRAME), FRAME))
+            found.arcs.forEach { arcNotes.add("r=%.1f roughness %.2f: %s".format(radiusCells, roughness, it.describe(SQUARE))) }
         }
         val measured = rings.filter { it.measured }
-        val worstFill = measured.maxBy { it.fill }
-        val forRuns = rings.filter { it.measuredForRuns }
-        val worstFacet = forRuns.maxBy { it.longestRunKm / it.facetAllowanceKm }
-        val worstSide = forRuns.maxBy { it.longestAlignedKm / it.alignedAllowanceKm }
-        println("GEOMETRY ENSEMBLE %d rings, %d measured, %.0f km of outline".format(rings.size, measured.size, outlineKm))
-        println("GEOMETRY ENSEMBLE fill: worst %.3f (%s) against the bar %.2f".format(worstFill.fill, worstFill.describe(SQUARE), ComponentShapes.RECTANGLE_FILL))
-        println("GEOMETRY ENSEMBLE facets: worst %.3f of the allowance (%s)".format(
-            worstFacet.longestRunKm / worstFacet.facetAllowanceKm, worstFacet.describe(SQUARE)))
-        println("GEOMETRY ENSEMBLE aligned side: worst %.3f of the allowance (%s)".format(
-            worstSide.longestAlignedKm / worstSide.alignedAllowanceKm, worstSide.describe(SQUARE)))
-        println("GEOMETRY ENSEMBLE corner pairs: %d rings; arcs: %d".format(measured.count { it.hasCornerPair }, arcs))
+        println("GEOMETRY ENSEMBLE islands: %d rings, %d measured, %d windows; bars %s".format(rings.size, measured.size, windows.size, bars))
+        println("GEOMETRY ENSEMBLE worst fill: %s".format(measured.maxByOrNull { it.fill }?.describe(SQUARE)))
+        println("GEOMETRY ENSEMBLE worst windows: aligned %.1f steps, run %.1f cell widths, crease %.2f; %d corner pairs; %d arcs".format(
+            windows.maxOf { it.alignedSteps }, windows.maxOf { it.runCellWidths }, windows.maxOf { it.creaseStrength },
+            windows.sumOf { it.cornerPairs }, arcs))
+        // Why nine cells across: the fill natural rings reach by their width, measured or not.
+        val bands = listOf(2.0, 4.0, 6.0, 9.0, 12.0, 1e9)
+        for (band in 0 until bands.size - 1) {
+            val within = rings.filter { it.areaCells >= 16 && it.cellsAcross >= bands[band] && it.cellsAcross < bands[band + 1] }
+            if (within.isEmpty()) continue
+            println("GEOMETRY ENSEMBLE rings %.0f to %.0f cells across: %d, worst fill %.3f".format(
+                bands[band], minOf(bands[band + 1], 999.0), within.size, within.maxOf { it.fill }))
+        }
         arcNotes.take(10).forEach { println("GEOMETRY ENSEMBLE arc $it") }
-        println("GEOMETRY ENSEMBLE arcs by radius: " + arcRadii.groupBy { minOf(it.first.toInt(), 16) }.toSortedMap()
-            .map { (radius, list) -> "%d: %d (least rms %.2f)".format(radius, list.size, list.minOf { it.second }) }.joinToString("; "))
-        val pairSteps = (rings + fieldRings).filter { it.cornerPairs > 0 }.map { it.cornerPairRunSteps }.sorted()
-        println("GEOMETRY ENSEMBLE corner pairs at %.0f steps and more: $pairSteps".format(LatticeRuns.CORNER_STEPS))
-        println("GEOMETRY ENSEMBLE corner pairs at 2 steps and more, by their shortest arm: " +
-            shortArmPairs.groupBy { it.toInt() }.toSortedMap().map { (steps, list) -> "$steps: ${list.size}" }.joinToString("; "))
         for (radius in listOf(4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 24.0)) for (inCells in listOf(false, true)) {
             val disc = Controls.disc(SQUARE, if (inCells) radius else radius * SQUARE.cellWidthKm,
                 if (inCells) SQUARE.cellsAcross / 2.0 + 0.3 else SQUARE.worldWidthKm / 2 + 0.3 * SQUARE.cellWidthKm,
@@ -399,18 +429,13 @@ class GeometryControlTest {
             println("GEOMETRY ENSEMBLE disc %s radius %.0f: %d arcs, %s".format(if (inCells) "on the sheet" else "on the ground", radius, found.size,
                 found.joinToString("; ") { "%s %.1f cells %.0f deg rms %.2f".format(it.frame, it.radiusCells, it.coverageDegrees, it.rmsCells) }))
         }
-        for (bound in listOf(64, 128, 256, 512, 1024, 4096)) {
-            val band = rings.filter { it.areaCells >= bound && it.rectangleShortCells >= ComponentShapes.MINIMUM_WIDTH_CELLS }
-            if (band.isEmpty()) continue
-            println("GEOMETRY ENSEMBLE from %5d cells: %3d rings, worst fill %.3f, worst facet %.3f, worst side %.3f".format(
-                bound, band.size, band.maxOf { it.fill }, band.maxOf { it.longestRunKm / it.facetAllowanceKm },
-                band.maxOf { it.longestAlignedKm / it.alignedAllowanceKm }))
-        }
-        assertTrue(measured.none { it.isRectangle }, "a natural ring filled its rectangle: ${worstFill.describe(SQUARE)}")
-        assertTrue(measured.none { it.hasFacets }, "a natural ring has a facet: ${worstFacet.describe(SQUARE)}")
-        assertTrue(measured.none { it.hasLongAlignedSide }, "a natural ring has a long aligned side: ${worstSide.describe(SQUARE)}")
-        assertTrue(measured.none { it.hasCornerPair }, "a natural ring has an aligned corner pair")
-        assertEquals(0, arcs, "natural outlines fitted circles:\n" + arcNotes.take(10).joinToString("\n"))
+        measured.filter { it.alignedRectangle && it.fill > bars.fill }.forEach { failures.add("a natural ring filled an aligned rectangle: ${it.describe(SQUARE)}") }
+        windows.filter { it.alignedSteps > bars.alignedSteps }.forEach { failures.add("a natural window has an aligned side of %.1f steps".format(it.alignedSteps)) }
+        windows.filter { it.runCellWidths > bars.runCellWidths }.forEach { failures.add("a natural window has a run of %.1f cell widths".format(it.runCellWidths)) }
+        windows.filter { it.creaseStrength > bars.creaseStrength }.forEach { failures.add("a natural window has a crease of %.2f".format(it.creaseStrength)) }
+        if (windows.any { it.cornerPairs > 0 }) failures.add("a natural island has a corner pair")
+        if (arcs > 0) failures.add("natural islands fitted circles:\n" + arcNotes.take(10).joinToString("\n"))
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     @Test
@@ -423,10 +448,12 @@ class GeometryControlTest {
             val flags = flagged(reading)
             val missed = mustFlag - flags
             val extra = flags - mustFlag - mayFlag
-            if (missed.isNotEmpty()) failures.add("$name: missed by ${missed.joinToString()}")
+            if (missed.isNotEmpty()) failures.add("$name: missed by ${missed.joinToString()} — " +
+                missed.joinToString(" | ") { "${it.name}: ${reading.outcome(it)} ${reading.describe(it)}" })
             if (extra.isNotEmpty()) failures.add("$name: flagged by ${extra.joinToString()} — " +
                 extra.joinToString(" | ") { reading.describe(it) })
         }
+        val corners = setOf(Detector.RIGHT_ANGLES, Detector.CORNER_RATE)
 
         // Natural controls: nothing may flag them.
         for (inCells in listOf(false, true)) for (rotation in listOf(0.0, 17.0, 45.0, 71.0)) {
@@ -449,72 +476,106 @@ class GeometryControlTest {
         val centreColumn = SQUARE.cellsAcross / 2.0
         val centreRow = SQUARE.cellsDown / 2.0
         expect("rectangle 60x30 on the grid", read("rect", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES), setOf(Detector.FACETS))
+            setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("rectangle 60x30 turned 23 deg", read("rect turned", Controls.rectangle(SQUARE, 60.0, 30.0, centreColumn, centreRow, 23.0), SQUARE),
-            setOf(Detector.RECTANGLE), setOf(Detector.FACETS))
+            setOf(Detector.FACETS), setOf(Detector.CREASES))
         expect("square window mask", read("window", Controls.squareWindowMask(FRAME, 4L, 9, 40 * FRAME.cellWidthKm), FRAME),
-            setOf(Detector.RIGHT_ANGLES), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.ISOTROPY, Detector.FACETS))
+            setOf(Detector.RIGHT_ANGLES), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.ISOTROPY, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("chessboard staircase, steps of 8", read("stairs", Controls.chessboardStaircase(SQUARE, 8, 120, 60, 60), SQUARE),
-            setOf(Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.COMBS, Detector.RECTANGLE, Detector.FACETS))
+            setOf(Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.COMBS, Detector.RECTANGLE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("half-disc on the sheet", read("half disc", Controls.halfDisc(SQUARE, 40.0, centreColumn, centreRow, 30.0, inCells = true), SQUARE),
-            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE))
+            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE, Detector.CREASES))
         expect("half-disc on the ground", read("half disc km", Controls.halfDisc(SQUARE, 40.0 * SQUARE.cellWidthKm,
             SQUARE.worldWidthKm / 2, SQUARE.cellsDown * SQUARE.cellHeightKm / 2, 30.0, inCells = false), SQUARE),
-            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE))
+            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.ALIGNED_SIDE, Detector.CREASES))
         val voronoi = readMany("voronoi", Controls.voronoiCells(BIG, 3L, 14, 960, 32, 32), BIG)
         lines.add("  nearest-seed partition's facets: " + voronoi.describe(Detector.FACETS))
-        expect("nearest-seed partition", voronoi, setOf(Detector.FACETS), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE))
+        expect("nearest-seed partition", voronoi, setOf(Detector.FACETS), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.CREASES, Detector.CORNER_RATE))
         expect("ruled comb along a row, 6 cells", read("comb", Controls.comb(SQUARE, 9, 6.0, 2.0, 60.0, centreColumn, centreRow, 0.0), SQUARE),
-            setOf(Detector.COMBS), setOf(Detector.ALIGNED_SIDE, Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY))
+            setOf(Detector.COMBS), setOf(Detector.ALIGNED_SIDE, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY, Detector.CREASES) + corners)
         expect("ruled comb at 33 deg, 7 cells", read("comb turned", Controls.comb(SQUARE, 9, 7.0, 2.0, 60.0, centreColumn, centreRow, 33.0), SQUARE),
-            setOf(Detector.COMBS), setOf(Detector.RECTANGLE, Detector.FACETS))
+            setOf(Detector.COMBS), setOf(Detector.RECTANGLE, Detector.FACETS, Detector.CREASES))
+        // A Manhattan diamond is a square turned on the sheet, a rhombus on the ground: its sides lie
+        // along the grid's diagonals and meet square on the sheet, but on the ground it fills only
+        // 0.625 of its smallest rectangle, which is not along the grid.
         expect("diamond (four-connected ring)", read("diamond", Controls.diamond(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS))
+            setOf(Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("square (eight-connected ring)", read("chebyshev", Controls.chebyshevSquare(SQUARE, 30.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS))
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES, Detector.ALIGNED_SIDE), setOf(Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         // Not among the brief's stamps; shown for what catches it, nothing asserted.
         expect("octagonal window", read("octagon", Controls.octagon(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
             emptySet(), Detector.entries.toSet())
 
+        // A pyramid, turned off the grid: its level lines are rhombi whose straight sides meet at
+        // its ridges, the crease the detector is for.
+        val cx = SQUARE.worldWidthKm / 2
+        val cy = SQUARE.cellsDown * SQUARE.cellHeightKm / 2
+        val turn = Math.toRadians(17.0)
+        val pyramid = sampled(SQUARE) { x, y ->
+            val u = (x - cx) * cos(turn) + (y - cy) * sin(turn)
+            val v = -(x - cx) * sin(turn) + (y - cy) * cos(turn)
+            -(abs(u) + 1.6 * abs(v))
+        }
+        val pyramidLines = listOf(-300f, -600f, -900f, -1200f).flatMap { Contours.ofField(pyramid, it, SQUARE) }
+        expect("a pyramid's level lines, turned 17 deg", readLines(Layer("pyramid", pyramidLines), SQUARE),
+            setOf(Detector.CREASES), setOf(Detector.FACETS, Detector.ALIGNED_SIDE, Detector.RECTANGLE, Detector.ISOTROPY, Detector.ORIENTATION) + corners)
+        // An ice sheet's plastic profile over a natural island, the square root of the distance to
+        // its margin: its level lines are the margin's offsets, curved, and meet at the divide.
+        val sheetIsland = Controls.naturalIsland(SQUARE, 61L, 40 * SQUARE.cellWidthKm, cx, cy)
+        val margin = (0 until SQUARE.cellCount).filter { cell ->
+            !sheetIsland[cell] && listOf(-1, 1, -SQUARE.cellsAcross, SQUARE.cellsAcross).any { step ->
+                val next = cell + step
+                next in 0 until SQUARE.cellCount && sheetIsland[next]
+            }
+        }
+        val profile = FloatArray(SQUARE.cellCount) { cell ->
+            if (!sheetIsland[cell]) return@FloatArray 0f
+            val x = (SQUARE.columnOf(cell) + 0.5) * SQUARE.cellWidthKm
+            val y = (SQUARE.rowOf(cell) + 0.5) * SQUARE.cellHeightKm
+            kotlin.math.sqrt(margin.minOf { lengthOf((SQUARE.columnOf(it) + 0.5) * SQUARE.cellWidthKm - x, (SQUARE.rowOf(it) + 0.5) * SQUARE.cellHeightKm - y) }).toFloat()
+        }
+        val highest = profile.max()
+        val profileLines = (1..6).flatMap { Contours.ofField(profile, highest * it / 7f, SQUARE) }
+        expect("a sheet's profile over a natural island (shown, nothing asserted)", readLines(Layer("sheet", profileLines), SQUARE),
+            emptySet(), Detector.entries.toSet())
+        lines.add("  its creases: " + readLines(Layer("sheet", profileLines), SQUARE).describe(Detector.CREASES))
+
         // Populations, for the one detector that reads a layer rather than a component.
         expect("union of 12-cell blocks", read("blocks", Controls.blockUnion(BIG, 21L, 12, 0.35, 90 * BIG.cellWidthKm), BIG),
-            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.COMBS))
+            setOf(Detector.ISOTROPY), setOf(Detector.RECTANGLE, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.COMBS, Detector.CREASES) + corners)
         // A smooth field — nothing finer than sixteen cells, as a blurred climate field is — whose
         // level lines are round wherever it is locally a paraboloid: read as a rough outline the
-        // arc detector finds them, and read as the smooth field it is, only concentric sets count.
+        // arc detector finds them, and read as the smooth field it is, its arcs come at the smooth
+        // controls' rate.
         for (finest in listOf(16, 32, 64)) {
-            val field = FloatArray(BIG.cellCount)
             val noise = IsotropicNoise(83L, finest * BIG.cellWidthKm, 480 * BIG.cellWidthKm)
-            for (cell in field.indices) {
-                field[cell] = noise.at((BIG.columnOf(cell) + 0.5) * BIG.cellWidthKm, (BIG.rowOf(cell) + 0.5) * BIG.cellHeightKm).toFloat()
-            }
+            val field = sampled(BIG) { x, y -> noise.at(x, y) }
             val smoothOutlines = listOf(-1f, -0.5f, 0f, 0.5f, 1f).flatMap { Contours.ofField(field, it, BIG) }
-            val smoothAsRough = GeometryGuard.read(Layer("smooth", smoothOutlines), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km)
-            lines.add("  a field smooth below $finest cells, its level lines read as rough outlines: " + smoothAsRough.describe(Detector.ARCS))
-            expect("a field smooth below $finest cells, as a smooth field", GeometryGuard.read(Layer("smooth", smoothOutlines, smoothField = true),
-                BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
+            lines.add("  a field smooth below $finest cells, its level lines read as rough outlines: " +
+                readLines(Layer("smooth", smoothOutlines), BIG).describe(Detector.ARCS))
+            expect("a field smooth below $finest cells, as a smooth field", readLines(Layer("smooth", smoothOutlines, smoothField = true), BIG), emptySet())
         }
 
         // Concentric terraces: a cone stamped into a field, its level lines four circles about one
-        // centre, flagged even where single arcs are forgiven.
+        // centre, flagged even where single arcs are held to a rate.
         val cone = FloatArray(SQUARE.cellCount) { cell ->
             val dx = SQUARE.columnOf(cell) + 0.5 - centreColumn
             val dy = SQUARE.rowOf(cell) + 0.5 - centreRow
             kotlin.math.sqrt(dx * dx + dy * dy).toFloat()
         }
         val terraces = listOf(12f, 16f, 20f, 24f).flatMap { Contours.ofField(cone, it, SQUARE) }
-        expect("concentric terraces, as a smooth field", GeometryGuard.read(Layer("terraces", terraces, smoothField = true), SQUARE, FAMILY,
-            NaturalFigures.of(SQUARE).cornersPer1000Km), setOf(Detector.ARCS), setOf(Detector.FACETS))
+        expect("concentric terraces, as a smooth field", readLines(Layer("terraces", terraces, smoothField = true), SQUARE),
+            setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.CREASES))
 
-        // Lobes: the grid's eight steps against any bearing at all, two thousand of each.
+        // Lobes: the grid's eight steps against any bearing at all.
         val lobeRadiusKm = 5.0 * BIG.cellWidthKm
         val gridSteps = doubleArrayOf(0.0, BIG.diagonalDegrees, 90.0, 180.0 - BIG.diagonalDegrees)
         expect("lobes facing the grid's eight steps", read("lobes", Controls.lobeField(BIG, 41L, 22, lobeRadiusKm) { random ->
             gridSteps[random.nextInt(4)] + if (random.nextBoolean()) 180.0 else 0.0
-        }, BIG), setOf(Detector.ORIENTATION), setOf(Detector.ARCS, Detector.RECTANGLE, Detector.ISOTROPY))
+        }, BIG), setOf(Detector.ORIENTATION), setOf(Detector.ARCS, Detector.RECTANGLE, Detector.ISOTROPY, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES))
         expect("lobes facing any bearing", read("lobes", Controls.lobeField(BIG, 41L, 22, lobeRadiusKm) { random ->
             random.nextDouble() * 360.0
-        }, BIG), emptySet(), setOf(Detector.ARCS, Detector.RECTANGLE))
+        }, BIG), emptySet(), setOf(Detector.ARCS, Detector.RECTANGLE, Detector.FACETS, Detector.CREASES))
 
         // A coast inked on every shore, and one inked only where the water lies east or south.
         val land = Controls.naturalField(FRAME, 71L, 0.4, 60 * FRAME.cellWidthKm)
@@ -525,17 +586,54 @@ class GeometryControlTest {
         }
         val everyShore = BooleanArray(FRAME.cellCount) { land[it] && (water(it, 1, 0) || water(it, -1, 0) || water(it, 0, 1) || water(it, 0, -1)) }
         val eastAndSouth = BooleanArray(FRAME.cellCount) { land[it] && (water(it, 1, 0) || water(it, 0, 1)) }
-        fun inked(name: String, ink: BooleanArray) =
-            GeometryGuard.read(Layer(name, emptyList(), facing = FacingShares.of(land, ink, FRAME)), FRAME, FAMILY, 1.0)
+        fun inked(name: String, ink: BooleanArray) = readLines(Layer(name, emptyList(), facing = FacingShares.of(land, ink, FRAME)), FRAME)
         expect("a coast inked on every shore", inked("every shore", everyShore), emptySet())
         expect("a coast inked east and south only", inked("east and south", eastAndSouth), setOf(Detector.FACING))
         lines.add("  " + inked("east and south", eastAndSouth).describe(Detector.FACING))
 
+        // Open lines: natural courses, the same routed by the steepest of eight, and natural courses
+        // with one reach laid along a row and one along the grid's diagonal, which the local tests
+        // find however many natural courses surround them.
         val natural = Controls.naturalCourses(BIG, 31L, 600, 300, 6.0)
-        expect("natural courses", GeometryGuard.read(Layer("courses", natural), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km), emptySet())
+        expect("natural courses", readLines(Layer("courses", natural, openLines = true), BIG), emptySet())
         val routed = Controls.eightNeighbourCourses(BIG, 31L, 600, 300, 6.0)
-        expect("eight-neighbour courses", GeometryGuard.read(Layer("d8", routed), BIG, FAMILY, NaturalFigures.of(BIG).cornersPer1000Km),
-            setOf(Detector.ISOTROPY), setOf(Detector.RIGHT_ANGLES, Detector.COMBS, Detector.ARCS))
+        expect("eight-neighbour courses", readLines(Layer("d8", routed, openLines = true), BIG),
+            setOf(Detector.ISOTROPY), setOf(Detector.COMBS, Detector.ARCS, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES) + corners)
+        val alongARow = Outline(DoubleArray(100) { (300 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(100) { 500.5 * BIG.cellHeightKm }, closed = false, belt = false)
+        val alongADiagonal = Outline(DoubleArray(80) { (600 + it + 0.5) * BIG.cellWidthKm }, DoubleArray(80) { (300 + it + 0.5) * BIG.cellHeightKm }, closed = false, belt = false)
+        expect("natural courses and one reach along a row", readLines(Layer("courses", natural + alongARow, openLines = true), BIG),
+            setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS))
+        expect("natural courses and one reach along the diagonal", readLines(Layer("courses", natural + alongADiagonal, openLines = true), BIG),
+            setOf(Detector.ALIGNED_SIDE), setOf(Detector.FACETS))
+
+        // Following the latitude: the zonal control's own level lines, from another seed than the
+        // null's, read as a latitude-following field is; and read as if isotropy were the null.
+        val zonalCanvas = ZonalFigures.canvasFor(FRAME)
+        lines.add("  the zonal null at 512: " + ZonalFigures.of(FRAME))
+        for (finest in listOf(2, 16)) {
+            val zonal = ZonalFigures.levelLines(zonalCanvas, 7L, finest)
+            expect("zonal lines finest $finest cells, following the latitude",
+                readLines(Layer("zonal", zonal, smoothField = finest > 2, followsLatitude = true), zonalCanvas), emptySet())
+            val asIsotropic = readLines(Layer("zonal", zonal, smoothField = finest > 2), zonalCanvas)
+            lines.add(row("  the same, held to an isotropic null", asIsotropic))
+            lines.add("    " + asIsotropic.describe(Detector.ISOTROPY))
+        }
+
+        // Ruled lines at two grids: a comb fixed on the ground doubles its spacing in cells at a grid
+        // twice as fine and is let stand; one fixed in cells keeps it and stands as a violation.
+        val fineSquare = GridFrame(512, 512, SQUARE.cellWidthKm / 2, SQUARE.cellHeightKm / 2)
+        val coarseComb = read("comb", Controls.comb(SQUARE, 9, 6.0, 2.0, 60.0, centreColumn, centreRow, 0.0), SQUARE)
+        val groundComb = read("comb", Controls.comb(fineSquare, 9, 12.0, 4.0, 120.0, 2 * centreColumn, 2 * centreRow, 0.0), fineSquare)
+        val cellComb = read("comb", Controls.comb(fineSquare, 9, 6.0, 2.0, 60.0, 2 * centreColumn, 2 * centreRow, 0.0), fineSquare)
+        for ((name, fine) in listOf("fixed on the ground" to groundComb, "fixed in cells" to cellComb)) {
+            if (fine.combs.isEmpty()) failures.add("the comb $name was not found at the finer grid")
+            val pairings = Census.pairCombs(fine, fineSquare, coarseComb, SQUARE)
+            fine.exemptGroundFixed(pairings.filter { it.groundFixed }.map { it.comb })
+            pairings.forEach { lines.add("  comb $name: ${it.line}") }
+        }
+        val combCompanions = setOf(Detector.ALIGNED_SIDE, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY, Detector.CREASES) + corners
+        expect("ruled comb fixed on the ground, at two grids", groundComb, emptySet(), combCompanions)
+        expect("ruled comb fixed in cells, at two grids", cellComb, setOf(Detector.COMBS), combCompanions)
 
         println(lines.joinToString("\n", prefix = "GEOMETRY MATRIX\n"))
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))

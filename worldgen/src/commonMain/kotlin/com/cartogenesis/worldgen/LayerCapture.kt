@@ -11,8 +11,9 @@ package com.cartogenesis.worldgen
  * would be an approximation reported as an observation. So a caller that wants them hands one of
  * these to [WorldGenerationEngine.generate] and the two stages fill it in as they run.
  *
- * Null, which is every caller but the guard, allocates nothing and moves no bit; with one, the
- * world is the same world to the last bit, which `LayerCaptureTest` shows by fingerprint. A stage
+ * Null, which is every caller but the guard, costs a few null checks on the way through the two
+ * stages, allocates nothing and moves no bit of the world; with one, the world is still the same
+ * world to the last bit, which `LayerCaptureTest` shows by fingerprint. A stage
  * reused from `previous` rather than run reports nothing, so a capture is whole only for a fresh
  * generation. A world with no ice, or ice that cut nothing, leaves [ice] null: such ice draws
  * nothing on the map.

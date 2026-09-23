@@ -17,7 +17,10 @@ internal class Run(
     val toXKm: Double,
     val toYKm: Double,
     val outline: Int,
-    val order: Int
+    val order: Int,
+    /** The vertices of its line the run starts and ends at. */
+    val fromVertex: Int = 0,
+    val toVertex: Int = 0
 ) {
     val lengthKm: Double = lengthOf(toXKm - fromXKm, toYKm - fromYKm)
     var bearingDegrees: Double = 0.0
@@ -123,7 +126,7 @@ internal object StraightRuns {
         for (at in 0 until kept.size - 1) {
             val from = kept[at]
             val to = kept[at + 1]
-            runs.add(Run(xs[from], ys[from], xs[to], ys[to], index, at).withBearing(frame))
+            runs.add(Run(xs[from], ys[from], xs[to], ys[to], index, at, from, to).withBearing(frame))
         }
         return runs
     }

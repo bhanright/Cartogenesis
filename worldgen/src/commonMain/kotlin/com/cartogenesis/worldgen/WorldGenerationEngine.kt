@@ -116,7 +116,8 @@ object WorldGenerationEngine {
         iceAccelerator: IceSheetAccelerator? = null,
         /**
          * Filled in with the layers the map draws that no stage's result carries, for the geometry
-         * guard; null, the default, allocates nothing and changes nothing. See [LayerCapture].
+         * guard; null, the default, costs a few null checks, allocates nothing and moves no bit of the
+         * world. See [LayerCapture].
          */
         capture: LayerCapture? = null,
         progress: GenerationProgress = NO_PROGRESS

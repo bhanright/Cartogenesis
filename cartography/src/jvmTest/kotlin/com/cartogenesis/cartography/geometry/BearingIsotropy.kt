@@ -17,7 +17,9 @@ import kotlin.random.Random
  * bin is compared with its two immediate neighbours, not with a uniform distribution: the run
  * length lying within [BIN_HALF_WIDTH_DEGREES] of the grid bearing against the mean of the two
  * bins of the same width on either side of it. That ratio is 1 for any preference broad next to
- * the three bins' 24 degrees, whatever its direction.
+ * the three bins' 24 degrees, whatever its direction. A layer that follows the latitude is the
+ * exception, since a zonal line can prefer the east-west bearing as narrowly as the grid would: such
+ * a layer is held to the ratio Earth-like zonal lines reach ([ZonalFigures]) in place of 1.
  *
  * Two things must both hold for a violation: the ratio reaches [EFFECT_RATIO], and it is past the
  * sampling spread — its lower confidence bound, at the census's corrected level, is above 1.
@@ -62,7 +64,8 @@ internal object BearingIsotropy {
      * central bin at these bin widths (the Gaussian's mean over the central 8 degrees against its
      * mean over the flanks from 4 to 12; 1.58 at a standard deviation of 8 and 1.24 at 12). A ratio
      * of 1.5 needs a preference narrower than a standard deviation of about 8.7 degrees, which no
-     * geography gives a whole layer; what is that narrow is the grid.
+     * geography gives a whole layer save one that follows the latitude, and that one is held to the
+     * zonal control's ratio times this; what is that narrow otherwise is the grid.
      */
     const val EFFECT_RATIO = 1.5
 
@@ -73,9 +76,6 @@ internal object BearingIsotropy {
 
     private fun overlap(low: Double, high: Double, from: Double, to: Double): Double =
         (minOf(high, to) - maxOf(low, from)).coerceAtLeast(0.0)
-
-    /** The share of the three bins the central one holds when the ratio is 1. */
-    private const val NULL_CENTRAL_SHARE = 1.0 / 3.0
 
     class Result(
         val bearingIndex: Int,
@@ -115,16 +115,19 @@ internal object BearingIsotropy {
     /**
      * The fewest blocks at which the test can bind at all.
      *
-     * If each block carried one run, the central bin's share would be binomial with a third under
-     * the null and `E / (E + 2)` at the effect size `E`. The smallest count at which a share of
-     * exactly the effect size would clear [z] standard errors of the null is
-     * `(z * sqrt(p0 * (1 - p0)) / (pE - p0))^2`; below it, even a stamp at the effect size could
-     * not be told from sampling spread, so the outcome is insufficient rather than clean.
+     * If each block carried one run, the central bin's share would be binomial: `r / (r + 2)` at a
+     * ratio `r`, so a third under the isotropic null (`r0 = 1`) and `E / (E + 2)` at the effect
+     * size `E`. The smallest count at which a share of exactly the effect size over the null would
+     * clear [z] standard errors of the null is `(z * sqrt(p0 * (1 - p0)) / (pE - p0))^2`; below
+     * it, even a stamp at the effect size could not be told from sampling spread, so the outcome is
+     * insufficient rather than clean. [nullRatio] is the ratio the null itself holds, above 1 for a
+     * layer judged against the zonal control ([ZonalFigures]).
      */
-    fun minimumBlocks(z: Double): Int {
-        val atEffect = EFFECT_RATIO / (EFFECT_RATIO + 2.0)
-        val spread = z * sqrt(NULL_CENTRAL_SHARE * (1 - NULL_CENTRAL_SHARE))
-        val needed = spread / (atEffect - NULL_CENTRAL_SHARE)
+    fun minimumBlocks(z: Double, nullRatio: Double = 1.0): Int {
+        val atNull = nullRatio / (nullRatio + 2.0)
+        val atEffect = EFFECT_RATIO * nullRatio / (EFFECT_RATIO * nullRatio + 2.0)
+        val spread = z * sqrt(atNull * (1 - atNull))
+        val needed = spread / (atEffect - atNull)
         return ceil(needed * needed).toInt()
     }
 

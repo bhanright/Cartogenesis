@@ -29,7 +29,9 @@ import kotlin.math.sqrt
  * multiples of the spacing, each tooth at least [TOOTH_OVER_SPACING] spacings long, and a mean
  * resultant length (how closely the teeth sit on the ideal positions) of [MINIMUM_REGULARITY]. A
  * spacing that is fixed *in cells* across grids, rather than on the ground, is the grid's; that
- * claim needs the same world at two grids, and the audit tier makes it.
+ * claim needs the same world at two grids, and the audit tier makes it ([Census.pairCombs]): a comb
+ * found again at half the grid at half the spacing in cells is fixed on the ground and let stand,
+ * and one found at the same spacing in cells, or not found again, stands as a violation.
  */
 internal object Combs {
 
@@ -91,6 +93,18 @@ internal object Combs {
         val uy: Double,
         val family: Int
     )
+
+    /**
+     * How many of [runs] are long enough to be a tooth at the closest spacing, in the family that
+     * has most: a layer with fewer than [MINIMUM_TEETH] cannot hold a comb, so a clean reading of it
+     * is not a pass.
+     */
+    fun mostTeeth(runs: List<Run>, frame: GridFrame, familyOf: (Int) -> Int = { 0 }): Int =
+        runs.filter { run ->
+            val dx = (run.toXKm - run.fromXKm) / frame.cellWidthKm
+            val dy = (run.toYKm - run.fromYKm) / frame.cellHeightKm
+            sqrt(dx * dx + dy * dy) >= TOOTH_OVER_SPACING * SHORTEST_SPACING_CELLS
+        }.groupingBy { familyOf(it.outline) }.eachCount().values.maxOrNull() ?: 0
 
     /**
      * The combs among [runs]. [familyOf] names the family each run's line belongs to, and teeth

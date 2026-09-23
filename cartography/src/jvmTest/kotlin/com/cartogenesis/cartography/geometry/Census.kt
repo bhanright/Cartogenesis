@@ -4,6 +4,35 @@ import com.cartogenesis.worldgen.LayerCapture
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlin.math.sqrt
+
+/**
+ * What a census expects of today's worlds: the findings its known failures record, the signature
+ * of each known violation, and the clauses it expects to be too small to measure.
+ *
+ * [findings] names the finding a violation records by layer and detector; [signatures] holds, by
+ * `seed/layer/DETECTOR`, the violation each known failure is ([Signature]); [insufficient] the
+ * clauses that cannot be measured on today's worlds at this grid, which is the census's expected
+ * coverage: a clause that could be measured and no longer can fails, and so does one that can now
+ * be measured and is still listed, so the table is kept true both ways.
+ */
+internal class Expectations {
+    val findings = HashMap<Pair<String, Detector>, String>()
+    val signatures = HashMap<String, Signature>()
+    val insufficient = HashSet<String>()
+
+    fun finding(layer: String, detector: Detector, name: String) {
+        findings[layer to detector] = name
+    }
+
+    fun known(key: String, signature: String) {
+        signatures[key] = Signature.parse(signature)
+    }
+
+    fun insufficient(layer: String, detector: Detector, vararg seeds: Long) {
+        for (seed in seeds) insufficient.add(Census.key(seed, layer, detector))
+    }
+}
 
 /**
  * The geometry guard run over a set of worlds: every layer, every detector, every world, what it
@@ -12,7 +41,9 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
  * Worlds are generated one at a time and dropped once read, so a census at 2048 holds one world
  * at a time. What is kept is the readings, which are small.
  */
-internal class Census(val side: Int, val familySize: Int) {
+internal class Census(val side: Int, worlds: Int) {
+
+    val judge = Judge.forCensus(worlds)
 
     class WorldReading(
         val name: String,
@@ -35,8 +66,7 @@ internal class Census(val side: Int, val familySize: Int) {
         val layers = MapLayers.of(world, capture)
         val traced = System.nanoTime()
         val frame = GridFrame.of(config)
-        val natural = NaturalFigures.of(frame)
-        val readings = layers.map { GeometryGuard.read(it, frame, familySize, natural.cornersPer1000Km) }
+        val readings = layers.map { GeometryGuard.read(it, frame, judge) }
         val read = System.nanoTime()
         if (readings.any { reading -> Detector.entries.any { reading.outcome(it) == Outcome.VIOLATION } }) {
             val raster = CensusImages.rasterOf(world)
@@ -53,12 +83,13 @@ internal class Census(val side: Int, val familySize: Int) {
     }
 
     fun print(world: WorldReading) {
-        println("GEOMETRY CENSUS ${world.name}: generation %.1f s, tracing the layers %.1f s, the detectors %.1f s"
-            .format(world.generationSeconds, world.layerSeconds, world.detectorSeconds))
+        println("GEOMETRY CENSUS ${world.name}: generation %.1f s, tracing the layers %.1f s, the detectors %.1f s; %s"
+            .format(world.generationSeconds, world.layerSeconds, world.detectorSeconds, judge))
         for (reading in world.readings) {
             for (detector in Detector.entries) {
-                println("GEOMETRY CENSUS ${world.name} | ${reading.layer} | ${detector.label} | ${reading.outcome(detector)} | " +
-                    (reading.absent ?: reading.describe(detector)))
+                val verdict = reading.verdict(detector)
+                println("GEOMETRY CENSUS ${world.name} | ${reading.layer} | ${detector.label} | ${verdict.outcome}" +
+                    (if (verdict.outcome == Outcome.VIOLATION) " ${verdict.signature()}" else "") + " | " + verdict.text)
             }
         }
     }
@@ -95,41 +126,125 @@ internal class Census(val side: Int, val familySize: Int) {
     }
 
     /**
-     * Every clause the census makes, with the known failures run through [KnownFailures.expect].
-     *
-     * A clause is made wherever a detector could measure a layer; where it could not, the layer is
-     * reported insufficient and nothing is asserted of it — unless it is on [known], where a
-     * finding that has become unmeasurable is itself a failure. Every failure is collected and
-     * thrown together, so one run names all of them.
+     * The census's findings as the lines that record them: every violation's signature and every
+     * clause too small to measure, ready to be carried into a test's [Expectations].
      */
-    fun failures(known: Map<String, String>): List<String> {
-        val failed = ArrayList<String>()
+    fun recordLines(): List<String> {
+        val lines = ArrayList<String>()
         for (world in worlds) for (reading in world.readings) for (detector in Detector.entries) {
-            val key = key(world.seed, reading.layer, detector)
-            val finding = known[key]
-            val outcome = reading.outcome(detector)
-            if (finding == null && (outcome == Outcome.INSUFFICIENT || outcome == Outcome.NOT_APPLICABLE)) continue
-            try {
-                if (finding == null) reading.assertClean(detector, world.name)
-                else KnownFailures.expect(finding) { reading.assertClean(detector, world.name) }
-            } catch (failure: AssertionError) {
-                failed.add("[$key] ${failure.message}")
+            val verdict = reading.verdict(detector)
+            if (verdict.outcome == Outcome.VIOLATION) {
+                lines.add("GEOMETRY RECORD known(\"${key(world.seed, reading.layer, detector)}\", \"${verdict.signature()}\")")
             }
         }
-        val unused = known.keys - worlds.flatMap { world ->
-            world.readings.flatMap { reading -> Detector.entries.map { key(world.seed, reading.layer, it) } }
-        }.toSet()
-        unused.forEach { failed.add("[$it] names no clause this census makes") }
+        val layers = worlds.first().readings.map { it.layer }
+        for (layer in layers) for (detector in Detector.entries) {
+            val seeds = worlds.filter { world -> world.readings.first { it.layer == layer }.outcome(detector) == Outcome.INSUFFICIENT }
+                .map { "${it.seed}L" }
+            if (seeds.isNotEmpty()) lines.add("GEOMETRY RECORD insufficient(\"$layer\", Detector.${detector.name}, ${seeds.joinToString()})")
+        }
+        return lines
+    }
+
+    /**
+     * Every clause the census makes, held to [expected]: known failures through
+     * [KnownFailures.expect] with their signatures, clauses too small to measure against the
+     * expected coverage (and written to the tier's report), and everything else asserted clean.
+     * Every failure is collected and thrown together, so one run names all of them.
+     */
+    fun failures(expected: Expectations): List<String> {
+        val failed = ArrayList<String>()
+        val made = HashSet<String>()
+        for (world in worlds) for (reading in world.readings) {
+            if (reading.places > Judge.MOST_PLACES_PER_LAYER) {
+                failed.add("[${world.name} ${reading.layer}] ${reading.places} places, past the ${Judge.MOST_PLACES_PER_LAYER} the place family was sized for")
+            }
+            for (detector in Detector.entries) {
+                val key = key(world.seed, reading.layer, detector)
+                made.add(key)
+                val verdict = reading.verdict(detector)
+                val signature = expected.signatures[key]
+                val listedInsufficient = key in expected.insufficient
+                when (verdict.outcome) {
+                    Outcome.INSUFFICIENT -> when {
+                        signature != null -> failed.add("[$key] a known failure can no longer be measured: ${verdict.text}")
+                        !listedInsufficient -> failed.add("[$key] coverage lost, the clause can no longer be measured: ${verdict.text}")
+                        else -> KnownFailures.insufficient(key, verdict.text)
+                    }
+                    Outcome.NOT_APPLICABLE -> if (signature != null || listedInsufficient) {
+                        failed.add("[$key] listed, but the detector asks nothing of this layer")
+                    }
+                    Outcome.CLEAN, Outcome.VIOLATION -> {
+                        if (listedInsufficient) failed.add("[$key] coverage gained, the clause is measured now: take it off the insufficient list")
+                        try {
+                            if (signature == null) reading.assertClean(detector, world.name)
+                            else {
+                                val finding = expected.findings[reading.layer to detector]
+                                    ?: error("no finding named for ${reading.layer} and ${detector.name}")
+                                KnownFailures.expect(finding, signature) { reading.assertClean(detector, world.name) }
+                            }
+                        } catch (failure: AssertionError) {
+                            failed.add("[$key] ${failure.message}")
+                        }
+                    }
+                }
+            }
+        }
+        (expected.signatures.keys - made).forEach { failed.add("[$it] names no clause this census makes") }
+        (expected.insufficient - made).forEach { failed.add("[$it] names no clause this census makes") }
         return failed
     }
+
+    /** One comb at the finer grid, and what the coarser grid found where it lies. */
+    class CombPairing(val comb: Int, val line: String, val groundFixed: Boolean)
 
     companion object {
         fun key(seed: Long, layer: String, detector: Detector): String = "$seed/$layer/${detector.name}"
 
-        /** The family a census of [worlds] worlds makes, over the layers [MapLayers] lists. */
+        /** The layer-wide family a census of [worlds] worlds makes, over the layers [MapLayers] lists. */
         fun familySize(worlds: Int): Int = worlds * LAYERS * GeometryGuard.TESTS_PER_LAYER
 
         /** How many layers [MapLayers.of] returns; `GeometryGuardTest` checks it against a world. */
         const val LAYERS = 28
+
+        /** How far apart, in kilometres, a comb at one grid and one at the other may lie and be one comb. */
+        const val SAME_COMB_KM = 150.0
+
+        /**
+         * The spacing ratio between a comb fixed in cells (1: the same count of cells at both grids)
+         * and one fixed on the ground (2: twice the cells at a grid twice as fine), taken at their
+         * geometric mean, `sqrt(2)`.
+         */
+        val GROUND_FIXED_RATIO = sqrt(2.0)
+
+        /**
+         * Each comb [fine] found at a grid twice as fine as [coarse]'s, matched with the nearest comb
+         * [coarse] found along the same bearing within [SAME_COMB_KM]: fixed on the ground where its
+         * spacing in cells has doubled, and the grid's where it has not or where it has no partner.
+         */
+        fun pairCombs(fine: LayerReading, fineFrame: GridFrame, coarse: LayerReading, coarseFrame: GridFrame): List<CombPairing> =
+            fine.combs.mapIndexed { index, comb ->
+                val x = comb.anchorXCells * fineFrame.cellWidthKm
+                val y = comb.anchorYCells * fineFrame.cellHeightKm
+                fun distance(other: Combs.Comb): Double =
+                    lengthOf(other.anchorXCells * coarseFrame.cellWidthKm - x, other.anchorYCells * coarseFrame.cellHeightKm - y)
+                val match = coarse.combs
+                    .filter { fineFrame.bearingGapDegrees(it.bearingDegrees, comb.bearingDegrees) <= Combs.PARALLEL_DEGREES * 2 }
+                    .minByOrNull(::distance)
+                if (match == null || distance(match) > SAME_COMB_KM) {
+                    CombPairing(index, "${comb.describe(fineFrame)} | no comb at ${coarseFrame.cellsAcross} within $SAME_COMB_KM km: stands", false)
+                } else {
+                    val ratio = comb.spacingCells / match.spacingCells
+                    val ground = ratio >= GROUND_FIXED_RATIO
+                    CombPairing(
+                        index,
+                        "%s | at %d %.2f cells apart, %.2f times: %s".format(
+                            comb.describe(fineFrame), coarseFrame.cellsAcross, match.spacingCells, ratio,
+                            if (ground) "fixed on the ground, let stand" else "fixed in cells, the grid's"
+                        ),
+                        ground
+                    )
+                }
+            }
     }
 }

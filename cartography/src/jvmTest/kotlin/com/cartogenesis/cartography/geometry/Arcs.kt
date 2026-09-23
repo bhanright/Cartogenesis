@@ -97,6 +97,17 @@ internal object Arcs {
 
     class Result(val arcs: List<Arc>, val concentricSets: List<List<Arc>>)
 
+    /**
+     * How many arcs each of [lines] lines carries: the larger of its ground and its sheet fits, since
+     * one round stretch is usually found in both frames and is one arc.
+     */
+    fun perLine(result: Result, lines: Int): IntArray {
+        val ground = IntArray(lines)
+        val sheet = IntArray(lines)
+        for (arc in result.arcs) if (arc.frame == Frame.GROUND) ground[arc.outline]++ else sheet[arc.outline]++
+        return IntArray(lines) { maxOf(ground[it], sheet[it]) }
+    }
+
     fun measure(outlines: List<Outline>, frame: GridFrame): Result {
         val arcs = ArrayList<Arc>()
         outlines.forEachIndexed { index, outline ->

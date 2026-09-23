@@ -49,9 +49,10 @@ tasks.withType<Test>().configureEach {
 
 /*
  * The geometry guard's known failures: clauses that fail today and are kept running under the
- * name of the finding each records (`KnownFailures` in the tests). Each test task hands the tests
- * a file to append them to, clears it before it runs and prints it once the whole task has run,
- * pass or fail — so the list of what is known to be wrong is at the foot of every tier's output.
+ * name of the finding each records (`KnownFailures` in the tests), and the clauses too small to
+ * measure on today's worlds. Each test task hands the tests a file to append them to, clears it
+ * before it runs and prints it once the whole task has run, pass or fail — so the list of what is
+ * known to be wrong, and of what the tier could not see, is at the foot of every tier's output.
  */
 tasks.withType<Test>().configureEach {
     val report = layout.buildDirectory.file("known-failures/$name.txt").get().asFile
@@ -59,9 +60,11 @@ tasks.withType<Test>().configureEach {
     doFirst { report.delete() }
     afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
         if (suite.parent == null && report.exists()) {
-            val known = report.readLines()
-            println("Known failures in $name (${known.size}):")
-            known.forEach { println("  $it") }
+            val lines = report.readLines()
+            val known = lines.count { it.startsWith("KNOWN FAILURE") }
+            val insufficient = lines.count { it.startsWith("INSUFFICIENT") }
+            println("Known failures in $name ($known), and clauses too small to measure ($insufficient):")
+            lines.forEach { println("  $it") }
         }
     }))
 }

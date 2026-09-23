@@ -138,6 +138,9 @@ internal class FacingShares(val shores: IntArray, val drawn: IntArray) {
         else -> Outcome.CLEAN
     }
 
+    /** The most-drawn facing's share over the least-drawn's: 1 for a coast drawn evenly all round. */
+    fun worstOverBest(): Double = shares.max() / shares.min().coerceAtLeast(1e-9)
+
     fun describe(): String = FACINGS.indices.joinToString("; ", prefix = "shores drawn by facing: ") {
         "%s %.0f%% of %d".format(FACINGS[it], 100 * shares[it], shores[it])
     }

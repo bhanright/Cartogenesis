@@ -31,7 +31,7 @@ internal object CensusImages {
         directory.mkdirs()
         val frame = GridFrame.of(world.config)
         for (detector in findings) {
-            val (column, row) = where(reading, detector, frame) ?: continue
+            val (column, row) = where(reading, detector, frame)
             val left = (column - HALF_WINDOW_CELLS).coerceIn(0, maxOf(0, frame.cellsAcross - 2 * HALF_WINDOW_CELLS))
             val top = (row - HALF_WINDOW_CELLS).coerceIn(0, maxOf(0, frame.cellsDown - 2 * HALF_WINDOW_CELLS))
             val across = minOf(2 * HALF_WINDOW_CELLS, frame.cellsAcross)
@@ -73,33 +73,9 @@ internal object CensusImages {
     /** The map as the atlas draws it, one pixel a cell. */
     fun rasterOf(world: WorldMap): IntArray = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY))
 
-    /** Where the worst instance of a finding lies, in cells, or null for a finding with no place. */
-    private fun where(reading: LayerReading, detector: Detector, frame: GridFrame): Pair<Int, Int>? {
-        fun at(xKm: Double, yKm: Double): Pair<Int, Int> {
-            var column = (xKm / frame.cellWidthKm) % frame.cellsAcross
-            if (column < 0) column += frame.cellsAcross
-            return column.toInt() to (yKm / frame.cellHeightKm).toInt()
-        }
-        fun ringAt(ring: ComponentShapes.Ring): Pair<Int, Int> = at(ring.centreXKm, ring.centreYKm)
-        return when (detector) {
-            Detector.ALIGNED_SIDE -> reading.rings.filter { it.hasLongAlignedSide }.maxByOrNull { it.longestAlignedKm / it.alignedAllowanceKm }
-                ?.let { at(it.longestAlignedAtKm.first, it.longestAlignedAtKm.second) }
-            Detector.RECTANGLE -> reading.rings.filter { it.isRectangle }.maxByOrNull { it.fill }?.let(::ringAt)
-            Detector.FACETS -> reading.rings.filter { it.hasFacets }.maxByOrNull { it.longestRunKm / it.facetAllowanceKm }
-                ?.let { at(it.longestRunAtKm.first, it.longestRunAtKm.second) }
-            Detector.RIGHT_ANGLES -> reading.rings.filter { it.hasCornerPair }.maxByOrNull { it.cornerPairs }?.let(::ringAt)
-                ?: (frame.cellsAcross / 2 to frame.cellsDown / 2)
-            Detector.ARCS -> reading.arcs.arcs.minByOrNull { it.rmsCells }?.let {
-                var column = it.centreXCells % frame.cellsAcross
-                if (column < 0) column += frame.cellsAcross
-                column.toInt() to it.centreYCells.toInt()
-            }
-            Detector.COMBS -> reading.combs.maxByOrNull { it.teeth }?.let {
-                var column = it.anchorXCells % frame.cellsAcross
-                if (column < 0) column += frame.cellsAcross
-                column.toInt() to it.anchorYCells.toInt()
-            }
-            Detector.ISOTROPY, Detector.ORIENTATION, Detector.FACING -> frame.cellsAcross / 2 to frame.cellsDown / 2
-        }
+    /** Where the worst instance of a finding lies, in cells; the middle of the map for a finding of the whole layer. */
+    private fun where(reading: LayerReading, detector: Detector, frame: GridFrame): Pair<Int, Int> {
+        val worst = reading.verdict(detector).worst
+        return if (worst == null || worst.row < 0) frame.cellsAcross / 2 to frame.cellsDown / 2 else worst.column to worst.row
     }
 }

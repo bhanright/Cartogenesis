@@ -36,9 +36,19 @@ internal class Layer(
      * A climate field, smooth by construction — the rainfall is box-blurred, the temperatures
      * read a box-blurred exposure and a spread anomaly, and the sea's anomaly is a solved
      * advection — whose single level lines are round wherever the field is locally a paraboloid,
-     * as a fractal outline's never are. On such a layer only concentric sets count as arcs.
+     * as a fractal outline's never are, and long and gently curved elsewhere. Such a layer is held
+     * to the smooth natural controls ([NaturalTails]): its places to their tails, and its single
+     * arcs to their rate; concentric sets are violations on every layer.
      */
-    val smoothField: Boolean = false
+    val smoothField: Boolean = false,
+    /**
+     * A layer whose lines follow the latitude for a real reason — the isotherms, and the biome and
+     * ice edges a climate field draws — whose isotropy is held to the zonal control's ratios
+     * ([ZonalFigures]) rather than to 1.
+     */
+    val followsLatitude: Boolean = false,
+    /** Open lines by construction, river courses: no ring to measure for its shape or its axis. */
+    val openLines: Boolean = false
 )
 
 /**
@@ -97,8 +107,8 @@ internal object MapLayers {
         val land = world.sea.isLand
         val sea = BooleanArray(cells) { !land[it] }
         val layers = ArrayList<Layer>()
-        fun mask(name: String, inside: BooleanArray, valid: BooleanArray? = null, twice: Boolean = false, smooth: Boolean = false) =
-            layers.add(Layer(name, Contours.ofMask(inside, frame, valid), twice, smoothField = smooth))
+        fun mask(name: String, inside: BooleanArray, valid: BooleanArray? = null, smooth: Boolean = false, zonal: Boolean = false) =
+            layers.add(Layer(name, Contours.ofMask(inside, frame, valid), smoothField = smooth, followsLatitude = zonal))
 
         mask("coast", land)
         val pane = MapSheet.onScreen(PANE_PIXELS_ACROSS / world.width)
@@ -106,8 +116,8 @@ internal object MapLayers {
         layers.add(Layer("coast as inked", emptyList(), facing = coastInk(world, frame)))
         mask("lakes", BooleanArray(cells) { world.rivers.lakes.lakeId[it] != LakeResult.NO_LAKE })
         mask("lakes' open water", world.rivers.lakes.openWater)
-        layers.add(Layer("river courses", courses(world, world.rivers.rivers, frame)))
-        layers.add(Layer("rivers as drawn", courses(world, RiverSelection.drawnOn(world, pane, RiverSelection.EARTH_DENSITY_STEP), frame)))
+        layers.add(Layer("river courses", courses(world, world.rivers.rivers, frame), openLines = true))
+        layers.add(Layer("rivers as drawn", courses(world, RiverSelection.drawnOn(world, pane, RiverSelection.EARTH_DENSITY_STEP), frame), openLines = true))
         layers.add(Layer("isobaths", isobaths(world, frame)))
         layers.add(Layer("terrain contours", terrainContours(world, frame)))
 
@@ -120,7 +130,7 @@ internal object MapLayers {
         } else {
             // Where the provisional climate's snow balance passes its threshold: a smooth field's
             // level set, like every climate layer below.
-            mask("ice occupancy", ice.frozen, smooth = true)
+            mask("ice occupancy", ice.frozen, smooth = true, zonal = true)
             mask("valley glaciers", ice.valleyGlacier)
             mask("ice sheet ground", ice.sheet)
             mask("ice carving", ice.cutByIce)
@@ -129,7 +139,7 @@ internal object MapLayers {
             mask("scour basins", BooleanArray(cells) { ice.basinFloor[it] >= ice.valleyBasinCount })
             layers.add(Layer("ice surface", iceSurface(world, ice.iceThicknessMetres, frame)))
         }
-        mask("ice as drawn", BooleanArray(cells) { world.climate.biome[it] == Biome.ICE_SHEET }, smooth = true)
+        mask("ice as drawn", BooleanArray(cells) { world.climate.biome[it] == Biome.ICE_SHEET }, smooth = true, zonal = true)
 
         val deposition = capture.deposition
         if (deposition == null) {
@@ -144,12 +154,12 @@ internal object MapLayers {
 
         layers.add(partition("realm borders", world.nations.nationId, NationResult.UNCLAIMED, land, frame))
         // Every biome is a class of the climate's own smooth fields, so its edges are their level lines.
-        layers.add(partition("biome edges", IntArray(cells) { world.climate.biome[it].ordinal }, -1, land, frame, smooth = true))
+        layers.add(partition("biome edges", IntArray(cells) { world.climate.biome[it].ordinal }, -1, land, frame, smooth = true, zonal = true))
         layers.add(partition("peoples' borders", world.cultures.cultureId, CultureResult.UNSETTLED, land, frame))
         layers.add(partition("plate boundaries", world.plates.plateId, -1, null, frame))
 
         layers.add(Layer("isotherms", levelLines(world.climate.temperature.data,
-            (-6..6).map { it * ISOTHERM_STEP_C }.toFloatArray(), frame, null), smoothField = true))
+            (-6..6).map { it * ISOTHERM_STEP_C }.toFloatArray(), frame, null), smoothField = true, followsLatitude = true))
         layers.add(Layer("isohyets", levelLines(world.climate.precipitationMm.data, ISOHYET_LEVELS_MM, frame, land), smoothField = true))
         layers.add(Layer("sea temperature anomaly", levelLines(world.ocean.anomaly.data, ANOMALY_LEVELS_C, frame, sea), smoothField = true))
         return layers
@@ -176,7 +186,8 @@ internal object MapLayers {
         unlabelled: Int,
         valid: BooleanArray?,
         frame: GridFrame,
-        smooth: Boolean = false
+        smooth: Boolean = false,
+        zonal: Boolean = false
     ): Layer {
         val labels = HashSet<Int>()
         for (cell in label.indices) if (valid == null || valid[cell]) labels.add(label[cell])
@@ -184,7 +195,7 @@ internal object MapLayers {
         val outlines = labels.sorted().flatMap { id ->
             Contours.ofMask(BooleanArray(label.size) { label[it] == id }, frame, valid)
         }
-        return Layer(name, outlines, tracedTwice = true, smoothField = smooth)
+        return Layer(name, outlines, tracedTwice = true, smoothField = smooth, followsLatitude = zonal)
     }
 
     private fun terrainContours(world: WorldMap, frame: GridFrame): List<Outline> {

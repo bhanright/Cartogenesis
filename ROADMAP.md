@@ -15,6 +15,7 @@ table disagree, so there is nothing to keep in step by hand.
 | 3.x | Saved worlds that keep opening after an update. |
 | 3.x | Wetter continental interiors, and cold currents that make coastal deserts. |
 | 3.x | Rivers that widen downstream, with meanders, braided reaches and marshes. |
+| 3.x | More control over how the map is drawn: relief exaggeration and the direction of the light, how small a lake is still shown, the strength of the climate colouring, line weight, and the graticule's spacing. |
 | 3.x | A topographic map style with contour lines. |
 | 3.x | Hydraulic erosion on the graphics card. |
 | 3.x | A choice of world width. |

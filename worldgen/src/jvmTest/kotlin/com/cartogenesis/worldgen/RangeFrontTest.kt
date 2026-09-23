@@ -351,6 +351,41 @@ class RangeFrontTest {
         )
     }
 
+    /**
+     * A belt whose first cell is the only cell joining two lobes is traced round both.
+     *
+     * The trace starts at a component's topmost-leftmost cell, and where that cell is a pinch — one
+     * cell, with a lobe hanging off it diagonally to either side — a trace that closes on its first
+     * return to the start has been round one lobe only, and the fronts on the other are never
+     * looked at. Audit III's A-I12. The lobes are three by three, two columns apart, each touching
+     * the pinch at a corner; every cell but each lobe's middle one is on the outline, so the chain
+     * must visit all seventeen.
+     */
+    @Test
+    fun `a belt pinched at its first cell is traced round both lobes`() {
+        val across = 12
+        val down = 8
+        val belt = BooleanArray(across * down)
+        fun cellAt(column: Int, row: Int) = row * across + column
+        belt[cellAt(5, 1)] = true
+        val west = (2..4).flatMap { column -> (2..4).map { row -> cellAt(column, row) } }
+        val east = (6..8).flatMap { column -> (2..4).map { row -> cellAt(column, row) } }
+        (west + east).forEach { belt[it] = true }
+        val component = IntArray(belt.size) { if (belt[it]) 0 else -1 }
+
+        val chains = RangeFront.boundaryChains(belt, component, 1, across, down)
+        assertEquals(1, chains.size, "one component, one chain")
+        val visited = chains.single().toSet()
+        val outline = (west + east + cellAt(5, 1)) - setOf(cellAt(3, 3), cellAt(7, 3))
+        val missed = outline.filter { it !in visited }
+        assertTrue(
+            missed.isEmpty(),
+            "the outline missed ${missed.size} of the belt's ${outline.size} outline cells, " +
+                "${missed.count { it in west }} of them in the western lobe and " +
+                "${missed.count { it in east }} in the eastern: the trace closed before going round both"
+        )
+    }
+
     private fun southernEastWestFront(report: RangeFront.Report): RangeFront.Measured {
         val fronts = report.measured.filter { it.front.bearing == RangeFront.Bearing.EAST_WEST }
         assertTrue(fronts.isNotEmpty(), "an east-west front was found: ${report.census}")

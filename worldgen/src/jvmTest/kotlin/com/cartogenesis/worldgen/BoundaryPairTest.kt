@@ -58,8 +58,8 @@ class BoundaryPairTest {
      * The world with the plate-base step flattened, which is what makes the belts measurable.
      *
      * `PlateStage` builds elevation out of two quite separate things: a blurred step between plate
-     * interiors, set by [com.cartogenesis.worldgen.model.TectonicsConfig.plateElevationBias], and
-     * the uplift along the boundaries. The step is blurred over `boundaryFalloffCells / 3` cells, so on
+     * interiors, which since S2 is the two crusts floating at their own isostatic levels, and the
+     * uplift along the boundaries. The step is blurred across the continental margin, so on
      * the continental side of an oceanic-continental margin it slopes down toward the ocean basin
      * across roughly the same distance the coastal range occupies — and it does so on exactly the
      * margins this test wants to measure and not on the continental collisions, which have the same
@@ -91,6 +91,7 @@ class BoundaryPairTest {
     @Test
     fun `an Andean margin and a collision plateau are different shapes`() {
         var withPairs = 0.0
+        var withOneProfile = 0.0
         listOf(true, false).forEach { crustPairs ->
             val label = if (crustPairs) "crust pairs" else "one profile "
             val worlds = pairSeeds.map { platesOf(it, crustPairs) }
@@ -113,7 +114,7 @@ class BoundaryPairTest {
                     "plateau %.2fx broader for its height")
                     .format(label, andes.widthToHeight, tibet.widthToHeight, ratio)
             )
-            if (crustPairs) withPairs = ratio
+            if (crustPairs) withPairs = ratio else withOneProfile = ratio
 
             // Per seed: the ratio is reported, because of the spread explained above, but the
             // widths themselves are not proportional to convergence rate and hold on every seed.
@@ -138,9 +139,9 @@ class BoundaryPairTest {
                     // The claim is that a plateau is broad *for what it stands*, which is the same
                     // claim the pooled figure below makes and the one the profiles are shaped to.
                     //
-                    // Broader, per seed, and twice as broad only pooled: the five seeds read 2.37,
-                    // 4.80, 2.40, 2.10 and 1.70, so the factor of two is a property of the profiles
-                    // and the spread is a property of which pairs a world happens to draw.
+                    // Broader, per seed, and twice as broad only pooled: the factor of two is a
+                    // property of the profiles and the spread is a property of which pairs a world
+                    // happens to draw, which the per-seed lines above print.
                     assertTrue(
                         t.widthToHeight > a.widthToHeight,
                         "seed ${pairSeeds[index]}: the collision plateau is only " +
@@ -161,6 +162,15 @@ class BoundaryPairTest {
             withPairs >= 2.0,
             "an Andean margin and a collision plateau came out the same shape: the plateau is " +
                 "only ${withPairs}x broader for its height, wanted at least 2x"
+        )
+        // And the same measurement fails the world built with one profile for every convergent
+        // boundary, which is what gives the clause above its meaning: a pooled ratio that cleared
+        // two whatever the profiles were would be measuring the seeds.
+        assertTrue(
+            withOneProfile < 2.0,
+            "with one profile for every convergent boundary the plateau still reads " +
+                "${withOneProfile}x broader for its height than the margin, so the 2x bar above " +
+                "cannot tell the crust pairs from a single profile"
         )
     }
 
@@ -211,7 +221,7 @@ class BoundaryPairTest {
 
     /**
      * Which crust pairs each seed happens to produce. Reported rather than asserted — it is how
-     * [pairSeed] was chosen, and it is what a later chunk would re-run if the plate RNG moved.
+     * [pairSeeds] were chosen, and it is what a later chunk would re-run if the plate RNG moved.
      */
     @Test
     fun `report which crust pairs each seed produces`() {
@@ -230,50 +240,120 @@ class BoundaryPairTest {
     }
 
     /**
-     * That the hotspot chains are actually there, and how much ground they raise.
+     * That the hotspot chains are there, that they raise ground away from the belts, and that they
+     * raise a trail rather than the ocean floor.
      *
-     * They are a bonus rather than the chunk's point, so this asserts only that they exist and do
-     * something, and reports the size of it — a chain that raised a tenth of the ocean floor would
-     * be a bug, and so would one that raised nothing.
+     * Three bars, each the claim in the name or in the stage's own KDoc. Something is raised on
+     * every seed. Pooled over the three, more of what is raised stands clear of every belt —
+     * further from every boundary than a belt reaches, `boundaryFalloffCells` — than of the ocean
+     * floor at large does: a chain is rooted at its plate's own seed point, which is where
+     * "somewhere other than a plate boundary" puts it, so it has to sit further from the boundaries
+     * than cones dropped anywhere on the floor would. Pooled, because a trail runs a hundred and ten
+     * cells down its plate's drift and is clipped at the plate's edge, so on one seed it can run into
+     * a boundary for most of its length: seed 1234's chains stand a hair under the floor's own
+     * share. And the chains raise under a tenth of the ocean floor on every seed: a trail of cones
+     * five cells across every fifteen is a small share of an oceanic plate, and a stage that raised
+     * a tenth of it would be building a plateau, not a chain. The control is the same stage with
+     * cones eight times as wide, which covers each carrying plate to its edges and has to fail one
+     * of the last two.
      */
     @Test
     fun `hotspot chains raise seamounts away from every boundary`() {
-        listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val withChains = PlateStage.generate(base, TerrainStage.generate(base))
-            val without = base.copy(tectonics = base.tectonics.copy(hotspotPlateFraction = 0f))
-            val flat = PlateStage.generate(without, TerrainStage.generate(without))
-
-            // Both fields are normalized over their own range before they come back, so compare
-            // against the mean difference rather than against zero: if the extra uplift moved the
-            // range at all, every cell shifts by a constant that is not a seamount.
-            var offset = 0.0
-            for (i in withChains.height.data.indices) {
-                offset += (withChains.height.data[i] - flat.height.data[i]).toDouble()
-            }
-            offset /= withChains.height.data.size
-
-            var raised = 0
-            var worst = 0f
-            var farFromBoundary = 0
-            for (i in withChains.height.data.indices) {
-                val delta = (withChains.height.data[i] - flat.height.data[i] - offset).toFloat()
-                if (delta <= 0.01f) continue
-                raised++
-                if (delta > worst) worst = delta
-                if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) {
-                    farFromBoundary++
-                }
-            }
-            println(
-                "PAIRS seed %d hotspots: %d cells raised (%.2f%% of the map), %d of them clear of every belt, tallest %+.3f"
-                    .format(
-                        seed, raised, raised * 100.0 / withChains.height.data.size,
-                        farFromBoundary, worst
-                    )
-            )
-            assertTrue(raised > 0, "seed $seed grew no seamounts at all")
+        val measured = listOf(7L, 42L, 1234L).map { seed ->
+            hotspotReach(WorldGenConfig(seed = seed, width = 512, height = 512), "seed $seed")
         }
+        val pooled = HotspotReach(
+            "pooled", measured.sumOf { it.raised }, measured.sumOf { it.farFromBoundary },
+            measured.sumOf { it.oceanFloor }, measured.sumOf { it.oceanFloorClear }
+        )
+        println(
+            "PAIRS pooled hotspots: %.3f of the raised cells clear of every belt, against %.3f of the ocean floor"
+                .format(pooled.clearShare, pooled.floorClearShare)
+        )
+        assertTrue(
+            pooled.clearShare > pooled.floorClearShare,
+            ("%.3f of the cells the hotspot chains raised stand clear of every belt, no more than the " +
+                "%.3f of the ocean floor that does, so the chains are no further from the boundaries " +
+                "than chance").format(pooled.clearShare, pooled.floorClearShare)
+        )
+        measured.forEach { reach ->
+            assertTrue(reach.raised > 0, "${reach.label} grew no seamounts at all")
+            assertTrue(
+                reach.raised * 10 < reach.oceanFloor,
+                "${reach.label}: the hotspot chains raised ${reach.raised} cells of an ocean floor " +
+                    "of ${reach.oceanFloor}, a tenth or more of it"
+            )
+        }
+        val control = hotspotReach(
+            WorldGenConfig(seed = 7L, width = 512, height = 512).let {
+                it.copy(tectonics = it.tectonics.copy(hotspotRadiusCells = it.tectonics.hotspotRadiusCells * 8f))
+            },
+            "control, cones eight times as wide"
+        )
+        assertTrue(
+            control.clearShare <= control.floorClearShare || control.raised * 10 >= control.oceanFloor,
+            "the control with cones eight times as wide passes both bars, so neither can tell a " +
+                "chain from a plateau"
+        )
+    }
+
+    private class HotspotReach(
+        val label: String,
+        val raised: Int,
+        val farFromBoundary: Int,
+        val oceanFloor: Int,
+        val oceanFloorClear: Int
+    ) {
+        val clearShare: Double get() = if (raised == 0) 0.0 else farFromBoundary.toDouble() / raised
+        val floorClearShare: Double get() = if (oceanFloor == 0) 0.0 else oceanFloorClear.toDouble() / oceanFloor
+    }
+
+    /**
+     * What the hotspot chains raise on [base]'s plates, against the same plates with no chains.
+     *
+     * The mean of the difference is taken off first: the two worlds share their plates and their
+     * crust, but a seamount stamped into the uplift feeds back into the relief the stage lays on
+     * it, so every cell may shift by a little that is not a seamount.
+     */
+    private fun hotspotReach(base: WorldGenConfig, label: String): HotspotReach {
+        val withChains = PlateStage.generate(base, TerrainStage.generate(base))
+        val without = base.copy(tectonics = base.tectonics.copy(hotspotPlateFraction = 0f))
+        val flat = PlateStage.generate(without, TerrainStage.generate(without))
+        var offset = 0.0
+        for (i in withChains.height.data.indices) {
+            offset += (withChains.height.data[i] - flat.height.data[i]).toDouble()
+        }
+        offset /= withChains.height.data.size
+
+        var raised = 0
+        var worst = 0f
+        var farFromBoundary = 0
+        var oceanFloor = 0
+        var oceanFloorClear = 0
+        for (i in withChains.height.data.indices) {
+            if (withChains.continentalShare.data[i] < 0.5f) {
+                oceanFloor++
+                if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) oceanFloorClear++
+            }
+            val delta = (withChains.height.data[i] - flat.height.data[i] - offset).toFloat()
+            if (delta <= 0.01f) continue
+            raised++
+            if (delta > worst) worst = delta
+            if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) {
+                farFromBoundary++
+            }
+        }
+        println(
+            ("PAIRS %s hotspots: %d cells raised (%.2f%% of the map, %.2f%% of the ocean floor), " +
+                "%d of them clear of every belt (%.3f, against %.3f of the ocean floor), tallest %+.3f")
+                .format(
+                    label, raised, raised * 100.0 / withChains.height.data.size,
+                    raised * 100.0 / oceanFloor.coerceAtLeast(1), farFromBoundary,
+                    farFromBoundary.toDouble() / raised.coerceAtLeast(1),
+                    oceanFloorClear.toDouble() / oceanFloor.coerceAtLeast(1), worst
+                )
+        )
+        return HotspotReach(label, raised, farFromBoundary, oceanFloor, oceanFloorClear)
     }
 
     private enum class Crust { CONTINENTAL, OCEANIC }

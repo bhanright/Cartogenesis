@@ -16,13 +16,42 @@ class PipelineTest {
     private fun config(seed: Long = 42L, size: Int = 128) =
         WorldGenConfig(seed = seed, width = size, height = size)
 
+    /**
+     * Two generations of one seed in one process are the same world, on every target this suite
+     * runs on: every stage's per-cell answer that the rest of the pipeline reads, compared array by
+     * array. `WorldFingerprintTest` holds the same property on the JVM over every field reachable
+     * from the world, by reflection; this is the part of it that can be asked on Wasm too.
+     */
     @Test
     fun `generation is deterministic for a given seed`() = runTest(timeout = 10.minutes) {
         val a = WorldGenerationEngine.generate(config())
         val b = WorldGenerationEngine.generate(config())
-        assertTrue(a.elevation.data.contentEquals(b.elevation.data))
-        assertEquals(a.sea.landCellCount, b.sea.landCellCount)
-        assertEquals(a.rivers.rivers.size, b.rivers.rivers.size)
+        val fields = listOf<Pair<String, (com.cartogenesis.worldgen.model.WorldMap) -> Any>>(
+            "plates.height" to { it.plates.height.data },
+            "erosion.height" to { it.elevation.data },
+            "sea.isLand" to { it.sea.isLand },
+            "sea.relativeElevation" to { it.sea.relativeElevation.data },
+            "climate.temperature" to { it.climate.temperature.data },
+            "climate.precipitation" to { it.climate.precipitation.data },
+            "climate.biome" to { it.climate.biome.map { biome -> biome.ordinal }.toIntArray() },
+            "rivers.flowTarget" to { it.rivers.flowTarget },
+            "rivers.lakeId" to { it.rivers.lakes.lakeId },
+            "nations.nationId" to { it.nations.nationId }
+        )
+        fields.forEach { (name, read) ->
+            val first = read(a)
+            val second = read(b)
+            val same = when (first) {
+                is FloatArray -> first.contentEquals(second as FloatArray)
+                is IntArray -> first.contentEquals(second as IntArray)
+                is BooleanArray -> first.contentEquals(second as BooleanArray)
+                else -> error("no comparison for $name")
+            }
+            assertTrue(same, "$name differs between two generations of the same seed")
+        }
+        assertEquals(a.rivers.rivers.map { it.cells.toList() }, b.rivers.rivers.map { it.cells.toList() })
+        assertEquals(a.nations.nations.map { it.name }, b.nations.nations.map { it.name })
+        assertEquals(a.landmarks.landmarks.size, b.landmarks.landmarks.size)
     }
 
     @Test
@@ -47,12 +76,37 @@ class PipelineTest {
         assertEquals(0.2f, high.landFraction(), 0.02f)
     }
 
+    /**
+     * Every cell where the plate partition changes plate carries a boundary type, and lies on or
+     * beside a boundary the stage classified: a plate edge the classification missed would carry no
+     * belt, and a type read off a boundary somewhere else would carry the wrong one.
+     */
     @Test
     fun `every plate boundary cell is assigned a boundary type`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(config())
         val plateIds = world.plates.plateId.toSet()
         assertTrue(plateIds.size > 1, "expected several plates, got ${plateIds.size}")
-        assertTrue(world.plates.nearestBoundaryType.any { it >= 0 })
+        val across = world.width
+        var edgeCells = 0
+        val untyped = ArrayList<Int>()
+        val unclassified = ArrayList<Int>()
+        for (cell in 0 until across * world.height) {
+            val column = cell % across
+            val row = cell / across
+            val plate = world.plates.plateId[cell]
+            val east = world.plates.plateId[row * across + (column + 1) % across]
+            val south = if (row + 1 < world.height) world.plates.plateId[cell + across] else plate
+            if (east == plate && south == plate) continue
+            edgeCells++
+            if (world.plates.nearestBoundaryType[cell] < 0) untyped += cell
+            if (world.plates.boundaryDistance.data[cell] > 1.5f) unclassified += cell
+        }
+        assertTrue(edgeCells > 0, "the partition has no edge between plates to check")
+        assertTrue(untyped.isEmpty(), "${untyped.size} of $edgeCells plate-edge cells carry no boundary type, the first at ${untyped.firstOrNull()}")
+        assertTrue(
+            unclassified.isEmpty(),
+            "${unclassified.size} of $edgeCells plate-edge cells lie further than a cell and a half from any classified boundary, the first at ${unclassified.firstOrNull()}"
+        )
     }
 
     /**
@@ -244,9 +298,8 @@ class PipelineTest {
 
     /**
      * Export re-runs generation at the target size, so a bigger grid has to mean more detail in
-     * the same world — not a different one. Settings measured in cells (mountain belt width,
-     * rainfall per cell of travel) skew the world's character if [WorldGenConfig.atResolution]
-     * does not rescale them.
+     * the same world — not a different one. The settings still measured in cells, the tectonics'
+     * widths, skew the world's character if [WorldGenConfig.atResolution] does not rescale them.
      */
     @Test
     fun `world keeps its character when regenerated at a larger resolution`() = runTest(timeout = 10.minutes) {
@@ -366,7 +419,7 @@ class PipelineTest {
     }
 
     @Test
-    fun `changing only sea level reuses the terrain and plate stages`() = runTest(timeout = 10.minutes) {
+    fun `changing only sea level reuses the terrain and recomputes the plates and the sea`() = runTest(timeout = 10.minutes) {
         val base = WorldGenerationEngine.generate(config())
         val adjusted = WorldGenerationEngine.generate(config().copy(seaLevel = 0.5f), previous = base)
         assertTrue(base.terrain === adjusted.terrain, "terrain should be reused")

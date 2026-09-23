@@ -7,16 +7,20 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The save format stores a seed rather than a world, so a saved world only travels between
- * platforms if the same seed generates the same map everywhere.
+ * A fingerprint of one generated world, printed on every target so the JVM's and Wasm's can be put
+ * side by side.
  *
- * This prints a fingerprint of a generated world. Run it on every target and compare: the numbers
- * agreeing means an Android save would reopen identically in a browser, and disagreeing means the
- * format needs to carry more than a seed. Floating-point basics are specified exactly by IEEE-754,
- * but transcendentals (`sin`, `cos`, `pow`) are not, and those feed the FFT — where a difference in
- * the last bit has plenty of room to compound.
+ * A save carries the whole world, so a world that generated differently on two platforms would
+ * still reopen as itself on either; the comparison is informational, and CI reads these lines back
+ * to make it. What a difference would say is that the platforms disagree somewhere in the
+ * arithmetic: floating-point basics are specified exactly by IEEE-754, but transcendentals (`sin`,
+ * `cos`, `pow`) are not, and those feed the FFT, where a difference in the last bit has plenty of
+ * room to compound.
+ *
+ * The checksum is of the height field the map is drawn from. That the whole of a world is the same
+ * from one generation to the next is `WorldFingerprintTest`'s, on the JVM, over every field.
  */
-class WorldFingerprintTest {
+class CrossPlatformFingerprintTest {
 
     @Test
     fun `print a cross-platform fingerprint`() = runTest(timeout = 10.minutes) {
@@ -39,6 +43,6 @@ class WorldFingerprintTest {
         println("FINGERPRINT firstRealm=${world.nations.nations.firstOrNull()?.name}")
         println("FINGERPRINT capital=${world.nations.nations.firstOrNull()?.capitalName}")
 
-        assertTrue(world.sea.landCellCount > 0)
+        assertTrue(world.sea.landCellCount > 0, "the fingerprinted world has no land, so the lines above say nothing")
     }
 }

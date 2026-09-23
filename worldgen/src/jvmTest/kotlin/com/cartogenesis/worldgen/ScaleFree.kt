@@ -60,9 +60,10 @@ internal object ScaleFree {
      * 512 and two hundred and ninety-one at 2048 — the Severn above Gloucester, so the network it
      * extracts is the one a map of a whole world would draw.
      *
-     * Deliberately not `RiverConfig.sourceFlowShare`, which is a share of the world's *runoff* and
-     * so answers to the climate as well as the terrain, and deliberately not the drawn courses,
-     * which `RiverConfig.maxRivers` caps at four hundred whatever the grid.
+     * Deliberately not the channel-head criterion, `RiverConfig.channelHeadAreaSlopeKm2`, whose
+     * area is weighted by the runoff and so answers to the climate as well as the terrain, and
+     * deliberately not the drawn courses, which are the map's selection from the network rather
+     * than the network.
      */
     const val CHANNEL_SUPPORT_KM2 = 5_000.0
 
@@ -239,8 +240,9 @@ internal object ScaleFree {
                 " same network on the same ground at both grids and its length should differ only" +
                 " by how finely the D8 path between two points is drawn. Measured x1.09, x1.07," +
                 " x1.16 and x1.13 from 512 to 1024, all of them the finer path and none of them a" +
-                " denser network. Extracted at `RiverConfig.sourceFlowShare` instead it reads x0.61" +
-                " to x0.21, which is the threshold moving and not the drainage"
+                " denser network. Extracted at a share of the world's runoff instead, the rule R1" +
+                " replaced, it read x0.61 to x0.21, which is the threshold moving and not the" +
+                " drainage"
         ),
         Tolerance(
             name = "largest lake",
@@ -328,9 +330,7 @@ internal object ScaleFree {
                         " desert share below $edge degrees moved from ${"%.3f".format(from)} to" +
                         " ${"%.3f".format(to)}, more than the $DESERT_BAND_TOLERANCE a band is" +
                         " allowed — a biome share is a share of the land and has no reason to move" +
-                        " with the grid, so what moves it is the moisture march, whose rain rate is" +
-                        " charged per cell of wind travel and whose orographic term is charged" +
-                        " against a per-cell rise (W3 in REALISM_AUDIT.md)"
+                        " with the grid, so what moves it is the moisture march"
             )
         }
         return Verdict(complaints, findings.sortedByDescending { it.first }.map { it.second })
@@ -462,8 +462,8 @@ internal object ScaleFree {
      * A cell further than this from the nearest plate boundary is a plate's interior, in cells of
      * the coarse grid.
      *
-     * One cell, which is what the distance transform is quantised to: a cell the boundary runs
-     * through reads about half a cell and its neighbour about one.
+     * One cell, which is what the distance transform is quantised to: a boundary cell is a source
+     * and reads zero, and its neighbours across and down read one.
      */
     const val INTERIOR_MARGIN_CELLS = 1.0f
 

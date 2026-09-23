@@ -922,11 +922,14 @@ internal object RangeFront {
      *
      * Moore-neighbour tracing, clockwise, entered from the west at the component's first cell in
      * row-major order — which is its topmost and then leftmost cell, and so lies on its outer
-     * boundary with no belt north or west of it. The chain closes when the trace returns to that
-     * cell. **Only the outer boundary**: ground enclosed inside a belt has a front of its own and
-     * this finder does not look at it, because the question being asked is about coasts.
+     * boundary with no belt north or west of it. The chain closes on Jacob's criterion: when the
+     * trace is back at that cell *and* about to leave it the way it first did. Closing on the first
+     * return alone loses a lobe wherever the start cell is the one cell joining two, because the
+     * trace comes back to it after going round the first lobe and has not yet been round the second.
+     * **Only the outer boundary**: ground enclosed inside a belt has a front of its own and this
+     * finder does not look at it, because the question being asked is about coasts.
      */
-    private fun boundaryChains(
+    internal fun boundaryChains(
         belt: BooleanArray,
         component: IntArray,
         componentCount: Int,
@@ -962,6 +965,7 @@ internal object RangeFront {
             // pathological shape ends the trace rather than the run.
             val limit = 4 * belt.size
             var steps = 0
+            var firstDirection = -1
             while (steps < limit) {
                 chain.add(row * cellsAcross + column)
                 var direction = -1
@@ -973,11 +977,20 @@ internal object RangeFront {
                     }
                 }
                 if (direction < 0) break
+                if (column == startColumn && row == startRow) {
+                    if (firstDirection < 0) {
+                        firstDirection = direction
+                    } else if (direction == firstDirection) {
+                        // Round every lobe the start cell joins and about to go round the first
+                        // again: the chain is closed, and the start is already its first cell.
+                        chain.removeAt(chain.size - 1)
+                        break
+                    }
+                }
                 column += stepColumn[direction]
                 row += stepRow[direction]
                 backtrack = (direction + 4) % 8
                 steps++
-                if (column == startColumn && row == startRow) break
             }
             if (chain.size >= 3) chains.add(chain.toIntArray())
         }

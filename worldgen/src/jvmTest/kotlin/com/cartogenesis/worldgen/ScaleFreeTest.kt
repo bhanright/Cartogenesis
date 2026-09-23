@@ -91,16 +91,17 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The channel-head threshold is the same area of ground at every grid, and so is the network
-     * it picks out.
+     * The network the channel-head criterion picks out is the same density of ground at every
+     * grid.
      *
      * The clause R1 owes this suite. A threshold in square kilometres against a gradient is a
-     * statement about ground, so `atResolution` must leave it exactly alone — where the rule it
-     * replaced was a share of the world's runoff, a count of courses and a count of cells, each of
-     * which described different ground at every grid. The network it picks out is the other half,
-     * and it is asked about as a **density** — kilometres of channel over square kilometres of land
-     * — and not as a share of the cells. A channel is a line and the land is an area, so the share
-     * of *cells* under channel must halve when the cell halves whatever the criterion does;
+     * statement about ground, where the rule it replaced was a share of the world's runoff, a count
+     * of courses and a count of cells, each of which described different ground at every grid. That
+     * `atResolution` leaves the threshold itself alone is a question about the settings and is
+     * `ResolutionScalingTest`'s, which holds every section but the tectonics equal across grids;
+     * this asks it of the network, as a **density** — kilometres of channel over square kilometres
+     * of land — and not as a share of the cells. A channel is a line and the land is an area, so the
+     * share of *cells* under channel must halve when the cell halves whatever the criterion does;
      * measured, it goes as 0.64 to 0.66 from 512 to 1024 where the geometry alone would say 0.5,
      * and reading that as a failure would be reading the grid. The density is the quantity that
      * describes the ground, and it is held to the same 1.35 [ScaleFree.TOLERANCES] allows the
@@ -110,24 +111,6 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     fun `the channel-head threshold is an area of ground and does not move with the grid`() {
         val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val coarse = configAt(seed, 512)
-            val fine = configAt(seed, 1024)
-            if (coarse.rivers.channelHeadAreaSlopeKm2 !=
-                fine.rivers.channelHeadAreaSlopeKm2
-            ) {
-                complaints.add(
-                    "seed $seed: the channel-head threshold is" +
-                        " ${coarse.rivers.channelHeadAreaSlopeKm2} km2 at 512 and" +
-                        " ${fine.rivers.channelHeadAreaSlopeKm2} at 1024"
-                )
-            }
-            if (coarse.rivers.shortestDrawnCourseKm != fine.rivers.shortestDrawnCourseKm) {
-                complaints.add(
-                    "seed $seed: the shortest drawn course is" +
-                        " ${coarse.rivers.shortestDrawnCourseKm} km at 512 and" +
-                        " ${fine.rivers.shortestDrawnCourseKm} at 1024"
-                )
-            }
             val coarse512 = worldAt(seed, 512)
             val fine1024 = worldAt(seed, 1024)
             val coarseDensity = channelDensityKmPerKm2(coarse512)

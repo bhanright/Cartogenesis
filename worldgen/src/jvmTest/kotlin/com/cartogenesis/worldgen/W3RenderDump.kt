@@ -1,6 +1,5 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
@@ -36,7 +35,7 @@ class W3RenderDump {
         listOf(718106L, 59758L).forEach { seed ->
             val started = System.currentTimeMillis()
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 2048, height = 2048)
+                authorsConfig(seed).atResolution(2048, 2048)
             )
             println(
                 "W3 RENDER $label seed $seed at 2048 in ${(System.currentTimeMillis() - started) / 1000}s"

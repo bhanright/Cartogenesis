@@ -81,7 +81,7 @@ object SeaLevelStage {
      * 200 while the break was 1,000; both figures came down to Earth's in S2's second pass, when
      * the sea gained a floor deep enough for a 130 m break to mean something.
      */
-    private const val SHELF_DEPTH_AT_COAST_METRES = -30f
+    internal const val SHELF_DEPTH_AT_COAST_METRES = -30f
 
     /**
      * The most passes [drainDrownedBasins] makes over the drowned basins' outlets.

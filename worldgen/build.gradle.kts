@@ -43,6 +43,12 @@ kotlin {
         jvmTest.dependencies {
             implementation(kotlin("test-junit"))
         }
+        // The worlds the JVM test suites share and the check that none of them is written to. A
+        // directory of its own rather than a source set of this module's, because `:cartography`
+        // and `:desktop` compile the same files into their own tests: each test JVM holds its own
+        // worlds, so what is shared is the code, and a project dependency on another module's
+        // tests would put two copies of this module's classes on the path.
+        named("jvmTest") { kotlin.srcDir("src/sharedTestSupport/kotlin") }
     }
 }
 
@@ -143,13 +149,54 @@ val auditOnlyClasses = listOf(
     // a printed table of where the permanent ice went and whether a belt boundary took it. It
     // asserts nothing; the guards it was written to explain are in `PressureWindTest` and
     // `SnowBalanceTest`.
-    "com.cartogenesis.worldgen.PressureWindIceTest"
+    "com.cartogenesis.worldgen.PressureWindIceTest",
+    // T5: five more that assert nothing and had been running on every merge. W3's renders, which
+    // said in their own KDoc that they were excluded like the rest of the harness and were not: two
+    // worlds at 2048 for four pictures. S3's three reports on the climate-fed erosion, which decide
+    // things by being read and are four minutes of provisional marches, one of them at 2048. How
+    // closely realm borders follow rivers and ridges, printed per seed against a null model. E7's
+    // two reports on what a rift trough holds, whose conclusion is that nothing at 512 can say.
+    // And the river-endings picture and tally, a 1024 world for a PNG and four worlds for a table.
+    "com.cartogenesis.worldgen.W3RenderDump",
+    "com.cartogenesis.worldgen.ClimateFedErosionMeasurementTest",
+    "com.cartogenesis.worldgen.BorderRealismTest",
+    "com.cartogenesis.worldgen.RiftDepthTest",
+    "com.cartogenesis.worldgen.RiverEndingsTest",
+    // T5, by method: three reports inside classes whose other cases are guards, which stay. H5's
+    // whole before-and-after table, twenty-seven worlds, most of them variants nobody else asks for; the
+    // lake budget before and after the water balance, twelve worlds, two of them at 1024; and the
+    // PNGs of the coast around the largest river mouths. A class name and a method name, which
+    // Gradle's filter matches the same way on both sides.
+    "com.cartogenesis.worldgen.SeaLevelHistoryTest.report every corner of the pair",
+    "com.cartogenesis.worldgen.LakeWaterBalanceTest.report the lake budget",
+    "com.cartogenesis.worldgen.DepositionTest.render the coast around the largest river mouths"
 )
 
+/*
+ * T5: the per-merge tier in workers side by side, each with the heap and the thread pool the root
+ * build script's budget gives it (see there for why those add up as they do). The audit task below
+ * keeps the eight gigabytes and the one worker above, which its 2048 and 4096 cases were sized for.
+ *
+ * Three workers take a third of the classes each, and every class that asks `SharedWorlds` for a
+ * world is handed the one its worker already holds, so a standard world is generated once a worker
+ * rather than once a class. Which classes share a worker is Gradle's choice — it deals them out in
+ * the order it finds them — so a world many classes ask for is made at most three times.
+ *
+ * `mustRunAfter` is for the project lock. Without the configuration cache Gradle runs no two tasks
+ * of one project at once, and this one holds the lock for as long as its tests run; the Wasm
+ * compilation and package manifests that `:ui` and `:desktop` wait on are tasks of this project,
+ * so the rest of the tier used to sit behind the whole of this suite. Ordered after them, the suite
+ * starts a moment later and everything else runs beside it.
+ */
 tasks.named<Test>("jvmTest") {
     filter {
         auditOnlyClasses.forEach { excludeTestsMatching(it) }
     }
+    val budget = rootProject.extra
+    maxParallelForks = budget["worldgenTestForks"] as Int
+    maxHeapSize = budget["worldgenTestHeap"] as String
+    jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=${budget["worldgenTestPoolThreads"]}")
+    mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
 }
 
 tasks.register<Test>("audit") {

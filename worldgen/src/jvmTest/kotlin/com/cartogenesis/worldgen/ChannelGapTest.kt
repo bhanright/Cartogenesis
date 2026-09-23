@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 
 /**
  * An initiated channel does not stop and start again, and in particular it does not stop on a flat.
@@ -24,6 +25,9 @@ import org.junit.Assert.assertTrue
  */
 class ChannelGapTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -34,7 +38,7 @@ class ChannelGapTest {
     fun `no initiated channel drains into land that carries none`() {
         val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val world: WorldMap = WorldGenerationEngine.generateBlocking(
+            val world: WorldMap = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
             )
             val channel = ChannelInitiation.channelMaskOf(world)

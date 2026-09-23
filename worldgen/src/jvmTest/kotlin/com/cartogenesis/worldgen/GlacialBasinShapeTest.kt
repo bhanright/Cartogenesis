@@ -9,6 +9,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -29,6 +30,9 @@ import org.junit.Test
  * their floors, which must not pile their cells at one height. See docs/DESIGN_LEDGER.md, I2.
  */
 class GlacialBasinShapeTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     @Test
     fun `the ice leaves no dead-level slab of ground`() {
@@ -257,7 +261,7 @@ class GlacialBasinShapeTest {
      */
     private fun measure(seed: Long, side: Int): Measurement = measured.getOrPut(seed) {
         val config = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side)
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val sea = SeaLevelStage.apply(world.erosion.height, config)
         val balance = if (config.climate.snowBalance) {
             ClimateStage.provisionalSnowBalance(config, sea, OceanStage.withoutCurrents(config, sea))

@@ -80,6 +80,12 @@ compose.resources {
     publicResClass = false
 }
 
+// The JVM tests' pool is the root build script's budget: they run beside the other modules' and
+// generate nothing larger than 128 cells, so one thread is all they are given.
+tasks.named<Test>("jvmTest") {
+    jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=${rootProject.extra["lightTestPoolThreads"]}")
+}
+
 /*
  * ---------------------------------------------------------------------------------------------
  * What the About dialog and the update check know about this build, generated rather than typed.

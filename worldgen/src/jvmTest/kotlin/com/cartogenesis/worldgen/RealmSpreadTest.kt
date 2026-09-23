@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether realms actually reach the whole world, and whether any one of them reaches too much of it.
@@ -15,10 +16,13 @@ import kotlin.test.assertTrue
  */
 class RealmSpreadTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     @Test
     fun `every landmass is settled, and no realm swallows the world`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val land = world.sea.isLand.count { it }
@@ -54,7 +58,7 @@ class RealmSpreadTest {
     @Test
     fun `realms are not riddled with enclaves`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width
@@ -119,7 +123,7 @@ class RealmSpreadTest {
 
     @Test
     fun `realms differ in size`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val sizes = world.nations.nations.map { it.cellCount }.sortedDescending()

@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Audits generated worlds against the rules real geography follows — the ones fantasy maps are
@@ -18,6 +19,9 @@ import kotlin.test.assertTrue
  */
 class GeographyAuditTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
     @Test
@@ -27,7 +31,7 @@ class GeographyAuditTest {
         // Desert and land cells per band, per seed and pooled. See [DesertBands].
         val bands = DesertBands()
         seeds.forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width
@@ -177,7 +181,7 @@ class GeographyAuditTest {
         val bands = DesertBands()
         seeds.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
             )
             for (i in 0 until world.width * world.height) {

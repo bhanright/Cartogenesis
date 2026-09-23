@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * How much of the land is ribbon — long thin strips a couple of cells wide.
@@ -16,6 +17,9 @@ import kotlin.test.assertTrue
  * here, alongside the longest single strip so a few big continents cannot hide a bad one.
  */
 class RibbonLandTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     /**
      * The most of its land a world may hold in strips, as a percentage — see the assertion below
@@ -57,7 +61,7 @@ class RibbonLandTest {
                 )
             )
         ).map { (name, config) ->
-            val world = WorldGenerationEngine.generateBlocking(config)
+            val world = SharedWorlds.world(config)
             val w = world.width
             val h = world.height
             val land = world.sea.isLand

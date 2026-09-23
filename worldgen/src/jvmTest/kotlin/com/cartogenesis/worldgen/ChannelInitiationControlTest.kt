@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 import kotlinx.coroutines.runBlocking
+import org.junit.Rule
 
 /**
  * R1's discriminating control: the channel-head threshold with the vegetation term off, shown
@@ -32,6 +33,9 @@ import kotlinx.coroutines.runBlocking
  */
 class ChannelInitiationControlTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     private companion object {
         /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -43,7 +47,7 @@ class ChannelInitiationControlTest {
         val pool = EarthLikeness.Pool()
         val bare = SEEDS.map { seed ->
             val config = WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
-            val withCover: WorldMap = WorldGenerationEngine.generateBlocking(config)
+            val withCover: WorldMap = SharedWorlds.world(config)
             val withoutCover = runBlocking {
                 WorldGenerationEngine.generate(
                     config.copy(rivers = config.rivers.copy(coverRaisesChannelHead = false)),
@@ -87,7 +91,7 @@ class ChannelInitiationControlTest {
     @Test
     fun `the frozen-ground rule does not follow the lake's evaporation scale`() {
         val config = WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)
-        val world: WorldMap = WorldGenerationEngine.generateBlocking(config)
+        val world: WorldMap = SharedWorlds.world(config)
         val noLakeEvaporation = runBlocking {
             WorldGenerationEngine.generate(
                 config.copy(lakes = config.lakes.copy(evaporationScale = 0f)),

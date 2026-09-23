@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.CultureStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether a hearth's landmass is decided fairly, not just its climate.
@@ -27,10 +28,13 @@ import kotlin.test.assertTrue
  */
 class CultureHearthLandmassTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     @Test
     fun `hearths are shared out between landmasses in proportion to habitable land`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val placement = CultureStage.placeHearths(world.config, world.sea, world.climate, world.rivers)

@@ -8,6 +8,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 
 /**
  * What the ground looks like, in figures rather than as an opinion.
@@ -27,6 +28,9 @@ import org.junit.Assert.assertTrue
  * and has been taken out rather than printed; the clause says so where it stands.
  */
 class GroundTextureTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     /**
      * A mountain belt's flank is dissected, and at S1's critical slope it is an analytic ramp.
@@ -49,7 +53,7 @@ class GroundTextureTest {
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val here = flankTexture(world(seed))
             val control = flankTexture(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     config.copy(
                         erosion = config.erosion.copy(
                             criticalFallMetresPerKm = CRITICAL_FALL_BEFORE_S2
@@ -175,7 +179,7 @@ class GroundTextureTest {
         SEEDS.forEach { seed ->
             val here = textureByElevation(world(seed))
             val control = textureByElevation(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
                             isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
@@ -258,7 +262,7 @@ class GroundTextureTest {
         SEEDS.forEach { seed ->
             val here = drownedCrust(world(seed))
             val control = drownedCrust(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
                             isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
@@ -492,7 +496,7 @@ class GroundTextureTest {
 
     /** The five worlds on the defaults, built once and shared by every clause below. */
     private fun world(seed: Long): WorldMap =
-        WORLDS.getOrPut(seed) { WorldGenerationEngine.generateBlocking(standard(seed)) }
+        WORLDS.getOrPut(seed) { SharedWorlds.world(standard(seed)) }
 
     private companion object {
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */

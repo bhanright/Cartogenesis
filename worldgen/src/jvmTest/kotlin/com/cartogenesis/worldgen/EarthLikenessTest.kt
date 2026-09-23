@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 
 /**
  * The Earth-likeness yardstick at 512, on the four standard seeds: every metric of the plan's M1
@@ -20,6 +21,9 @@ import org.junit.Assert.assertTrue
  * metric is and where Earth's number comes from.
  */
 class EarthLikenessTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     @Test
     fun `every metric of the suite, per seed and pooled`() {
@@ -114,7 +118,7 @@ class EarthLikenessTest {
         fun suite(): Suite = measured ?: run {
             val pool = EarthLikeness.Pool()
             val perSeed = seeds.map { seed ->
-                val world: WorldMap = WorldGenerationEngine.generateBlocking(
+                val world: WorldMap = SharedWorlds.world(
                     WorldGenConfig(seed = seed, width = 512, height = 512)
                 )
                 EarthLikeness.measure(world, seed.toString(), pool)

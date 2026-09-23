@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.VegetationDensity
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the cover this generator puts on its ground is Earth's cover, and whether the function
@@ -21,6 +22,9 @@ import kotlin.test.assertTrue
  * See docs/DESIGN_LEDGER.md, W4.
  */
 class VegetationDensityTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
 
@@ -134,7 +138,7 @@ class VegetationDensityTest {
          */
         val WORLDS: Map<Long, WorldMap> by lazy {
             SEEDS.associateWith {
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     WorldGenConfig(seed = it, width = GRID, height = GRID)
                 )
             }
@@ -144,7 +148,7 @@ class VegetationDensityTest {
         val WITHOUT_VEGETATION: Map<Long, WorldMap> by lazy {
             SEEDS.associateWith {
                 val base = WorldGenConfig(seed = it, width = GRID, height = GRID)
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     base.copy(vegetation = base.vegetation.copy(enabled = false))
                 )
             }

@@ -1,7 +1,6 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -10,6 +9,7 @@ import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * That the map is drawn for the scale it is being seen at, and says what that scale is.
@@ -37,6 +37,9 @@ import kotlin.test.assertTrue
  */
 class GeneralisationTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     private companion object {
         const val SIDE = 512
 
@@ -60,7 +63,7 @@ class GeneralisationTest {
         const val ON_A_CELL_CENTRE = 1e-4f
     }
 
-    private fun world(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
+    private fun world(seed: Long): WorldMap = SharedWorlds.world(
         WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
     )
 

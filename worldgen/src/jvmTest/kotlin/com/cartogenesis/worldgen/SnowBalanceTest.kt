@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.Season
 import com.cartogenesis.worldgen.pipeline.SnowBalance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -28,6 +29,9 @@ import org.junit.Test
  * here honest.
  */
 class SnowBalanceTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
@@ -50,7 +54,7 @@ class SnowBalanceTest {
      * the carving step.
      */
     private fun uncarvedTerrain(seed: Long): WorldMap =
-        WorldGenerationEngine.generateBlocking(config(seed).withoutBalance().withoutGlaciation())
+        SharedWorlds.world(config(seed).withoutBalance().withoutGlaciation())
 
     /**
      * Every guard here wants the same eight worlds — four seeds, with the balance and without —
@@ -60,7 +64,7 @@ class SnowBalanceTest {
      */
     private fun world(seed: Long, balance: Boolean): WorldMap = cache.getOrPut(seed to balance) {
         val cfg = config(seed)
-        WorldGenerationEngine.generateBlocking(if (balance) cfg else cfg.withoutBalance())
+        SharedWorlds.world(if (balance) cfg else cfg.withoutBalance())
     }
 
     // ---------------------------------------------------------------- the arithmetic itself
@@ -220,7 +224,7 @@ class SnowBalanceTest {
             // a tenth of them warm, because a moat reaches past a margin by construction. This
             // clause is about where the ice *cut*, so the load is switched off for it and asserted
             // on its own in `IsostasyTest`.
-            val carving = WorldGenerationEngine.generateBlocking(
+            val carving = SharedWorlds.world(
                 config(seed).withoutBalance()
                     .let { it.copy(isostasy = it.isostasy.copy(iceLoad = false)) }
             )

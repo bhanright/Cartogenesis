@@ -292,9 +292,18 @@ The audit tier, run nightly by `.github/workflows/nightly.yml` and on demand:
 It carries the slower checks: the `DebugMapDump` render harness (PNGs under `worldgen/build/maps/`),
 `StageProfileTest`, `GenerationSpeedTest`, `DesertCauseTest`, `ColdCapReportTest` and
 `ErosionConvergenceTest`, the 2048-scale cases of `GlaciationTest` and `RealmIdRangeTest` (split
-into `*AuditTest` siblings), and `ExportSmokeTest`'s larger exports (split into `ExportAuditTest`; a
-1024 export stays per merge, and `DataExportTest` holds the data exports at 512). To regenerate the
-render PNGs alone: `./gradlew :worldgen:jvmTest --tests '*DebugMapDump*' --rerun`.
+into `*AuditTest` siblings), `ExportSmokeTest`'s larger exports (split into `ExportAuditTest`; a
+1024 export stays per merge, and `DataExportTest` holds the data exports at 512), and every render
+harness and printed report that asserts nothing, `:cartography`'s `W4RenderDump` among them. Each
+module's build script lists its audit classes, and a few single reports by class and method. To
+regenerate the render PNGs alone: `./gradlew :worldgen:audit --tests '*DebugMapDump*' --rerun`
+(the per-merge task excludes the class, so asking it for the class finds nothing).
+
+The per-merge JVM suites run in parallel workers, and a test that reads a standard world borrows
+it from `SharedWorlds` (in `worldgen/src/sharedTestSupport`) rather than generating its own; each
+borrowed world is fingerprinted and checked after every test that borrowed it, so a test that
+writes to one fails and is named. A timing report — each test task's wall time and the slowest
+classes — is printed at the end of any run that tests.
 
 CI also compares a JVM-versus-Wasm world fingerprint (`WorldFingerprintTest`, read from the test
 runs' own output) and reports a difference as a warning rather than a failure, since saves carry the

@@ -8,6 +8,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the year actually has two halves, and whether they are the halves they should be.
@@ -25,6 +26,9 @@ import kotlin.test.assertTrue
  * unreachable by construction.
  */
 class SeasonsTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
@@ -85,7 +89,7 @@ class SeasonsTest {
 
     @Test
     fun `at 35 degrees the land swings through the year and the open sea does not`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = size, height = size)
         )
         val w = world.width
@@ -183,7 +187,7 @@ class SeasonsTest {
 
     private fun measure(seed: Long, seasons: Boolean): Tally {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             base.copy(climate = base.climate.copy(seasons = seasons))
         )
         val w = world.width

@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the peoples layer says anything the political map does not.
@@ -22,11 +23,14 @@ import kotlin.test.assertTrue
  */
 class CultureRealmTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     @Test
     fun `cultures and realms disagree`() {
         val pooled = ArrayList<Double>()
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val realmOf = world.nations.nationId
@@ -157,7 +161,7 @@ class CultureRealmTest {
     @Test
     fun `peoples cover the habitable world without one swallowing it`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val land = world.sea.isLand.count { it }

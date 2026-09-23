@@ -21,6 +21,11 @@ plugins {
 
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    // The shared worlds and their check, compiled into this module's tests as well; see
+    // `:worldgen`'s build script for why the files are shared rather than depended on.
+    sourceSets.named("test") {
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("worldgen/src/sharedTestSupport/kotlin"))
+    }
 }
 
 // Kotlin and Java must agree, or the build refuses. Without this, javac defaults to whatever the
@@ -105,7 +110,16 @@ val auditOnlyClasses = listOf(
     // says one pane draws one map whatever grid it was generated on, and for the before-and-after
     // sheets. Four worlds, three of them above 512. Its 512 guards are `:cartography`'s
     // `RiverSelectionTest` and run on every merge.
-    "com.cartogenesis.desktop.RiverSelectionAuditTest"
+    "com.cartogenesis.desktop.RiverSelectionAuditTest",
+    // T5, by method: three measurements inside classes whose other cases are guards, which stay.
+    // The ocean stage's wall clock on the card and off it at 2048 and 4096, which its own KDoc says
+    // is reported and not asserted: seven minutes of every merge. The engraved style drawn at 512
+    // and at 2048 for a person to look at. And how far a world generated on the card drifts from
+    // one generated without it, printed. A class name and a method name, which Gradle's filter
+    // matches the same way on both sides.
+    "com.cartogenesis.desktop.GpuOceanTest.ocean wall clock at export sizes",
+    "com.cartogenesis.desktop.StyleGalleryTest.the engraved style, at 512 and at 2048",
+    "com.cartogenesis.desktop.GpuErosionTest.how far a world drifts when the gpu generates it"
 )
 
 /**
@@ -115,11 +129,19 @@ val auditOnlyClasses = listOf(
  */
 val siteAssemblyClass = "com.cartogenesis.desktop.SiteAssemblyTest"
 
+/*
+ * The per-merge suite's heap and pool are the root build script's budget. One worker, not the
+ * several `:worldgen` runs: the graphics tests here each drive the one card, and two of them
+ * driving it at once from separate workers is a combination nothing has tested.
+ */
 tasks.named<Test>("test") {
     filter {
         auditOnlyClasses.forEach { excludeTestsMatching(it) }
         excludeTestsMatching(siteAssemblyClass)
     }
+    val budget = rootProject.extra
+    maxHeapSize = budget["desktopTestHeap"] as String
+    jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=${budget["desktopTestPoolThreads"]}")
 }
 
 tasks.register<Test>("audit") {

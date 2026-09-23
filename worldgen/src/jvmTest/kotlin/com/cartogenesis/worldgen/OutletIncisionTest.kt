@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingReportingRounds
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * E1: a lake is sized by its outlet, not by its basin.
@@ -29,6 +30,9 @@ import kotlin.test.assertTrue
  * Both are shown failing with `outletIncision = false`, which reproduces the pre-E1 world.
  */
 class OutletIncisionTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     /**
      * The Caspian's share of Earth's *land*: the bar for "too big to be a lake".
@@ -253,10 +257,10 @@ class OutletIncisionTest {
         val drownedShares = ArrayList<Double>()
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val before = WorldGenerationEngine.generateBlocking(
+            val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(outletIncision = false))
             )
-            val after = WorldGenerationEngine.generateBlocking(config)
+            val after = SharedWorlds.world(config)
 
             val was = largestLakeShare(before)
             val now = largestLakeShare(after)
@@ -397,10 +401,10 @@ class OutletIncisionTest {
         val perSeed = ArrayList<String>()
         SILL_SEEDS.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val without = WorldGenerationEngine.generateBlocking(
+            val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
             )
-            val with = WorldGenerationEngine.generateBlocking(base)
+            val with = SharedWorlds.world(base)
             val lastLandCell = largestLakeShare(without, drowned = true)
             val intoTheWater = largestLakeShare(with, drowned = true)
             before.add(lastLandCell)

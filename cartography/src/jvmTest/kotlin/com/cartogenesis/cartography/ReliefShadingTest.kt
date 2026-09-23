@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.PI
@@ -9,6 +10,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the light in [ReliefShading] behaves like a sky rather than like a lamp.
@@ -28,6 +30,9 @@ import kotlin.test.assertTrue
  *    re-derives it from the two contrasts rather than trusting the constant.
  */
 class ReliefShadingTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
 

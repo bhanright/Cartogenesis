@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.RiverResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * F18: no lake is a ruled line, because no river runs in one.
@@ -26,6 +27,9 @@ import kotlin.test.assertTrue
  * defect itself, is on every map, and is what makes the census above worth reading.
  */
 class StraightRunTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
         /** The author's own world, at the size he looks at it, where the bar was found. */
@@ -50,7 +54,7 @@ class StraightRunTest {
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = 512, height = 512)
                 .atResolution(side, side)
                 .copy(facetRouting = byFacet)

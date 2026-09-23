@@ -11,6 +11,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the wind slants across the latitude lines, and what that changes about the rain.
@@ -40,6 +41,9 @@ import kotlin.test.assertTrue
  * worlds would differ by two things rather than one.
  */
 class MeridionalWindTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
         const val SIZE = 512
@@ -104,7 +108,7 @@ class MeridionalWindTest {
     fun `a wind with no slant reproduces the old zonal march exactly`() {
         ZONAL_MARCH_SEEDS.forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 256, height = 256)
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
                         meridionalWind = 0f, pressureWinds = false
@@ -263,7 +267,7 @@ class MeridionalWindTest {
 
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 128, height = 128).let {
                 it.copy(climate = it.climate.copy(pressureWinds = false))
             }
@@ -292,7 +296,7 @@ class MeridionalWindTest {
         }
         assertTrue(checked > h / 2, "only $checked rows were checked")
 
-        val flat = WorldGenerationEngine.generateBlocking(
+        val flat = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 128, height = 128).let {
                 it.copy(
                     climate = it.climate.copy(meridionalWind = 0f, pressureWinds = false)
@@ -315,14 +319,14 @@ class MeridionalWindTest {
         var pooledDescend = 0.0; var pooledDescendCells = 0
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = SIZE, height = SIZE)
-            val zonal = WorldGenerationEngine.generateBlocking(
+            val zonal = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
                         meridionalWind = 0f, pressureWinds = false
                     )
                 )
             )
-            val slanted = WorldGenerationEngine.generateBlocking(
+            val slanted = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(pressureWinds = false))
             )
             val w = zonal.width
@@ -425,7 +429,7 @@ class MeridionalWindTest {
     fun `a tropical coast has a wet season and a dry one`() {
         val base = WorldGenConfig(seed = MONSOON_SEED, width = SIZE, height = SIZE)
         val figures = listOf(0f, 0.3f).map { slant ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(meridionalWind = slant))
             )
             largestRegion(world, monsoonMask(world)) / world.sea.landCellCount.toDouble()

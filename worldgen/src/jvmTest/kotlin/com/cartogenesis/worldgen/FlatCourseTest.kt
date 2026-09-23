@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.FlowRouting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * F30b: a river crossing ground the depression fill raised does not run in a ruled line.
@@ -25,6 +26,9 @@ import kotlin.test.assertTrue
  * `FlatCourseAuditTest`.
  */
 class FlatCourseTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -118,7 +122,7 @@ class FlatCourseTest {
 internal object FlatCourse {
 
     fun world(seed: Long, side: Int, overPotential: Boolean): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = 512, height = 512)
                 .atResolution(side, side)
                 .copy(flatPotential = overPotential)

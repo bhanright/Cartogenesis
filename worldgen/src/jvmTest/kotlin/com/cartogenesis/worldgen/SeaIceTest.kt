@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the polar sea freezes, where its edge sits, and what freezing does to the rain.
@@ -24,6 +25,9 @@ import kotlin.test.assertTrue
  * See docs/DESIGN_LEDGER.md, W1.
  */
 class SeaIceTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
@@ -183,7 +187,7 @@ class SeaIceTest {
 
     private fun generate(seed: Long, seaIce: Boolean): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        return WorldGenerationEngine.generateBlocking(
+        return SharedWorlds.world(
             base.copy(climate = base.climate.copy(seaIce = seaIce))
         )
     }

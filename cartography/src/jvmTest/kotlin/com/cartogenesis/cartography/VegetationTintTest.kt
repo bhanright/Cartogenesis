@@ -1,13 +1,13 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether the canopy the ground is darkened under is a fact about the cell or a fact about its
@@ -31,6 +31,9 @@ import kotlin.test.assertTrue
  * See docs/DESIGN_LEDGER.md, W4.
  */
 class VegetationTintTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
 

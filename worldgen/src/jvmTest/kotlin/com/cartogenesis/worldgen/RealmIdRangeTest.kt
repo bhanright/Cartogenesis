@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.NationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Every realm id on the map is an index into the realm list.
@@ -25,6 +26,9 @@ import kotlin.test.assertTrue
  * the symptom.
  */
 class RealmIdRangeTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     /**
      * Cheap cases, and deliberately varied: wilderness changes which steps run at all — it is what
@@ -62,7 +66,7 @@ internal fun authorsConfig(seed: Long): WorldGenConfig {
 
 /** Top-level for the same reason as [authorsConfig]: shared with [RealmIdRangeAuditTest]. */
 internal fun assertRealmIdsInRange(config: WorldGenConfig) {
-    val world = WorldGenerationEngine.generateBlocking(config)
+    val world = SharedWorlds.world(config)
     val nations = world.nations.nations
     val ids = world.nations.nationId
 

@@ -16,6 +16,7 @@ import kotlin.math.cos
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -33,6 +34,9 @@ import org.junit.Test
  * there rather than a set of worlds picked to suit these clauses.
  */
 class IceSheetTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     @Test
     fun `a sheet stands as thick as Earth's sheets do`() {
@@ -621,7 +625,7 @@ class IceSheetTest {
      * second opinion about it.
      */
     private fun carve(config: WorldGenConfig): Measured {
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val bed = SeaLevelStage.apply(world.erosion.height, config)
         val balance =
             if (config.climate.snowBalance) {

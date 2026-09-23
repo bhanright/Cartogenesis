@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * A river crosses its own delta and reaches the open sea.
@@ -36,6 +37,9 @@ import kotlin.test.assertTrue
  * seeing.
  */
 class DeltaMouthTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private val seeds = listOf(59758L, 42L, 7L, 1234L)
 
@@ -73,11 +77,11 @@ class DeltaMouthTest {
         var lobeFlat = 0.0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val before = WorldGenerationEngine.generateBlocking(
+            val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deltaLobe = false))
             )
-            val after = WorldGenerationEngine.generateBlocking(config)
-            val bare = WorldGenerationEngine.generateBlocking(
+            val after = SharedWorlds.world(config)
+            val bare = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deposition = false))
             )
 

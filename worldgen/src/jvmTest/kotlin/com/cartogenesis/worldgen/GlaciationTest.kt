@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
@@ -26,6 +27,9 @@ import kotlinx.coroutines.runBlocking
  * the control world differs only by [com.cartogenesis.worldgen.model.GlaciationConfig.enabled].
  */
 class GlaciationTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     /**
      * Seed 42 at 1024, not at 512.
@@ -98,8 +102,8 @@ class GlaciationTest {
         var without = Zones.EMPTY
         lakeSeeds.forEach { seed ->
             val config = base.copy(seed = seed)
-            val iced = WorldGenerationEngine.generateBlocking(config)
-            val bare = WorldGenerationEngine.generateBlocking(
+            val iced = SharedWorlds.world(config)
+            val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
             )
             if (seed == base.seed) reportBudget(config, iced)
@@ -238,8 +242,8 @@ class GlaciationTest {
                 // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
                 // 0.04% of land, under this test's own floor for having any water to compare.
                 .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
-            val iced = WorldGenerationEngine.generateBlocking(config)
-            val bare = WorldGenerationEngine.generateBlocking(
+            val iced = SharedWorlds.world(config)
+            val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
             )
             val work = measureIceWork(bare, iced, config)
@@ -531,8 +535,8 @@ class GlaciationTest {
                 // measures is asserted where it can be read against the un-glaciated world of the
                 // same seed: see `the author's 2048 world has no narrow straight water`.
                 .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
-            val world = WorldGenerationEngine.generateBlocking(config)
-            val bare = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(config)
+            val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
             )
             val filaments = countFilaments(world)

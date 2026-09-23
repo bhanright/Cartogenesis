@@ -1,9 +1,11 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether a desert is ever drawn as a lawn.
@@ -30,6 +32,9 @@ import kotlin.test.assertTrue
  * `ClearStyleTest` holds the ramp itself to its CIEDE2000 ladder.
  */
 class ClimateTintTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private companion object {
 

@@ -11,6 +11,7 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Checks that the stream-function solve actually produces circulation, and draws it.
@@ -22,9 +23,12 @@ import kotlin.test.assertTrue
  */
 class OceanCurrentTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     @Test
     fun `currents circulate and carry temperature`() {
-        val world = WorldGenerationEngine.generateBlocking(
+        val world = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 512, height = 512)
         )
         val w = world.width
@@ -146,7 +150,7 @@ class OceanCurrentTest {
     /** The warm quartile's coastal habitability over the cold quartile's, as a ratio. */
     private fun checkCoasts(seed: Long): Double {
         val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height
 

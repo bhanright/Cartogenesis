@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * E2. A closed basin holds as much water as its catchment can keep wet, not as much as its rim
@@ -25,6 +26,9 @@ import kotlin.test.assertTrue
  * the second, and a world with no lakes in it is not more realistic than one with too many.
  */
 class LakeWaterBalanceTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     // Both are samples, re-picked at S2's fourth pass by the same scan that chose their
     // predecessors, and for the same reason it has had to be run at every terrain change: the
@@ -113,7 +117,7 @@ class LakeWaterBalanceTest {
         historyEpochs: Int = 1
     ): WorldMap {
         val base = WorldGenConfig(seed = seed, width = size, height = size)
-        return WorldGenerationEngine.generateBlocking(
+        return SharedWorlds.world(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
                 erosion = base.erosion.copy(outletIncision = false),
@@ -426,7 +430,7 @@ class LakeWaterBalanceTest {
     @Test
     fun `no drawn river runs across a lake`() {
         listOf(7L to 512, 42L to 512, 1234L to 512, 59758L to 512, 718106L to 1024).forEach { (seed, size) ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = size, height = size, seaLevel = 0.62f)
             )
             val lakes = world.rivers.lakes

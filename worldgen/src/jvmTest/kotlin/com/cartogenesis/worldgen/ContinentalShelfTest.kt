@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * B1: continental shelves.
@@ -26,6 +27,9 @@ import kotlin.test.assertTrue
  */
 class ContinentalShelfTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     private val seeds = listOf(7L, 42L, 1234L)
 
     @Test
@@ -33,7 +37,7 @@ class ContinentalShelfTest {
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
-            val world = WorldGenerationEngine.generateBlocking(config)
+            val world = SharedWorlds.world(config)
             val (near, far) = shallowShares(world, shelfWidthCells)
             println(
                 "SHELF seed $seed: shelfWidthCells=%.0f near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
@@ -63,7 +67,7 @@ class ContinentalShelfTest {
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512).let {
             it.copy(sea = it.sea.copy(shelfWidthKm = 0.0))
         }
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val (near, far) = shallowShares(world, defaultWidth)
         println(
             "SHELF shelfWidthCells=0 control: near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
@@ -96,8 +100,8 @@ class ContinentalShelfTest {
             val base = WorldGenConfig(seed = seed, width = 512, height = 512).let {
                 it.copy(glaciation = it.glaciation.copy(enabled = false))
             }
-            val withShelf = WorldGenerationEngine.generateBlocking(base)
-            val noShelf = WorldGenerationEngine.generateBlocking(
+            val withShelf = SharedWorlds.world(base)
+            val noShelf = SharedWorlds.world(
                 base.copy(sea = base.sea.copy(shelfWidthKm = 0.0))
             )
 

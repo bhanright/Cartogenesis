@@ -7,8 +7,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
 import com.cartogenesis.ui.MapImage
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
@@ -18,6 +17,7 @@ import kotlin.math.sqrt
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * Whether a river is drawn as wide as the water it carries.
@@ -33,6 +33,7 @@ import kotlin.test.assertTrue
  * only ever been green proves nothing, and keeping the superseded rule beside the new one is the
  * cheapest way to keep proving that this one can discriminate.
  */
+@ExtendWith(SharedWorldsCheck::class)
 class RiverWidthTest {
 
     private companion object {
@@ -136,7 +137,7 @@ class RiverWidthTest {
         RiverPen.widthPixels(ratio, cellsAcross)
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
-        WorldGenerationEngine.generateBlocking(
+        SharedWorlds.world(
             WorldGenConfig(seed = seed, width = side, height = side)
         )
 

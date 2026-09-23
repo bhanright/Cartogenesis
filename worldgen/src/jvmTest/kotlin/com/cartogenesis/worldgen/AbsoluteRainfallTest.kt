@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether an arid world and a lush one can tell each other apart.
@@ -19,6 +20,9 @@ import kotlin.test.assertTrue
  * more desert and a genuinely wetter one produces genuinely less.
  */
 class AbsoluteRainfallTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
@@ -40,7 +44,7 @@ class AbsoluteRainfallTest {
     @Test
     fun `report calibration and desert-share figures per seed`() {
         seeds.forEach { seed ->
-            val world = WorldGenerationEngine.generateBlocking(
+            val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
             )
             val w = world.width
@@ -191,7 +195,7 @@ class AbsoluteRainfallTest {
     fun `the monsoon claim, re-measured without the clamp`() {
         val seed = 26L
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-        val world = WorldGenerationEngine.generateBlocking(base)
+        val world = SharedWorlds.world(base)
         val generated = ClimateStage.generateWithSeasonalMm(base, world.sea, world.ocean)
         val w = world.width
         val h = world.height
@@ -298,7 +302,7 @@ class AbsoluteRainfallTest {
         desertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
 
     private fun desertShare(config: WorldGenConfig): Float {
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         var land = 0
         var desert = 0
         for (i in world.climate.biome.indices) {
@@ -313,7 +317,7 @@ class AbsoluteRainfallTest {
         oldNormalizedDesertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
 
     private fun oldNormalizedDesertShare(config: WorldGenConfig): Float {
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val reference =
             ClimateStage.landPercentile(world.climate.precipitationMm, world.sea.isLand, 0.88f)
         if (reference <= 0f) return 0f

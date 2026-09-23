@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 
 /**
  * The solid earth floats and it bends, and both show on the map.
@@ -44,6 +45,9 @@ import org.junit.Assert.assertTrue
  * See docs/DESIGN_LEDGER.md, S2, and [Isostasy].
  */
 class IsostasyTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     // ------------------------------------------------------------------ the columns
 
@@ -356,7 +360,7 @@ class IsostasyTest {
         val control = SEEDS.map { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
             shorelineResidualMetres(
-                WorldGenerationEngine.generateBlocking(
+                SharedWorlds.world(
                     base.copy(
                         tectonics = base.tectonics.copy(
                             continentalCrustSubmergedShare = CONTROL_SUBMERGED_SHARE
@@ -386,7 +390,7 @@ class IsostasyTest {
     fun `the hypsometry is bimodal, and is one mode without the two crusts`() {
         SEEDS.take(3).forEach { seed ->
             val world = worldAt(seed)
-            val flat = WorldGenerationEngine.generateBlocking(
+            val flat = SharedWorlds.world(
                 world.config.copy(isostasy = world.config.isostasy.copy(enabled = false))
             )
             listOf("isostatic" to world, "control" to flat).forEach { (label, measured) ->
@@ -642,7 +646,7 @@ class IsostasyTest {
                     riftShoulderUpliftMmPerYear = 0f
                 )
             )
-            val world = WorldGenerationEngine.generateBlocking(still)
+            val world = SharedWorlds.world(still)
             val rate = beltDenudationMmPerYear(world)
             println("ISOSTASY denudation seed %d: %.3f mm/yr off an active belt, uplift off"
                 .format(seed, rate))
@@ -700,7 +704,7 @@ class IsostasyTest {
     fun `a stripped range rebounds and its foreland sinks`() {
         val seed = 42L
         val world = worldAt(seed)
-        val without = WorldGenerationEngine.generateBlocking(
+        val without = SharedWorlds.world(
             world.config.copy(isostasy = world.config.isostasy.copy(flexure = false))
         )
         val scale = world.config.scale
@@ -809,7 +813,7 @@ class IsostasyTest {
     fun `ice holds its bed down by Airy's share of its own thickness`() {
         val seed = 7L
         val world = worldAt(seed)
-        val without = WorldGenerationEngine.generateBlocking(
+        val without = SharedWorlds.world(
             world.config.copy(isostasy = world.config.isostasy.copy(iceLoad = false))
         )
         val config = world.config
@@ -930,7 +934,7 @@ class IsostasyTest {
         return inside
     }
 
-    private fun worldAt(seed: Long): WorldMap = WorldGenerationEngine.generateBlocking(
+    private fun worldAt(seed: Long): WorldMap = SharedWorlds.world(
         WorldGenConfig(seed = seed, width = 512, height = 512)
     )
 

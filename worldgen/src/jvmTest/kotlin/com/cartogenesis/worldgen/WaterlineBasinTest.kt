@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * E8's census: how many basins the sea-level cut leaves standing at the waterline, and what became
@@ -47,6 +48,9 @@ import kotlin.test.assertTrue
  */
 class WaterlineBasinTest {
 
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
+
     /**
      * Earth's surge range, in metres above the waterline.
      *
@@ -67,7 +71,7 @@ class WaterlineBasinTest {
         var found = 0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            val world = WorldGenerationEngine.generateBlocking(config)
+            val world = SharedWorlds.world(config)
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground
             // is a hollow at the waterline that no sea-level rule ever saw.

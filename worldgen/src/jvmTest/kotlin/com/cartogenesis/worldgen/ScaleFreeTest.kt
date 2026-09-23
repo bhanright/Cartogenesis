@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 
 /**
  * The same seed at 512 and at 1024, measured in kilometres, metres and shares of the land.
@@ -24,6 +25,9 @@ import org.junit.Assert.assertTrue
  * same as the world it replaced and the statistics said so for a month.
  */
 class ScaleFreeTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     @Test
     fun `the same world at 512 and 1024 measures the same and stands on the same ground`() {
@@ -277,6 +281,6 @@ class ScaleFreeTest {
         }
 
         fun worldAt(seed: Long, size: Int): WorldMap =
-            WorldGenerationEngine.generateBlocking(configAt(seed, size))
+            SharedWorlds.world(configAt(seed, size))
     }
 }

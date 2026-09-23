@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.junit.Rule
 
 /**
  * Whether rivers run in valleys they cut, or merely in whatever hollows the noise left.
@@ -34,6 +35,9 @@ import kotlin.test.assertTrue
  * question for S3, and it is in `TODO.md`.
  */
 class ValleyIncisionTest {
+
+    @get:Rule
+    val sharedWorlds = SharedWorlds.Check()
 
     @Test
     fun `rivers sit in valleys they cut`() {
@@ -87,7 +91,7 @@ class ValleyIncisionTest {
      * two numbers are the same measurement of the same places.
      */
     private fun incision(config: WorldGenConfig): Cross {
-        val world = WorldGenerationEngine.generateBlocking(config)
+        val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height
         // Both sides in the height field's own units, which is what makes them comparable: the

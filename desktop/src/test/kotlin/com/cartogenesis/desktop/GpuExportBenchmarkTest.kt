@@ -44,17 +44,9 @@ class GpuExportBenchmarkTest {
         const val SIZE = 4096
     }
 
-    /** True when the run asked for measurements. Prints why it is skipping, so it never looks green
-     * by having done nothing. */
-    private fun measuring(): Boolean {
-        if (System.getProperty("cartogenesis.benchmark") == "true") return true
-        println("EXPORT skipped: run with -Pbenchmark=true to measure")
-        return false
-    }
-
     @Test
     fun `a 4096 export on the processor`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         val file = destination("4096-cpu")
         val heap = PeakHeap()
         val millis = measureTimeMillis {
@@ -65,13 +57,9 @@ class GpuExportBenchmarkTest {
 
     @Test
     fun `a 4096 export on the graphics card`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("EXPORT GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
         println("EXPORT GPU device: ${gpu.name}")
 
         val file = destination("4096-gpu")
@@ -92,13 +80,9 @@ class GpuExportBenchmarkTest {
      */
     @Test
     fun `the 4096 raster alone, both ways`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("EXPORT GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
         val world = WorldGenerationEngine.generateBlocking(CONFIG.atResolution(SIZE, SIZE))
         val options = RenderOptions()
@@ -159,7 +143,7 @@ class GpuExportBenchmarkTest {
      */
     @Test
     fun `an 8192 export, attempted`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         val log = File("build/exports").apply { mkdirs() }.resolve("8192-attempt.log")
         log.writeText("")
         fun note(line: String) {
@@ -168,10 +152,9 @@ class GpuExportBenchmarkTest {
         }
 
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
+        val gpu = found.accelerator ?: run {
             note("GPU unavailable here: ${found.unavailableBecause}")
-            return
+            skipWithoutDevice(found.unavailableBecause)
         }
 
         val file = destination("8192-gpu")

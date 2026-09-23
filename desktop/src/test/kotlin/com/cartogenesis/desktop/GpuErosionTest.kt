@@ -26,19 +26,15 @@ import kotlinx.coroutines.withTimeout
  * this measures both and holds them only to the claims the UI makes: that it is substantially
  * faster, and that the world is the same world.
  *
- * On a machine with no usable device the accelerator reports itself unavailable and this reports
- * that instead of failing, since a headless CI runner is not a broken build.
+ * On a machine with no usable device the accelerator reports itself unavailable and every case here
+ * is skipped: a headless CI runner is not a broken build, and it has not checked the kernel either.
  */
 class GpuErosionTest {
 
     @Test
     fun `gpu erosion matches the cpu closely and runs far faster`() {
         val result = GpuErosion.createOrNull()
-        val gpu = result.accelerator
-        if (gpu == null) {
-            println("GPU unavailable here: ${result.unavailableBecause}")
-            return
-        }
+        val gpu = result.accelerator ?: skipWithoutDevice(result.unavailableBecause)
         println("GPU device: ${gpu.name}")
 
         val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
@@ -160,11 +156,7 @@ class GpuErosionTest {
     @Test
     fun `a run stopped part-way frees its buffers and the next one still matches the cpu`() {
         val result = GpuErosion.createOrNull()
-        val gpu = result.accelerator
-        if (gpu == null) {
-            println("GPU unavailable here: ${result.unavailableBecause}")
-            return
-        }
+        val gpu = result.accelerator ?: skipWithoutDevice(result.unavailableBecause)
 
         val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
             .atResolution(1024, 1024)
@@ -216,11 +208,7 @@ class GpuErosionTest {
     @Test
     fun `how far a world drifts when the gpu generates it`() {
         val result = GpuErosion.createOrNull()
-        val gpu = result.accelerator
-        if (gpu == null) {
-            println("GPU unavailable here: ${result.unavailableBecause}")
-            return
-        }
+        val gpu = result.accelerator ?: skipWithoutDevice(result.unavailableBecause)
 
         // The terrain difference is tiny, but the stages after it are not smooth functions of it.
         // Sea level is a percentile, river routing picks a single steepest neighbour per cell, and

@@ -13,6 +13,12 @@ on:
     - cron: '17 4 * * *'
   workflow_dispatch:
 
+# Every `run:` step under `bash -eo pipefail` rather than GitHub's unspecified default, `bash -e`,
+# so that a step which pipes a command fails when the command does, not only when the last one does.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   audit:
     name: Audit tier (worldgen + desktop)
@@ -29,38 +35,26 @@ jobs:
 
       # Unqualified, this runs the `audit` task in every subproject that declares one —
       # `:worldgen:audit` and `:desktop:audit` today — the same way `gradlew audit` does locally.
+      # --continue so that one project's red does not keep Gradle from starting the other's tier.
+      # The init script writes down, before anything runs, every class the tier is to run, which
+      # is what the summary below holds the results against.
       - name: Audit tier
-        run: ./gradlew audit --console=plain
+        id: tier
+        run: ./gradlew audit --continue --init-script .github/audit-tier.init.gradle.kts --console=plain
 
       # T3: a red tier is only useful if it can be read. The badge in `README.md` says whether
       # last night passed; this says what failed, on the run's own summary page, so a red is a
       # line of text rather than a download. Read from the JUnit XML the Test tasks always write
-      # (`build/test-results/audit/`) rather than from the console log, because that is the one
-      # place the class and case names are structured; `if: always()` because the interesting
-      # case is the one where the step above failed.
+      # rather than from the console log, because that is the one place the class and case names
+      # are structured; `if: always()` because the interesting case is the one where the step
+      # above failed. It fails itself when a planned class wrote no result, which is what a worker
+      # killed part-way through leaves and a count of the files present reads as green, and when
+      # the step above failed although the results show nothing wrong.
       - name: What failed
         if: always()
-        run: |
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import glob, xml.etree.ElementTree as ET
-
-          failed, cases, suites = [], 0, 0
-          for path in sorted(glob.glob("*/build/test-results/audit/*.xml")):
-              suites += 1
-              for case in ET.parse(path).getroot().iter("testcase"):
-                  cases += 1
-                  if case.find("failure") is not None or case.find("error") is not None:
-                      failed.append("%s.%s" % (case.get("classname", "?"), case.get("name", "?")))
-
-          print("## Audit tier")
-          if not suites:
-              print("No test results were written: the tier did not get as far as running.")
-          elif failed:
-              print("**%d of %d cases red** in %d classes: %s"
-                    % (len(failed), cases, suites, "; ".join(failed)))
-          else:
-              print("All %d cases green in %d classes." % (cases, suites))
-          PY
+        env:
+          AUDIT_TIER_OUTCOME: ${{ steps.tier.outcome }}
+        run: python3 .github/scripts/audit_summary.py
 
       - name: Upload audit reports and renders
         if: always()
@@ -68,6 +62,7 @@ jobs:
         with:
           name: audit-tier-output
           path: |
+            build/audit-tier-plan.tsv
             worldgen/build/reports/tests/
             worldgen/build/maps/
             desktop/build/reports/tests/

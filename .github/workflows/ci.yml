@@ -11,6 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every `run:` step under `bash -eo pipefail`. With no shell named, GitHub runs a step as `bash -e`,
+# which has no pipefail, so a piped step takes the status of its last command: the two engine test
+# steps below, piped into `tee`, stayed green when a test failed.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   engine:
     name: Generation engine (JVM + Wasm)
@@ -50,8 +57,10 @@ jobs:
       - name: JVM and Wasm generation comparison
         continue-on-error: true
         run: |
-          grep 'FINGERPRINT' jvm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
-          grep 'FINGERPRINT' wasm-test-output.log | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
+          # `|| true` because grep exits 1 when it finds nothing, and under pipefail that would end
+          # the step before the check below could say that no fingerprint was captured.
+          { grep 'FINGERPRINT' jvm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
+          { grep 'FINGERPRINT' wasm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
 
           echo "--- JVM ---";  cat jvm-fingerprint.txt
           echo "--- Wasm ---"; cat wasm-fingerprint.txt
@@ -95,3 +104,15 @@ jobs:
       # failure read differently and should not share a line in the log.
       - name: Interface tests (headless browser)
         run: ./gradlew :ui:wasmJsTest --console=plain
+
+      # The browser front end, compiled but neither linked nor bundled. Nothing else here depends
+      # on `:web`, so without this a member added to `Platform` in `:ui` that `WebPlatform` does not
+      # implement passed every check and failed the release's site deploy. Compiling is enough to
+      # catch that, and the browser build of `:ui` it needs is already made by the step above.
+      - name: Browser front end compiles
+        run: ./gradlew :web:compileKotlinWasmJs --console=plain
+
+      # The interface's common tests on the JVM, where the desktop app runs them. The browser run
+      # does not stand in for this one, and nothing else runs it: `:ui` has no audit tier.
+      - name: Interface tests (JVM)
+        run: ./gradlew :ui:jvmTest --console=plain

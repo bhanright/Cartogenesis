@@ -35,8 +35,8 @@ import kotlinx.coroutines.runBlocking
  * on the style that rakes the light hardest. Two of 255, on well under a thousandth of the
  * pixels, is therefore the floor of what is achievable and the bound below is set there.
  *
- * On a machine with no usable device this reports that and passes, as `GpuErosionTest` does: a
- * headless CI runner is not a broken build.
+ * On a machine with no usable device every case here is skipped, as `GpuErosionTest`'s are: a
+ * headless CI runner is not a broken build, and it has not checked the raster either.
  */
 class GpuRasterTest {
 
@@ -78,11 +78,7 @@ class GpuRasterTest {
     @Test
     fun `every view and style matches the cpu raster`() {
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("RASTER GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
         println("RASTER GPU device: ${gpu.name}")
 
         val world = WORLD
@@ -136,11 +132,7 @@ class GpuRasterTest {
     @Test
     fun `every pass can be switched off and still matches`() {
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("RASTER GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
         val world = WORLD
         val cases = listOf(
@@ -178,11 +170,7 @@ class GpuRasterTest {
     @Test
     fun `the same world renders identically twice`() {
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("RASTER GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
         val world = WORLD
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
@@ -196,11 +184,7 @@ class GpuRasterTest {
     @Test
     fun `how much faster the raster is`() {
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("RASTER GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
         val world = WORLD
         val options = RenderOptions()
@@ -230,11 +214,7 @@ class GpuRasterTest {
     @Test
     fun `an 8192 raster, on fields made up for the purpose`() {
         val found = GpuRaster.createOrNull()
-        val gpu = found.accelerator
-        if (gpu == null) {
-            println("RASTER GPU unavailable here: ${found.unavailableBecause}")
-            return
-        }
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
         val side = 8192
         val cells = side * side

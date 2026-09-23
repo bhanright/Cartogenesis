@@ -133,6 +133,12 @@ val auditOnlyClasses = listOf(
     // generated twice, once under each routing rule — ten worlds, a pair of them at 1024, and one
     // more at 2048 to be timed. The census that guards the chunk is in `StraightRunTest`.
     "com.cartogenesis.worldgen.StraightRunAuditTest",
+    // X1d: the coastal valleys' spacing. Twenty-one whole worlds, seven of them at 2048; six more
+    // for the instrument's own scales; ten controlled worlds at 512 and fourteen at 2048; about
+    // forty minutes in all. The finder it drives is shown reading a range whose answer was written
+    // in by hand in `RangeFrontTest`, which is per-merge and costs nothing, because it generates no
+    // world at all.
+    "com.cartogenesis.worldgen.CoastalSpacingAuditTest",
     // W2's diagnosis: eight worlds, each seed generated with the pressure wind and without it, for
     // a printed table of where the permanent ice went and whether a belt boundary took it. It
     // asserts nothing; the guards it was written to explain are in `PressureWindTest` and

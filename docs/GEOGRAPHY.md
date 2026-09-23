@@ -172,14 +172,14 @@ grid: at a 12,000 km world width and the CSS reference pixel, a 2048 export is a
 and the same world fitted into a 900-pixel pane about 1:50 400 000 — which the pane's own
 half-octave zoom bands round to 1:44 300 000, the scale the selection is actually made at and the
 scale quoted below. Seed 969495 at 2048 traces
-1,967 courses and 470,634 km of watercourse; its export draws **99 courses and 70,321 km over 27.4
-million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 67
-courses and 49,727 km. The rule that preceded this one kept a share of the traced count by the same
+2,077 courses and 470,806 km of watercourse; its export draws **107 courses and 70,292 km over 27.4
+million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 66
+courses and 49,701 km. The rule that preceded this one kept a share of the traced count by the same
 law of Töpfer's, which relates a derived map to a source map and so has no absolute answer: it drew
 6.7 times that ink on the export and 7.7 times on the pane, and the *same country at the same size
 on the same screen* came out at three densities depending on whether the world behind it had been
-generated at 512, 1024 or 2048 — 0.01019, 0.011724 and 0.011947 km/km² on seed 7, a spread of
-14.7%, against 0.001813, 0.001814 and 0.001814 now, a spread of 0.06%.
+generated at 512, 1024 or 2048 — 0.01019, 0.01252 and 0.012786 km/km² on seed 7, a spread of
+20.3%, against 0.001813 three times over now, a spread under a tenth of a per cent.
 
 Which courses survive is decided by discharge, largest first, on the peak width ratio — the square
 root of discharge normalised over the network. Two rules sit on top of that. The budget is spread by

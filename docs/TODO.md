@@ -33,8 +33,9 @@
   was asked to reproduce the old rule's drawing exactly, and the old rule drew the comb; so the
   crowding lattice, which runs at every mark, decides only the order there and the fullest square
   is the radical law's own (the figures are in the X1c row). Below the top the lattice still serves
-  every square once before the extra ink goes anywhere, and the fullest square grows gradually with
-  the mark rather than jumping to the law's. If the author wants a top mark that draws every river
+  every square once before the extra ink goes anywhere, but its lead shrinks as the mark rises: on
+  the four standard seeds the fullest square is 2 against 7-12 without it at Earth's mark and 18-25
+  against 19-26 at four times, before the top's 49-70. If the author wants a top mark that draws every river
   and still thins a straight front, it has to stop being the old rule: a cap per lattice square
   that the top keeps would do it, at the price of the exact reproduction. 2026-09-22, X1c.
 

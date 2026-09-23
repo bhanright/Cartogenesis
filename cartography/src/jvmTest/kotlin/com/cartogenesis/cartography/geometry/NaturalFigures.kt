@@ -38,28 +38,11 @@ internal class NaturalFigures private constructor(
                     rotationDegrees = rotation, isotropicInCells = inCells
                 )
                 val outlines = Contours.ofMask(mask, local)
-                corners += rightAnglesOf(outlines, local)
+                corners += ComponentShapes.rightAnglesOf(outlines, local)
                 length += outlines.sumOf { it.lengthKm() }
             }
             // One corner's worth added, so an ensemble with none still gives a rate to hold a layer to.
             NaturalFigures((corners + 1) * 1000.0 / length, length)
-        }
-
-        fun rightAnglesOf(outlines: List<Outline>, frame: GridFrame): Int {
-            var count = 0
-            val runs = StraightRuns.of(outlines, frame)
-            for ((outlineIndex, list) in runs.groupBy { it.outline }) {
-                val closed = outlines[outlineIndex].closed
-                for (at in list.indices) {
-                    val next = if (at + 1 < list.size) at + 1 else if (closed && list.size > 2) 0 else continue
-                    if (ComponentShapes.isRightAngle(
-                            list[at], ComponentShapes.alignedBearing(list[at], frame),
-                            list[next], ComponentShapes.alignedBearing(list[next], frame), frame
-                        )
-                    ) count++
-                }
-            }
-            return count
         }
     }
 }

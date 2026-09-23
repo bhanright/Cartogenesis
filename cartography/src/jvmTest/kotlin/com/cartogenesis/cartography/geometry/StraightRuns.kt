@@ -48,13 +48,14 @@ internal class Run(
  *
  * A raster boundary is a staircase whose every step lies on an axis, so the steps themselves say
  * nothing about the country; what a reader sees is the line the staircase approximates. Douglas-
- * Peucker with a tolerance of [TOLERANCE_CELL_WIDTHS] of a cell's width recovers it: a staircase
- * following a straight line at any bearing departs from that line by at most half the lattice
- * spacing across it, and that spacing is at most one cell width (across a north-south line), so
- * any straight stretch of ground comes out as one run and its bearing is the bearing of the line,
- * not of the steps. The extra quarter-width is the midpoint cuts the trace makes at each step,
- * which move a vertex a further quarter of a cell. `StraightRunsControlTest` shows a straight edge
- * at arbitrary bearings coming out as one run.
+ * Peucker with a tolerance of [TOLERANCE_CELL_WIDTHS] of a cell's width recovers it. The traced
+ * staircase of a straight line at any bearing lies within half the cell's width across that line
+ * of the line itself, and that width is at most one cell width (across a north-south line); the
+ * chord Douglas-Peucker draws runs between two traced vertices, each of which may lie that far off
+ * the line, so a vertex between them may lie up to a whole cell width from the chord. A tolerance
+ * of one cell width and a tenth is therefore the least at which any straight stretch of ground
+ * comes out as one run, its bearing the line's and not the steps'. `GeometryControlTest` shows
+ * straight edges at arbitrary bearings coming out as one run within a degree.
  */
 internal object StraightRuns {
 
@@ -62,7 +63,7 @@ internal object StraightRuns {
      * The simplification tolerance, in cell widths — the larger of the cell's two sides.
      * See the object's own comment for the derivation.
      */
-    const val TOLERANCE_CELL_WIDTHS = 0.75
+    const val TOLERANCE_CELL_WIDTHS = 1.1
 
     fun toleranceKm(frame: GridFrame): Double =
         TOLERANCE_CELL_WIDTHS * maxOf(frame.cellWidthKm, frame.cellHeightKm)

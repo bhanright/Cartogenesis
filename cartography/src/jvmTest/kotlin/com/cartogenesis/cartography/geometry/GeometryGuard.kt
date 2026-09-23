@@ -39,9 +39,9 @@ internal class LayerReading(
                 isotropy.any { it.outcome == Outcome.CLEAN } -> Outcome.CLEAN
                 else -> Outcome.INSUFFICIENT
             }
-            Detector.ALIGNED_SIDE -> ringOutcome { it.hasLongAlignedSide }
-            Detector.RECTANGLE -> ringOutcome { it.isRectangle }
-            Detector.FACETS -> ringOutcome { it.hasFacets }
+            Detector.ALIGNED_SIDE -> ringOutcome(forRuns = true) { it.hasLongAlignedSide }
+            Detector.RECTANGLE -> ringOutcome(forRuns = false) { it.isRectangle }
+            Detector.FACETS -> ringOutcome(forRuns = true) { it.hasFacets }
             Detector.RIGHT_ANGLES -> when {
                 measuredRings.any { it.hasCornerPair } -> Outcome.VIOLATION
                 outlineKm <= 0.0 -> Outcome.INSUFFICIENT
@@ -61,10 +61,13 @@ internal class LayerReading(
         }
     }
 
-    private fun ringOutcome(past: (ComponentShapes.Ring) -> Boolean): Outcome = when {
-        measuredRings.any(past) -> Outcome.VIOLATION
-        measuredRings.isEmpty() -> Outcome.INSUFFICIENT
-        else -> Outcome.CLEAN
+    private fun ringOutcome(forRuns: Boolean, past: (ComponentShapes.Ring) -> Boolean): Outcome {
+        val judged = if (forRuns) rings.filter { it.measuredForRuns } else measuredRings
+        return when {
+            judged.any(past) -> Outcome.VIOLATION
+            judged.isEmpty() -> Outcome.INSUFFICIENT
+            else -> Outcome.CLEAN
+        }
     }
 
     /** One line: the figure the detector's bar reads, and the worst component and where it is. */
@@ -75,16 +78,16 @@ internal class LayerReading(
                 (worst?.let { " | worst %.1f deg".format(it.gridBearingDegrees) } ?: "")
         }
         Detector.ALIGNED_SIDE -> worstRing(
-            { it.longestAlignedKm / it.alignedAllowanceKm },
+            true, { it.longestAlignedKm / it.alignedAllowanceKm },
             { "longest aligned side %.0f km against %.0f allowed at %s".format(it.longestAlignedKm, it.alignedAllowanceKm, it.where(frame)) }
         )
         Detector.RECTANGLE -> worstRing(
-            { it.fill },
+            false, { it.fill },
             { "fill %.2f%s at %s, %.0f by %.0f cells".format(it.fill, if (it.alignedRectangle) " aligned" else " unaligned", it.where(frame), it.rectangleLongCells, it.rectangleShortCells) }
         )
         Detector.FACETS -> worstRing(
-            { it.longestRunKm / it.equivalentDiameterKm },
-            { "longest run %.2f of its diameter (%.0f km) at %s".format(it.longestRunKm / it.equivalentDiameterKm, it.longestRunKm, it.where(frame)) }
+            true, { it.longestRunKm / it.facetAllowanceKm },
+            { "longest run %.0f km against %.0f allowed at %s".format(it.longestRunKm, it.facetAllowanceKm, it.where(frame)) }
         )
         Detector.RIGHT_ANGLES -> {
             val pairs = measuredRings.filter { it.hasCornerPair }
@@ -105,8 +108,8 @@ internal class LayerReading(
         }
     }
 
-    private fun worstRing(score: (ComponentShapes.Ring) -> Double, text: (ComponentShapes.Ring) -> String): String {
-        val measured = measuredRings
+    private fun worstRing(forRuns: Boolean, score: (ComponentShapes.Ring) -> Double, text: (ComponentShapes.Ring) -> String): String {
+        val measured = if (forRuns) rings.filter { it.measuredForRuns } else measuredRings
         if (measured.isEmpty()) return "no ring large enough to measure (${rings.size} rings)"
         val worst = measured.maxBy(score)
         return "${measured.size} rings measured; worst: ${text(worst)}"
@@ -134,33 +137,19 @@ internal object GeometryGuard {
 
     /**
      * How many independent tests one layer of one world makes, for the census's multiplicity: four
-     * grid bearings of isotropy, the right-angle rate, and the combs' own scan. The per-component
-     * bars are not tests at a level; they are held against the natural ensemble with the census's
+     * grid bearings of isotropy and the right-angle rate. The per-component bars and the combs'
+     * geometric bar are not tests at a level; they are held against the natural ensemble with the census's
      * size in view (see `GeometryControlTest`).
      */
-    const val TESTS_PER_LAYER = 6
+    const val TESTS_PER_LAYER = 5
 
     fun read(layer: Layer, frame: GridFrame, familySize: Int, naturalCornersPer1000Km: Double): LayerReading {
         val runs = StraightRuns.of(layer.outlines, frame)
         val isotropy = BearingIsotropy.measure(runs, frame, familySize, tracedTwice = layer.tracedTwice)
         val rings = ComponentShapes.measure(layer.outlines, frame)
         val arcs = Arcs.measure(layer.outlines, frame)
-        val combs = Combs.measure(runs, frame, familySize)
-        var rightAngles = 0
-        val byOutline = runs.groupBy { it.outline }
-        for ((outlineIndex, list) in byOutline) {
-            val closed = layer.outlines[outlineIndex].closed
-            for (at in list.indices) {
-                val next = if (at + 1 < list.size) at + 1 else if (closed && list.size > 2) 0 else continue
-                val first = list[at]
-                val second = list[next]
-                if (ComponentShapes.isRightAngle(
-                        first, ComponentShapes.alignedBearing(first, frame),
-                        second, ComponentShapes.alignedBearing(second, frame), frame
-                    )
-                ) rightAngles++
-            }
-        }
+        val combs = Combs.measure(runs, frame)
+        val rightAngles = ComponentShapes.rightAnglesOf(layer.outlines, frame)
         val outlineKm = layer.outlines.sumOf { it.lengthKm() } / if (layer.tracedTwice) 2.0 else 1.0
         val counted = if (layer.tracedTwice) rightAngles / 2.0 else rightAngles.toDouble()
         // The rate's lower bound at the census's level: the count's own Poisson spread, on the

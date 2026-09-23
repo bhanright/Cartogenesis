@@ -4,8 +4,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -14,72 +12,61 @@ import kotlin.math.sqrt
  *
  * Four figures per ring. Its **rectangularity**: its area over the area of its smallest bounding
  * rectangle at any orientation, and whether that rectangle lies along the grid. Its **longest
- * aligned side**: the longest run lying exactly along a grid bearing, against the run a circle of
- * its own area makes there. Its **right-angle corners**: consecutive runs lying exactly along two
- * grid bearings that are square to one another on the sheet. And its **longest straight run** at
- * any bearing, against its own size, which is what a nearest-seed partition's facets show.
+ * aligned side**: the longest stretch lying exactly along a grid line ([LatticeRuns]), against the
+ * stretch a circle of its own area makes. Its **right-angle corners**: two such stretches meeting
+ * square on the sheet, and the corner pairs, a side with a corner at each end. And its **longest
+ * straight run** at any bearing, against the run a circle of its own area makes, which is what a
+ * nearest-seed partition's facets show.
  *
  * A ring is measured only when it is big enough for its shape to be more than its raster: see
- * [MINIMUM_AREA_CELLS], [MINIMUM_WIDTH_CELLS] and [MINIMUM_VERTICES].
+ * [MINIMUM_AREA_CELLS], [MINIMUM_RUN_BAR_AREA_CELLS], [MINIMUM_WIDTH_CELLS] and [MINIMUM_VERTICES].
  */
 internal object ComponentShapes {
 
     /**
-     * How close to a grid line a run's two ends must lie to count as lying exactly along it, in
-     * lattice spacings across the line.
-     *
-     * A stamp's side runs along one row, column or diagonal of the lattice, and the trace puts
-     * its vertices on the half-cell lattice, so both ends lie on the same lattice line and the
-     * offset is zero. Half a spacing admits the midpoint cut at each end and nothing that crosses
-     * a lattice line: a run that steps across one is a staircase, which is what a natural edge at
-     * a small angle to the grid is.
-     */
-    const val EXACT_OFFSET_SPACINGS = 0.5
-
-    /**
-     * How much longer than a circle's own the longest aligned side may be.
+     * How much longer than a circle's own the longest aligned side, or the longest straight run,
+     * may be.
      *
      * The derivation is `OutlineRuns.STRAIGHTEST_SHORE_OVER_A_CIRCLE`'s, carried here rather than
      * shared because that instrument lives in `:worldgen`'s tests: Earth's straightest large lake
      * shore, Tanganyika's western scarp, runs about 100 km without a bend worth drawing at an
      * equivalent radius of 102 km (Hutchinson, *A Treatise on Limnology*, 1957), which is 2.05
      * times the run a circle of its own area makes at the same grid; three leaves a margin. A fault
-     * has no reason to fall on one of the grid's bearings, so a side that long *and* aligned is
-     * the grid. The circle's own run is measured by this same instrument on a rasterised disc
-     * ([DiscFigures]), so the comparison is like for like.
+     * has no reason to fall on one of the grid's bearings, so a side that long *and* aligned is the
+     * grid; a straight run that long at any bearing is a facet no shore has. The circle's own
+     * figures are read by these same instruments off rasterised discs ([DiscFigures]), so the
+     * comparison is like for like.
      */
     const val STRAIGHTEST_SHORE_OVER_A_CIRCLE = 3.0
 
     /**
-     * The bar on rectangularity for a ring aligned with the grid: area over bounding rectangle.
+     * The bar on rectangularity: area over the smallest bounding rectangle.
      *
-     * From the control ensemble, not from any world: see `GeometryControlTest`, which prints the
-     * largest fill any natural control of admissible size reached and asserts it below this. An
-     * ellipse fills pi/4 = 0.785 of its bounding rectangle and a rougher shape fills less; the
-     * stamps fill 0.95 and more. Set between the two.
+     * From the control ensemble, not from any world: `GeometryControlTest` prints the largest fill
+     * any natural control of admissible size reaches (0.80) and asserts the whole ensemble under
+     * this. An ellipse fills pi/4 = 0.785 of its bounding rectangle and a rougher shape fills less;
+     * a rasterised rectangle fills 0.95 and more at any turn. Set between the two.
      */
     const val RECTANGLE_FILL = 0.9
 
     /**
-     * The shortest run that can make a right-angle corner, in lattice spacings along its own
-     * bearing. From the controls: see `GeometryControlTest`.
-     */
-    const val CORNER_RUN_SPACINGS = 4.0
-
-    /**
-     * How long, as a share of the ring's equivalent diameter, the longest straight run at any
-     * bearing may be. From the controls: see `GeometryControlTest`.
-     */
-    const val LONGEST_RUN_OVER_DIAMETER = 0.6
-
-    /**
-     * The smallest ring measured, in cells of area.
+     * The smallest ring measured for its fill and its corners, in cells of area.
      *
-     * A ring's rectangularity and its aligned side say something about the ground only when the
-     * raster's own corners do not decide them. The natural controls' fill stays under
-     * [RECTANGLE_FILL] from this size up; `GeometryControlTest` shows it.
+     * A ring's rectangularity says something about the ground only when the raster's own corners
+     * do not decide it; the natural controls' fill stays under [RECTANGLE_FILL] from this size up,
+     * which `GeometryControlTest` prints.
      */
     const val MINIMUM_AREA_CELLS = 64.0
+
+    /**
+     * The smallest ring the run bars — the aligned side and the facets — bind on, in cells.
+     *
+     * `OutlineRuns.SMALLEST_BODY_THE_BAR_BINDS`'s derivation, for the same bar: three times a
+     * circle's own run is wider than the body itself until `(n / pi)^(1/4)` passes 3, that is
+     * until `n` passes `3^4 * pi` = 254.5 cells, and under that a body can break the bar only by
+     * being longer than it is wide, which is not the defect.
+     */
+    const val MINIMUM_RUN_BAR_AREA_CELLS = 255.0
 
     /** The narrowest a ring's bounding rectangle may be and still be measured, in cells. */
     const val MINIMUM_WIDTH_CELLS = 4.0
@@ -100,17 +87,22 @@ internal object ComponentShapes {
         val rectangleShortCells: Double,
         val alignedRectangle: Boolean,
         val longestRunKm: Double,
-        val equivalentDiameterKm: Double,
+        /** Three times the longest run at any bearing a circle of this ring's area makes. */
+        val facetAllowanceKm: Double,
         val longestAlignedKm: Double,
         val longestAlignedBearing: Int,
+        /** Three times the longest aligned stretch a circle of this ring's area makes. */
         val alignedAllowanceKm: Double,
         val rightAngles: Int,
-        val cornerPairs: Int
+        val cornerPairs: Int,
+        /** Of this ring's corner pairs, the longest shortest stretch, in steps of the grid along it. */
+        val cornerPairRunSteps: Double
     ) {
+        val measuredForRuns: Boolean get() = measured && areaCells >= MINIMUM_RUN_BAR_AREA_CELLS
         val isRectangle: Boolean get() = measured && fill >= RECTANGLE_FILL
         val isAlignedStamp: Boolean get() = isRectangle && alignedRectangle
-        val hasLongAlignedSide: Boolean get() = measured && longestAlignedKm > alignedAllowanceKm
-        val hasFacets: Boolean get() = measured && longestRunKm > LONGEST_RUN_OVER_DIAMETER * equivalentDiameterKm
+        val hasLongAlignedSide: Boolean get() = measuredForRuns && longestAlignedKm > alignedAllowanceKm
+        val hasFacets: Boolean get() = measuredForRuns && longestRunKm > facetAllowanceKm
         val hasCornerPair: Boolean get() = measured && cornerPairs > 0
 
         fun where(frame: GridFrame): String {
@@ -120,10 +112,10 @@ internal object ComponentShapes {
         }
 
         fun describe(frame: GridFrame): String =
-            "ring at %s, %.0f cells: fill %.2f%s, longest aligned side %.0f km against %.0f allowed, %d right angles, %d corner pairs, longest run %.2f of its diameter".format(
+            ("ring at %s, %.0f cells: fill %.2f%s, longest aligned side %.0f km against %.0f allowed, " +
+                "longest run %.0f km against %.0f, %d right angles, %d corner pairs").format(
                 where(frame), areaCells, fill, if (alignedRectangle) " aligned" else "",
-                longestAlignedKm, alignedAllowanceKm, rightAngles, cornerPairs,
-                if (equivalentDiameterKm > 0) longestRunKm / equivalentDiameterKm else 0.0
+                longestAlignedKm, alignedAllowanceKm, longestRunKm, facetAllowanceKm, rightAngles, cornerPairs
             )
     }
 
@@ -140,43 +132,22 @@ internal object ComponentShapes {
             val (centreX, centreY) = outline.centroidKm()
             val (cellsX, cellsY) = outline.inCells(frame)
             val rectangle = MinimumRectangle.of(cellsX, cellsY)
-            val runs = StraightRuns.of(outline, index, frame, tolerance)
             val measured = areaCells >= MINIMUM_AREA_CELLS &&
                 rectangle.shortSide >= MINIMUM_WIDTH_CELLS &&
                 outline.vertexCount >= MINIMUM_VERTICES
 
-            var longestRun = 0.0
-            var longestAligned = 0.0
-            var longestAlignedBearing = -1
-            val alignedTo = IntArray(runs.size) { -1 }
-            runs.forEachIndexed { at, run ->
-                if (run.lengthKm > longestRun) longestRun = run.lengthKm
-                val bearing = alignedBearing(run, frame)
-                alignedTo[at] = bearing
-                if (bearing >= 0 && run.lengthKm > longestAligned) {
-                    longestAligned = run.lengthKm
-                    longestAlignedBearing = bearing
-                }
-            }
-            val corners = BooleanArray(runs.size)
-            var rightAngles = 0
-            for (at in runs.indices) {
-                val next = (at + 1) % runs.size
-                if (next == at) continue
-                if (isRightAngle(runs[at], alignedTo[at], runs[next], alignedTo[next], frame)) {
-                    corners[at] = true
-                    rightAngles++
-                }
-            }
-            var pairs = 0
-            for (at in runs.indices) {
-                val previous = (at - 1 + runs.size) % runs.size
-                if (corners[previous] && corners[at] && runs.size > 2) pairs++
-            }
+            val longestRun = StraightRuns.of(outline, index, frame, tolerance).maxOfOrNull { it.lengthKm } ?: 0.0
+            val stretches = LatticeRuns.of(outline, frame, 0.0)
+            val longestStretch = stretches.maxByOrNull { it.lengthKm }
+            val corners = LatticeRuns.corners(stretches, outline.vertexCount, true, frame)
+            val pairs = LatticeRuns.cornerPairs(corners)
+            val pairRunSteps = pairs.maxOfOrNull { side ->
+                val before = corners.filter { it.second === side }.maxOf { it.first.steps }
+                val after = corners.filter { it.first === side }.maxOf { it.second.steps }
+                minOf(side.steps, before, after)
+            } ?: 0.0
+
             val radiusKm = sqrt(areaKm2 / PI)
-            val allowance = if (longestAlignedBearing >= 0)
-                STRAIGHTEST_SHORE_OVER_A_CIRCLE * discs.longestAlignedKm(radiusKm, longestAlignedBearing)
-            else Double.MAX_VALUE
             val angle = rectangle.angleDegrees
             val tolerated = Math.toDegrees(atan(1.0 / rectangle.longSide.coerceAtLeast(1.0)))
                 .coerceAtLeast(MINIMUM_ALIGNMENT_DEGREES)
@@ -190,37 +161,25 @@ internal object ComponentShapes {
                     rectangleShortCells = rectangle.shortSide,
                     alignedRectangle = offGrid <= tolerated,
                     longestRunKm = longestRun,
-                    equivalentDiameterKm = 2 * radiusKm,
-                    longestAlignedKm = longestAligned,
-                    longestAlignedBearing = longestAlignedBearing,
-                    alignedAllowanceKm = allowance,
-                    rightAngles = rightAngles,
-                    cornerPairs = pairs
+                    facetAllowanceKm = STRAIGHTEST_SHORE_OVER_A_CIRCLE * discs.longestAnyKm(radiusKm),
+                    longestAlignedKm = longestStretch?.lengthKm ?: 0.0,
+                    longestAlignedBearing = longestStretch?.bearingIndex ?: -1,
+                    alignedAllowanceKm = if (longestStretch == null) Double.MAX_VALUE
+                    else STRAIGHTEST_SHORE_OVER_A_CIRCLE * discs.longestAlignedKm(radiusKm, longestStretch.bearingIndex),
+                    rightAngles = corners.size,
+                    cornerPairs = pairs.size,
+                    cornerPairRunSteps = pairRunSteps
                 )
             )
         }
         return rings
     }
 
-    /** The grid bearing [run] lies exactly along, or -1. */
-    fun alignedBearing(run: Run, frame: GridFrame): Int {
-        for (index in frame.gridBearings.indices) {
-            val spacing = frame.latticeSpacingKm[index]
-            if (frame.bearingGapDegrees(run.bearingDegrees, frame.gridBearings[index]) > 45.0) continue
-            if (run.offsetAcrossKm(frame.gridBearings[index]) <= EXACT_OFFSET_SPACINGS * spacing) return index
-        }
-        return -1
-    }
-
-    /** Whether two consecutive runs make a right angle on the sheet, both lying along the grid. */
-    fun isRightAngle(first: Run, firstBearing: Int, second: Run, secondBearing: Int, frame: GridFrame): Boolean {
-        if (firstBearing < 0 || secondBearing < 0) return false
-        val square = frame.perpendicularPairs.any { (a, b) ->
-            (firstBearing == a && secondBearing == b) || (firstBearing == b && secondBearing == a)
-        }
-        if (!square) return false
-        return first.lengthKm >= CORNER_RUN_SPACINGS * frame.latticeSpacingAlong(firstBearing) &&
-            second.lengthKm >= CORNER_RUN_SPACINGS * frame.latticeSpacingAlong(secondBearing)
+    /** The right-angle corners along every line of [outlines], counted. */
+    fun rightAnglesOf(outlines: List<Outline>, frame: GridFrame): Int = outlines.sumOf { outline ->
+        LatticeRuns.corners(
+            LatticeRuns.of(outline, frame, LatticeRuns.CORNER_STEPS), outline.vertexCount, outline.isRing, frame
+        ).size
     }
 
     /**
@@ -307,16 +266,20 @@ internal object ConvexHull {
 }
 
 /**
- * The longest aligned run a disc on the ground makes, by radius and grid bearing, measured by the
- * same trace and the same runs as every layer: the circle's own figure the aligned-side bar is a
- * multiple of. Built once per frame over a geometric ladder of radii and interpolated between.
+ * The longest aligned stretch a disc on the ground makes, by radius and grid bearing, and its longest
+ * straight run at any bearing, measured by the same trace, stretches and runs as every layer: the
+ * circle's own figures the aligned-side and facet bars are multiples of. Built once per frame over a geometric ladder of radii and interpolated between.
  */
 internal class DiscFigures private constructor(
     private val radiiKm: DoubleArray,
     private val longestKm: Array<DoubleArray>
 ) {
-    fun longestAlignedKm(radiusKm: Double, bearingIndex: Int): Double {
-        val figures = longestKm[bearingIndex]
+    fun longestAlignedKm(radiusKm: Double, bearingIndex: Int): Double = interpolated(radiusKm, longestKm[bearingIndex])
+
+    /** The longest run at any bearing, aligned or not: the circle's own figure for the facets. */
+    fun longestAnyKm(radiusKm: Double): Double = interpolated(radiusKm, longestKm[ANY_BEARING])
+
+    private fun interpolated(radiusKm: Double, figures: DoubleArray): Double {
         if (radiusKm <= radiiKm.first()) return figures.first()
         if (radiusKm >= radiiKm.last()) {
             // Past the ladder the figure grows as the root of the radius, the curvature argument.
@@ -331,6 +294,9 @@ internal class DiscFigures private constructor(
 
     companion object {
         private val cache = HashMap<String, DiscFigures>()
+
+        /** Where the any-bearing figure is kept, after the four grid bearings'. */
+        private const val ANY_BEARING = 4
 
         /** Radii from two cells to [LARGEST_RADIUS_CELLS] cells, in cell widths, a quarter octave apart. */
         private const val LARGEST_RADIUS_CELLS = 256.0
@@ -349,7 +315,7 @@ internal class DiscFigures private constructor(
                 radii.add(radiusCells * frame.cellWidthKm)
                 radiusCells *= Math.pow(2.0, 1.0 / STEPS_PER_OCTAVE)
             }
-            val longest = Array(frame.gridBearings.size) { DoubleArray(radii.size) }
+            val longest = Array(frame.gridBearings.size + 1) { DoubleArray(radii.size) }
             radii.forEachIndexed { step, radiusKm ->
                 // A frame just big enough, with the same cells. Several offsets of the centre
                 // against the lattice, and the longest over them, since where a circle's top falls
@@ -360,16 +326,18 @@ internal class DiscFigures private constructor(
                 for (offset in listOf(0.0, 0.25, 0.5, 0.75)) {
                     val centreX = (across / 2.0 + offset) * frame.cellWidthKm
                     val centreY = (down / 2.0 + offset) * frame.cellHeightKm
-                    val mask = Controls.disc(local, radiusKm, centreX, centreY, inCells = false)
-                    val runs = StraightRuns.of(Contours.ofMask(mask, local), local)
-                    for (run in runs) {
-                        val bearing = ComponentShapes.alignedBearing(run, local)
-                        if (bearing >= 0 && run.lengthKm > longest[bearing][step]) longest[bearing][step] = run.lengthKm
+                    val outlines = Contours.ofMask(Controls.disc(local, radiusKm, centreX, centreY, inCells = false), local)
+                    for (run in StraightRuns.of(outlines, local)) {
+                        if (run.lengthKm > longest[ANY_BEARING][step]) longest[ANY_BEARING][step] = run.lengthKm
+                    }
+                    for (outline in outlines) for (stretch in LatticeRuns.of(outline, local, 0.0)) {
+                        val bearing = stretch.bearingIndex
+                        if (stretch.lengthKm > longest[bearing][step]) longest[bearing][step] = stretch.lengthKm
                     }
                 }
                 // A bearing the disc shows no aligned run on at all falls back on the lattice's own
                 // step along it, the least an aligned run can be.
-                for (bearing in longest.indices) {
+                for (bearing in frame.gridBearings.indices) {
                     if (longest[bearing][step] == 0.0) longest[bearing][step] = frame.latticeSpacingAlong(bearing)
                 }
             }

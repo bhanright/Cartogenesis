@@ -15,10 +15,10 @@ import kotlin.random.Random
 /**
  * A field with no preferred bearing, defined everywhere on the plane rather than on a grid.
  *
- * A sum of [WAVES] plane waves whose directions are drawn uniformly round the compass and whose
- * wavelengths are drawn uniformly in their logarithm between [shortestWavelength] and
- * [longestWavelength], each with an amplitude of `wavelength ^ HURST`. That is a random-phase
- * spectral synthesis of fractional Brownian relief with Hurst exponent [HURST], and a level line
+ * A sum of plane waves, [WAVES_PER_OCTAVE] to each octave of wavelength between
+ * [shortestWavelength] and [longestWavelength] with their directions spread evenly round the
+ * compass and their wavelengths drawn uniformly in their logarithm within the octave, each
+ * with an amplitude of `wavelength ^ HURST`. That is a random-phase spectral synthesis of fractional Brownian relief with Hurst exponent [HURST], and a level line
  * of such relief has fractal dimension `2 - H`: at 0.75 that is 1.25, which is Richardson's west
  * coast of Britain as Mandelbrot (1967) reports it, the figure `CoastRoughness` already holds the
  * generator's coasts to. So its thresholded outlines are the natural shapes the guard's bars are
@@ -45,19 +45,28 @@ internal class IsotropicNoise(
     private val unitsAcross: Double = 1.0,
     private val unitsDown: Double = 1.0
 ) {
-    private val waveX = DoubleArray(WAVES)
-    private val waveY = DoubleArray(WAVES)
-    private val phase = DoubleArray(WAVES)
-    private val amplitude = DoubleArray(WAVES)
+    // A band of wavelengths an octave wide at a time, and within each band the directions spread
+    // evenly round the half-circle with one random offset: drawn independently, the handful of
+    // shortest waves that dominate the gradient would each be a direction of their own.
+    private val octaves = maxOf(1, kotlin.math.ceil(ln(longestWavelength / shortestWavelength) / ln(2.0)).toInt())
+    private val waves = octaves * WAVES_PER_OCTAVE
+    private val waveX = DoubleArray(waves)
+    private val waveY = DoubleArray(waves)
+    private val phase = DoubleArray(waves)
+    private val amplitude = DoubleArray(waves)
 
     init {
         val random = Random(seed)
         val rotation = Math.toRadians(rotationDegrees)
+        val octaveWidth = (ln(longestWavelength) - ln(shortestWavelength)) / octaves
         var power = 0.0
-        for (wave in 0 until WAVES) {
-            val direction = random.nextDouble() * PI + rotation
-            val logWavelength = ln(shortestWavelength) +
-                random.nextDouble() * (ln(longestWavelength) - ln(shortestWavelength))
+        var bandOffset = 0.0
+        for (wave in 0 until waves) {
+            val octave = wave / WAVES_PER_OCTAVE
+            val slot = wave % WAVES_PER_OCTAVE
+            if (slot == 0) bandOffset = random.nextDouble()
+            val direction = (slot + bandOffset) / WAVES_PER_OCTAVE * PI + rotation
+            val logWavelength = ln(shortestWavelength) + (octave + random.nextDouble()) * octaveWidth
             val wavelength = exp(logWavelength)
             val number = 2 * PI / wavelength
             waveX[wave] = number * cos(direction)
@@ -68,7 +77,7 @@ internal class IsotropicNoise(
         }
         // Unit variance, so a level is a number of standard deviations whatever the wavelengths.
         val scale = 1.0 / sqrt(power)
-        for (wave in 0 until WAVES) amplitude[wave] *= scale
+        for (wave in 0 until waves) amplitude[wave] *= scale
     }
 
     /** The field at a point given in kilometres. */
@@ -76,7 +85,7 @@ internal class IsotropicNoise(
         val x = xKm / unitsAcross
         val y = yKm / unitsDown
         var sum = 0.0
-        for (wave in 0 until WAVES) sum += amplitude[wave] * cos(waveX[wave] * x + waveY[wave] * y + phase[wave])
+        for (wave in 0 until waves) sum += amplitude[wave] * cos(waveX[wave] * x + waveY[wave] * y + phase[wave])
         return sum
     }
 
@@ -86,7 +95,7 @@ internal class IsotropicNoise(
         val y = yKm / unitsDown
         var gx = 0.0
         var gy = 0.0
-        for (wave in 0 until WAVES) {
+        for (wave in 0 until waves) {
             val slope = -amplitude[wave] * sin(waveX[wave] * x + waveY[wave] * y + phase[wave])
             gx += slope * waveX[wave]
             gy += slope * waveY[wave]
@@ -95,8 +104,8 @@ internal class IsotropicNoise(
     }
 
     companion object {
-        /** Enough waves that no one of them stands out as a direction; see [IsotropicNoise]. */
-        const val WAVES = 256
+        /** Waves in each octave of wavelength, spread evenly in direction; see [IsotropicNoise]. */
+        const val WAVES_PER_OCTAVE = 36
 
         /** Mandelbrot's 1.25 for a coastline is `2 - H`; see [IsotropicNoise]. */
         const val HURST = 0.75

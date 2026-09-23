@@ -41,19 +41,23 @@ internal object Arcs {
 
     /**
      * The smallest radius judged, in cells (of the cell's larger side on the ground frame).
-     * Below it every rasterised blob is a circle to within a cell. From the controls: see
-     * `GeometryControlTest`.
+     *
+     * From the control ensemble: `GeometryControlTest` fits circles to every stretch of hundreds
+     * of natural islands, and below this they fit — a natural blob a few cells across is a circle
+     * to within a quarter of a cell once rasterised, as round as a stamped disc (0.11 cells at a
+     * radius of 4, 0.22 at 7, 0.27 at 9, and none past 9). Under it a stamped disc cannot be told
+     * from a lake by its outline alone, and the guard does not pretend to.
      */
-    const val MINIMUM_RADIUS_CELLS = 4.0
+    const val MINIMUM_RADIUS_CELLS = 10.0
 
     /**
      * The largest root-mean-square distance from the circle, in cells along the radius.
      *
-     * A traced raster circle departs from its true circle by the staircase and the midpoint cuts,
-     * about a quarter of a cell in root mean square; `GeometryControlTest` measures it on the disc
-     * stamps. A third of a cell admits that and little else.
+     * A traced raster circle departs from its true circle by the staircase and the midpoint cuts:
+     * `GeometryControlTest` measures 0.18 to 0.24 cells on stamped discs of every radius from 4 to
+     * 24 cells, on the ground and on the sheet. A quarter of a cell admits that and little else.
      */
-    const val MAXIMUM_RMS_CELLS = 0.35
+    const val MAXIMUM_RMS_CELLS = 0.25
 
     /** The largest single departure from the circle, in cells along the radius: the one cell of G4. */
     const val MAXIMUM_DEVIATION_CELLS = 1.0

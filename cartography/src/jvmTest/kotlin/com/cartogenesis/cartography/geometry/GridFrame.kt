@@ -65,6 +65,18 @@ internal class GridFrame(
      */
     val perpendicularPairs: List<Pair<Int, Int>> = listOf(0 to 2, 1 to 3)
 
+    /**
+     * How wide one cell is across a line at [bearingDegrees], in kilometres: its width and height
+     * projected onto the line's normal. A traced raster edge lies within half of this of the line
+     * it stands for, so it is the raster's own uncertainty across a line at that bearing — the
+     * cell's height across an east-west line, its width across a north-south one.
+     */
+    fun cellAcrossKm(bearingDegrees: Double): Double {
+        val radians = Math.toRadians(bearingDegrees)
+        return cellWidthKm * kotlin.math.abs(kotlin.math.sin(radians)) +
+            cellHeightKm * kotlin.math.abs(kotlin.math.cos(radians))
+    }
+
     /** The column and row of a cell, and back. */
     fun columnOf(cell: Int): Int = cell % cellsAcross
     fun rowOf(cell: Int): Int = cell / cellsAcross

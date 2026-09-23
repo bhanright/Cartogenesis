@@ -23,8 +23,15 @@ import kotlin.random.Random
  * sampling spread — its lower confidence bound, at the census's corrected level, is above 1.
  * Significance alone would, over a whole world's coast, reject real geography.
  *
- * Only runs long enough for the grid to have resolved their bearing count toward a bin: see
- * [shortestResolvedRunKm]. The sampling spread comes from a block bootstrap, because neighbouring
+ * Every run counts, by its length, but a run's bearing is known only as well as its two ends are:
+ * each end of a traced edge lies within half a cell of the line it stands for, so a run of length
+ * `L` is known to within `atan(w / L)` either way, `w` the cell's width across it
+ * ([GridFrame.cellAcrossKm]), and its length is spread evenly over that interval before the bins
+ * take their shares. That is what keeps the raster's own snapping — a short edge near a grid
+ * bearing reads as lying exactly on it — from putting into the grid's bin length that belongs to
+ * its neighbours; and every run is counted rather than only long ones, because on a raster the
+ * runs near a grid bearing come out longer, and a length threshold would favour them. The
+ * sampling spread comes from a block bootstrap, because neighbouring
  * runs along one outline turn together and are not independent trials: runs are grouped
  * [BLOCK_RUNS] at a time along each line, and the blocks resampled.
  */
@@ -45,10 +52,11 @@ internal object BearingIsotropy {
      *
      * A real preference is broad. The narrowest one a whole layer of a world could plausibly carry
      * — every edge within about ten degrees of one bearing, a Gaussian of standard deviation 10
-     * centred exactly on the grid's bearing — puts 1.34 times its neighbours' length in the
+     * centred exactly on the grid's bearing — puts 1.35 times its neighbours' length in the
      * central bin at these bin widths (the Gaussian's mean over the central 8 degrees against its
-     * mean over the flanks from 4 to 12). A ratio past 1.5 therefore needs a preference narrower
-     * than any geography gives a layer; what is that narrow is the grid.
+     * mean over the flanks from 4 to 12; 1.58 at a standard deviation of 8 and 1.24 at 12). A ratio
+     * of 1.5 needs a preference narrower than a standard deviation of about 8.7 degrees, which no
+     * geography gives a whole layer; what is that narrow is the grid.
      */
     const val EFFECT_RATIO = 1.5
 
@@ -64,6 +72,9 @@ internal object BearingIsotropy {
     const val BLOCK_RUNS = 8
 
     const val BOOTSTRAP_RESAMPLES = 1000
+
+    private fun overlap(low: Double, high: Double, from: Double, to: Double): Double =
+        (minOf(high, to) - maxOf(low, from)).coerceAtLeast(0.0)
 
     /** The share of the three bins the central one holds when the ratio is 1. */
     private const val NULL_CENTRAL_SHARE = 1.0 / 3.0
@@ -89,13 +100,10 @@ internal object BearingIsotropy {
     }
 
     /**
-     * The shortest run whose bearing the grid resolves to within a bin's half-width, in km.
-     *
-     * A run of length `L` whose two ends lie within one lattice spacing `p` of a line at the grid's
-     * bearing is indistinguishable, on this grid, from lying on it, so its bearing is known only to
-     * `atan(p / L)`. Counting a shorter run would let the raster itself move bearings from a
-     * neighbour's bin into the grid's — which is exactly the excess being looked for — so a run
-     * counts toward a bearing's bins only when `atan(p / L)` is within the half-width.
+     * The shortest run whose bearing the grid resolves to within a bin's half-width, in km: one
+     * lattice spacing across the grid's bearing over the tangent of the half-width. One such run's
+     * length is added to the central bin and to each flank as a prior, so that a layer with almost
+     * nothing near a bearing reads a ratio of about 1 there rather than 0 or infinity.
      */
     fun shortestResolvedRunKm(frame: GridFrame, bearingIndex: Int): Double =
         frame.latticeSpacingKm[bearingIndex] / tan(Math.toRadians(BIN_HALF_WIDTH_DEGREES))
@@ -126,6 +134,78 @@ internal object BearingIsotropy {
         familySize: Int,
         seed: Long = 1L,
         tracedTwice: Boolean = false
+    ): List<Result> = measurePieces(
+        runs.map { run ->
+            Piece(
+                run.bearingDegrees, run.lengthKm,
+                Math.toDegrees(kotlin.math.atan(frame.cellAcrossKm(run.bearingDegrees) / run.lengthKm)),
+                (run.outline.toLong() shl 32) or (run.order / BLOCK_RUNS).toLong()
+            )
+        },
+        frame, familySize, seed, tracedTwice
+    )
+
+    /**
+     * The same test read off chords of one fixed length rather than off Douglas-Peucker's runs:
+     * every outline sampled every half a cell's height, and the chord from each sample to the one
+     * [chordKm] further along taken as the line's bearing there, for the half-cell of outline it
+     * stands for. The chord's ends each lie within half a cell of the line, so its bearing is known
+     * to `atan(w / chord)` whatever the outline does, and no partition of the line into runs enters.
+     */
+    fun measureChords(
+        outlines: List<Outline>,
+        frame: GridFrame,
+        familySize: Int,
+        chordKm: Double = chordKm(frame),
+        seed: Long = 1L,
+        tracedTwice: Boolean = false
+    ): List<Result> {
+        val stepKm = 0.5 * minOf(frame.cellWidthKm, frame.cellHeightKm)
+        val stride = kotlin.math.ceil(chordKm / stepKm).toInt()
+        val pieces = ArrayList<Piece>()
+        outlines.forEachIndexed { index, outline ->
+            val (xs, ys) = Arcs.resample(outline, stepKm)
+            val count = xs.size
+            if (count <= stride) return@forEachIndexed
+            val last = if (outline.closed) count else count - stride
+            for (at in 0 until last) {
+                val to = (at + stride) % count
+                if (!outline.closed && to <= at) continue
+                val dx = xs[to] - xs[at]
+                val dy = ys[to] - ys[at]
+                val length = lengthOf(dx, dy)
+                if (length <= 0.0) continue
+                val bearing = frame.bearingDegrees(dx, dy)
+                pieces.add(
+                    Piece(
+                        bearing, stepKm,
+                        Math.toDegrees(kotlin.math.atan(frame.cellAcrossKm(bearing) / length)),
+                        (index.toLong() shl 32) or (at / (stride * CHORDS_PER_BLOCK)).toLong()
+                    )
+                )
+            }
+        }
+        return measurePieces(pieces, frame, familySize, seed, tracedTwice)
+    }
+
+    /**
+     * The chord the fixed-length reading takes, in km: the length at which a cell's width across a
+     * north-south line, the widest the raster is anywhere, resolves a bearing to the bins' half-width.
+     */
+    fun chordKm(frame: GridFrame): Double =
+        maxOf(frame.cellWidthKm, frame.cellHeightKm) / tan(Math.toRadians(BIN_HALF_WIDTH_DEGREES))
+
+    /** How many chord lengths of outline make one block for the bootstrap. */
+    const val CHORDS_PER_BLOCK = 2
+
+    private class Piece(val bearingDegrees: Double, val lengthKm: Double, val uncertaintyDegrees: Double, val block: Long)
+
+    private fun measurePieces(
+        pieces: List<Piece>,
+        frame: GridFrame,
+        familySize: Int,
+        seed: Long,
+        tracedTwice: Boolean
     ): List<Result> {
         val z = Statistics.zFor(familySize)
         val minimum = minimumBlocks(z)
@@ -139,16 +219,23 @@ internal object BearingIsotropy {
             // Central and flank length per block.
             val central = HashMap<Long, Double>()
             val flank = HashMap<Long, Double>()
-            for (run in runs) {
-                if (run.lengthKm < shortest) continue
-                val gap = frame.bearingGapDegrees(run.bearingDegrees, gridBearing)
-                if (gap > 3 * BIN_HALF_WIDTH_DEGREES) continue
-                val block = (run.outline.toLong() shl 32) or (run.order / BLOCK_RUNS).toLong()
-                if (gap <= BIN_HALF_WIDTH_DEGREES) {
-                    central[block] = (central[block] ?: 0.0) + run.lengthKm
-                } else {
-                    flank[block] = (flank[block] ?: 0.0) + run.lengthKm
-                }
+            val half = BIN_HALF_WIDTH_DEGREES
+            for (piece in pieces) {
+                // Where the piece's bearing lies against the grid's, signed, and how far either way its
+                // two ends let it lie: its length is spread evenly over that interval.
+                var offset = (piece.bearingDegrees - gridBearing) % 180.0
+                if (offset > 90.0) offset -= 180.0
+                if (offset < -90.0) offset += 180.0
+                val uncertainty = piece.uncertaintyDegrees
+                val low = offset - uncertainty
+                val high = offset + uncertainty
+                if (high < -3 * half || low > 3 * half) continue
+                val width = high - low
+                val inCentral = overlap(low, high, -half, half) / width
+                val inFlanks = (overlap(low, high, -3 * half, -half) + overlap(low, high, half, 3 * half)) / width
+                if (inCentral <= 0.0 && inFlanks <= 0.0) continue
+                central[piece.block] = (central[piece.block] ?: 0.0) + piece.lengthKm * inCentral
+                flank[piece.block] = (flank[piece.block] ?: 0.0) + piece.lengthKm * inFlanks
             }
             val blocks = (central.keys + flank.keys).toList()
             val centralOf = DoubleArray(blocks.size) { central[blocks[it]] ?: 0.0 }

@@ -4,7 +4,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -18,13 +17,15 @@ import kotlin.math.sqrt
  * the same direction along their lines, so that the two edges of one bar are not read as two
  * teeth) are gathered, their offsets across the common bearing taken in cells, and the offsets
  * tested for periodicity: the Rayleigh statistic `Z(s) = |sum exp(2 pi i o / s)|^2 / n` over the
- * spacings `s` between [SHORTEST_SPACING_CELLS] and [LONGEST_SPACING_CELLS]. Random offsets give
- * `Z` distributed as a unit exponential at each spacing, and the scan over spacings tests about
- * `span * (1 / shortest - 1 / longest)` independent frequencies, which the significance is
- * corrected for along with the census's own family.
+ * spacings `s` between [SHORTEST_SPACING_CELLS] and [LONGEST_SPACING_CELLS], whose square root over
+ * the count is the mean resultant length: 1 for teeth exactly a ruler's spacing apart, near 0 for
+ * offsets at random.
  *
- * Periodicity alone is not a comb — Earth's valleys down a mountain front are spaced more
- * regularly than chance (Hovius 1996) — so a comb also needs [MINIMUM_TEETH] teeth on distinct
+ * The bar is geometric rather than a significance level. A comb a reader sees as ruled has five
+ * to ten teeth, and a Rayleigh statistic on nine offsets cannot reach the level a census of a
+ * thousand tests needs whatever their regularity, so a level would pass every comb this project
+ * has drawn. Periodicity alone is not a comb either — Earth's valleys down a mountain front are
+ * spaced more regularly than chance (Hovius 1996) — so a comb needs [MINIMUM_TEETH] teeth on distinct
  * multiples of the spacing, each tooth at least [TOOTH_OVER_SPACING] spacings long, and a mean
  * resultant length (how closely the teeth sit on the ideal positions) of [MINIMUM_REGULARITY]. A
  * spacing that is fixed *in cells* across grids, rather than on the ground, is the grid's; that
@@ -33,20 +34,25 @@ import kotlin.math.sqrt
 internal object Combs {
 
     const val PARALLEL_DEGREES = 3.0
-    const val SHORTEST_SPACING_CELLS = 2.0
+    /**
+     * The closest teeth a comb is looked for at, in cells. At two and a half cells and under,
+     * natural outlines and courses make regular-looking rows of raster steps by themselves
+     * (`GeometryControlTest` prints them); a comb is ruled at a spacing the eye resolves.
+     */
+    const val SHORTEST_SPACING_CELLS = 3.0
     const val LONGEST_SPACING_CELLS = 16.0
-    const val MINIMUM_TEETH = 5
+    const val MINIMUM_TEETH = 6
 
     /** A tooth is at least this many spacings long: a comb's teeth are longer than their gaps. */
     const val TOOTH_OVER_SPACING = 2.0
 
     /**
-     * How closely the teeth must sit on the ideal positions: a mean resultant length of 0.8 is
-     * teeth within about a sixth of a spacing of where a ruler would put them (a uniform jitter of
-     * plus or minus 0.17 spacings has a resultant of 0.8), where the natural spacing of Earth's
+     * How closely the teeth must sit on the ideal positions: a mean resultant length of 0.9 is
+     * teeth within about an eighth of a spacing of where a ruler would put them (a uniform jitter
+     * of plus or minus 0.124 spacings has a resultant of 0.9), where the natural spacing of Earth's
      * outlet valleys varies by a quarter to a third of itself (Hovius 1996's spacing ratios).
      */
-    const val MINIMUM_REGULARITY = 0.8
+    const val MINIMUM_REGULARITY = 0.9
 
     /** How far across from an anchor its comb may reach, in cells. */
     private const val REACH_CELLS = LONGEST_SPACING_CELLS * 6
@@ -82,8 +88,8 @@ internal object Combs {
         val uy: Double
     )
 
-    /** The combs among [runs], at the level a census of [familySize] tests needs. */
-    fun measure(runs: List<Run>, frame: GridFrame, familySize: Int): List<Comb> {
+    /** The combs among [runs]. */
+    fun measure(runs: List<Run>, frame: GridFrame): List<Comb> {
         val teeth = runs.mapNotNull { run ->
             val dx = (run.toXKm - run.fromXKm) / frame.cellWidthKm
             val dy = (run.toYKm - run.fromYKm) / frame.cellHeightKm
@@ -130,7 +136,6 @@ internal object Combs {
                 }
             }
             if (offsets.size < MINIMUM_TEETH) continue
-            val span = offsets.max() - offsets.min()
             // A comb at spacing s scores as highly at s / 2, s / 3 and so on, where every tooth still
             // falls on a whole number of periods; the spacing is the fundamental, the longest one
             // scoring within [HARMONIC_TIE] of the best.
@@ -154,11 +159,7 @@ internal object Combs {
             val distinctMultiples = members.indices
                 .filter { teeth[members[it]].lengthCells >= TOOTH_OVER_SPACING * bestSpacing }
                 .map { Math.round(offsets[it] / bestSpacing) }.distinct().size
-            val frequencies = span * (1 / SHORTEST_SPACING_CELLS - 1 / LONGEST_SPACING_CELLS) + 1
-            val pValue = (frequencies * exp(-bestZ)).coerceAtMost(1.0)
-            val level = Statistics.FAMILY_ERROR_RATE / (familySize.toDouble() * teeth.size)
-            if (distinctMultiples >= MINIMUM_TEETH && regularity >= MINIMUM_REGULARITY && pValue < level
-            ) {
+            if (distinctMultiples >= MINIMUM_TEETH && regularity >= MINIMUM_REGULARITY) {
                 members.forEach { claimed[it] = true }
                 combs.add(
                     Comb(anchor.midX, anchor.midY, anchor.directionDegrees % 180.0, bestSpacing, distinctMultiples, regularity, bestZ)

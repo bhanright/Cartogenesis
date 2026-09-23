@@ -137,25 +137,26 @@ internal class RateTest(
             val total = blocks.sumOf { it.first }.toDouble()
             val length = blocks.sumOf { it.second }
             // On the square-root scale, the bootstrap's spread over blocks. A layer traced twice
-            // holds every block twice, and the two copies of one border always agree, so resampling
-            // them as independent draws twice as many blocks as the layer has: the variance of the
-            // count, halved again by the division that follows, comes out too small by the
-            // duplication, and the spread by its square root, which is put back here as
-            // `BearingIsotropy` puts it back for the chords.
+            // holds every block twice, and the two copies of one border always agree, so a resample
+            // draws as many blocks as the layer has independent ones — a pick among the copies is a
+            // pick among the borders — and scales what it drew to one tracing's length. Drawing the
+            // whole doubled list instead had counted every border as two independent draws and
+            // narrowed the spread by the square root of the duplication.
             var spread = POISSON_SPREAD_ON_ROOTS
             if (blocks.size >= 2 && total > 0 && length > 0) {
                 val random = Random(seed)
+                val independent = (blocks.size / duplication).coerceAtLeast(1)
                 val roots = DoubleArray(RESAMPLES) {
                     var events = 0.0
                     var line = 0.0
-                    repeat(blocks.size) {
+                    repeat(independent) {
                         val block = blocks[random.nextInt(blocks.size)]
                         events += block.first
                         line += block.second
                     }
-                    sqrt(if (line > 0) events / duplication * length / line else 0.0)
+                    sqrt(if (line > 0) events * (length / duplication) / line else 0.0)
                 }
-                spread = maxOf(spread, Statistics.standardDeviation(roots) * sqrt(duplication.toDouble()))
+                spread = maxOf(spread, Statistics.standardDeviation(roots))
             }
             val count = total / duplication
             val cellWidths = length / duplication

@@ -119,6 +119,65 @@ class SettingsEffectTest {
         )
     }
 
+    /**
+     * The stored library folder is where the library is, from the moment the window opens.
+     *
+     * The folder is the one setting whose effect is not a default for next time but a move: the
+     * platform is told to use it ([Platform.useLibraryFolder]), and the listing follows. Nothing
+     * does that at launch today (Audit III, G-D3) — only a change made in the dialog moves the
+     * library — so after a restart the dialog names the reader's folder and the library lists the
+     * default one. Kept running as a known failure recorded by what the platform was asked.
+     */
+    @Test
+    fun `the stored library folder is where the library is at launch`() {
+        val host = FakeHost(AppSettings(libraryFolder = "D:/atlas/worlds"))
+        compose(host, AppSettings(libraryFolder = "D:/atlas/worlds"))
+        KnownFailures.expect(
+            "Audit III G-D3: the stored library folder is never applied at launch",
+            "the platform was asked to use []"
+        ) {
+            if (host.libraryFolders != listOf("D:/atlas/worlds")) {
+                throw RecordedViolation(
+                    "a window opened with the library folder set to D:/atlas/worlds asked the platform to use ${host.libraryFolders}",
+                    "the platform was asked to use ${host.libraryFolders}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Reset writes the defaults back, every one of them: "Reset to defaults" in the dialog, pressed
+     * over a document in which every setting differs from its default, leaves the store holding
+     * exactly the default document.
+     */
+    @Test
+    fun `Reset to defaults writes every default back through the seam`() {
+        val everyOneMoved = AppSettings(
+            theme = ThemeChoice.MARS,
+            workingResolution = 2048,
+            graphicsAccelerationAtLaunch = true,
+            exportFormat = ExportFormat.WEBP,
+            exportSize = 4096,
+            interfaceScale = 1.3f,
+            checkForUpdatesOnLaunch = true,
+            riverInkStep = 0
+        )
+        val host = FakeHost(everyOneMoved)
+        @OptIn(ExperimentalTestApi::class)
+        runDesktopComposeUiTest(width = 1440, height = 900) {
+            setContent { CartogenesisRoot(host) }
+            waitForIdle()
+            onNodeWithText("File").performClick()
+            waitForIdle()
+            onNodeWithText("Settings…").performClick()
+            waitForIdle()
+            onNodeWithText("Reset to defaults").performClick()
+            waitForIdle()
+        }
+        assertTrue(host.written.isNotEmpty(), "pressing Reset wrote nothing to the store")
+        assertEquals(AppSettings(), SettingsCodec.decode(host.written.last()), "Reset left a setting away from its default")
+    }
+
     // ---- the machinery ----
 
     /** A content hash of the window drawn under [settings]. */
@@ -172,8 +231,16 @@ private class FakeHost(settings: AppSettings = AppSettings()) : Platform {
     val written = mutableListOf<String>()
     val fetched = mutableListOf<String>()
 
+    /** Every folder the application asked this platform to move the library to, in order. */
+    val libraryFolders = mutableListOf<String>()
+
     fun preload(settings: AppSettings) {
         stored = SettingsCodec.encode(settings)
+    }
+
+    override suspend fun useLibraryFolder(path: String): Boolean {
+        libraryFolders += path
+        return true
     }
 
     override val defaultResolution: Int = 512

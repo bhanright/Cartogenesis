@@ -70,11 +70,10 @@ class StyleGalleryTest {
      * and the flat sea are the whole of it, and the political view, which is the worst case colour
      * vision has in this application and the only one with a realm set behind it — so those two are
      * written out to be reviewed. The other thirteen are rendered as well and thrown away, because
-     * a style that cannot describe a view fails by throwing rather than by looking wrong, and the
-     * diagnostic views are supposed to *ignore* it: the assertion below is that they still do.
+     * a style that cannot describe a view fails by throwing rather than by looking wrong.
      */
     @Test
-    fun `the colour-blind style renders every view, and leaves the diagnostic ones alone`() {
+    fun `the colour-blind style renders every view`() {
         val dir = File("build/styles").apply { mkdirs() }
         val world = SharedWorlds.world(
             WorldGenConfig(seed = 234475L, width = 512, height = 512)
@@ -87,32 +86,74 @@ class StyleGalleryTest {
                 File(dir, "clear-${view.name.lowercase()}.png").writeBytes(data.bytes)
             }
             clear.close()
-
-            if (view.showsTerrain) return@forEach
-            // A diagnostic view's colours mean a temperature, a plate, a wind: they are read
-            // against a legend and a style must not touch them. Compared with the passes that are
-            // *not* the colours switched off — the coastline is inked in the style's own ink on
-            // every view, and the relief is raked by the style's own strength — so what this asks
-            // is exactly the question worth asking: is the palette the same? Atlas and Colour-blind
-            // are as far apart as two styles in this list get; if these two agree, nothing differs.
-            val bare = RenderOptions(
-                view = view, showCoastline = false, showHillshade = false, showLakes = false,
-                // Rivers too: they are drawn over every view that is not a flow field, in the
-                // style's own ink, and Colour-blind's is white where Atlas's is blue.
-                showRivers = false
-            )
-            val underClear = MapImage.toBitmap(world, bare.copy(style = MapStyle.CLEAR))
-            val underAtlas = MapImage.toBitmap(world, bare.copy(style = MapStyle.ATLAS))
-            assertTrue(
-                underClear.readPixels()!!.contentEquals(underAtlas.readPixels()!!),
-                "${view.label} came out in different colours under the Colour-blind style"
-            )
-            underClear.close()
-            underAtlas.close()
         }
         println(
             "STYLE wrote the Colour-blind fantasy and political views at 512 to ${dir.absolutePath}"
         )
+    }
+
+    /**
+     * The diagnostic views ignore the style: `MapStyle` says so, and a diagnostic view's colours
+     * mean a height, a temperature, a plate, read against a legend a style does not change.
+     *
+     * Every view the style does not choose the colours of ([MapView.styled] false, Elevation and
+     * Biomes among them) is drawn as the reader gets it, under Atlas and under Colour-blind — as
+     * far apart as two styles in the list get — and then again with each pass alone that could
+     * carry the style: the coast's ink, the relief, the lakes and the rivers. Where the two styles
+     * differ, the view and the passes that make them differ are what the clause records. They do
+     * differ today, through all four (Audit III, F-C2: under Pen and ink the lakes of Elevation
+     * and Biomes are painted as blank paper), and the clause is kept running as a known failure by
+     * view and pass.
+     */
+    @Test
+    fun `the diagnostic views ignore the style`() {
+        val world = SharedWorlds.world(
+            WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        )
+        val passes = listOf<Pair<String, (RenderOptions) -> RenderOptions>>(
+            "the palette" to { it },
+            "the coast" to { it.copy(showCoastline = true) },
+            "the relief" to { it.copy(showHillshade = true) },
+            "the lakes" to { it.copy(showLakes = true) },
+            "the rivers" to { it.copy(showRivers = true) }
+        )
+        val reached = ArrayList<String>()
+        MapView.entries.filter { !it.styled }.forEach { view ->
+            val bare = RenderOptions(
+                view = view, showCoastline = false, showHillshade = false, showLakes = false, showRivers = false
+            )
+            val through = passes.filter { (_, on) -> !samePicture(world, on(bare).copy(style = MapStyle.CLEAR), on(bare).copy(style = MapStyle.ATLAS)) }
+                .map { it.first }
+            val whole = samePicture(world, RenderOptions(view = view, style = MapStyle.CLEAR), RenderOptions(view = view, style = MapStyle.ATLAS))
+            if (through.isNotEmpty() || !whole) reached.add("${view.name}: " + through.joinToString().ifEmpty { "passes together" })
+        }
+        println("STYLE the colour-blind style reaches the diagnostic views: " + reached.joinToString("; ").ifEmpty { "none" })
+        KnownFailures.expect(
+            DIAGNOSTIC_VIEWS_STYLED,
+            "ELEVATION: the coast, the relief, the lakes, the rivers; BIOMES: the coast, the relief, the lakes, the rivers; " +
+                "TEMPERATURE: the coast, the relief, the rivers; SUMMER_TEMPERATURE: the coast, the relief, the rivers; " +
+                "WINTER_TEMPERATURE: the coast, the relief, the rivers; RAINFALL: the coast, the relief, the rivers; " +
+                "SUMMER_RAINFALL: the coast, the relief, the rivers; WINTER_RAINFALL: the coast, the relief, the rivers; " +
+                "PLATES: the coast, the relief, the rivers; CURRENTS: the coast, the relief; WIND: the coast, the relief; " +
+                "NORMALS: the coast, the rivers"
+        ) {
+            if (reached.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the colour-blind style changes ${reached.size} diagnostic views: " + reached.joinToString("; "),
+                    reached.joinToString("; ")
+                )
+            }
+        }
+    }
+
+    /** Whether [first] and [second] draw [world] to the same pixels, as the window shows them. */
+    private fun samePicture(world: WorldMap, first: RenderOptions, second: RenderOptions): Boolean {
+        val one = MapImage.toBitmap(world, first)
+        val other = MapImage.toBitmap(world, second)
+        val same = one.readPixels()!!.contentEquals(other.readPixels()!!)
+        one.close()
+        other.close()
+        return same
     }
 
     /**
@@ -249,6 +290,10 @@ class StyleGalleryTest {
     }
 
     private companion object {
+        /** The known failure the diagnostic-view clause records. */
+        const val DIAGNOSTIC_VIEWS_STYLED =
+            "Audit III F-C2: the diagnostic views take the style through its coast, relief, lakes and rivers"
+
         /** Side of the detail crop in 512-render cells: half the sheet each way. */
         const val DETAIL_CELLS = 256
 

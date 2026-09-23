@@ -217,7 +217,7 @@ class ClearStyleTest : BorrowsSharedWorlds() {
                 "CIEDE2000 ($worstWhere), bar $MARGIN; under it: " +
                 shortCells.entries.joinToString { "${it.key} on ${it.value} cells" }.ifEmpty { "none" }
         )
-        KnownFailures.expect(FILLS_SHADED_TOGETHER, "pairs under the margin: 0-3, 0-6, 1-2, 1-4, 1-5, 2-5, 3-6, 4-5, 7-8") {
+        KnownFailures.expect(FILLS_SHADED_TOGETHER, "pairs under the margin: 0-8, 2-6, 3-4, 3-6") {
             if (shortPairs.isNotEmpty()) {
                 throw RecordedViolation(
                     "realm fills as drawn come within ${worst.rounded()} of each other ($worstWhere), under $MARGIN",
@@ -267,6 +267,10 @@ class ClearStyleTest : BorrowsSharedWorlds() {
      * The hatch as the political view draws it: each realm of the second turn of the set against
      * its twin of the first, rendered over the gallery's world the way the clause above renders
      * the fills, and compared at the cells the hatch strikes, which are the only ones that differ.
+     *
+     * Where the relief darkens the ground, the stroke and the fill come closer than the margin for
+     * some realms (Audit III, F-I9, on the older clause, which measured them unshaded); kept running
+     * as a known failure recorded by the hatched realms that do.
      */
     @Test
     fun `the hatch stands out from its fill as the political view draws it`() {
@@ -299,7 +303,7 @@ class ClearStyleTest : BorrowsSharedWorlds() {
             }
         }
         println("CLEAR hatch as drawn: worst stroke-against-fill ${worst.rounded()} CIEDE2000 ($worstWhere), bar $MARGIN")
-        KnownFailures.expect(HATCH_SHADED_AWAY, "hatched realms under the margin: 9") {
+        KnownFailures.expect(HATCH_SHADED_AWAY, "hatched realms under the margin: 12, 16") {
             if (shortRealms.isNotEmpty()) {
                 throw RecordedViolation(
                     "the hatch comes within ${worst.rounded()} of its fill ($worstWhere), under $MARGIN",

@@ -12,7 +12,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
@@ -42,6 +42,9 @@ class ClimateReliefGalleryTest {
     @Test
     fun `both worlds at 2048, in three styles, with five details of each`() {
         val dir = File("build/f13-crops").apply { mkdirs() }
+        // This run's pictures only: a count of whatever the directory holds would pass on files an
+        // earlier run left there.
+        dir.listFiles()?.filter { it.name.endsWith(".png") }?.forEach { it.delete() }
         val styles = listOf(MapStyle.ATLAS, MapStyle.VELLUM, MapStyle.PEN_AND_INK)
 
         WORLDS.forEach { (name, config) ->
@@ -70,8 +73,9 @@ class ClimateReliefGalleryTest {
             }
         }
 
-        val written = dir.listFiles()?.count { it.name.endsWith(".png") } ?: 0
-        assertTrue(written >= 30, "only $written pictures were written to ${dir.absolutePath}")
+        val written = dir.listFiles()?.count { it.name.endsWith(".png") && it.length() > 0 } ?: 0
+        val expected = WORLDS.size * styles.size * (1 + DETAILS.size)
+        assertEquals(expected, written, "this run wrote $written of the $expected pictures to ${dir.absolutePath}")
         println("CLIMATE RELIEF wrote $written pictures to ${dir.absolutePath}")
     }
 

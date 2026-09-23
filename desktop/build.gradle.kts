@@ -241,6 +241,9 @@ tasks.register<Test>("siteTest") {
         includeTestsMatching(siteAssemblyClass)
         isFailOnNoMatchingTests = true
     }
+    // It reads a tree of files and generates nothing, and it runs beside the other modules' suites,
+    // so it takes the smallest heap of the root build script's budget rather than the exports'.
+    maxHeapSize = "512m"
     // What this test reads is another project's build output. Declaring it as an input here is
     // what Gradle would want, but it also makes Gradle refuse the build for using an output
     // without a producing dependency it can see. Never being up to date costs a few seconds and

@@ -101,18 +101,33 @@ class SharedWorldsGuardTest {
     }
 
     @Test
-    fun `a world two classes share outlasts a variant only one asked for`() {
+    fun `among plain worlds, one two classes share outlasts one only one class asked for`() {
         val roomForTwo = 2 * ReachableState.arrayBytes(original) + 1
         val lender = WorldLender({ ReachableState.deepCopy(original) }, roomForTwo, Int.MAX_VALUE)
-        val variant = config.copy(seed = 43L)
+        val askedOnce = config.copy(seed = 43L)
         val latecomer = config.copy(seed = 44L)
         borrow(lender, "First", config)
-        borrow(lender, "Second", config, variant)
+        borrow(lender, "Second", config, askedOnce)
         // The shared world is now the least recently lent, so a plain least-recently-used rule
         // would drop it for the latecomer.
         borrow(lender, "Third", latecomer)
 
         assertEquals(setOf(config, latecomer), lender.retainedConfigs().toSet())
+    }
+
+    @Test
+    fun `a variant goes before a plain world, however recently it was lent`() {
+        val roomForTwo = 2 * ReachableState.arrayBytes(original) + 1
+        val lender = WorldLender({ ReachableState.deepCopy(original) }, roomForTwo, Int.MAX_VALUE)
+        val variant = config.copy(seaLevel = 0.5f)
+        val nextPlain = config.copy(seed = 43L)
+        borrow(lender, "First", config)
+        borrow(lender, "First", variant)
+        // Both have one borrower, and the plain world is the less recently lent: only the rule
+        // that a variant goes first keeps it.
+        borrow(lender, "Second", nextPlain)
+
+        assertEquals(setOf(config, nextPlain), lender.retainedConfigs().toSet())
     }
 
     @Test

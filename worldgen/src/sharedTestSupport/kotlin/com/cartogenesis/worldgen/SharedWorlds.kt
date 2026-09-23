@@ -32,18 +32,18 @@ object SharedWorlds {
      *
      * A 512 world holds 39 MB of arrays and a 1024 one four times that, so this keeps the four
      * standard worlds with room for a dozen variants or three 1024 worlds. It is what a worker can
-     * spare: the largest thing a per-merge worker does is generate a 2048 world, which stood at
-     * 2.5 GB live at its peak (3.7 GB after a collection with 1.2 GB retained), so 600 MB keeps
-     * that peak inside the 3.5 GB the root build script gives a `:worldgen` worker.
+     * spare beside the largest thing it does, which is generating a 2048 world: with twice this
+     * retained, the worker that did so stood at 3.7 GB after a collection in a 4 GB heap; with this,
+     * at 2.8 GB in the 3.5 GB the root build script gives a `:worldgen` worker.
      */
     private const val RETAINED_ARRAY_BYTES = 600_000_000L
 
     /**
      * The largest world kept once its borrower is done with it, in cells.
      *
-     * Larger worlds are generated for the test that asks and not retained: a 2048 world is 620 MB
-     * of arrays, one class at a time uses it, and holding it past that class would crowd out a
-     * dozen 512 worlds that many classes share.
+     * Larger worlds are generated for the test that asks and not retained: a 2048 world is sixteen
+     * times a 512 one, about 620 MB of arrays, more than the whole of [RETAINED_ARRAY_BYTES], and
+     * holding one past the class that made it would take that from every class after it.
      */
     private const val LARGEST_RETAINED_CELLS = 1024 * 1024
 
@@ -120,11 +120,13 @@ class WorldGuard(private val world: WorldMap) {
  * of their own without touching the shared one.
  *
  * Retains worlds up to [retainedArrayBytes] of arrays and never one larger than
- * [largestRetainedCells]. When it is full, the world to go is the least recently lent of those only
- * one class has asked for, and only when there are none of those the least recently lent of all:
- * most of what a tier generates is a variant one class asks for and nobody else, and a plain
- * least-recently-used rule would let a run of those push out the four standard worlds forty classes
- * share. Every world is checked when lent again and before it goes.
+ * [largestRetainedCells]. When it is full, the world to go is the least recently lent variant; then,
+ * if there are no variants, the least recently lent plain world only one class has asked for; then
+ * the least recently lent of all. Most of what a tier generates is a variant — a seed with one
+ * setting moved — that the class moving it asks for and nobody else, while a plain world, a seed at
+ * its default settings, is what the next class asks for too; a plain least-recently-used rule let a
+ * run of variants push the standard worlds out, and seed 99 was generated in ten classes of one run.
+ * Every world is checked when lent again and before it goes.
  */
 class WorldLender(
     private val generate: (WorldGenConfig) -> WorldMap,
@@ -134,6 +136,7 @@ class WorldLender(
     private class Loan(val config: WorldGenConfig, val world: WorldMap) {
         val guard = WorldGuard(world)
         val arrayBytes: Long = ReachableState.arrayBytes(world)
+        val plain: Boolean = isPlainWorld(config)
         var lastBorrower: String = ""
         var lastLentInTest = 0
         val borrowingClasses = HashSet<String>()
@@ -199,9 +202,9 @@ class WorldLender(
         }
         val testClass = activeClass!!
         if (config.width.toLong() * config.height > largestRetainedCells) {
-            // The generation about to run is the largest thing a worker does, so the variants
-            // nobody else has asked for make way for it first.
-            loans.values.filter { it.borrowingClasses.size < 2 }.forEach { dropToMakeRoom(it, borrower) }
+            // The generation about to run is the largest thing a worker does, so the variants make
+            // way for it first; the plain worlds stay for the classes that come after.
+            loans.values.filter { !it.plain }.forEach { dropToMakeRoom(it, borrower) }
             generated++
             return generate(config).also { report("generated, too large to keep", config, borrower, started) }
         }
@@ -253,7 +256,10 @@ class WorldLender(
 
     private fun admit(loan: Loan, borrower: String) {
         while (retainedBytes + loan.arrayBytes > retainedArrayBytes && loans.isNotEmpty()) {
-            dropToMakeRoom(loans.values.firstOrNull { it.borrowingClasses.size < 2 } ?: loans.values.first(), borrower)
+            val leaving = loans.values.firstOrNull { !it.plain }
+                ?: loans.values.firstOrNull { it.borrowingClasses.size < 2 }
+                ?: loans.values.first()
+            dropToMakeRoom(leaving, borrower)
         }
         loans[loan.config] = loan
         retainedBytes += loan.arrayBytes
@@ -286,8 +292,27 @@ class WorldLender(
     }
 
     private fun describe(config: WorldGenConfig): String {
-        val defaults = WorldGenConfig(seed = config.seed, width = config.width, height = config.height)
-        val same = if (config == defaults) "default settings" else "non-default settings"
-        return "seed ${config.seed} at ${config.width}x${config.height}, $same"
+        val kind = if (isPlainWorld(config)) "default settings" else "non-default settings"
+        return "seed ${config.seed} at ${config.width}x${config.height}, $kind"
     }
+}
+
+/**
+ * The grid a test states its worlds at before scaling them: every per-merge class writes a world as
+ * `WorldGenConfig(seed, 512, 512)`, and a larger one as that `.atResolution(side, side)`, which
+ * carries the tectonics' widths across the change of grid.
+ */
+private const val PREVIEW_CELLS_ACROSS = 512
+
+/**
+ * Whether [config] is a seed at its default settings — at its own grid, or at the preview grid scaled
+ * to its grid — rather than a variant with a setting moved.
+ */
+private fun isPlainWorld(config: WorldGenConfig): Boolean {
+    val atItsGrid = WorldGenConfig(seed = config.seed, width = config.width, height = config.height)
+    if (config == atItsGrid) return true
+    val scaledFromPreview = WorldGenConfig(
+        seed = config.seed, width = PREVIEW_CELLS_ACROSS, height = PREVIEW_CELLS_ACROSS
+    ).atResolution(config.width, config.height)
+    return config == scaledFromPreview
 }

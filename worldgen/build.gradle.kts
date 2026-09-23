@@ -152,11 +152,11 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.PressureWindIceTest",
     // T5: five more that assert nothing and had been running on every merge. W3's renders, which
     // said in their own KDoc that they were excluded like the rest of the harness and were not: two
-    // worlds at 2048 for four pictures. S3's three reports on the climate-fed erosion, which decide
+    // worlds at 2048 for eight pictures. S3's three reports on the climate-fed erosion, which decide
     // things by being read and are four minutes of provisional marches, one of them at 2048. How
     // closely realm borders follow rivers and ridges, printed per seed against a null model. E7's
     // two reports on what a rift trough holds, whose conclusion is that nothing at 512 can say.
-    // And the river-endings picture and tally, a 1024 world for a PNG and four worlds for a table.
+    // And the river-endings picture and tally, a 1024 world for a PNG and three more for a table.
     "com.cartogenesis.worldgen.W3RenderDump",
     "com.cartogenesis.worldgen.ClimateFedErosionMeasurementTest",
     "com.cartogenesis.worldgen.BorderRealismTest",

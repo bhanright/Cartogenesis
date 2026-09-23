@@ -30,21 +30,15 @@ import kotlinx.coroutines.runBlocking
  */
 class EngravedRasterBenchmarkTest {
 
-    private fun measuring(): Boolean {
-        if (System.getProperty("cartogenesis.benchmark") == "true") return true
-        println("ENGRAVED skipped: run with -Pbenchmark=true to measure")
-        return false
-    }
-
     @Test
     fun `the raster at 2048`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         measure(2048)
     }
 
     @Test
     fun `the raster at 4096`() {
-        if (!measuring()) return
+        skipUnlessBenchmarking()
         measure(4096)
     }
 

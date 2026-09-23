@@ -35,16 +35,20 @@ import kotlinx.coroutines.runBlocking
  * and through that the sea-surface anomaly the climate reads. A solve that agreed on the stream
  * function and disagreed on its gradients would be no use.
  *
- * On a machine with no usable device this reports that and returns, since a headless runner is not
- * a broken build. A machine that *has* a device and cannot compile the shader is a different
- * matter and fails, because that is a real fault hiding behind the same silence.
+ * On a machine with no usable device every case here is skipped, since a headless runner is not a
+ * broken build and has not checked the kernel either. A machine that *has* a device and cannot
+ * compile the shader is a different matter and fails, because that is a real fault hiding behind
+ * the same silence.
+ *
+ * Each case says `: Unit` because `runBlocking` returns its block's last value, and JUnit does not
+ * run a test method that returns one: a case ending in `assertFailsWith` would drop out unseen.
  */
 class GpuOceanTest {
 
     @Test
-    fun `gpu currents match the cpu on the standard seeds at preview and export sizes`() =
+    fun `gpu currents match the cpu on the standard seeds at preview and export sizes`(): Unit =
         runBlocking {
-            val gpu = deviceOrSkip() ?: return@runBlocking
+            val gpu = deviceOrSkip()
             for (side in listOf(512, 2048)) {
                 for (seed in listOf(42L, 718106L, 59758L)) {
                     val config = WorldGenConfig(seed = seed).atResolution(side, side)
@@ -68,8 +72,8 @@ class GpuOceanTest {
      * the same handedness, closed against the same coasts.
      */
     @Test
-    fun `the gyres draw the same on the review seeds`() = runBlocking {
-        val gpu = deviceOrSkip() ?: return@runBlocking
+    fun `the gyres draw the same on the review seeds`(): Unit = runBlocking {
+        val gpu = deviceOrSkip()
         for (seed in listOf(7L, 42L, 1234L)) {
             val config = WorldGenConfig(seed = seed)
             val sea = seaFor(config)
@@ -104,8 +108,8 @@ class GpuOceanTest {
      * the seam instead of running round the world.
      */
     @Test
-    fun `the parity bound rejects a solve stopped a tenth of the way`() = runBlocking {
-        val gpu = deviceOrSkip() ?: return@runBlocking
+    fun `the parity bound rejects a solve stopped a tenth of the way`(): Unit = runBlocking {
+        val gpu = deviceOrSkip()
         val config = WorldGenConfig(seed = 42L)
         val sea = seaFor(config)
         val onCpu = OceanStage.generate(config, sea)
@@ -158,8 +162,8 @@ class GpuOceanTest {
      * chunk should not smuggle in.
      */
     @Test
-    fun `ocean wall clock at export sizes`() = runBlocking {
-        val gpu = deviceOrSkip() ?: return@runBlocking
+    fun `ocean wall clock at export sizes`(): Unit = runBlocking {
+        val gpu = deviceOrSkip()
         val accelerated = mustNotDecline(gpu)
 
         // The advection is turned off for this measurement. The solve's cost is obtained by
@@ -227,8 +231,8 @@ class GpuOceanTest {
      * reason a world solved on the card can be reopened at all.
      */
     @Test
-    fun `an accelerated ocean is saved and reopens unchanged`() = runBlocking {
-        val gpu = deviceOrSkip() ?: return@runBlocking
+    fun `an accelerated ocean is saved and reopens unchanged`(): Unit = runBlocking {
+        val gpu = deviceOrSkip()
         val config = onGpuConfig(WorldGenConfig(seed = 42L, width = 64, height = 64))
         val world = WorldGenerationEngine.generate(config, oceanAccelerator = mustNotDecline(gpu))
         val document =
@@ -244,8 +248,8 @@ class GpuOceanTest {
 
     /** The two declines the seam promises, and that neither input is written through. */
     @Test
-    fun `an odd width declines and no passes leaves the stream at zero`() = runBlocking {
-        val gpu = deviceOrSkip() ?: return@runBlocking
+    fun `an odd width declines and no passes leaves the stream at zero`(): Unit = runBlocking {
+        val gpu = deviceOrSkip()
         assertNull(gpu.solve(3, 2, BooleanArray(6) { true }, FloatArray(6) { 1f }, 2, 1.7f))
         val isWater = booleanArrayOf(true, false, true, true)
         val forcing = floatArrayOf(1f, 2f, 3f, 4f)
@@ -255,12 +259,12 @@ class GpuOceanTest {
     }
 
     /**
-     * The device, or null when this machine has no graphics context at all.
+     * The device; the calling test is skipped when this machine has no graphics context at all.
      *
      * A machine with a context whose driver would not compile the shader is a fault and is thrown,
      * not skipped: silence there would let a broken kernel sit green for ever.
      */
-    private fun deviceOrSkip(): GpuOcean? {
+    private fun deviceOrSkip(): GpuOcean {
         // Probed once for the whole class: each probe compiles a program on the shared context,
         // and one per test would leave five of them behind for nothing.
         val probe = probed
@@ -274,8 +278,7 @@ class GpuOceanTest {
                     "${probe.unavailableBecause}"
             )
         }
-        println("OCEAN GPU unavailable here: ${probe.unavailableBecause}")
-        return null
+        skipWithoutDevice(probe.unavailableBecause)
     }
 
     /**

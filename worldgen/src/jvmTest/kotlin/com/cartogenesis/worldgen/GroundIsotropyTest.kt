@@ -42,16 +42,17 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
      * theirs. A world isotropic in cells reads 2.
      *
      * It fails today, on a defect the ruler does not reach, and runs as a known failure under it.
-     * With every operator on the ground's ruler the plate stage's own coast reads 0.9 to 1.1 on
-     * these worlds and the thermal sweeps leave it there, but the twelve hydraulic rounds take it to
-     * 1.4: the incision is capped at half the drop to a cell's receiver in a round, a drop is in
-     * proportion to the step's length on the ground, and a step down a column is half as long as
-     * one along a row, so wherever the cap and not the stream-power law sets the cut — most
-     * channels, by Audit III's B-D1 — a channel running north-south is cut half as deep a round as
-     * one running east-west on the same slope, and the valleys the coast is notched by run east-west.
-     * Weakening the law until the cap stops binding takes the ratio to 1.15 and 1.04 at a tenth of
-     * its strength and to 1.05 and 0.92 at three hundredths, on seeds 42 and 7. The erosion's units,
-     * which set how often the cap binds, are the next chunk's; see docs/DESIGN_LEDGER.md, Fix 2.
+     * With every operator on the ground's ruler the plate stage's own coast reads 1.09 and 0.91 on
+     * seeds 42 and 7 and the thermal sweeps leave it there, but the twelve hydraulic rounds take
+     * the erosion stage's own land to 1.56 and 1.48: the incision is capped at half the drop to a
+     * cell's receiver in a round, a drop is in proportion to the step's length on the ground, and a
+     * step down a column is half as long as one along a row, so wherever the cap and not the
+     * stream-power law sets the cut — most channels, by Audit III's B-D1 — a channel running
+     * north-south is cut half as deep a round as one running east-west on the same slope, and the
+     * valleys the coast is notched by run east-west. Weakening the law until the cap stops binding
+     * takes the ratio to 1.14 and 1.04 at a tenth of its strength and to 1.05 and 0.91 at three
+     * hundredths, on seeds 42 and 7. The erosion's units, which set how often the cap binds, are
+     * the next chunk's; see docs/DESIGN_LEDGER.md, Fix 2.
      */
     @Test
     fun `the coastline runs as far north-south as east-west on the ground`() {

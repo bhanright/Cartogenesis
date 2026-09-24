@@ -107,17 +107,59 @@
   300 km band (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`,
   `deltaReachKm`, `outletReachKm`), and the instrument's reference grid and shortest front, which
   were not varied. 2026-09-22, X1d.
-- **The land's outlines are consistent with cell-space anisotropy in the kilometre metric.** Over
-  seven worlds the coastline projects 1.93, 1.99 and 2.06 times as far east-west as north-south at
-  512, 1024 and 2048 (1.82 to 2.14 by world), the 2,000 m contour 1.99, 2.00 and 2.04 (1.83 to
-  2.24), where land isotropic on the ground gives 1; `CoastalSpacingAuditTest` prints both for every
-  world. Two known inputs could draw it so: the terrain noise's lattice has as many cycles down the
-  map as across it (`TerrainStage.buildNormalField`), and `PlateStage`'s boundary distance counts
-  cells with no row scale (the `JumpFloodDistance` entry below); which carries it is not measured.
-  A kilometre-isotropic noise would take half the cycles down the map that it takes across it, and
-  would move every world; the two projections per seed are the guard. Found by X1d, whose
-  straight-front finder saw one to three north-south coasts against 86 to 121 east-west ones at
-  each grid. 2026-09-22, X1d.
+- ~~**The land's outlines are consistent with cell-space anisotropy in the kilometre metric.**~~
+  Answered by Fix 2, 2026-09-24. The terrain noise's lattice and `PlateStage`'s boundary distance
+  were put on the ground with every other operator Audit III found counting a row as a column, so
+  which of them carried the twofold figure was not separated. On the four standard worlds at 512 the
+  coastline now projects 1.32, 1.41, 1.41 and 1.41 times as far east-west as north-south, 1.39
+  pooled, where the same measure read 1.88 to 2.00 before (`GroundIsotropyTest`). What is left is
+  the incision's cap per step, Audit III's B-D1, which cuts a channel running north-south half as
+  far a round; the test records it as a known failure and the erosion's units are the next chunk's.
+  The 2,000 m contour and the grids at 1024 and 2048 were not re-measured.
+- **The map draws a world twice as wide as it is tall on a square sheet, so land that is round on
+  the ground reads twice as tall as it is wide.** Since the operators measure the ground (Fix 2), a
+  continent, a lake or a range is as wide on the ground whichever way it runs, and the default grid
+  is as many cells down as across over 12,000 by 6,000 km. The raster draws one pixel a cell, the
+  map view fits it with one scale for both axes (`App.kt`, its fit scale), and the site's imagery is
+  cut from the same square sheet, so what a reader sees is the ground stretched twofold north-south.
+  The fix is the drawing's: draw the sheet at the world's own aspect, or make grids twice as many
+  cells across as down. The cartouche already states the two scales the sheet has; the exports'
+  aspect was not checked. 2026-09-24, Fix 2.
+- **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
+  code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
+  `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
+  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (the ocean's chunk); the realms'
+  two blurs (`NationStage`); the seeded field that jitters flat routing and the lake balance, a
+  lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
+  which spends `debrisTravelKm` as sweeps of one cell, a row down a column
+  (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
+  entry below). 2026-09-24, Fix 2.
+- **Fix 2 redrew every continent, and eighteen clauses its new worlds tipped run as known failures,
+  each named for where it is next taken up.** The plate partition moved from a chamfer on square
+  cells to Euclid on the ground, so every seed's continents are new, and a clause that reads one
+  sample of them moved with them. Each runs under `KnownFailures` with the figure that tipped it:
+  - *the plates*: seed 42's old belts stand within 52 cell widths of a present boundary
+    (`TectonicHistoryTest`), and seed 42's foreland falls to the edge of the collision's own
+    ground with no rise beyond (`IsostasyTest`);
+  - *the ice* (chunk 5): the bed under seed 7's cap sinks a metre past Airy's share of its column
+    (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
+    (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
+    census's ice-edge finding (`IceSheetTest`);
+  - *the erosion* (chunk 3): the coast's projection ratio and the valley notch, a quarter to a third
+    shallower where a course steps down a column, both under B-D1 (`GroundIsotropyTest`,
+    `ValleyIncisionTest`); seed 1234's windward flank cut 1.26 times as hard for 3.5 times the rain,
+    under the law's 1.49 (`ClimateFedErosionTest`);
+  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`); the flat potential
+    at 4.7% of a generation on seed 7, past rule 8's hundredth, because the redrawn world's flats
+    hold twice the cells (`FlatCourseTest`) — a device path, or a cheaper solve, is owed;
+  - *the climate*: the pooled recycling ratio, 0.292 against Earth's 0.30 (`MoistureBudgetTest`,
+    both clauses); seed 1's cold-current coast, 0.66% wetter with the coupling on
+    (`CurrentFeedsRainTest`); the tropics' pooled desert share, x0.69 against a bar of x0.54
+    (`GeographyAuditTest`);
+  - *the coast*: seed 298405's coast, 1.092 by ruler on the ground (`LittoralCoastTest`);
+  - *the distance*: seed 42's shelf, drawn off the plain jump flood, off Euclid by 0.0016 of a cell
+    width on nine cells, under A-I11 (`JumpFloodDistanceTest`).
+  Measured, and not tuned: no bar moved to take any of them in. 2026-09-24, Fix 2.
 - ~~**The incision and the routing measure a step in cell widths whichever way it runs.**~~ Done by
   Fix 2, 2026-09-24. The routing's facets are built on the ground, a leg of a cell width and a leg of
   a row's height, so a plane falls where it faces: `RoutingGroundTest` routes a dozen planes, the
@@ -743,7 +785,10 @@
   ruler coarsened by majority, which cannot see under its own step, the same coast reads 1.255
   pooled after against 1.260 before, and seed 7 reads 1.228 against 1.230. The repair belongs to the instrument — `CoastRoughness`'s
   `richardsonLength` is the one F17 uses and M1 could take it, or its box sizes could start above
-  the scale it means to measure. 2026-09-13.
+  the scale it means to measure. 2026-09-13. Since Fix 2 its boxes are square on the ground, four,
+  eight and sixteen cell widths across and twice as many rows down, and `CoastRoughness`'s with
+  them: on the redrawn worlds the pooled figure reads 1.128 with them and 1.063 with boxes square in
+  cells. The saturation this entry names is unchanged. 2026-09-24, Fix 2.
 - **A graded coast has no barrier islands.** F17's littoral pass fills the re-entrants of Earth's
   third of the shoreline but does not throw a barrier across the mouth of one and leave a lagoon
   behind it, which is what Earth's depositional coasts are — Padre Island and the Laguna Madre, the

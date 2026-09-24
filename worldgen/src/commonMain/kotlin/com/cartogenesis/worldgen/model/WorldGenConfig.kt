@@ -1006,22 +1006,21 @@ data class TectonicsConfig(
      * pass, the erosion rate came out at Earth's own order for an orogen, and the uplift that has
      * to race it came with it.
      *
-     * **The denudation has been re-measured twice since, and the rate follows it each time rather
-     * than staying put.** S2's fourth pass gave the base relief a texture proportional to the
-     * ground's own relief, and a smoother plain is less for the water to take away: 0.36 to 0.27,
-     * which is where 0.77 came from. Then the hydraulic rounds started reading the climate. Two
-     * terms arrived together there and they pull the same way on a belt: the rainfall weight
+     * **The denudation has been re-measured three times since, and the rate follows it each time
+     * rather than staying put.** S2's fourth pass gave the base relief a texture proportional to
+     * the ground's own relief, and a smoother plain is less for the water to take away: 0.36 to
+     * 0.27, which is where 0.77 came from. Then the hydraulic rounds started reading the climate.
+     * Two terms arrived together there and they pull the same way on a belt: the rainfall weight
      * redistributes the world's water, and the plant cover's relative shielding takes erodibility
      * off the wettest and best-wooded ground — which is what an active belt is — so a belt keeps a
      * little more of itself. 0.27 to 0.218, and the rate with it. Then the erosion was put on the
-     * ground's ruler: a slope down a column had been read at half its gradient, since a step to
-     * the next row was taken for a cell width when it is half of one, and the thermal sweeps and
-     * the incision now take north- and south-facing ground at its true steepness. A belt loses
-     * more of itself, 0.218 to 0.275, and the rate follows, 0.718 to 0.775 (see
-     * docs/DESIGN_LEDGER.md, Fix 2). This is a
-     * derived constant and not a pin: what it is held to is Earth's surface uplift plus whatever
-     * this model's own rivers are measured to remove on the day, and a chunk that moves the
-     * second re-derives the first.
+     * ground's ruler: a slope down a column had been read at half its gradient, since a step to the
+     * next row was taken for a cell width when it is half of one, and the thermal sweeps and the
+     * incision now take north- and south-facing ground at its true steepness. A belt loses more of
+     * itself, 0.218 to 0.275, and the rate follows, 0.718 to 0.775 (see
+     * docs/DESIGN_LEDGER.md, Fix 2). This is a derived constant and not a pin: what it is held to
+     * is Earth's surface uplift plus whatever this model's own rivers are measured to remove on the
+     * day, and a chunk that moves the second re-derives the first.
      *
      * Over the one and a half million years twelve rounds stand for that is 1.2 km of rock into a
      * collision belt and 0.4 km out of it, against a dead belt of the same age that only loses.

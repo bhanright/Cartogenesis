@@ -48,11 +48,12 @@ class PenAndInkTest : BorrowsSharedWorlds() {
          * a half across, and on real ground the aspect turns within that window — every ridge crest
          * and every valley floor is a place where two directions meet inside one window and the
          * answer is the average of them. What the bar has to separate is ink that follows the
-         * ground from ink that ignores it, and those two are nowhere near each other: the engraving
-         * measures 20.0 degrees over 6110 windows and the fixed-bearing comb it replaced measures
-         * 47.0, which is what a bearing chosen at random scores against an aspect that is uniform.
-         * The bar sits at 30, giving away a third of the headroom, so a change that halved how well
-         * the strokes followed the ground would still be caught.
+         * ground from ink that ignores it, and those two are nowhere near each other: read on the
+         * true-shape sheet, where a stroke running along a column is as wide as a cell, the
+         * engraving measures 25.5 degrees over 8419 windows and the fixed-bearing comb it replaced
+         * 41.8, near what a bearing chosen at random scores against an aspect that is uniform. The
+         * bar sits at 30, between the two. (Read cell for pixel on the square sheet that preceded it, the figures
+         * were 20.0 and 47.0; docs/DESIGN_LEDGER.md, Fix A.)
          */
         const val MAX_MEAN_ASPECT_ERROR_DEGREES = 30.0
 
@@ -687,7 +688,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val seventyFifth = hundredths(percentile(slopes, 0.75))
         val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.43, the widest stroke is at 0.40") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.47, the widest stroke is at 0.40") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${percentile(slopes, 0.75)}; " +

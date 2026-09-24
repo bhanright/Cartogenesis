@@ -6,6 +6,8 @@ import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
+import com.cartogenesis.cartography.SheetGeometry
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -130,6 +132,9 @@ class RiverWidthTest {
 
     private fun pen(ratio: Float, cellsAcross: Int = SIDE): Float =
         RiverPen.widthPixels(ratio, cellsAcross)
+
+    /** The true-shape sheet's width for a world [side] cells square, which the drawn pen is a share of. */
+    private fun sheetWidth(side: Int): Int = SheetGeometry.of(WorldScale(), side, side).widthPixels
 
     /**
      * How many drawn steps of [rivers] narrow, how many of those narrow where the water did not
@@ -406,7 +411,7 @@ class RiverWidthTest {
             val span = widths.min() to widths.max()
             println(
                 "RIVERWIDTH ${side}x$side draws %.2f-%.2f px, full is %.3f%% of the width"
-                    .format(span.first, span.second, span.second * 100f / side)
+                    .format(span.first, span.second, span.second * 100f / sheetWidth(side))
             )
             span
         }
@@ -417,7 +422,7 @@ class RiverWidthTest {
         listOf(512, 1024).forEachIndexed { k, side ->
             assertTrue(
                 abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
-                    abs(spans[k].second - RiverPen.fullPixels(side)) < 0.01f,
+                    abs(spans[k].second - RiverPen.fullPixels(sheetWidth(side))) < 0.01f,
                 "at $side the drawn pen ${spans[k]} is not the pen RiverPen declares"
             )
         }
@@ -501,12 +506,15 @@ class RiverWidthTest {
 
             val withRivers = pixelsOf(world, options)
             val without = pixelsOf(world, options.copy(showRivers = false))
+            val sheet = SheetGeometry.of(world)
             var onWater = 0
             var offshore = 0
             for (i in withRivers.indices) {
-                if (withRivers[i] == without[i] || world.sea.isLand[i]) continue
+                if (withRivers[i] == without[i]) continue
+                val cell = cellUnder(sheet, i)
+                if (world.sea.isLand[cell]) continue
                 onWater++
-                if (!touchesLand(world, i)) offshore++
+                if (!touchesLand(world, cell)) offshore++
             }
             println(
                 ("RIVERMOUTH seed=$seed $mouths mouths at water, $endsOverWater strokes ending " +
@@ -569,7 +577,10 @@ class RiverWidthTest {
     @Test
     fun `the river pen touches nothing but the rivers`() {
         val world = world(42L)
-        val reach = (RiverPen.fullPixels(world.width) / 2f).toInt() + 2
+        val sheet = SheetGeometry.of(world)
+        // Half the full pen on the sheet, in cells of the narrower side, and two for the cap.
+        val reach = (RiverPen.fullPixels(sheet.widthPixels) / 2f /
+            minOf(sheet.pixelsPerCellAcross, sheet.pixelsPerCellDown)).toInt() + 2
         val nearRiver = dilatedRiverMask(world, reach)
 
         MapStyle.entries.forEach { style ->
@@ -582,7 +593,7 @@ class RiverWidthTest {
             for (i in withRivers.indices) {
                 if (withRivers[i] == without[i]) continue
                 differing++
-                if (!nearRiver[i]) strayed++
+                if (!nearRiver[cellUnder(sheet, i)]) strayed++
             }
             println(
                 "RIVERWIDTH ${style.label}: $differing pixels differ with rivers on, " +
@@ -641,6 +652,11 @@ class RiverWidthTest {
         return mask
     }
 
+    /** The cell under pixel [pixel] of [sheet]'s bitmap, row-major. */
+    private fun cellUnder(sheet: SheetGeometry, pixel: Int): Int =
+        sheet.cellAt(pixel % sheet.widthPixels + 0.5f, pixel / sheet.widthPixels + 0.5f)
+
+    /** The world drawn on its true-shape sheet, one ARGB int a sheet pixel. */
     private fun pixelsOf(world: WorldMap, options: RenderOptions): IntArray {
         val bitmap = MapImage.toBitmap(world, options)
         val bytes = bitmap.readPixels()!!

@@ -56,12 +56,12 @@ class GeneralisationRenderTest {
         const val PANE = 512
 
         /**
-         * The zooms the crops are drawn for, in screen pixels to the cell.
+         * The zooms the crops are drawn for, in screen pixels to a pixel of the whole sheet.
          *
-         * A 2048 sheet fitted into a 900-pixel pane is at 0.44; four times zoom is 1.76.
-         * [MapSheet.onScreen] quantises them to 0.5 and 2.0.
+         * A 2048 world's 4096-pixel true-shape sheet fitted into a 900-pixel pane is at 0.22;
+         * four times zoom is 0.88. [MapSheet.onScreen] quantises them to 0.25 and 1.
          */
-        const val AT_FIT = 900f / SIZE
+        const val AT_FIT = 900f / (2 * SIZE)
         const val AT_FOUR_TIMES = 4f * AT_FIT
     }
 
@@ -120,7 +120,7 @@ class GeneralisationRenderTest {
                         written += write(
                             dir,
                             "$name-$zoom-$grid-crop.png",
-                            crop(bitmap, window.first, window.second)
+                            crop(bitmap, window.first * 2, window.second)
                         )
                         bitmap.close()
                     }
@@ -146,7 +146,7 @@ class GeneralisationRenderTest {
                 "$name-printed-corner.png",
                 crop(printed, 0, SIZE - CROP)
             )
-            written += write(dir, "$name-printed-topright.png", crop(printed, SIZE - CROP, 0))
+            written += write(dir, "$name-printed-topright.png", crop(printed, printed.width - CROP, 0))
             printed.close()
 
             val atFit = MapRasterizer.overlay(map, plain, MapSheet.onScreen(AT_FIT))
@@ -264,13 +264,16 @@ class GeneralisationRenderTest {
      */
     private fun shrunkToThePane(bitmap: Bitmap): Bitmap {
         val source = bitmap.readPixels() ?: error("could not read the rendered map back")
-        val block = SIZE / PANE
-        val shrunk = ByteArray(PANE * PANE * 4)
-        for (row in 0 until PANE) {
+        // The sheet is the world's true shape, so the pane keeps it: PANE across and as many rows
+        // down as the sheet's shape asks for.
+        val block = bitmap.width / PANE
+        val paneRows = bitmap.height / block
+        val shrunk = ByteArray(PANE * paneRows * 4)
+        for (row in 0 until paneRows) {
             for (column in 0 until PANE) {
                 val channels = IntArray(4)
                 for (withinRow in 0 until block) {
-                    var at = ((row * block + withinRow) * SIZE + column * block) * 4
+                    var at = ((row * block + withinRow) * bitmap.width + column * block) * 4
                     repeat(block) {
                         for (channel in 0 until 4) {
                             channels[channel] += source[at + channel].toInt() and 0xFF
@@ -285,7 +288,7 @@ class GeneralisationRenderTest {
             }
         }
         val pane = Bitmap()
-        pane.allocPixels(ImageInfo.makeS32(PANE, PANE, ColorAlphaType.PREMUL))
+        pane.allocPixels(ImageInfo.makeS32(PANE, paneRows, ColorAlphaType.PREMUL))
         pane.installPixels(shrunk)
         return pane
     }

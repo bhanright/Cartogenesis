@@ -455,6 +455,16 @@ class SiteAssemblyTest {
             exports.contains("$phoneCeiling × $phoneCeiling"),
             "the Export row does not quote the phone's cap of $phoneCeiling: \"$exports\""
         )
+        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
+        // is not the grid's own size.
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(
+            com.cartogenesis.worldgen.model.WorldScale(), ceiling, ceiling
+        )
+        assertTrue(
+            exports.contains("${sheet.widthPixels} × ${sheet.heightPixels}"),
+            "the Export row does not say a $ceiling world's map image is " +
+                "${sheet.widthPixels} × ${sheet.heightPixels}: \"$exports\""
+        )
 
         val resolutions = row("Resolution")
         assertTrue(

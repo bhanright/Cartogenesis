@@ -250,6 +250,10 @@ class GpuRasterTest {
     private fun syntheticRecipe(side: Int, elevation: FloatArray, land: ByteArray) = RasterRecipe(
         width = side,
         height = side,
+        // A picture with no world behind it, laid a cell to a sheet pixel: this view draws no
+        // pattern that asks where on the sheet it is.
+        pixelsPerCellAcross = 1,
+        pixelsPerCellDown = 1,
         view = RasterView.ELEVATION,
         elevation = elevation,
         land = land,

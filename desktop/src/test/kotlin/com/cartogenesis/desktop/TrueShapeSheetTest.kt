@@ -92,7 +92,9 @@ class TrueShapeSheetTest {
 
     @Test
     fun `a line of ink is the same width east-west and north-south, in pixels and on the ground`() {
-        val base = world(SIZES[1])
+        // The largest of the three, so the full pen is several pixels wide and has a core of solid
+        // ink the stroke's antialiased edge can be measured against.
+        val base = world(SIZES.last())
         val land = withDisc(base, WHOLE_WORLD_KM)
         val rivers = withCrossedRivers(land)
         val options = RenderOptions(
@@ -106,13 +108,24 @@ class TrueShapeSheetTest {
         val sheetHeight = drawn.height
         val ground = pixels(bare)
         val ink = pixels(drawn)
-        fun changed(x: Int, y: Int) = ink[y * sheetWidth + x] != ground[y * sheetWidth + x]
+        fun change(x: Int, y: Int): Int {
+            val a = ink[y * sheetWidth + x]
+            val b = ground[y * sheetWidth + x]
+            return (0..16 step 8).sumOf { shift -> abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF)) }
+        }
 
         // Across the east-west river, down a column a quarter of the way along it; across the
         // north-south river, along a row a quarter of the way down it: both well clear of the
-        // crossing and of either end.
-        val acrossTheEastWest = (sheetWidth * 5 / 8).let { x -> (0 until sheetHeight).count { changed(x, it) } }
-        val acrossTheNorthSouth = (sheetHeight * 5 / 8).let { y -> (0 until sheetWidth).count { changed(it, y) } }
+        // crossing and of either end. A stroke's width is its ink summed across it over the ink of
+        // its solid core, so an antialiased edge counts for the share of a pixel it covers.
+        fun width(changes: List<Int>): Double {
+            val core = changes.max()
+            return if (core == 0) 0.0 else changes.sum().toDouble() / core
+        }
+        val acrossTheEastWest =
+            (sheetWidth * 5 / 8).let { x -> width((0 until sheetHeight).map { change(x, it) }) }
+        val acrossTheNorthSouth =
+            (sheetHeight * 5 / 8).let { y -> width((0 until sheetWidth).map { change(it, y) }) }
 
         val scale = base.config.scale
         val kilometresPerPixelAcross = scale.worldWidthKm / sheetWidth
@@ -121,11 +134,11 @@ class TrueShapeSheetTest {
         val eastWestKm = acrossTheEastWest * kilometresPerPixelDown
         val northSouthKm = acrossTheNorthSouth * kilometresPerPixelAcross
         println(
-            "TRUESHAPE the east-west river is $acrossTheEastWest pixels across (${eastWestKm.round()} km), " +
-                "the north-south one $acrossTheNorthSouth (${northSouthKm.round()} km), on a " +
-                "${sheetWidth}x$sheetHeight sheet"
+            "TRUESHAPE the east-west river is ${acrossTheEastWest.round()} pixels across " +
+                "(${eastWestKm.round()} km), the north-south one ${acrossTheNorthSouth.round()} " +
+                "(${northSouthKm.round()} km), on a ${sheetWidth}x$sheetHeight sheet"
         )
-        assertTrue(acrossTheEastWest > 1 && acrossTheNorthSouth > 1, "a river was not drawn")
+        assertTrue(acrossTheEastWest > 1.0 && acrossTheNorthSouth > 1.0, "a river was not drawn")
         assertTrue(
             abs(acrossTheEastWest - acrossTheNorthSouth) <= INK_SLACK_PIXELS,
             "the same pen runs $acrossTheEastWest pixels across east-west and " +
@@ -246,8 +259,12 @@ class TrueShapeSheetTest {
         const val ROUNDNESS_SLACK_PIXELS = 4
         const val ROUNDNESS_SHARE = 0.03f
 
-        /** A pixel of antialiasing either side of a stroke. */
-        const val INK_SLACK_PIXELS = 2
+        /**
+         * How far the two widths may differ: a pixel, against a full pen of about five at 1024.
+         * The widths are coverage-weighted, so where each stroke's edge falls on the pixel grid
+         * moves them by a fraction of a pixel and no more.
+         */
+        const val INK_SLACK_PIXELS = 1
 
         const val BYTES_PER_PIXEL = 4
     }

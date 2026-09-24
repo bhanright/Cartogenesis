@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,10 +32,17 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         const val SIDE = 512
 
         /**
-         * A laptop's pane, across. The world is always drawn whole, so this over the grid is the
-         * pixels a cell covers and [MapSheet.onScreen] quantises it to a half-octave band.
+         * A laptop's pane, across. The world is always drawn whole, so this over the true-shape
+         * sheet's width is the reader's pixels to one of the sheet's, which [MapSheet.onScreen]
+         * quantises to a half-octave band.
          */
         const val PANE_PIXELS_ACROSS = 900f
+
+        /**
+         * A pane twice that, for the one clause that compares two grids against the radical law:
+         * wide enough that both grids' sheets are shown whole or larger. See that clause.
+         */
+        const val WIDE_PANE_PIXELS_ACROSS = 2 * PANE_PIXELS_ACROSS
 
         /**
          * How far a generated world's drawn density may sit from the Earth figure.
@@ -68,13 +76,14 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         const val ACROSS_RESOLUTIONS_BAND = 0.05
 
         /**
-         * A sheet a sixty-fourth of a pixel to the cell: a 512 world eight pixels across.
+         * A sheet drawn at a hundred-and-twenty-eighth of the whole sheet: a 512 world, whose
+         * true-shape sheet is 1024 pixels across, drawn eight pixels across.
          *
          * Nothing draws a map this small; it is here because the budget goes as the square root
-         * of the scale, so at an eighth of the export's budget a quarter of Earth's ink falls to
+         * of the scale, so at an eleventh of the export's budget a quarter of Earth's ink falls to
          * about 1,100 km on these worlds, below the length of their largest river.
          */
-        const val TINY_SHEET_PIXELS_PER_CELL = 1f / 64f
+        const val TINY_SHEET_PIXELS_PER_SHEET_PIXEL = 1f / 128f
     }
 
     /**
@@ -91,7 +100,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
 
     /** The sheet a whole world of [cellsAcross] cells is shown on in a [PANE_PIXELS_ACROSS] pane. */
     private fun paneSheet(cellsAcross: Int): MapSheet =
-        MapSheet.onScreen(PANE_PIXELS_ACROSS / cellsAcross)
+        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(WorldScale(), cellsAcross, cellsAcross).widthPixels)
 
     // ---- the Earth figure --------------------------------------------------------------------
 
@@ -211,7 +220,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
                     )
                 }
                 println(
-                    "X1C $seed at ${sheet.pixelsPerCell} px per cell: ${chosen.drawnCount} drawn, " +
+                    "X1C $seed at ${sheet.pixelsPerSheetPixel} px per sheet pixel: ${chosen.drawnCount} drawn, " +
                         "$tributaries of them joining a drawn trunk"
                 )
                 // Without this the clause above would pass on a reconstruction that found no
@@ -227,6 +236,15 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
 
     // ---- the discriminator: the same scale from two grids --------------------------------------
 
+    /**
+     * Asked in a pane twice the laptop's, [WIDE_PANE_PIXELS_ACROSS]. In the 900-pixel pane the 1024
+     * world's true-shape sheet is shown at half its size, where the radical law keeps √½ of its
+     * traced courses, and on seed 7 that cut happens to land within 1% of the 512 world's uncut
+     * density — so the control could not tell the rules apart there, by coincidence rather than by
+     * the rule. At 1800 pixels both grids are shown at their whole sheet or more, where the law
+     * keeps every course traced, which is the case the control is about; Earth's rule is asked at
+     * the same pane, at 1:22M.
+     */
     @Test
     fun `one pane draws the same density from a 512 world and a 1024 world`() {
         val densities = HashMap<String, MutableMap<Int, Double>>()
@@ -234,8 +252,10 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             // One world alive at a time: reduced to the two figures each rule is read for before
             // the next is generated.
             val map = world(7L, side)
-            val sheet = paneSheet(side)
-            val scale = MapScale.representativeFractionDenominator(map.config.scale, side, sheet.pixelsPerCell)
+            val sheet = MapSheet.onScreen(
+                WIDE_PANE_PIXELS_ACROSS / SheetGeometry.of(map).widthPixels
+            )
+            val scale = MapScale.representativeFractionDenominator(SheetGeometry.of(map), sheet.pixelsPerSheetPixel)
             val earth = RiverSelection.select(map, sheet)
             val byTheLaw = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
             val lawKilometres = byTheLaw.sumOf { RiverSelection.courseKilometres(map, it) }
@@ -243,8 +263,8 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             densities.getOrPut("radical law") { HashMap() }[side] =
                 lawKilometres / earth.landAreaSquareKm
             println(
-                "X1C seed 7 at $side in a ${PANE_PIXELS_ACROSS.toInt()} px pane " +
-                    "(${sheet.pixelsPerCell} px per cell, 1:${(scale / 1e6).oneDecimal()}M): " +
+                "X1C seed 7 at $side in a ${WIDE_PANE_PIXELS_ACROSS.toInt()} px pane " +
+                    "(${sheet.pixelsPerSheetPixel} px per sheet pixel, 1:${(scale / 1e6).oneDecimal()}M): " +
                     "Earth's density draws ${earth.drawnCount} courses, " +
                     "${earth.drawnKilometres.round()} km, ${earth.drawnKmPerSquareKm.sig()} km/km2; " +
                     "the radical law draws ${byTheLaw.size} courses, ${lawKilometres.round()} km, " +
@@ -363,7 +383,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
                 val leftPeak = chosen.drawn.indices.filter { !chosen.drawn[it] }
                     .map { RiverSelection.peakWidthRatio(map.rivers.rivers[it]).toDouble() }
                 println(
-                    "X1C $seed at ${sheet.pixelsPerCell} px per cell: mean peak width ratio " +
+                    "X1C $seed at ${sheet.pixelsPerSheetPixel} px per sheet pixel: mean peak width ratio " +
                         "${(drawnPeak.average() * 1000).oneDecimal()}e-3 over ${drawnPeak.size} " +
                         "drawn against ${(leftPeak.average() * 1000).oneDecimal()}e-3 over " +
                         "${leftPeak.size} left out"
@@ -409,13 +429,13 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             val map = world(seed)
             val traced = map.rivers.rivers
             // An export, where the law keeps everything, and a pane where it does not. A 512
-            // world fitted into a 900-pixel pane is at two pixels to the cell and the law has
+            // world's sheet fitted into a 900-pixel pane is at 0.88 of the sheet and the law has
             // nothing to cut there, so the pane is the band the author's own 2048 world falls in
-            // (0.44 pixels to the cell, which `MapSheet.onScreen` rounds to a half), where it keeps
-            // 71 per cent of them and the tie at its cut is the thing worth agreeing about.
+            // (0.22 of its 4096-pixel sheet, which `MapSheet.onScreen` rounds to a quarter), where
+            // it keeps half of them and the tie at its cut is the thing worth agreeing about.
             listOf(
                 "export" to MapSheet.UNGENERALISED,
-                "the half-pixel pane" to MapSheet.onScreen(0.5f)
+                "the quarter-scale pane" to MapSheet.onScreen(0.25f)
             ).forEach { (where, sheet) ->
                     val top = RiverSelection.drawnOn(map, sheet, RiverSelection.EVERY_COURSE_STEP)
                     val law = RiverSelection.drawnByTheRadicalLaw(traced, sheet)
@@ -472,12 +492,12 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             // And on a sheet so small that a quarter of Earth's ink is shorter than that river's
             // own chain, which is where the budget's floor is what draws it. The clause asserts the
             // quarter really is short there, so it cannot pass on a sheet where the floor is idle.
-            val postage = MapSheet(TINY_SHEET_PIXELS_PER_CELL)
+            val postage = MapSheet(TINY_SHEET_PIXELS_PER_SHEET_PIXEL)
             val tiny = RiverSelection.select(map, postage, RiverSelection.INK_STEPS.first)
             val quarterOfEarthKm = RiverSelection.drawnRiverKmPerSquareKm(tiny.denominator) *
                 tiny.landAreaSquareKm * RiverSelection.LEAST_INK_SCALE
             println(
-                "X1C $seed on a ${TINY_SHEET_PIXELS_PER_CELL} px-per-cell sheet at the bottom: " +
+                "X1C $seed on a ${TINY_SHEET_PIXELS_PER_SHEET_PIXEL} px-per-sheet-pixel sheet at the bottom: " +
                     "a quarter of Earth's ink is ${quarterOfEarthKm.round()} km, the budget " +
                     "${tiny.budgetKilometres.round()} km, ${tiny.drawnCount} drawn"
             )

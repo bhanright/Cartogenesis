@@ -466,7 +466,7 @@
       <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and colour-blind options.</dd></div>
       <div><dt>Editing</dt><dd>Edit generated names and borders. Your changes are saved with the world.</dd></div>
       <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
-      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, or the data behind the map: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. Up to 4096 × 4096 in the browser and on the desktop; phones are capped at 2048 × 2048.</dd></div>
+      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. Worlds up to 4096 × 4096 in the browser and on the desktop, whose map image is 8192 × 4096; phones are capped at 2048 × 2048.</dd></div>
       <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
       <div><dt>Acceleration</dt><dd>Optional graphics acceleration speeds up erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
     </dl>
@@ -490,7 +490,7 @@
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. Larger worlds take longer and use more memory. On phones, browser exports are capped at 2048 × 2048 to keep memory in bounds.</p>
+        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. On phones, browser exports are capped at 2048 × 2048 to keep memory in bounds.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 

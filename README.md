@@ -26,8 +26,9 @@ three apt commands and what to do about the unsigned installer's SmartScreen war
 - Interface themes grouped into Standard, Accessible and Styled.
 - Editing of generated names and borders, kept with the world.
 - Save files containing the generated world and your edits, readable by both front ends.
-- Image exports up to 4096 × 4096 as PNG, WebP or JPEG, and data exports (heightmap, biome map,
-  realm map) with JSON sidecars.
+- Image exports as PNG, WebP or JPEG, drawn at the world's true shape — a picture of an N world is
+  2N × N, so a 4096 world is 8192 × 4096 — and data exports (heightmap, biome map, realm map), one
+  sample per cell with JSON sidecars.
 
 MIT licensed; see [LICENSE](LICENSE).
 
@@ -167,9 +168,14 @@ affect how the map is drawn without changing the generated world.
   river the sheet has room for. The coast is traced as a simplified polyline over the raster.
 - **Graticule.** Lines every ten degrees with figured edges (`40°N`, `170°W`), on screen and on
   exports.
-- **Scale bar.** In the legend and on exports, restating itself as you zoom — 2000 km at fit, 20 km
-  at 32 pixels to the cell; the cartouche gives the scale at the sheet's own size, quoted at the
-  equator because east–west distance on an equirectangular map shrinks with latitude.
+- **Scale bar.** In the legend and on exports, restating itself as you zoom; the cartouche gives
+  the scale at the sheet's own size — one figure, since the map is drawn at the world's true shape
+  and a pixel covers the same ground either way — quoted at the equator because east–west distance
+  on an equirectangular map shrinks with latitude.
+- **True shape.** The world is twice as wide as it is tall on the ground, and its grid is square,
+  so a cell is twice as wide as it is tall. Every picture — on screen and exported — draws a cell
+  two pixels wide and one tall, copying its colour exactly, and lays the ink over it at its own
+  width; data exports keep the grid, one sample per cell.
 
 All of these read the one declared width, `WorldScale.worldWidthKm`, and are drawn as geometry so
 they appear identically on screen and in a PNG. The measurements behind them are in
@@ -195,7 +201,8 @@ The measured trade-offs are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md); `Expo
 | Realms | 8-bit palette PNG, sea 0, unclaimed land 1, realms from 2 | index → realm name, colour and cell count |
 
 Each data export is a PNG and a JSON sidecar of the same name. The sidecar carries the seed, the
-pixel dimensions, the world's width (12,000 km), the cell size, the square kilometres per cell, the
+pixel dimensions (the grid's, one sample per cell, unlike the picture exports), the world's width
+(12,000 km), the cell size east-west and north-south, the square kilometres per cell, the
 save format version and the build. **Sea level is grey level 32768 on every world**, fixed rather
 than derived per world, because its job is to be typed into somebody else's program. There are
 32767 levels either side of the waterline, and the sidecar states a metres-per-level figure for

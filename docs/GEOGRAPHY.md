@@ -168,13 +168,15 @@ course is 499 km at 1:10M against 708 km at 1:50M. So the budget is in kilometre
 law carries and which does not turn on where one course is cut from the next.
 
 A sheet's scale is its representative fraction, which needs the drawing's physical size and not the
-grid: at a 12,000 km world width and the CSS reference pixel, a 2048 export is about 1:22 000 000
-and the same world fitted into a 900-pixel pane about 1:50 400 000 — which the pane's own
-half-octave zoom bands round to 1:44 300 000, the scale the selection is actually made at and the
-scale quoted below. Seed 969495 at 2048 traces
-2,081 courses and 471,294 km of watercourse; its export draws **107 courses and 70,294 km over 27.4
-million km² of land, 0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 62
-courses and 49,705 km. The rule that preceded this one kept a share of the traced count by the same
+grid: at a 12,000 km world width and the CSS reference pixel, a 2048 export — drawn since Fix A on
+its true-shape sheet, 4096 pixels by 2048 — is about 1:11 000 000, and the same world fitted into a
+900-pixel pane about 1:50 400 000, which the pane's own half-octave zoom bands round to
+1:44 300 000, the scale the selection is actually made at and the scale quoted below. The export's
+figures here were measured on the square sheet that preceded it, at 1:22 000 000, and are kept as
+that sheet's (the pane's scale did not move): seed 969495 at 2048 traces 2,081 courses and 471,294
+km of watercourse; that export drew **107 courses and 70,294 km over 27.4 million km² of land,
+0.002565 km/km² against Earth's 0.002565 at that scale**, and its pane 62 courses and 49,705 km.
+`RiverSelectionAuditTest` prints the true-shape export's own. The rule that preceded this one kept a share of the traced count by the same
 law of Töpfer's, which relates a derived map to a source map and so has no absolute answer: it drew
 6.7 times that ink on the export and 7.7 times on the pane, and the *same country at the same size
 on the same screen* came out at three densities depending on whether the world behind it had been
@@ -184,7 +186,7 @@ generated at 512, 1024 or 2048 — 0.010182, 0.012508 and 0.012781 km/km² on se
 Which courses survive is decided by discharge, largest first, on the peak width ratio — the square
 root of discharge normalised over the network. Two rules sit on top of that. The budget is spread by
 a crowding lattice whose pitch is the mean spacing the reference's own course density implies (645
-km at 1:50M, 475 km at 1:22M): the first pass takes at most one course per square, the second
+km at 1:50M, 475 km at 1:22M, 366 km at 1:11M): the first pass takes at most one course per square, the second
 spends what is left, and the fullest square on the four standard seeds falls from 49–70 drawn
 courses to 2 — which is what stops a straight coastal front from keeping every gully it has cut.
 And a drawn tributary's trunk is drawn, always: ranking by discharge alone would give that for

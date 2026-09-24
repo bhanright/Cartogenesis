@@ -7,6 +7,8 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
+import com.cartogenesis.cartography.SheetGeometry
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
@@ -77,7 +79,7 @@ class RiverSelectionAuditTest {
     private val outputDir = File("build/x1c-renders")
 
     private fun paneSheet(cellsAcross: Int): MapSheet =
-        MapSheet.onScreen(PANE_PIXELS_ACROSS / cellsAcross)
+        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(WorldScale(), cellsAcross, cellsAcross).widthPixels)
 
     /**
      * One seed at one grid, the way the application reaches a grid above 512.
@@ -108,7 +110,7 @@ class RiverSelectionAuditTest {
             val sheet = paneSheet(side)
             val chosen = RiverSelection.select(map, sheet)
             val denominator =
-                MapScale.representativeFractionDenominator(map.config.scale, side, sheet.pixelsPerCell)
+                MapScale.representativeFractionDenominator(SheetGeometry.of(map), sheet.pixelsPerSheetPixel)
             MARKS.forEach { (name, mark) ->
                 val drawn = RiverSelection.drawnOn(map, sheet, mark)
                 val kilometres = drawn.sumOf { RiverSelection.courseKilometres(map, it) }

@@ -53,7 +53,10 @@ softer file or a larger, sharper one, and not the ranking the format names sugge
 
 ## What each export costs
 
-Machine as above. Measured 2026-09-12 by `ExportAuditTest` on one world per size, seed 42.
+Machine as above. Measured 2026-09-12 by `ExportAuditTest` on one world per size, seed 42, when a
+picture was drawn a cell to a pixel. Since Fix A a picture is the world's true-shape sheet, twice as
+many pixels (a 4096 world is 8192 by 4096), so the three picture rows below are the square sheet's
+and have not been re-measured; the raster and the data exports are one value a cell and unchanged.
 
 | Export | 2048 | 4096 |
 |---|---|---|

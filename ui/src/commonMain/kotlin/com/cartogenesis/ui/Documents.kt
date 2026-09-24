@@ -31,9 +31,19 @@ internal data class DocumentIdentity(val id: String, val key: String?, val seed:
     fun at(writtenKey: String): DocumentIdentity = copy(key = writtenKey)
 
     companion object {
-        /** A save opened from [key], or from a file outside the library when [key] is null. */
-        fun opened(document: WorldDocument, key: String?): DocumentIdentity =
-            DocumentIdentity(document.id, key, document.config.seed)
+        /**
+         * A save opened from the library's [key], which Save writes back to; or, when [key] is
+         * null, a file from outside the library, which is a new document with [freshId] and
+         * nowhere saved.
+         *
+         * An imported file keeps no id of its own because the id it carries may be the id of a save
+         * already in the library — a copy downloaded and brought back, or a copy from another
+         * machine — and its first Save must never write over that save. The library files a new
+         * document under a name no other file has.
+         */
+        fun opened(document: WorldDocument, key: String?, freshId: () -> String): DocumentIdentity =
+            if (key != null) DocumentIdentity(document.id, key, document.config.seed)
+            else DocumentIdentity(freshId(), null, document.config.seed)
     }
 }
 

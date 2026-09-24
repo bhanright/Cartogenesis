@@ -96,6 +96,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 
@@ -329,6 +331,13 @@ private fun Application(
     val scope = rememberCoroutineScope()
     /** The one export in flight, if any. See [ExportRunner]. */
     val exports = remember(scope) { ExportRunner(scope) }
+    /**
+     * Held while a save is written, so saves are made one after another in the order they were
+     * asked for. The library orders its own writes too; this is so that the second of two quick
+     * Saves of a world never saved before goes where the first one went, rather than being filed
+     * as a second new file because the first had not yet said where it put the world.
+     */
+    val saving = remember { Mutex() }
 
     // What opening a save amounts to, whether it came from the library or from an uploaded file:
     // hand the world back to the engine as the world to reuse, which recomputes nothing.
@@ -337,7 +346,7 @@ private fun Application(
     // or null for a file from outside the library.
     fun openSave(save: WorldSave, key: String?) {
         val opened = save.document
-        identity = DocumentIdentity.opened(opened, key)
+        identity = DocumentIdentity.opened(opened, key, ::randomId)
         naming.opened(opened.config.seed, opened.title)
         overrides = opened.overrides
         labels = opened.labels
@@ -385,9 +394,14 @@ private fun Application(
         val writing = identity
         scope.launch {
             status = try {
-                val key = store.save(document, current, writing.key)
-                // Unless a world at another seed has taken this one's place while it was written.
-                if (identity.id == writing.id) identity = identity.at(key)
+                saving.withLock {
+                    // Where the document was last written, read now rather than when Save was
+                    // pressed: an earlier Save of it may have finished while this one waited.
+                    val destination = if (identity.id == writing.id) identity.key else writing.key
+                    val key = store.save(document, current, destination)
+                    // Unless a world at another seed has taken this one's place while it was written.
+                    if (identity.id == writing.id) identity = identity.at(key)
+                }
                 refreshLibrary()
                 "Saved \"${document.title}\""
             } catch (cancelled: CancellationException) {

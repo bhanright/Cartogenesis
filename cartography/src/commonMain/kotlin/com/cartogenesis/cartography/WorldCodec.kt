@@ -104,11 +104,13 @@ class WorldSave(val document: WorldDocument, val world: WorldMap)
  * "CGWD"                 4 bytes of magic
  * int32                  format version
  * int32                  header length in bytes
+ * int32                  CRC-32 of the header's bytes
  * header                 UTF-8 JSON: the document (settings, overrides, labels, title), the
  *                        compression, the writer, and the directory of the payload's records
  * frames                 one per chunk of the expanded payload, each:
- *                          int32 raw length, int32 stored length, int32 CRC-32 of the raw bytes,
- *                          int32 method (0 stored, 1 compressed), the stored bytes
+ *                          int32 raw length, int32 stored length, int32 checksum of the raw
+ *                          bytes bound to the header and to the chunk's place (see
+ *                          [chunkChecksum]), int32 method (0 stored, 1 compressed), the stored bytes
  *                        and then a frame of sixteen zero bytes, and nothing after it
  * ```
  *
@@ -134,7 +136,9 @@ object WorldCodec {
      * of the header into the payload's first record, the header lost its header-only form and its
      * optional fields, and [WorldDocument] lost the terrain snapshot it had carried, empty, since
      * the container format. A format-13 file has its payload as one gzip stream and its lists in
-     * its header, and this reader does not read either.
+     * its header, and this reader does not read either. The header is checksummed too, and every
+     * chunk's checksum is bound to it, so one changed digit of a seed is found rather than opened
+     * as the same arrays under another world's settings.
      *
      * 13 because a channel begins where the ground can cut one and the rounds that cut it read
      * the rain. Two chunks landed on this version and neither shipped without the other, so the
@@ -230,14 +234,17 @@ object WorldCodec {
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 
-    /** Magic, version and header length, before the header itself starts. */
-    const val PREFIX_BYTES = 12
+    /** Magic, version, header length and the header's checksum, before the header itself starts. */
+    const val PREFIX_BYTES = 16
 
     /** Where the format version sits in that prefix: straight after the magic. */
     const val VERSION_OFFSET = 4
 
     /** Where the header's own length sits: after the magic and the version. */
     const val HEADER_LENGTH_OFFSET = 8
+
+    /** Where the header's checksum sits: after its length. */
+    const val HEADER_CHECKSUM_OFFSET = 12
 
     /**
      * How much of the expanded payload is compressed, checksummed and handed on at a time: one
@@ -327,14 +334,16 @@ object WorldCodec {
         val headerBytes = json.encodeToString(header).encodeToByteArray()
         require(headerBytes.size <= LARGEST_HEADER_BYTES) { "the header is ${headerBytes.size} bytes, more than a save holds" }
 
+        val headerChecksum = Crc32.of(headerBytes)
         val prefix = ByteArray(PREFIX_BYTES)
         MAGIC.copyInto(prefix)
         putInt(prefix, VERSION_OFFSET, FORMAT_VERSION)
         putInt(prefix, HEADER_LENGTH_OFFSET, headerBytes.size)
+        putInt(prefix, HEADER_CHECKSUM_OFFSET, headerChecksum)
         sink.write(prefix)
         sink.write(headerBytes)
 
-        val writer = PayloadWriter(sink, compressor)
+        val writer = PayloadWriter(sink, compressor, headerChecksum)
         WorldSections.write(world, listsJson, writer)
         check(writer.written == header.payloadBytes) {
             "wrote ${writer.written} payload bytes where the directory promised ${header.payloadBytes}"
@@ -374,7 +383,9 @@ object WorldCodec {
                 "it ends inside its header, after ${bytes.size} bytes of ${PREFIX_BYTES + headerLength}"
             )
         }
-        return headerFrom(bytes.copyOfRange(PREFIX_BYTES, PREFIX_BYTES + headerLength))
+        return headerFrom(
+            bytes.copyOfRange(PREFIX_BYTES, PREFIX_BYTES + headerLength), getInt(bytes, HEADER_CHECKSUM_OFFSET)
+        )
     }
 
     /**
@@ -391,8 +402,9 @@ object WorldCodec {
         if (source.readFully(headerBytes, 0, headerLength) < headerLength) {
             throw WorldFormatException(SaveProblem.INCOMPLETE, "it ends inside its header")
         }
-        val header = headerFrom(headerBytes)
-        val reader = PayloadReader(source, header.compression, compressor, header.payloadBytes)
+        val headerChecksum = getInt(prefix, HEADER_CHECKSUM_OFFSET)
+        val header = headerFrom(headerBytes, headerChecksum)
+        val reader = PayloadReader(source, header.compression, compressor, header.payloadBytes, headerChecksum)
         val world = WorldSections.read(reader, header.document.config, header.sections, header.document.labels) {
             listsFrom(it)
         }
@@ -418,7 +430,7 @@ object WorldCodec {
         read(ByteArraySource(bytes), compressor)
 
     /**
-     * The header's length, from the twelve bytes in front of it, of which [available] arrived.
+     * The header's length, from the sixteen bytes in front of it, of which [available] arrived.
      *
      * The first question is whether this is a save at all, and a file of zeros is answered as an
      * incomplete one rather than as a stranger: zeros where a save begins are what a copy that has
@@ -469,7 +481,10 @@ object WorldCodec {
      * this build's own for that grid, entry for entry. What the directory promises the payload is
      * then held to as it is read.
      */
-    private fun headerFrom(bytes: ByteArray): SaveHeader {
+    private fun headerFrom(bytes: ByteArray, checksum: Int): SaveHeader {
+        if (Crc32.of(bytes) != checksum) {
+            throw WorldFormatException(SaveProblem.DAMAGED, "its header fails its checksum")
+        }
         val header = try {
             json.decodeFromString<SaveHeader>(bytes.decodeToString())
         } catch (refused: WorldFormatException) {

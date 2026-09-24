@@ -391,9 +391,15 @@ internal object Crc32 {
         remainder
     }
 
-    fun of(data: ByteArray, from: Int = 0, length: Int = data.size - from): Int {
-        // Starts at all ones and is inverted at the end, both of which the standard requires.
-        var remainder = -1
+    /**
+     * The checksum of [length] bytes of [data] from [from] — or, given the checksum [continuing]
+     * of some bytes before them, the checksum of those bytes and these together, as if they had
+     * been one run. Zero, the default, is the checksum of nothing, so it starts a fresh run.
+     */
+    fun of(data: ByteArray, from: Int = 0, length: Int = data.size - from, continuing: Int = 0): Int {
+        // Starts at all ones and is inverted at the end, both of which the standard requires; a
+        // continued run starts from the previous run's register, which is its checksum inverted.
+        var remainder = continuing.inv()
         for (at in from until from + length) {
             remainder = table[(remainder xor data[at].toInt()) and 0xFF] xor
                 (remainder ushr BITS_IN_A_BYTE)

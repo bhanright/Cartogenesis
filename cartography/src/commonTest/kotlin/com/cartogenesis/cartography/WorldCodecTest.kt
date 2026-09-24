@@ -405,12 +405,44 @@ class WorldCodecTest {
     }
 
     @Test
+    fun `one changed character in the header is refused, not opened under other settings`() = runTest {
+        // Every chunk checked out and nothing checked the header: a seed of 5 edited to 6 opened
+        // the same arrays under another world's settings.
+        val bytes = rawSave()
+        val seed = "\"seed\":5,".encodeToByteArray()
+        val at = (0..bytes.size - seed.size).first { start -> seed.indices.all { bytes[start + it] == seed[it] } }
+        bytes[at + seed.size - 2] = '6'.code.toByte()
+        assertRefused(bytes, SaveProblem.DAMAGED, "its header fails its checksum")
+        assertEquals(
+            SaveProblem.DAMAGED,
+            assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(bytes) }.problem,
+            "the listing read the edited header as whole"
+        )
+    }
+
+    @Test
+    fun `a header from one save in front of another's chunks is refused`() = runTest {
+        // The same grid and layout at another seed: its header is whole and so are the other
+        // save's chunks, and only the binding between them says they were never one file.
+        val mine = rawSave()
+        val theirs = rawSave(SyntheticWorlds.of(WorldGenConfig(seed = 6L, width = 64, height = 64)))
+        val headerEnd = WorldCodec.PREFIX_BYTES + getInt(theirs, WorldCodec.HEADER_LENGTH_OFFSET)
+        assertEquals(headerEnd, WorldCodec.PREFIX_BYTES + getInt(mine, WorldCodec.HEADER_LENGTH_OFFSET))
+        val spliced = theirs.copyOfRange(0, headerEnd) + mine.copyOfRange(headerEnd, mine.size)
+        assertRefused(spliced, SaveProblem.DAMAGED, "chunk 0 fails its checksum")
+    }
+
+    @Test
     fun `bytes after the end of the world are refused`() = runTest {
         assertRefused(rawSave() + byteArrayOf(1, 2, 3), SaveProblem.DAMAGED, "bytes after the end")
     }
 
     @Test
-    fun `a chunk that expands past its frame is refused without being held`() = runTest {
+    fun `a chunk its decompressor expands past its frame is refused`() = runTest {
+        // What the codec does with the one byte past the limit a decompressor hands back. Whether
+        // the real decompressors stop at that byte rather than expanding everything is asked of
+        // each of them: the JVM's in `GzipCompressorTest` in `:desktop`, the browser's in its
+        // self-test.
         val squeezed = WorldCodec.encode(document(synthetic), synthetic, RunLengthCompressor)
         val bomb = object : Compressor {
             override val name = "runs"

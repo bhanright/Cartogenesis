@@ -1,6 +1,8 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Where saved worlds live.
@@ -24,9 +26,13 @@ interface WorldLibrary {
     suspend fun list(): List<LibraryEntry>
 
     /**
-     * Writes [world] under [document] to [key], or to a new key named for the document when [key]
-     * is null, and returns the key it wrote. The write replaces the file whole or leaves it as it
-     * was: a reader, or a sync client, never sees half of one.
+     * Writes [world] under [document] to [key], and returns the key it wrote.
+     *
+     * A null [key] is a new file, which never replaces one already in the library: it is named
+     * for the document, or for the document and a number when that name is taken. The write
+     * replaces the file whole or leaves it as it was, so a reader, or a sync client, never sees
+     * half of one; and writes are made one at a time in the order they were asked for, so when two
+     * saves of one file overlap the one asked for last is the one that stays.
      */
     suspend fun save(document: WorldDocument, world: WorldMap, key: String? = null): String
 
@@ -114,6 +120,14 @@ abstract class ByteWorldLibrary(
 
     protected abstract suspend fun remove(name: String)
 
+    /**
+     * Held for the whole of every write and delete, so they happen one at a time. `Mutex` hands
+     * itself on first come, first served, and a save asks for it before it suspends on anything
+     * else, so the order writes land in is the order they were asked for — never the order they
+     * would have finished in, which let a slow older save rename itself over a newer one.
+     */
+    private val writing = Mutex()
+
     override suspend fun list(): List<LibraryEntry> {
         val entries = names().filter { LibraryKeys.isValid(it) }.map { entry(it) }
         val readable = entries.filter { it.document != null }.sortedByDescending { it.document!!.savedAt }
@@ -122,10 +136,25 @@ abstract class ByteWorldLibrary(
     }
 
     override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String {
-        val name = key ?: LibraryKeys.of(document)
-        requireKey(name)
-        replacing(name) { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
-        return name
+        key?.let(::requireKey)
+        val newName = if (key == null) LibraryKeys.of(document) else null
+        return writing.withLock {
+            val name = key ?: freeName(newName!!)
+            replacing(name) { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
+            name
+        }
+    }
+
+    /**
+     * [wanted], or when the library already has a file of that name, the first of `<id> (2).cgw`,
+     * `<id> (3).cgw` and so on that it does not: a new file is never written over an old one,
+     * whatever the ids inside them say.
+     */
+    private suspend fun freeName(wanted: String): String {
+        val taken = names().toSet()
+        if (wanted !in taken) return wanted
+        val stem = wanted.removeSuffix(LibraryKeys.EXTENSION)
+        return generateSequence(2) { it + 1 }.map { "$stem ($it)${LibraryKeys.EXTENSION}" }.first { it !in taken }
     }
 
     override suspend fun load(key: String): LoadOutcome {
@@ -140,7 +169,7 @@ abstract class ByteWorldLibrary(
 
     override suspend fun delete(key: String) {
         requireKey(key)
-        remove(key)
+        writing.withLock { remove(key) }
     }
 
     private fun requireKey(key: String) = require(LibraryKeys.isValid(key)) { "'$key' is not a library key" }

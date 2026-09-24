@@ -21,6 +21,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -90,10 +95,50 @@ class DesktopWorldStoreTest {
         Files.createLink(witness.toPath(), target.toPath())
         val first = witness.readBytes()
 
-        store.save(document(title = "Second"), world)
+        store.save(document(title = "Second"), world, "w1.cgw")
         assertContentEquals(first, witness.readBytes(), "the save was written over the old file in place")
         assertEquals("Second", titleIn(store.load("w1.cgw")))
         assertEquals(listOf("w1.cgw"), folder.list()!!.toList(), "a temporary file was left in the library")
+    }
+
+    @Test
+    fun `a slow older save never lands over a newer one`() = runBlocking<Unit> {
+        // Two Saves of one file, the first slow to compress. Unordered, the second was renamed
+        // into place first and the first then renamed itself over it: the older world stayed.
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val slowFirst = object : Compressor by GzipCompressor {
+            @Volatile var first = true
+            override suspend fun compress(data: ByteArray): ByteArray {
+                if (first) {
+                    first = false
+                    held.complete(Unit)
+                    release.await()
+                }
+                return GzipCompressor.compress(data)
+            }
+        }
+        val slowStore = DesktopWorldStore(folder, slowFirst, "a test")
+        val older = launch(Dispatchers.Default) { slowStore.save(document(title = "Older"), world, "w1.cgw") }
+        held.await()
+        val newer = launch(Dispatchers.Default) { slowStore.save(document(title = "Newer"), world, "w1.cgw") }
+        // Long enough for the newer save to have been written many times over, were it let.
+        delay(OVERTAKING_MILLIS)
+        release.complete(Unit)
+        joinAll(older, newer)
+        assertEquals("Newer", titleIn(store.load("w1.cgw")))
+        assertEquals(listOf("w1.cgw"), folder.list()!!.toList())
+    }
+
+    @Test
+    fun `a world brought in from outside is saved beside the library's copy, never over it`() = runBlocking<Unit> {
+        store.save(document(title = "In the library"), world)
+        val original = File(folder, "w1.cgw").readBytes()
+        // Filed as new, which is what the first Save of an uploaded file is: the same id inside.
+        val key = store.save(document(title = "Brought in"), world)
+        assertEquals("w1 (2).cgw", key)
+        assertContentEquals(original, File(folder, "w1.cgw").readBytes())
+        assertEquals("Brought in", titleIn(store.load(key)))
     }
 
     @Test
@@ -102,7 +147,7 @@ class DesktopWorldStoreTest {
         val kept = File(folder, "w1.cgw").readBytes()
 
         val failing = DesktopWorldStore(folder, FailsOnFirstChunk, "a test")
-        assertFailsWith<IllegalStateException> { failing.save(document(title = "Lost"), world) }
+        assertFailsWith<IllegalStateException> { failing.save(document(title = "Lost"), world, "w1.cgw") }
         assertContentEquals(kept, File(folder, "w1.cgw").readBytes())
         assertEquals(listOf("w1.cgw"), folder.list()!!.toList(), "the failed save's temporary file was left behind")
     }
@@ -184,3 +229,6 @@ private object FailsOnFirstChunk : Compressor {
 
 private fun ByteArray.indexOfSequence(sequence: ByteArray): Int =
     (0..size - sequence.size).first { start -> sequence.indices.all { this[start + it] == sequence[it] } }
+
+/** Two seconds: a 32 world saves in milliseconds, so a newer save let past would have landed. */
+private const val OVERTAKING_MILLIS = 2_000L

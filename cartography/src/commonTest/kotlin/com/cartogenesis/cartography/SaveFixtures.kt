@@ -141,8 +141,9 @@ internal object GeneratedWorlds {
 
 /**
  * A container taken apart into its header and its expanded payload, so a test can damage exactly
- * one thing and put the rest back with fresh frames and checksums — which is what makes the reader
- * meet the damage itself rather than a checksum that no longer adds up.
+ * one thing and put the rest back with a fresh header checksum, fresh frames and fresh chunk
+ * checksums bound to that header — which is what makes the reader meet the damage itself rather
+ * than a checksum that no longer adds up.
  *
  * Only for containers whose chunks are all stored raw, which is what [NoCompression] writes.
  */
@@ -163,18 +164,21 @@ internal class TakenApart(val header: SaveHeader, val payload: ByteArray) {
 
     fun reassembleText(headerText: String, payload: ByteArray = this.payload): ByteArray {
         val headerBytes = headerText.encodeToByteArray()
+        val headerChecksum = Crc32.of(headerBytes)
         val out = ArrayList<Byte>()
         fun int(value: Int) = repeat(4) { out.add((value ushr (8 * it)).toByte()) }
         "CGWD".forEach { out.add(it.code.toByte()) }
         int(WorldCodec.FORMAT_VERSION)
         int(headerBytes.size)
+        int(headerChecksum)
         headerBytes.forEach { out.add(it) }
         var at = 0
+        var index = 0
         while (at < payload.size) {
             val length = minOf(WorldCodec.CHUNK_BYTES, payload.size - at)
             int(length)
             int(length)
-            int(Crc32.of(payload, at, length))
+            int(chunkChecksum(headerChecksum, index++, payload, at, length))
             int(PayloadWriter.METHOD_STORED)
             for (index in at until at + length) out.add(payload[index])
             at += length

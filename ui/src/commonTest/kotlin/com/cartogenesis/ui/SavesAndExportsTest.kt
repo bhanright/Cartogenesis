@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.ExportedWorld
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -59,6 +60,13 @@ class SavesAndExportsTest {
 
         // A settings edit at the same seed is the same document, saved where it was.
         assertEquals(first, first.afterGenerating(1L, next))
+        // A file from outside the library is a new document too, whatever id it carries: that id
+        // may be a library save's, and a first Save filed under it wrote over that save.
+        val world = WorldDocument(id = "doc-0", title = "Brought in", config = WorldGenConfig(seed = 1L), savedAt = 1L)
+        val imported = DocumentIdentity.opened(world, key = null, freshId = next)
+        assertNotEquals("doc-0", imported.id)
+        assertNull(imported.key)
+        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L), DocumentIdentity.opened(world, "doc-0.cgw", next))
         // Save as is a new document for the same world.
         val copy = first.savedAs(next)
         assertNotEquals(first.id, copy.id)

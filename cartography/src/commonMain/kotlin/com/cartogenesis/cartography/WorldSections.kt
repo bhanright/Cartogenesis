@@ -437,13 +437,35 @@ internal fun WorldLists.checkAgainst(width: Int, height: Int) {
 }
 
 /**
+ * A chunk's checksum: the CRC-32 of its raw bytes, run on from the header's own checksum and the
+ * chunk's place in the payload.
+ *
+ * Bound to both because each is a way a whole-looking file can be the wrong one: a header from
+ * one save put in front of another's chunks, or two chunks of one save swapped, would pass a
+ * checksum of the chunk's bytes alone. Run on from the header's, every chunk of the spliced file
+ * fails; run on from its index, a chunk out of place does.
+ */
+internal fun chunkChecksum(headerChecksum: Int, index: Int, raw: ByteArray, from: Int, length: Int): Int {
+    val place = ByteArray(Int.SIZE_BYTES).also { putInt(it, 0, index) }
+    return Crc32.of(raw, from, length, continuing = Crc32.of(place, continuing = headerChecksum))
+}
+
+/**
  * The expanded payload going out, a chunk at a time.
  *
- * Fills one chunk and hands it to [sink] as a frame — raw length, stored length and CRC-32 of the
- * raw bytes as int32, then whether it is compressed, then the stored bytes — compressing it first
- * when [compressor] can and the result is smaller. Ends with a frame of zeros.
+ * Fills one chunk and hands it to [sink] as a frame — raw length, stored length and the chunk's
+ * checksum ([chunkChecksum], bound to [headerChecksum]) as int32, then whether it is compressed,
+ * then the stored bytes — compressing it first when [compressor] can and the result is smaller.
+ * Ends with a frame of zeros.
  */
-internal class PayloadWriter(private val sink: SaveSink, private val compressor: Compressor) {
+internal class PayloadWriter(
+    private val sink: SaveSink,
+    private val compressor: Compressor,
+    private val headerChecksum: Int
+) {
+
+    /** How many chunks have gone out, which is the next one's place. */
+    private var frames = 0
 
     private val chunk = ByteArray(WorldCodec.CHUNK_BYTES)
     private var filled = 0
@@ -560,11 +582,12 @@ internal class PayloadWriter(private val sink: SaveSink, private val compressor:
         val compressed = compressor.compress(raw)?.takeIf { it.size < filled }
         putInt(frameHeader, 0, filled)
         putInt(frameHeader, 4, compressed?.size ?: filled)
-        putInt(frameHeader, 8, Crc32.of(chunk, 0, filled))
+        putInt(frameHeader, 8, chunkChecksum(headerChecksum, frames, chunk, 0, filled))
         putInt(frameHeader, 12, if (compressed != null) METHOD_COMPRESSED else METHOD_STORED)
         sink.write(frameHeader, 0, FRAME_HEADER_BYTES)
         if (compressed != null) sink.write(compressed, 0, compressed.size) else sink.write(chunk, 0, filled)
         filled = 0
+        frames++
     }
 
     companion object {
@@ -586,7 +609,8 @@ internal class PayloadReader(
     private val source: SaveSource,
     private val compression: String,
     private val compressor: Compressor,
-    private val expectedBytes: Long
+    private val expectedBytes: Long,
+    private val headerChecksum: Int
 ) {
     private var chunk = ByteArray(0)
     private var position = 0
@@ -760,7 +784,7 @@ internal class PayloadReader(
             }
             else -> damaged("chunk $frame names an unknown method $method")
         }
-        if (Crc32.of(raw) != checksum) {
+        if (chunkChecksum(headerChecksum, frame, raw, 0, raw.size) != checksum) {
             if (endsUnfilled(raw)) unfilled(frame)
             damaged("chunk $frame fails its checksum")
         }

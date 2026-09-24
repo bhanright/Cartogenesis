@@ -11,6 +11,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -179,13 +183,54 @@ class WorldLibraryTest {
     }
 
     @Test
+    fun `a new save never replaces a file already in the library`() = runTest {
+        // A world opened from outside the library keeps the id it was saved with. Filed as new
+        // under <id>.cgw it wrote over the library's own copy of that world, edited or not.
+        val library = FakeByteWorldLibrary()
+        library.save(document(title = "In the library"), world)
+        val original = library.blobs.getValue("a.cgw").copyOf()
+
+        assertEquals("a (2).cgw", library.save(document(title = "Imported"), world))
+        assertEquals("a (3).cgw", library.save(document(title = "Imported again"), world))
+        assertContentEquals(original, library.blobs.getValue("a.cgw"))
+        assertEquals("Imported", assertIs<LoadOutcome.Loaded>(library.load("a (2).cgw")).save.document.title)
+    }
+
+    @Test
+    fun `overlapping saves of one file land in the order they were asked for`() = runTest {
+        // The first save is slow and the second fast. Unordered, the second finished first and
+        // the first then renamed itself over it, so the older world was the one left on disk.
+        val release = CompletableDeferred<Unit>()
+        var holdNext = true
+        val slowFirst = object : Compressor {
+            override val name: String get() = "none"
+            override suspend fun compress(data: ByteArray): ByteArray? {
+                if (holdNext) {
+                    holdNext = false
+                    release.await()
+                }
+                return null
+            }
+            override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? = null
+        }
+        val library = FakeByteWorldLibrary(slowFirst)
+        val older = launch { library.save(document(title = "Older"), world, "a.cgw") }
+        runCurrent()
+        val newer = launch { library.save(document(title = "Newer"), world, "a.cgw") }
+        runCurrent()
+        release.complete(Unit)
+        joinAll(older, newer)
+        assertEquals("Newer", assertIs<LoadOutcome.Loaded>(library.load("a.cgw")).save.document.title)
+    }
+
+    @Test
     fun `a save that fails partway leaves the previous one whole`() = runTest {
         val library = FakeByteWorldLibrary(FailingCompressor)
         library.save(document(title = "First"), SyntheticWorlds.of())
         val first = library.blobs.getValue("a.cgw").copyOf()
 
         FailingCompressor.failNext = true
-        assertFailsWith<IllegalStateException> { library.save(document(title = "Second"), world) }
+        assertFailsWith<IllegalStateException> { library.save(document(title = "Second"), world, "a.cgw") }
         assertContentEquals(first, library.blobs.getValue("a.cgw"))
     }
 }

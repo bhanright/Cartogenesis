@@ -140,7 +140,7 @@ class WebPlatform(
      * name, whatever that is.
      */
     override suspend fun downloadWorld(document: WorldDocument, world: WorldMap) {
-        val sink = PartsSink()
+        val sink = DownloadSink()
         WorldCodec.write(document, world, sink, compressor, "web")
         downloadParts("cartogenesis-${document.id}.cgw", sink.parts, "application/octet-stream")
     }

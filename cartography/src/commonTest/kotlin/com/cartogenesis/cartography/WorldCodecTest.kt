@@ -1,6 +1,5 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
@@ -11,39 +10,29 @@ import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 /**
  * The save format is shared between every front end, so it is tested in `commonTest` and runs on
  * every target — a format that only round-trips on one platform would be worse than none.
  *
- * The round-trip case is the one that matters now that a save carries the world rather than the
- * recipe for it: every per-cell array has to come back *identical*, not close, because what comes
- * out of the file is what the user sees and edits from then on. Decoding regenerates whatever the
- * payload cannot rebuild, and regenerates it identically, so identity alone cannot tell a save
- * that carried a stage from one that dropped it; the case also reads the file's own directory and
- * rebuilds its payload, and fails on a section dropped from the writer.
+ * The round-trip cases are the ones that matter for a world that opens: every per-cell array has
+ * to come back *identical*, not close, because what comes out of the file is what the reader sees
+ * and edits from then on. The refusal cases are the ones that matter for a world that does not: a
+ * save that is damaged, cut short or crafted is refused with its own reason, and none of them is
+ * opened as whatever its settings would have regenerated. Most of these run on a synthetic world
+ * that costs nothing to make — see [SyntheticWorlds] — so each kind of damage can be tried alone.
  */
 class WorldCodecTest {
 
-    private fun document() = WorldDocument(
+    private fun document(world: WorldMap) = WorldDocument(
         id = "a-world",
         title = "Test World",
-        config = WorldGenConfig(seed = 4242L, width = 256, height = 256).copy(
-            seaLevel = 0.55f,
-            nations = WorldGenConfig().nations.copy(
-                nationCount = 9,
-                wilderness = WildernessMode.LEAVE_WILDERNESS
-            )
-        ),
+        config = world.config,
         overrides = WorldOverrides(
             nations = mapOf(
                 3 to NationOverride(
@@ -59,27 +48,36 @@ class WorldCodecTest {
         savedAt = 1_700_000_000_000L
     )
 
-    /** Writes one little-endian int at a fixed offset, to forge a header from an older build. */
-    private class ByteWriterAt(private val bytes: ByteArray, private val offset: Int) {
-        fun putInt(value: Int) {
-            for (byte in 0 until 4) {
-                bytes[offset + byte] = ((value shr (8 * byte)) and 0xFF).toByte()
-            }
-        }
+    private val synthetic = SyntheticWorlds.of()
+
+    private suspend fun rawSave(world: WorldMap = synthetic): ByteArray =
+        WorldCodec.encode(document(world), world)
+
+    /** The refusal [bytes] meet, which the case then says must be of [problem] and say [words]. */
+    private suspend fun assertRefused(
+        bytes: ByteArray,
+        problem: SaveProblem,
+        words: String,
+        compressor: Compressor = NoCompression
+    ) {
+        val outcome = WorldCodec.open(ByteArraySource(bytes), compressor)
+        val refused = outcome as? LoadOutcome.Refused
+            ?: throw AssertionError("a save that should have been refused ($words) opened")
+        assertEquals(problem, refused.refusal.problem, refused.refusal.message)
+        assertTrue(words in refused.refusal.detail, "the refusal said '${refused.refusal.detail}', not '$words'")
     }
 
-    /** Small enough to run on every target, large enough to have rivers, realms and peoples. */
-    private val worldConfig = WorldGenConfig(seed = 99L, width = 256, height = 256)
+    // ---- Opening ----
 
     @Test
     fun `a saved world survives a round trip intact`() = runTest {
-        val original = document()
-        val restored = assertNotNull(WorldCodec.decode(WorldCodec.encode(original, null)).document)
+        val original = document(synthetic).copy(
+            config = synthetic.config,
+            title = "Test World"
+        )
+        val restored = WorldCodec.decode(WorldCodec.encode(original, synthetic)).document
 
         assertEquals(original, restored)
-        // Spot-check the parts that would quietly break the app rather than fail to parse.
-        assertEquals(4242L, restored.config.seed)
-        assertEquals(WildernessMode.LEAVE_WILDERNESS, restored.config.nations.wilderness)
         assertEquals(listOf("salt", "iron"), restored.overrides.forNation(3).exports)
         assertEquals(2, restored.overrides.territory[10])
         assertEquals(LabelKind.MOUNTAIN, restored.labels.single().kind)
@@ -87,8 +85,7 @@ class WorldCodecTest {
 
     @Test
     fun `untouched override fields stay null rather than freezing generated values`() = runTest {
-        val restored = WorldCodec.decode(WorldCodec.encode(document(), null)).document
-        val override = restored.overrides.forNation(3)
+        val override = WorldCodec.decode(rawSave()).document.overrides.forNation(3)
 
         // If these came back non-null, an edit to one field would pin every other field to
         // whatever the generator happened to produce at save time.
@@ -100,174 +97,39 @@ class WorldCodecTest {
 
     @Test
     fun `every per-cell array and every list comes back identical`() = runTest(timeout = 10.minutes) {
-        val world = WorldGenerationEngine.generate(worldConfig)
+        val world = GeneratedWorlds.at256()
         // A case can only mean anything if there was something to compare. An empty list is equal
         // to an empty list, and a world with no realms would pass this without looking at one.
         assertTrue(world.rivers.rivers.isNotEmpty(), "world has no rivers to compare")
+        assertTrue(world.rivers.lakes.lakes.isNotEmpty(), "world has no lakes to compare")
         assertTrue(world.nations.nations.isNotEmpty(), "world has no realms to compare")
         assertTrue(world.cultures.cultures.isNotEmpty(), "world has no peoples to compare")
         assertTrue(world.landmarks.landmarks.isNotEmpty(), "world has no landmarks to compare")
-        assertTrue(world.plates.plates.isNotEmpty(), "world has no plates to compare")
 
-        val bytes = WorldCodec.encode(document().copy(config = worldConfig), world)
-        val restored = assertNotNull(WorldCodec.decode(bytes).world, "the save carried no world")
+        val bytes = WorldCodec.encode(document(world), world)
+        val restored = WorldCodec.decode(bytes).world
 
-        // What the file itself holds, read as a reader finds it. Decoding regenerates any stage the
-        // payload cannot rebuild, and regeneration is deterministic, so the comparison below would
-        // pass on a save that had dropped a stage; the directory and the payload say whether it did.
+        // The file's directory is this build's whole layout: every section, nothing optional.
         val header = WorldCodec.decodeHeader(bytes)
         assertEquals(
-            GenerationStage.entries.toSet(),
-            WorldSections.presentStages(header.sections.map { it.name }.toSet()),
-            "the save's directory is missing a stage's sections, so opening it regenerates that stage"
+            listOf(WorldSections.LISTS) + WorldSections.SECTIONS.map { it.name },
+            header.sections.map { it.name }
         )
-        val headerLength = ByteReader(bytes, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
-        val payload = bytes.copyOfRange(WorldCodec.PREFIX_BYTES + headerLength, bytes.size)
-        val rebuilt = WorldSections.rebuild(
-            worldConfig, assertNotNull(header.world), emptyList(), WorldSections.read(payload)
-        )
-        val notRebuilt = listOf(
-            "terrain" to rebuilt.terrain, "plates" to rebuilt.plates, "erosion" to rebuilt.erosion,
-            "sea" to rebuilt.sea, "ocean" to rebuilt.ocean, "climate" to rebuilt.climate,
-            "rivers" to rebuilt.rivers, "nations" to rebuilt.nations, "cultures" to rebuilt.cultures,
-            "landmarks" to rebuilt.landmarks
-        ).filter { it.second == null }.map { it.first }
-        assertTrue(notRebuilt.isEmpty(), "the save's payload does not rebuild $notRebuilt; opening it regenerates them")
-
         assertArraysIdentical(world, restored)
         assertListsEqual(world, restored)
-        assertEquals(
-            world.sea.shorelineHeight.toRawBits(), restored.sea.shorelineHeight.toRawBits()
-        )
+        assertEquals(world.sea.shorelineHeight.toRawBits(), restored.sea.shorelineHeight.toRawBits())
         assertEquals(world.sea.landCellCount, restored.sea.landCellCount)
     }
 
     @Test
-    fun `a stage missing all of its sections rebuilds as null instead of refusing to open`() =
-        runTest(timeout = 10.minutes) {
-            // Erosion has exactly one section, so dropping it drops the whole stage cleanly: this
-            // is what an old save looks like to a reader that has since added a field to some
-            // *other* stage's result. It has to come back as a world with a hole in it, not throw:
-            // refusing the file outright broke every save written before the climate stage gained
-            // its seasonal fields, the checked-in gzip fixture included.
-            val world = WorldGenerationEngine.generate(worldConfig)
-            val complete = WorldSections.of(world)
-            val short = complete.filterNot { it.name == "erosion.height" }
-
-            val (payload, directory) = WorldSections.write(short)
-            val partial = WorldSections.rebuild(
-                config = worldConfig,
-                lists = WorldLists.of(world),
-                labels = emptyList(),
-                sections = WorldSections.read(payload)
-            )
-
-            assertNull(partial.erosion, "erosion's only section was dropped, so it should not rebuild")
-            assertNotNull(partial.terrain, "terrain's sections were untouched")
-            assertNotNull(partial.plates, "plates' sections were untouched")
-            assertNotNull(partial.sea, "sea level's sections were untouched")
-            assertEquals(complete.size - 1, directory.size)
-        }
-
-    @Test
-    fun `a section that disagrees about its own element count still throws`() =
-        runTest(timeout = 10.minutes) {
-            // Different from a missing section, and still refused: a section that lies about its
-            // own shape is bytes this build cannot trust at all, not an old file it can work around.
-            val world = WorldGenerationEngine.generate(worldConfig)
-            val (payload, _) = WorldSections.write(WorldSections.of(world))
-
-            // Every section's record starts with its ASCII name (int32 length, then the bytes),
-            // then an int32 element type, then an int32 element count, then an int32 byte length
-            // the reader checks the count against. Bumping the count without touching the length
-            // it is supposed to agree with is exactly that disagreement.
-            val corrupted = payload.copyOf()
-            val nameLength = ByteReader(corrupted, position = 0).getInt()
-            val countOffset = 4 + nameLength + 4
-            corrupted[countOffset] = (corrupted[countOffset] + 1).toByte()
-
-            assertFailsWith<WorldFormatException> { WorldSections.read(corrupted) }
-        }
-
-    @Test
-    fun `a save missing the climate sections opens, regenerating climate and everything after it`() =
-        runTest(timeout = 10.minutes) {
-            // The exact shape of the defect: a save written before a chunk added fields to one
-            // stage's result is missing that stage's sections and no others. It must open,
-            // reusing the stages whose sections survived and regenerating climate and everything
-            // the pipeline runs after it - not refuse the whole file.
-            val world = WorldGenerationEngine.generate(worldConfig)
-            val complete = WorldSections.of(world)
-            val withoutClimate = complete.filterNot { it.name.startsWith("climate.") }
-            assertTrue(withoutClimate.size < complete.size, "the fixture should actually drop something")
-
-            val (payload, directory) = WorldSections.write(withoutClimate)
-            val lists = WorldLists.of(world)
-
-            // What WorldSections.rebuild() hands back for a save like this: every stage whose
-            // sections survived, present; climate, missing.
-            val partial = WorldSections.rebuild(worldConfig, lists, emptyList(), WorldSections.read(payload))
-            assertNotNull(partial.terrain, "terrain's own sections survived and should have rebuilt")
-            assertNotNull(partial.rivers, "rivers' own sections survived and should have rebuilt")
-            assertNull(partial.climate, "climate's sections were dropped and should not have rebuilt")
-
-            // What WorldCodec.decode() does with that: hand it to the engine, which reuses the
-            // stages that survived and regenerates climate and everything downstream of it. Identity,
-            // not equality - a stage that recomputed the same answer would pass an equality check
-            // while costing exactly what reuse exists to avoid, and reusing a stage that should not
-            // have been reused would still pass a null check.
-            val opened = WorldGenerationEngine.generate(worldConfig, previous = partial)
-            assertSame(partial.terrain, opened.terrain, "terrain was regenerated")
-            assertSame(partial.plates, opened.plates, "plates were regenerated")
-            assertSame(partial.erosion, opened.erosion, "erosion was regenerated")
-            assertSame(partial.sea, opened.sea, "sea level was regenerated")
-            assertSame(partial.ocean, opened.ocean, "ocean was regenerated")
-            assertNotSame(partial.rivers, opened.rivers, "rivers should regenerate along with climate")
-            assertNotSame(partial.nations, opened.nations, "realms should regenerate along with climate")
-            assertNotSame(partial.cultures, opened.cultures, "peoples should regenerate along with climate")
-            assertNotSame(
-                partial.landmarks, opened.landmarks, "landmarks should regenerate along with climate"
-            )
-
-            // And the codec's own path over real bytes must open rather than refuse - this is the
-            // actual bug: the pre-fix reader threw WorldFormatException on exactly this file.
-            val original = document().copy(config = worldConfig)
-            val fullBytes = WorldCodec.encode(original, world)
-            val header = WorldCodec.decodeHeader(fullBytes)
-            val stripped = containerBytes(
-                header.copy(sections = directory, payloadBytes = payload.size), payload
-            )
-            val decoded = assertNotNull(
-                WorldCodec.decode(stripped).world,
-                "a save missing only climate's sections should still open"
-            )
-            assertEquals(worldConfig.seed, decoded.config.seed)
-            assertEquals(worldConfig.width, decoded.config.width)
-        }
-
-    /** Hand-assembles a container from a header and payload, the way [WorldCodec.encode] does. */
-    private fun containerBytes(header: SaveHeader, payload: ByteArray): ByteArray {
-        val headerBytes = Json.encodeToString(header).encodeToByteArray()
-        val writer = ByteWriter(WorldCodec.PREFIX_BYTES + headerBytes.size + payload.size)
-        writer.putBytes(byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte()))
-        writer.putInt(WorldCodec.FORMAT_VERSION)
-        writer.putInt(headerBytes.size)
-        writer.putBytes(headerBytes)
-        writer.putBytes(payload)
-        return writer.bytes
-    }
-
-    @Test
     fun `a loaded save reuses every stage and generates nothing`() = runTest(timeout = 10.minutes) {
-        val world = WorldGenerationEngine.generate(worldConfig)
-        val save = WorldCodec.decode(WorldCodec.encode(document().copy(config = worldConfig), world))
-        val loaded = assertNotNull(save.world)
+        val world = GeneratedWorlds.at256()
+        val loaded = WorldCodec.decode(WorldCodec.encode(document(world), world)).world
 
-        // Opening a save is this: hand the stored world back to the engine as the world to reuse.
-        // Every stage's guard should match, so every result should be the very object that came
-        // out of the file — identity, not equality, because equality would also pass if the stage
-        // had been recomputed to the same answer, which is the expensive thing this avoids.
-        val opened = WorldGenerationEngine.generate(save.document.config, previous = loaded)
+        // What the application does with an opened world when a setting is next edited: hand it
+        // back to the engine as the world to reuse. Every stage's guard should match, so every
+        // result should be the very object that came out of the file — identity, not equality.
+        val opened = WorldGenerationEngine.generate(loaded.config, previous = loaded)
 
         assertSame(loaded.terrain, opened.terrain, "terrain was regenerated")
         assertSame(loaded.plates, opened.plates, "plates were regenerated")
@@ -283,79 +145,297 @@ class WorldCodecTest {
     }
 
     @Test
-    fun `a save from an older format is refused rather than misread`() = runTest {
-        // Exactly what the build before the container wrote: JSON, no magic, no payload.
-        val olderText = """
-            {
-              "id": "old",
-              "title": "Old World",
-              "config": { "seed": 7, "width": 128, "height": 128 },
-              "savedAt": 1
-            }
-        """.trimIndent()
+    fun `a payload stored raw and one stored compressed both read back`() = runTest {
+        val raw = rawSave()
+        assertEquals("none", WorldCodec.decodeHeader(raw).compression)
+        assertArraysIdentical(synthetic, WorldCodec.decode(raw).world)
 
-        // A header decoded with unknown keys ignored would take this build's defaults wherever a
-        // setting has since been renamed, so it would open as a different world with no complaint.
-        // Refusing is the only honest answer while the format is still moving.
-        assertFailsWith<WorldFormatException> {
-            WorldCodec.decodeHeader(olderText.encodeToByteArray())
-        }
-        assertNull(WorldCodec.decodeOrNull(olderText.encodeToByteArray()))
+        val squeezed = WorldCodec.encode(document(synthetic), synthetic, RunLengthCompressor)
+        assertEquals("runs", WorldCodec.decodeHeader(squeezed).compression)
+        assertTrue(squeezed.size < raw.size, "the flag and id maps should have squeezed")
+        assertArraysIdentical(synthetic, WorldCodec.decode(squeezed, RunLengthCompressor).world)
 
-        // And a container one version behind, which is the case a real older save would be.
-        val current = WorldCodec.encode(document(), null)
-        val older = current.copyOf().also {
-            ByteWriterAt(it, WorldCodec.VERSION_OFFSET).putInt(WorldCodec.FORMAT_VERSION - 1)
-        }
-        val refusal = assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(older) }
-        assertTrue(
-            refusal.message!!.contains("${WorldCodec.FORMAT_VERSION - 1}"),
-            "the refusal should name the version it found: ${refusal.message}"
-        )
+        // A platform that cannot expand what it was handed says so rather than guessing.
+        assertRefused(squeezed, SaveProblem.CANNOT_EXPAND, "'runs'")
     }
 
     @Test
-    fun `the header reads without touching the payload`() = runTest(timeout = 10.minutes) {
-        // What a library listing does, and the reason the header sits uncompressed at the front.
-        val world = WorldGenerationEngine.generate(worldConfig)
-        val bytes = WorldCodec.encode(document().copy(config = worldConfig), world, writtenBy = "a test")
-        val headerLength = ByteReader(bytes, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
+    fun `a save larger than one chunk is carried across its chunks`() = runTest {
+        // 512 by 512 is 38 MB of arrays: thirty-odd chunks, with records and values straddling
+        // every boundary between them.
+        val world = SyntheticWorlds.of(WorldGenConfig(seed = 6L, width = 512, height = 512))
+        val bytes = WorldCodec.encode(document(world), world)
+        assertTrue(bytes.size > 30 * WorldCodec.CHUNK_BYTES)
+        assertArraysIdentical(world, WorldCodec.decode(bytes).world)
+    }
+
+    @Test
+    fun `the header reads without touching the payload`() = runTest {
+        val bytes = WorldCodec.encode(document(synthetic), synthetic, writtenBy = "a test")
+        val headerLength = getInt(bytes, WorldCodec.HEADER_LENGTH_OFFSET)
         val prefixOnly = bytes.copyOfRange(0, WorldCodec.PREFIX_BYTES + headerLength)
 
         val header = WorldCodec.decodeHeader(prefixOnly)
         assertEquals("Test World", header.document.title)
         assertEquals("a test", header.writtenBy)
-        assertEquals(WorldSections.of(world).size, header.sections.size)
+        assertEquals(WorldSections.SECTIONS.size + 1, header.sections.size)
         assertTrue(prefixOnly.size < bytes.size / 4, "the header should be a small part of the file")
     }
 
     @Test
-    fun `a payload stored raw and one stored compressed both read back`() = runTest(timeout = 10.minutes) {
-        // The browser cannot gzip, so it stores raw and says so; the desktop gzips. Either file
-        // has to open on either side, which is what the flag in the header is for.
-        val world = WorldGenerationEngine.generate(WorldGenConfig(seed = 7L, width = 128, height = 128))
-        val doc = document().copy(config = world.config)
+    fun `a 4096 world's payload is counted past what an Int holds`() {
+        // 146 bytes a cell at 4096 is 2,449,473,536 bytes of arrays, which wrapped the old Int
+        // sum negative. Counted here from the layout itself, so a narrowing anywhere shows.
+        val cells = 4096 * 4096
+        val directory = WorldSections.directory(cells, listsBytes = 1_000)
+        val arrays = directory.drop(1).sumOf { it.bytes }
+        assertEquals(146L * cells, arrays)
+        assertTrue(WorldSections.payloadBytes(directory) > Int.MAX_VALUE)
+        assertEquals(directory.last().offset + WorldSections.RECORD_PREFIX_BYTES + directory.last().name.length +
+            directory.last().bytes, WorldSections.payloadBytes(directory))
+    }
 
-        val raw = WorldCodec.encode(doc, world, NoCompression)
-        assertEquals("none", WorldCodec.decodeHeader(raw).compression)
-        assertArraysIdentical(world, assertNotNull(WorldCodec.decode(raw).world))
+    // ---- What is not written ----
 
-        // A stand-in for a platform that can compress: reversing the bytes is not gzip, but it is
-        // a transform the reader has to undo through the seam, which is what is under test.
-        val flipped = WorldCodec.encode(doc, world, ReversingCompressor)
-        assertEquals("reversed", WorldCodec.decodeHeader(flipped).compression)
-        assertTrue(flipped.size < raw.size + 64, "a compressed save should not balloon")
-        assertArraysIdentical(world, assertNotNull(WorldCodec.decode(flipped, ReversingCompressor).world))
-
-        // And a platform that cannot expand what it was handed says so rather than guessing.
-        assertNull(WorldCodec.decodeOrNull(flipped, NoCompression))
+    @Test
+    fun `a document whose settings are not its world's is not written`() = runTest {
+        // What Save did after a stopped change of seed: the settings on the panel filed with the
+        // world still on screen, which reopened as a world nobody made.
+        val moved = document(synthetic).copy(config = synthetic.config.copy(seed = 6L))
+        assertFailsWith<IllegalArgumentException> { WorldCodec.encode(moved, synthetic) }
+        val resized = document(synthetic).copy(config = synthetic.config.atResolution(128, 128))
+        assertFailsWith<IllegalArgumentException> { WorldCodec.encode(resized, synthetic) }
     }
 
     @Test
-    fun `unreadable bytes are rejected without throwing`() = runTest {
-        assertNull(WorldCodec.decodeOrNull("this is not json".encodeToByteArray()))
-        assertNull(WorldCodec.decodeOrNull(ByteArray(0)))
-        assertNull(WorldCodec.decodeOrNull(byteArrayOf(67, 71, 87, 68, 3, 0, 0, 0, 99, 0, 0, 0)))
+    fun `an id with a path in it is not written`() = runTest {
+        assertFailsWith<IllegalArgumentException> {
+            WorldCodec.encode(document(synthetic).copy(id = "../escape"), synthetic)
+        }
+    }
+
+    // ---- What is refused, each with its own reason ----
+
+    @Test
+    fun `a save from an older format is refused rather than misread`() = runTest {
+        // Exactly what the build before the container wrote: JSON, no magic, no payload.
+        val olderText = """{ "id": "old", "title": "Old World", "config": { "seed": 7 }, "savedAt": 1 }"""
+        assertRefused(olderText.encodeToByteArray(), SaveProblem.WRONG_VERSION, "before format 3")
+
+        // And a container one version behind, which is the case a real older save would be.
+        val older = rawSave().also { putInt(it, WorldCodec.VERSION_OFFSET, WorldCodec.FORMAT_VERSION - 1) }
+        assertRefused(older, SaveProblem.WRONG_VERSION, "format ${WorldCodec.FORMAT_VERSION - 1}")
+        val newer = rawSave().also { putInt(it, WorldCodec.VERSION_OFFSET, WorldCodec.FORMAT_VERSION + 1) }
+        assertRefused(newer, SaveProblem.WRONG_VERSION, "a newer build")
+    }
+
+    @Test
+    fun `bytes that are not a save are refused as not a save`() = runTest {
+        assertRefused("this is not json".encodeToByteArray(), SaveProblem.NOT_A_SAVE, "")
+    }
+
+    @Test
+    fun `a section renamed in the payload is refused, not regenerated`() = runTest {
+        // Astra's case: the directory still advertises erosion.height and the payload's record is
+        // called something else. The old reader took the stage as missing and regenerated erosion
+        // and everything after it on the processor.
+        val apart = TakenApart.of(rawSave())
+        val payload = apart.payload.copyOf()
+        val nameAt = apart.recordOf("erosion.height") + 4 + "erosion.height".length - 1
+        payload[nameAt] = 'u'.code.toByte()
+        assertRefused(apart.reassemble(payload = payload), SaveProblem.DAMAGED, "is called 'erosion.heighu'")
+    }
+
+    @Test
+    fun `a directory that is not this build's layout is refused`() = runTest {
+        val apart = TakenApart.of(rawSave())
+        val renamed = apart.header.sections.map {
+            if (it.name == "erosion.height") it.copy(name = "erosion.heighu") else it
+        }
+        assertRefused(
+            apart.reassemble(header = apart.header.copy(sections = renamed)),
+            SaveProblem.DAMAGED, "'erosion.heighu'"
+        )
+        // A save that carries some stages and not others is not a save: there is no partial form.
+        val shorter = apart.header.sections.filterNot { it.name.startsWith("climate.") }
+        assertRefused(
+            apart.reassemble(header = apart.header.copy(sections = shorter)),
+            SaveProblem.DAMAGED, "sections where this build's format has"
+        )
+        assertRefused(
+            apart.reassemble(header = apart.header.copy(sections = emptyList())),
+            SaveProblem.DAMAGED, "directory is empty"
+        )
+    }
+
+    @Test
+    fun `a header without its world does not parse`() = runTest {
+        // The header-only save the old codec wrote for a null world, and opened by regenerating.
+        val apart = TakenApart.of(rawSave())
+        val headerOnly = """{"formatVersion":${WorldCodec.FORMAT_VERSION},"document":""" +
+            kotlinx.serialization.json.Json.encodeToString(WorldDocument.serializer(), apart.header.document) +
+            ""","compression":"none","writtenBy":"old"}"""
+        assertRefused(apart.reassembleText(headerOnly, ByteArray(0)), SaveProblem.DAMAGED, "header does not parse")
+    }
+
+    @Test
+    fun `a truncated save is refused as incomplete`() = runTest {
+        val bytes = rawSave()
+        assertRefused(bytes.copyOf(bytes.size / 2), SaveProblem.INCOMPLETE, "partway through")
+        assertRefused(bytes.copyOf(bytes.size - 1), SaveProblem.INCOMPLETE, "frame that closes the world")
+        assertRefused(bytes.copyOf(40), SaveProblem.INCOMPLETE, "inside its header")
+        assertRefused(ByteArray(0), SaveProblem.INCOMPLETE, "empty")
+    }
+
+    @Test
+    fun `zeros where a save should be are refused as incomplete`() = runTest {
+        // What a file a sync client has made room for and not yet filled looks like.
+        val bytes = rawSave()
+        assertRefused(ByteArray(bytes.size), SaveProblem.INCOMPLETE, "nothing but zeros")
+        val halfFilled = bytes.copyOf().also { it.fill(0, bytes.size / 2, bytes.size) }
+        assertRefused(halfFilled, SaveProblem.INCOMPLETE, "zeros where its world should continue")
+    }
+
+    @Test
+    fun `an element count that overflows is refused before anything is allocated`() = runTest {
+        // A count of 2^30 floats with a byte length of zero passed the old length check, because
+        // 2^30 * 4 wraps to zero in an Int, and then asked for a 4 GB array.
+        val apart = TakenApart.of(rawSave())
+        val payload = apart.payload.copyOf()
+        val countAt = apart.recordOf("terrain.height") + 4 + "terrain.height".length + 4
+        putInt(payload, countAt, 1 shl 30)
+        putInt(payload, countAt + 4, 0)
+        putInt(payload, countAt + 8, 0)
+        assertRefused(apart.reassemble(payload = payload), SaveProblem.DAMAGED, "holds 1073741824 elements")
+
+        // A grid, a header or a list beyond what this build holds is refused by its size alone.
+        val huge = apart.header.document.config.copy(width = 65536, height = 65536)
+        assertRefused(
+            apart.reassemble(header = apart.header.copy(document = apart.header.document.copy(config = huge))),
+            SaveProblem.TOO_LARGE, "65536 by 65536"
+        )
+        val lists = apart.header.sections.first().copy(count = Int.MAX_VALUE)
+        assertRefused(
+            apart.reassemble(header = apart.header.copy(sections = listOf(lists) + apart.header.sections.drop(1))),
+            SaveProblem.TOO_LARGE, "lists claim"
+        )
+        val longHeader = rawSave().also { putInt(it, WorldCodec.HEADER_LENGTH_OFFSET, Int.MAX_VALUE) }
+        assertRefused(longHeader, SaveProblem.TOO_LARGE, "header claims")
+    }
+
+    @Test
+    fun `an id that names nothing in the world is refused`() = runTest {
+        // A lake id one past the lakes: the old reader accepted it, and the raster threw on the
+        // first lake cell it drew.
+        val apart = TakenApart.of(rawSave())
+        val lakes = synthetic.rivers.lakes.lakes.size
+        val payload = apart.payload.copyOf()
+        putInt(payload, apart.elementsOf("rivers.lakeId") + 4 * 7, lakes)
+        assertRefused(apart.reassemble(payload = payload), SaveProblem.DAMAGED, "'rivers.lakeId' holds $lakes at cell 7")
+
+        val flow = apart.payload.copyOf()
+        putInt(flow, apart.elementsOf("rivers.flowTarget") + 4 * 9, synthetic.width * synthetic.height)
+        assertRefused(apart.reassemble(payload = flow), SaveProblem.DAMAGED, "'rivers.flowTarget' holds")
+    }
+
+    @Test
+    fun `a list that points off the grid is refused`() = runTest {
+        val apart = TakenApart.of(rawSave())
+        val cells = synthetic.width * synthetic.height
+        val listsText = apart.payload.copyOfRange(
+            apart.elementsOf(WorldSections.LISTS),
+            apart.elementsOf(WorldSections.LISTS) + apart.header.sections.first().count
+        ).decodeToString()
+        // The river's course is cells 10, 11 and 12; move its last cell past the grid, keeping
+        // the text the same length so the directory still adds up.
+        val moved = listsText.replaceFirst("\"cells\":[10,11,12]", "\"cells\":[10,11,${cells + 1}]")
+        check(moved != listsText)
+        val movedBytes = moved.encodeToByteArray()
+        val listsEntry = apart.header.sections.first()
+        val payload = ByteArray(apart.payload.size + movedBytes.size - listsEntry.count)
+        val listsStart = apart.elementsOf(WorldSections.LISTS)
+        apart.payload.copyInto(payload, 0, 0, listsStart)
+        movedBytes.copyInto(payload, listsStart)
+        apart.payload.copyInto(payload, listsStart + movedBytes.size, listsStart + listsEntry.count)
+        // The record's element count, then the low half of its int64 byte length.
+        putInt(payload, listsStart - 12, movedBytes.size)
+        putInt(payload, listsStart - 8, movedBytes.size)
+        val directory = WorldSections.directory(cells, movedBytes.size)
+        val header = apart.header.copy(sections = directory, payloadBytes = WorldSections.payloadBytes(directory))
+        assertRefused(apart.reassemble(header, payload), SaveProblem.DAMAGED, "river 0's course is cell ${cells + 1}")
+    }
+
+    @Test
+    fun `a NaN or an infinity is refused`() = runTest {
+        val apart = TakenApart.of(rawSave())
+        val payload = apart.payload.copyOf()
+        putInt(payload, apart.elementsOf("terrain.height") + 4 * 5, Float.NaN.toRawBits())
+        assertRefused(apart.reassemble(payload = payload), SaveProblem.DAMAGED, "'terrain.height' holds NaN at cell 5")
+
+        val infinite = apart.payload.copyOf()
+        putInt(infinite, apart.elementsOf("ocean.temperature"), Float.POSITIVE_INFINITY.toRawBits())
+        assertRefused(apart.reassemble(payload = infinite), SaveProblem.DAMAGED, "'ocean.temperature' holds Infinity")
+    }
+
+    @Test
+    fun `a flag that is neither 0 nor 1 is refused`() = runTest {
+        // The old reader read any byte that was not zero as true.
+        val apart = TakenApart.of(rawSave())
+        val payload = apart.payload.copyOf()
+        payload[apart.elementsOf("sea.isLand") + 3] = 2
+        assertRefused(apart.reassemble(payload = payload), SaveProblem.DAMAGED, "'sea.isLand' holds 2 at cell 3")
+    }
+
+    @Test
+    fun `an id with a path in it is refused`() = runTest {
+        // The library files a new save as <id>.cgw, so a crafted id reaches the file system.
+        val apart = TakenApart.of(rawSave())
+        val crafted = apart.header.copy(document = apart.header.document.copy(id = "../../somewhere/x"))
+        assertRefused(apart.reassemble(header = crafted), SaveProblem.DAMAGED, "its id '../../somewhere/x'")
+    }
+
+    @Test
+    fun `a flipped byte is caught by its chunk's checksum`() = runTest {
+        // Stored raw, nothing else would notice: gzip's own checksum only covers a compressed file.
+        val bytes = rawSave()
+        val headerLength = getInt(bytes, WorldCodec.HEADER_LENGTH_OFFSET)
+        val inside = WorldCodec.PREFIX_BYTES + headerLength + PayloadWriter.FRAME_HEADER_BYTES + 5_000
+        bytes[inside] = (bytes[inside] + 1).toByte()
+        assertRefused(bytes, SaveProblem.DAMAGED, "fails its checksum")
+    }
+
+    @Test
+    fun `bytes after the end of the world are refused`() = runTest {
+        assertRefused(rawSave() + byteArrayOf(1, 2, 3), SaveProblem.DAMAGED, "bytes after the end")
+    }
+
+    @Test
+    fun `a chunk that expands past its frame is refused without being held`() = runTest {
+        val squeezed = WorldCodec.encode(document(synthetic), synthetic, RunLengthCompressor)
+        val bomb = object : Compressor {
+            override val name = "runs"
+            override suspend fun compress(data: ByteArray): ByteArray? = null
+            override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray = ByteArray(limitBytes + 1)
+        }
+        assertRefused(squeezed, SaveProblem.DAMAGED, "expands to more than", bomb)
+    }
+
+    @Test
+    fun `a cancelled load leaves as a cancellation, not as no such save`() = runTest {
+        // decodeOrNull caught everything, so a load cancelled halfway read as a file that did not
+        // exist. The reason a load did not finish is the caller's to know.
+        val bytes = rawSave()
+        var served = 0
+        val cancelling = object : SaveSource {
+            override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+                if (served > 10_000) throw kotlin.coroutines.cancellation.CancellationException("the reader went away")
+                val count = minOf(length, bytes.size - served)
+                bytes.copyInto(into, offset, served, served + count)
+                served += count
+                return count
+            }
+        }
+        assertFailsWith<kotlin.coroutines.cancellation.CancellationException> { WorldCodec.open(cancelling) }
     }
 
     /**
@@ -365,38 +445,25 @@ class WorldCodecTest {
      * to the format in future is compared the day it is added instead of the day someone
      * remembers to add it here.
      */
-    private fun assertArraysIdentical(expected: WorldMap, actual: WorldMap) {
-        val before = WorldSections.of(expected)
-        val after = WorldSections.of(actual).associateBy { it.name }
-        assertEquals(before.size, after.size, "a section went missing")
-        for (section in before) {
-            val other = assertNotNull(after[section.name], "no section ${section.name}")
-            assertEquals(section.type, other.type, "${section.name} changed element type")
-            assertEquals(section.count, other.count, "${section.name} changed length")
-            when (section.type) {
-                SectionType.F32 -> {
-                    val a = section.floatsOrFail()
-                    val b = other.floatsOrFail()
-                    for (i in a.indices) {
-                        // Raw bits, not equality: identical, and carrying the sign of a negative
-                        // zero rather than quietly normalising it.
-                        assertEquals(
-                            a[i].toRawBits(), b[i].toRawBits(),
-                            "${section.name} differs at $i: ${a[i]} became ${b[i]}"
-                        )
-                    }
-                }
-                SectionType.I32 -> {
-                    val a = section.intsOrFail()
-                    val b = other.intsOrFail()
-                    for (i in a.indices) assertEquals(a[i], b[i], "${section.name} differs at $i")
-                }
-                SectionType.U8 -> {
-                    val a = section.bytesOrFail()
-                    val b = other.bytesOrFail()
-                    for (i in a.indices) assertEquals(a[i], b[i], "${section.name} differs at $i")
+    private suspend fun assertArraysIdentical(expected: WorldMap, actual: WorldMap) {
+        val sink = { world: WorldMap ->
+            WorldSections.SECTIONS.associate { spec ->
+                spec.name to when (spec) {
+                    is FloatSection -> spec.of(world).map { it.toRawBits() }
+                    is IntSection -> spec.of(world).toList()
+                    is ByteSection -> ByteArray(world.width * world.height).also {
+                        spec.of(world).copyInto(it, 0, 0, it.size)
+                    }.toList()
                 }
             }
+        }
+        val before = sink(expected)
+        val after = sink(actual)
+        for ((name, values) in before) {
+            val other = after.getValue(name)
+            assertEquals(values.size, other.size, "$name changed length")
+            val first = values.indices.firstOrNull { values[it] != other[it] }
+            assertNull(first, "$name differs at ${first}")
         }
     }
 
@@ -420,11 +487,4 @@ class WorldCodecTest {
             }
         }
     }
-}
-
-/** Not a compression scheme; a transform the reader must undo through the seam to get the bytes back. */
-private object ReversingCompressor : Compressor {
-    override val name: String get() = "reversed"
-    override suspend fun compress(data: ByteArray): ByteArray = data.reversedArray()
-    override suspend fun decompress(data: ByteArray): ByteArray = data.reversedArray()
 }

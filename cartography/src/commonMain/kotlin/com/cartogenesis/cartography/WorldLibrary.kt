@@ -5,125 +5,173 @@ import com.cartogenesis.worldgen.model.WorldMap
 /**
  * Where saved worlds live.
  *
- * Only the bytes are platform-specific — the desktop has the user's home directory, the browser
- * has IndexedDB. Everything about the *format* is shared, which is what stops the two builds
- * drifting into incompatible save files.
+ * Only the bytes are platform-specific — the desktop has a folder, the browser has IndexedDB.
+ * Everything about the *format* is shared, which is what stops the two builds drifting into
+ * incompatible save files.
  *
- * [save] takes the world as well as the document, because a save now carries the world rather than
- * the recipe for it; passing null still writes a valid save, which simply regenerates on open.
+ * Every save is found by its **key**: the name the library lists it under, which on the desktop is
+ * the file's own name. Listing, opening, saving over and deleting all use that one key, so a file
+ * whose name is not its world's id — a download from the browser, a copy the reader made, the
+ * `world (1).cgw` a sync client makes when two machines edit one world — lists, opens and saves as
+ * itself, and two files carrying the same world never write over each other.
  *
- * Every method suspends. The desktop never actually suspends on one — plain blocking file I/O,
- * the same as before — but the browser's library lives in IndexedDB, which is asynchronous
- * throughout, so the interface has to be. A JVM caller not already in a coroutine reaches for
- * `runBlocking`, the way [com.cartogenesis.worldgen.generateBlocking] does for the engine's own
- * suspend seam, rather than this spreading a second, needless suspend point into every JVM test.
+ * Every method suspends. The desktop never actually suspends on one — plain blocking file I/O —
+ * but the browser's library lives in IndexedDB, which is asynchronous throughout, so the interface
+ * has to be.
  */
 interface WorldLibrary {
     /** Headers only. A listing must never expand a payload — a 1024 save is tens of megabytes. */
     suspend fun list(): List<LibraryEntry>
 
-    suspend fun save(document: WorldDocument, world: WorldMap?)
+    /**
+     * Writes [world] under [document] to [key], or to a new key named for the document when [key]
+     * is null, and returns the key it wrote. The write replaces the file whole or leaves it as it
+     * was: a reader, or a sync client, never sees half of one.
+     */
+    suspend fun save(document: WorldDocument, world: WorldMap, key: String? = null): String
 
-    suspend fun load(id: String): WorldSave?
+    /** The world saved under [key], or the reason it will not open. */
+    suspend fun load(key: String): LoadOutcome
 
-    suspend fun delete(id: String)
+    suspend fun delete(key: String)
 }
 
 /**
- * One row of the library listing: the document, and [SaveHeader.openStatus] — computed from the
- * header alone, at listing time, since what a save costs to open depends on what *this* build's
- * sections are, not on anything fixed when the file was written.
+ * One row of the library listing: the [key] it is found by, and either the [document] its header
+ * holds or the [refusal] that says why the header could not be read. A file that will not open is
+ * listed with its reason rather than left out, so a reader can see it is there and delete it.
  */
-data class LibraryEntry(val document: WorldDocument, val status: String)
+data class LibraryEntry(val key: String, val document: WorldDocument?, val refusal: SaveRefusal? = null)
+
+/** What a library key may be. */
+object LibraryKeys {
+
+    /** A full-world save. */
+    const val EXTENSION = ".cgw"
+
+    /**
+     * Whether [key] is one name inside the library and nothing else: a `.cgw` file name with no
+     * separator, no drive or stream colon, no control character and no leading dot, so no key can
+     * reach outside the folder or name a hidden file. Spaces and brackets are allowed, because a
+     * sync client's conflict copies are named with them.
+     */
+    fun isValid(key: String): Boolean =
+        key.length in (EXTENSION.length + 1)..LONGEST_KEY &&
+            key.endsWith(EXTENSION) &&
+            !key.startsWith(".") &&
+            key.none { it == '/' || it == '\\' || it == ':' || it.code < SPACE || it.code == DELETE }
+
+    /** The key a document takes when it is first saved. */
+    fun of(document: WorldDocument): String {
+        require(WorldDocument.isValidId(document.id)) { "'${document.id}' is not a save id" }
+        return document.id + EXTENSION
+    }
+
+    /** The longest file name the file systems a library can sit on all accept. */
+    private const val LONGEST_KEY = 255
+
+    /** The first printable character: everything below it is a control code. */
+    private const val SPACE = 0x20
+
+    /** The one control code above [SPACE]. */
+    private const val DELETE = 0x7F
+}
 
 /**
- * A [WorldLibrary] over anything that can read and write named byte blobs.
+ * A [WorldLibrary] over anything that can list, read, replace and remove named blobs.
  *
- * Both platforms are just named blobs, so they share this and supply the primitives. A platform
- * that can read part of a blob should override [readPrefix]: the header sits at the front, so a
- * listing need never touch the arrays behind it. The browser cannot slice a stored value without
- * reading all of it back from IndexedDB either, so its implementation keeps the header in a
- * second, small record instead — see the web module's `IndexedDbLibrary`.
- *
- * A save written under an older format is not opened — see [WorldCodec] for why an older header
- * cannot be trusted — so it never appears in the listing. Saving under the same id overwrites it
- * and removes any older file beside it, so the stale one does not linger.
+ * Both platforms are just named blobs, so they share this and supply the primitives. The header
+ * sits at the front of a save, so a listing reads only [readPrefix]; a save is read through
+ * [reading] a chunk at a time and written through [replacing], which makes the new blob visible
+ * only once it is whole.
  */
 abstract class ByteWorldLibrary(
     private val compressor: Compressor = NoCompression,
     private val writtenBy: String = "unknown"
 ) : WorldLibrary {
 
+    /** Every key in the library, whatever state its file is in. */
     protected abstract suspend fun names(): List<String>
 
-    protected abstract suspend fun read(name: String): ByteArray?
+    /**
+     * Runs [block] over the blob [name], a piece at a time, and returns what it returned; null if
+     * there is no such blob. A failure of the storage itself throws [WorldFormatException] with
+     * [SaveProblem.UNREADABLE].
+     */
+    protected abstract suspend fun <T> reading(name: String, block: suspend (SaveSource) -> T): T?
 
-    protected abstract suspend fun write(name: String, bytes: ByteArray)
+    /**
+     * Up to the first [limitBytes] bytes of the blob [name], or null if there is none. Throws
+     * [WorldFormatException] with [SaveProblem.UNREADABLE] when the storage cannot read it.
+     */
+    protected abstract suspend fun readPrefix(name: String, limitBytes: Int): ByteArray?
+
+    /**
+     * Runs [contents] into a sink and makes what it wrote the blob [name], whole, only once it has
+     * returned: if it throws, or is cancelled, [name] is as it was before.
+     */
+    protected abstract suspend fun replacing(name: String, contents: suspend (SaveSink) -> Unit)
 
     protected abstract suspend fun remove(name: String)
 
-    /**
-     * The first [limitBytes] bytes, or the whole blob if this platform cannot read part of one.
-     *
-     * Returning everything is correct but slow to list a library of large worlds, which is the
-     * one thing a listing must not be.
-     */
-    protected open suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? = read(name)
-
-    private fun fileName(id: String) = "$id$EXTENSION"
-
-    private fun legacyFileName(id: String) = "$id$LEGACY_EXTENSION"
-
-    override suspend fun list(): List<LibraryEntry> =
-        names().mapNotNull { name -> header(name)?.let { LibraryEntry(it.document, it.openStatus) } }
-            .sortedByDescending { it.document.savedAt }
-
-    override suspend fun save(document: WorldDocument, world: WorldMap?) {
-        write(fileName(document.id), WorldCodec.encode(document, world, compressor, writtenBy))
-        // A world first saved by a much older build left a JSON file behind under the same id.
-        // Nothing reads one any more, so it is cleared rather than left to sit in the directory.
-        remove(legacyFileName(document.id))
+    override suspend fun list(): List<LibraryEntry> {
+        val entries = names().filter { LibraryKeys.isValid(it) }.map { entry(it) }
+        val readable = entries.filter { it.document != null }.sortedByDescending { it.document!!.savedAt }
+        val refused = entries.filter { it.document == null }.sortedBy { it.key }
+        return readable + refused
     }
 
-    override suspend fun load(id: String): WorldSave? =
-        read(fileName(id))?.let { WorldCodec.decodeOrNull(it, compressor) }
-
-    override suspend fun delete(id: String) {
-        remove(fileName(id))
-        remove(legacyFileName(id))
+    override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String {
+        val name = key ?: LibraryKeys.of(document)
+        requireKey(name)
+        replacing(name) { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
+        return name
     }
 
+    override suspend fun load(key: String): LoadOutcome {
+        requireKey(key)
+        return try {
+            reading(key) { source -> WorldCodec.open(source, compressor) }
+                ?: LoadOutcome.Refused(SaveRefusal(SaveProblem.UNREADABLE, "it is no longer in the library"))
+        } catch (refused: WorldFormatException) {
+            LoadOutcome.Refused(SaveRefusal(refused.problem, refused.detail))
+        }
+    }
+
+    override suspend fun delete(key: String) {
+        requireKey(key)
+        remove(key)
+    }
+
+    private fun requireKey(key: String) = require(LibraryKeys.isValid(key)) { "'$key' is not a library key" }
+
     /**
-     * Reads a blob's header without its payload.
+     * One row of the listing, from the header alone.
      *
      * The header's length is in the prefix, so this asks for a probe first and only asks again
-     * when the header turned out to be longer than the probe — two reads at worst, neither of
-     * them the arrays.
+     * when the header turned out to be longer than the probe — two reads at worst, neither of them
+     * the arrays.
      */
-    private suspend fun header(name: String): SaveHeader? {
-        val probe = readPrefix(name, HEADER_PROBE_BYTES) ?: return null
-        // Anything that is not a container is a file from before this format, which does not open.
-        if (!WorldCodec.isContainer(probe)) return null
-
-        val declared = ByteReader(probe, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
-        val needed = WorldCodec.PREFIX_BYTES + declared
-        val bytes = if (probe.size >= needed) probe else readPrefix(name, needed) ?: return null
-        return WorldCodec.decodeHeaderOrNull(bytes)
+    private suspend fun entry(name: String): LibraryEntry = try {
+        val probe = readPrefix(name, HEADER_PROBE_BYTES)
+            ?: throw WorldFormatException(SaveProblem.UNREADABLE, "it is no longer in the library")
+        val declared = if (WorldCodec.isContainer(probe)) getInt(probe, WorldCodec.HEADER_LENGTH_OFFSET) else 0
+        val needed = WorldCodec.PREFIX_BYTES.toLong() + declared
+        val bytes = if (declared <= 0 || probe.size >= needed || needed > WorldCodec.PREFIX_BYTES + WorldCodec.LARGEST_HEADER_BYTES) {
+            probe
+        } else {
+            readPrefix(name, needed.toInt()) ?: probe
+        }
+        LibraryEntry(name, WorldCodec.decodeHeader(bytes).document)
+    } catch (refused: WorldFormatException) {
+        LibraryEntry(name, null, SaveRefusal(refused.problem, refused.detail))
     }
 
     companion object {
-        /** A full-world save. */
-        const val EXTENSION = ".cgw"
-
         /**
-         * A save from before the container format: JSON text, seed and settings only. Nothing
-         * reads or writes one; the name survives only so a stale file can be cleared away.
-         */
-        const val LEGACY_EXTENSION = ".json"
-
-        /**
-         * Enough for a header on any world worth saving — the lists in it are realms, rivers and
-         * landmarks, not cells — and small enough that reading it costs nothing.
+         * Enough for a header on any world worth saving — it is the settings, the reader's edits and
+         * a directory of forty-two entries, not the lists — and small enough that reading it costs
+         * nothing.
          */
         const val HEADER_PROBE_BYTES = 1 shl 20
     }

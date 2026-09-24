@@ -24,5 +24,6 @@ internal expect fun platformGzipAvailable(): Boolean
 internal object PlatformGzipCompressor : Compressor {
     override val name: String get() = "gzip"
     override suspend fun compress(data: ByteArray): ByteArray? = platformGzipCompress(data)
-    override suspend fun decompress(data: ByteArray): ByteArray? = platformGzipDecompress(data)
+    override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? =
+        platformGzipDecompress(data)?.let { if (it.size > limitBytes) it.copyOf(limitBytes + 1) else it }
 }

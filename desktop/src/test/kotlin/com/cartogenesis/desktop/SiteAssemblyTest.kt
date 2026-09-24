@@ -33,19 +33,29 @@ class SiteAssemblyTest {
         const val AA = 4.5
 
         /**
-         * How far a decoded pixel of a hairline may sit from the divider's colour, per channel. The
-         * figures are lossy WebP, which moves a two-pixel line of one colour by a few levels at
-         * most and a map's own pixels, which cross the line nowhere, by nothing like that.
+         * How far a decoded pixel of a hairline may sit from the divider's brightness, in levels
+         * of Rec. 601 luma.
+         *
+         * Brightness and not colour, because the figures are lossy WebP, which keeps brightness at
+         * every pixel and colour at every second one: a two-pixel line of the divider's brass
+         * between two dark bands decodes as #7C7153, 45 levels bluer than it was drawn, with its
+         * brightness within one level. Measured on the assembled strips, both ways round: within 8
+         * levels every divider line keeps 0.92 of its length or more, and no other line more than
+         * 0.29. A calibration on the figures as built, not a figure of the codec's.
          */
-        const val DIVIDER_TOLERANCE = 24
+        const val DIVIDER_LUMA_TOLERANCE = 8.0
 
-        /** The share of a line's pixels that must be the divider's colour for it to be a hairline. */
-        const val DIVIDER_SHARE = 0.9
+        /**
+         * The share of a line's pixels within [DIVIDER_LUMA_TOLERANCE] of the divider's brightness
+         * for the line to be part of a hairline: most of it, which sits between the 0.92 the
+         * dividers keep and the 0.29 no line of a map or a band reaches.
+         */
+        const val DIVIDER_SHARE = 0.5
 
         /**
          * The fewest colours, at five bits a channel, the map in a panel can hold: a panel of one
-         * flat colour decodes to a handful after lossy compression, and a window of a generated
-         * map to hundreds.
+         * flat colour decodes to one after lossy compression, and the strips' panels as built to
+         * between six hundred and three and a half thousand.
          */
         const val LEAST_COLOURS_IN_A_MAP = 32
     }
@@ -69,17 +79,21 @@ class SiteAssemblyTest {
         }
     }
 
+    /** Rec. 601 luma, the brightness lossy WebP stores at every pixel. */
+    private fun luma(argb: Int): Double =
+        0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)
+
     /**
      * The hairlines across a strip: runs of whole lines — columns for panels laid across, rows for
-     * panels laid down — whose pixels are [SiteImagery.DIVIDER_COLOUR], each run one hairline.
+     * panels laid down — most of whose pixels are as bright as [SiteImagery.DIVIDER_COLOUR], each
+     * run one hairline.
      */
     private fun dividerRules(pixels: IntArray, width: Int, height: Int, layout: SiteImagery.Layout): List<IntRange> {
         val across = layout == SiteImagery.Layout.ACROSS
         val lines = if (across) width else height
         val length = if (across) height else width
-        fun near(argb: Int): Boolean = (0..16 step 8).all { shift ->
-            kotlin.math.abs(((argb shr shift) and 0xFF) - ((SiteImagery.DIVIDER_COLOUR shr shift) and 0xFF)) <= DIVIDER_TOLERANCE
-        }
+        val dividerLuma = luma(SiteImagery.DIVIDER_COLOUR)
+        fun near(argb: Int): Boolean = kotlin.math.abs(luma(argb) - dividerLuma) <= DIVIDER_LUMA_TOLERANCE
         val isRule = BooleanArray(lines) { line ->
             val matching = (0 until length).count { along ->
                 near(if (across) pixels[along * width + line] else pixels[line * width + along])

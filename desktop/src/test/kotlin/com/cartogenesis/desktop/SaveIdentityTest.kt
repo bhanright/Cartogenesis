@@ -35,8 +35,9 @@ import kotlin.test.assertNull
  * Two of Audit III's findings are about exactly this and neither shows without a window. G-D2:
  * Save read the panel's settings, so during a generation or after a stopped one it filed the world
  * on screen under settings it was not made with. G-D4: Save after Random world wrote the new world
- * over the previous one's file. Both were shown failing on the code before the fix — the first
- * recorded a 1024 document with a 512 world, the second the same id twice.
+ * over the previous one's file. Each was shown failing with its defect put back: filing the panel's
+ * settings recorded a 1024 document with a 512 world, and keeping the document across a change of
+ * seed recorded the same id twice.
  */
 class SaveIdentityTest {
 

@@ -247,7 +247,7 @@ object WorldCodec {
      * its compressed copy and the compressor's own buffers — so a mebibyte keeps that under 1% of
      * even a 512 world's 38 MB of arrays. Smaller costs more than it saves: each chunk is a frame's
      * sixteen bytes and a gzip header and trailer of eighteen, and in a browser a promise round trip
-     * through `CompressionStream`, which at 2048 is already 584 of them.
+     * through `CompressionStream`, which at 2048 is already 586 of them.
      */
     const val CHUNK_BYTES = 1 shl 20
 
@@ -265,17 +265,21 @@ object WorldCodec {
      *
      * The header is the document and the directory. The directory is forty-two entries whatever
      * the grid, and the document is the settings, the title and the reader's own edits and labels:
-     * CONSTANT_MEASUREMENT_HEADER. What could make one long is a reader's edits, so the bound
-     * leaves room for a hundred thousand of them and is still a size a browser tab can hold twice.
+     * 10.4 to 10.6 KB on every world measured at 512, 1024 and 2048 and a synthetic 4096, none of
+     * them edited. What could make one long is a reader's edits and labels, so the bound leaves
+     * room for a hundred thousand of them and is still a size a browser tab can hold twice over.
      */
     const val LARGEST_HEADER_BYTES = 16 shl 20
 
     /**
-     * The longest the lists' JSON may be, in bytes: 256 mebibytes.
+     * The longest the lists' JSON may be, in bytes: 64 mebibytes.
      *
-     * CONSTANT_MEASUREMENT_LISTS
+     * Rivers are most of it, each a list of cells, so it grows about twofold with each doubling of
+     * the grid: 0.26 to 0.39 MB over twelve seeds at 512, 0.73 and 0.77 MB over two at 1024, and
+     * 1.8 MB for seed 42 at 2048, which puts a 4096 world near 4 MB. Sixteen times that is room for
+     * a world with far more rivers than any measured, and still a string a browser tab can parse.
      */
-    const val LARGEST_LISTS_BYTES = 256 shl 20
+    const val LARGEST_LISTS_BYTES = 64 shl 20
 
     private val json = Json {
         ignoreUnknownKeys = true

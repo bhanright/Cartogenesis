@@ -1,6 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.LoadOutcome
+import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
@@ -21,8 +22,14 @@ import com.cartogenesis.worldgen.pipeline.PlateType
 import com.cartogenesis.worldgen.pipeline.RiverResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.TerrainResult
+import com.sun.management.GarbageCollectionNotificationInfo
 import java.io.File
+import java.lang.management.ManagementFactory
+import java.lang.management.MemoryType
 import java.nio.file.Files
+import javax.management.NotificationEmitter
+import javax.management.NotificationListener
+import javax.management.openmbean.CompositeData
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
@@ -66,22 +73,33 @@ class SaveResolutionAuditTest {
             val size = "${world.width}x${world.height}"
 
             val beforeSave = settledHeap()
-            val (saveMillis, savePeak) = sampled { runBlocking { store.save(document, world) } }
+            val saving = sampled { runBlocking { store.save(document, world) } }
             val file = File(folder, "large.cgw")
+            val front = file.inputStream().use { it.readNBytes(HEADER_READ_BYTES) }
+            val header = WorldCodec.decodeHeader(front)
+            val headerLength = java.nio.ByteBuffer.wrap(front, WorldCodec.HEADER_LENGTH_OFFSET, Int.SIZE_BYTES)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN).int
             println(
-                "SAVE $size: ${file.length() / MEBIBYTE} MB on disk in ${saveMillis / 1000.0} s; heap above the " +
-                    "world ${(savePeak - beforeSave) / MEBIBYTE} MB at the sampled peak, " +
-                    "${(settledHeap() - beforeSave) / MEBIBYTE} MB once settled"
+                "SAVE $size: header $headerLength bytes, lists ${header.sections.first().count} bytes, " +
+                    "payload ${header.payloadBytes} bytes expanded"
+            )
+            println(
+                "SAVE $size: ${file.length() / MEBIBYTE} MB on disk in ${saving.millis / 1000.0} s; heap above the " +
+                    "world ${(saving.livePeak - beforeSave) / MEBIBYTE} MB at most after any of " +
+                    "${saving.collections} collections, ${(saving.sampledPeak - beforeSave) / MEBIBYTE} MB at the " +
+                    "sampled peak counting garbage, ${(settledHeap() - beforeSave) / MEBIBYTE} MB once settled"
             )
 
             val beforeOpen = settledHeap()
             var opened: LoadOutcome? = null
-            val (openMillis, openPeak) = sampled { opened = runBlocking { store.load("large.cgw") } }
+            val opening = sampled { opened = runBlocking { store.load("large.cgw") } }
             val loaded = assertIs<LoadOutcome.Loaded>(opened, "the $size save did not open").save.world
             val retained = settledHeap() - beforeOpen
             println(
-                "OPEN $size: ${openMillis / 1000.0} s; heap above the first world ${(openPeak - beforeOpen) / MEBIBYTE} MB " +
-                    "at the sampled peak, ${retained / MEBIBYTE} MB once settled (the opened world itself)"
+                "OPEN $size: ${opening.millis / 1000.0} s; heap above the first world " +
+                    "${(opening.livePeak - beforeOpen) / MEBIBYTE} MB at most after any of ${opening.collections} " +
+                    "collections, ${(opening.sampledPeak - beforeOpen) / MEBIBYTE} MB at the sampled peak counting " +
+                    "garbage, ${retained / MEBIBYTE} MB once settled (the opened world itself)"
             )
 
             assertTrue(loaded.terrain.height.data.contentEquals(world.terrain.height.data), "the heights did not come back")
@@ -101,16 +119,32 @@ class SaveResolutionAuditTest {
     }
 
     /**
-     * How long [work] took, and the most heap in use at any sample taken while it ran — an upper
-     * bound on what it held, since garbage not yet collected is counted too.
+     * What [work] cost: how long it took; the most heap in use after any collection while it ran,
+     * which is as near its live peak as a JVM will say; how many collections that was taken over;
+     * and the most heap in use at any sample, garbage and all, which is an upper bound.
      */
-    private fun sampled(work: () -> Unit): Pair<Long, Long> {
-        val peak = AtomicLong(0L)
+    private class Cost(val millis: Long, val livePeak: Long, val collections: Int, val sampledPeak: Long)
+
+    private fun sampled(work: () -> Unit): Cost {
+        val sampledPeak = AtomicLong(0L)
+        val livePeak = AtomicLong(0L)
+        val collections = AtomicLong(0L)
+        val heapPools = ManagementFactory.getMemoryPoolMXBeans().filter { it.type == MemoryType.HEAP }.map { it.name }.toSet()
+        val listener = NotificationListener { notification, _ ->
+            if (notification.type == GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION) {
+                val info = GarbageCollectionNotificationInfo.from(notification.userData as CompositeData)
+                val after = info.gcInfo.memoryUsageAfterGc.filterKeys { it in heapPools }.values.sumOf { it.used }
+                livePeak.accumulateAndGet(after, ::maxOf)
+                collections.incrementAndGet()
+            }
+        }
+        val emitters = ManagementFactory.getGarbageCollectorMXBeans().map { it as NotificationEmitter }
+        emitters.forEach { it.addNotificationListener(listener, null, null) }
         val running = AtomicBoolean(true)
         val runtime = Runtime.getRuntime()
         val sampler = Thread {
             while (running.get()) {
-                peak.accumulateAndGet(runtime.totalMemory() - runtime.freeMemory(), ::maxOf)
+                sampledPeak.accumulateAndGet(runtime.totalMemory() - runtime.freeMemory(), ::maxOf)
                 Thread.sleep(SAMPLE_MILLIS)
             }
         }.apply { isDaemon = true; start() }
@@ -120,8 +154,9 @@ class SaveResolutionAuditTest {
         } finally {
             running.set(false)
             sampler.join()
+            emitters.forEach { it.removeNotificationListener(listener) }
         }
-        return (System.currentTimeMillis() - started) to peak.get()
+        return Cost(System.currentTimeMillis() - started, livePeak.get(), collections.get().toInt(), sampledPeak.get())
     }
 
     /**
@@ -176,6 +211,9 @@ class SaveResolutionAuditTest {
 
     private companion object {
         const val MEBIBYTE = 1L shl 20
+
+        /** Enough of the front of a save to hold its header, which is ten kilobytes or so. */
+        const val HEADER_READ_BYTES = 1 shl 20
         const val SAMPLE_MILLIS = 2L
         const val SETTLING_COLLECTIONS = 3
 

@@ -45,6 +45,12 @@ internal object GeometryFindings {
     /** A river course follows a circular arc to within a quarter of a cell. */
     const val RIVER_ARC = "a river course follows a circular arc"
 
+    /** A river course jogs through two square corners a few cells apart (1234 and 59758 at 2048). */
+    const val RIVER_SQUARE_CORNERS = "a river course jogs through square corners"
+
+    /** A coast turns a square notch a few cells across (1234 and 718106 at 2048). */
+    const val COAST_SQUARE_NOTCH = "a coast turns a square notch"
+
     /** A coast runs ruler-straight for 388 km at 4 degrees (59758 at 2048, in the far south). */
     const val COAST_STRAIGHT = "a coast runs ruler-straight"
 
@@ -66,6 +72,12 @@ internal object GeometryFindings {
     /** The land's level lines follow a circular arc. */
     const val TERRAIN_ARC = "a terrain contour follows a circular arc"
 
+    /**
+     * A level line of the land or of the temperature turns a square corner, where the ice's edge
+     * does and a lake lies against it (59758 at 2048).
+     */
+    const val LEVEL_LINE_CORNER_AT_THE_ICE = "a level line turns a square corner at the ice's edge"
+
     /** A biome edge turns a square corner on the grid's axes, and the peoples' border there with it. */
     const val BIOME_EDGE_CORNER = "a biome edge turns a square corner"
 
@@ -78,10 +90,17 @@ internal object GeometryFindings {
     /** A realm border turns square corners on the grid's axes. */
     const val REALM_BORDER_CORNERS = "a realm border turns square corners"
 
+    /** A realm border follows a circular arc (99 at 2048, on the continents Fix 2 drew). */
+    const val REALM_BORDER_ARC = "a realm border follows a circular arc"
+
     /** Realm borders run ruler-straight for 380 to 500 km at 2048. */
     const val REALM_BORDERS_STRAIGHT = "realm borders run ruler-straight"
 
-    /** Plate boundaries run ruler-straight for 470 to 600 km at 2048, on every world. */
+    /**
+     * Plate boundaries run ruler-straight: 470 to 600 km at 2048 on every world while the partition
+     * was square in cells; since it is Euclidean on the ground (Fix 2), 370 to 460 km on four worlds
+     * of seven, and on five a run of 64 to 87 steps along a grid bearing.
+     */
     const val PLATE_BOUNDARIES_STRAIGHT = "plate boundaries run ruler-straight"
 
     /** A plate boundary bends in a circular arc to within a quarter of a cell. */

@@ -115,7 +115,10 @@
   pooled, where the same measure read 1.88 to 2.00 before (`GroundIsotropyTest`). What is left is
   the incision's cap per step, Audit III's B-D1, which cuts a channel running north-south half as
   far a round; the test records it as a known failure and the erosion's units are the next chunk's.
-  The 2,000 m contour and the grids at 1024 and 2048 were not re-measured.
+  Over the seven worlds `CoastalSpacingAuditTest` prints, the coastline reads 1.41, 1.48 and 1.53 at
+  512, 1024 and 2048 where it read 1.93, 1.99 and 2.06, and the 2,000 m contour 1.46, 1.47 and 1.48
+  where it read 1.99, 2.00 and 2.04. The coast's figure still rises with the grid; why is not
+  measured.
 - **The map draws a world twice as wide as it is tall on a square sheet, so land that is round on
   the ground reads twice as tall as it is wide.** Since the operators measure the ground (Fix 2), a
   continent, a lake or a range is as wide on the ground whichever way it runs, and the default grid
@@ -134,13 +137,15 @@
   which spends `debrisTravelKm` as sweeps of one cell, a row down a column
   (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
   entry below). 2026-09-24, Fix 2.
-- **Fix 2 redrew every continent, and eighteen clauses its new worlds tipped run as known failures,
+- **Fix 2 redrew every continent, and twenty clauses its new worlds tipped run as known failures,
   each named for where it is next taken up.** The plate partition moved from a chamfer on square
   cells to Euclid on the ground, so every seed's continents are new, and a clause that reads one
   sample of them moved with them. Each runs under `KnownFailures` with the figure that tipped it:
   - *the plates*: seed 42's old belts stand within 52 cell widths of a present boundary
-    (`TectonicHistoryTest`), and seed 42's foreland falls to the edge of the collision's own
-    ground with no rise beyond (`IsostasyTest`);
+    (`TectonicHistoryTest`); seed 42's foreland falls to the edge of the collision's own
+    ground with no rise beyond (`IsostasyTest`); and the author's world at 2048 holds 2 rift lakes,
+    the deepest 454 m, under Malawi's 706, where it held 4 and the deepest 1,025 m
+    (`RiftDepthAuditTest`, the audit tier);
   - *the ice* (chunk 5): the bed under seed 7's cap sinks a metre past Airy's share of its column
     (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
     (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
@@ -155,7 +160,9 @@
   - *the climate*: the pooled recycling ratio, 0.292 against Earth's 0.30 (`MoistureBudgetTest`,
     both clauses); seed 1's cold-current coast, 0.66% wetter with the coupling on
     (`CurrentFeedsRainTest`); the tropics' pooled desert share, x0.69 against a bar of x0.54
-    (`GeographyAuditTest`);
+    (`GeographyAuditTest`); the warm-current west coasts at 50-60 degrees forested on one seed of
+    three, 64.0%, 12.7% and 34.3% where they were 56.9%, 41.1% and 62.1% (`ColdCapReportTest`, the
+    audit tier);
   - *the coast*: seed 298405's coast, 1.092 by ruler on the ground (`LittoralCoastTest`);
   - *the distance*: seed 42's shelf, drawn off the plain jump flood, off Euclid by 0.0016 of a cell
     width on nine cells, under A-I11 (`JumpFloodDistanceTest`).

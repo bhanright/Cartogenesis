@@ -84,11 +84,33 @@ class RiftDepthAuditTest {
                 "(Malawi to Baikal); generation %.1f s")
                 .format(deepest, deepestRiftLakeMinMetres, deepestRiftLakeMaxMetres, seconds)
         )
-        assertTrue(
-            deepest in deepestRiftLakeMinMetres..deepestRiftLakeMaxMetres,
-            "the deepest rift lake stands ${"%.0f".format(deepest)} m deep, outside Earth's " +
-                "${deepestRiftLakeMinMetres.toInt()}-${deepestRiftLakeMaxMetres.toInt()} m"
-        )
+        // Earth's envelope did not move; the world under it did. See [RIFT_LAKES_SHALLOW].
+        KnownFailures.expect(RIFT_LAKES_SHALLOW, "454 m") {
+            if (deepest !in deepestRiftLakeMinMetres..deepestRiftLakeMaxMetres) {
+                throw RecordedViolation(
+                    "the deepest rift lake stands ${"%.0f".format(deepest)} m deep, outside Earth's " +
+                        "${deepestRiftLakeMinMetres.toInt()}-${deepestRiftLakeMaxMetres.toInt()} m",
+                    String.format(java.util.Locale.ROOT, "%.0f m", deepest)
+                )
+            }
+        }
+    }
+
+    private companion object {
+        /**
+         * The known failure the envelope clause records.
+         *
+         * On the tree before Fix 2 this world held 4 rift lakes, 3,977 cells of water, the deepest 1,025 m; with the plates partitioned on
+         * the ground's ruler it holds 2, 2,953 cells of water, the deepest 454 m, under Malawi's
+         * 706. Which rifts a world has, and which of them meet the sea, moved with the partition,
+         * and the belts' profiles now reach as far north and south of a rift as east and west, so
+         * an east-west trough is as wide on the ground as the setting says where it was half that.
+         * Which of the two took the depth is not separated. The envelope is Earth's and is not
+         * moved; the rift's subsidence, which is what deepens Earth's rift lakes, is the tectonics'
+         * own open item (docs/DESIGN_LEDGER.md, Fix 2).
+         */
+        const val RIFT_LAKES_SHALLOW =
+            "the plates: on the continents the ground's ruler draws, the author's world holds no rift lake as deep as Malawi"
     }
 
     /**

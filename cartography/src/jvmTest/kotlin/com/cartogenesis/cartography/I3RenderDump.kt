@@ -172,7 +172,10 @@ class I3RenderDump {
      * renderer multiplies a tint by, black at nothing and white at twice ordinary ground.
      */
     private fun lightOf(world: WorldMap): BufferedImage {
-        val light = ReliefShading.of(world.relativeElevation, world.sea.isLand, singleLamp = false)
+        val light = ReliefShading.of(
+            world.relativeElevation, world.sea.isLand, singleLamp = false,
+            cellHeightInCellWidths = world.config.cellHeightInCellWidths
+        )
         val image = BufferedImage(world.width, world.height, BufferedImage.TYPE_INT_RGB)
         for (cell in light.indices) {
             val tone = (255f * (light[cell] / (2f * ReliefShading.ordinaryGround)))

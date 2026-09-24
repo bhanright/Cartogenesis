@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.ThermalLimits
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.Serializable
@@ -91,7 +92,7 @@ class StoredTerrain(private val snapshot: TerrainSnapshot) : ErosionAccelerator 
         width: Int,
         height: Int,
         heights: FloatArray,
-        maxOrthogonalDrop: Float,
+        limits: ThermalLimits,
         passes: Int,
         rate: Float
     ): FloatArray? =

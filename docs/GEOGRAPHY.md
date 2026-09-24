@@ -229,8 +229,10 @@ alternating polarity, so a drowned one is a string of gulfs and lakes rather tha
 "Three kinds of collision" below.
 
 **The crust floats, so the world has two levels and the sea has a floor.** Every cell carries a
-mixture of continental and oceanic crust, blurred across a 300 km margin so the band between the
-two is a shelf, a slope and a rise rather than a step, and Airy isostasy turns the mixture into an
+mixture of continental and oceanic crust, blurred across a 300 km margin — the width over which
+the mixture runs from nine tenths continental to a tenth, the same on the ground whichever way the
+margin faces — so the band between the two is a shelf, a slope and a rise rather than a step, and
+Airy isostasy turns the mixture into an
 altitude: a standard continental column floats at Earth's mean land elevation of 840 m and the sea
 floor at the depth its own age puts it. Everything follows from those two numbers. The
 hypsometric curve has two modes with a trough between them where the continental slope is, which
@@ -338,8 +340,10 @@ boundaries migrate with the season, so a coast can sit in one belt in summer and
 so deserts are pulled strongly equatorward of average land, toward the 30° band.
 
 **An interior swings more than a coast.** How much of the sea's year a cell takes falls away from
-the coast with an e-folding of 350 km, measured on a jump-flooded Euclidean distance transform from
-every sea and lake cell, so a shore and an interior at the same latitude do not swing alike. Since
+the coast with an e-folding of 350 km, measured on the ground to the nearest sea by a jump-flooded
+Euclidean distance transform, so a shore and an interior at the same latitude do not swing alike,
+and a coast facing north reaches as far inland as one facing east. Lakes are not in it: the
+climate is solved before the rivers decide which hollows hold water. Since
 W1 there is no setting for it: the gap is the difference between the band's two air columns — one
 with a fifty-metre mixed layer under it and one with three metres of soil — and the world's own
 coastline deciding how much of each a place gets. See "Temperature is solved, not drawn".

@@ -1,6 +1,7 @@
 package com.cartogenesis.web
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.ThermalLimits
 
 /**
  * Runs the erosion sweeps on the browser's graphics device.
@@ -27,7 +28,7 @@ class WebGpuErosion private constructor(
         width: Int,
         height: Int,
         heights: FloatArray,
-        maxOrthogonalDrop: Float,
+        limits: ThermalLimits,
         passes: Int,
         rate: Float
     ): FloatArray? {
@@ -38,7 +39,10 @@ class WebGpuErosion private constructor(
         for (i in heights.indices) setFloat(input, i, heights[i])
 
         val result = awaitPromise(
-            runErosion(device, width, height, input, maxOrthogonalDrop, passes, rate)
+            runErosion(
+                device, width, height, input, limits.eastWest, limits.northSouth, limits.diagonal,
+                passes, rate
+            )
         )
         if (result == null || isNullish(result)) return null
 

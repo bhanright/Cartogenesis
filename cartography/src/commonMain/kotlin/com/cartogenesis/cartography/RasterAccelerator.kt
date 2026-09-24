@@ -245,10 +245,18 @@ class RasterRecipe(
      */
     val slopeScale: Float,
     /**
-     * How far the openness stencil's shortest step reaches, in cells. Scales with resolution too,
-     * and for the opposite reason: it measures the country rather than the sheet.
+     * Where the sky's horizon is sampled round a cell, on the ground: the offsets and distances
+     * `ReliefShading` itself reads, worked out once so the shader samples the same cells. Its
+     * reach scales with resolution too, and for the opposite reason: it measures the country
+     * rather than the sheet.
      */
-    val opennessStep: Int,
+    val reliefHorizon: ReliefHorizon,
+    /**
+     * How tall a row is as a fraction of how wide a column is: what turns a difference down a
+     * column into a slope on the ground, for the relief, the hachures and the plain under the
+     * isobaths alike. See `ReliefShading`, drawn for the ground.
+     */
+    val cellHeightInCellWidths: Float,
     /**
      * The median illumination over ordinary country, which every lit cell is divided by.
      *
@@ -285,6 +293,14 @@ class RasterRecipe(
          * [ordinaryGround] exists to break.
          */
         val ORDINARY_GROUND: Float get() = ReliefShading.ordinaryGround
+
+        /**
+         * The relief's horizon for a grid [cellsAcross] wide whose rows are [cellHeightInCellWidths]
+         * as tall as its columns are wide, for a caller that builds a recipe by hand, on the terms
+         * [ORDINARY_GROUND] is offered.
+         */
+        fun reliefHorizon(cellsAcross: Int, cellHeightInCellWidths: Double): ReliefHorizon =
+            ReliefHorizon.of(ReliefShading.opennessStep(cellsAcross), cellHeightInCellWidths)
 
         /**
          * Describes what [MapRasterizer.rasterize] would draw, or null if this world and these
@@ -487,7 +503,10 @@ class RasterRecipe(
                 hillshade = options.showHillshade && view != MapView.NORMALS,
                 singleLamp = options.singleLamp,
                 slopeScale = ReliefShading.slopeScale(cellsAcross),
-                opennessStep = ReliefShading.opennessStep(cellsAcross),
+                reliefHorizon = ReliefHorizon.of(
+                    ReliefShading.opennessStep(cellsAcross), world.config.cellHeightInCellWidths
+                ),
+                cellHeightInCellWidths = world.config.cellHeightInCellWidths.toFloat(),
                 ordinaryGround = ReliefShading.ordinaryGround,
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,

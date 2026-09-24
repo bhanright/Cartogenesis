@@ -10,6 +10,7 @@ import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.sqrt
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -1013,10 +1014,11 @@ object ClimateStage {
     }
 
     /**
-     * Distance in cells from every cell to the nearest sea cell — zero over water — by the same
-     * jump-flooded Euclidean distance field `SeaLevelStage` uses for the continental shelf: a
-     * handful of passes, and a true straight-line distance rather than the best an eight-direction
-     * walk can do.
+     * Distance on the ground, in cell widths, from every land cell to the water of the nearest sea
+     * cell — zero over water — off the same jump-flooded Euclidean distance field `SeaLevelStage`
+     * uses for the continental shelf, told how tall a row is so that a coast facing north reaches
+     * as far inland as one facing east. The land mask at this stage counts lakes as land, since
+     * lakes are decided later by the rivers, so the water is the sea's.
      *
      * [marineAirFraction] reads this rather than the blurred water exposure above, because "how
      * exposed to water" and "how close to water" are not the same question at this radius: two
@@ -1025,12 +1027,13 @@ object ClimateStage {
      * distance says a shoreline cell is half a cell from water and one at 350 km is exactly that,
      * which is what a decay length measured in kilometres needs.
      *
-     * Half a cell, and the correction matters. The jump flood measures centre to centre, so a cell
-     * whose own edge is the shoreline comes back a whole cell from the sea — 78 km on the 512-wide
-     * grid and 39 on the 1024 — which made the same coast four fifths maritime at one resolution
-     * and nine tenths at the other, and put a fifth of a continental interior's winter onto every
-     * shoreline in the world at the coarse one. The water starts halfway between the two centres,
-     * so half a cell comes off every distance and a shoreline reads as a shoreline.
+     * To the water's edge, not to its centre, and the correction matters. The jump flood measures
+     * centre to centre, so a cell whose own edge is the shoreline would come back a whole cell from
+     * the sea — 78 km on the 512-wide grid and 39 on the 1024 — which made the same coast four
+     * fifths maritime at one resolution and nine tenths at the other. The water starts at the near
+     * side of the nearest sea cell, which is half a column away across a row and half a row away
+     * down a column, and at its corner on a diagonal, so the distance is taken to the nearest point
+     * of that cell rather than less a constant half.
      *
      * Internal rather than private so `ContinentalityTest` measures the same field the stage
      * actually used instead of re-deriving it and risking the two drifting apart.
@@ -1039,6 +1042,7 @@ object ClimateStage {
     internal fun waterDistance(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
+        val rowScale = config.cellHeightInCellWidths
         val distanceToWater = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
         val nearestWaterCell = IntArray(cellsAcross * cellsDown) { -1 }
         for (cell in 0 until cellsAcross * cellsDown) {
@@ -1049,22 +1053,35 @@ object ClimateStage {
         }
         // A world with no water at all leaves every distance at INFINITE, which is exactly right:
         // the marine fraction falls to zero everywhere and every cell is fully continental.
-        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToWater, nearestWaterCell)
+        JumpFloodDistance.run(cellsAcross, cellsDown, distanceToWater, nearestWaterCell, rowScale)
         val field = FloatField(cellsAcross, cellsDown)
         for (cell in distanceToWater.indices) {
-            val centreToCentre = distanceToWater[cell]
-            field.data[cell] =
-                if (centreToCentre == JumpFloodDistance.INFINITE) centreToCentre
-                else (centreToCentre - HALF_A_CELL).coerceAtLeast(0f)
+            val water = nearestWaterCell[cell]
+            field.data[cell] = when {
+                distanceToWater[cell] == JumpFloodDistance.INFINITE -> JumpFloodDistance.INFINITE
+                water == cell -> 0f
+                else -> toTheWatersEdgeCellWidths(cellsAcross, cell, water, rowScale).toFloat()
+            }
         }
         return field
     }
 
     /**
-     * The half cell that separates a land cell's centre from the shoreline when the sea starts in
-     * the next cell along. See [waterDistance].
+     * From the centre of [cell] to the nearest point of sea cell [water], in cell widths on the
+     * ground: the gap between the two cells' centres less the half of the water cell that faces
+     * this one, along each axis.
      */
-    private const val HALF_A_CELL = 0.5f
+    private fun toTheWatersEdgeCellWidths(cellsAcross: Int, cell: Int, water: Int, rowScale: Double): Double {
+        var columns = abs(cell % cellsAcross - water % cellsAcross)
+        if (columns > cellsAcross - columns) columns = cellsAcross - columns
+        val rows = abs(cell / cellsAcross - water / cellsAcross)
+        val acrossCellWidths = (columns - HALF_A_CELL).coerceAtLeast(0.0)
+        val downCellWidths = (rows - HALF_A_CELL).coerceAtLeast(0.0) * rowScale
+        return sqrt(acrossCellWidths * acrossCellWidths + downCellWidths * downCellWidths)
+    }
+
+    /** Half a cell: from a cell's centre to its edge, along either axis, in that axis's cells. */
+    private const val HALF_A_CELL = 0.5
 
     /**
      * Lets a coast feel the water beside it.

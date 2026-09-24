@@ -282,7 +282,7 @@ class UnitsTest : BorrowsSharedWorlds() {
         return linkedMapOf(
             "sea.lowstand" to config.scale.fieldShareOfMetres(config.sea.lowstandMetres),
             "erosion.shelfBreak" to rates.shelfBreak,
-            "erosion.criticalDrop" to ErosionStage.maxOrthogonalDrop(config)
+            "erosion.criticalDrop" to ErosionStage.thermalLimits(config).eastWest
         )
     }
 

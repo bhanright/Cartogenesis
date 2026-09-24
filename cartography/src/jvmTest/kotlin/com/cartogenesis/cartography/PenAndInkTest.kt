@@ -737,9 +737,11 @@ class PenAndInkTest : BorrowsSharedWorlds() {
                     // coordinates, so the whole picture arrives magnified by the grid ratio.
                     val readX = if (enlarged) column * REFERENCE_SIDE / width else column
                     val readY = if (enlarged) row * REFERENCE_SIDE / width else row
+                    // Square pixels of ground: the strokes' own geometry on the sheet is what this
+                    // measures, and a row counts as a column.
                     val ink = Engraving.hachure(
                         readX, readY,
-                        fromCentreX / radius * slope, fromCentreY / radius * slope, plan, gain
+                        fromCentreX / radius * slope, fromCentreY / radius * slope, 1f, plan, gain
                     ) > INKED
                     scanned++
                     if (ink && !wasInk) runs++

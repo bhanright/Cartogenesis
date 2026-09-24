@@ -111,10 +111,11 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         // being measured. One pass read 3.9 ms against 1.7 quiet while another build ran beside
         // it, and put the share over the line it is meant to sit well under.
         var surfaceMs = Double.MAX_VALUE
-        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed)
+        val rowScale = world.config.cellHeightInCellWidths
+        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
         repeat(3) {
             val surfaceStarted = System.nanoTime()
-            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed)
+            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
             surfaceMs = minOf(surfaceMs, (System.nanoTime() - surfaceStarted) / 1_000_000.0)
         }
         val passes = routingPassesPerGeneration(world.config)
@@ -211,7 +212,8 @@ internal object FlatCourse {
         val filled = world.rivers.filledElevation
         val flow = FlowRouting.flowDirections(
             world.width, world.height, sea.isLand, sea.relativeElevation, filled,
-            world.config.seed, world.config.facetRouting, world.config.flatPotential
+            world.config.seed, world.config.cellHeightInCellWidths, world.config.facetRouting,
+            world.config.flatPotential
         )
         val cellCount = world.width * world.height
         // 0 not yet walked, 1 known to leave the raised ground, 2 on the walk in progress.

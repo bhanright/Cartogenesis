@@ -399,7 +399,7 @@ class StraightRunTest : BorrowsSharedWorlds() {
             FlowRouting.fillDepressions(cellsAcross, cellsDown, world.sea.isLand, ground)
         val routed = FlowRouting.flowDirections(
             cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed,
-            world.config.facetRouting, world.config.flatPotential
+            world.config.cellHeightInCellWidths, world.config.facetRouting, world.config.flatPotential
         )
         val filled = filledField.data
         val trueGround = ground.data
@@ -410,7 +410,8 @@ class StraightRunTest : BorrowsSharedWorlds() {
         val routingSurface =
             if (world.config.flatPotential) {
                 FlatRouting.surfaceOf(
-                    cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed
+                    cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed,
+                    world.config.cellHeightInCellWidths
                 ).heights
             } else {
                 DoubleArray(filled.size) {

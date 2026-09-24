@@ -1,6 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.ThermalLimits
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import org.lwjgl.opengl.GL43C
@@ -36,7 +37,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         width: Int,
         height: Int,
         heights: FloatArray,
-        maxOrthogonalDrop: Float,
+        limits: ThermalLimits,
         passes: Int,
         rate: Float
     ): FloatArray? {
@@ -54,10 +55,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         val stillWanted = currentCoroutineContext()[Job]
         return GlContext.run("Erosion") {
             val cells = width * height
-            val orthogonal = maxOrthogonalDrop
-            // A diagonal neighbour is √2 further away, so it may stand √2 higher at the same slope.
-            val diagonal = orthogonal * kotlin.math.sqrt(2f)
-            val settled = orthogonal * SETTLED_SHARE_OF_LIMIT
+            val settled = limits.eastWest * SETTLED_SHARE_OF_LIMIT
 
             val (shareToGive, moveMaterial) = programs ?: return@run null
 
@@ -92,14 +90,14 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                     if (stillWanted?.isActive == false) return@run null
 
                     GL43C.glUseProgram(shareToGive)
-                    setUniforms(shareToGive, width, height, orthogonal, diagonal, rate, settled)
+                    setUniforms(shareToGive, width, height, limits, rate, settled)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
                     GL43C.glDispatchCompute(groupsX, groupsY, 1)
                     GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
 
                     GL43C.glUseProgram(moveMaterial)
-                    setUniforms(moveMaterial, width, height, orthogonal, diagonal, rate, settled)
+                    setUniforms(moveMaterial, width, height, limits, rate, settled)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 0, source)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 1, destination)
                     GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, rateBuffer)
@@ -128,15 +126,15 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
         program: Int,
         width: Int,
         height: Int,
-        orthogonal: Float,
-        diagonal: Float,
+        limits: ThermalLimits,
         rate: Float,
         settled: Float
     ) {
         GL43C.glUniform1i(GL43C.glGetUniformLocation(program, "uWidth"), width)
         GL43C.glUniform1i(GL43C.glGetUniformLocation(program, "uHeight"), height)
-        GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uOrthogonal"), orthogonal)
-        GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uDiagonal"), diagonal)
+        GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uEastWest"), limits.eastWest)
+        GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uNorthSouth"), limits.northSouth)
+        GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uDiagonal"), limits.diagonal)
         GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uRate"), rate)
         GL43C.glUniform1f(GL43C.glGetUniformLocation(program, "uSettled"), settled)
     }
@@ -191,7 +189,11 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
 
             uniform int uWidth;
             uniform int uHeight;
-            uniform float uOrthogonal;
+            // The steepest drop a cell may hold toward a neighbour along a row, down a column and
+            // on a diagonal: ErosionStage.thermalLimits, three figures because a row is not as tall
+            // as a column is wide.
+            uniform float uEastWest;
+            uniform float uNorthSouth;
             uniform float uDiagonal;
             uniform float uRate;
             uniform float uSettled;
@@ -200,6 +202,11 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                 ivec2( 1, 0), ivec2(-1, 0), ivec2(0,  1), ivec2(0, -1),
                 ivec2( 1, 1), ivec2( 1,-1), ivec2(-1, 1), ivec2(-1,-1)
             );
+
+            float limitFor(int n) {
+                if (n >= 4) return uDiagonal;
+                return n < 2 ? uEastWest : uNorthSouth;
+            }
 
             // The world is a cylinder: x wraps, y does not.
             int indexOf(int x, int y) {
@@ -231,7 +238,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                     float drop = here - source[indexOf(x + NEIGHBOURS[n].x, ny)];
                     if (drop <= 0.0) continue;
                     steepest = max(steepest, drop);
-                    float limit = n < 4 ? uOrthogonal : uDiagonal;
+                    float limit = limitFor(n);
                     if (drop > limit) excess += drop - limit;
                 }
 
@@ -261,7 +268,7 @@ class GpuErosion private constructor(private val deviceName: String) : ErosionAc
                     int ny = y + NEIGHBOURS[n].y;
                     if (ny < 0 || ny >= uHeight) continue;
                     int j = indexOf(x + NEIGHBOURS[n].x, ny);
-                    float limit = n < 4 ? uOrthogonal : uDiagonal;
+                    float limit = limitFor(n);
 
                     float incoming = source[j] - here;
                     if (incoming > limit) {

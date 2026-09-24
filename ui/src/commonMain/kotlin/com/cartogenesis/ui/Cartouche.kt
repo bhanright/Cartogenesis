@@ -37,7 +37,10 @@ import com.cartogenesis.worldgen.pipeline.Culture
 internal data class Cartouche(
     val worldName: String,
     val facts: String,
-    /** `5.9 km per pixel · about 1:22 000 000 at the equator`, for the size [facts] quotes. */
+    /**
+     * `5.9 km per pixel east-west, 2.9 north-south · about 1:22 000 000 at the equator, east-west`,
+     * for the size [facts] quotes.
+     */
     val scale: String,
     /**
      * How wide one cell of this world is on the ground.
@@ -109,7 +112,7 @@ internal object Cartouches {
     fun of(world: WorldMap, name: String, millis: Long): Cartouche = Cartouche(
         worldName = name,
         facts = facts(world.config.seed, world.config.width, world.config.height),
-        scale = MapScale.cartoucheLine(world.config.scale, world.width),
+        scale = MapScale.cartoucheLine(world.config.scale, world.width, world.height),
         kilometresPerCellWidth = world.config.scale.cellWidthKm(world.width),
         footnote = footnote(millis)
     )

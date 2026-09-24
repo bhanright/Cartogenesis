@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.model
 
+import com.cartogenesis.worldgen.math.GroundSteps
 import kotlinx.serialization.Serializable
 
 /**
@@ -418,11 +419,22 @@ data class TectonicsConfig(
     val mountainHeight: Float = 0.55f,
     /** Depth of oceanic trenches at subduction boundaries, on the same scale. */
     val trenchDepth: Float = 0.3f,
-    /** How far, in cells, boundary effects reach inland. */
+    /**
+     * How far boundary effects reach inland, in cell widths of ground: the same kilometres from a
+     * boundary running north-south as from one running east-west. Every belt half-width and offset
+     * below is a count of cell widths on the same terms.
+     */
     val boundaryFalloffCells: Float = 26f,
     /**
      * How wide the band is over which one crust becomes the other, in kilometres — a continental
      * margin, measured from where the crust starts to thin to where it is ocean floor.
+     *
+     * Read as the width over which the crust's share falls from nine tenths to a tenth, since the
+     * blur that makes the band is a Gaussian and has no end of its own; the ramp is then steepest in
+     * its middle at `1.02 / width` of the step a kilometre, which is the gradient the paragraph below
+     * works out, and the same width on the ground whichever way the margin runs. See
+     * `PlateStage.blurAcrossTheMargin`, and docs/DESIGN_LEDGER.md, Fix 2: the box blur this replaced
+     * made the band 389 km wide east-west and 195 km north-south.
      *
      * Implicit before it was a setting: the plate base was blurred by a third of
      * [boundaryFalloffCells], which comes to about 200 km on the default grid and was never a
@@ -704,7 +716,7 @@ data class TectonicsConfig(
      */
     val crustPairProfiles: Boolean = true,
     /**
-     * Half-width, in cells, of the coastal range on the continental side of an oceanic–continental
+     * Half-width, in cell widths, of the coastal range on the continental side of an oceanic–continental
      * margin. Deliberately far narrower than [collisionWidthCells]: the Andes are a few hundred
      * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
      * of distinguishing the pairs. [WorldGenConfig.atResolution] rescales it with the grid.
@@ -713,19 +725,19 @@ data class TectonicsConfig(
     /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
     val andeanHeight: Float = 0.52f,
     /**
-     * How far inland of the suture the volcanic arc stands, in cells.
+     * How far inland of the suture the volcanic arc stands, in cell widths.
      *
      * A subducting slab does not melt at the trench; it melts once it is deep enough, which puts
      * the volcanoes a fixed distance behind the margin rather than on it. That offset is what
      * makes the margin asymmetric in a way a symmetric falloff cannot express.
      */
     val arcOffsetCells: Float = 13f,
-    /** Half-width of the volcanic arc ridge about its own axis, in cells. */
+    /** Half-width of the volcanic arc ridge about its own axis, in cell widths. */
     val arcWidthCells: Float = 5f,
     /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
     val arcHeight: Float = 0.20f,
     /**
-     * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidthCells].
+     * Half-width, in cell widths, of a continental collision plateau. Broad — see [andeanWidthCells].
      * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val collisionWidthCells: Float = 26f,
@@ -774,11 +786,11 @@ data class TectonicsConfig(
      */
     val plateauAlongVariation: Float = 0.50f,
     /**
-     * How far from the suture the island arc stands, on the overriding plate, in cells.
+     * How far from the suture the island arc stands, on the overriding plate, in cell widths.
      * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val islandArcOffsetCells: Float = 8f,
-    /** Half-width of the island-arc ridge about its own axis, in cells. */
+    /** Half-width of the island-arc ridge about its own axis, in cell widths. */
     val islandArcWidthCells: Float = 7f,
     /**
      * Crest height of an island arc, in normalized elevation units.
@@ -809,7 +821,7 @@ data class TectonicsConfig(
      * docs/DESIGN_LEDGER.md, E7, for the figures.
      */
     val riftDepth: Float = 0.25f,
-    /** Half-width of the rift trough, in cells. */
+    /** Half-width of the rift trough, in cell widths. */
     val riftWidthCells: Float = 7f,
     /**
      * Share of the trough's half-width that is flat floor before the ground starts climbing.
@@ -820,9 +832,9 @@ data class TectonicsConfig(
      * `ValleyIncisionTest` reads as incision. Dimensionless, so it needs no rescaling.
      */
     val riftFloorShare: Float = 0.55f,
-    /** How far from the rift axis its raised shoulders crest, in cells. */
+    /** How far from the rift axis its raised shoulders crest, in cell widths. */
     val riftShoulderOffsetCells: Float = 11f,
-    /** Half-width of each shoulder about its own crest, in cells. */
+    /** Half-width of each shoulder about its own crest, in cell widths. */
     val riftShoulderWidthCells: Float = 7f,
     /**
      * Height of the rift shoulders, in normalized elevation units.
@@ -912,7 +924,8 @@ data class TectonicsConfig(
      */
     val historyEpochs: Int = 3,
     /**
-     * How far a plate travels between one epoch and the next, in cells.
+     * How far a plate travels between one epoch and the next, in cell widths of ground, whichever
+     * way it drifts.
      *
      * A plate boundary only moves if the plates either side of it move relative to one another, so
      * this is what decides how far an old belt ends up from a present one. At the default a
@@ -1047,9 +1060,11 @@ data class TectonicsConfig(
      */
     val beltAgeWidening: Float = 1.45f,
     /**
-     * Radius, in cells, of the rounding blur applied per epoch of age.
+     * Radius, in cell widths, of the rounding blur applied per epoch of age.
      *
-     * Two box passes rather than three: an old belt should read as rounded, not as a stain. The
+     * Applied as a Gaussian round on the ground with the spread two box passes of this radius have
+     * east-west, `sqrt(2 r (r + 1) / 3)`; it was those two box passes, square in cells. Two rather
+     * than three because an old belt should read as rounded, not as a stain. The
      * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
      * range, and it is applied to the epoch's own uplift field alone, so it never touches the
      * present epoch's edges. [WorldGenConfig.atResolution] rescales it with the grid.
@@ -1096,11 +1111,11 @@ data class TectonicsConfig(
      * rather than volcanic fields inland.
      */
     val hotspotPlateFraction: Float = 0.35f,
-    /** How long a hotspot trail runs before it has subsided to nothing, in cells. */
+    /** How long a hotspot trail runs before it has subsided to nothing, in cell widths of ground. */
     val hotspotChainLengthCells: Float = 110f,
-    /** Distance between successive seamounts along a trail, in cells. */
+    /** Distance between successive seamounts along a trail, in cell widths of ground. */
     val hotspotSpacingCells: Float = 15f,
-    /** Radius of a single seamount, in cells. */
+    /** Radius of a single seamount, in cell widths: round on the ground, so twice as many rows. */
     val hotspotRadiusCells: Float = 5f,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
     val hotspotHeight: Float = 0.17f,
@@ -3065,6 +3080,16 @@ data class WorldGenConfig(
     /** [kilometres] on the ground as a whole number of cells, never fewer than [atLeast]. */
     fun wholeCellsFor(kilometres: Double, atLeast: Int = 1): Int =
         kotlin.math.round(cellsFor(kilometres)).toInt().coerceAtLeast(atLeast)
+
+    /**
+     * [kilometres] on the ground as a count of *rows* of this grid, which are not as tall as a cell
+     * is wide: the north-south twin of [cellsFor].
+     */
+    fun rowsFor(kilometres: Double): Double = kilometres / cellHeightKm
+
+    /** How long a step to each of a cell's neighbours is on this grid, in cell widths. */
+    val groundSteps: GroundSteps
+        get() = GroundSteps(cellHeightInCellWidths)
 
     /**
      * Re-targets the same world at a different grid size — used by HD export.

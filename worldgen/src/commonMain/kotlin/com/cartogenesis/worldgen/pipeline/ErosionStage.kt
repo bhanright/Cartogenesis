@@ -53,7 +53,7 @@ object ErosionStage {
     /** Neighbours every cell trades material with: the four orthogonal ones, then the diagonals. */
     private const val NEIGHBOUR_COUNT = 8
 
-    /** How many of those come first in the tables below, and so cost one step rather than sqrt(2). */
+    /** How many of those come first in the tables below: the neighbours along a row or a column. */
     private const val ORTHOGONAL_NEIGHBOURS = 4
 
     /**
@@ -174,7 +174,7 @@ object ErosionStage {
                 config.width,
                 config.height,
                 height.data,
-                maxOrthogonalDrop(config),
+                thermalLimits(config),
                 sweeps,
                 erosion.rate
             )
@@ -219,12 +219,18 @@ object ErosionStage {
         // only ever needs the product.
         val giveRate = FloatArray(cellsAcross * cellsDown)
 
-        // The critical slope arrives as a fall in metres per kilometre and is turned into a drop
-        // per cell here, once, so the same terrain wears to the same shape whatever grid it is
-        // computed on. Cells are treated as square, as they are everywhere else in the pipeline.
-        val maxOrthogonalDrop = maxOrthogonalDrop(config)
-        val maxDiagonalDrop = maxOrthogonalDrop * SQRT2
-        val settled = maxOrthogonalDrop * SETTLED_SHARE_OF_CRITICAL_SLOPE
+        // The critical slope arrives as a fall in metres per kilometre and is turned into a drop to
+        // each kind of neighbour here, once, so the same terrain wears to the same shape whatever
+        // grid it is computed on and whichever way it faces.
+        val limits = thermalLimits(config)
+        val limitByNeighbour = FloatArray(NEIGHBOUR_COUNT) { neighbour ->
+            when {
+                neighbour >= ORTHOGONAL_NEIGHBOURS -> limits.diagonal
+                NEIGHBOUR_ROW_STEP[neighbour] != 0 -> limits.northSouth
+                else -> limits.eastWest
+            }
+        }
+        val settled = limits.eastWest * SETTLED_SHARE_OF_CRITICAL_SLOPE
 
         // Most of a map reaches the critical slope early and then never moves again — ocean floor,
         // plains, anything the uplift left gentle. Re-scanning all of it every sweep is what made
@@ -275,9 +281,7 @@ object ErosionStage {
                                         here - current[neighbourRow * cellsAcross + neighbourColumn]
                                     if (drop <= 0f) continue
                                     if (drop > steepestDrop) steepestDrop = drop
-                                    val limit =
-                                        if (neighbour < ORTHOGONAL_NEIGHBOURS) maxOrthogonalDrop
-                                        else maxDiagonalDrop
+                                    val limit = limitByNeighbour[neighbour]
                                     if (drop > limit) excess += drop - limit
                                 }
 
@@ -338,9 +342,7 @@ object ErosionStage {
                                     val neighbourColumn =
                                         (column + NEIGHBOUR_COLUMN_STEP[neighbour] + cellsAcross) %
                                             cellsAcross
-                                    val limit =
-                                        if (neighbour < ORTHOGONAL_NEIGHBOURS) maxOrthogonalDrop
-                                        else maxDiagonalDrop
+                                    val limit = limitByNeighbour[neighbour]
                                     val neighbourCell = neighbourRow * cellsAcross + neighbourColumn
 
                                     val incoming = current[neighbourCell] - here
@@ -377,19 +379,27 @@ object ErosionStage {
         config.wholeCellsFor(config.erosion.debrisTravelKm, atLeast = 0)
 
     /**
-     * The steepest drop one cell may hold, in the height field's own units.
+     * The steepest drop one cell may hold toward each kind of neighbour, in the height field's own
+     * units.
      *
-     * [ErosionConfig.criticalFallMetresPerKm] is a gradient, so this is that gradient over one
-     * cell's width, divided by what one unit of the height field is worth in metres. The grid
-     * cancels out of the pair - a finer grid has narrower cells and so a smaller drop - which is
-     * the whole point of writing the knob as a gradient.
+     * [ErosionConfig.criticalFallMetresPerKm] is a gradient, so each is that gradient over the
+     * step's length on the ground — a cell's width along a row, a row's height down a column, the
+     * hypotenuse of the two on a diagonal — divided by what one unit of the height field is worth
+     * in metres. The grid cancels out of the pair - a finer grid has narrower cells and so a
+     * smaller drop - which is the whole point of writing the knob as a gradient.
      *
-     * Public because an accelerator is handed the converted figure rather than the knob: a kernel
+     * Public because an accelerator is handed the converted figures rather than the knob: a kernel
      * has no business knowing how wide the world is. See [ErosionAccelerator.erode].
      */
-    fun maxOrthogonalDrop(config: WorldGenConfig): Float {
-        val fallMetres = config.erosion.criticalFallMetresPerKm * config.cellWidthKm.toFloat()
-        return fallMetres / config.scale.reliefSpanMetres
+    fun thermalLimits(config: WorldGenConfig): ThermalLimits {
+        val criticalPerKm = config.erosion.criticalFallMetresPerKm.toDouble() / config.scale.reliefSpanMetres
+        val cellWidthKm = config.cellWidthKm
+        val cellHeightKm = config.cellHeightKm
+        return ThermalLimits(
+            eastWest = (criticalPerKm * cellWidthKm).toFloat(),
+            northSouth = (criticalPerKm * cellHeightKm).toFloat(),
+            diagonal = (criticalPerKm * sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)).toFloat()
+        )
     }
 
     /** Grows a tile mask by one tile in every direction, wrapping in x as the world does. */
@@ -411,8 +421,6 @@ object ErosionStage {
         }
         return grown
     }
-
-    private val SQRT2 = sqrt(2f)
 
     // Orthogonal neighbours first, so the loop can tell them from the diagonals by index alone.
     private val NEIGHBOUR_COLUMN_STEP = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)

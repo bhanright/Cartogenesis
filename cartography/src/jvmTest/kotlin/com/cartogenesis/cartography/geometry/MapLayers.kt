@@ -252,6 +252,7 @@ internal object MapLayers {
         val stencil = Isobaths.slopeStencil(world.width)
         val elevation = world.sea.relativeElevation
         val perCell = 1f / (2f * stencil)
+        val rowScale = config.cellHeightInCellWidths.toFloat()
         val inked = BooleanArray(frame.cellCount) { cell ->
             if (world.sea.isLand[cell]) return@BooleanArray false
             val column = cell % world.width
@@ -259,8 +260,10 @@ internal object MapLayers {
             val eastward = (elevation.sample(column + stencil, row) - elevation.sample(column - stencil, row)) * perCell
             val southward = (elevation.sample(column, row + stencil) - elevation.sample(column, row - stencil)) * perCell
             val slope = sqrt(eastward * eastward + southward * southward)
+            val southwardOnTheGround = southward / rowScale
+            val slopeOnTheGround = sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
             // A pixel lying on a line: depth exactly one interval, so the ink is the line's own.
-            Isobaths.ink(interval, slope, interval, flattest) > 0f
+            Isobaths.ink(interval, slope, slopeOnTheGround, interval, flattest) > 0f
         }
         val levels = ArrayList<Float>()
         var depth = interval

@@ -73,8 +73,6 @@ class GeneralisationTest : BorrowsSharedWorlds() {
 
         /** The known failures these clauses record, by the audit finding each is. */
         const val COAST_INKED_EAST_AND_SOUTH = "Audit III F-D2: the raster coast inks east- and south-facing shores only"
-        const val SCALE_BAR_EAST_WEST_ONLY =
-            "Audit III F-C1: the scale bar holds east-west only, and a pixel north-south is half the ground"
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(
@@ -305,7 +303,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         println(
             "SCALE scale bar on a $cellsAcross sheet: ${bar.label} over ${bar.lengthPixels} px, " +
                 "at ${MapScale.oneDecimal(perPixel)} km per pixel; " +
-                MapScale.cartoucheLine(scale, cellsAcross)
+                MapScale.cartoucheLine(scale, cellsAcross, cellsAcross)
         )
 
         // The bar is as long as it says it is, to the pixel.
@@ -325,24 +323,27 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             "${bar.kilometres} km is not a 1-2-5 distance"
         )
 
-        // `MapScale` says a kilometre on the bar is a kilometre along the equator and along every
-        // meridian. The sheet draws a cell as one pixel each way, so along a meridian a pixel is a
-        // cell's height of ground, which the world's arithmetic gives separately; the bar holds
-        // there only if the two agree. They do not (Audit III, F-C1), so the clause runs as a known
-        // failure, recorded by how many times the bar overstates a distance laid north-south.
+        // The sheet draws a cell as one pixel each way, so along a meridian a pixel is a cell's height
+        // of ground, which the world's arithmetic gives separately, and the sheet has two scales. The
+        // bar is drawn along a row and holds there; what a reader is told about the other axis is the
+        // cartouche's line, so the clause reads that line as a reader would: it must give the ground
+        // a pixel covers along a meridian, and give it as the world's own arithmetic has it. Until
+        // the line said so, a bar laid north-south overstated the distance twice over (Audit III,
+        // F-C1).
         val cellsDown = cellsAcross
         val perPixelNorthSouth = scale.cellHeightKm(cellsDown)
-        val overstates = perPixel / perPixelNorthSouth
-        println("SCALE along a meridian a pixel is ${MapScale.oneDecimal(perPixelNorthSouth)} km; the bar says ${MapScale.oneDecimal(perPixel)}")
-        KnownFailures.expect(SCALE_BAR_EAST_WEST_ONLY, "overstates a distance along a meridian 2.00 times") {
-            if (abs(overstates - 1.0) > 1e-9) {
-                throw RecordedViolation(
-                    "the bar reads ${MapScale.oneDecimal(perPixel)} km a pixel and a pixel along a meridian is " +
-                        "${MapScale.oneDecimal(perPixelNorthSouth)} km on a $cellsAcross by $cellsDown sheet",
-                    String.format(Locale.ROOT, "overstates a distance along a meridian %.2f times", overstates)
-                )
-            }
-        }
+        val line = MapScale.cartoucheLine(scale, cellsAcross, cellsDown)
+        println("SCALE along a meridian a pixel is ${MapScale.oneDecimal(perPixelNorthSouth)} km; the cartouche says: $line")
+        assertTrue(
+            line.contains("${MapScale.oneDecimal(perPixel)} km per pixel east-west") &&
+                line.contains("${MapScale.oneDecimal(perPixelNorthSouth)} north-south"),
+            "the cartouche does not give the sheet's two scales, ${MapScale.oneDecimal(perPixel)} km a pixel east-west " +
+                "and ${MapScale.oneDecimal(perPixelNorthSouth)} north-south: $line"
+        )
+        assertEquals(
+            perPixelNorthSouth, MapScale.kilometresPerPixelNorthSouth(scale, cellsDown, 1f), 1e-9,
+            "the north-south scale is not a row's height of ground"
+        )
     }
 
     @Test

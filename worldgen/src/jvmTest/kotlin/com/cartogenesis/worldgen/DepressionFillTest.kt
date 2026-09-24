@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import kotlin.test.Test
 import org.junit.Assert.assertEquals
@@ -36,7 +37,8 @@ class DepressionFillTest {
         val grid = syntheticCoastAndSubmergedPatch()
         val filled = FlowRouting.fillDepressions(SIDE, SIDE, grid.isLand, grid.elevation)
         val target = FlowRouting.flowDirections(
-            SIDE, SIDE, grid.isLand, grid.elevation, filled, seed = 1L
+            SIDE, SIDE, grid.isLand, grid.elevation, filled, seed = 1L,
+            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths
         )
 
         var landCells = 0

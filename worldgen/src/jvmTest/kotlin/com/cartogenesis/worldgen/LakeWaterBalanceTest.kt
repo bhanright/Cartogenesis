@@ -495,7 +495,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         val flowTarget = IntArray(w * h) { -1 }
         com.cartogenesis.worldgen.pipeline.LakeWaterBalance.routeIntoWater(
             w, h, ground, pending, water.toIntArray(), w * h, flowTarget,
-            IntArray(w * h) { -1 }, 0, FloatArray(w * h), seed = 59758L
+            IntArray(w * h) { -1 }, 0, FloatArray(w * h), seed = 59758L,
+            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths
         )
 
         val straight = Straightness()

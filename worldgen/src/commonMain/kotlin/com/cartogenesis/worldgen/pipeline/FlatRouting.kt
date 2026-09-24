@@ -48,7 +48,8 @@ internal object FlatRouting {
         isLand: BooleanArray,
         elevation: FloatField,
         filled: FloatField,
-        seed: Long
+        seed: Long,
+        cellHeightInCellWidths: Double
     ): Surface {
         val cellCount = width * height
         val ground = elevation.data
@@ -97,7 +98,9 @@ internal object FlatRouting {
             // because the lowest cell of a flat was raised from something lower that was not raised
             // itself — had it been, it would be in this flat and lower still.
             val entryLevel = lowestLevel.toDouble()
-            val potential = solvePotential(width, height, members, memberCount, localIndex, surface, entryLevel, seed)
+            val potential = solvePotential(
+                width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths
+            )
 
             if (potential != null && layInBand(width, height, members, memberCount, localIndex, surface, potential, entryLevel)) {
                 // laid
@@ -117,10 +120,33 @@ internal object FlatRouting {
     /** Marks a raised cell whose flat has been handled, so the component walk does not revisit it. */
     private const val LAID = Int.MAX_VALUE
 
+    /** The Laplacian's weight on a neighbour east or west: the unit the other two are set against. */
+    private const val EAST_WEST_WEIGHT = 1.0
+
+    /**
+     * The Laplacian's weight on a diagonal neighbour, `2 / (1 + r^2)` for a row scale `r`: one on
+     * square cells, so the stencil there is the unit one it replaced, and less as the cells flatten,
+     * in step with the diagonal's length on the ground. Any positive figure would make the operator
+     * isotropic once the north-south weight is set against it; this one keeps all three positive on
+     * any cell no taller than it is wide, which is every cell a square grid of this 2:1 world has.
+     */
+    private fun diagonalWeight(cellHeightInCellWidths: Double): Double =
+        2.0 / (1.0 + cellHeightInCellWidths * cellHeightInCellWidths)
+
     /**
      * Poisson's equation over one flat: every member gathers a unit of rain, the entry holds it
      * at nothing, the rim lets nothing through. Conjugate gradients on the eight-neighbour
      * Laplacian, which is symmetric and positive definite as soon as one entry cell exists.
+     *
+     * The Laplacian is the ground's. On cells [cellHeightInCellWidths] as tall as they are wide, an
+     * eight-neighbour stencil with every weight one is the operator `3 (w^2 d2/dx2 + h^2 d2/dy2)`
+     * on the ground, four times as conductive east-west as north-south, and the level lines it
+     * draws round an outlet are ellipses twice as long east-west. The weights here make it
+     * isotropic: a diagonal neighbour weighs [diagonalWeight], one east or west one, and one north
+     * or south whatever makes the two axes' second derivatives carry the same coefficient,
+     * `(1 + 2 d) / r^2 - 2 d` for a diagonal weight `d` and a row scale `r`. All three are positive,
+     * which keeps the discrete maximum principle the guarantee below rests on, and on square cells
+     * they are all one, the stencil this replaced.
      *
      * Returns null where the solve produced a non-positive value, which a converged solve cannot
      * (the discrete maximum principle puts every member strictly above the average of its
@@ -134,28 +160,52 @@ internal object FlatRouting {
         localIndex: IntArray,
         surface: DoubleArray,
         entryLevel: Double,
-        seed: Long
+        seed: Long,
+        cellHeightInCellWidths: Double
     ): DoubleArray? {
-        // The stencil per member: its degree over members and entries, and its member neighbours.
+        val diagonal = diagonalWeight(cellHeightInCellWidths)
+        val rowScaleSquared = cellHeightInCellWidths * cellHeightInCellWidths
+        val northSouth = (1.0 + 2.0 * diagonal) / rowScaleSquared - 2.0 * diagonal
+
+        // The stencil per member: its weighted degree over members and entries, and its member
+        // neighbours with their weights.
         val degree = DoubleArray(memberCount)
         val neighbourStart = IntArray(memberCount + 1)
         val neighbours = IntArray(memberCount * 8)
+        val weights = DoubleArray(memberCount * 8)
         var written = 0
         for (member in 0 until memberCount) {
             val cell = members[member]
+            val column = cell % width
+            val row = cell / width
             neighbourStart[member] = written
-            var count = 0
-            FlowRouting.forEachNeighbour(width, height, cell % width, cell / width) { neighbour ->
-                val local = localIndex[neighbour]
-                if (local in 0 until memberCount && local != LAID) {
-                    neighbours[written++] = local
-                    count++
-                } else if (local < 0 && surface[neighbour] < entryLevel) {
-                    // An entry: it takes water and holds the potential at nothing.
-                    count++
+            var total = 0.0
+            for (rowStep in -1..1) {
+                val neighbourRow = row + rowStep
+                if (neighbourRow < 0 || neighbourRow >= height) continue
+                for (columnStep in -1..1) {
+                    if (columnStep == 0 && rowStep == 0) continue
+                    var neighbourColumn = (column + columnStep) % width
+                    if (neighbourColumn < 0) neighbourColumn += width
+                    val neighbour = neighbourRow * width + neighbourColumn
+                    val weight = when {
+                        columnStep != 0 && rowStep != 0 -> diagonal
+                        rowStep != 0 -> northSouth
+                        else -> EAST_WEST_WEIGHT
+                    }
+                    val local = localIndex[neighbour]
+                    if (local in 0 until memberCount && local != LAID) {
+                        neighbours[written] = local
+                        weights[written] = weight
+                        written++
+                        total += weight
+                    } else if (local < 0 && surface[neighbour] < entryLevel) {
+                        // An entry: it takes water and holds the potential at nothing.
+                        total += weight
+                    }
                 }
             }
-            degree[member] = count.toDouble()
+            degree[member] = total
         }
         neighbourStart[memberCount] = written
 
@@ -163,7 +213,7 @@ internal object FlatRouting {
             for (member in 0 until memberCount) {
                 var sum = degree[member] * x[member]
                 for (slot in neighbourStart[member] until neighbourStart[member + 1]) {
-                    sum -= x[neighbours[slot]]
+                    sum -= weights[slot] * x[neighbours[slot]]
                 }
                 into[member] = sum
             }

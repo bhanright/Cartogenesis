@@ -41,6 +41,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val SLOPE_SCALE = ReliefShading.slopeScale(512)
         val OPENNESS_STEP = ReliefShading.opennessStep(512)
 
+        /**
+         * The row scale of the synthetic cone's field: square cells, so a cone round in cells is
+         * round on its ground. What the shading does on this project's own cells is
+         * `the drawn relief is the ground's under the same light`.
+         */
+        const val SQUARE_CELLS = 1.0
+
         /** The darkest factor the model can produce. A face pinned here has lost its detail. */
         const val DARKEST = 0.45f
 
@@ -83,6 +90,22 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         /** The known failure the haze clause records. */
         const val HAZE_ONE_STEP_OFF =
             "Audit III F-I3: the declared haze is a step off the haze at which the relief keeps the lamp's contrast"
+
+        /** The planes of the facing clause: their field, their steepness, and how many facings. */
+        const val PLANE_FIELD = 128
+        const val PLANE_FALL_PER_CELL_WIDTH = 0.02
+        const val PLANE_FACINGS = 16
+
+        /**
+         * How far a plane's drawn factor may sit from its ground's: a hundredth of the factor.
+         *
+         * The lamps are read off the plane's exact difference, so they agree to rounding; the sky's
+         * horizon is sampled at whole cells along each bearing, which on cells half as tall as they
+         * are wide puts a diagonal sample up to eleven degrees off its bearing at the stencil's
+         * shortest reach, and that is worth a few thousandths of the factor. A plane read at half
+         * its gradient north-south is several hundredths out.
+         */
+        const val PLANE_TOLERANCE = 0.01
 
         /** How far the declared ordinary ground may sit from the measured median. */
         const val MAX_GROUND_DRIFT = 0.004f
@@ -140,7 +163,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         var floored = 0
         for (step in 0 until BEARINGS) {
             val shade = onFlank(field, radius, step) { x, y ->
-                ReliefShading.at(x, y, field, SLOPE_SCALE, OPENNESS_STEP, singleLamp)
+                ReliefShading.at(x, y, field, SLOPE_SCALE, OPENNESS_STEP, singleLamp, SQUARE_CELLS)
             }
             if (shade < darkest) darkest = shade
             if (shade > brightest) brightest = shade
@@ -260,7 +283,10 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     fun `the haze is the one at which the relief keeps the lamp's contrast`() {
         val world = WORLD
         val lamp = Spread(
-            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, singleLamp = true),
+            ReliefShading.of(
+                world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                cellHeightInCellWidths = world.config.cellHeightInCellWidths
+            ),
             world
         )
 
@@ -323,6 +349,67 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         )
     }
 
+    /**
+     * The relief is drawn for the ground: a plane on this project's own cells is shaded as the
+     * ground it stands for is shaded under the same sky, whichever way it faces.
+     *
+     * A cell is twice as wide as it is tall, so a plane falling north drops twice as far a row as a
+     * plane of the same ground slope falling east drops a column. A shading that read both
+     * differences over one cell of the sheet drew the north-facing plane half as steep as the
+     * east-facing one (Audit III's F-R5). What each plane's shading should be is worked out here
+     * from its exact gradient on the ground, through the model's own lamps and its own sky, with
+     * the sky's horizon along each bearing being the plane itself; that is what the drawn factor is
+     * held to. Planes of one steepness at sixteen facings; equal slopes facing different ways are
+     * lit differently, and the clause asks only that each be lit as its ground is.
+     */
+    @Test
+    fun `a plane is shaded as the ground it stands for, whichever way it faces`() {
+        val config = com.cartogenesis.worldgen.model.WorldGenConfig()
+        val rowScale = config.cellHeightInCellWidths
+        val width = config.width
+        val scale = ReliefShading.slopeScale(width)
+        val step = ReliefShading.opennessStep(width)
+        val sky = ReliefShading.DAYLIGHT
+        val onFlatGround = ReliefShading.directLight(0f, 0f, 1f)
+        var worst = 0.0
+        var worstFacing = 0
+        for (facing in 0 until PLANE_FACINGS) {
+            val falls = 2.0 * PI * facing / PLANE_FACINGS
+            val plane = FloatField.of(PLANE_FIELD, PLANE_FIELD) { column, row ->
+                (0.5 - PLANE_FALL_PER_CELL_WIDTH * (column * cos(falls) + row * rowScale * sin(falls))).toFloat()
+            }
+            val drawn = ReliefShading.at(
+                PLANE_FIELD / 2, PLANE_FIELD / 2, plane, scale, step, singleLamp = false, rowScale
+            ).toDouble()
+
+            // The model's central difference spans two cell widths of ground either way.
+            val eastward = (-2.0 * PLANE_FALL_PER_CELL_WIDTH * cos(falls) * scale).toFloat()
+            val southward = (-2.0 * PLANE_FALL_PER_CELL_WIDTH * sin(falls) * scale).toFloat()
+            val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
+            val direct = ReliefShading.directLight(eastward, southward, normalLength) / onFlatGround
+            // An infinite plane's horizon along a bearing is the plane: its rise per cell width of
+            // ground along that bearing, where it rises, and nothing where it falls away.
+            var blocked = 0.0
+            for (bearing in 0 until 8) {
+                val toward = PI / 4 * bearing
+                val rise = -PLANE_FALL_PER_CELL_WIDTH * scale * cos(toward - falls)
+                val tangent = maxOf(0.0, rise)
+                blocked += sky.brightness[bearing] * tangent / sqrt(tangent * tangent + 1.0)
+            }
+            val open = 1.0 - blocked / sky.brightnessTotal
+            val illumination = sky.diffuseShare * open + (1.0 - sky.diffuseShare) * direct
+            val expected = (illumination / ReliefShading.ordinaryGround).coerceIn(DARKEST.toDouble(), 1.35)
+            val gap = kotlin.math.abs(drawn - expected)
+            println("RELIEF plane falling at %5.1f degrees on the ground: drawn %.4f, the ground's %.4f".format(360.0 * facing / PLANE_FACINGS, drawn, expected))
+            if (gap > worst) { worst = gap; worstFacing = facing }
+        }
+        assertTrue(
+            worst <= PLANE_TOLERANCE,
+            "a plane falling at ${360.0 * worstFacing / PLANE_FACINGS} degrees on the ground is drawn " +
+                "${"%.4f".format(worst)} off the shading of the ground it stands for"
+        )
+    }
+
     /** The unnormalised light over every land cell, in cell order. */
     private fun illuminationOverLand(world: WorldMap, sky: ReliefShading.Sky): FloatArray {
         val elevation = world.sea.relativeElevation
@@ -333,7 +420,8 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 val cell = row * world.width + column
                 if (!land[cell]) continue
                 light[cell] = ReliefShading.illumination(
-                    column, row, elevation, SLOPE_SCALE, OPENNESS_STEP, sky
+                    column, row, elevation, SLOPE_SCALE, OPENNESS_STEP,
+                    world.config.cellHeightInCellWidths, sky
                 )
             }
         }
@@ -356,11 +444,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     fun `the sky model has the same contrast as the lamp it replaces`() {
         val world = WORLD
         val sky = Spread(
-            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, singleLamp = false),
+            ReliefShading.of(
+                world.sea.relativeElevation, world.sea.isLand, singleLamp = false,
+                cellHeightInCellWidths = world.config.cellHeightInCellWidths
+            ),
             world
         )
         val lamp = Spread(
-            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, singleLamp = true),
+            ReliefShading.of(
+                world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                cellHeightInCellWidths = world.config.cellHeightInCellWidths
+            ),
             world
         )
         println("RELIEF over ${lamp.cells} land cells of seed 234475 at 512")

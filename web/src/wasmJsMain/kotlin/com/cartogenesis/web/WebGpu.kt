@@ -52,28 +52,29 @@ internal external fun deviceLabel(device: JsHandle): String
  * expensive part, so it happens once rather than per sweep.
  */
 @JsFun(
-    """(device, width, height, heightsBuffer, maxOrthogonalDrop, passes, rate) => (async () => {
+    """(device, width, height, heightsBuffer, eastWest, northSouth, diagonal, passes, rate) => (async () => {
         if (device.__lost) return null;
 
         const cells = width * height;
-        const orthogonal = maxOrthogonalDrop;
-        const diagonal = orthogonal * Math.SQRT2;
-        const settled = orthogonal * 1e-3;
+        const settled = eastWest * 1e-3;
 
         const shared = `
-            // Six values, and two words of padding to reach 32 bytes. A struct in the uniform
-            // address space has to be a multiple of 16 bytes; at 24 the binding reads as zeros
-            // rather than failing, which makes width zero, sends every invocation down the
-            // out-of-bounds early return, and leaves the output untouched.
+            // Seven values, and a word of padding to reach 32 bytes. A struct in the uniform
+            // address space has to be a multiple of 16 bytes; short of it the binding reads as
+            // zeros rather than failing, which makes width zero, sends every invocation down the
+            // out-of-bounds early return, and leaves the output untouched. The three limits are
+            // ErosionStage.thermalLimits: the steepest drop toward a neighbour along a row, down a
+            // column and on a diagonal, which differ because a row is not as tall as a column is
+            // wide.
             struct Params {
                 width: u32,
                 height: u32,
-                orthogonal: f32,
+                eastWest: f32,
+                northSouth: f32,
                 diagonal: f32,
                 rate: f32,
                 settled: f32,
                 pad0: f32,
-                pad1: f32,
             };
             @group(0) @binding(0) var<storage, read> source: array<f32>;
             @group(0) @binding(1) var<storage, read_write> destination: array<f32>;
@@ -111,7 +112,7 @@ internal external fun deviceLabel(device: JsHandle): String
                     if (drop <= 0.0) { continue; }
                     steepest = max(steepest, drop);
                     var limit = params.diagonal;
-                    if (n < 4) { limit = params.orthogonal; }
+                    if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
                     if (drop > limit) { excess = excess + (drop - limit); }
                 }
 
@@ -140,7 +141,7 @@ internal external fun deviceLabel(device: JsHandle): String
                     if (ny < 0 || ny >= i32(params.height)) { continue; }
                     let j = indexOf(x + OFFSETS[n].x, ny);
                     var limit = params.diagonal;
-                    if (n < 4) { limit = params.orthogonal; }
+                    if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
 
                     let incoming = source[j] - here;
                     if (incoming > limit) {
@@ -170,7 +171,7 @@ internal external fun deviceLabel(device: JsHandle): String
         });
         const paramData = new ArrayBuffer(32);
         new Uint32Array(paramData, 0, 2).set([width, height]);
-        new Float32Array(paramData, 8, 4).set([orthogonal, diagonal, rate, settled]);
+        new Float32Array(paramData, 8, 5).set([eastWest, northSouth, diagonal, rate, settled]);
         device.queue.writeBuffer(params, 0, paramData);
         device.queue.writeBuffer(bufferA, 0, heightsBuffer);
 
@@ -256,7 +257,9 @@ internal external fun runErosion(
     width: Int,
     height: Int,
     heights: JsHandle,
-    maxOrthogonalDrop: Float,
+    eastWestLimit: Float,
+    northSouthLimit: Float,
+    diagonalLimit: Float,
     passes: Int,
     rate: Float
 ): JsHandle

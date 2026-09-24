@@ -59,7 +59,7 @@ private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
     // A zero-sweep run must hand the input straight back, which separates a broken exchange across
     // the wasm boundary from a broken shader.
     val roundTrip = accelerator.erode(
-        config.width, config.height, uplift.data, ErosionStage.maxOrthogonalDrop(config), 0,
+        config.width, config.height, uplift.data, ErosionStage.thermalLimits(config), 0,
         config.erosion.rate
     ) ?: return "device=${accelerator.name} declined a zero-sweep run"
     var roundTripWorst = 0f

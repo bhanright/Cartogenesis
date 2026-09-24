@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.LakesConfig
@@ -234,6 +235,8 @@ internal object LakeWaterBalance {
      *   array serves every basin without being cleared between them.
      * @param pathKey scratch, one float per cell: the highest ground on the route to that cell.
      * @param seed the world's seed, so the [jitter] is this world's and not every world's.
+     * @param cellHeightInCellWidths how tall a row is against a column's width, so the descent is
+     *   steepest on the ground and not on a square of cells.
      * @param flowTarget modified in place.
      */
     fun routeIntoWater(
@@ -247,8 +250,10 @@ internal object LakeWaterBalance {
         settled: IntArray,
         mark: Int,
         pathKey: FloatArray,
-        seed: Long
+        seed: Long,
+        cellHeightInCellWidths: Double
     ) {
+        val steps = GroundSteps(cellHeightInCellWidths)
         fun surfaceAt(cell: Int): Float =
             ground.data[cell] + jitter(width, cell % width, cell / width, seed)
 
@@ -275,7 +280,7 @@ internal object LakeWaterBalance {
                 var steepestNeighbour = -1
                 var steepestDrop = -Float.MAX_VALUE
                 FlowRouting.forEachNeighbourWithDistance(
-                    width, height, column, row
+                    width, height, column, row, steps
                 ) { neighbour, distance ->
                     if (settled[neighbour] != mark) return@forEachNeighbourWithDistance
                     val drop = (here - surfaceAt(neighbour)) / distance

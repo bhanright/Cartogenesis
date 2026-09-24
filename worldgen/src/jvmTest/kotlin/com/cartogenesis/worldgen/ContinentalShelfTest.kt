@@ -35,6 +35,14 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
 
         /** A plateau cell at the break itself, read back through a float, in relative units. */
         const val BREAK_ROUNDING = 1e-6f
+
+        /**
+         * The band of the shelf the facing clause reads, as shares of its width: clear of the
+         * coast's own cells, where the depth is the coast's and not the plateau's, and short of the
+         * break, where a cell's own rounding decides which side it falls.
+         */
+        const val BAND_FROM = 0.3f
+        const val BAND_TO = 0.9f
     }
 
     /**
@@ -51,10 +59,10 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
      * (`relativeElevation > -0.12`, 1,200 m), which holds on the ground too, because what lies past
      * a short plateau is the upper slope and still shallower than that. And the shelf's own: water
      * no deeper than its break, `SeaConfig.shelfDepthMetres`, which is what the plateau promises out
-     * to the shelf's width. That one fails on the ground: the stage measures its distance with a row
-     * as tall as a column, so off a coast facing north or south the plateau reaches half the width
-     * and the slope begins inside the band. That is Audit III's C7, kept running here as a known
-     * failure until the chunk that gives the stage the row scale.
+     * to the shelf's width. That one failed on the ground while the stage measured its distance
+     * with a row as tall as a column, since off a coast facing north or south the plateau reached
+     * half the width and the slope began inside the band: Audit III's C7, 80.4%, 76.2% and 85.4% on
+     * the three seeds, run as a known failure until the stage was given the row scale.
      */
     @Test
     fun `shallow water hugs the coast and the open ocean is deep`() {
@@ -90,20 +98,94 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // The plateau runs from 30 m at the coast to the break at the shelf's width, so on the
         // ground the band should stand no deeper than the break nearly throughout; the same tenth
         // is room for the fjords the ice cuts across it.
-        KnownFailures.expect(
-            "C7: the shelf is measured with a row as tall as a column, so it is half as wide north-south",
-            "seed 7 80.4%, seed 42 76.2%, seed 1234 85.4%"
-        ) {
-            val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
-            if (short.isNotEmpty()) {
-                val found = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
-                throw RecordedViolation(
-                    "within a shelf's width of the coast on the ground, only $found of the water stands no " +
-                        "deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%",
-                    found
+        val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
+        assertTrue(
+            short.isEmpty(),
+            "within a shelf's width of the coast on the ground, only " +
+                short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) } +
+                " of the water stands no deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%"
+        )
+    }
+
+    /**
+     * The shelf is as wide off a coast facing north or south as off one facing east or west, on the
+     * ground.
+     *
+     * The water between three tenths and nine tenths of the shelf's width from land, split by which
+     * way the coast it is nearest faces: north or south where the step to that land runs more than
+     * twice as far north-south as east-west on the ground, east or west the other way round, and the
+     * diagonals left out. Each half must stand no deeper than the shelf break nearly throughout, the
+     * tenth being the same room for the fjords the clause above leaves. A stage that counts a row as
+     * a column ends a north-facing plateau at half the shelf's width, so most of that band off a
+     * northern coast is already down the slope.
+     */
+    @Test
+    fun `the shelf is as wide off a coast facing north as off one facing east`() {
+        seeds.forEach { seed ->
+            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val world = SharedWorlds.world(config)
+            val breakDepth = -config.scale.depthShareOfMetres(config.sea.shelfDepthMetres) - BREAK_ROUNDING
+            val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
+            val facing = byFacing(world, shelfWidthCells * BAND_FROM, shelfWidthCells * BAND_TO) { cell ->
+                world.sea.relativeElevation.data[cell] > breakDepth
+            }
+            println(
+                ("SHELF seed $seed: between %.0f%% and %.0f%% of the shelf's width from land, on the ground, " +
+                    "%.1f%% of the water off north- and south-facing coasts (%d cells) and %.1f%% off east- and " +
+                    "west-facing ones (%d cells) stands no deeper than the break").format(
+                    BAND_FROM * 100, BAND_TO * 100, facing.northSouth * 100, facing.northSouthCells,
+                    facing.eastWest * 100, facing.eastWestCells
                 )
+            )
+            assertTrue(
+                facing.northSouth > NEAR_SHALLOW_SHARE && facing.eastWest > NEAR_SHALLOW_SHARE,
+                "seed $seed: the shelf's plateau holds ${(facing.northSouth * 100).toInt()}% of its band off " +
+                    "north- and south-facing coasts and ${(facing.eastWest * 100).toInt()}% off east- and west-facing ones"
+            )
+        }
+    }
+
+    private class Facing(val northSouth: Double, val northSouthCells: Int, val eastWest: Double, val eastWestCells: Int)
+
+    /**
+     * Of the water between [fromCellWidths] and [toCellWidths] from land on the ground, the share
+     * [holds] is true of, off coasts facing north or south and off coasts facing east or west.
+     */
+    private fun byFacing(world: WorldMap, fromCellWidths: Float, toCellWidths: Float, holds: (Int) -> Boolean): Facing {
+        val w = world.width
+        val h = world.height
+        val rowScale = world.config.cellHeightInCellWidths
+        val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
+        val label = IntArray(w * h) { -1 }
+        for (i in 0 until w * h) {
+            if (world.sea.isLand[i]) {
+                dist[i] = 0f
+                label[i] = i
             }
         }
+        JumpFloodDistance.run(w, h, dist, label, rowScale)
+        var northSouthHeld = 0
+        var northSouthCells = 0
+        var eastWestHeld = 0
+        var eastWestCells = 0
+        for (cell in 0 until w * h) {
+            if (world.sea.isLand[cell]) continue
+            val d = dist[cell]
+            if (d < fromCellWidths || d > toCellWidths) continue
+            val land = label[cell]
+            var across = (cell % w - land % w).toDouble()
+            if (across > w / 2) across -= w
+            if (across < -w / 2) across += w
+            val down = (cell / w - land / w) * rowScale
+            when {
+                abs(down) > 2 * abs(across) -> { northSouthCells++; if (holds(cell)) northSouthHeld++ }
+                abs(across) > 2 * abs(down) -> { eastWestCells++; if (holds(cell)) eastWestHeld++ }
+            }
+        }
+        return Facing(
+            northSouthHeld.toDouble() / northSouthCells.coerceAtLeast(1), northSouthCells,
+            eastWestHeld.toDouble() / eastWestCells.coerceAtLeast(1), eastWestCells
+        )
     }
 
     /** Ground rule 2: shown failing without the fix, at exactly the width the guard above uses. */

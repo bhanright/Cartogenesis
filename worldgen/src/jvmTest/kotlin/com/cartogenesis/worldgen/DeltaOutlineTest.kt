@@ -288,9 +288,10 @@ class DeltaOutlineTest {
             shapes.forEach { (name, form) ->
                 val (outX, outY, wobble) = form
                 val sediment = FloatArray(w * h)
-                val scratch = DeltaFan.Scratch(w * h, reach.toInt())
+                val scratch = DeltaFan.Scratch(w * h, reach.toInt(), SQUARE_CELLS)
                 val rim = DeltaFan.Rim(
-                    apex = apex, width = w, reachCells = reach, outX = outX, outY = outY,
+                    apex = apex, width = w, cellHeightInCellWidths = SQUARE_CELLS,
+                    reachCells = reach, outX = outX, outY = outY,
                     hash = hash, grooved = false, wobble = wobble
                 )
                 growFan(
@@ -522,6 +523,58 @@ class DeltaOutlineTest {
      * own; the control is the same twenty-four walks with the depth term switched off, which is
      * what the breadth-first walk did — it never looked at the water at all.
      */
+    /**
+     * A lobe with no direction to build in reaches as far north and south as east and west, on
+     * this project's own cells.
+     *
+     * `ErosionConfig.deltaReachKm` is a length on the ground, converted to cells with the cell's
+     * width; a rim that measured its distances in cells would therefore reach half as far north and
+     * south as the kilometres it was given (Audit III's B-D2). Grown on open flat water with no
+     * wobble, a fan's extent along each axis is read back in cell widths.
+     */
+    @Test
+    fun `a lobe reaches as far north as east on the ground`() {
+        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val rowScale = config.cellHeightInCellWidths
+        val w = 256
+        val h = 256
+        val apexColumn = w / 2
+        val apexRow = h / 2
+        // Far wider than a delta on the default grid, so the extent is read to a few percent.
+        val reach = WIDE_LOBE_CELL_WIDTHS
+        val sediment = FloatArray(w * h)
+        val scratch = DeltaFan.Scratch(w * h, reach.toInt(), rowScale)
+        val rim = DeltaFan.Rim(
+            apex = apexRow * w + apexColumn, width = w, cellHeightInCellWidths = rowScale,
+            reachCells = reach, outX = 0f, outY = 0f, hash = DeltaFan.hash(42L, 1), grooved = false,
+            wobble = 0f
+        )
+        growFan(
+            w, h, budget = 1e9, rim = rim, scratch = scratch, id = 1,
+            surfaceOf = FloatArray(w * h) { -1f }, sediment = sediment,
+            settled = FloatArray(w * h), toRelative = 1f, wholeCells = false, log = null,
+            mark = DepositionLog.SEA_LOBE, accepts = { true }, advance = { 1f }, levelOf = { _, _ -> 0f }
+        )
+        var eastWest = 0.0
+        var northSouth = 0.0
+        for (cell in 0 until w * h) {
+            if (sediment[cell] <= 0f) continue
+            val across = abs(cell % w - apexColumn).toDouble()
+            val down = abs(cell / w - apexRow) * rowScale
+            if (cell / w == apexRow) eastWest = maxOf(eastWest, across)
+            if (cell % w == apexColumn) northSouth = maxOf(northSouth, down)
+        }
+        println(
+            "DELTA a directionless lobe of %.1f cell widths reaches %.1f east-west and %.1f north-south on the ground"
+                .format(reach, eastWest, northSouth)
+        )
+        assertTrue(
+            abs(eastWest - northSouth) <= 1.0,
+            "a lobe of ${"%.1f".format(reach)} cell widths reaches ${"%.1f".format(eastWest)} east-west and " +
+                "${"%.1f".format(northSouth)} north-south on the ground"
+        )
+    }
+
     @Test
     fun `a fan reaches further over a shelf than into deep water`() {
         val w = 96
@@ -546,9 +599,10 @@ class DeltaOutlineTest {
                 }
                 val sediment = FloatArray(w * h)
                 val settled = FloatArray(w * h)
-                val scratch = DeltaFan.Scratch(w * h, reach.toInt())
+                val scratch = DeltaFan.Scratch(w * h, reach.toInt(), SQUARE_CELLS)
                 val rim = DeltaFan.Rim(
-                    apex = apexY * w + apexX, width = w, reachCells = reach,
+                    apex = apexY * w + apexX, width = w, cellHeightInCellWidths = SQUARE_CELLS,
+                    reachCells = reach,
                     outX = 1f, outY = 0f, hash = hash, grooved = false
                 )
                 growFan(
@@ -652,7 +706,10 @@ class DeltaOutlineTest {
         val sea = SeaLevelStage.percentileCut(run.height, 0.62f, run.config.scale)
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow =
-            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, run.seed)
+            FlowRouting.flowDirections(
+                w, h, sea.isLand, sea.relativeElevation, filled, run.seed,
+                run.config.cellHeightInCellWidths
+            )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
 
@@ -776,5 +833,19 @@ class DeltaOutlineTest {
 
         /** Mouths measured in the synthetic depth test. */
         const val TRIALS = 24
+
+        /**
+         * The row scale of the synthetic grids the outline's shape and its depth bending are read
+         * on: square cells, so a harmonic of the outline in cells is the same harmonic on the
+         * ground. What the rim does on this project's own cells is `a lobe reaches as far north
+         * as east on the ground`.
+         */
+        const val SQUARE_CELLS = 1.0
+
+        /**
+         * The directionless lobe's reach in the ground-reach case: forty cell widths, so the lobe's
+         * `DeltaFan.SIDE_REACH_SHARE` of it is fifteen, and a cell of rasterisation is a fifteenth.
+         */
+        const val WIDE_LOBE_CELL_WIDTHS = 40f
     }
 }

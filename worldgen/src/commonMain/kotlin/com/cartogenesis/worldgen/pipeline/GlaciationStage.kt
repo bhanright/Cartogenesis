@@ -361,6 +361,7 @@ object GlaciationStage {
             sea.relativeElevation,
             filled,
             config.seed,
+            config.cellHeightInCellWidths,
             config.facetRouting,
             config.flatPotential
         )

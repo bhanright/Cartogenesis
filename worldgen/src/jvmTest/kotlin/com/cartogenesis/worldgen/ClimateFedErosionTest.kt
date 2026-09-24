@@ -204,7 +204,7 @@ class ClimateFedErosionTest {
             )
             val receiversBare = FlowRouting.flowDirections(
                 once.width, once.height, bareCut.isLand, bareCut.relativeElevation, filledBare,
-                once.seed, once.facetRouting, once.flatPotential
+                once.seed, once.cellHeightInCellWidths, once.facetRouting, once.flatPotential
             )
             val area = FlowRouting.accumulate(
                 config.width, config.height, bareCut.isLand, filledBare, receiversBare,
@@ -712,7 +712,7 @@ class ClimateFedErosionTest {
         )
         val directions = FlowRouting.flowDirections(
             config.width, config.height, cut.isLand, cut.relativeElevation, filled,
-            config.seed, config.facetRouting, config.flatPotential
+            config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential
         )
         val area = FlowRouting.accumulate(
             config.width, config.height, cut.isLand, filled, directions, cut.landCellCount

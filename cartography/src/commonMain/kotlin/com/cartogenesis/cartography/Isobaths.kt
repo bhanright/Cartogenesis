@@ -119,18 +119,29 @@ object Isobaths {
     fun interval(scale: WorldScale): Float = scale.depthShareOfMetres(INTERVAL_METRES)
 
     /**
-     * [ABYSSAL_PLAIN_GRADIENT] in the units the raster measures a slope in: field units per pixel.
+     * [ABYSSAL_PLAIN_GRADIENT] in the units the plain is judged in: field units per cell width of
+     * ground.
      *
-     * A pixel covers a piece of the world, and how big a piece is what turns a gradient on the sea
+     * A cell width is a piece of the world, and how big a piece is what turns a gradient on the sea
      * floor into a difference between two neighbours. Both halves come from the config — how wide
      * the world is taken to be, and how many metres its full elevation range stands for — so the
      * rule is about the sea floor and holds at every resolution: at 2048 the same plain is measured
      * over four times as many cells, each a quarter of the ground, and comes to the same gradient.
+     *
+     * Per cell width, and read against the floor's fall on the ground (see [ink]), because a plain
+     * is a plain whichever way it falls. The rule used to take one cell side for both axes, the
+     * geometric mean of a cell's width and height, and read it against the fall per pixel, so on
+     * cells twice as wide as they are tall a floor falling east was judged at 1.41 of its gradient
+     * and one falling north at 0.71 (Audit III's F-R5).
+     *
+     * [height] is not read: the cell's width alone is the unit. It is kept so the call reads the
+     * grid it describes.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun flattestSlope(config: WorldGenConfig, width: Int, height: Int): Float {
-        val kilometresPerCell = sqrt(config.scale.squareKilometresPerCell(width, height)).toFloat()
+        val kilometresPerCellWidth = config.scale.cellWidthKm(width).toFloat()
         return config.scale.depthShareOfMetres(
-            ABYSSAL_PLAIN_GRADIENT * kilometresPerCell * METRES_PER_KILOMETRE
+            ABYSSAL_PLAIN_GRADIENT * kilometresPerCellWidth * METRES_PER_KILOMETRE
         )
     }
 
@@ -139,14 +150,22 @@ object Isobaths {
      * line.
      *
      * [depth] is 0 at the shoreline and 1 at the deepest floor the field can hold; [slopePerPixel]
-     * is how much of that depth a step of one pixel covers here; [interval] comes from [interval]
-     * and [flattestSlope] from [flattestSlope], or 0 to draw on the plains as well, which is the
+     * is how much of that depth a step of one pixel covers here, which is what holds a line to its
+     * width on the sheet; [slopePerCellWidth] is how much of it a cell width of ground covers,
+     * which is what says whether the floor is a plain; [interval] comes from [interval] and
+     * [flattestSlope] from [flattestSlope], or 0 to draw on the plains as well, which is the
      * control `IsobathTest` measures against.
      */
-    fun ink(depth: Float, slopePerPixel: Float, interval: Float, flattestSlope: Float): Float {
+    fun ink(
+        depth: Float,
+        slopePerPixel: Float,
+        slopePerCellWidth: Float,
+        interval: Float,
+        flattestSlope: Float
+    ): Float {
         if (depth <= 0f) return 0f
         val onASlope = if (flattestSlope <= 0f) 1f else Engraving.smoothstep(
-            flattestSlope * PLAIN_FADE_FROM, flattestSlope, slopePerPixel
+            flattestSlope * PLAIN_FADE_FROM, flattestSlope, slopePerCellWidth
         )
         if (onASlope <= 0f) return 0f
         val run = if (slopePerPixel < FLATTEST_SLOPE) FLATTEST_SLOPE else slopePerPixel

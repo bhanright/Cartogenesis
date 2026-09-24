@@ -2,6 +2,8 @@ package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.ExportFormat
+import com.cartogenesis.worldgen.WorldGenerationEngine
+import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -58,10 +60,12 @@ class ExportSmokeTest {
     fun `the three picture formats, their sizes, and what WebP costs in fidelity`() {
         val outputDir = File("build/exports").apply { mkdirs() }
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        // The world a 1024 export of a 512 world draws: made again at 1024 from its settings.
+        val world = WorldGenerationEngine.generateBlocking(base.atResolution(1024, 1024))
 
         val results = ExportFormat.entries.associateWith { format ->
             val destination = File(outputDir, Exporter.defaultName(base, 1024, format))
-            runBlocking { Exporter.export(base, RenderOptions(), 1024, destination, format) }
+            runBlocking { Exporter.export(world, RenderOptions(), destination, format) }
         }
 
         val png = results.getValue(ExportFormat.PNG)

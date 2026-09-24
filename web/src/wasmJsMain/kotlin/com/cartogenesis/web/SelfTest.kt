@@ -3,11 +3,11 @@ package com.cartogenesis.web
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataFiles
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
-import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.MapImage
@@ -117,18 +117,22 @@ private suspend fun runStorageSelfTest(): String {
     val bytes = WorldCodec.encode(document, world, compressor, "web-selftest")
 
     val library = IndexedDbLibrary(compressor, "web-selftest")
-    val writeElapsed = measureTime { library.save(document, world) }
+    var key = ""
+    val writeElapsed = measureTime { key = library.save(document, world) }
 
-    var restored: WorldSave? = null
-    val readElapsed = measureTime { restored = library.load(document.id) }
-    library.delete(document.id)
+    var restored: LoadOutcome? = null
+    val readElapsed = measureTime { restored = library.load(key) }
+    val listed = library.list().any { it.key == key && it.document?.title == document.title }
+    library.delete(key)
 
-    val restoredHeights = restored?.world?.terrain?.height?.data
+    val opened = restored as? LoadOutcome.Loaded
+    val restoredHeights = opened?.save?.world?.terrain?.height?.data
     val identical = restoredHeights != null && restoredHeights.contentEquals(world.terrain.height.data)
+    val refusal = (restored as? LoadOutcome.Refused)?.refusal?.message
 
     return "storage compression=${compressor.name} bytes=${bytes.size} " +
         "writeMs=${writeElapsed.inWholeMilliseconds} readMs=${readElapsed.inWholeMilliseconds} " +
-        "heightIdentical=$identical"
+        "listed=$listed heightIdentical=$identical" + (refusal?.let { " refused=\"$it\"" } ?: "")
 }
 
 /**

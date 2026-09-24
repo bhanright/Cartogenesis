@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -91,16 +92,16 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // is room for the fjords the ice cuts across it.
         KnownFailures.expect(
             "C7: the shelf is measured with a row as tall as a column, so it is half as wide north-south",
-            Signature.unplaced(3, 0.7619)
+            "seed 7 80.4%, seed 42 76.2%, seed 1234 85.4%"
         ) {
             val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
-            GuardViolation.unless(
-                short.isEmpty(),
-                { Signature.unplaced(short.size, short.minOf { it.second }) }
-            ) {
-                "within a shelf's width of the coast on the ground, only " +
-                    short.joinToString { (seed, near) -> "seed $seed %.1f%%".format(near * 100) } +
-                    " of the water stands no deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%"
+            if (short.isNotEmpty()) {
+                val found = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
+                throw RecordedViolation(
+                    "within a shelf's width of the coast on the ground, only $found of the water stands no " +
+                        "deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%",
+                    found
+                )
             }
         }
     }

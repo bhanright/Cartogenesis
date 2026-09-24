@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -51,7 +52,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the calibration lands every audited seed's coast near 3000 mm and its desert core under 250`() {
-        val misses = ArrayList<Pair<Long, Float>>()
+        val misses = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
@@ -96,17 +97,18 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
                     "desert core (p10 @ 25-35deg) %.0fmm, ".format(core) +
                     "desert %.2f%% of land, %.0f%% of it in the 15-45deg band".format(desertShare, inBand)
             )
-            if (abs(coast - CALIBRATED_COAST_MM) > FEW_HUNDRED_MM) misses += seed to coast
-            if (core >= DESERT_LINE_MM) misses += seed to core
+            if (abs(coast - CALIBRATED_COAST_MM) > FEW_HUNDRED_MM) {
+                misses += String.format(Locale.ROOT, "seed %d's windward coast at %.0f mm", seed, coast)
+            }
+            if (core >= DESERT_LINE_MM) misses += String.format(Locale.ROOT, "seed %d's desert core at %.0f mm", seed, core)
         }
-        KnownFailures.expect("I-9: the rainfall calibration's figures predate W2 and W3", Signature.unplaced(1, 574.4)) {
-            GuardViolation.unless(
-                misses.isEmpty(),
-                { Signature.unplaced(misses.size, misses.maxOf { abs(it.second - CALIBRATED_COAST_MM).toDouble() }) }
-            ) {
-                "the calibration misses on ${misses.size} figures: " +
-                    misses.joinToString { (seed, mm) -> "seed $seed at %.0f mm".format(mm) } +
-                    ", against a windward coast of $CALIBRATED_COAST_MM +/- $FEW_HUNDRED_MM mm and a desert core under $DESERT_LINE_MM"
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 1234's windward coast at 3574 mm") {
+            if (misses.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +
+                        "coast of $CALIBRATED_COAST_MM +/- $FEW_HUNDRED_MM mm and a desert core under $DESERT_LINE_MM",
+                    misses.joinToString()
+                )
             }
         }
     }

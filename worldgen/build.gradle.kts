@@ -65,8 +65,8 @@ tasks.withType<Test>().configureEach {
 
 /*
  * The re-armed guards' known failures: clauses that fail today on a defect an audit found and are
- * kept running under the name of that finding (`KnownFailures` in the tests, the twin of the
- * geometry guard's in `:cartography`). Each test task hands the tests a file to append them to,
+ * kept running under the name of that finding (`KnownFailures` in the tests, the twin of
+ * `:cartography`'s). Each test task hands the tests a file to append them to,
  * clears it before it runs and prints it once the whole task has run, pass or fail, as
  * `:cartography`'s build script does for the geometry guard — so what is known to be wrong is at
  * the foot of every tier's output.
@@ -78,9 +78,7 @@ tasks.withType<Test>().configureEach {
     afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
         if (suite.parent == null && report.exists()) {
             val lines = report.readLines()
-            val known = lines.count { it.startsWith("KNOWN FAILURE") }
-            val insufficient = lines.count { it.startsWith("INSUFFICIENT") }
-            println("Known failures in $name ($known), and clauses too small to measure ($insufficient):")
+            println("Known failures in $name (${lines.count { it.startsWith("KNOWN FAILURE") }}):")
             lines.forEach { println("  $it") }
         }
     }))

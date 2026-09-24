@@ -80,12 +80,15 @@ class PressureWindCostTest {
                 // moves from run to run; what is recorded is that the one clause is over its bar.
                 KnownFailures.expect(
                     "D I-4: the pressure wind is more than a hundredth of a world, so rule 8's exemption is not established",
-                    Signature.unplaced(1, 0.0)
+                    "over a hundredth of a world at 2048"
                 ) {
-                    GuardViolation.unless(share < WORTH_A_DEVICE_SHARE, { Signature.unplaced(1, 0.0) }) {
-                        ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at " +
-                            "which rule 8 asks for a graphics path rather than a measurement")
-                            .format(share * 100, WORTH_A_DEVICE_SHARE * 100)
+                    if (share >= WORTH_A_DEVICE_SHARE) {
+                        throw RecordedViolation(
+                            ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at " +
+                                "which rule 8 asks for a graphics path rather than a measurement")
+                                .format(share * 100, WORTH_A_DEVICE_SHARE * 100),
+                            "over a hundredth of a world at 2048"
+                        )
                     }
                 }
             }

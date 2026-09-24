@@ -13,6 +13,7 @@ import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import com.cartogenesis.worldgen.pipeline.erodeBlockingObservingCover
 import com.cartogenesis.worldgen.pipeline.thermalSweepBlocking
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
@@ -429,15 +430,14 @@ class ClimateFedErosionTest {
         // pin is re-derived on the path the map is made by.
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            Signature.unplaced(1, 0.198)
+            "seed 1234 at 0.198"
         ) {
-            GuardViolation.unless(
-                underThePin.isEmpty(),
-                { Signature.unplaced(underThePin.size, underThePin.minOf { it.second }) }
-            ) {
-                "rainfall and incision rank together at only " +
-                    underThePin.joinToString { (seed, fed) -> "%.3f on seed %d".format(fed, seed) } +
-                    ", under the pin of $DISSECTION_CORRELATION"
+            if (underThePin.isNotEmpty()) {
+                val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) }
+                throw RecordedViolation(
+                    "rainfall and incision rank together at only $found, under the pin of $DISSECTION_CORRELATION",
+                    found
+                )
             }
         }
     }

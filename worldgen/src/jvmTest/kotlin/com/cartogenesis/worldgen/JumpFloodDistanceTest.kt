@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.math.DistanceTransform
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
+import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -153,7 +154,17 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
     fun `jump flooding is exact on a coastline's sources and on the known counterexamples`() {
         KnownFailures.expect(
             "A-I11: the plain jump flood is not exact on land-mask sources",
-            Signature(11, 0, 63, 0.4308)
+            "three sources, row scale 0.5 (32,3) 0.0125, " +
+                "three sources, row scale 1 (0,63) 0.4308, " +
+                "three sources, row scale 1 (1,63) 0.1272, " +
+                "96 x 96 blobs seed 2, row scale 0.5 (51,28) 0.1325, " +
+                "96 x 96 blobs seed 2, row scale 0.5 (51,29) 0.1136, " +
+                "96 x 96 blobs seed 2, row scale 0.5 (16,42) 0.0756, " +
+                "96 x 96 blobs seed 2, row scale 0.5 (16,43) 0.0279, " +
+                "96 x 96 blobs seed 3, row scale 0.5 (70,4) 0.0756, " +
+                "96 x 96 blobs seed 3, row scale 0.5 (70,5) 0.0279, " +
+                "96 x 96 blobs seed 4, row scale 0.5 (47,2) 0.0232, " +
+                "128 x 64 blobs seed 3, row scale 0.5 (56,21) 0.0279"
         ) {
             val misses = ArrayList<Miss>()
             misses += nearestSourceMisses(64, 64, listOf(1254, 298, 1503), equirectangularCells, "three sources, row scale 0.5")
@@ -173,12 +184,12 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
                     (worst?.let { ", worst %.4f cell widths at (%d,%d) on %s".format(it.errorCells, it.column, it.row, it.fixture) } ?: "")
             )
             misses.groupBy { it.fixture }.forEach { (fixture, off) -> println("JFA   $fixture: ${off.size} cells off") }
-            GuardViolation.unless(
-                worst == null,
-                { Signature(misses.size, worst!!.column, worst.row, worst.errorCells) }
-            ) {
-                "jump flooding handed ${misses.size} cells a source that is not their nearest, the " +
-                    "worst by ${worst!!.errorCells} cell widths at (${worst.column},${worst.row}) on ${worst.fixture}"
+            if (worst != null) {
+                throw RecordedViolation(
+                    "jump flooding handed ${misses.size} cells a source that is not their nearest, the " +
+                        "worst by ${worst.errorCells} cell widths at (${worst.column},${worst.row}) on ${worst.fixture}",
+                    misses.joinToString { String.format(Locale.ROOT, "%s (%d,%d) %.4f", it.fixture, it.column, it.row, it.errorCells) }
+                )
             }
         }
     }
@@ -389,9 +400,10 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
             chamferSum[bin] += (chamfer[cell] - truth) / truth
             count[bin]++
         }
-        if (plateauCells < MIN_PLATEAU_CELLS) {
-            throw InsufficientSample("seed 42 has $plateauCells plateau cells where the wedge governs, under $MIN_PLATEAU_CELLS")
-        }
+        assertTrue(
+            plateauCells >= MIN_PLATEAU_CELLS,
+            "seed 42 has $plateauCells plateau cells where the wedge governs, under $MIN_PLATEAU_CELLS"
+        )
         val stageEightFold = eightFoldByBearing(stageSum, count)
         val chamferEightFold = eightFoldByBearing(chamferSum, count)
         println(

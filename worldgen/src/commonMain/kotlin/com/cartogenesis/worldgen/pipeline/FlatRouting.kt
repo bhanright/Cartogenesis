@@ -120,18 +120,50 @@ internal object FlatRouting {
     /** Marks a raised cell whose flat has been handled, so the component walk does not revisit it. */
     private const val LAID = Int.MAX_VALUE
 
-    /** The Laplacian's weight on a neighbour east or west: the unit the other two are set against. */
-    private const val EAST_WEST_WEIGHT = 1.0
+    /**
+     * The weight on a neighbour along the cell's longer side: the unit the other two are set
+     * against. East-west on cells no taller than they are wide, north-south on taller ones.
+     */
+    private const val LONG_SIDE_WEIGHT = 1.0
+
+    /** The Laplacian's three weights: a neighbour east or west, north or south, and diagonal. */
+    internal class Stencil(val eastWest: Double, val northSouth: Double, val diagonal: Double)
 
     /**
-     * The Laplacian's weight on a diagonal neighbour, `2 / (1 + r^2)` for a row scale `r`: one on
-     * square cells, so the stencil there is the unit one it replaced, and less as the cells flatten,
-     * in step with the diagonal's length on the ground. Any positive figure would make the operator
-     * isotropic once the north-south weight is set against it; this one keeps all three positive on
-     * any cell no taller than it is wide, which is every cell a square grid of this 2:1 world has.
+     * The weights of [solvePotential]'s Laplacian on cells [cellHeightInCellWidths] as tall as they
+     * are wide: isotropic on the ground, and every one of them positive whatever shape the cells are.
+     *
+     * The derivation. Measure the ground in cell widths, so a neighbour east or west is one away,
+     * one north or south `r` away and a diagonal one `(±1, ±r)`. The second-order Taylor expansion
+     * of `sum w (u_neighbour - u)` over the eight is `(e + 2d) u_xx + r^2 (n + 2d) u_yy`, the cross
+     * terms cancelling between the diagonals, for weights `e` east-west, `n` north-south and `d`
+     * on each diagonal. The operator is isotropic on the ground when the two coefficients agree,
+     * `e + 2d = r^2 (n + 2d)`, which leaves one weight free once the scale is fixed.
+     *
+     * On cells no taller than they are wide (`r <= 1`, this map's) the east-west weight is the unit
+     * and the diagonal `2 / (1 + r^2)`, one on square cells and less as the cells flatten, in step
+     * with the diagonal's length on the ground; the north-south weight follows, `(1 + 2d) / r^2 - 2d`,
+     * which is positive because `1 + 2d > 2d >= 2d r^2`. On taller cells the same rule is read with
+     * the axes exchanged, the grid seen on its side: the north-south weight is the unit, the
+     * diagonal `2 / (1 + 1/r^2)`, and the east-west weight `r^2 (1 + 2d) - 2d`, positive because
+     * `r^2 > 1`. The two agree on square cells, where all three weights are one, the unit stencil
+     * this replaced. The overall scale does not matter to the answer: the potential is laid into
+     * its band by its own highest value.
+     *
+     * Read with the axes as they are for every shape, the north-south weight goes negative once a
+     * cell is more than `sqrt(5/3)` as tall as it is wide: -0.35 on the cells of a grid 512 by 128.
+     * A negative weight voids the discrete maximum principle the solve's guarantee rests on.
      */
-    private fun diagonalWeight(cellHeightInCellWidths: Double): Double =
-        2.0 / (1.0 + cellHeightInCellWidths * cellHeightInCellWidths)
+    internal fun stencil(cellHeightInCellWidths: Double): Stencil {
+        val r = cellHeightInCellWidths
+        return if (r <= 1.0) {
+            val diagonal = 2.0 / (1.0 + r * r)
+            Stencil(LONG_SIDE_WEIGHT, (1.0 + 2.0 * diagonal) / (r * r) - 2.0 * diagonal, diagonal)
+        } else {
+            val diagonal = 2.0 / (1.0 + 1.0 / (r * r))
+            Stencil(r * r * (1.0 + 2.0 * diagonal) - 2.0 * diagonal, LONG_SIDE_WEIGHT, diagonal)
+        }
+    }
 
     /**
      * Poisson's equation over one flat: every member gathers a unit of rain, the entry holds it
@@ -140,13 +172,10 @@ internal object FlatRouting {
      *
      * The Laplacian is the ground's. On cells [cellHeightInCellWidths] as tall as they are wide, an
      * eight-neighbour stencil with every weight one is the operator `3 (w^2 d2/dx2 + h^2 d2/dy2)`
-     * on the ground, four times as conductive east-west as north-south, and the level lines it
-     * draws round an outlet are ellipses twice as long east-west. The weights here make it
-     * isotropic: a diagonal neighbour weighs [diagonalWeight], one east or west one, and one north
-     * or south whatever makes the two axes' second derivatives carry the same coefficient,
-     * `(1 + 2 d) / r^2 - 2 d` for a diagonal weight `d` and a row scale `r`. All three are positive,
-     * which keeps the discrete maximum principle the guarantee below rests on, and on square cells
-     * they are all one, the stencil this replaced.
+     * on the ground, four times as conductive east-west as north-south on this map's cells, and the
+     * level lines it draws round an outlet are ellipses twice as long east-west. The weights of
+     * [stencil] make it isotropic and keep every weight positive, which keeps the discrete maximum
+     * principle the guarantee below rests on.
      *
      * The price of an isotropic ground is an anisotropic matrix: on this map's cells a member is
      * held to the members above and below it 13.6 times as hard as to the ones beside it, and plain
@@ -156,7 +185,8 @@ internal object FlatRouting {
      * stiff direction out whole and leaves the solve converging at the pace of the soft one: the
      * same flat takes 148. The block is symmetric and positive definite, being a principal part of
      * a matrix that is, so the steps are still conjugate gradients and the answer is the same one
-     * to the tolerance; see [ColumnRuns].
+     * to the tolerance; see [ColumnRuns]. On cells taller than they are wide the stiff direction is
+     * along the row instead, and the column runs precondition less; the answer is the same.
      *
      * Returns null where the solve produced a non-positive value, which a converged solve cannot
      * (the discrete maximum principle puts every member strictly above the average of its
@@ -173,9 +203,10 @@ internal object FlatRouting {
         seed: Long,
         cellHeightInCellWidths: Double
     ): DoubleArray? {
-        val diagonal = diagonalWeight(cellHeightInCellWidths)
-        val rowScaleSquared = cellHeightInCellWidths * cellHeightInCellWidths
-        val northSouth = (1.0 + 2.0 * diagonal) / rowScaleSquared - 2.0 * diagonal
+        val stencil = stencil(cellHeightInCellWidths)
+        val diagonal = stencil.diagonal
+        val northSouth = stencil.northSouth
+        val eastWest = stencil.eastWest
 
         // The stencil per member: its weighted degree over members and entries, and its member
         // neighbours with their weights.
@@ -201,7 +232,7 @@ internal object FlatRouting {
                     val weight = when {
                         columnStep != 0 && rowStep != 0 -> diagonal
                         rowStep != 0 -> northSouth
-                        else -> EAST_WEST_WEIGHT
+                        else -> eastWest
                     }
                     val local = localIndex[neighbour]
                     if (local in 0 until memberCount && local != LAID) {

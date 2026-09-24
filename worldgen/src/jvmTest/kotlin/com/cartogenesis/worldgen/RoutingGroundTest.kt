@@ -70,63 +70,109 @@ class RoutingGroundTest {
 
     /**
      * Across a raised flat, the potential the water follows rises as fast north-south as east-west
-     * from the flat's one outlet: its level lines are round on the ground.
+     * from the flat's one outlet: its level lines are round on the ground, on cells of every shape.
      *
      * A flat round on the ground, raised one flat-gradient step over a basin floor, with its outlet
      * a single lower cell at its centre and a rim far above it all round. At the same distance on
      * the ground from the outlet, the mean potential in the north-south quarters and in the
-     * east-west ones must agree.
+     * east-west ones must agree. Read on the cells this map has, half as tall as they are wide, and
+     * on the others a grid may have: every width and height is a power of two, so a cell is
+     * `2^k` as tall as it is wide for some whole `k` (512 by 128 gives 2, 512 by 1024 a quarter).
      */
     @Test
     fun `the potential across a flat is round on the ground`() {
-        val centre = SIDE / 2
-        val isLand = BooleanArray(SIDE * SIDE) { true }
-        val ground = FloatArray(SIDE * SIDE)
-        val filled = FloatArray(SIDE * SIDE)
-        for (row in 0 until SIDE) {
-            for (column in 0 until SIDE) {
-                val cell = row * SIDE + column
-                val fromCentre = groundCellWidths(column - centre, row - centre)
-                when {
-                    column == centre && row == centre -> { ground[cell] = OUTLET; filled[cell] = OUTLET }
-                    fromCentre <= FLAT_RADIUS_CELL_WIDTHS -> { ground[cell] = 0f; filled[cell] = FLAT_SURFACE }
-                    else -> { ground[cell] = RIM; filled[cell] = RIM }
+        val failures = ArrayList<String>()
+        for (aspect in FLAT_ASPECTS) {
+            val columns = FLAT_FIELD_CELL_WIDTHS
+            val rows = kotlin.math.ceil(FLAT_FIELD_CELL_WIDTHS / aspect).toInt()
+            val centreColumn = columns / 2
+            val centreRow = rows / 2
+            val isLand = BooleanArray(columns * rows) { true }
+            val ground = FloatArray(columns * rows)
+            val filled = FloatArray(columns * rows)
+            for (row in 0 until rows) {
+                for (column in 0 until columns) {
+                    val cell = row * columns + column
+                    val across = (column - centreColumn).toDouble()
+                    val down = (row - centreRow) * aspect
+                    val fromCentre = sqrt(across * across + down * down)
+                    when {
+                        column == centreColumn && row == centreRow -> { ground[cell] = OUTLET; filled[cell] = OUTLET }
+                        fromCentre <= FLAT_RADIUS_CELL_WIDTHS -> { ground[cell] = 0f; filled[cell] = FLAT_SURFACE }
+                        else -> { ground[cell] = RIM; filled[cell] = RIM }
+                    }
                 }
             }
-        }
-        val surface = FlatRouting.surfaceOf(
-            SIDE, SIDE, isLand, FloatField(SIDE, SIDE, ground), FloatField(SIDE, SIDE, filled), config.seed, rowScale
-        )
-        assertTrue(surface.flats == 1 && surface.flatsKept == 0, "the flat was not laid: ${surface.flats} flats, ${surface.flatsKept} kept")
-        val floor = surface.heights[centre * SIDE + centre + 1]
-        val ratios = RING_RADII_CELL_WIDTHS.map { radius ->
-            var eastWestSum = 0.0
-            var eastWestCells = 0
-            var northSouthSum = 0.0
-            var northSouthCells = 0
-            for (row in 0 until SIDE) {
-                for (column in 0 until SIDE) {
-                    val across = (column - centre).toDouble()
-                    val down = (row - centre) * rowScale
-                    if (abs(sqrt(across * across + down * down) - radius) > RING_HALF_WIDTH) continue
-                    val potential = surface.heights[row * SIDE + column] - floor
-                    if (abs(across) > abs(down)) { eastWestSum += potential; eastWestCells++ }
-                    else { northSouthSum += potential; northSouthCells++ }
-                }
+            val surface = FlatRouting.surfaceOf(
+                columns, rows, isLand, FloatField(columns, rows, ground), FloatField(columns, rows, filled),
+                config.seed, aspect
+            )
+            if (surface.flats != 1 || surface.flatsKept != 0) {
+                println("ROUTING flat potential on cells $aspect as tall as wide: not laid, ${surface.flats} flats, ${surface.flatsKept} kept")
+                failures.add("cells $aspect as tall as wide: the flat was not laid")
+                continue
             }
-            val ratio = (northSouthSum / northSouthCells) / (eastWestSum / eastWestCells)
-            println("ROUTING flat potential %4.0f cell widths from its outlet: north-south quarters %.3f of the east-west ones".format(radius, ratio))
-            ratio
+            val floor = surface.heights[centreRow * columns + centreColumn + 1]
+            val ratios = RING_RADII_CELL_WIDTHS.map { radius ->
+                var eastWestSum = 0.0
+                var eastWestCells = 0
+                var northSouthSum = 0.0
+                var northSouthCells = 0
+                for (row in 0 until rows) {
+                    for (column in 0 until columns) {
+                        val across = (column - centreColumn).toDouble()
+                        val down = (row - centreRow) * aspect
+                        if (abs(sqrt(across * across + down * down) - radius) > RING_HALF_WIDTH * maxOf(1.0, aspect)) continue
+                        val potential = surface.heights[row * columns + column] - floor
+                        if (abs(across) > abs(down)) { eastWestSum += potential; eastWestCells++ }
+                        else { northSouthSum += potential; northSouthCells++ }
+                    }
+                }
+                val ratio = (northSouthSum / northSouthCells) / (eastWestSum / eastWestCells)
+                println(
+                    "ROUTING flat potential on cells %.3f as tall as wide, %4.0f cell widths from its outlet: north-south quarters %.3f of the east-west ones"
+                        .format(aspect, radius, ratio)
+                )
+                ratio
+            }
+            if (!ratios.all { abs(it - 1.0) <= POTENTIAL_TOLERANCE }) {
+                failures.add("cells $aspect as tall as wide: north-south ${ratios.map { "%.2f".format(it) }} of east-west")
+            }
         }
-        assertTrue(
-            ratios.all { abs(it - 1.0) <= POTENTIAL_TOLERANCE },
-            "at the same distance on the ground the flat's potential north-south is ${ratios.map { "%.2f".format(it) }} of east-west"
-        )
+        assertTrue(failures.isEmpty(), "at the same distance on the ground the flat's potential is not round: $failures")
     }
 
-    private fun groundCellWidths(columns: Int, rows: Int): Double {
-        val down = rows * rowScale
-        return sqrt(columns.toDouble() * columns + down * down)
+    /**
+     * The flat's Laplacian weighs every neighbour positively and weighs the ground alike both ways,
+     * on cells of every shape a grid can have.
+     *
+     * Positive, because the discrete maximum principle — every member strictly above the mean of
+     * its neighbours, and so strictly above the entry — is what guarantees the potential a lower
+     * neighbour at every cell, and a negative weight voids it. Isotropic, because that is what the
+     * weights are for: the operator's second derivatives east-west and north-south on the ground
+     * carry one coefficient, `e + 2d = r^2 (n + 2d)` for weights `e`, `n` and `d` on cells `r` as
+     * tall as they are wide. Over `r = 2^k` for `k` from -8 to 8.
+     */
+    @Test
+    fun `the flat's weights are positive and isotropic on cells of every shape`() {
+        val failures = ArrayList<String>()
+        for (k in -8..8) {
+            val aspect = Math.pow(2.0, k.toDouble())
+            val weights = FlatRouting.stencil(aspect)
+            val eastWestCoefficient = weights.eastWest + 2.0 * weights.diagonal
+            val northSouthCoefficient = aspect * aspect * (weights.northSouth + 2.0 * weights.diagonal)
+            println(
+                "ROUTING flat stencil on cells %.4f as tall as wide: east-west %.4f, north-south %.4f, diagonal %.4f; coefficients %.6f and %.6f"
+                    .format(aspect, weights.eastWest, weights.northSouth, weights.diagonal, eastWestCoefficient, northSouthCoefficient)
+            )
+            if (!(weights.eastWest > 0.0 && weights.northSouth > 0.0 && weights.diagonal > 0.0)) {
+                failures.add("r=$aspect: a weight is not positive (${weights.eastWest}, ${weights.northSouth}, ${weights.diagonal})")
+            }
+            if (abs(eastWestCoefficient - northSouthCoefficient) > 1e-9 * eastWestCoefficient) {
+                failures.add("r=$aspect: east-west ${eastWestCoefficient} against north-south $northSouthCoefficient")
+            }
+        }
+        assertTrue(failures.isEmpty(), "the flat's Laplacian: $failures")
     }
 
     private companion object {
@@ -154,6 +200,16 @@ class RoutingGroundTest {
         const val FLAT_SURFACE = 1e-3f
         const val RIM = 10f
         const val FLAT_RADIUS_CELL_WIDTHS = 50.0
+
+        /** The flat's field: this many cell widths of ground each way, however many rows that is. */
+        const val FLAT_FIELD_CELL_WIDTHS = 128
+
+        /**
+         * The cell shapes the flat is laid on, as a row's height in cell widths: this map's half, the
+         * square, and a quarter and twice on either side of them, which a 512 by 1024 and a 512 by
+         * 128 grid have.
+         */
+        val FLAT_ASPECTS = listOf(0.25, 0.5, 1.0, 2.0)
 
         /** The rings the potential is read on, and how wide each is. */
         val RING_RADII_CELL_WIDTHS = listOf(10.0, 20.0, 30.0, 40.0)

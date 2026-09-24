@@ -574,10 +574,10 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             for (column in 1 until width - 1) {
                 val cell = row * width + column
                 if (!world.sea.isLand[cell]) continue
-                val here = aspectOrNull(elevation, column, row, reach, plan) ?: continue
+                val here = aspectOrNull(world, elevation, column, row, reach, plan) ?: continue
                 measured++
-                val east = aspectOrNull(elevation, column + 1, row, reach, plan)
-                val south = aspectOrNull(elevation, column, row + 1, reach, plan)
+                val east = aspectOrNull(world, elevation, column + 1, row, reach, plan)
+                val south = aspectOrNull(world, elevation, column, row + 1, reach, plan)
                 val turned = (east != null && foldedDifference(here, east) > SEAM_RADIANS) ||
                     (south != null && foldedDifference(here, south) > SEAM_RADIANS)
                 if (turned) seams++
@@ -592,6 +592,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     }
 
     private fun aspectOrNull(
+        world: WorldMap,
         elevation: com.cartogenesis.worldgen.model.FloatField,
         x: Int,
         y: Int,
@@ -602,9 +603,9 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
         val gradientY =
             (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
-        val slope = groundSlope(gradientX, gradientY, WORLD)
+        val slope = groundSlope(gradientX, gradientY, world)
         if (slope < MEASURED_SLOPE_FLOOR) return null
-        return sheetFallLine(gradientX, gradientY, WORLD)
+        return sheetFallLine(gradientX, gradientY, world)
     }
 
     /**

@@ -143,7 +143,15 @@ class ClimateTintTest : BorrowsSharedWorlds() {
 
         var controlWorst = 0.0
         MapStyle.entries.forEach { style ->
-            val drawn = MapRasterizer.rasterize(world, RenderOptions(style = style))
+            // Drawn without the coastline, because the claim is the fill's and the coastline is a
+            // stroke laid over it. The raster inks a shore cell with most of the style's coast
+            // colour, and Verdant's is a blue-teal, 0x123C44 at eight tenths: over sand it leaves
+            // a pixel whose green beats its red, which is the line being read and not the desert.
+            // One coastal desert cell of 6,542 on this world did exactly that once the ground's
+            // ruler redrew its coasts (docs/DESIGN_LEDGER.md, Fix 2), and none reads green with
+            // the stroke left off. The control below is the fill before the climate, un-inked,
+            // so this also compares the same thing on both sides.
+            val drawn = MapRasterizer.rasterize(world, RenderOptions(style = style, showCoastline = false))
             var green = 0
             var hueTotal = 0.0
             var controlGreen = 0

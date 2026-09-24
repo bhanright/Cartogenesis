@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 
-/** One line of the graticule, in cell coordinates: a whole meridian or a whole parallel. */
+/** One line of the graticule, in sheet pixels: a whole meridian or a whole parallel. */
 class GraticuleLine(
     val fromX: Float,
     val fromY: Float,
@@ -15,7 +15,7 @@ class GraticuleLine(
 /**
  * A figure in the sheet's margin, already placed: `40°N`, `0°`, `170°W`.
  *
- * [leftX] and [baselineY] are where [Numerals] should start setting it, in cell coordinates, and
+ * [leftX] and [baselineY] are where [Numerals] should start setting it, in sheet pixels, and
  * [heightPixels] is its cap height. Placed here rather than in the front end because where a
  * figure sits depends on how wide it is, and how wide it is is this module's arithmetic.
  */
@@ -30,12 +30,15 @@ class GraticuleLabel(
  * Lines of latitude and longitude over an equirectangular world, and the figures that name them.
  *
  * The map is the whole globe: 360 degrees of longitude across the sheet's width and 180 of latitude
- * down its height, with the prime meridian at the middle column and the equator at the middle row.
- * That makes the spacing exact rather than fitted — a meridian every ten degrees falls every
- * `width / 36` cells and a parallel every `height / 18`, which at 2048 is 56.888… and 113.777…
- * cells and is not asked to be a whole number of anything. Rounding it to whole cells is the one
- * mistake worth naming here: it would put the equator off the middle row and make the two
- * hemispheres different sizes.
+ * down its height, with the prime meridian at the middle and the equator half way down. That makes
+ * the spacing exact rather than fitted — a meridian every ten degrees falls every `width / 36`
+ * pixels and a parallel every `height / 18`, which on a 2048 world's 4096 by 2048 true-shape sheet
+ * is 113.777… pixels either way, and is not asked to be a whole number of anything. Rounding it to
+ * whole pixels is the one mistake worth naming here: it would put the equator off the middle and
+ * make the two hemispheres different sizes.
+ *
+ * Laid out on the sheet ([SheetGeometry]) rather than on the grid, because it belongs to the paper:
+ * its lines, its figures and where each figure sits are all in the sheet's own pixels.
  *
  * The graticule is a hairline — [RiverPen.HAIRLINE_PIXELS], the finest mark the nib leaves, for the
  * reason that constant gives — and its figures are sized from its own spacing, so a sheet twice as
@@ -44,10 +47,10 @@ class GraticuleLabel(
 class Graticule(
     val lines: List<GraticuleLine>,
     val labels: List<GraticuleLabel>,
-    /** Cells between two neighbouring meridians. Exactly `cellsAcross · degrees / 360`. */
-    val meridianSpacingCells: Float,
-    /** Cells between two neighbouring parallels. Exactly `cellsDown · degrees / 180`. */
-    val parallelSpacingCells: Float
+    /** Pixels between two neighbouring meridians. Exactly `widthPixels · degrees / 360`. */
+    val meridianSpacingPixels: Float,
+    /** Pixels between two neighbouring parallels. Exactly `heightPixels · degrees / 180`. */
+    val parallelSpacingPixels: Float
 ) {
 
     companion object {
@@ -78,20 +81,20 @@ class Graticule(
          * a smudge. A 512 sheet is therefore given a figure that is legible rather than one that is
          * in proportion, and pays for it by having [figuresEveryNthLine] label fewer of its lines.
          */
-        fun labelHeightPixels(meridianSpacingCells: Float): Float =
-            max(SMALLEST_LEGIBLE_FIGURE_PIXELS, meridianSpacingCells * figureShareOfSpacing)
+        fun labelHeightPixels(meridianSpacingPixels: Float): Float =
+            max(SMALLEST_LEGIBLE_FIGURE_PIXELS, meridianSpacingPixels * figureShareOfSpacing)
 
         /**
          * How many lines apart the figures are set: every line where they fit side by side, every
          * second or third where they would run into one another.
          *
-         * A small sheet cannot have both — its spacing is a dozen cells and its figures are held at
+         * A small sheet cannot have both — its spacing is a few dozen pixels and its figures are held at
          * six pixels by the floor above — and of the two, legible figures on every other line beat
          * a solid smear of digits on every one. An atlas does exactly this: the graticule is ruled
          * at ten degrees and figured at twenty or thirty, whichever the margin has room for.
          */
-        internal fun figuresEveryNthLine(spacingCells: Float, figurePixels: Float): Int {
-            val room = spacingCells * SHARE_OF_GAP_A_FIGURE_MAY_TAKE
+        internal fun figuresEveryNthLine(spacingPixels: Float, figurePixels: Float): Int {
+            val room = spacingPixels * SHARE_OF_GAP_A_FIGURE_MAY_TAKE
             if (room <= 0f) return 1
             // The nudge is against the exact-fit case: where the figure was sized from the
             // spacing, the ratio is one to the last bit and must not be rounded up to two.
@@ -118,15 +121,17 @@ class Graticule(
         private const val MARGIN_SHARE_OF_FIGURE = 0.55f
 
         /**
-         * The graticule for a sheet [cellsAcross] by [cellsDown], at [Graticule.DEGREES].
+         * The graticule for a sheet [widthPixels] by [heightPixels] — the true-shape sheet's own
+         * dimensions, [SheetGeometry.widthPixels] and [SheetGeometry.heightPixels] — at
+         * [Graticule.DEGREES].
          *
          * Both edges of the sheet carry the figures for the lines that cross them — longitude along
          * the top and the bottom, latitude down the left and the right — which is what lets a
          * reader take a position off a corner of the map without carrying a finger across it.
          */
-        fun of(cellsAcross: Int, cellsDown: Int): Graticule {
-            val meridianSpacing = cellsAcross.toFloat() * DEGREES / DEGREES_OF_LONGITUDE
-            val parallelSpacing = cellsDown.toFloat() * DEGREES / DEGREES_OF_LATITUDE
+        fun of(widthPixels: Int, heightPixels: Int): Graticule {
+            val meridianSpacing = widthPixels.toFloat() * DEGREES / DEGREES_OF_LONGITUDE
+            val parallelSpacing = heightPixels.toFloat() * DEGREES / DEGREES_OF_LATITUDE
             val figurePixels = labelHeightPixels(meridianSpacing)
             val marginPixels = figurePixels * MARGIN_SHARE_OF_FIGURE
             val figuredEvery = figuresEveryNthLine(meridianSpacing, figurePixels)
@@ -139,7 +144,7 @@ class Graticule(
             for (step in 0..DEGREES_OF_LONGITUDE / DEGREES) {
                 val degrees = -DEGREES_OF_LONGITUDE / 2 + step * DEGREES
                 val atX = step * meridianSpacing
-                lines.add(GraticuleLine(atX, 0f, atX, cellsDown.toFloat()))
+                lines.add(GraticuleLine(atX, 0f, atX, heightPixels.toFloat()))
                 if (abs(degrees) == DEGREES_OF_LONGITUDE / 2) continue
                 if (step % figuredEvery != 0) continue
                 val text = eastWest(degrees)
@@ -148,7 +153,7 @@ class Graticule(
                     GraticuleLabel(text, left, figurePixels + marginPixels, figurePixels)
                 )
                 labels.add(
-                    GraticuleLabel(text, left, cellsDown - marginPixels, figurePixels)
+                    GraticuleLabel(text, left, heightPixels - marginPixels, figurePixels)
                 )
             }
 
@@ -157,7 +162,7 @@ class Graticule(
             for (step in 0..DEGREES_OF_LATITUDE / DEGREES) {
                 val degrees = DEGREES_OF_LATITUDE / 2 - step * DEGREES
                 val atY = step * parallelSpacing
-                lines.add(GraticuleLine(0f, atY, cellsAcross.toFloat(), atY))
+                lines.add(GraticuleLine(0f, atY, widthPixels.toFloat(), atY))
                 if (abs(degrees) == DEGREES_OF_LATITUDE / 2) continue
                 // Figured at the same interval as the meridians, because a graticule figured every
                 // twenty degrees one way and every ten the other reads as two grids.
@@ -169,7 +174,7 @@ class Graticule(
                 labels.add(
                     GraticuleLabel(
                         text,
-                        cellsAcross - marginPixels - Numerals.widthOf(text, figurePixels),
+                        widthPixels - marginPixels - Numerals.widthOf(text, figurePixels),
                         baseline,
                         figurePixels
                     )

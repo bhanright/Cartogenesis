@@ -449,8 +449,9 @@ internal fun ChartLegend(
                                 )
                             }
                         }
-                        // The scale, under the facts it is a fact about: it is quoted for the size the
-                        // line above states, which is the size an export of this world comes out at.
+                        // The scale, under the facts it is a fact about: it is quoted for the true-shape
+                        // sheet of the grid the line above states, which is what an export of this
+                        // world comes out as.
                         Text(
                             cartouche.scale,
                             style = MaterialTheme.typography.labelSmall,
@@ -462,7 +463,7 @@ internal fun ChartLegend(
                 }
 
                 if (LegendPart.SCALE in parts && cartouche != null && progress == null) {
-                    ScaleBarStrip(cartouche.kilometresPerCellWidth, camera, frameWidth)
+                    ScaleBarStrip(cartouche.kilometresPerSheetPixel, camera, frameWidth)
                 }
 
                 // The wheel and the pinch are both invisible, so the same thing is offered where it
@@ -508,12 +509,12 @@ internal fun ChartLegend(
  * answer to how far a screen pixel reaches.
  */
 @Composable
-private fun ScaleBarStrip(kilometresPerCellWidth: Double, camera: MapCamera, frameWidth: Dp) {
-    val pixelsPerCell = camera.pixelsPerCell
-    if (pixelsPerCell <= 0f) return
+private fun ScaleBarStrip(kilometresPerSheetPixel: Double, camera: MapCamera, frameWidth: Dp) {
+    val pixelsPerSheetPixel = camera.pixelsPerSheetPixel
+    if (pixelsPerSheetPixel <= 0f) return
     val density = LocalDensity.current
     val bar = MapScale.longestBarThatFits(
-        kilometresPerCellWidth / pixelsPerCell,
+        kilometresPerSheetPixel / pixelsPerSheetPixel,
         with(density) { frameWidth.toPx() }
     )
     if (bar.lengthPixels <= 0f || !bar.lengthPixels.isFinite()) return
@@ -655,18 +656,67 @@ internal class MapCamera {
     var pan by mutableStateOf(Offset.Zero)
 
     /**
-     * Screen pixels one cell of the world covers when the whole sheet is fitted into the pane.
+     * Screen pixels one pixel of the true-shape sheet covers when the whole sheet is fitted into
+     * the pane.
      *
      * Written by the map pane as it measures, because the pane is the only thing that knows how big
      * it is; one for a sheet no larger than the pane, and a fraction for the usual case of a 2048
-     * world in a window. Everything that has to say how far a distance on the screen reaches —
-     * [pixelsPerCell], the legend's scale bar, the generalisation the overlay is drawn at — comes
-     * off this and the zoom.
+     * world's 4096-pixel sheet in a window. Everything that has to say how far a distance on the
+     * screen reaches — [pixelsPerSheetPixel], the legend's scale bar, the generalisation the
+     * overlay is drawn at — comes off this and the zoom.
      */
     var fitScale by mutableStateOf(1f)
 
-    /** Screen pixels one cell covers right now. See [fitScale]. */
-    val pixelsPerCell: Float get() = fitScale * zoom
+    /** Screen pixels one pixel of the sheet covers right now. See [fitScale]. */
+    val pixelsPerSheetPixel: Float get() = fitScale * zoom
+
+    /**
+     * Where on the screen a point of the sheet is drawn, given as fractions of the sheet — how a
+     * label is stored — for a sheet [sheetWidth] by [sheetHeight] pixels fitted into a pane
+     * [paneWidth] by [paneHeight] and then zoomed and panned by this camera.
+     *
+     * The one arithmetic the map pane draws the picture and the pins with, and [sheetFractionAt]
+     * is its inverse, so a click and a pin cannot come to disagree about where something is.
+     */
+    fun screenAt(
+        acrossSheet: Float,
+        downSheet: Float,
+        paneWidth: Float,
+        paneHeight: Float,
+        sheetWidth: Float,
+        sheetHeight: Float
+    ): Offset {
+        val fit = fitOf(paneWidth, paneHeight, sheetWidth, sheetHeight)
+        val offsetX = (paneWidth - sheetWidth * fit) / 2f
+        val offsetY = (paneHeight - sheetHeight * fit) / 2f
+        return Offset(
+            (acrossSheet * sheetWidth * fit + offsetX) * zoom + pan.x,
+            (downSheet * sheetHeight * fit + offsetY) * zoom + pan.y
+        )
+    }
+
+    /**
+     * The point of the sheet under [screen], as fractions of the sheet across and down, or null
+     * where the screen shows no sheet. Back out of the pan and the zoom, then out of the
+     * letterboxing: the inverse of [screenAt]. [com.cartogenesis.cartography.SheetGeometry.cellAtFraction]
+     * says which cell that is.
+     */
+    fun sheetFractionAt(
+        screen: Offset,
+        paneWidth: Float,
+        paneHeight: Float,
+        sheetWidth: Float,
+        sheetHeight: Float
+    ): Offset? {
+        val fit = fitOf(paneWidth, paneHeight, sheetWidth, sheetHeight)
+        val offsetX = (paneWidth - sheetWidth * fit) / 2f
+        val offsetY = (paneHeight - sheetHeight * fit) / 2f
+        val unpanned = (screen - pan) / zoom
+        val acrossSheet = (unpanned.x - offsetX) / fit / sheetWidth
+        val downSheet = (unpanned.y - offsetY) / fit / sheetHeight
+        return if (acrossSheet in 0f..1f && downSheet in 0f..1f) Offset(acrossSheet, downSheet)
+        else null
+    }
 
     val zoomPercent: Int get() = (zoom * 100).roundToInt()
 
@@ -696,5 +746,14 @@ internal class MapCamera {
 
         /** One wheel notch, or one press of a button. Compounds, so it is a modest step. */
         const val ZOOM_STEP = 1.15f
+
+        /**
+         * Screen pixels per sheet pixel that fit a sheet [sheetWidth] by [sheetHeight] whole into
+         * a pane [paneWidth] by [paneHeight]: the narrower of the two ratios, so the sheet keeps
+         * its true shape and is letterboxed the other way.
+         */
+        fun fitOf(paneWidth: Float, paneHeight: Float, sheetWidth: Float, sheetHeight: Float): Float =
+            if (sheetWidth <= 0f || sheetHeight <= 0f) 1f
+            else minOf(paneWidth / sheetWidth, paneHeight / sheetHeight)
     }
 }

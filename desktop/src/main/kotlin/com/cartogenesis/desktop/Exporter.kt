@@ -65,22 +65,28 @@ object Exporter {
         val started = System.currentTimeMillis()
 
         val pixels = MapRasterizer.rasterize(world, options, raster)
-        // A printed sheet: drawn cell for pixel, so nothing is generalised away, and carrying its
-        // own scale bar because there is no legend beside a PNG. See [MapSheet].
+        // A printed sheet: the whole true-shape sheet, so nothing is generalised away, and carrying
+        // its own scale bar because there is no legend beside a PNG. See [MapSheet]. A world N
+        // cells square comes out 2N pixels wide and N tall, one pixel the same ground either way.
         val bitmap = MapImage.toBitmap(world, options, pixels, MapSheet.PRINTED)
+        // Immutable, so the encoder's Image shares the sheet's pixels rather than copying them.
+        bitmap.setImmutable()
 
         val encoded = if (format == ExportFormat.JPEG) {
             encodeJpeg(bitmap, ExportFormat.JPEG_QUALITY)
         } else {
             // Quality 100 is lossless for WebP and ignored by the PNG encoder, so one call does
             // for both of those.
-            Image.makeFromBitmap(bitmap)
-                .encodeToData(skiaFormat(format), quality = LOSSLESS_QUALITY)?.bytes
+            val image = Image.makeFromBitmap(bitmap)
+            val data = image.encodeToData(skiaFormat(format), quality = LOSSLESS_QUALITY)?.bytes
+            image.close()
+            data
         } ?: error("Could not encode the map as ${format.label}")
         currentCoroutineContext().ensureActive()
         destination.writeBytes(encoded)
 
-        // The bitmap holds size*size*4 bytes; let it go before the caller renders anything else.
+        // The bitmap holds the whole sheet, width*height*4 bytes; let it go before the caller
+        // renders anything else.
         bitmap.close()
 
         return Result(destination, System.currentTimeMillis() - started, destination.length(), format)

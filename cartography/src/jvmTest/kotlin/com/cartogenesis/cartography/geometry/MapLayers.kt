@@ -3,6 +3,7 @@ package com.cartogenesis.cartography.geometry
 import com.cartogenesis.cartography.Isobaths
 import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
@@ -131,7 +132,7 @@ internal object MapLayers {
             layers.add(Layer(name, Contours.ofMask(inside, frame, valid), smoothField = smooth, followsLatitude = zonal))
 
         mask("coast", land)
-        val pane = MapSheet.onScreen(PANE_PIXELS_ACROSS / world.width)
+        val pane = MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(world).widthPixels)
         layers.add(Layer("coast as drawn", shorelineAsDrawn(world, frame, pane)))
         layers.add(Layer("coast as inked", emptyList(), facing = coastInk(world, frame)))
         mask("lakes", BooleanArray(cells) { world.rivers.lakes.lakeId[it] != LakeResult.NO_LAKE })
@@ -287,7 +288,7 @@ internal object MapLayers {
 
     /** The pane's stroked coast, in kilometres; a ring the tracer closed by repeating its start is closed. */
     private fun shorelineAsDrawn(world: WorldMap, frame: GridFrame, sheet: MapSheet): List<Outline> =
-        Shoreline.of(world.sea.isLand, world.width, world.height, sheet).map { line ->
+        Shoreline.of(world.sea.isLand, SheetGeometry.of(world), sheet).map { line ->
             val count = line.size / 2
             val repeats = count > 2 && line[0] == line[line.size - 2] && line[1] == line[line.size - 1]
             val kept = if (repeats) count - 1 else count

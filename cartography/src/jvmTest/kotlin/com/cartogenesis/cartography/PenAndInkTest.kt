@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.model.WorldScale
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -328,8 +329,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     @Test
     fun `the ink runs down the slope, and the fixed-bearing hatch did not`() {
         val world = WORLD
-        val width = world.width
-        val plan = EngravingPlan(width)
+        val plan = EngravingPlan(SheetGeometry.of(world))
 
         val engraved = MapRasterizer.rasterize(
             world,
@@ -433,6 +433,10 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      * strokes is across them. So the strokes run a quarter turn from that axis, and the question is
      * how far that is from the aspect. Orientation is modulo half a turn — a stroke has no head or
      * tail — so the error folds into 0 to 90 degrees.
+     *
+     * Read on the true-shape sheet the raster is copied out to ([SheetGeometry.expand]), which is
+     * where the reader sees the strokes and where a pixel is the same ground both ways, so the
+     * aspect the ink is held to is the ground's own fall line.
      */
     private fun meanAspectError(
         world: WorldMap,
@@ -441,34 +445,43 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     ): AspectError {
         val width = world.width
         val height = world.height
+        val geometry = SheetGeometry.of(world)
+        val sheet = geometry.expand(pixels)
+        val sheetWidth = geometry.widthPixels
         val land = world.sea.isLand
         val elevation = world.sea.relativeElevation
-        val reach = plan.gradientStencilCells
-        val window = (plan.hachureLatticeCells * TENSOR_WINDOW_PITCHES).toInt().coerceAtLeast(2)
+        val reachColumns = plan.gradientStencilColumns
+        val reachRows = plan.gradientStencilRows
+        val window = (plan.hachureLatticePixels * TENSOR_WINDOW_PITCHES).toInt().coerceAtLeast(2)
+        // The window in cells, each way, rounded up: what has to be land under it.
+        val windowColumns = window / geometry.pixelsPerCellAcross + 1
+        val windowRows = window / geometry.pixelsPerCellDown + 1
 
         var total = 0.0
         var windows = 0
-        var row = window + reach
-        while (row < height - window - reach) {
-            var column = window + reach
-            while (column < width - window - reach) {
+        var row = windowRows + reachRows
+        while (row < height - windowRows - reachRows) {
+            var column = windowColumns + reachColumns
+            while (column < width - windowColumns - reachColumns) {
                 val gradientX =
-                    (elevation.sample(column + reach, row) -
-                        elevation.sample(column - reach, row)) * plan.gradientScale
+                    (elevation.sample(column + reachColumns, row) -
+                        elevation.sample(column - reachColumns, row)) * plan.gradientScaleAcross
                 val gradientY =
-                    (elevation.sample(column, row + reach) -
-                        elevation.sample(column, row - reach)) * plan.gradientScale
+                    (elevation.sample(column, row + reachRows) -
+                        elevation.sample(column, row - reachRows)) * plan.gradientScaleDown
                 val slope = groundSlope(gradientX, gradientY, world)
                 if (slope >= MEASURED_SLOPE_FLOOR &&
-                    allLand(land, width, column, row, window)
+                    allLand(land, width, column, row, windowColumns, windowRows)
                 ) {
-                    val tensor = structureTensor(pixels, width, column, row, window)
+                    val tensor = structureTensor(
+                        sheet, sheetWidth, plan.sheetX(column), plan.sheetY(row), window
+                    )
                     if (tensor != null) {
                         // The picture's steepest change runs across the strokes; the strokes run a
-                        // quarter turn from it, and the ground's fall line as the sheet draws it is
-                        // what they should be along.
+                        // quarter turn from it, and the ground's fall line is what they should be
+                        // along.
                         val inkDirection = tensor + QUARTER_TURN
-                        total += foldedDifference(inkDirection, sheetFallLine(gradientX, gradientY, world))
+                        total += foldedDifference(inkDirection, groundFallLine(gradientX, gradientY, world))
                         windows++
                     }
                 }
@@ -482,10 +495,17 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         )
     }
 
-    private fun allLand(land: BooleanArray, width: Int, x: Int, y: Int, window: Int): Boolean {
-        for (offsetRow in -window..window) {
+    private fun allLand(
+        land: BooleanArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        windowColumns: Int,
+        windowRows: Int
+    ): Boolean {
+        for (offsetRow in -windowRows..windowRows) {
             val rowStart = (y + offsetRow) * width
-            for (offsetColumn in -window..window) {
+            for (offsetColumn in -windowColumns..windowColumns) {
                 if (!land[rowStart + x + offsetColumn]) return false
             }
         }
@@ -574,17 +594,16 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val width = world.width
         val height = world.height
         val elevation = world.sea.relativeElevation
-        val reach = plan.gradientStencilCells
         var measured = 0
         var seams = 0
         for (row in 1 until height - 1) {
             for (column in 1 until width - 1) {
                 val cell = row * width + column
                 if (!world.sea.isLand[cell]) continue
-                val here = aspectOrNull(world, elevation, column, row, reach, plan) ?: continue
+                val here = aspectOrNull(world, elevation, column, row, plan) ?: continue
                 measured++
-                val east = aspectOrNull(world, elevation, column + 1, row, reach, plan)
-                val south = aspectOrNull(world, elevation, column, row + 1, reach, plan)
+                val east = aspectOrNull(world, elevation, column + 1, row, plan)
+                val south = aspectOrNull(world, elevation, column, row + 1, plan)
                 val turned = (east != null && foldedDifference(here, east) > SEAM_RADIANS) ||
                     (south != null && foldedDifference(here, south) > SEAM_RADIANS)
                 if (turned) seams++
@@ -603,16 +622,17 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         elevation: com.cartogenesis.worldgen.model.FloatField,
         x: Int,
         y: Int,
-        reach: Int,
         plan: EngravingPlan
     ): Double? {
-        val gradientX =
-            (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
-        val gradientY =
-            (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
+        val reachColumns = plan.gradientStencilColumns
+        val reachRows = plan.gradientStencilRows
+        val gradientX = (elevation.sample(x + reachColumns, y) - elevation.sample(x - reachColumns, y)) *
+            plan.gradientScaleAcross
+        val gradientY = (elevation.sample(x, y + reachRows) - elevation.sample(x, y - reachRows)) *
+            plan.gradientScaleDown
         val slope = groundSlope(gradientX, gradientY, world)
         if (slope < MEASURED_SLOPE_FLOOR) return null
-        return sheetFallLine(gradientX, gradientY, world)
+        return groundFallLine(gradientX, gradientY, world)
     }
 
     /**
@@ -624,10 +644,13 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         return sqrt(gradientX * gradientX + southward * southward)
     }
 
-    /** The ground's fall line as the sheet draws it, the bearing a hachure runs along, in radians. */
-    private fun sheetFallLine(gradientX: Float, gradientY: Float, world: WorldMap): Double {
+    /**
+     * The ground's fall line, the bearing a hachure runs along, in radians: on the true-shape
+     * sheet the bearing on the ground is the bearing as drawn.
+     */
+    private fun groundFallLine(gradientX: Float, gradientY: Float, world: WorldMap): Double {
         val rowScale = world.config.cellHeightInCellWidths
-        return atan2(gradientY / (rowScale * rowScale), gradientX.toDouble())
+        return atan2(gradientY / rowScale, gradientX.toDouble())
     }
 
     /**
@@ -641,7 +664,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the slope floor is the tenth percentile of the land it was read off`() {
-        val slopes = landSlopes(WORLD, EngravingPlan(WORLD.width))
+        val slopes = landSlopes(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
         val tenth = hundredths(percentile(slopes, 0.10))
         val floor = hundredths(EngravingPlan.SLOPE_FLOOR)
         println("PENINK the tenth percentile of the land slope rounds to $tenth; the floor is $floor")
@@ -660,7 +683,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the ink gain puts the widest stroke at the seventy-fifth percentile of the land`() {
-        val slopes = landSlopes(WORLD, EngravingPlan(WORLD.width))
+        val slopes = landSlopes(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
         val seventyFifth = hundredths(percentile(slopes, 0.75))
         val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
@@ -682,18 +705,19 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     private fun landSlopes(world: WorldMap, plan: EngravingPlan): List<Float> {
         val width = world.width
         val elevation = world.sea.relativeElevation
-        val reach = plan.gradientStencilCells
+        val reachColumns = plan.gradientStencilColumns
+        val reachRows = plan.gradientStencilRows
         val slopes = ArrayList<Float>()
         for (cell in world.sea.isLand.indices) {
             if (!world.sea.isLand[cell]) continue
             val column = cell % width
             val row = cell / width
             val gradientX =
-                (elevation.sample(column + reach, row) -
-                    elevation.sample(column - reach, row)) * plan.gradientScale
+                (elevation.sample(column + reachColumns, row) -
+                    elevation.sample(column - reachColumns, row)) * plan.gradientScaleAcross
             val gradientY =
-                (elevation.sample(column, row + reach) -
-                    elevation.sample(column, row - reach)) * plan.gradientScale
+                (elevation.sample(column, row + reachRows) -
+                    elevation.sample(column, row - reachRows)) * plan.gradientScaleDown
             slopes.add(groundSlope(gradientX, gradientY, world))
         }
         slopes.sort()
@@ -721,6 +745,13 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     private class StrokeScan(val pixelPitch: Double, val runs: Long)
 
     /**
+     * A sheet [side] pixels square, a cell to a pixel: the cone below is laid out on the sheet
+     * directly, so its pixels are its cells and the same ground either way.
+     */
+    private fun squarePixelSheet(side: Int): SheetGeometry =
+        SheetGeometry.cellForPixel(side, side, WorldScale().worldWidthKm / (2 * side))
+
+    /**
      * How far apart the marks are in pixels, and how many of them fall on the same share of the map.
      *
      * Measured on a cone rather than on a world, because a cone is the same shape at every
@@ -735,7 +766,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      * forty-eight at four times it — which is exactly the woodcut the review sent back.
      */
     private fun strokeScan(width: Int, enlarged: Boolean): StrokeScan {
-        val plan = if (enlarged) EngravingPlan(REFERENCE_SIDE) else EngravingPlan(width)
+        val plan = EngravingPlan(squarePixelSheet(if (enlarged) REFERENCE_SIDE else width))
         val gain = MapStyle.PEN_AND_INK.inkGain
         // Half way up the ink ramp, so the strokes are neither hairlines nor a solid mass.
         val slope = EngravingPlan.SLOPE_FLOOR + 0.5f / gain

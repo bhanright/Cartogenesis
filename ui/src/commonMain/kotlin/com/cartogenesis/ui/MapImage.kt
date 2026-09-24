@@ -9,6 +9,7 @@ import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.Numerals
 import com.cartogenesis.cartography.PlacedScaleBar
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.model.WorldMap
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
@@ -56,10 +57,12 @@ object MapImage {
 
     /** A finished Skia bitmap as something Compose can draw, releasing the bitmap. */
     private fun finish(bitmap: Bitmap): ImageBitmap {
-        // Compose only converts from a Skia Image, not a Bitmap; the Image takes its own copy,
-        // so both can be released straight away rather than holding width*height*4 bytes twice.
-        // Closed by hand rather than with `use`, which in common code would resolve to the JVM
-        // Closeable extension and does not exist in the browser.
+        // Compose only converts from a Skia Image, not a Bitmap. Marked immutable first, so the
+        // Image shares the bitmap's pixels rather than taking a copy of a sheet that can be 128 MB;
+        // both are released straight away once Compose has its own. Closed by hand rather than
+        // with `use`, which in common code would resolve to the JVM Closeable extension and does
+        // not exist in the browser.
+        bitmap.setImmutable()
         val image = Image.makeFromBitmap(bitmap)
         val composed = image.toComposeImageBitmap()
         image.close()
@@ -80,6 +83,11 @@ object MapImage {
      * Export draws its pixels on the graphics card where there is one (see
      * [com.cartogenesis.cartography.RasterAccelerator]) and hands them here, so the overlays and the
      * bitmap do not care which processor drew what is underneath them.
+     *
+     * [pixels] is one colour per cell. The bitmap is the true-shape sheet ([SheetGeometry]): each
+     * cell's colour is copied into every pixel its cell covers there, exactly — a biome, a realm or
+     * a style's colour is never blended with its neighbour's — and then the ink is laid over it at
+     * its own width, its positions carried onto the sheet point by point. Nothing is stretched.
      */
     fun toBitmap(
         world: WorldMap,
@@ -87,28 +95,60 @@ object MapImage {
         pixels: IntArray,
         sheet: MapSheet = MapSheet.UNGENERALISED
     ): Bitmap {
-        val widthPixels = world.width
-        val heightPixels = world.height
-        val wanted = widthPixels * heightPixels
-        require(pixels.size == wanted) { "raster is ${pixels.size} pixels, not $wanted" }
+        val geometry = SheetGeometry.of(world)
+        val bitmap = sheetBitmap(geometry, pixels)
+        drawOverlay(world, bitmap, options, sheet)
+        return bitmap
+    }
 
-        val bytes = ByteArray(wanted * BYTES_PER_PIXEL)
-        for (pixel in pixels.indices) {
-            val argb = pixels[pixel]
-            val at = pixel * BYTES_PER_PIXEL
-            bytes[at] = (argb and 0xFF).toByte()             // B
-            bytes[at + 1] = ((argb shr 8) and 0xFF).toByte()  // G
-            bytes[at + 2] = ((argb shr 16) and 0xFF).toByte() // R
-            bytes[at + 3] = ((argb shr 24) and 0xFF).toByte() // A
+    /**
+     * [cellPixels], one ARGB colour per cell of [geometry]'s grid, copied out to a bitmap of the
+     * whole true-shape sheet.
+     *
+     * Written a band of rows at a time, so the only copy of the picture the size of the sheet is the
+     * bitmap itself: at a 4096 world the sheet is 8192 by 4096, 128 MB, and a byte array of it
+     * alongside would be another 128 MB of heap for as long as the copy took.
+     */
+    fun sheetBitmap(geometry: SheetGeometry, cellPixels: IntArray): Bitmap {
+        val cellCount = geometry.cellsAcross * geometry.cellsDown
+        require(cellPixels.size == cellCount) {
+            "raster is ${cellPixels.size} cells, not $cellCount"
         }
+        val widthPixels = geometry.widthPixels
+        val heightPixels = geometry.heightPixels
 
         val bitmap = Bitmap()
-        bitmap.allocPixels(
-            ImageInfo.makeS32(widthPixels, heightPixels, ColorAlphaType.PREMUL)
-        )
-        bitmap.installPixels(bytes)
+        bitmap.allocPixels(ImageInfo.makeS32(widthPixels, heightPixels, ColorAlphaType.PREMUL))
+        val canvas = Canvas(bitmap)
 
-        drawOverlay(world, bitmap, options, sheet)
+        val bandRows = (BAND_PIXELS / widthPixels).coerceIn(1, heightPixels)
+        val sheetRow = IntArray(widthPixels)
+        val band = Bitmap()
+        var bandTop = 0
+        while (bandTop < heightPixels) {
+            val rows = minOf(bandRows, heightPixels - bandTop)
+            val bytes = ByteArray(rows * widthPixels * BYTES_PER_PIXEL)
+            for (rowInBand in 0 until rows) {
+                geometry.sheetRow(cellPixels, bandTop + rowInBand, sheetRow)
+                var at = rowInBand * widthPixels * BYTES_PER_PIXEL
+                for (argb in sheetRow) {
+                    bytes[at] = (argb and 0xFF).toByte()             // B
+                    bytes[at + 1] = ((argb shr 8) and 0xFF).toByte()  // G
+                    bytes[at + 2] = ((argb shr 16) and 0xFF).toByte() // R
+                    bytes[at + 3] = ((argb shr 24) and 0xFF).toByte() // A
+                    at += BYTES_PER_PIXEL
+                }
+            }
+            band.installPixels(
+                ImageInfo.makeS32(widthPixels, rows, ColorAlphaType.PREMUL),
+                bytes,
+                widthPixels * BYTES_PER_PIXEL
+            )
+            canvas.writePixels(band, 0, bandTop)
+            bandTop += rows
+        }
+        band.close()
+        canvas.close()
         return bitmap
     }
 
@@ -122,6 +162,10 @@ object MapImage {
         if (overlay.isEmpty) return
 
         val canvas = Canvas(bitmap)
+        // Where each thing on the ground lands on the sheet. Only positions go through it: every
+        // width, radius and length below is already in the sheet's pixels, so a line is the same
+        // weight whichever way it runs.
+        val onSheet = overlay.sheet
 
         // The graticule first, because it is the sheet's reference grid and everything the world
         // itself puts on the paper is drawn over it.
@@ -136,7 +180,7 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
                 strokeJoin = PaintStrokeJoin.ROUND
             }
-            overlay.coastline.forEach { canvas.drawPath(polyline(it), paint) }
+            overlay.coastline.forEach { canvas.drawPath(polylineOnSheet(it, onSheet), paint) }
         }
 
         if (overlay.rivers.isNotEmpty()) {
@@ -148,7 +192,10 @@ object MapImage {
             }
             overlay.rivers.forEach { segment ->
                 paint.strokeWidth = segment.widthPixels
-                canvas.drawLine(segment.fromX, segment.fromY, segment.toX, segment.toY, paint)
+                canvas.drawLine(
+                    onSheet.sheetX(segment.fromX), onSheet.sheetY(segment.fromY),
+                    onSheet.sheetX(segment.toX), onSheet.sheetY(segment.toY), paint
+                )
             }
         }
 
@@ -159,16 +206,18 @@ object MapImage {
                 strokeCap = PaintStrokeCap.ROUND
             }
             overlay.flow.forEach { arrow ->
-                val length = overlay.flowArrowReachCells *
+                val length = overlay.flowArrowReachPixels *
                     (SHORTEST_ARROW_SHARE + (1f - SHORTEST_ARROW_SHARE) * arrow.strength)
                 val alpha = (FAINTEST_ARROW_ALPHA + ARROW_ALPHA_RANGE * arrow.strength)
                     .toInt().coerceIn(0, 255)
                 paint.color = (arrow.color and 0x00FFFFFF) or (alpha shl 24)
                 paint.strokeWidth =
-                    (overlay.flowArrowReachCells * ARROW_WIDTH_SHARE).coerceAtLeast(1f)
-                val tipX = arrow.x + arrow.directionX * length
-                val tipY = arrow.y + arrow.directionY * length
-                canvas.drawLine(arrow.x, arrow.y, tipX, tipY, paint)
+                    (overlay.flowArrowReachPixels * ARROW_WIDTH_SHARE).coerceAtLeast(1f)
+                val footX = onSheet.sheetX(arrow.x)
+                val footY = onSheet.sheetY(arrow.y)
+                val tipX = footX + arrow.directionX * length
+                val tipY = footY + arrow.directionY * length
+                canvas.drawLine(footX, footY, tipX, tipY, paint)
                 // The barbs meet the shaft a little behind the tip and stand out either side of
                 // it, which is a head drawn with two strokes rather than a filled triangle.
                 val barbRootX = tipX - arrow.directionX * length * BARB_LENGTH_SHARE
@@ -199,16 +248,18 @@ object MapImage {
         overlay.landmarks.forEach { glyph ->
             fill.color = glyph.fill
             val radius = glyph.radius
+            val x = onSheet.sheetX(glyph.x)
+            val y = onSheet.sheetY(glyph.y)
             when (glyph.shape) {
                 GlyphShape.TRIANGLE -> {
                     // Its base is drawn short of the circumscribed circle, so a triangle and a
                     // diamond of the same radius look the same size rather than the triangle
                     // looking the larger of the two.
-                    val baseY = glyph.y + radius * TRIANGLE_BASE_SHARE
+                    val baseY = y + radius * TRIANGLE_BASE_SHARE
                     val path = Path().apply {
-                        moveTo(glyph.x, glyph.y - radius)
-                        lineTo(glyph.x + radius, baseY)
-                        lineTo(glyph.x - radius, baseY)
+                        moveTo(x, y - radius)
+                        lineTo(x + radius, baseY)
+                        lineTo(x - radius, baseY)
                         closePath()
                     }
                     canvas.drawPath(path, fill)
@@ -217,10 +268,10 @@ object MapImage {
 
                 GlyphShape.DIAMOND -> {
                     val path = Path().apply {
-                        moveTo(glyph.x, glyph.y - radius)
-                        lineTo(glyph.x + radius, glyph.y)
-                        lineTo(glyph.x, glyph.y + radius)
-                        lineTo(glyph.x - radius, glyph.y)
+                        moveTo(x, y - radius)
+                        lineTo(x + radius, y)
+                        lineTo(x, y + radius)
+                        lineTo(x - radius, y)
                         closePath()
                     }
                     canvas.drawPath(path, fill)
@@ -228,17 +279,14 @@ object MapImage {
                 }
 
                 GlyphShape.SQUARE -> {
-                    val rect = Rect(
-                        glyph.x - radius, glyph.y - radius,
-                        glyph.x + radius, glyph.y + radius
-                    )
+                    val rect = Rect(x - radius, y - radius, x + radius, y + radius)
                     canvas.drawRect(rect, fill)
                     canvas.drawRect(rect, outline)
                 }
 
                 GlyphShape.CIRCLE -> {
-                    canvas.drawCircle(glyph.x, glyph.y, radius, fill)
-                    canvas.drawCircle(glyph.x, glyph.y, radius, outline)
+                    canvas.drawCircle(x, y, radius, fill)
+                    canvas.drawCircle(x, y, radius, outline)
                 }
             }
         }
@@ -313,6 +361,18 @@ object MapImage {
             .forEach { canvas.drawPath(polyline(it), paint) }
     }
 
+    /** A run of `x, y` floats in cell coordinates as a Skia path on the sheet, point by point. */
+    private fun polylineOnSheet(points: FloatArray, onSheet: SheetGeometry): Path {
+        val path = Path()
+        path.moveTo(onSheet.sheetX(points[0]), onSheet.sheetY(points[1]))
+        var at = 2
+        while (at < points.size) {
+            path.lineTo(onSheet.sheetX(points[at]), onSheet.sheetY(points[at + 1]))
+            at += 2
+        }
+        return path
+    }
+
     /** A run of `x, y` floats as a Skia path. Nothing is closed: a ring already repeats its end. */
     private fun polyline(points: FloatArray): Path {
         val path = Path()
@@ -330,6 +390,13 @@ object MapImage {
 
     /** BGRA, one byte a channel, which is what Skia's S32 bitmap wants. */
     private const val BYTES_PER_PIXEL = 4
+
+    /**
+     * How many sheet pixels [sheetBitmap] copies in one band: a million, four megabytes of bytes
+     * in hand at a time, which is a hundred and twenty-eight rows of an 8192 sheet and small beside
+     * the sheet itself.
+     */
+    private const val BAND_PIXELS = 1 shl 20
 
     // ---- The flow arrows, all as shares so they scale with the sheet. ----
 

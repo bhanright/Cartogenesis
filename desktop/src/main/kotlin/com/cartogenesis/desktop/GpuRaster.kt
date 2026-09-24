@@ -214,6 +214,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
     private fun setUniforms(recipe: RasterRecipe) {
         GL43C.glUniform1i(uniform("uWidth"), recipe.width)
         GL43C.glUniform1i(uniform("uHeight"), recipe.height)
+        GL43C.glUniform1i(uniform("uPixelsAcross"), recipe.pixelsPerCellAcross)
+        GL43C.glUniform1i(uniform("uPixelsDown"), recipe.pixelsPerCellDown)
         GL43C.glUniform1i(uniform("uView"), recipe.view)
         GL43C.glUniform1i(uniform("uHillshade"), recipe.hillshade.toGl())
         GL43C.glUniform1i(uniform("uSingleLamp"), recipe.singleLamp.toGl())
@@ -274,27 +276,29 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1i(uniform("uIceBiome"), recipe.iceBiome)
 
         val plan = recipe.engraving ?: return
-        GL43C.glUniform1i(uniform("uHachureStencil"), plan.gradientStencilCells)
-        GL43C.glUniform1f(uniform("uGradientScale"), plan.gradientScale)
-        GL43C.glUniform1i(uniform("uHachureLattice"), plan.hachureLatticeCells)
+        GL43C.glUniform1i(uniform("uHachureStencilColumns"), plan.gradientStencilColumns)
+        GL43C.glUniform1i(uniform("uHachureStencilRows"), plan.gradientStencilRows)
+        GL43C.glUniform1f(uniform("uGradientScaleAcross"), plan.gradientScaleAcross)
+        GL43C.glUniform1f(uniform("uGradientScaleDown"), plan.gradientScaleDown)
+        GL43C.glUniform1i(uniform("uHachureLattice"), plan.hachureLatticePixels)
         GL43C.glUniform1i(uniform("uHachureColumns"), plan.hachureLatticeColumns)
-        GL43C.glUniform1f(uniform("uStrokeHalfLength"), plan.strokeHalfLengthCells)
-        GL43C.glUniform1f(uniform("uStrokeHalfWidth"), plan.strokeHalfWidthCells)
+        GL43C.glUniform1f(uniform("uStrokeHalfLength"), plan.strokeHalfLengthPixels)
+        GL43C.glUniform1f(uniform("uStrokeHalfWidth"), plan.strokeHalfWidthPixels)
         GL43C.glUniform1f(uniform("uSlopeFloor"), EngravingPlan.SLOPE_FLOOR)
         GL43C.glUniform1f(uniform("uFullInkAt"), EngravingPlan.FULL_INK_AT_STEEPNESS)
-        GL43C.glUniform1f(uniform("uAntialias"), EngravingPlan.ANTIALIAS_CELLS)
-        GL43C.glUniform1f(uniform("uVignetteBase"), plan.vignetteBaseCells)
-        GL43C.glUniform1f(uniform("uVignetteHalf"), plan.vignetteHalfWidthCells)
+        GL43C.glUniform1f(uniform("uAntialias"), EngravingPlan.ANTIALIAS_PIXELS)
+        GL43C.glUniform1f(uniform("uVignetteBase"), plan.vignetteBasePixels)
+        GL43C.glUniform1f(uniform("uVignetteHalf"), plan.vignetteHalfWidthPixels)
         GL43C.glUniform1i(uniform("uVignetteLines"), plan.vignetteLineCount)
-        GL43C.glUniform1f(uniform("uShoreInk"), plan.shoreInkCells)
-        GL43C.glUniform1f(uniform("uLakeRim"), plan.lakeRimCells)
-        GL43C.glUniform1f(uniform("uLakePitch"), plan.lakeLinePitchCells)
-        GL43C.glUniform1f(uniform("uLakeHalf"), plan.lakeLineHalfWidthCells)
-        GL43C.glUniform1f(uniform("uLakeFade"), plan.lakeFadeCells)
+        GL43C.glUniform1f(uniform("uShoreInk"), plan.shoreInkPixels)
+        GL43C.glUniform1f(uniform("uLakeRim"), plan.lakeRimPixels)
+        GL43C.glUniform1f(uniform("uLakePitch"), plan.lakeLinePitchPixels)
+        GL43C.glUniform1f(uniform("uLakeHalf"), plan.lakeLineHalfWidthPixels)
+        GL43C.glUniform1f(uniform("uLakeFade"), plan.lakeFadePixels)
         GL43C.glUniform1f(uniform("uLakeLineStrength"), EngravingPlan.LAKE_LINE_STRENGTH)
-        GL43C.glUniform1i(uniform("uStipplePitch"), plan.stipplePitchCells)
-        GL43C.glUniform1f(uniform("uStippleRadius"), plan.stippleRadiusCells)
-        GL43C.glUniform1i(uniform("uBorderBlock"), plan.borderDashCells)
+        GL43C.glUniform1i(uniform("uStipplePitch"), plan.stipplePitchPixels)
+        GL43C.glUniform1f(uniform("uStippleRadius"), plan.stippleRadiusPixels)
+        GL43C.glUniform1i(uniform("uBorderBlock"), plan.borderDashPixels)
         GL43C.glUniform1i(uniform("uBorderDuty"), EngravingPlan.BORDER_DUTY_PERCENT)
     }
 
@@ -406,6 +410,11 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             uniform int uWidth;
             uniform int uHeight;
+            // How many pixels of the true-shape sheet a cell covers each way (SheetGeometry): a
+            // cell asks its patterns about the sheet pixel at its own top-left corner, so they
+            // keep their bearing and pitch once the cell is copied out to the sheet.
+            uniform int uPixelsAcross;
+            uniform int uPixelsDown;
             uniform int uRowStart;
             uniform int uRows;
             uniform int uView;
@@ -454,13 +463,15 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform float uHatchStrength;
 
             // The engraving, from the recipe's EngravingPlan. Not one of these is derived here:
-            // every length is a share of the map's width worked out once on the processor, so the
-            // two paths cannot draw at different pitches. See Engraving.kt, of which the four
-            // functions below are a line-for-line copy.
+            // every length is in sheet pixels, worked out once on the processor, so the two paths
+            // cannot draw at different pitches. See Engraving.kt, of which the four functions
+            // below are a line-for-line copy.
             uniform int uEngraveWater;
             uniform int uIceBiome;
-            uniform int uHachureStencil;
-            uniform float uGradientScale;
+            uniform int uHachureStencilColumns;
+            uniform int uHachureStencilRows;
+            uniform float uGradientScaleAcross;
+            uniform float uGradientScaleDown;
             uniform int uHachureLattice;
             uniform int uHachureColumns;
             uniform float uStrokeHalfLength;
@@ -717,30 +728,37 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * when they disagree about which cell a pixel is in cannot reach it either.
              */
             float hachureInk(int x, int y) {
-                int reach = uHachureStencil;
+                // The differences are read in cells, a lattice pitch of the sheet in each axis's
+                // own cells; the stroke is laid out on the sheet, at this cell's own pixel of it.
+                int reachColumns = uHachureStencilColumns;
+                int reachRows = uHachureStencilRows;
                 precise float gradX =
-                    (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * uGradientScale;
+                    (elevationAt(x + reachColumns, y) - elevationAt(x - reachColumns, y)) *
+                    uGradientScaleAcross;
                 precise float gradY =
-                    (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * uGradientScale;
-                // The ground's slope for the stroke's weight, and the ground's fall line as the
-                // sheet draws it for its direction: Engraving.hachure.
+                    (elevationAt(x, y + reachRows) - elevationAt(x, y - reachRows)) *
+                    uGradientScaleDown;
+                // The ground's slope for the stroke's weight, and the ground's fall line for its
+                // direction, which on the true-shape sheet is its direction as drawn:
+                // Engraving.hachure.
                 precise float southwardOnTheGround = gradY / uRowScale;
                 precise float slope =
                     sqrt(gradX * gradX + southwardOnTheGround * southwardOnTheGround);
                 float steepness = clamp((slope - uSlopeFloor) * uInkGain, 0.0, 1.0);
                 if (steepness <= 0.0) return 0.0;
 
-                precise float sheetSouthward = southwardOnTheGround / uRowScale;
-                precise float inverse = 1.0 / sqrt(gradX * gradX + sheetSouthward * sheetSouthward);
+                precise float inverse = 1.0 / slope;
                 precise float downX = gradX * inverse;
-                precise float downY = sheetSouthward * inverse;
+                precise float downY = southwardOnTheGround * inverse;
 
+                int sheetX = x * uPixelsAcross;
+                int sheetY = y * uPixelsDown;
                 int pitch = uHachureLattice;
                 float halfLength = uStrokeHalfLength;
                 float halfWidth = uStrokeHalfWidth * steepness;
                 float soft = uAntialias;
-                int cellX = x / pitch;
-                int cellY = y / pitch;
+                int cellX = sheetX / pitch;
+                int cellY = sheetY / pitch;
 
                 float strongest = 0.0;
                 for (int offsetY = -1; offsetY <= 1; offsetY++) {
@@ -754,8 +772,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                             float(column * pitch) + float(pitch) * (0.25 + 0.5 * unitFrom(bits, 8u));
                         precise float seedY =
                             float(row * pitch) + float(pitch) * (0.25 + 0.5 * unitFrom(bits, 20u));
-                        precise float awayX = float(x) - seedX;
-                        precise float awayY = float(y) - seedY;
+                        precise float awayX = float(sheetX) - seedX;
+                        precise float awayY = float(sheetY) - seedY;
                         precise float along = abs(awayX * downX + awayY * downY);
                         precise float across = abs(awayX * -downY + awayY * downX);
                         float coverage =
@@ -781,9 +799,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             }
 
             /* Engraving.lakeWater: a firm bank, and ruled water fading toward the middle. */
-            float lakeWaterInk(int y, float shore) {
+            float lakeWaterInk(int sheetY, float shore) {
                 if (shore < uLakeRim) return 1.0;
-                precise float phase = float(y) / uLakePitch;
+                precise float phase = float(sheetY) / uLakePitch;
                 float fromLine = abs(phase - floor(phase) - 0.5) * uLakePitch;
                 float coverage = 1.0 - smoothstep(
                     uLakeHalf - uAntialias, uLakeHalf + uAntialias, fromLine);
@@ -796,25 +814,25 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * a dot and its soft edge never cross the cell's boundary and the two paths cannot draw
              * a different dot even where they disagree about which cell a pixel is in.
              */
-            float stippleInk(int x, int y) {
+            float stippleInk(int sheetX, int sheetY) {
                 int pitch = uStipplePitch;
-                int cellX = x / pitch;
-                int cellY = y / pitch;
+                int cellX = sheetX / pitch;
+                int cellY = sheetY / pitch;
                 uint bits = hashBits(cellX, cellY);
                 precise float centreX =
                     float(cellX * pitch) + float(pitch) * (0.3 + 0.4 * unitFrom(bits, 8u));
                 precise float centreY =
                     float(cellY * pitch) + float(pitch) * (0.3 + 0.4 * unitFrom(bits, 20u));
-                precise float dx = float(x) - centreX;
-                precise float dy = float(y) - centreY;
+                precise float dx = float(sheetX) - centreX;
+                precise float dy = float(sheetY) - centreY;
                 precise float away = sqrt(dx * dx + dy * dy);
                 return 1.0 - smoothstep(
                     uStippleRadius - uAntialias, uStippleRadius + uAntialias, away);
             }
 
             /* Engraving.borderDot: which blocks of a boundary take ink, so the line reads dotted. */
-            bool borderDot(int x, int y) {
-                uint bits = hashBits(x / uBorderBlock, y / uBorderBlock);
+            bool borderDot(int sheetX, int sheetY) {
+                uint bits = hashBits(sheetX / uBorderBlock, sheetY / uBorderBlock);
                 return (bits >> 8u) % 100u < uint(uBorderDuty);
             }
 
@@ -856,13 +874,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * span;
                 precise float southward =
                     (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * span;
-                precise float slope = sqrt(eastward * eastward + southward * southward);
                 // A contour is a line only where the floor slopes; on a plain the level set is a
                 // region, and the drawing stains a basin instead of tracing a line through it.
-                // Whether it slopes is a question about the ground, so it is asked per cell width.
+                // Whether it slopes is a question about the ground, so it is asked per cell width;
+                // and the line's width is held on the true-shape sheet, where a pixel is the same
+                // ground either way, so the fall per pixel is the same slope over the pixels a
+                // cell width spans.
                 precise float southwardOnTheGround = southward / uRowScale;
                 precise float slopeOnTheGround =
                     sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround);
+                precise float slope = slopeOnTheGround / float(uPixelsAcross);
                 float onASlope = uIsobathFlattest <= 0.0 ? 1.0 : smoothstep(
                     uIsobathFlattest * ISOBATH_PLAIN_FADE, uIsobathFlattest, slopeOnTheGround);
                 if (onASlope <= 0.0) return 0.0;
@@ -917,12 +938,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     // MapStyle.hatched, to the letter. A declared realm set runs out of colours
                     // and starts again, so each further turn of the cycle takes a texture instead
                     // of a hue that is not there to be had. uRealmSet is 0 for every other style,
-                    // and then this whole block is dead.
+                    // and then this whole block is dead. Ruled on the sheet, at this cell's pixel.
                     if (uRealmSet > 0) {
                         int tier = (owner / uRealmSet) % 3;
+                        int sheetX = x * uPixelsAcross;
+                        int sheetY = y * uPixelsDown;
                         bool ink = false;
-                        if (tier == 1) ink = ((x + y) % 6) < 2;
-                        else if (tier == 2) ink = ((x + (6 - y % 6)) % 6) < 2;
+                        if (tier == 1) ink = ((sheetX + sheetY) % 6) < 2;
+                        else if (tier == 2) ink = ((sheetX + (6 - sheetY % 6)) % 6) < 2;
                         if (ink) fill = blend(fill, uCoastline, uHatchStrength);
                     }
                     return blend(
@@ -974,6 +997,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 int i = y * uWidth + x;
                 bool land = isLand(i);
                 float relative = elevation[i];
+                // This cell's own pixel of the true-shape sheet, where its patterns are asked.
+                int sheetX = x * uPixelsAcross;
+                int sheetY = y * uPixelsDown;
 
                 bool engraveWater = uLineArt != 0 && uEngraveWater != 0;
 
@@ -986,7 +1012,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     precise float shallowness = depth * 12.0;
                     colour = blend(uLake, uLakeDeep, clamp(shallowness, 0.0, 1.0));
                     if (engraveWater) {
-                        colour = blend(colour, uCoastline, lakeWaterInk(y, scalarC[i]));
+                        colour = blend(colour, uCoastline, lakeWaterInk(sheetY, scalarC[i]));
                     }
                 } else {
                     colour = baseColour(x, y, i, land, relative);
@@ -1006,7 +1032,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                         }
                     }
                     if (engraveWater && uIceBiome >= 0 && biomeAt(i) == uIceBiome) {
-                        colour = blend(colour, uCoastline, stippleInk(x, y));
+                        colour = blend(colour, uCoastline, stippleInk(sheetX, sheetY));
                     }
                 }
 
@@ -1026,7 +1052,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     // cells are broken into blocks and the survivors take the colour outright.
                     if (differs) {
                         if (uLineArt != 0) {
-                            if (borderDot(x, y)) colour = blend(colour, uBorder, 1.0);
+                            if (borderDot(sheetX, sheetY)) colour = blend(colour, uBorder, 1.0);
                         } else {
                             colour = blend(colour, uBorder, 0.75);
                         }

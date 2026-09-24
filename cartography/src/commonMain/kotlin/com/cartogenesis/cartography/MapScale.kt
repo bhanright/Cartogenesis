@@ -20,8 +20,9 @@ class ScaleBar(
 )
 
 /**
- * A scale bar placed on the sheet, at the left end of the bar in cell coordinates. It is drawn
- * east-west, along a row, which is the axis its length holds on.
+ * A scale bar placed on the sheet, at the left end of the bar in sheet pixels. It is drawn
+ * east-west, along a row; on the true-shape sheet a pixel covers the same ground either way, so
+ * the same bar laid along a meridian would read true as well.
  */
 class PlacedScaleBar(
     val bar: ScaleBar,
@@ -36,18 +37,16 @@ class PlacedScaleBar(
  * Everything here comes off one number the world already carries — [WorldScale.worldWidthKm],
  * twelve thousand kilometres east to west and half that from pole to pole, which is what turns a
  * count of cells into a length and is where the realm areas and the heightmap sidecar's cell size
- * come from too. Nothing is measured twice: [WorldScale.cellWidthKm] and [WorldScale.cellHeightKm]
- * are the arithmetic, and this puts them on the paper.
+ * come from too. Nothing is measured twice: [SheetGeometry] turns the grid's cell sizes into the
+ * sheet's one scale, and this puts it on the paper.
  *
- * The sheet draws a cell as a square pixel, and a cell is not square: on a grid as many cells tall
- * as wide over a world twice as wide as it is tall, a pixel covers a cell's width of ground
- * east-west and half of that north-south. So the sheet has two scales, and a bar laid along a
- * meridian would overstate a distance twice over. The bar is drawn east-west and holds there; the
- * cartouche gives both figures, east-west and north-south. On top of that the projection is
- * equirectangular, so east-west distances shrink by the cosine of the latitude as they go poleward;
- * that is the projection's own distortion and not something a scale bar can fix, which is why the
- * bar and the cartouche both say *at the equator* and neither pretends otherwise. A projection that
- * could say more is a later chunk's work; see REALISM_AUDIT.md, P1.
+ * The sheet is drawn at the world's true shape, so a pixel covers the same ground east-west as
+ * north-south and the sheet has one scale rather than two: a bar reads true laid along a row or a
+ * column, and the cartouche quotes one figure. The projection is still equirectangular, so
+ * east-west distances shrink by the cosine of the latitude as they go poleward; that is the
+ * projection's own distortion and not something a scale bar can fix, which is why the bar and the
+ * cartouche both say *at the equator* and neither pretends otherwise. A projection that could say
+ * more is a later chunk's work; see REALISM_AUDIT.md, P1.
  */
 object MapScale {
 
@@ -76,24 +75,11 @@ object MapScale {
     private const val MILLIMETRES_PER_KILOMETRE: Double = 1_000_000.0
 
     /**
-     * Ground kilometres one drawn pixel covers east-west, at [pixelsPerCell] pixels to the cell:
-     * the scale along a row, which is the one the bar is drawn on.
+     * Ground kilometres one drawn pixel covers, east-west and north-south alike, on [geometry]'s
+     * sheet shown at [pixelsPerSheetPixel] of the reader's pixels to one of the sheet's.
      */
-    fun kilometresPerPixel(
-        scale: WorldScale,
-        cellsAcross: Int,
-        pixelsPerCell: Float
-    ): Double = scale.cellWidthKm(cellsAcross) / pixelsPerCell
-
-    /**
-     * Ground kilometres one drawn pixel covers north-south, at [pixelsPerCell] pixels to the cell:
-     * a row's height, which on this project's grids is half what a pixel covers east-west.
-     */
-    fun kilometresPerPixelNorthSouth(
-        scale: WorldScale,
-        cellsDown: Int,
-        pixelsPerCell: Float
-    ): Double = scale.cellHeightKm(cellsDown) / pixelsPerCell
+    fun kilometresPerPixel(geometry: SheetGeometry, pixelsPerSheetPixel: Float): Double =
+        geometry.kilometresPerPixel / pixelsPerSheetPixel
 
     /**
      * The longest round distance that fits [SHARE_OF_FRAME] of a frame [frameWidthPixels] wide.
@@ -129,44 +115,40 @@ object MapScale {
         else "${(kilometres * 1_000.0).roundToLong()} m"
 
     /**
-     * The denominator of this sheet's representative fraction: the `22 000 000` of `1:22 000 000`.
+     * The denominator of this sheet's representative fraction: the `11 000 000` of `1:11 000 000`.
      *
      * One ground length over one drawn length, both in the same unit. The drawn length needs a
      * physical size for a picture that has none, so it is [MILLIMETRES_PER_PIXEL] — the CSS
      * reference pixel, ninety-six to the inch — and the fraction is only ever quoted with that
-     * stated. [pixelsPerCell] is the sheet's, so an export of a 2048 world is about 1:22 000 000
-     * and the same world fitted into a 900-pixel pane is about 1:50 000 000; the generation
-     * resolution on its own fixes neither, because it says nothing about how big the drawing is.
+     * stated. [pixelsPerSheetPixel] is the reader's, so an export of a 2048 world, whose sheet is
+     * 4096 pixels across, is about 1:11 000 000 and the same sheet fitted into a 900-pixel pane is
+     * about 1:50 000 000; the generation resolution on its own fixes neither, because it says
+     * nothing about how big the drawing is.
      *
      * Returned as a `Double` and not rounded: [cartoucheLine] is what rounds it for a reader, and
      * [RiverSelection] wants the whole figure to derive a density from.
      */
     fun representativeFractionDenominator(
-        scale: WorldScale,
-        cellsAcross: Int,
-        pixelsPerCell: Float
+        geometry: SheetGeometry,
+        pixelsPerSheetPixel: Float
     ): Double =
-        kilometresPerPixel(scale, cellsAcross, pixelsPerCell) *
+        kilometresPerPixel(geometry, pixelsPerSheetPixel) *
             MILLIMETRES_PER_KILOMETRE / MILLIMETRES_PER_PIXEL
 
     /**
-     * The line the cartouche carries: how far a pixel of this sheet reaches each way, and the
-     * fraction.
+     * The line the cartouche carries: how far a pixel of the whole sheet reaches, and the fraction.
      *
-     * `5.9 km per pixel east-west, 2.9 north-south · about 1:22 000 000 at the equator, east-west`.
-     * Both figures, because a pixel covers twice as much ground east-west as north-south and one
-     * figure for both would be wrong along every meridian (Audit III's F-C1). The fraction is the
-     * east-west one, the axis the bar is drawn on. It is quoted to two significant figures and no
-     * more, because it rests on [MILLIMETRES_PER_PIXEL] — an assumption about the reader's screen —
-     * and a fraction written to seven digits would claim a precision that assumption does not have.
-     * "About" is there for the same reason.
+     * `2.9 km per pixel · about 1:11 000 000 at the equator`. One figure, because the sheet is drawn
+     * at the world's true shape and a pixel covers the same ground east-west and north-south. It is
+     * quoted to two significant figures and no more, because it rests on [MILLIMETRES_PER_PIXEL] —
+     * an assumption about the reader's screen — and a fraction written to seven digits would claim
+     * a precision that assumption does not have. "About" is there for the same reason.
      */
-    fun cartoucheLine(scale: WorldScale, cellsAcross: Int, cellsDown: Int): String {
-        val perPixel = kilometresPerPixel(scale, cellsAcross, 1f)
-        val perPixelNorthSouth = kilometresPerPixelNorthSouth(scale, cellsDown, 1f)
-        val denominator = representativeFractionDenominator(scale, cellsAcross, 1f)
-        return "${oneDecimal(perPixel)} km per pixel east-west, ${oneDecimal(perPixelNorthSouth)} " +
-            "north-south · about 1:${grouped(twoFigures(denominator))} at the equator, east-west"
+    fun cartoucheLine(geometry: SheetGeometry): String {
+        val perPixel = kilometresPerPixel(geometry, 1f)
+        val denominator = representativeFractionDenominator(geometry, 1f)
+        return "${oneDecimal(perPixel)} km per pixel · " +
+            "about 1:${grouped(twoFigures(denominator))} at the equator"
     }
 
     /** `5.9`. Kotlin's common runtime has no format string, and this is the only place one is due. */

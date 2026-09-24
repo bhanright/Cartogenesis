@@ -32,10 +32,11 @@ import kotlin.test.assertTrue
  *    rivers a sheet draws: it is a share of the traced count and so has no answer in kilometres of
  *    ink per square kilometre of land, which is what X1c measures a map by. Nothing about the law
  *    itself has changed, and neither have the figures here. See `RiverSelectionTest`.
- *  - **The scale bar measures what the world says it measures.** Against
- *    `WorldScale.cellWidthKm`, which is the same arithmetic the heightmap sidecar
- *    writes, so the bar and the exported metadata cannot drift apart; and against
- *    `WorldScale.cellHeightKm` along a meridian, where it does not hold today (a known failure).
+ *  - **The scale bar measures what the world says it measures.** Against the true-shape sheet's
+ *    one scale, `WorldScale.cellWidthKm` over the pixels a cell spans east-west and
+ *    `WorldScale.cellHeightKm` over the pixels it spans north-south, which is the same arithmetic
+ *    the heightmap sidecar writes, so the bar and the exported metadata cannot drift apart; and the
+ *    printed bar against the sheet's pixel rather than the grid's.
  *  - **The graticule's spacing is exact.** The map is the whole globe, so ten degrees is exactly a
  *    thirty-sixth of the width and an eighteenth of the height; the control is the same spacing
  *    rounded to whole cells, which puts the equator off the middle row.
@@ -46,14 +47,15 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         const val SIDE = 512
 
         /**
-         * The two scales the generalisation is asked about, in screen pixels to the cell.
+         * The two scales the generalisation is asked about, in screen pixels to a pixel of the
+         * whole sheet.
          *
-         * A 2048 world fitted into a 900-pixel pane is at 0.44, which is what the application shows
-         * on a laptop the moment a world finishes; four times zoom on the same window is 1.76.
-         * [MapSheet.onScreen] quantises both to half-octave bands, so the figures the arithmetic
-         * actually runs on are 0.5 and 2.0.
+         * A 2048 world's true-shape sheet, 4096 pixels across, fitted into a 900-pixel pane is at
+         * 0.22, which is what the application shows on a laptop the moment a world finishes; four
+         * times zoom on the same window is 0.88. [MapSheet.onScreen] quantises both to half-octave
+         * bands, so the figures the arithmetic actually runs on are 0.25 and 1.
          */
-        const val AT_FIT = 900f / 2048f
+        const val AT_FIT = 900f / 4096f
         const val AT_FOUR_TIMES = 4f * AT_FIT
 
         /**
@@ -85,11 +87,18 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     fun `the simplified coast never leaves the tolerance it was simplified at`() {
         val map = world(42L)
         val sheet = MapSheet.onScreen(AT_FIT)
-        val tolerance = sheet.simplifyToleranceCells
+        val tolerance = sheet.simplifyTolerancePixels
+        val geometry = SheetGeometry.of(map)
 
+        // Carried onto the true-shape sheet, where the tolerance is set and a pixel is the same
+        // ground both ways, and measured there.
         var traced = emptyList<FloatArray>()
         val traceMs = measureTimeMillis {
-            traced = Shoreline.trace(map.sea.isLand, map.width, map.height)
+            traced = Shoreline.trace(map.sea.isLand, map.width, map.height).map { line ->
+                FloatArray(line.size) { at ->
+                    if (at % 2 == 0) geometry.sheetX(line[at]) else geometry.sheetY(line[at])
+                }
+            }
         }
         val full = traced.sumOf { it.size / 2 }
 
@@ -105,18 +114,18 @@ class GeneralisationTest : BorrowsSharedWorlds() {
 
         println(
             "SCALE coast at $SIDE: ${traced.size} lines, $full vertices traced in $traceMs ms, " +
-                "$kept kept at a tolerance of $tolerance cells; " +
-                "Douglas-Peucker strays ${worst.round()} cells, decimation to the same count " +
+                "$kept kept at a tolerance of $tolerance sheet pixels; " +
+                "Douglas-Peucker strays ${worst.round()} pixels, decimation to the same count " +
                 "strays ${worstDecimated.round()}"
         )
         assertTrue(
             worst <= tolerance,
-            "the simplified coast strays ${worst.round()} cells, past its $tolerance tolerance"
+            "the simplified coast strays ${worst.round()} pixels, past its $tolerance tolerance"
         )
         assertTrue(
             worstDecimated > tolerance,
             "decimation to the same vertex count stayed inside the band too, at " +
-                "${worstDecimated.round()} cells: the guard cannot tell a simplification from a cull"
+                "${worstDecimated.round()} pixels: the guard cannot tell a simplification from a cull"
         )
     }
 
@@ -195,15 +204,16 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     @Test
     fun `a coast is simplified harder the further out the reader stands`() {
         val map = world(42L)
-        val counts = listOf(AT_FIT, AT_FOUR_TIMES, 1f).map { pixelsPerCell ->
-            val sheet = if (pixelsPerCell == 1f) MapSheet.UNGENERALISED else MapSheet.onScreen(pixelsPerCell)
-            sheet to Shoreline.of(map.sea.isLand, map.width, map.height, sheet)
+        val counts = listOf(AT_FIT, AT_FOUR_TIMES, 1f).map { pixelsPerSheetPixel ->
+            val sheet = if (pixelsPerSheetPixel == 1f) MapSheet.UNGENERALISED
+            else MapSheet.onScreen(pixelsPerSheetPixel)
+            sheet to Shoreline.of(map.sea.isLand, SheetGeometry.of(map), sheet)
                 .sumOf { it.size / 2 }
         }
         counts.forEach { (sheet, vertices) ->
             println(
-                "SCALE coast vertices at ${sheet.pixelsPerCell} px per cell " +
-                    "(tolerance ${sheet.simplifyToleranceCells} cells): $vertices"
+                "SCALE coast vertices at ${sheet.pixelsPerSheetPixel} px per sheet pixel " +
+                    "(tolerance ${sheet.simplifyTolerancePixels} sheet pixels): $vertices"
             )
         }
         assertTrue(
@@ -293,17 +303,21 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     fun `the scale bar measures what the world's own arithmetic says`() {
         val scale = WorldGenConfig().scale
         val cellsAcross = 2048
-        val perPixel = MapScale.kilometresPerPixel(scale, cellsAcross, 1f)
+        val geometry = SheetGeometry.of(scale, cellsAcross, cellsAcross)
+        val perPixel = MapScale.kilometresPerPixel(geometry, 1f)
 
-        assertEquals(scale.worldWidthKm / cellsAcross, perPixel, 1e-9)
-        assertEquals(scale.cellWidthKm(cellsAcross), perPixel, 1e-9)
+        // The true-shape sheet is twice the grid's width, so its pixel is half a cell's width of
+        // ground east-west and one row's height north-south: the same ground both ways.
+        assertEquals(scale.worldWidthKm / geometry.widthPixels, perPixel, 1e-9)
+        assertEquals(scale.cellWidthKm(cellsAcross) / geometry.pixelsPerCellAcross, perPixel, 1e-9)
+        assertEquals(scale.cellHeightKm(cellsAcross) / geometry.pixelsPerCellDown, perPixel, 1e-9)
 
-        val frame = cellsAcross.toFloat()
+        val frame = geometry.widthPixels.toFloat()
         val bar = MapScale.longestBarThatFits(perPixel, frame)
         println(
-            "SCALE scale bar on a $cellsAcross sheet: ${bar.label} over ${bar.lengthPixels} px, " +
-                "at ${MapScale.oneDecimal(perPixel)} km per pixel; " +
-                MapScale.cartoucheLine(scale, cellsAcross, cellsAcross)
+            "SCALE scale bar on a $cellsAcross world's ${geometry.widthPixels}-pixel sheet: " +
+                "${bar.label} over ${bar.lengthPixels} px, at ${MapScale.oneDecimal(perPixel)} km " +
+                "per pixel; " + MapScale.cartoucheLine(geometry)
         )
 
         // The bar is as long as it says it is, to the pixel.
@@ -323,39 +337,74 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             "${bar.kilometres} km is not a 1-2-5 distance"
         )
 
-        // The sheet draws a cell as one pixel each way, so along a meridian a pixel is a cell's height
-        // of ground, which the world's arithmetic gives separately, and the sheet has two scales. The
-        // bar is drawn along a row and holds there; what a reader is told about the other axis is the
-        // cartouche's line, so the clause reads that line as a reader would: it must give the ground
-        // a pixel covers along a meridian, and give it as the world's own arithmetic has it. Until
-        // the line said so, a bar laid north-south overstated the distance twice over (Audit III,
-        // F-C1).
-        val cellsDown = cellsAcross
-        val perPixelNorthSouth = scale.cellHeightKm(cellsDown)
-        val line = MapScale.cartoucheLine(scale, cellsAcross, cellsDown)
-        println("SCALE along a meridian a pixel is ${MapScale.oneDecimal(perPixelNorthSouth)} km; the cartouche says: $line")
+        // The sheet is drawn at the world's true shape, so a pixel covers the same ground along a
+        // meridian as along a parallel and the sheet has one scale: the cartouche quotes one figure,
+        // and it is that one. (The squeezed sheet this replaced had two, and quoted both; Audit III,
+        // F-C1.)
+        val line = MapScale.cartoucheLine(geometry)
+        println("SCALE the cartouche says: $line")
         assertTrue(
-            line.contains("${MapScale.oneDecimal(perPixel)} km per pixel east-west") &&
-                line.contains("${MapScale.oneDecimal(perPixelNorthSouth)} north-south"),
-            "the cartouche does not give the sheet's two scales, ${MapScale.oneDecimal(perPixel)} km a pixel east-west " +
-                "and ${MapScale.oneDecimal(perPixelNorthSouth)} north-south: $line"
+            line.startsWith("${MapScale.oneDecimal(perPixel)} km per pixel ·") &&
+                "east-west" !in line && "north-south" !in line,
+            "the cartouche does not quote the sheet's one scale, " +
+                "${MapScale.oneDecimal(perPixel)} km a pixel: $line"
         )
+    }
+
+    /**
+     * The printed sheet's own bar, placed by the renderer, is measured against the sheet's pixel
+     * width and not the grid's.
+     *
+     * On a 2048 world's sheet a pixel is 12,000 / 4096 = 2.9297 km, so a 500 km bar is 170.7
+     * pixels long. The control is the arithmetic of the squeezed sheet this replaced — a cell's
+     * width of ground to the pixel — which draws the same bar at 85.3 pixels, half the length it
+     * should be on the true-shape sheet.
+     */
+    @Test
+    fun `the printed bar is as long on the sheet as the distance it names`() {
+        val scale = WorldGenConfig().scale
+        val geometry = SheetGeometry.of(scale, 2048, 2048)
+        val kilometresPerPixel = scale.worldWidthKm / geometry.widthPixels
+        assertEquals(2.9296875, kilometresPerPixel, 1e-12)
+
+        val placed = MapRasterizer.placedScaleBar(geometry)
         assertEquals(
-            perPixelNorthSouth, MapScale.kilometresPerPixelNorthSouth(scale, cellsDown, 1f), 1e-9,
-            "the north-south scale is not a row's height of ground"
+            placed.bar.kilometres / kilometresPerPixel, placed.bar.lengthPixels.toDouble(), 1e-3,
+            "the printed ${placed.bar.label} bar runs ${placed.bar.lengthPixels} pixels"
+        )
+        assertTrue(
+            placed.bar.lengthPixels <= geometry.widthPixels * MapScale.SHARE_OF_FRAME,
+            "the printed bar runs past a quarter of the sheet"
+        )
+
+        // A 500 km bar, as a 900-pixel frame at this scale chooses it.
+        val fiveHundred =
+            MapScale.longestBarThatFits(MapScale.kilometresPerPixel(geometry, 1f), 900f)
+        assertEquals(500.0, fiveHundred.kilometres)
+        assertEquals(500.0 / 2.9296875, fiveHundred.lengthPixels.toDouble(), 1e-3)
+        val squeezedPixels = 500.0 / scale.cellWidthKm(2048)
+        println(
+            "SCALE the printed bar on a 2048 world's sheet: ${placed.bar.label} over " +
+                "${placed.bar.lengthPixels} px; 500 km is ${fiveHundred.lengthPixels} px, and was " +
+                "$squeezedPixels px on the squeezed sheet"
+        )
+        assertTrue(
+            abs(squeezedPixels - fiveHundred.lengthPixels) > 1.0,
+            "the squeezed sheet's arithmetic draws 500 km the same length, so the guard cannot " +
+                "tell them apart"
         )
     }
 
     @Test
     fun `the bar shortens as the reader zooms in, and stays a round number`() {
-        val scale = WorldGenConfig().scale
-        val quoted = listOf(0.25f, 0.5f, 1f, 2f, 8f, 32f).map { pixelsPerCell ->
+        val geometry = SheetGeometry.of(WorldGenConfig().scale, 2048, 2048)
+        val quoted = listOf(0.125f, 0.25f, 0.5f, 1f, 4f, 16f).map { pixelsPerSheetPixel ->
             val bar = MapScale.longestBarThatFits(
-                MapScale.kilometresPerPixel(scale, 2048, pixelsPerCell),
+                MapScale.kilometresPerPixel(geometry, pixelsPerSheetPixel),
                 900f
             )
             assertTrue(oneTwoOrFive(bar.kilometres), "${bar.label} is not a 1-2-5 distance")
-            pixelsPerCell to bar.label
+            pixelsPerSheetPixel to bar.label
         }
         println("SCALE the legend's bar as the zoom climbs: $quoted")
         assertTrue(
@@ -367,14 +416,14 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     // ---- the graticule -----------------------------------------------------------------------
 
     @Test
-    fun `the graticule's spacing is exact in cells`() {
+    fun `the graticule's spacing is exact in sheet pixels`() {
         listOf(512, 1024, 2048, 4096).forEach { side ->
             val graticule = Graticule.of(side, side)
             val meridianSpacing = side / 36f
             val parallelSpacing = side / 18f
 
-            assertEquals(meridianSpacing, graticule.meridianSpacingCells, 0f)
-            assertEquals(parallelSpacing, graticule.parallelSpacingCells, 0f)
+            assertEquals(meridianSpacing, graticule.meridianSpacingPixels, 0f)
+            assertEquals(parallelSpacing, graticule.parallelSpacingPixels, 0f)
 
             val meridians = graticule.lines.filter { it.fromX == it.toX }.map { it.fromX }.sorted()
             val parallels = graticule.lines.filter { it.fromY == it.toY }.map { it.fromY }.sorted()
@@ -402,7 +451,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         }
         println(
             "SCALE graticule spacing at 512/1024/2048/4096: " +
-                listOf(512, 1024, 2048, 4096).map { Graticule.of(it, it).meridianSpacingCells }
+                listOf(512, 1024, 2048, 4096).map { Graticule.of(it, it).meridianSpacingPixels }
         )
     }
 
@@ -454,10 +503,10 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             println(
                 "SCALE at $side: $figured figures, set every " +
                     "${Graticule.figuresEveryNthLine(
-                        graticule.meridianSpacingCells,
-                        Graticule.labelHeightPixels(graticule.meridianSpacingCells)
+                        graticule.meridianSpacingPixels,
+                        Graticule.labelHeightPixels(graticule.meridianSpacingPixels)
                     ) * Graticule.DEGREES} degrees at " +
-                    "${Graticule.labelHeightPixels(graticule.meridianSpacingCells)} px"
+                    "${Graticule.labelHeightPixels(graticule.meridianSpacingPixels)} px"
             )
         }
     }

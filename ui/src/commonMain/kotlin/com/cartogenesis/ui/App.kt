@@ -83,13 +83,13 @@ import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
 import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -442,9 +442,15 @@ private fun Application(
         val drawnOptions = options
         val madeAgain = shown.width != size || shown.height != size
         val grid = "${size}x$size"
+        // The picture is the true-shape sheet of that grid, which is not square: a 2048 world is a
+        // 4096 by 2048 picture. A data export is one sample a cell and keeps the grid's own size.
+        val sheet = SheetGeometry.of(shown.config.scale, size, size)
+        val picture = "${sheet.widthPixels}x${sheet.heightPixels}"
         // A data export renders no picture, so the progress line says what it is actually doing.
         val doing = when (choice) {
-            is ExportChoice.Picture -> if (madeAgain) "Making the world again at $grid to render it" else "Rendering $grid"
+            is ExportChoice.Picture ->
+                if (madeAgain) "Making the world again at $grid to render it at $picture"
+                else "Rendering the $grid world at $picture"
             is ExportChoice.Layer -> {
                 val layer = choice.layer.label.lowercase()
                 if (madeAgain) "Making the world again at $grid to write the $layer" else "Writing the $layer at $grid"
@@ -603,7 +609,7 @@ private fun Application(
                     stage = it.label
                 }
             }
-            val sheet = MapSheet.onScreen(camera.pixelsPerCell)
+            val sheet = MapSheet.onScreen(camera.pixelsPerSheetPixel)
             val drawnOptions = options
             val (drawnRaster, drawnImage) = withContext(Dispatchers.Default) {
                 val pixels = MapRasterizer.rasterize(generated, drawnOptions)
@@ -648,7 +654,7 @@ private fun Application(
      * notch of the wheel: a scroll from fit to four times crosses four bands and redraws the ink
      * four times, rather than redrawing it on each of the twenty notches it takes to get there.
      */
-    val sheet by remember { derivedStateOf { MapSheet.onScreen(camera.pixelsPerCell) } }
+    val sheet by remember { derivedStateOf { MapSheet.onScreen(camera.pixelsPerSheetPixel) } }
 
     // One effect draws the world on screen again, whatever moved: the drawing's options, the zoom
     // band, or a generation putting up a new picture. Two effects used to share [image] - one for
@@ -1430,8 +1436,10 @@ private fun MapPane(
         val paneHeight = constraints.maxHeight.toFloat()
         val measured = image
         val fitScale =
-            if (measured == null || measured.width == 0 || measured.height == 0) 1f
-            else min(paneWidth / measured.width, paneHeight / measured.height)
+            if (measured == null) 1f
+            else MapCamera.fitOf(
+                paneWidth, paneHeight, measured.width.toFloat(), measured.height.toFloat()
+            )
         LaunchedEffect(fitScale) { camera.fitScale = fitScale }
 
         Canvas(
@@ -1467,20 +1475,16 @@ private fun MapPane(
                 .pointerInput(labelMode, labels, image, doubleTapToFit) {
                     detectTapGestures(onDoubleTap = fitOnDoubleTap) { tap ->
                         val drawn = image ?: return@detectTapGestures
-                        val fitScale = min(
-                            size.width.toFloat() / drawn.width,
-                            size.height.toFloat() / drawn.height
-                        )
-                        val offsetX = (size.width - drawn.width * fitScale) / 2f
-                        val offsetY = (size.height - drawn.height * fitScale) / 2f
-
-                        fun toScreen(label: MapLabel) = Offset(
-                            (label.x * drawn.width * fitScale + offsetX) * zoom + pan.x,
-                            (label.y * drawn.height * fitScale + offsetY) * zoom + pan.y
-                        )
+                        val paneWidth = size.width.toFloat()
+                        val paneHeight = size.height.toFloat()
+                        val sheetWidth = drawn.width.toFloat()
+                        val sheetHeight = drawn.height.toFloat()
 
                         val struck = labels.firstOrNull {
-                            (toScreen(it) - tap).getDistance() < LABEL_HIT_RADIUS_PIXELS
+                            val pin = camera.screenAt(
+                                it.x, it.y, paneWidth, paneHeight, sheetWidth, sheetHeight
+                            )
+                            (pin - tap).getDistance() < LABEL_HIT_RADIUS_PIXELS
                         }
                         if (struck != null) {
                             onLabelClick(struck)
@@ -1488,22 +1492,24 @@ private fun MapPane(
                         }
                         if (!labelMode) return@detectTapGestures
 
-                        // Back out of the pan and the zoom, then out of the letterboxing, to a
-                        // fraction of the sheet — which is how a label is stored, so that it stays
-                        // on the same piece of coast at any zoom and at any export size.
-                        val unpanned = (tap - pan) / zoom
-                        val acrossSheet = (unpanned.x - offsetX) / fitScale / drawn.width
-                        val downSheet = (unpanned.y - offsetY) / fitScale / drawn.height
-                        if (acrossSheet in 0f..1f && downSheet in 0f..1f) {
-                            onPlace(acrossSheet, downSheet)
-                        }
+                        // A fraction of the sheet — which is how a label is stored, so that it
+                        // stays on the same piece of coast at any zoom and at any export size, and
+                        // is the same fraction of the grid whatever shape the sheet is drawn at.
+                        val placed = camera.sheetFractionAt(
+                            tap, paneWidth, paneHeight, sheetWidth, sheetHeight
+                        ) ?: return@detectTapGestures
+                        onPlace(placed.x, placed.y)
                     }
                 }
         ) {
             val drawn = image ?: return@Canvas
-            val fitScale = min(size.width / drawn.width, size.height / drawn.height)
-            val offsetX = (size.width - drawn.width * fitScale) / 2f
-            val offsetY = (size.height - drawn.height * fitScale) / 2f
+            val sheetWidth = drawn.width.toFloat()
+            val sheetHeight = drawn.height.toFloat()
+            // One scale both ways: the image is the true-shape sheet, so fitting it keeps its
+            // shape and letterboxes the pane rather than stretching the picture to fill it.
+            val fitScale = MapCamera.fitOf(size.width, size.height, sheetWidth, sheetHeight)
+            val offsetX = (size.width - sheetWidth * fitScale) / 2f
+            val offsetY = (size.height - sheetHeight * fitScale) / 2f
 
             withTransform({
                 translate(pan.x, pan.y)
@@ -1515,22 +1521,28 @@ private fun MapPane(
             }
 
             labels.forEach { label ->
-                val x = (label.x * drawn.width * fitScale + offsetX) * zoom + pan.x
-                val y = (label.y * drawn.height * fitScale + offsetY) * zoom + pan.y
-                drawCircle(OverMap.Ink, radius = LABEL_PIN_RADIUS_PIXELS, center = Offset(x, y))
-                drawCircle(
-                    OverMap.Parchment,
-                    radius = LABEL_PIN_EYE_RADIUS_PIXELS,
-                    center = Offset(x, y)
+                val pin = camera.screenAt(
+                    label.x, label.y, size.width, size.height, sheetWidth, sheetHeight
                 )
+                drawCircle(OverMap.Ink, radius = LABEL_PIN_RADIUS_PIXELS, center = pin)
+                drawCircle(OverMap.Parchment, radius = LABEL_PIN_EYE_RADIUS_PIXELS, center = pin)
             }
         }
-    }
 
-    // Text has to go through the platform canvas, since DrawScope has no text primitive.
-    Box(Modifier.fillMaxSize()) {
-        labels.forEach { label ->
-            LabelChip(label)
+        // Text has to go through the platform canvas, since DrawScope has no text primitive. Each
+        // name is centred where its pin is drawn, by the same arithmetic, so it follows the map
+        // through the zoom and the pan and sits on the sheet rather than on the letterboxing.
+        val shown = image
+        if (shown != null) {
+            labels.forEach { label ->
+                LabelChip(
+                    label,
+                    camera.screenAt(
+                        label.x, label.y, paneWidth, paneHeight,
+                        shown.width.toFloat(), shown.height.toFloat()
+                    )
+                )
+            }
         }
     }
 
@@ -1555,8 +1567,7 @@ private const val LABEL_PIN_RADIUS_PIXELS = 4f
 private const val LABEL_PIN_EYE_RADIUS_PIXELS = 2f
 
 @Composable
-private fun LabelChip(label: MapLabel) {
-    // Positioned by the same normalised coordinates the map uses, via a fraction-based offset.
+private fun LabelChip(label: MapLabel, at: Offset) {
     Box(Modifier.fillMaxSize()) {
         Text(
             label.text,
@@ -1564,7 +1575,7 @@ private fun LabelChip(label: MapLabel) {
             color = OverMap.Ink,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offsetFraction(label.x, label.y)
+                .centredAt(at)
                 .background(OverMap.ParchmentDim, RoundedCornerShape(2.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         )
@@ -2247,16 +2258,16 @@ private fun freshSeed(): Long = Random.nextLong(SEED_CEILING)
 private const val SEED_CEILING = 1_000_000L
 
 /**
- * Places a composable at a fraction of its parent, which is how labels stay put in map
- * coordinates while being laid out in screen space.
+ * Centres a composable on [point], in its parent's pixels: how a label's name stays on the point
+ * of the map its pin marks while being laid out in screen space.
  */
-private fun Modifier.offsetFraction(acrossParent: Float, downParent: Float): Modifier =
+private fun Modifier.centredAt(point: Offset): Modifier =
     layout { measurable, constraints ->
         val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
         layout(constraints.maxWidth, constraints.maxHeight) {
             placeable.place(
-                x = (constraints.maxWidth * acrossParent).toInt() - placeable.width / 2,
-                y = (constraints.maxHeight * downParent).toInt() - placeable.height / 2
+                x = point.x.toInt() - placeable.width / 2,
+                y = point.y.toInt() - placeable.height / 2
             )
         }
     }

@@ -36,6 +36,13 @@ class IsobathTest : BorrowsSharedWorlds() {
         const val SLOPE_COLUMNS = SIDE / 2
 
         /**
+         * Pixels of the true-shape sheet one cell of the made floor spans east-west: the made floor
+         * is a square grid over [CONFIG]'s world, whose sheet is twice the grid's width.
+         */
+        val PIXELS_PER_CELL_ACROSS: Int
+            get() = SheetGeometry.of(CONFIG.scale, SIDE, SIDE).pixelsPerCellAcross
+
+        /**
          * The plain's depth, and how far its floor rises toward the margins of the basin.
          *
          * It sits exactly on a contour, which is the worst case and the common one: an abyssal
@@ -176,10 +183,10 @@ class IsobathTest : BorrowsSharedWorlds() {
                 val southward =
                     (sample(depth, column, row + reach) -
                         sample(depth, column, row - reach)) * span
-                val slope = sqrt(eastward * eastward + southward * southward)
                 val southwardOnTheGround = southward / rowScale
                 val slopeOnTheGround = sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
-                ink[cell] = Isobaths.ink(depth[cell], slope, slopeOnTheGround, interval, flattest)
+                val slopePerSheetPixel = slopeOnTheGround / PIXELS_PER_CELL_ACROSS
+                ink[cell] = Isobaths.ink(depth[cell], slopePerSheetPixel, slopeOnTheGround, interval, flattest)
             }
         }
         return ink
@@ -314,8 +321,8 @@ class IsobathTest : BorrowsSharedWorlds() {
                 for (row in SIDE / 4 until SIDE * 3 / 4) {
                     for (column in SIDE / 4 until SIDE * 3 / 4) {
                         val cell = row * SIDE + column
-                        val withRule = MapRasterizer.seaContour(floor, rowScale, cell, depth[cell], interval, flattest, stencil)
-                        val without = MapRasterizer.seaContour(floor, rowScale, cell, depth[cell], interval, 0f, stencil)
+                        val withRule = MapRasterizer.seaContour(floor, rowScale, PIXELS_PER_CELL_ACROSS, cell, depth[cell], interval, flattest, stencil)
+                        val without = MapRasterizer.seaContour(floor, rowScale, PIXELS_PER_CELL_ACROSS, cell, depth[cell], interval, 0f, stencil)
                         if (withRule >= VISIBLE_INK) inkedWithRule++
                         if (withRule != without) differing++
                     }
@@ -352,7 +359,7 @@ class IsobathTest : BorrowsSharedWorlds() {
         var inked = 0
         for (cell in relative.indices) {
             if (world.sea.isLand[cell]) continue
-            val raster = MapRasterizer.seaContour(world, cell, depth[cell], interval, flattest, stencil)
+            val raster = MapRasterizer.seaContour(world, SheetGeometry.of(world), cell, depth[cell], interval, flattest, stencil)
             assertEquals(
                 raster.toRawBits(), copied[cell].toRawBits(),
                 "the copy draws $cell at ${copied[cell]} and the raster at $raster"
@@ -392,7 +399,7 @@ class IsobathTest : BorrowsSharedWorlds() {
         var openSeaInked = 0
         for (cell in relative.indices) {
             if (land[cell]) continue
-            val ink = MapRasterizer.seaContour(world, cell, -relative[cell], interval, flattest, stencil)
+            val ink = MapRasterizer.seaContour(world, SheetGeometry.of(world), cell, -relative[cell], interval, flattest, stencil)
             if (besideLand(cell)) {
                 coastal++
                 if (ink > VISIBLE_INK) doubled++

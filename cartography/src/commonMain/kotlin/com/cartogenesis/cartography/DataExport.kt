@@ -69,6 +69,33 @@ class DataFiles(
     )
 }
 
+/**
+ * Which world an export drew: the one on screen, or one made again at the export's size.
+ *
+ * An export at the world's own size is the world the reader was looking at, cell for cell. One at
+ * any other size cannot be — a 1024 world has no 4096 cells to draw — so it is generated afresh at
+ * that size from the same settings, which is a world like the one on screen and not the same one.
+ * The export's notice and its data sidecar both say which, so nobody takes the second for the first.
+ */
+sealed interface ExportedWorld {
+
+    /** The world on screen, drawn as it is. */
+    data object OnScreen : ExportedWorld
+
+    /** Made again at the export's size from the settings of a [fromWidth] by [fromHeight] world. */
+    data class MadeAgain(val fromWidth: Int, val fromHeight: Int) : ExportedWorld {
+        fun note(width: Int, height: Int): String =
+            "made again at $width x $height from the settings of the $fromWidth x $fromHeight world " +
+                "on screen: the same settings, but not the same world cell for cell"
+    }
+
+    companion object {
+        /** [OnScreen] when [exported] is [onScreen] itself, and [MadeAgain] otherwise. */
+        fun of(onScreen: WorldMap, exported: WorldMap): ExportedWorld =
+            if (exported === onScreen) OnScreen else MadeAgain(onScreen.width, onScreen.height)
+    }
+}
+
 object DataExports {
 
     /**
@@ -197,17 +224,20 @@ object DataExports {
     /**
      * Renders [layer] from [world] at whatever size [world] was generated at.
      *
-     * No resampling happens here, and none is wanted: an export re-runs the whole pipeline at the
-     * export size — see the desktop's `Exporter` and the browser's `WebPlatform` — so the world
-     * handed in already has one cell per exported pixel. That is the picture export's own rule
-     * ("the detail is real rather than interpolated") applied to the data, and it is why a
-     * heightmap at 4096 carries 4096 cells of real terrain rather than a 1024 world stretched.
+     * No resampling happens here, and none is wanted: an export at the world's own size draws the
+     * world on screen, and one at any other size is made again at that size from its settings —
+     * see `ExportWorlds` in `:ui` — so the world handed in already has one cell per exported
+     * pixel. That is the picture export's own rule ("the detail is real rather than interpolated")
+     * applied to the data, and it is why a heightmap at 4096 carries 4096 cells of real terrain
+     * rather than a 1024 world stretched. [source] says which of the two it was, and the sidecar
+     * says so too.
      */
     suspend fun write(
         world: WorldMap,
         layer: DataLayer,
         compressor: Compressor,
-        appVersion: String
+        appVersion: String,
+        source: ExportedWorld = ExportedWorld.OnScreen
     ): DataFiles {
         val deflater = GzipRewrappingDeflater(compressor)
         val base = baseName(world.config, world.width, layer)
@@ -216,21 +246,21 @@ object DataExports {
         when (layer) {
             DataLayer.HEIGHTMAP -> {
                 image = heightmapPng(world, deflater)
-                sidecar = heightmapSidecar(world, appVersion)
+                sidecar = heightmapSidecar(world, appVersion, source)
             }
             DataLayer.BIOMES -> {
                 val painted = biomeIndices(world)
                 image = PngWriter.indexed8(
                     world.width, world.height, painted.indices, painted.palette, deflater
                 )
-                sidecar = layerSidecar(world, layer, painted, appVersion)
+                sidecar = layerSidecar(world, layer, painted, appVersion, source)
             }
             DataLayer.REALMS -> {
                 val painted = realmIndices(world)
                 image = PngWriter.indexed8(
                     world.width, world.height, painted.indices, painted.palette, deflater
                 )
-                sidecar = layerSidecar(world, layer, painted, appVersion)
+                sidecar = layerSidecar(world, layer, painted, appVersion, source)
             }
         }
         return DataFiles("$base.png", image, "$base.json", sidecar.encodeToByteArray())
@@ -326,12 +356,12 @@ object DataExports {
     private fun readable(enumName: String): String =
         enumName.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
 
-    private fun heightmapSidecar(world: WorldMap, appVersion: String): String {
+    private fun heightmapSidecar(world: WorldMap, appVersion: String, source: ExportedWorld): String {
         val config = world.config
         val metresPerLevel = metresPerGreyLevel(config)
         val metresPerLevelBelow = metresPerGreyLevelBelowSeaLevel(config)
         val json = JsonLines()
-        common(json, world, DataLayer.HEIGHTMAP, appVersion)
+        common(json, world, DataLayer.HEIGHTMAP, appVersion, source)
         json.number("bitsPerSample", GREYSCALE_BITS_PER_SAMPLE)
         json.number("seaLevelGreyLevel", SEA_LEVEL_GREY_LEVEL)
         json.number("greyLevelsPerSide", LEVELS_PER_SIDE)
@@ -364,10 +394,11 @@ object DataExports {
         world: WorldMap,
         layer: DataLayer,
         painted: Painted,
-        appVersion: String
+        appVersion: String,
+        source: ExportedWorld
     ): String {
         val json = JsonLines()
-        common(json, world, layer, appVersion)
+        common(json, world, layer, appVersion, source)
         json.number("bitsPerSample", INDEXED_BITS_PER_SAMPLE)
         json.number("paletteSize", painted.palette.size)
         json.legend(painted.names, painted.palette, painted.cellCounts)
@@ -378,7 +409,13 @@ object DataExports {
     private const val GREYSCALE_BITS_PER_SAMPLE = 16
     private const val INDEXED_BITS_PER_SAMPLE = 8
 
-    private fun common(json: JsonLines, world: WorldMap, layer: DataLayer, appVersion: String) {
+    private fun common(
+        json: JsonLines,
+        world: WorldMap,
+        layer: DataLayer,
+        appVersion: String,
+        source: ExportedWorld
+    ) {
         val config = world.config
         val scale = config.scale
         json.text("generator", "Cartogenesis")
@@ -386,6 +423,15 @@ object DataExports {
         json.number("sidecarVersion", SIDECAR_VERSION)
         json.number("saveFormatVersion", WorldCodec.FORMAT_VERSION)
         json.text("layer", layer.fileSuffix)
+        when (source) {
+            ExportedWorld.OnScreen -> json.text("worldSource", "on screen")
+            is ExportedWorld.MadeAgain -> {
+                json.text("worldSource", "regenerated")
+                json.number("regeneratedFromWidthPixels", source.fromWidth)
+                json.number("regeneratedFromHeightPixels", source.fromHeight)
+                json.text("worldSourceNote", source.note(world.width, world.height))
+            }
+        }
         json.number("seed", config.seed)
         json.number("widthPixels", world.width)
         json.number("heightPixels", world.height)

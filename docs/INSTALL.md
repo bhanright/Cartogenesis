@@ -103,7 +103,9 @@ and it exits cleanly either way. From the tarball the command is
 
 ### Where things live
 
-- Saved worlds: `~/.cartogenesis/worlds`. Back that folder up and nothing else.
+- Saved worlds: `~/.cartogenesis/worlds`, or the folder chosen under Settings ▸ Library folder.
+  Back that folder up and nothing else; choosing a folder a sync client keeps in step, as the
+  README's "The library, and keeping it in the cloud" describes, backs it up as you go.
 - Settings: alongside them, under `~/.cartogenesis`.
 - From the package, the launcher is `/opt/cartogenesis/bin/Cartogenesis`, reached from the
   desktop environment's own menu. The package adds no symlink to `/usr/bin`, so the full path is

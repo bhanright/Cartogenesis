@@ -125,28 +125,38 @@ fun Landmark.resolve(override: LandmarkOverride): ResolvedLandmark = ResolvedLan
  * The text half of a save: the settings, the edits, the labels and the title.
  *
  * The world itself travels beside this as binary sections — see [WorldCodec] — so this is what a
- * library listing reads and what the app needs to know before it has a map to draw. A save may
- * carry this and no sections at all, which opens by regenerating the world from the settings.
+ * library listing reads and what the app needs to know before it has a map to draw. Every save
+ * carries a world as well, and [config] is the settings that world was made with: the codec will
+ * not write the one without the other matching.
  *
  * [savedAt] is passed in rather than defaulted, because a wall clock is not something common
  * Kotlin has — each platform supplies its own.
  */
 @Serializable
 data class WorldDocument(
+    /** Which document this is, whatever it is called. See [isValidId] for what one may hold. */
     val id: String,
     val title: String,
     val config: WorldGenConfig,
     val overrides: WorldOverrides = WorldOverrides(),
     val labels: List<MapLabel> = emptyList(),
-    /**
-     * Always null now: the eroded terrain of a world made on the graphics card, which the seed
-     * alone did not pin down, carried in the save so it could be replayed through [StoredTerrain].
-     *
-     * A save has carried every stage since the container format, so nothing writes this; and the
-     * only files that ever had it are older than the format this build reads, so nothing can hand
-     * it back either. It is left in place because removing it is a change to the wire and to the
-     * app's own load path rather than a rename, and belongs to whoever takes that on.
-     */
-    val terrain: TerrainSnapshot? = null,
     val savedAt: Long
-)
+) {
+    companion object {
+        /**
+         * The ids this build writes and reads: one to [LONGEST_ID] letters, digits, hyphens and
+         * underscores, which is every id either front end makes — a UUID, or thirty-two hex digits
+         * where a browser has no `randomUUID`.
+         *
+         * Strict because an id names a file. A new save is filed as `<id>.cgw`, and an id with a
+         * separator or a `..` in it, read from somebody else's file, would put the next Save
+         * somewhere outside the library.
+         */
+        fun isValidId(id: String): Boolean =
+            id.length in 1..LONGEST_ID &&
+                id.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '_' }
+
+        /** Longer than a UUID's thirty-six characters, and far shorter than any file name's limit. */
+        const val LONGEST_ID = 64
+    }
+}

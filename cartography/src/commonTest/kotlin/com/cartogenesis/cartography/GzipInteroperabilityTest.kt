@@ -4,7 +4,6 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -36,7 +35,7 @@ class GzipInteroperabilityTest {
         assertEquals("Gzip fixture", header.document.title)
 
         val save = WorldCodec.decode(bytes, PlatformGzipCompressor)
-        val world = assertNotNull(save.world, "the JVM-gzipped fixture did not decode on this platform")
+        val world = save.world
 
         assertEquals(32, save.document.config.width)
         assertEquals(32, save.document.config.height)
@@ -47,7 +46,7 @@ class GzipInteroperabilityTest {
         // not merely tolerant of the fixture by accident - re-encoding and decoding it again has
         // to come back exactly the same world.
         val rewritten = WorldCodec.encode(save.document, world, PlatformGzipCompressor, "roundtrip")
-        val reread = assertNotNull(WorldCodec.decode(rewritten, PlatformGzipCompressor).world)
+        val reread = WorldCodec.decode(rewritten, PlatformGzipCompressor).world
         for (i in world.terrain.height.data.indices) {
             assertEquals(
                 world.terrain.height.data[i].toRawBits(),

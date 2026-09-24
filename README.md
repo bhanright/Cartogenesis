@@ -351,20 +351,43 @@ not matter. The apt repository the `.deb` is served from is rebuilt by the site 
 ## Save format
 
 A save is an uncompressed JSON header (format version, settings, overrides, labels, title, which
-front end wrote it, and a directory of sections) followed by one gzipped binary section per per-cell
-array. The arrays are the file: a 1024 world is around 94 MB of floats and ids before compression,
-carried as little-endian `float32` and `int32` sections, while the small lists (rivers, lakes,
-realms, peoples, landmarks) stay in the JSON header. `WorldCodec` in `:cartography` is the whole
-format, shared by both front ends, with serializers generated from the config classes so a new
-setting cannot go missing from a save.
+front end wrote it, and a directory of the payload's sections) followed by the payload: the world's
+lists (rivers, lakes, realms, peoples, landmarks) as JSON, then one little-endian binary section per
+per-cell array, 146 bytes a cell in all. The payload is cut into one-mebibyte chunks, each gzipped
+and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 2.45 GB
+of arrays, saves and opens without any array its size existing in between. The header is
+checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
+edited header, or a header put in front of another save's chunks, is found. The browser keeps its
+library in IndexedDB the same way, a mebibyte to a record. `WorldCodec` in
+`:cartography` is the whole format, shared by both front ends, with serializers generated from the
+config classes so a new setting cannot go missing from a save.
 
-The format is version 10, and only that version opens; an older or newer file is refused by name
-with an explanation rather than filled in with defaults. Within a version, a stage can add a new
-section without a bump: a save lacking it comes back `null` for that stage, and the same reuse chain
-that skips an unchanged stage regenerates it and everything downstream.
+The format is version 14, and only that version opens. A save carries its whole world or it does not
+open: an older or newer file, a truncated one, one whose directory or payload disagrees with this
+build's layout, or one holding an id, a reference, a number or a flag it could not have been written
+with is refused with the reason, never opened as whatever its settings would regenerate. Its
+settings are always the ones its world was made with.
 
 Edits sit in a `WorldOverrides` layer and survive regeneration. A new generated attribute needs an
-override path and a line in `WorldStore` or it will not survive a save.
+override path and a line in `WorldSections` or it will not survive a save.
+
+### The library, and keeping it in the cloud
+
+The desktop keeps saves as ordinary `.cgw` files in `~/.cartogenesis/worlds`, or in the folder
+chosen under Settings ▸ Library folder. Any `.cgw` file in that folder is listed under its own name
+and opens as itself, whatever it is called, so a save downloaded from the browser can simply be
+dropped in. A file that will not open is listed with the reason. A world brought in from a file is
+a new document, so its first Save lands beside any copy already in the library rather than over
+it, and two Saves of one world always leave the later one on disk.
+
+To keep your worlds in the cloud, choose a folder that a file-sync client already keeps in step
+across your machines as the library folder. Cartogenesis never talks to the service itself; it only
+behaves well in a folder another program is syncing. Each save is written to a temporary file beside
+it and renamed into place, so the sync client never uploads half of one. A file the client has not
+finished bringing down, or an online-only placeholder it cannot fetch, is refused as incomplete
+rather than opened as something else. And the copies a client makes when two machines edit one
+world (`world (1).cgw`, `world (conflicted copy).cgw` and the like) are listed as worlds of their
+own, each of which opens, and saves, without touching the other.
 
 ## Menus, settings and themes
 

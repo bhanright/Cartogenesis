@@ -2,6 +2,7 @@ package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -131,15 +132,16 @@ class CartoucheTest {
         naming.rename("The Hollow Sea")
         naming.generated(59758L, "Somethingelse")
 
+        // The smallest world the generator makes: every save carries one, and the title lives in
+        // the header, which is the part being tested.
+        val world = WorldGenerationEngine.generate(WorldGenConfig(seed = 59758L, width = 32, height = 32))
         val document = WorldDocument(
             id = "a-world",
             title = naming.title,
-            config = WorldGenConfig(seed = 59758L, width = 256, height = 256),
+            config = world.config,
             savedAt = 1_700_000_000_000L
         )
-        // No world in the file: the title lives in the header, which is the part being tested,
-        // and a generated world would cost a minute to say nothing more.
-        val bytes = WorldCodec.encode(document, world = null)
+        val bytes = WorldCodec.encode(document, world)
         assertEquals("The Hollow Sea", WorldCodec.decodeHeader(bytes).document.title)
 
         // And what comes back off the shelf is what the header field then holds.

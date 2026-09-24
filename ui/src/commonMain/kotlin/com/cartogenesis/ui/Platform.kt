@@ -2,11 +2,11 @@ package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.ExportedWorld
+import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
-import com.cartogenesis.cartography.WorldSave
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
@@ -60,8 +60,16 @@ enum class ExportFormat(val label: String, val extension: String, val detail: St
     }
 }
 
-/** Where an exported map ended up, in whatever terms the host can describe. */
-class ExportOutcome(val description: String, val millis: Long, val bytes: Long)
+/**
+ * Where an exported map ended up, in whatever terms the host can describe, and whether it drew the
+ * world on screen or one made again at the export's size — see [ExportSubjects].
+ */
+class ExportOutcome(
+    val description: String,
+    val millis: Long,
+    val bytes: Long,
+    val source: ExportedWorld = ExportedWorld.OnScreen
+)
 
 /**
  * Everything the shared interface cannot do for itself.
@@ -118,13 +126,14 @@ interface Platform {
      * Hands [world] to the user as a `.cgw` file, exactly as [library] would have written it. A
      * no-op where [supportsFileTransfer] is false.
      */
-    suspend fun downloadWorld(document: WorldDocument, world: WorldMap?) {}
+    suspend fun downloadWorld(document: WorldDocument, world: WorldMap) {}
 
     /**
-     * Opens a file picker and decodes whatever the user chose, or returns null if they cancelled,
-     * the file did not parse, or this platform offers no such picker.
+     * Opens a file picker and reads whatever the user chose: the world, or the reason it will not
+     * open. Null only when they cancelled or this platform offers no such picker — a file that does
+     * not parse is a refusal with its reason, not a cancellation.
      */
-    suspend fun uploadWorld(): WorldSave? = null
+    suspend fun uploadWorld(): LoadOutcome? = null
 
     /**
      * The accelerator to offer, or null if this machine cannot provide one — in which case
@@ -216,11 +225,14 @@ interface Platform {
     fun exportCeiling(compact: Boolean): Int = 4096
 
     /**
-     * Renders at [size] and puts the result wherever this platform puts finished files: a chosen
-     * path on the desktop, a download in a browser. Returns null if the user backed out.
+     * Draws [world] at [size] and puts the result wherever this platform puts finished files: a
+     * chosen path on the desktop, a download in a browser. Returns null if the user backed out.
+     *
+     * [world] is the world on screen. At its own size it is what is drawn; at any other size the
+     * platform draws the world [ExportSubjects.at] makes from it, and says so in the outcome.
      */
     suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
         size: Int,
         format: ExportFormat
@@ -241,7 +253,7 @@ interface Platform {
      * saying nothing, and the interface reports that the export did not happen.
      */
     suspend fun exportData(
-        config: WorldGenConfig,
+        world: WorldMap,
         size: Int,
         layer: DataLayer
     ): ExportOutcome? = null

@@ -1,13 +1,12 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.model.FloatField
-import com.cartogenesis.worldgen.model.LoadedWorld
 import com.cartogenesis.worldgen.model.MapLabel
-import com.cartogenesis.worldgen.model.PartialWorld
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.BoundaryClass
+import com.cartogenesis.worldgen.pipeline.BoundaryType
 import com.cartogenesis.worldgen.pipeline.ClimateResult
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.ErosionResult
@@ -20,10 +19,9 @@ import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.RiverResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.TerrainResult
+import com.cartogenesis.worldgen.pipeline.VegetationDensity
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.Serializable
-
-/** Thrown when a container is not a container, or is one this build cannot make a world from. */
-class WorldFormatException(message: String) : IllegalArgumentException(message)
 
 /** How a section's elements are laid out. Little-endian throughout, on every platform. */
 enum class SectionType(val code: Int, val bytesPerElement: Int) {
@@ -34,414 +32,284 @@ enum class SectionType(val code: Int, val bytesPerElement: Int) {
     I32(2, 4),
 
     /** One byte per cell: land or sea, biome. */
-    U8(3, 1);
+    U8(3, 1),
+
+    /** Text: the world's lists, as JSON. One element is one byte of UTF-8. */
+    UTF8(4, 1);
 
     companion object {
-        fun ofCode(code: Int): SectionType =
-            entries.firstOrNull { it.code == code }
-                ?: throw WorldFormatException("unknown section element type $code")
+        fun ofCode(code: Int): SectionType? = entries.firstOrNull { it.code == code }
     }
 }
 
 /**
  * A section as the header advertises it, so a reader can see what a file holds — and how big it
- * is — without expanding a byte of the payload. That is what keeps a library listing cheap.
+ * is — without expanding a byte of the payload, and can hold the payload to it as it is read.
+ *
+ * [bytes] and [offset] are in bytes of the expanded payload, and are `Long` because a 4096 world's
+ * payload is 2.45 GB, past what an `Int` counts.
  */
 @Serializable
 data class SectionInfo(
     val name: String,
     val type: String,
+    /** Elements: cells for a per-cell array, bytes of UTF-8 for the lists. */
     val count: Int,
-    val bytes: Int,
-    /** Where the section's own record starts within the expanded payload. */
-    val offset: Int
+    /** The elements' own bytes, not counting the record's name and lengths in front of them. */
+    val bytes: Long,
+    /** Where the section's record starts within the expanded payload. */
+    val offset: Long
 )
 
-/** One per-cell array, named, on its way to or from the payload. */
-internal class Section(
-    val name: String,
-    val type: SectionType,
-    val floats: FloatArray? = null,
-    val ints: IntArray? = null,
-    val bytes: ByteArray? = null
-) {
-    val count: Int get() = floats?.size ?: ints?.size ?: bytes!!.size
-
-    /** Name, element type, element count and byte length, so the payload parses on its own. */
-    val recordLength: Int get() =
-        RECORD_PREFIX_BYTES + name.length + count * type.bytesPerElement
-
-    fun floatsOrFail(): FloatArray = floats ?: throw WorldFormatException("$name is not float data")
-
-    fun intsOrFail(): IntArray = ints ?: throw WorldFormatException("$name is not int data")
-
-    fun bytesOrFail(): ByteArray = bytes ?: throw WorldFormatException("$name is not byte data")
-
-    companion object {
-        /**
-         * The four int32 fields in front of a section's elements: the name's length, the element
-         * type's code, the element count, and the byte length. The name's own characters are
-         * counted separately, since they are one byte each.
-         */
-        const val RECORD_PREFIX_BYTES = 4 * 4
-    }
+/**
+ * A run of bytes a section is written from, a stretch at a time, so that a flag array or the
+ * biome map is never copied whole into a byte array just to be written.
+ */
+internal fun interface ByteElements {
+    fun copyInto(target: ByteArray, targetOffset: Int, from: Int, count: Int)
 }
 
-/** Little-endian writes over a fixed buffer, since every length is known before anything is written. */
-internal class ByteWriter(size: Int) {
-    val bytes = ByteArray(size)
-    var position = 0
-        private set
+/** What a byte section's values mean, and so which values a reader accepts. */
+internal enum class ByteMeaning(val valuesBelow: Int) {
+    /** Zero or one. Any other byte is damage, not "true". */
+    FLAG(2),
 
-    fun putInt(value: Int) {
-        bytes[position] = (value and 0xFF).toByte()
-        bytes[position + 1] = ((value shr 8) and 0xFF).toByte()
-        bytes[position + 2] = ((value shr 16) and 0xFF).toByte()
-        bytes[position + 3] = ((value shr 24) and 0xFF).toByte()
-        position += 4
-    }
+    /** A [VegetationDensity.Permafrost] ordinal. */
+    PERMAFROST(VegetationDensity.Permafrost.entries.size),
 
-    fun putBytes(source: ByteArray) {
-        source.copyInto(bytes, position)
-        position += source.size
-    }
-
-    /** Names are ASCII by construction — they are the field paths written in this file. */
-    fun putAscii(text: String) {
-        putInt(text.length)
-        for (c in text) bytes[position++] = c.code.toByte()
-    }
-}
-
-internal class ByteReader(private val bytes: ByteArray, var position: Int = 0) {
-
-    val remaining: Int get() = bytes.size - position
-
-    fun getInt(): Int {
-        if (remaining < 4) throw WorldFormatException("truncated: wanted 4 bytes, had $remaining")
-        val value = (bytes[position].toInt() and 0xFF) or
-            ((bytes[position + 1].toInt() and 0xFF) shl 8) or
-            ((bytes[position + 2].toInt() and 0xFF) shl 16) or
-            ((bytes[position + 3].toInt() and 0xFF) shl 24)
-        position += 4
-        return value
-    }
-
-    fun getBytes(length: Int): ByteArray {
-        if (length < 0 || remaining < length) {
-            throw WorldFormatException("truncated: wanted $length bytes, had $remaining")
-        }
-        val slice = bytes.copyOfRange(position, position + length)
-        position += length
-        return slice
-    }
-
-    fun getAscii(): String {
-        val length = getInt()
-        val raw = getBytes(length)
-        return buildString(length) { for (b in raw) append((b.toInt() and 0xFF).toChar()) }
-    }
+    /** A [Biome] ordinal. */
+    BIOME(Biome.entries.size)
 }
 
 /**
- * The per-cell arrays of a world, as bytes and back.
+ * What a reader needs from the world's lists to check a section's values: how many cells there
+ * are, and how many of each thing a per-cell id can name.
+ */
+internal class IdBounds(val cells: Int, val lists: WorldLists)
+
+/** One per-cell array of a [WorldMap]: its wire name, its type, and how it is read and checked. */
+internal sealed class SectionSpec(val name: String, val type: SectionType)
+
+/** Every float is written by its raw bits and must come back finite: no field holds a NaN. */
+internal class FloatSection(name: String, val of: (WorldMap) -> FloatArray) :
+    SectionSpec(name, SectionType.F32)
+
+/** Ids, each of which must lie in [allowed]: a lake id must name a lake the lists carry. */
+internal class IntSection(
+    name: String,
+    val allowed: (IdBounds) -> IntRange,
+    val of: (WorldMap) -> IntArray
+) : SectionSpec(name, SectionType.I32)
+
+internal class ByteSection(
+    name: String,
+    val meaning: ByteMeaning,
+    val of: (WorldMap) -> ByteElements
+) : SectionSpec(name, SectionType.U8)
+
+/**
+ * The per-cell arrays of a world, as a payload of chunks and back.
  *
- * Binary rather than JSON because the arrays are the file: a 1024x1024 world is fifteen float
- * fields, seven id maps and two byte maps — ninety megabytes before compression, and JSON would
- * roughly triple that while also having to promise that a float survives a decimal round trip.
- * Raw little-endian bits promise it by construction.
+ * Binary rather than JSON because the arrays are the file: 146 bytes a cell, which is 153 MB at
+ * 1024 before compression, and JSON would roughly triple that while also having to promise that a
+ * float survives a decimal round trip. Raw little-endian bits promise it by construction.
  *
- * Every section carries its own name, element type, element count and byte length, so the payload
- * can be walked without the header; the header repeats the directory so a reader that only wants
- * the title and the date never touches the payload at all.
+ * The payload is a run of records — the world's lists as JSON first, then one record per array in
+ * [SECTIONS] order — cut into chunks of [WorldCodec.CHUNK_BYTES], each compressed on its own and
+ * carried in a frame with its lengths and a checksum. Chunks are what keep a save's memory bounded:
+ * the writer holds one chunk and the reader one chunk and the array it is filling, never the
+ * payload. Every record carries its own name, type, count and length, and the reader holds each to
+ * the header's directory, which it has already held to this build's own list: a section renamed,
+ * dropped, resized or reordered is damage, and is refused rather than regenerated.
  */
 internal object WorldSections {
 
+    /** The lists' record, which comes first so the arrays' ids can be checked against them. */
+    const val LISTS = "lists"
+
     /**
-     * Every array in a [WorldMap], in the order the pipeline produces them.
-     *
-     * Nothing here is derived from anything else: the point of the format is that opening a save
-     * recomputes no stage, so a field that a stage merely *could* rebuild is still written.
+     * The four fields in front of a record's elements besides its name: the name's length, the
+     * element type's code and the element count as int32, and the byte length as int64.
      */
-    fun of(world: WorldMap): List<Section> = listOf(
-        Section(
-            "terrain.normals.gradientX", SectionType.F32,
-            floats = world.terrain.normals.gradientX.data
-        ),
-        Section(
-            "terrain.normals.gradientY", SectionType.F32,
-            floats = world.terrain.normals.gradientY.data
-        ),
-        Section("terrain.height", SectionType.F32, floats = world.terrain.height.data),
-        Section("plates.plateId", SectionType.I32, ints = world.plates.plateId),
-        Section("plates.boundaryDistance", SectionType.F32, floats = world.plates.boundaryDistance.data),
-        Section("plates.nearestBoundaryType", SectionType.I32, ints = world.plates.nearestBoundaryType),
-        Section(
-            "plates.nearestBoundaryClass", SectionType.I32,
-            ints = world.plates.nearestBoundaryClass
-        ),
-        Section("plates.height", SectionType.F32, floats = world.plates.height.data),
+    const val RECORD_PREFIX_BYTES = 4 + 4 + 4 + 8
+
+    /** Every array in a [WorldMap], in the order the pipeline produces them. */
+    val SECTIONS: List<SectionSpec> = listOf(
+        FloatSection("terrain.normals.gradientX") { it.terrain.normals.gradientX.data },
+        FloatSection("terrain.normals.gradientY") { it.terrain.normals.gradientY.data },
+        FloatSection("terrain.height") { it.terrain.height.data },
+        IntSection("plates.plateId", { 0 until it.lists.plates.size }) { it.plates.plateId },
+        FloatSection("plates.boundaryDistance") { it.plates.boundaryDistance.data },
+        // -1 where a cell has no boundary to be nearest to, which a one-plate partition has.
+        IntSection("plates.nearestBoundaryType", { -1 until BoundaryType.entries.size }) {
+            it.plates.nearestBoundaryType
+        },
+        IntSection("plates.nearestBoundaryClass", { -1 until BoundaryClass.entries.size }) {
+            it.plates.nearestBoundaryClass
+        },
+        FloatSection("plates.height") { it.plates.height.data },
         // Which crust each cell is made of, and how fast it is still rising. Neither can be
         // recovered from the height field — the first is what isostasy turned *into* that field
-        // and the second never appears in it at all — and erosion reads the second every round, so
-        // both are written like any other per-cell array.
-        Section("plates.continentalShare", SectionType.F32, floats = world.plates.continentalShare.data),
-        Section("plates.seafloorAgeMyr", SectionType.F32, floats = world.plates.seafloorAgeMyr.data),
-        Section(
-            "plates.upliftRateMmPerYear", SectionType.F32,
-            floats = world.plates.upliftRateMmPerYear.data
-        ),
-        // How long ago each cell's crust was last built. Not derivable from anything else in the
-        // file — it is the record of epochs that left no other trace — and erosion reads it, so it
-        // is written like any other per-cell array rather than recomputed on open.
-        Section("plates.crustAge", SectionType.F32, floats = world.plates.crustAge.data),
-        Section("erosion.height", SectionType.F32, floats = world.erosion.height.data),
-        Section("sea.isLand", SectionType.U8, bytes = ByteArray(world.sea.isLand.size) {
-            if (world.sea.isLand[it]) 1 else 0
-        }),
-        Section("sea.relativeElevation", SectionType.F32, floats = world.sea.relativeElevation.data),
-        Section("ocean.velocityX", SectionType.F32, floats = world.ocean.velocityX.data),
-        Section("ocean.velocityY", SectionType.F32, floats = world.ocean.velocityY.data),
-        Section("ocean.temperature", SectionType.F32, floats = world.ocean.temperature.data),
-        Section("ocean.anomaly", SectionType.F32, floats = world.ocean.anomaly.data),
-        Section("climate.temperature", SectionType.F32, floats = world.climate.temperature.data),
-        Section(
-            "climate.summerTemperature", SectionType.F32,
-            floats = world.climate.summerTemperature.data
-        ),
-        Section(
-            "climate.winterTemperature", SectionType.F32,
-            floats = world.climate.winterTemperature.data
-        ),
-        Section("climate.precipitation", SectionType.F32, floats = world.climate.precipitation.data),
-        Section(
-            "climate.summerPrecipitation", SectionType.F32,
-            floats = world.climate.summerPrecipitation.data
-        ),
-        Section(
-            "climate.winterPrecipitation", SectionType.F32,
-            floats = world.climate.winterPrecipitation.data
-        ),
-        Section(
-            "climate.precipitationMm", SectionType.F32,
-            floats = world.climate.precipitationMm.data
-        ),
-        Section("climate.windDirection", SectionType.I32, ints = world.climate.windDirection),
-        // A byte per cell for each half of the year: what that season's sea surface froze, which
-        // the moisture march reads as a lid and the biome reads as pack ice. Saved rather than
-        // recomputed on open because it is a per-cell fact of the finished climate, as the biome is.
-        Section(
-            "climate.summerSeaIce", SectionType.U8,
-            bytes = ByteArray(world.climate.summerSeaIce.size) {
-                if (world.climate.summerSeaIce[it]) 1 else 0
-            }
-        ),
-        Section(
-            "climate.winterSeaIce", SectionType.U8,
-            bytes = ByteArray(world.climate.winterSeaIce.size) {
-                if (world.climate.winterSeaIce[it]) 1 else 0
-            }
-        ),
-        Section(
-            "climate.windMeridional", SectionType.F32,
-            floats = world.climate.windMeridional.data
-        ),
-        Section(
-            "climate.vegetationDensity", SectionType.F32,
-            floats = world.climate.vegetationDensity.data
-        ),
-        Section("climate.permafrost", SectionType.U8, bytes = world.climate.permafrost),
-        Section("climate.biome", SectionType.U8, bytes = ByteArray(world.climate.biome.size) {
-            world.climate.biome[it].ordinal.toByte()
-        }),
-        Section("rivers.filledElevation", SectionType.F32, floats = world.rivers.filledElevation.data),
-        Section("rivers.flowAccumulation", SectionType.F32, floats = world.rivers.flowAccumulation.data),
-        Section("rivers.flowTarget", SectionType.I32, ints = world.rivers.flowTarget),
-        Section("rivers.lakeId", SectionType.I32, ints = world.rivers.lakes.lakeId),
-        // A byte per cell rather than a list of indices, because a playa is a per-cell fact
-        // exactly as a lake is, and salt flats will be drawn the same way lake ids are.
-        Section("rivers.playa", SectionType.U8, bytes = ByteArray(world.rivers.lakes.playa.size) {
-            if (world.rivers.lakes.playa[it]) 1 else 0
-        }),
-        Section("nations.nationId", SectionType.I32, ints = world.nations.nationId),
-        Section("nations.habitability", SectionType.F32, floats = world.nations.habitability.data),
-        Section("cultures.cultureId", SectionType.I32, ints = world.cultures.cultureId)
-    )
-
-    /**
-     * Which sections make up each stage's result, so a reader can tell whether a *stage* survived
-     * rather than merely a section: an old save is missing every section a later chunk added to a
-     * stage's result, not just one of them, and reusing that stage from the sections it does have
-     * would be a different (wrong) answer, not a partial one. [GenerationStage.LANDMARKS] has no
-     * entry because it has no binary section at all — a landmark list lives entirely in
-     * [WorldLists], so it is always present whenever the header carries a world.
-     */
-    private val SECTIONS_BY_STAGE: Map<GenerationStage, List<String>> = mapOf(
-        GenerationStage.TERRAIN to listOf(
-            "terrain.normals.gradientX", "terrain.normals.gradientY", "terrain.height"
-        ),
-        GenerationStage.TECTONICS to listOf(
-            "plates.plateId", "plates.boundaryDistance", "plates.nearestBoundaryType",
-            // Both of these were added to the stage after the others. A save written before one
-            // of them has every other section of this stage and not that one, so the stage counts
-            // as absent and is regenerated rather than half-built from what happens to be there.
-            "plates.nearestBoundaryClass", "plates.height", "plates.crustAge",
-            "plates.continentalShare", "plates.upliftRateMmPerYear", "plates.seafloorAgeMyr"
-        ),
-        GenerationStage.EROSION to listOf("erosion.height"),
-        GenerationStage.SEA_LEVEL to listOf("sea.isLand", "sea.relativeElevation"),
-        GenerationStage.OCEAN to listOf(
-            "ocean.velocityX", "ocean.velocityY", "ocean.temperature", "ocean.anomaly"
-        ),
-        GenerationStage.CLIMATE to listOf(
-            "climate.temperature", "climate.summerTemperature", "climate.winterTemperature",
-            "climate.precipitation", "climate.summerPrecipitation", "climate.winterPrecipitation",
-            "climate.precipitationMm",
-            "climate.windDirection", "climate.windMeridional",
-            "climate.summerSeaIce", "climate.winterSeaIce", "climate.biome",
-            "climate.vegetationDensity", "climate.permafrost"
-        ),
-        GenerationStage.RIVERS to listOf(
-            "rivers.filledElevation", "rivers.flowAccumulation", "rivers.flowTarget",
-            // Listed for the same reason the tectonic additions above are: a save written before
-            // endorheic basins existed knows nothing of them, so its river stage counts as absent
-            // rather than partially present, and is regenerated on open.
-            "rivers.lakeId", "rivers.playa"
-        ),
-        GenerationStage.NATIONS to listOf("nations.nationId", "nations.habitability"),
-        GenerationStage.CULTURES to listOf("cultures.cultureId")
-    )
-
-    /**
-     * Which stages a reader holding exactly these section names can reuse without recomputing.
-     *
-     * Reads only the names — never a section's bytes — so this is cheap enough for a library
-     * listing to call on every save's header, which is what lets the listing say "opens with
-     * regeneration" without ever touching a payload.
-     */
-    fun presentStages(sectionNames: Set<String>): Set<GenerationStage> =
-        SECTIONS_BY_STAGE.filterValues { required -> required.all { it in sectionNames } }.keys +
-            GenerationStage.LANDMARKS
-
-    /** The payload, plus the directory that describes it to a reader who has not expanded it. */
-    fun write(sections: List<Section>): Pair<ByteArray, List<SectionInfo>> {
-        val writer = ByteWriter(sections.sumOf { it.recordLength })
-        val directory = ArrayList<SectionInfo>(sections.size)
-        for (section in sections) {
-            val offset = writer.position
-            writer.putAscii(section.name)
-            writer.putInt(section.type.code)
-            writer.putInt(section.count)
-            writer.putInt(section.count * section.type.bytesPerElement)
-            when (section.type) {
-                SectionType.F32 -> for (v in section.floatsOrFail()) writer.putInt(v.toRawBits())
-                SectionType.I32 -> for (v in section.intsOrFail()) writer.putInt(v)
-                SectionType.U8 -> writer.putBytes(section.bytesOrFail())
-            }
-            directory.add(
-                SectionInfo(
-                    name = section.name,
-                    type = section.type.name,
-                    count = section.count,
-                    bytes = section.count * section.type.bytesPerElement,
-                    offset = offset
-                )
-            )
+        // and the second never appears in it at all — and erosion reads the second every round.
+        FloatSection("plates.continentalShare") { it.plates.continentalShare.data },
+        FloatSection("plates.seafloorAgeMyr") { it.plates.seafloorAgeMyr.data },
+        FloatSection("plates.upliftRateMmPerYear") { it.plates.upliftRateMmPerYear.data },
+        // How long ago each cell's crust was last built: the record of epochs that left no other
+        // trace, and erosion reads it.
+        FloatSection("plates.crustAge") { it.plates.crustAge.data },
+        FloatSection("erosion.height") { it.erosion.height.data },
+        ByteSection("sea.isLand", ByteMeaning.FLAG) { flagsOf(it.sea.isLand) },
+        FloatSection("sea.relativeElevation") { it.sea.relativeElevation.data },
+        FloatSection("ocean.velocityX") { it.ocean.velocityX.data },
+        FloatSection("ocean.velocityY") { it.ocean.velocityY.data },
+        FloatSection("ocean.temperature") { it.ocean.temperature.data },
+        FloatSection("ocean.anomaly") { it.ocean.anomaly.data },
+        FloatSection("climate.temperature") { it.climate.temperature.data },
+        FloatSection("climate.summerTemperature") { it.climate.summerTemperature.data },
+        FloatSection("climate.winterTemperature") { it.climate.winterTemperature.data },
+        FloatSection("climate.precipitation") { it.climate.precipitation.data },
+        FloatSection("climate.summerPrecipitation") { it.climate.summerPrecipitation.data },
+        FloatSection("climate.winterPrecipitation") { it.climate.winterPrecipitation.data },
+        FloatSection("climate.precipitationMm") { it.climate.precipitationMm.data },
+        // +1 blows east, -1 west, 0 where the belts meet.
+        IntSection("climate.windDirection", { -1..1 }) { it.climate.windDirection },
+        // What each season's sea surface froze, which the moisture march reads as a lid and the
+        // biome reads as pack ice: a per-cell fact of the finished climate, as the biome is.
+        ByteSection("climate.summerSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.summerSeaIce) },
+        ByteSection("climate.winterSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.winterSeaIce) },
+        FloatSection("climate.windMeridional") { it.climate.windMeridional.data },
+        FloatSection("climate.vegetationDensity") { it.climate.vegetationDensity.data },
+        ByteSection("climate.permafrost", ByteMeaning.PERMAFROST) { bytesOf(it.climate.permafrost) },
+        ByteSection("climate.biome", ByteMeaning.BIOME) { biomesOf(it.climate.biome) },
+        FloatSection("rivers.filledElevation") { it.rivers.filledElevation.data },
+        FloatSection("rivers.flowAccumulation") { it.rivers.flowAccumulation.data },
+        // -1 where the water leaves the world, which only the polar rows do.
+        IntSection("rivers.flowTarget", { -1 until it.cells }) { it.rivers.flowTarget },
+        IntSection("rivers.lakeId", { LakeResult.NO_LAKE until it.lists.lakes.size }) {
+            it.rivers.lakes.lakeId
+        },
+        // A playa is a per-cell fact exactly as a lake is, and salt flats will be drawn the same
+        // way lake ids are.
+        ByteSection("rivers.playa", ByteMeaning.FLAG) { flagsOf(it.rivers.lakes.playa) },
+        IntSection("nations.nationId", { NationResult.UNCLAIMED until it.lists.nations.size }) {
+            it.nations.nationId
+        },
+        FloatSection("nations.habitability") { it.nations.habitability.data },
+        IntSection("cultures.cultureId", { CultureResult.UNSETTLED until it.lists.cultures.size }) {
+            it.cultures.cultureId
         }
-        return writer.bytes to directory
+    )
+
+    private fun bytesOf(values: ByteArray) = ByteElements { target, targetOffset, from, count ->
+        values.copyInto(target, targetOffset, from, from + count)
     }
 
-    fun read(payload: ByteArray): Map<String, Section> {
-        val reader = ByteReader(payload)
-        val sections = LinkedHashMap<String, Section>()
-        while (reader.remaining > 0) {
-            val name = reader.getAscii()
-            val type = SectionType.ofCode(reader.getInt())
-            val count = reader.getInt()
-            val length = reader.getInt()
-            if (length != count * type.bytesPerElement) {
-                throw WorldFormatException("section $name claims $length bytes for $count ${type.name}")
-            }
-            val raw = reader.getBytes(length)
-            val section = when (type) {
-                SectionType.F32 -> {
-                    val values = ByteReader(raw)
-                    Section(name, type, floats = FloatArray(count) { Float.fromBits(values.getInt()) })
-                }
-                SectionType.I32 -> {
-                    val values = ByteReader(raw)
-                    Section(name, type, ints = IntArray(count) { values.getInt() })
-                }
-                SectionType.U8 -> Section(name, type, bytes = raw)
-            }
-            sections[name] = section
-        }
-        return sections
+    private fun flagsOf(values: BooleanArray) = ByteElements { target, targetOffset, from, count ->
+        for (step in 0 until count) target[targetOffset + step] = if (values[from + step]) 1 else 0
+    }
+
+    private fun biomesOf(values: Array<Biome>) = ByteElements { target, targetOffset, from, count ->
+        for (step in 0 until count) target[targetOffset + step] = values[from + step].ordinal.toByte()
     }
 
     /**
-     * Rebuilds as much of the world as the sections allow.
-     *
-     * A stage whose sections are all present comes back built from them; a stage missing even one
-     * — an old save opened by a build that has since added a field to that stage's result — comes
-     * back `null` rather than throwing. That is not "inventing an array the file never had": no
-     * stage here reads another's *object*, only its own named sections and the lists, so building
-     * the stages that did survive is sound regardless of which others did not. It is
-     * [WorldGenerationEngine.generate], not this function, that turns "missing" into "regenerated,
-     * and everything downstream of it too" — this function only has to say honestly what it found.
-     *
-     * A corrupt section is a different thing from a missing one and still throws: a length that
-     * disagrees with its own element count ([read]) or a cell count that disagrees with the
-     * config's resolution ([field]/[ints]/[bytes] below) is not a save from an older build, it is
-     * bytes this build cannot trust at all.
+     * The directory a save of [cells] cells with [listsBytes] bytes of lists has, entry for entry:
+     * what the writer produces and what a reader holds a file's own directory to.
      */
-    fun rebuild(
+    fun directory(cells: Int, listsBytes: Int): List<SectionInfo> {
+        var offset = 0L
+        fun entry(name: String, type: SectionType, count: Int): SectionInfo {
+            val bytes = count.toLong() * type.bytesPerElement
+            val info = SectionInfo(name, type.name, count, bytes, offset)
+            offset += RECORD_PREFIX_BYTES + name.length + bytes
+            return info
+        }
+        return listOf(entry(LISTS, SectionType.UTF8, listsBytes)) +
+            SECTIONS.map { entry(it.name, it.type, cells) }
+    }
+
+    /** The expanded payload's whole length, from its directory. */
+    fun payloadBytes(directory: List<SectionInfo>): Long =
+        directory.sumOf { RECORD_PREFIX_BYTES + it.name.length + it.bytes }
+
+    /** Writes the lists' JSON and every array of [world], in [SECTIONS] order. */
+    suspend fun write(world: WorldMap, listsJson: ByteArray, writer: PayloadWriter) {
+        val cells = world.width * world.height
+        writer.record(LISTS, SectionType.UTF8, listsJson.size)
+        writer.bytes(listsJson, 0, listsJson.size)
+        for (spec in SECTIONS) {
+            writer.record(spec.name, spec.type, cells)
+            when (spec) {
+                is FloatSection -> writer.floats(spec.of(world).also { requireCells(spec, it.size, cells) })
+                is IntSection -> writer.ints(spec.of(world).also { requireCells(spec, it.size, cells) })
+                is ByteSection -> writer.elements(spec.of(world), cells)
+            }
+        }
+    }
+
+    private fun requireCells(spec: SectionSpec, size: Int, cells: Int) =
+        require(size == cells) { "the world's ${spec.name} holds $size cells where its grid has $cells" }
+
+    /**
+     * Reads the lists and every array back, checking each record against [directory] and each
+     * value against what it may hold, and builds the world from them. Everything is present or the
+     * file is refused: a save carries its whole world or it is damaged.
+     */
+    suspend fun read(
+        reader: PayloadReader,
+        config: WorldGenConfig,
+        directory: List<SectionInfo>,
+        labels: List<MapLabel>,
+        decodeLists: (ByteArray) -> WorldLists
+    ): WorldMap {
+        val cells = config.width * config.height
+        val listsEntry = directory.first()
+        reader.expectRecord(listsEntry, 0)
+        val listsBytes = ByteArray(listsEntry.count)
+        reader.bytes(listsBytes)
+        val lists = decodeLists(listsBytes)
+        lists.checkAgainst(config.width, config.height)
+        val bounds = IdBounds(cells, lists)
+
+        val arrays = HashMap<String, Any>(SECTIONS.size * 2)
+        SECTIONS.forEachIndexed { index, spec ->
+            reader.expectRecord(directory[index + 1], index + 1)
+            arrays[spec.name] = when (spec) {
+                is FloatSection -> FloatArray(cells).also { reader.floats(it, spec.name) }
+                is IntSection -> IntArray(cells).also { reader.ints(it, spec.allowed(bounds), spec.name) }
+                is ByteSection -> {
+                    val raw = ByteArray(cells).also { reader.elements(it, spec.meaning, spec.name) }
+                    when (spec.meaning) {
+                        ByteMeaning.FLAG -> BooleanArray(cells) { raw[it].toInt() != 0 }
+                        ByteMeaning.PERMAFROST -> raw
+                        ByteMeaning.BIOME -> Array(cells) { Biome.entries[raw[it].toInt()] }
+                    }
+                }
+            }
+        }
+        return assemble(config, lists, labels, arrays)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun assemble(
         config: WorldGenConfig,
         lists: WorldLists,
         labels: List<MapLabel>,
-        sections: Map<String, Section>
-    ): PartialWorld {
-        val cells = config.width * config.height
-        val present = presentStages(sections.keys)
+        arrays: Map<String, Any>
+    ): WorldMap {
+        fun field(name: String) = FloatField(config.width, config.height, arrays.getValue(name) as FloatArray)
+        fun ints(name: String) = arrays.getValue(name) as IntArray
+        fun flags(name: String) = arrays.getValue(name) as BooleanArray
 
-        fun section(name: String): Section =
-            sections[name] ?: throw WorldFormatException("save is missing the section '$name'")
-
-        fun field(name: String): FloatField {
-            val values = section(name).floatsOrFail()
-            if (values.size != cells) {
-                throw WorldFormatException("section '$name' has ${values.size} cells, expected $cells")
-            }
-            return FloatField(config.width, config.height, values)
-        }
-
-        fun ints(name: String): IntArray {
-            val values = section(name).intsOrFail()
-            if (values.size != cells) {
-                throw WorldFormatException("section '$name' has ${values.size} cells, expected $cells")
-            }
-            return values
-        }
-
-        fun bytes(name: String): ByteArray {
-            val values = section(name).bytesOrFail()
-            if (values.size != cells) {
-                throw WorldFormatException("section '$name' has ${values.size} cells, expected $cells")
-            }
-            return values
-        }
-
-        val terrain = if (GenerationStage.TERRAIN in present) {
-            TerrainResult(
+        return WorldMap(
+            config = config,
+            terrain = TerrainResult(
                 normals = NormalField(
                     field("terrain.normals.gradientX"), field("terrain.normals.gradientY")
                 ),
                 height = field("terrain.height")
-            )
-        } else null
-
-        val plates = if (GenerationStage.TECTONICS in present) {
-            PlateResult(
+            ),
+            plates = PlateResult(
                 plates = lists.plates,
                 plateId = ints("plates.plateId"),
                 boundaryDistance = field("plates.boundaryDistance"),
@@ -453,38 +321,21 @@ internal object WorldSections {
                 seafloorHalfSpreadingRateKmPerMyr = lists.seafloorHalfSpreadingRateKmPerMyr,
                 upliftRateMmPerYear = field("plates.upliftRateMmPerYear"),
                 crustAge = field("plates.crustAge")
-            )
-        } else null
-
-        val erosion = if (GenerationStage.EROSION in present) {
-            ErosionResult(height = field("erosion.height"))
-        } else null
-
-        val sea = if (GenerationStage.SEA_LEVEL in present) {
-            val isLandBytes = bytes("sea.isLand")
-            SeaLevelResult(
+            ),
+            erosion = ErosionResult(height = field("erosion.height")),
+            sea = SeaLevelResult(
                 shorelineHeight = lists.shorelineHeight,
-                isLand = BooleanArray(cells) { isLandBytes[it].toInt() != 0 },
+                isLand = flags("sea.isLand"),
                 relativeElevation = field("sea.relativeElevation"),
                 landCellCount = lists.landCellCount
-            )
-        } else null
-
-        val ocean = if (GenerationStage.OCEAN in present) {
-            OceanResult(
+            ),
+            ocean = OceanResult(
                 velocityX = field("ocean.velocityX"),
                 velocityY = field("ocean.velocityY"),
                 temperature = field("ocean.temperature"),
                 anomaly = field("ocean.anomaly")
-            )
-        } else null
-
-        val climate = if (GenerationStage.CLIMATE in present) {
-            val biomes = Biome.entries
-            val biomeBytes = bytes("climate.biome")
-            val summerSeaIceBytes = bytes("climate.summerSeaIce")
-            val winterSeaIceBytes = bytes("climate.winterSeaIce")
-            ClimateResult(
+            ),
+            climate = ClimateResult(
                 temperature = field("climate.temperature"),
                 summerTemperature = field("climate.summerTemperature"),
                 winterTemperature = field("climate.winterTemperature"),
@@ -495,21 +346,12 @@ internal object WorldSections {
                 windDirection = ints("climate.windDirection"),
                 windMeridional = field("climate.windMeridional"),
                 vegetationDensity = field("climate.vegetationDensity"),
-                permafrost = bytes("climate.permafrost"),
-                summerSeaIce = BooleanArray(cells) { summerSeaIceBytes[it].toInt() != 0 },
-                winterSeaIce = BooleanArray(cells) { winterSeaIceBytes[it].toInt() != 0 },
-                biome = Array(cells) { i ->
-                    val ordinal = biomeBytes[i].toInt() and 0xFF
-                    if (ordinal !in biomes.indices) {
-                        throw WorldFormatException("unknown biome $ordinal at cell $i")
-                    }
-                    biomes[ordinal]
-                }
-            )
-        } else null
-
-        val rivers = if (GenerationStage.RIVERS in present) {
-            RiverResult(
+                permafrost = arrays.getValue("climate.permafrost") as ByteArray,
+                summerSeaIce = flags("climate.summerSeaIce"),
+                winterSeaIce = flags("climate.winterSeaIce"),
+                biome = arrays.getValue("climate.biome") as Array<Biome>
+            ),
+            rivers = RiverResult(
                 filledElevation = field("rivers.filledElevation"),
                 flowAccumulation = field("rivers.flowAccumulation"),
                 flowTarget = ints("rivers.flowTarget"),
@@ -517,41 +359,501 @@ internal object WorldSections {
                 lakes = LakeResult(
                     lakeId = ints("rivers.lakeId"),
                     lakes = lists.lakes,
-                    playa = bytes("rivers.playa").let { raw -> BooleanArray(raw.size) { raw[it].toInt() != 0 } },
+                    playa = flags("rivers.playa"),
                     cellsAcross = config.width
                 )
-            )
-        } else null
-
-        val nations = if (GenerationStage.NATIONS in present) {
-            NationResult(
+            ),
+            nations = NationResult(
                 nationId = ints("nations.nationId"),
                 nations = lists.nations,
                 habitability = field("nations.habitability")
-            )
-        } else null
-
-        val cultures = if (GenerationStage.CULTURES in present) {
-            CultureResult(cultureId = ints("cultures.cultureId"), cultures = lists.cultures)
-        } else null
-
-        // No section of its own — a landmark list lives entirely in WorldLists — so it is built
-        // whenever the header carries a world at all.
-        val landmarks = LandmarkResult(landmarks = lists.landmarks)
-
-        return LoadedWorld(
-            config = config,
-            terrain = terrain,
-            plates = plates,
-            erosion = erosion,
-            sea = sea,
-            ocean = ocean,
-            climate = climate,
-            rivers = rivers,
-            nations = nations,
-            cultures = cultures,
-            landmarks = landmarks,
+            ),
+            cultures = CultureResult(cultureId = ints("cultures.cultureId"), cultures = lists.cultures),
+            // No section of its own: a landmark list lives entirely in the lists.
+            landmarks = LandmarkResult(landmarks = lists.landmarks),
             labels = labels
         )
     }
 }
+
+/**
+ * Every reference the lists make, checked against the grid and against each other before a
+ * single array is read: a river's cells, a realm's capital and neighbours, a landmark's cell, and
+ * that each list's ids are its own indices, which is what lets a per-cell id index one.
+ *
+ * A lake's outlet and a people's hearth may be -1: the stages that set them start from -1 and are
+ * not obliged to replace it, and nothing indexes by either without looking first.
+ */
+internal fun WorldLists.checkAgainst(width: Int, height: Int) {
+    val cells = width * height
+    fun damaged(detail: String): Nothing = throw WorldFormatException(SaveProblem.DAMAGED, detail)
+    fun checkIds(list: String, ids: List<Int>) {
+        ids.forEachIndexed { index, id -> if (id != index) damaged("$list entry $index calls itself $id") }
+    }
+    fun checkCell(what: String, cell: Int, noneAllowed: Boolean = false) {
+        if (cell in 0 until cells || (noneAllowed && cell == -1)) return
+        damaged("$what is cell $cell, and the grid has $cells")
+    }
+
+    if (!shorelineHeight.isFinite()) damaged("the shoreline height is $shorelineHeight")
+    if (!seafloorHalfSpreadingRateKmPerMyr.isFinite()) {
+        damaged("the spreading rate is $seafloorHalfSpreadingRateKmPerMyr")
+    }
+    if (landCellCount !in 0..cells) damaged("$landCellCount land cells on a grid of $cells")
+
+    checkIds("plate", plates.map { it.id })
+    plates.forEach { plate ->
+        if (plate.seedX !in 0 until width || plate.seedY !in 0 until height) {
+            damaged("plate ${plate.id}'s seed is at (${plate.seedX}, ${plate.seedY}), off the grid")
+        }
+        if (!plate.driftX.isFinite() || !plate.driftY.isFinite()) damaged("plate ${plate.id}'s drift is not a number")
+    }
+    rivers.forEachIndexed { index, river ->
+        river.cells.forEach { checkCell("river $index's course", it) }
+        if (river.widthRatio.size != river.cells.size) {
+            damaged("river $index has ${river.cells.size} cells and ${river.widthRatio.size} widths")
+        }
+        if (river.widthRatio.any { !it.isFinite() }) damaged("river $index has a width that is not a number")
+    }
+    checkIds("lake", lakes.map { it.id })
+    lakes.forEach { lake ->
+        checkCell("lake ${lake.id}'s outlet", lake.outletCell, noneAllowed = true)
+        if (!lake.surfaceElevation.isFinite() || !lake.spillElevation.isFinite()) {
+            damaged("lake ${lake.id}'s surface is not a number")
+        }
+    }
+    checkIds("realm", nations.map { it.id })
+    nations.forEach { nation ->
+        checkCell("realm ${nation.id}'s origin", nation.originCell)
+        checkCell("realm ${nation.id}'s capital", nation.capitalCell)
+        nation.neighbours.forEach {
+            if (it !in nations.indices) damaged("realm ${nation.id} borders realm $it, and there are ${nations.size}")
+        }
+    }
+    checkIds("people", cultures.map { it.id })
+    cultures.forEach { checkCell("people ${it.id}'s hearth", it.hearthCell, noneAllowed = true) }
+    checkIds("landmark", landmarks.map { it.id })
+    landmarks.forEach { checkCell("landmark ${it.id}", it.cell) }
+}
+
+/**
+ * A chunk's checksum: the CRC-32 of its raw bytes, run on from the header's own checksum and the
+ * chunk's place in the payload.
+ *
+ * Bound to both because each is a way a whole-looking file can be the wrong one: a header from
+ * one save put in front of another's chunks, or two chunks of one save swapped, would pass a
+ * checksum of the chunk's bytes alone. Run on from the header's, every chunk of the spliced file
+ * fails; run on from its index, a chunk out of place does.
+ */
+internal fun chunkChecksum(headerChecksum: Int, index: Int, raw: ByteArray, from: Int, length: Int): Int {
+    val place = ByteArray(Int.SIZE_BYTES).also { putInt(it, 0, index) }
+    return Crc32.of(raw, from, length, continuing = Crc32.of(place, continuing = headerChecksum))
+}
+
+/**
+ * The expanded payload going out, a chunk at a time.
+ *
+ * Fills one chunk and hands it to [sink] as a frame — raw length, stored length and the chunk's
+ * checksum ([chunkChecksum], bound to [headerChecksum]) as int32, then whether it is compressed,
+ * then the stored bytes — compressing it first when [compressor] can and the result is smaller.
+ * Ends with a frame of zeros.
+ */
+internal class PayloadWriter(
+    private val sink: SaveSink,
+    private val compressor: Compressor,
+    private val headerChecksum: Int
+) {
+
+    /** How many chunks have gone out, which is the next one's place. */
+    private var frames = 0
+
+    private val chunk = ByteArray(WorldCodec.CHUNK_BYTES)
+    private var filled = 0
+    private val frameHeader = ByteArray(FRAME_HEADER_BYTES)
+
+    /** Expanded bytes written so far, which the header's directory promised in advance. */
+    var written: Long = 0L
+        private set
+
+    suspend fun record(name: String, type: SectionType, count: Int) {
+        int(name.length)
+        for (character in name) byte(character.code.toByte())
+        int(type.code)
+        int(count)
+        long(count.toLong() * type.bytesPerElement)
+    }
+
+    suspend fun int(value: Int) {
+        if (chunk.size - filled < Int.SIZE_BYTES) {
+            for (shift in 0 until Int.SIZE_BITS step Byte.SIZE_BITS) byte((value ushr shift).toByte())
+            return
+        }
+        putInt(chunk, filled, value)
+        advance(Int.SIZE_BYTES)
+    }
+
+    suspend fun long(value: Long) {
+        int(value.toInt())
+        int((value ushr Int.SIZE_BITS).toInt())
+    }
+
+    suspend fun bytes(source: ByteArray, offset: Int, length: Int) {
+        var from = offset
+        val end = offset + length
+        while (from < end) {
+            if (filled == chunk.size) flush()
+            val count = minOf(end - from, chunk.size - filled)
+            source.copyInto(chunk, filled, from, from + count)
+            from += count
+            advance(count)
+        }
+    }
+
+    suspend fun floats(values: FloatArray) {
+        var index = 0
+        while (index < values.size) {
+            val room = (chunk.size - filled) / Float.SIZE_BYTES
+            if (room == 0) {
+                int(values[index++].toRawBits())
+                continue
+            }
+            val count = minOf(room, values.size - index)
+            var at = filled
+            for (step in 0 until count) {
+                putInt(chunk, at, values[index + step].toRawBits())
+                at += Float.SIZE_BYTES
+            }
+            index += count
+            advance(count * Float.SIZE_BYTES)
+        }
+    }
+
+    suspend fun ints(values: IntArray) {
+        var index = 0
+        while (index < values.size) {
+            val room = (chunk.size - filled) / Int.SIZE_BYTES
+            if (room == 0) {
+                int(values[index++])
+                continue
+            }
+            val count = minOf(room, values.size - index)
+            var at = filled
+            for (step in 0 until count) {
+                putInt(chunk, at, values[index + step])
+                at += Int.SIZE_BYTES
+            }
+            index += count
+            advance(count * Int.SIZE_BYTES)
+        }
+    }
+
+    suspend fun elements(source: ByteElements, count: Int) {
+        var from = 0
+        while (from < count) {
+            if (filled == chunk.size) flush()
+            val run = minOf(count - from, chunk.size - filled)
+            source.copyInto(chunk, filled, from, run)
+            from += run
+            advance(run)
+        }
+    }
+
+    /** Sends the last, partly filled chunk and the frame of zeros that ends the payload. */
+    suspend fun finish() {
+        flush()
+        frameHeader.fill(0)
+        sink.write(frameHeader, 0, FRAME_HEADER_BYTES)
+    }
+
+    private suspend fun byte(value: Byte) {
+        if (filled == chunk.size) flush()
+        chunk[filled] = value
+        advance(1)
+    }
+
+    private fun advance(count: Int) {
+        filled += count
+        written += count
+    }
+
+    private suspend fun flush() {
+        if (filled == 0) return
+        val raw = if (filled == chunk.size) chunk else chunk.copyOf(filled)
+        val compressed = compressor.compress(raw)?.takeIf { it.size < filled }
+        putInt(frameHeader, 0, filled)
+        putInt(frameHeader, 4, compressed?.size ?: filled)
+        putInt(frameHeader, 8, chunkChecksum(headerChecksum, frames, chunk, 0, filled))
+        putInt(frameHeader, 12, if (compressed != null) METHOD_COMPRESSED else METHOD_STORED)
+        sink.write(frameHeader, 0, FRAME_HEADER_BYTES)
+        if (compressed != null) sink.write(compressed, 0, compressed.size) else sink.write(chunk, 0, filled)
+        filled = 0
+        frames++
+    }
+
+    companion object {
+        /** Raw length, stored length, checksum and method, each an int32. */
+        const val FRAME_HEADER_BYTES = 16
+        const val METHOD_STORED = 0
+        const val METHOD_COMPRESSED = 1
+    }
+}
+
+/**
+ * The expanded payload coming back, a chunk at a time, with every frame, record and value checked
+ * before anything is built from it.
+ *
+ * [compression] is the method the header names for compressed frames; [compressor] is this
+ * platform's, which has to be the same one to expand them.
+ */
+internal class PayloadReader(
+    private val source: SaveSource,
+    private val compression: String,
+    private val compressor: Compressor,
+    private val expectedBytes: Long,
+    private val headerChecksum: Int
+) {
+    private var chunk = ByteArray(0)
+    private var position = 0
+    private var frames = 0
+    private val frameHeader = ByteArray(PayloadWriter.FRAME_HEADER_BYTES)
+
+    /** Expanded bytes delivered so far. */
+    private var delivered = 0L
+
+    private fun damaged(detail: String): Nothing = throw WorldFormatException(SaveProblem.DAMAGED, detail)
+
+    private fun incomplete(detail: String): Nothing = throw WorldFormatException(SaveProblem.INCOMPLETE, detail)
+
+    /** Reads a record's prefix and holds it to its directory [entry], the [index]th. */
+    suspend fun expectRecord(entry: SectionInfo, index: Int) {
+        val nameLength = int()
+        if (nameLength != entry.name.length) {
+            damaged("record $index's name is $nameLength letters long where the directory's '${entry.name}' is ${entry.name.length}")
+        }
+        val name = CharArray(nameLength) { (byte().toInt() and 0xFF).toChar() }.concatToString()
+        if (name != entry.name) damaged("record $index is called '$name' where the directory says '${entry.name}'")
+        val type = SectionType.ofCode(int())
+        if (type?.name != entry.type) damaged("'$name' is stored as ${type?.name ?: "an unknown type"}, not ${entry.type}")
+        val count = int()
+        if (count != entry.count) damaged("'$name' holds $count elements where the directory says ${entry.count}")
+        val length = long()
+        if (length != entry.bytes) damaged("'$name' claims $length bytes where the directory says ${entry.bytes}")
+    }
+
+    suspend fun int(): Int {
+        if (chunk.size - position < Int.SIZE_BYTES) {
+            var value = 0
+            for (shift in 0 until Int.SIZE_BITS step Byte.SIZE_BITS) value = value or ((byte().toInt() and 0xFF) shl shift)
+            return value
+        }
+        val value = getInt(chunk, position)
+        position += Int.SIZE_BYTES
+        return value
+    }
+
+    suspend fun long(): Long {
+        val low = int().toLong() and 0xFFFFFFFFL
+        val high = int().toLong()
+        return low or (high shl Int.SIZE_BITS)
+    }
+
+    suspend fun byte(): Byte {
+        if (position == chunk.size) nextFrame()
+        return chunk[position++]
+    }
+
+    suspend fun bytes(target: ByteArray) {
+        var at = 0
+        while (at < target.size) {
+            if (position == chunk.size) nextFrame()
+            val count = minOf(target.size - at, chunk.size - position)
+            chunk.copyInto(target, at, position, position + count)
+            position += count
+            at += count
+        }
+    }
+
+    suspend fun floats(target: FloatArray, name: String) {
+        var index = 0
+        while (index < target.size) {
+            val available = (chunk.size - position) / Float.SIZE_BYTES
+            if (available == 0) {
+                target[index] = checkedFloat(Float.fromBits(int()), name, index)
+                index++
+                continue
+            }
+            val count = minOf(available, target.size - index)
+            var at = position
+            for (step in 0 until count) {
+                target[index + step] = checkedFloat(Float.fromBits(getInt(chunk, at)), name, index + step)
+                at += Float.SIZE_BYTES
+            }
+            position = at
+            index += count
+        }
+    }
+
+    private fun checkedFloat(value: Float, name: String, cell: Int): Float {
+        if (!value.isFinite()) damaged("'$name' holds $value at cell $cell")
+        return value
+    }
+
+    suspend fun ints(target: IntArray, allowed: IntRange, name: String) {
+        var index = 0
+        while (index < target.size) {
+            val available = (chunk.size - position) / Int.SIZE_BYTES
+            if (available == 0) {
+                target[index] = checkedInt(int(), allowed, name, index)
+                index++
+                continue
+            }
+            val count = minOf(available, target.size - index)
+            var at = position
+            for (step in 0 until count) {
+                target[index + step] = checkedInt(getInt(chunk, at), allowed, name, index + step)
+                at += Int.SIZE_BYTES
+            }
+            position = at
+            index += count
+        }
+    }
+
+    private fun checkedInt(value: Int, allowed: IntRange, name: String, cell: Int): Int {
+        if (value !in allowed) damaged("'$name' holds $value at cell $cell, outside ${allowed.first}..${allowed.last}")
+        return value
+    }
+
+    suspend fun elements(target: ByteArray, meaning: ByteMeaning, name: String) {
+        bytes(target)
+        for (cell in target.indices) {
+            val value = target[cell].toInt() and 0xFF
+            if (value >= meaning.valuesBelow) {
+                damaged("'$name' holds $value at cell $cell, where only 0..${meaning.valuesBelow - 1} mean anything")
+            }
+        }
+    }
+
+    /**
+     * After the last record: nothing left over in the chunk, a frame of zeros, nothing after it,
+     * and every byte the directory promised delivered.
+     */
+    suspend fun finish() {
+        if (position != chunk.size) damaged("the last chunk runs ${chunk.size - position} bytes past the last section")
+        if (source.readFully(frameHeader, 0, frameHeader.size) < frameHeader.size) {
+            incomplete("it ends where the frame that closes the world should be")
+        }
+        if (frameHeader.any { it.toInt() != 0 }) damaged("the world runs on past where its directory ends")
+        val trailing = ByteArray(1)
+        if (source.read(trailing, 0, 1) >= 0) damaged("there are bytes after the end of the world")
+        if (delivered != expectedBytes) damaged("the payload is $delivered bytes where the directory says $expectedBytes")
+    }
+
+    private suspend fun nextFrame() {
+        val arrived = source.readFully(frameHeader, 0, frameHeader.size)
+        if (arrived < frameHeader.size) {
+            incomplete("it ends partway through its world, after $delivered of $expectedBytes bytes")
+        }
+        if (frameHeader.all { it.toInt() == 0 }) {
+            incomplete("it holds zeros where its world should continue, after $delivered of $expectedBytes bytes")
+        }
+        val rawLength = getInt(frameHeader, 0)
+        val storedLength = getInt(frameHeader, 4)
+        val checksum = getInt(frameHeader, 8)
+        val method = getInt(frameHeader, 12)
+        val frame = frames
+        if (rawLength !in 1..WorldCodec.CHUNK_BYTES) damaged("chunk $frame claims $rawLength bytes")
+        if (delivered + rawLength > expectedBytes) damaged("chunk $frame runs past the $expectedBytes bytes the directory promises")
+        val raw = when (method) {
+            PayloadWriter.METHOD_STORED -> {
+                if (storedLength != rawLength) damaged("chunk $frame is stored raw but claims $storedLength bytes for $rawLength")
+                readStored(rawLength, frame)
+            }
+            PayloadWriter.METHOD_COMPRESSED -> {
+                // The writer stores a chunk compressed only when that is smaller than the chunk,
+                // so a compressed frame longer than its own expansion was not written by it.
+                if (storedLength !in 1 until rawLength) {
+                    damaged("chunk $frame claims $storedLength compressed bytes for $rawLength")
+                }
+                val stored = readStored(storedLength, frame)
+                try {
+                    expand(stored, rawLength, frame)
+                } catch (refused: WorldFormatException) {
+                    if (refused.problem == SaveProblem.DAMAGED && endsUnfilled(stored)) unfilled(frame)
+                    throw refused
+                }
+            }
+            else -> damaged("chunk $frame names an unknown method $method")
+        }
+        if (chunkChecksum(headerChecksum, frame, raw, 0, raw.size) != checksum) {
+            if (endsUnfilled(raw)) unfilled(frame)
+            damaged("chunk $frame fails its checksum")
+        }
+        chunk = raw
+        position = 0
+        delivered += rawLength
+        frames++
+    }
+
+    /**
+     * Whether a chunk that did not check out ends in zeros, which is how a file a sync client has
+     * made room for and not finished filling looks: the right length, and nothing in its tail.
+     */
+    private fun endsUnfilled(bytes: ByteArray): Boolean =
+        bytes.size >= UNFILLED_TAIL_BYTES &&
+            (bytes.size - UNFILLED_TAIL_BYTES until bytes.size).all { bytes[it].toInt() == 0 }
+
+    private fun unfilled(frame: Int): Nothing =
+        incomplete("it holds zeros where its world should continue, in chunk $frame after $delivered of $expectedBytes bytes")
+
+    private suspend fun readStored(length: Int, frame: Int): ByteArray {
+        val stored = ByteArray(length)
+        if (source.readFully(stored, 0, length) < length) {
+            incomplete("it ends partway through chunk $frame, after $delivered of $expectedBytes bytes")
+        }
+        return stored
+    }
+
+    private suspend fun expand(stored: ByteArray, rawLength: Int, frame: Int): ByteArray {
+        if (compression == NoCompression.name) {
+            damaged("chunk $frame is compressed in a file whose header says it stores its chunks raw")
+        }
+        if (compression != compressor.name) {
+            throw WorldFormatException(
+                SaveProblem.CANNOT_EXPAND,
+                "its chunks are compressed with '$compression' and this platform expands '${compressor.name}'"
+            )
+        }
+        val expanded = try {
+            compressor.decompress(stored, rawLength)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            damaged("chunk $frame does not expand: ${failure.message ?: failure::class.simpleName}")
+        } ?: throw WorldFormatException(SaveProblem.CANNOT_EXPAND, "this platform cannot expand '$compression'")
+        if (expanded.size != rawLength) {
+            damaged("chunk $frame expands to ${if (expanded.size > rawLength) "more than" else expanded.size} where its frame says $rawLength bytes")
+        }
+        return expanded
+    }
+}
+
+/**
+ * How many zero bytes at the end of a chunk that fails its checks make it read as unfilled rather
+ * than damaged: sixty-four. A chunk written by the codec ends in zeros only where its data does,
+ * and then it checks out; one whose checks fail and whose last sixty-four bytes are zero is far
+ * likelier to be a file cut off and padded than one damaged into sixteen zero floats in a row.
+ */
+private const val UNFILLED_TAIL_BYTES = 64
+
+internal fun putInt(target: ByteArray, at: Int, value: Int) {
+    target[at] = value.toByte()
+    target[at + 1] = (value ushr 8).toByte()
+    target[at + 2] = (value ushr 16).toByte()
+    target[at + 3] = (value ushr 24).toByte()
+}
+
+internal fun getInt(source: ByteArray, at: Int): Int =
+    (source[at].toInt() and 0xFF) or
+        ((source[at + 1].toInt() and 0xFF) shl 8) or
+        ((source[at + 2].toInt() and 0xFF) shl 16) or
+        ((source[at + 3].toInt() and 0xFF) shl 24)

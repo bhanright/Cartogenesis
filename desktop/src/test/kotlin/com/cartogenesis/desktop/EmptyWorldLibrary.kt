@@ -1,9 +1,12 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.LibraryKeys
+import com.cartogenesis.cartography.LoadOutcome
+import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.SaveRefusal
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
-import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.WorldMap
 
 /**
@@ -16,9 +19,11 @@ import com.cartogenesis.worldgen.model.WorldMap
  */
 internal object EmptyWorldLibrary : WorldLibrary {
     override suspend fun list(): List<LibraryEntry> = emptyList()
-    override suspend fun save(document: WorldDocument, world: WorldMap?) = Unit
-    override suspend fun load(id: String): WorldSave? = null
-    override suspend fun delete(id: String) = Unit
+    override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String =
+        key ?: LibraryKeys.of(document)
+    override suspend fun load(key: String): LoadOutcome =
+        LoadOutcome.Refused(SaveRefusal(SaveProblem.UNREADABLE, "this library keeps nothing"))
+    override suspend fun delete(key: String) = Unit
 
     /** What the settings dialog names as the library's place. */
     const val LOCATION = "an empty library the tests hold"

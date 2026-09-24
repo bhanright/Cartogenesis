@@ -101,6 +101,9 @@ tasks.withType<Test>().configureEach {
 val auditOnlyClasses = listOf(
     // The 2048 and 4096 exports: minutes of pipeline before a pixel is drawn.
     "com.cartogenesis.desktop.ExportAuditTest",
+    // A 2048 world and a 4096 one saved and opened through the real library: two 4096 worlds are
+    // five gigabytes, which the per-merge worker's heap does not have.
+    "com.cartogenesis.desktop.SaveResolutionAuditTest",
     // A 2048 pair, four worlds and four renders: the same tier for the same reason.
     "com.cartogenesis.desktop.SeaLevelHistoryAuditTest",
     // A render review: two worlds at 2048, drawn in three styles with four details of each.

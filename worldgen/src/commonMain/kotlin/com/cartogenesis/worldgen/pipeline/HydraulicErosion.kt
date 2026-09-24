@@ -1596,8 +1596,8 @@ internal object HydraulicErosion {
      * term carries is the contrast between bare ground and closed canopy, with the blanket
      * attenuation taken out. It does not conserve the erosion: a mean of one over cells is not a
      * mean of one over cuts, because the cover sits where the cutting is (wet ground is both best
-     * wooded and hardest cut), and the measured denudation off an active belt is 0.218 mm/yr
-     * against 0.271 without the term, not 0.271 again. The relative form is the least the
+     * wooded and hardest cut), and the denudation off an active belt measured 0.218 mm/yr
+     * against 0.271 without the term when S3 built it, not 0.271 again. The relative form is the least the
      * calibration can lose, not its preservation. `ErosionConfig.bedrockErodibilityPerYear` carries Stock and
      * Montgomery's and Lague's figures for real bedrock rivers, and those rivers ran through
      * forests: the cover is already in the number. Multiplying it by `1 - 0.5 * density` again

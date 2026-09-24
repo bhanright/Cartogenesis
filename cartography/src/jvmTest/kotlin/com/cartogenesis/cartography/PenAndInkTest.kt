@@ -453,18 +453,17 @@ class PenAndInkTest : BorrowsSharedWorlds() {
                 val gradientY =
                     (elevation.sample(column, row + reach) -
                         elevation.sample(column, row - reach)) * plan.gradientScale
-                val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
+                val slope = groundSlope(gradientX, gradientY, world)
                 if (slope >= MEASURED_SLOPE_FLOOR &&
                     allLand(land, width, column, row, window)
                 ) {
                     val tensor = structureTensor(pixels, width, column, row, window)
                     if (tensor != null) {
                         // The picture's steepest change runs across the strokes; the strokes run a
-                        // quarter turn from it, and the aspect is what they should be along.
+                        // quarter turn from it, and the ground's fall line as the sheet draws it is
+                        // what they should be along.
                         val inkDirection = tensor + QUARTER_TURN
-                        total += foldedDifference(
-                            inkDirection, atan2(gradientY.toDouble(), gradientX.toDouble())
-                        )
+                        total += foldedDifference(inkDirection, sheetFallLine(gradientX, gradientY, world))
                         windows++
                     }
                 }
@@ -605,9 +604,24 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
         val gradientY =
             (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
-        val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
+        val slope = groundSlope(gradientX, gradientY, WORLD)
         if (slope < MEASURED_SLOPE_FLOOR) return null
-        return atan2(gradientY.toDouble(), gradientX.toDouble())
+        return sheetFallLine(gradientX, gradientY, WORLD)
+    }
+
+    /**
+     * The ground's steepness from a hachure's two differences, as `Engraving.hachure` reads it: the
+     * difference down a column is over rows, a share of a cell width each.
+     */
+    private fun groundSlope(gradientX: Float, gradientY: Float, world: WorldMap): Float {
+        val southward = gradientY / world.config.cellHeightInCellWidths.toFloat()
+        return sqrt(gradientX * gradientX + southward * southward)
+    }
+
+    /** The ground's fall line as the sheet draws it, the bearing a hachure runs along, in radians. */
+    private fun sheetFallLine(gradientX: Float, gradientY: Float, world: WorldMap): Double {
+        val rowScale = world.config.cellHeightInCellWidths
+        return atan2(gradientY / (rowScale * rowScale), gradientX.toDouble())
     }
 
     /**
@@ -659,7 +673,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     /** [value] rounded to the hundredth and written out, for comparing figures at that digit. */
     private fun hundredths(value: Float): String = String.format(Locale.ROOT, "%.2f", value)
 
-    /** The land slopes in ascending order, read the way the raster reads them for a hachure. */
+    /** The land slopes in ascending order, read the way the raster reads them for a hachure: on the ground. */
     private fun landSlopes(world: WorldMap, plan: EngravingPlan): List<Float> {
         val width = world.width
         val elevation = world.sea.relativeElevation
@@ -675,7 +689,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             val gradientY =
                 (elevation.sample(column, row + reach) -
                     elevation.sample(column, row - reach)) * plan.gradientScale
-            slopes.add(sqrt(gradientX * gradientX + gradientY * gradientY))
+            slopes.add(groundSlope(gradientX, gradientY, world))
         }
         slopes.sort()
         return slopes

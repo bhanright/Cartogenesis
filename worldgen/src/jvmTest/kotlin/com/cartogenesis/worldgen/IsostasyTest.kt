@@ -517,7 +517,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
      * stream-power law is detachment-limited and says nothing about a plate with strength.
      */
     private fun syntheticBelt(upliftMmPerYear: Float, erodibilityPerYear: Float): Belt {
-        val rounds = 300
+        val rounds = 600
         val base = WorldGenConfig(seed = 4242L, width = 128, height = 128)
         val config = base.copy(
             seaLevel = 0.5f,
@@ -527,10 +527,19 @@ class IsostasyTest : BorrowsSharedWorlds() {
             // is 10^12 m² — so the relief a millimetre a year would hold up is a few centimetres,
             // and every round's cut runs into the half-the-drop cap long before the rock has any
             // say in it. Two hundred kilometres across puts the catchments where a real orogen's
-            // are and the relief in hundreds of metres; a forty-thousand-year round keeps each
+            // are and the relief in hundreds of metres; a twenty-thousand-year round keeps each
             // round's bite well inside the cap, so what limits the cut is the stream power and
             // not the arithmetic that guards it.
-            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = 40_000.0),
+            //
+            // Twenty thousand and six hundred rounds, where it was forty thousand and three hundred
+            // until Fix 2, and the twelve million years between them unchanged. The belt's rivers
+            // run down columns, and a step down a column is a row's height, half a cell width, now
+            // that the incision measures it on the ground: the same slope falls half as far in a
+            // step, and a round's bite, which is in proportion to the slope, is twice as large a
+            // share of the drop the cap is read off. The forty-thousand-year round was sized on
+            // the step the cut used to assume, and on the true one it reached the cap on the softest
+            // rock: relief went as K^-0.74. Half the round is the same share of the cap it was.
+            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = 20_000.0),
             isostasy = base.isostasy.copy(flexure = false),
             erosion = base.erosion.copy(
                 hydraulicRounds = rounds,
@@ -1029,7 +1038,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
          *
          * A quarter. The relation is exact only for a single channel at a single catchment area,
          * and what is measured here is the mean relief of a band of ground carrying a whole
-         * drainage network whose catchments span three orders of magnitude, over the three hundred
+         * drainage network whose catchments span three orders of magnitude, over the six hundred
          * rounds `syntheticBelt` runs rather than to convergence. A quarter admits that and still refuses everything the guard
          * is for: an exponent near zero, which is relief that does not answer the rock at all, and
          * an exponent near a half, which is a different `n`.

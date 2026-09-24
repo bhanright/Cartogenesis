@@ -285,15 +285,18 @@ class StraightRunAuditTest {
         )
 
         // Hack's `L` is the main stem measured from the divide, which on a tree is the longest of
-        // the paths reaching the cell. In cells rather than kilometres: the exponent is the slope
-        // of a log-log fit, and rescaling both axes by a constant moves only the intercept.
+        // the paths reaching the cell. In cell widths of ground rather than kilometres: the
+        // exponent is the slope of a log-log fit, and rescaling both axes by a constant moves only
+        // the intercept. A step down a column is a row's height, not a cell's width, or every
+        // north-south stem would be counted twice its length.
+        val steps = world.config.groundSteps
         val longestPath = DoubleArray(cellsAcross * cellsDown)
         for (cell in sourcesFirst) {
             val receiver = world.rivers.flowTarget[cell]
             if (receiver < 0 || !world.sea.isLand[receiver]) continue
             val columnStep = shortestColumnStep(receiver % cellsAcross - cell % cellsAcross, cellsAcross)
             val rowStep = receiver / cellsAcross - cell / cellsAcross
-            val step = if (columnStep != 0 && rowStep != 0) 1.41421356 else 1.0
+            val step = steps.of(columnStep, rowStep).toDouble()
             val throughHere = longestPath[cell] + step
             if (throughHere > longestPath[receiver]) longestPath[receiver] = throughHere
         }

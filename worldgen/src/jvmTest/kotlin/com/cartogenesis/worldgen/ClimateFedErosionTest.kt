@@ -220,9 +220,8 @@ class ClimateFedErosionTest {
                 val toSea = !bareCut.isLand[receiver]
                 val drop = floor[cell] - if (toSea) relative[receiver] else floor[receiver]
                 if (drop <= 0f) return@BooleanArray false
-                val diagonal = (cell % config.width) != (receiver % config.width) &&
-                    (cell / config.width) != (receiver / config.width)
-                val slope = drop / (if (diagonal) sqrt(2f) else 1f) * config.width
+                // The step on the ground, as the stage's own cut measures it.
+                val slope = drop / config.groundSteps.between(cell, receiver, config.width) * config.width
                 val unshielded = coefficient * sqrt(area.data[cell] / landCells) * slope
                 val larger = unshielded * maxOf(1f, bareErodibility[cell])
                 unshielded > 0f && larger < drop * 0.5f &&
@@ -404,6 +403,8 @@ class ClimateFedErosionTest {
     @Test
     fun `dissection follows the rainfall`() {
         val underThePin = ArrayList<Pair<Long, Double>>()
+        // Every seed measured before any is judged, so one run prints all four.
+        val complaints = ArrayList<String>()
         for (seed in SEEDS) {
             val ground = ground(seed)
             val land = ground.cut.isLand
@@ -414,16 +415,16 @@ class ClimateFedErosionTest {
             if (fed < DISSECTION_CORRELATION) underThePin += seed to fed
             // Against a control that correlates at all: a negative control would make the bar
             // below pass on any positive figure.
-            assertTrue(
-                flat > 0.0,
-                "seed $seed: the flat-rain control correlates at ${"%.3f".format(flat)}, so the ratio below would pass on anything"
-            )
-            assertTrue(
-                fed >= flat * DISSECTION_OVER_CONTROL,
-                "seed $seed: flat rain already correlates at ${"%.3f".format(flat)} against the " +
+            if (flat <= 0.0) {
+                complaints += "seed $seed: the flat-rain control correlates at ${"%.3f".format(flat)}, " +
+                    "so the ratio below would pass on anything"
+            }
+            if (fed < flat * DISSECTION_OVER_CONTROL) {
+                complaints += "seed $seed: flat rain already correlates at ${"%.3f".format(flat)} against the " +
                     "fed ${"%.3f".format(fed)}, so the fed figure says little about the rain"
-            )
+            }
         }
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
         // The pin was taken on rounds run without the tectonic uplift, which no world is made by;
         // on the uplift path, which is the path this measures since Audit III (its B-I2), seed
         // 1234 reads a hair under it. Not re-set to fit: kept running as a known failure until the

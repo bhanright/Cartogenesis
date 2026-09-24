@@ -452,11 +452,16 @@ class IceSheetTest : BorrowsSharedWorlds() {
      *
      * A neck of ice one cell wide is not a sheet's geometry — a sheet is fifty thousand square
      * kilometres by definition — and the grid it is drawn on has no business deciding which way
-     * such a neck runs. If anything the grid leans the other way: a row is half as tall as a
-     * column is wide on this projection, so a neck one *row* thick is 5.9 km of ground at 1024
-     * and one a *column* thick is 11.7, and a ragged margin frays more easily in the finer
-     * direction. So the count of north-south necks may not run ahead of the count of east-west
-     * ones at all, and the clause allows it a factor of two for the sample being what it is.
+     * such a neck runs. So the two bearings are counted on the same ground: a neck running north
+     * and south is ice one column wide, a cell width of ground, and one running east and west is
+     * ice as many rows thick as make a cell width, two at a row half as tall as a column is wide.
+     * Each is counted by its length on the ground in cell widths, a row's height for each cell of
+     * a north-south neck and a cell width for each column an east-west one crosses. Counted in
+     * cells, as this clause first was, an ice sheet round on the ground reads twice as many
+     * north-south necks as east-west ones by the ruler alone, since the north-south neck is the
+     * wider of the two and each of its cells stands for half the length. The count along one
+     * bearing may not run ahead of the other at all, and the clause allows it a factor of two for
+     * the sample being what it is.
      */
     @Test
     fun `the sheet's surface is a dome and not a ruling of the grid`() {
@@ -485,8 +490,11 @@ class IceSheetTest : BorrowsSharedWorlds() {
             var overAcross = 0
             var overDown = 0
             var pairs = 0
-            var necksAcross = 0
-            var necksDown = 0
+            // Lengths of neck on the ground, in cell widths.
+            var necksNorthSouth = 0.0
+            var necksEastWest = 0.0
+            val rowHeight = config.cellHeightInCellWidths
+            val rowsInACellWidth = kotlin.math.round(1.0 / rowHeight).toInt().coerceAtLeast(1)
             var iceCells = 0
             for (cell in 0 until across * down) {
                 if (thickness[cell] <= 0f) continue
@@ -505,25 +513,27 @@ class IceSheetTest : BorrowsSharedWorlds() {
                     if (step > worstDown) worstDown = step
                     if (step > stepCeiling) overDown++
                 }
-                // A neck one cell wide: ice here and none on either side of it.
+                // A neck a cell width wide: ice here and none on either side of it along the row,
+                // or a run of ice down the column no taller than a cell width with none above or
+                // below it, counted once, at the run's top cell.
                 if (column > 0 && column < across - 1 &&
                     thickness[cell - 1] <= 0f && thickness[cell + 1] <= 0f
                 ) {
-                    necksAcross++
+                    necksNorthSouth += rowHeight
                 }
-                if (row > 0 && row < down - 1 &&
-                    thickness[cell - across] <= 0f && thickness[cell + across] <= 0f
-                ) {
-                    necksDown++
+                if (row > 0 && thickness[cell - across] <= 0f) {
+                    var run = 1
+                    while (row + run < down && thickness[cell + run * across] > 0f && run <= rowsInACellWidth) run++
+                    if (run <= rowsInACellWidth && row + run < down) necksEastWest += 1.0
                 }
             }
             println(
                 ("I3 DOME seed %d at %d: %d ice cells, %d neighbour pairs, ceiling %.0f m," +
                     " worst step %.0f m east-west and %.0f m north-south, %d and %d over;" +
-                    " one-cell necks %d east-west against %d north-south")
+                    " necks a cell width wide %.1f cell widths of them running north-south against %.1f east-west")
                     .format(
                         seed, across, iceCells, pairs, stepCeiling, worstAcross, worstDown,
-                        overAcross, overDown, necksAcross, necksDown
+                        overAcross, overDown, necksNorthSouth, necksEastWest
                     )
             )
             if (overAcross + overDown > 0) {
@@ -531,10 +541,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
                     " between neighbouring cells of ice on ${overAcross + overDown} pairs, over the" +
                     " ${"%.0f".format(stepCeiling)} m the profile itself can climb across one cell"
             }
-            if (necksAcross > NECK_BEARING_ALLOWANCE * maxOf(necksDown, 1)) {
-                failures += "seed $seed at $across carries $necksAcross one-cell necks running" +
-                    " north and south against $necksDown running east and west, over the" +
-                    " ${NECK_BEARING_ALLOWANCE}x a grid with no preferred bearing allows"
+            if (necksNorthSouth > NECK_BEARING_ALLOWANCE * maxOf(necksEastWest, 1.0)) {
+                failures += "seed $seed at $across carries ${"%.1f".format(necksNorthSouth)} cell widths of" +
+                    " neck running north and south against ${"%.1f".format(necksEastWest)} running east and" +
+                    " west, over the ${NECK_BEARING_ALLOWANCE}x a grid with no preferred bearing allows"
             }
         }
         assertTrue(failures.joinToString("; "), failures.isEmpty())

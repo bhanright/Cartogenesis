@@ -59,7 +59,8 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             val over = largestShares.filter { it.second > cap }
             if (over.isNotEmpty()) {
                 val found = over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
-                throw RecordedViolation("one realm holds more of the land than the stage's own cap of ${cap * 100}%: $found", found)
+                val capPercent = String.format(Locale.ROOT, "%.0f%%", cap * 100)
+                throw RecordedViolation("one realm holds more of the land than the stage's own cap of $capPercent: $found", found)
             }
         }
     }

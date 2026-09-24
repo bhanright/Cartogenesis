@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.FlatRouting
 import com.cartogenesis.worldgen.pipeline.FlowRouting
+import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -31,10 +32,24 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         const val STANDARD_SIDE = 512
 
         /**
-         * Water is routed about fifteen times in a generation: twelve hydraulic rounds, the closing
-         * breaches, the outlet pass, the ice and the rivers.
+         * The most routing passes one default generation makes, counted at the calls to
+         * `FlowRouting.flowDirections`: one per hydraulic round; the closing breach and the mouths
+         * the last round opens, two more; the post-cut outlet pass over the drowned basins, at
+         * least one and at most `SeaLevelStage.MAX_POST_CUT_OUTLET_PASSES`; and one each for the
+         * ice, the drowned valleys and the rivers. Eighteen to thirty-three at the defaults, and the
+         * cost below is charged at the most, which is the figure a device-path decision has to
+         * survive. Fifteen until Audit III (its B-I13), which undercounted every term but the
+         * rounds.
          */
-        const val ROUTING_PASSES_PER_GENERATION = 15
+        fun routingPassesPerGeneration(config: WorldGenConfig): Int =
+            config.erosion.hydraulicRounds + CLOSING_ROUTING_PASSES +
+                SeaLevelStage.MAX_POST_CUT_OUTLET_PASSES + LATER_STAGE_ROUTING_PASSES
+
+        /** The closing breach and the mouths the last round opens. */
+        const val CLOSING_ROUTING_PASSES = 2
+
+        /** The ice, the drowned valleys and the rivers, one each. */
+        const val LATER_STAGE_ROUTING_PASSES = 3
 
         /** Rule 8's line: under this share of a generation a device path is declined. */
         const val LARGEST_SHARE_WITHOUT_A_DEVICE_PATH = 0.01
@@ -102,11 +117,12 @@ class FlatCourseTest : BorrowsSharedWorlds() {
             surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed)
             surfaceMs = minOf(surfaceMs, (System.nanoTime() - surfaceStarted) / 1_000_000.0)
         }
-        val shareOfGeneration = ROUTING_PASSES_PER_GENERATION * surfaceMs / generationMs
+        val passes = routingPassesPerGeneration(world.config)
+        val shareOfGeneration = passes * surfaceMs / generationMs
         println(
             "F30B COST seed $seed@$STANDARD_SIDE: potential %.1f ms a pass over %d flats and %d raised cells, "
                 .format(surfaceMs, surface.flats, surface.raisedCells) +
-                "%.2f%% of a %.1f s generation over $ROUTING_PASSES_PER_GENERATION passes; %d flats kept the staircase"
+                "%.2f%% of a %.1f s generation over $passes passes; %d flats kept the staircase"
                     .format(shareOfGeneration * 100, generationMs / 1000, surface.flatsKept)
         )
         assertTrue(

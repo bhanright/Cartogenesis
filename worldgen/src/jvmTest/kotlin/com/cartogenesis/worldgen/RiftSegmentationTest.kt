@@ -62,12 +62,17 @@ class RiftSegmentationTest : BorrowsSharedWorlds() {
     private val seed = 43L
 
     /**
-     * Thresholds, measured before they were written down; both tests print the figures they were
-     * taken from. Segmented, seed 59758 at 512 gives 3 bodies of sea, 4 land bridges and a flooded
-     * width whose coefficient of variation along strike is 0.32, with 82% of the corridor under
-     * water; unsegmented the same rift gives 1 body, no land bridges and 0.03, 98% flooded end to
-     * end at a width that barely moves. What is asserted is "several" of each and a variation an
-     * order of magnitude above the canal's, not the measured figures themselves.
+     * Thresholds, and what they are: **regression pins on one seed**, not figures derived from
+     * Earth's rifts. Of the twelve seeds scanned (see [seed]), seed 43 is the only one where the
+     * segmented world clears both and the plain one clears neither, and the bars sit between the
+     * two worlds' figures on that seed. So the pair of tests says the segmentation still separates
+     * the two worlds on the one rift it was shown to separate them on; a change that moved seed 43's
+     * rift would have to re-scan, not re-set. Both tests print the figures.
+     *
+     * The history of the figures. When the guard was written, segmented, seed 59758 at 512 gave 3
+     * bodies of sea, 4 land bridges and a flooded width whose coefficient of variation along strike
+     * was 0.32, with 82% of the corridor under water; unsegmented the same rift gave 1 body, no land
+     * bridges and 0.03, 98% flooded end to end.
      *
      * The width is measured as the flooded share of the trough's cross-section rather than as a
      * raw count of cells, because a station's cell count wobbles by a cell or two with the
@@ -79,9 +84,10 @@ class RiftSegmentationTest : BorrowsSharedWorlds() {
      * numerical. H5 runs the hydraulic rounds with the sea a stand below where it ends up, so the
      * accommodation zones between the half-grabens stood above water while the rivers were cutting
      * and the rivers cut through them; the sea then came back up over what they had cut. Measured on
-     * this seed at 512, with `SeaConfig.lowstand` at zero the rift keeps five bridges and at the
-     * default 0.015 it keeps two, while the other two figures barely move — three separate bodies
-     * either way, and a width variation of 0.25 against 0.32. Earth agrees with the direction: a
+     * the seed of the day, 59758, at 512, with the lowstand at zero the rift kept five bridges and at
+     * its default then (0.015 of the land's relief; `SeaConfig.lowstandMetres` since S1) it kept two,
+     * while the other two figures barely moved — three separate bodies either way, and a width
+     * variation of 0.25 against 0.32. Earth agrees with the direction: a
      * flooded rift has very few land bridges once the sea is in it (the Red Sea has none in two
      * thousand kilometres, nor has the Gulf of California), and what tells one from a canal is that
      * it is a chain of separate basins of wildly varying width. The bar sits at the measured figure

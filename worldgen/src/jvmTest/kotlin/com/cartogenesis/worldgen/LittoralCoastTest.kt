@@ -65,7 +65,7 @@ class LittoralCoastTest {
             .atResolution(cellsAcross, cellsAcross)
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
-        val eroded = erodeBlocking(config, plates.height)
+        val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
         val control = config.copy(
             sea = config.sea.copy(littoralGrading = false, drownedValleyFill = false)
         )
@@ -157,6 +157,16 @@ class LittoralCoastTest {
             ("the coast is %.3f rougher at the cell than four to sixteen cells up, against a bar " +
                 "of %.3f — the part of the excess that is not channels (%.3f) and the seeds' own " +
                 "spread (%.3f)").format(excess, bar, notChannels, spread)
+        )
+        // And the coast without either pass fails the same bar. The bar is read off an arm that
+        // runs both passes too, so a pass that did nothing would move the graded coast and the bar
+        // together and the clause above would still hold; this is what says the passes are what
+        // brings the coast inside it.
+        assertTrue(
+            controlExcess > bar,
+            ("the coast with the valley fill and the grading both off reads an excess of %.3f, " +
+                "inside the bar of %.3f, so the clause above cannot tell the passes from their " +
+                "absence").format(controlExcess, bar)
         )
     }
 
@@ -253,7 +263,7 @@ class LittoralCoastTest {
      * the rocky coasts are taken out do not agree more closely than that.
      */
     @Test
-    fun `the pass grades Earth's third of the shoreline`() {
+    fun `the criterion hands the pass the configured third of the shoreline`() {
         val cellsAcross = 512
         var pooled = 0.0
         cutsAt(cellsAcross).forEach { (seed, cut) ->
@@ -345,7 +355,7 @@ class LittoralCoastTest {
      * two stages earlier, so a bay the grading sealed would be a lake below sea level for good — and
      * a finer grid, which resolves more two-cell bay mouths, would seal more of them, which is how
      * this was found: it took `GlaciationTest`'s resolution contract from 1.91 to 2.37 against a bar
-     * of 2.20. `LittoralGrading.severs` makes it impossible rather than unlikely, and this counts
+     * of 2.20. `WaterTopology.severs` makes it impossible rather than unlikely, and this counts
      * the bodies to prove it.
      */
     @Test
@@ -417,8 +427,10 @@ class LittoralCoastTest {
          *
          * Half again, which is not an Earth figure and does not pretend to be: it is the floor under
          * "the mechanism did something", set well inside the measured 0.123 against 0.086 so that a
-         * pass which stopped working would be caught and a seed swap would not. Earth's own figure
-         * is asserted where it can be, on the share of shoreline graded, above.
+         * pass which stopped working would be caught and a seed swap would not. Earth's third is not
+         * asserted anywhere: the share of shoreline the criterion hands the pass is Luijendijk's 31%
+         * by construction, and what the case above checks is only what the drift floor and the
+         * histogram's bins lose of it.
          */
         const val SMOOTH_SHARE_GAIN = 1.3
     }

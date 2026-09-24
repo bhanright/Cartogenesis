@@ -115,7 +115,7 @@ object SeaLevelStage {
      * when a pass finds nothing, so sixteen still bounds it.
      * See docs/DESIGN_LEDGER.md, H5b, S1 and F22, for the pass-by-pass figures.
      */
-    private const val MAX_POST_CUT_OUTLET_PASSES = 16
+    internal const val MAX_POST_CUT_OUTLET_PASSES = 16
 
     /**
      * The percentile cut on its own, without the three rules that [apply] runs on top of it.

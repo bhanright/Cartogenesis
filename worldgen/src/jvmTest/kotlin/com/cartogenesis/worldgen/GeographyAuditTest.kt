@@ -189,7 +189,11 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        val complaints = bands.report(seeds, "NO RECOVERY")
+        // Against the bars the shipped world is held to and no others. Every band would include the
+        // poleward one and the per-seed tropical one, which the shipped world already trips and
+        // which are printed there as findings, so a control reading them would bite whatever the
+        // recovery did.
+        val complaints = bands.report(seeds, "NO RECOVERY", everyBand = false)
         assertTrue(
             complaints.isNotEmpty(),
             "a world with no land moisture recovery was expected to fail the per-band bars and " +

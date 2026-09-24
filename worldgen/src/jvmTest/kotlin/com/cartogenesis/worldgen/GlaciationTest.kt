@@ -159,6 +159,26 @@ class GlaciationTest : BorrowsSharedWorlds() {
                 " ${with.coldLakes.toLong() * without.coldLand} against" +
                 " ${3L * without.coldLakes * with.coldLand}"
         )
+        // Asserted, and failing: the two clauses above are this stage's whole purpose, and a
+        // finding printed where nobody reads it is a guard that cannot fail (Audit III's C I4). So
+        // both are run as a known failure, which goes red the day either the valley machinery or
+        // a change upstream of it brings them back, and says to arm them.
+        KnownFailures.expect(
+            "C I4: glaciated country holds no more lakes than the ice's absence leaves",
+            Signature.unplaced(2, 1.408)
+        ) {
+            val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
+            val contrasted = with.ratio >= COLD_LAKE_RATIO
+            GuardViolation.unless(
+                tripled && contrasted,
+                { Signature.unplaced(listOf(tripled, contrasted).count { !it }, with.ratio.toDouble()) }
+            ) {
+                ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
+                    "and the iced zone ratio to %.2f, asked %.1f").format(
+                    without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
+                )
+            }
+        }
     }
 
     /**

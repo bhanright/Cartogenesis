@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -53,14 +54,15 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
      * The floodplain's own flats are real and are recorded in `TODO.md`; the cure is the receiver
      * clamp H5b is fitting to the incision loop, not a change to the fan.
      */
-    private fun lobeOf(config: WorldGenConfig, deltaLobe: Boolean): BooleanArray {
+    private fun lobeOf(config: WorldGenConfig, deltaLobe: Boolean, world: WorldMap): BooleanArray {
         val cfg = config.copy(erosion = config.erosion.copy(deltaLobe = deltaLobe))
         val log = DepositionLog(cfg.width * cfg.height)
-        erodeBlockingLoggingDeposition(
-            cfg,
-            PlateStage.generate(cfg, TerrainStage.generate(cfg)).height,
-            log
-        )
+        val plates = PlateStage.generate(cfg, TerrainStage.generate(cfg))
+        val eroded = erodeBlockingLoggingDeposition(cfg, plates.height, plates.upliftRateMmPerYear, log)
+        // The same erosion the world was cut from, to the last bit, or the mask below would be
+        // another run's lobes laid over this world's new land.
+        val differing = eroded.height.data.indices.count { eroded.height.data[it] != world.erosion.height.data[it] }
+        assertEquals(0, differing, "the logged erosion differs from the generated world on $differing cells")
         return BooleanArray(log.mechanism.size) { log.mechanism[it] == DepositionLog.SEA_LOBE }
     }
 
@@ -83,8 +85,8 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
 
             val reach = HydraulicErosion.Rates(config).deltaReachCells
             val cap = (2 * reach + 1) * (2 * reach + 1)
-            val was = Delta(before, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = false))
-            val now = Delta(after, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = true))
+            val was = Delta(before, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = false, before))
+            val now = Delta(after, bare, config.seaLevel, cap, lobeOf(config, deltaLobe = true, after))
             val floor = Delta(bare, bare, config.seaLevel, cap, BooleanArray(0)).inPocket
             controlStranded += was.stranded
             controlPockets += if (was.inPocket > floor) 1 else 0

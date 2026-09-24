@@ -119,11 +119,9 @@ class CultureRealmTest : BorrowsSharedWorlds() {
             // below rather than asserted on whichever of them the loop reached first.
             //
             // It used to read `> 1.3` here, which stopped at seed 42 and so was a bar set by one
-            // world: the three seeds measure 1.50, 1.75 and 1.88, and a
-            // realm map is built from drainage catchments, so anything that moves the river network
-            // moves it. E6 found it at 1.25 on seed 42 alone and the other two unmeasured. Same
-            // shape as the desert guard: the claim per seed, the strength pooled, every figure
-            // printed.
+            // world, and a realm map is built from drainage catchments, so anything that moves the
+            // river network moves it. Same shape as the desert guard: the claim per seed, the
+            // strength pooled, every figure printed.
             assertTrue(
                 meanRealms > 1.0,
                 "seed $seed: peoples do not cross borders at all, $meanRealms realms per people"
@@ -137,11 +135,11 @@ class CultureRealmTest : BorrowsSharedWorlds() {
                     "inside a country, so the peoples layer is close to a copy of the political map"
             )
         }
-        // And the strong form, pooled. Three worlds measure 1.50, 1.75 and 1.88 realms per people,
-        // a mean of 1.71; the bar is 1.4, which is under the worst of the three and well over the
-        // 1.0 that would mean the two layers agree. Pooling is what makes it a statement about the
-        // generator rather than about seed 42: one world's realm count is a property of where its
-        // catchments happened to fall, and the claim is that peoples cross borders in general.
+        // And the strong form, pooled. The bar is 1.4, set under the worst of the three seeds when
+        // it was written (their figures are printed below) and well over the 1.0 that would mean
+        // the two layers agree: a pin, not a derivation. Pooling is what makes it a statement about
+        // the generator rather than about seed 42: one world's realm count is a property of where
+        // its catchments happened to fall, and the claim is that peoples cross borders in general.
         val mean = pooled.average()
         println(
             "CULTURE pooled over ${pooled.size} seeds: %.2f realms per people (%s)"
@@ -188,6 +186,10 @@ class CultureRealmTest : BorrowsSharedWorlds() {
                 settled >= habitable * 0.90,
                 "seed $seed left ${100 - settled * 100 / habitable}% of habitable land unsettled"
             )
+            // Under 45% of the habitable land, which is no figure of Earth's and no setting of the
+            // stage's: a pin against a runaway people, with nothing derived behind
+            // it (Audit III's E-T10). Several settings elsewhere cite their margin against this
+            // bar; it is not a derivation they can lean on.
             assertTrue(
                 largest <= habitable * 0.45,
                 "seed $seed: one people holds ${largest * 100 / habitable}% of habitable land"

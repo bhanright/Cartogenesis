@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
@@ -229,9 +230,10 @@ class SeaIceTest : BorrowsSharedWorlds() {
         }
 
         // Rain over the frozen sea against rain over the open sea in the same rows, so latitude is
-        // not what the comparison is measuring. The cold season's field is the annual mean's colder
-        // half; `precipitationMm` is the annual figure, and the ice is a cold-season fact, so this
-        // reads the winter march's own cells.
+        // not what the comparison is measuring. The ice is a cold-season fact, so the rain is the
+        // cold-season march's own; `precipitationMm` is the mean of the two marches, and a cell
+        // frozen only in the cold season would carry its open-water summer into it.
+        val winterMm = coldSeasonRainMm(world)
         var iceRain = 0.0
         var iceRainCells = 0
         var openRain = 0.0
@@ -251,10 +253,10 @@ class SeaIceTest : BorrowsSharedWorlds() {
                 val cell = row * cellsAcross + column
                 if (world.sea.isLand[cell]) continue
                 if (world.climate.winterSeaIce[cell]) {
-                    iceRain += world.climate.precipitationMm.data[cell]
+                    iceRain += winterMm.data[cell]
                     iceRainCells++
                 } else {
-                    openRain += world.climate.precipitationMm.data[cell]
+                    openRain += winterMm.data[cell]
                     openRainCells++
                 }
             }
@@ -272,15 +274,32 @@ class SeaIceTest : BorrowsSharedWorlds() {
         )
     }
 
-    /** Mean annual rainfall in millimetres over the cells [mask] marks, on [world]. */
+    /** Mean cold-season rainfall in millimetres over the cells [mask] marks, on [world]. */
     private fun meanRainOver(world: WorldMap, mask: BooleanArray): Double {
+        val winterMm = coldSeasonRainMm(world)
         var total = 0.0
         var counted = 0
         for (cell in mask.indices) {
             if (!mask[cell]) continue
-            total += world.climate.precipitationMm.data[cell]
+            total += winterMm.data[cell]
             counted++
         }
         return if (counted == 0) 0.0 else total / counted
+    }
+
+    /**
+     * The cold-season march's rainfall on [world], in millimetres.
+     *
+     * The result keeps only the two marches' mean in millimetres, so the stage is run again on the
+     * world's own sea and ocean, and its annual figure is checked against the one the world
+     * carries to the last bit: the march read here is the one the world was made with.
+     */
+    private fun coldSeasonRainMm(world: WorldMap): FloatField {
+        val generated = ClimateStage.generateWithSeasonalMm(world.config, world.sea, world.ocean)
+        assertTrue(
+            generated.result.precipitationMm.data.contentEquals(world.climate.precipitationMm.data),
+            "the climate run again on the world's own sea and ocean is not the world's climate"
+        )
+        return generated.winterPrecipitationMm
     }
 }

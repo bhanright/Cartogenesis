@@ -43,11 +43,14 @@ class VegetationCostTest {
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /**
-         * A 2048 world's generation, in seconds, as `GenerationSpeedTest` last reported it.
+         * How many vegetation fields one default generation builds.
          *
-         * Quoted rather than measured here so this stays a measurement of one piece of arithmetic.
+         * Three, counted at the call sites: the field is built inside
+         * `ClimateStage.generateWithSeasonalMm`, which runs twice as the provisional weather the
+         * hydraulic rounds cut with and once as the finished climate. The glaciation's provisional
+         * snow balance runs the seasonal fields without it.
          */
-        const val WORLD_AT_2048_SECONDS = 180.0
+        const val VEGETATION_FIELDS_PER_WORLD = 3
     }
 
     @Test
@@ -65,17 +68,15 @@ class VegetationCostTest {
             val started = System.nanoTime()
             repeat(MEASURED_RUNS) { run() }
             val millisecondsEach = (System.nanoTime() - started) / 1e6 / MEASURED_RUNS
+            val perWorldMs = millisecondsEach * VEGETATION_FIELDS_PER_WORLD
             println(
-                ("VEGETATION COST at %d: %.1f ms over a whole grid of land (%.3f%% of a %.0f s " +
-                    "world at 2048)")
-                    .format(
-                        side, millisecondsEach,
-                        millisecondsEach / 1000.0 / WORLD_AT_2048_SECONDS * 100,
-                        WORLD_AT_2048_SECONDS
-                    )
+                "VEGETATION COST at %d: %.1f ms over a whole grid of land, %.1f ms for the %d a world builds"
+                    .format(side, millisecondsEach, perWorldMs, VEGETATION_FIELDS_PER_WORLD)
             )
             if (side == 2048) {
-                val share = millisecondsEach / 1000.0 / WORLD_AT_2048_SECONDS
+                val worldSeconds = GenerationTime.secondsAt(2048)
+                val share = perWorldMs / 1000.0 / worldSeconds
+                println("VEGETATION COST: %.3f%% of a %.1f s world at 2048, measured in this run".format(share * 100, worldSeconds))
                 assertTrue(
                     share < WORTH_A_DEVICE_SHARE,
                     ("the vegetation field takes %.2f%% of a world at 2048, above the %.0f%% at " +

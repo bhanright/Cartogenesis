@@ -2,9 +2,11 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.RoundMass
 import com.cartogenesis.worldgen.pipeline.TerrainStage
+import com.cartogenesis.worldgen.pipeline.erodeBlockingLoggingDeposition
 import com.cartogenesis.worldgen.pipeline.erodeBlockingReportingRounds
 import kotlin.math.abs
 import kotlin.math.max
@@ -40,10 +42,10 @@ class DepositionTest : BorrowsSharedWorlds() {
     @Test
     fun `every round conserves mass`() {
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
         val rounds = ArrayList<RoundMass>()
-        erodeBlockingReportingRounds(config, uplift) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, plates.height, plates.upliftRateMmPerYear) { rounds.add(it) }
         assertEquals(config.erosion.hydraulicRounds, rounds.size, "not every round reported")
 
         var worstBudget = 0.0
@@ -84,43 +86,76 @@ class DepositionTest : BorrowsSharedWorlds() {
         assertTrue(rounds.all { it.deposited > 0.0 }, "some round deposited nothing at all")
     }
 
+    /**
+     * River mouths stand on land the deposition laid, and do not without it.
+     *
+     * Read off the stage's own record of which mechanism laid what where ([DepositionLog]), taken
+     * from the very erosion the world was cut from and checked to be it cell for cell, and counted
+     * only where that ground is land in the finished cut. Not by differencing the world against
+     * the one with deposition off, which is what this did until Audit III (its B-I5): the two worlds
+     * differ in more than the sediment — every round after the first routes over ground the spoil
+     * has changed — so their coasts differ everywhere, and a world that cannot deposit at all but
+     * whose coast has merely moved (the rounds' lowstand off) "gains" land at mouths by that
+     * reckoning. The differencing figures are printed beside, for the record. The control is the
+     * world with deposition off, whose record is empty, so the count is nothing.
+     */
     @Test
     fun `river mouths gain land, and do not without deposition`() {
         val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val without = SharedWorlds.world(
-            base.copy(erosion = base.erosion.copy(deposition = false))
-        )
+        val off = base.copy(erosion = base.erosion.copy(deposition = false))
+        val without = SharedWorlds.world(off)
+        val world = SharedWorlds.world(base)
 
-        // Ground rule 2: the same measurement against a world that cannot deposit. The old
-        // coastline is compared with itself, so nothing can have been gained.
-        val control = mouthsGainingLand(
-            SharedWorlds.world(
-                base.copy(erosion = base.erosion.copy(deposition = false))
-            ),
+        val gained = mouthsOnLand(world, depositedLand(base, world))
+        val touching = mouthsOnLand(world, depositedLand(base, world), reach = 1)
+        val control = mouthsOnLand(without, depositedLand(off, without))
+        val byDifference = mouthsGainingLand(world, without)
+        val chaos = mouthsGainingLand(
+            SharedWorlds.world(off.copy(sea = off.sea.copy(lowstandMetres = 0f))),
             without
         )
-        println("DELTA control (deposition off): $control mouths gained land within 4 cells")
-        assertTrue(
-            control < 3,
-            "the deposition-off control was expected to fail the guard, but gained land at " +
-                "$control mouths"
-        )
-
-        val world = SharedWorlds.world(base)
-        val gained = mouthsGainingLand(world, without)
-        // The guard's own radius is generous, so the tighter figure is reported beside it: new
-        // ground the mouth is standing on rather than merely near.
-        val touching = mouthsGainingLand(world, without, reach = 1)
-        val newCells = gainedLand(world, without).count { it }
         println(
-            "DELTA seed 42: $gained mouths gained land within 4 cells of the old coastline " +
-                "($touching with new ground immediately beside the mouth); $newCells new land " +
-                "cells in all"
+            "DELTA seed 42: $gained mouths stand within 4 cells of land the deposition laid ($touching " +
+                "with it beside the mouth), against $control with deposition off; by differencing the " +
+                "two worlds $byDifference, where a world that cannot deposit but whose coast moved " +
+                "(the rounds' lowstand off) reads $chaos by the same differencing"
         )
+        assertTrue(control == 0, "with deposition off the record put land at $control mouths, so it is not the deposition's record")
         assertTrue(
             gained >= 3,
-            "only $gained river mouths gained land within 4 cells of the old coastline"
+            "only $gained river mouths stand within 4 cells of land the deposition laid"
         )
+    }
+
+    /**
+     * The cells the deposition laid that are land in [world]'s finished cut, from the stage's own
+     * record: [config]'s erosion run again with the plates' uplift and a [DepositionLog], and
+     * checked to give [world]'s eroded height to the last bit.
+     */
+    private fun depositedLand(config: WorldGenConfig, world: WorldMap): BooleanArray {
+        val plates = PlateStage.generate(config, TerrainStage.generate(config))
+        val log = DepositionLog(config.width * config.height)
+        val eroded = erodeBlockingLoggingDeposition(config, plates.height, plates.upliftRateMmPerYear, log)
+        val differing = eroded.height.data.indices.count { eroded.height.data[it] != world.erosion.height.data[it] }
+        assertEquals(0, differing, "the logged erosion differs from the generated world on $differing cells")
+        return BooleanArray(log.mechanism.size) {
+            world.sea.isLand[it] && log.mechanism[it] != DepositionLog.NONE
+        }
+    }
+
+    /** How many of [world]'s river mouths have a cell of [land] within [reach] cells. */
+    private fun mouthsOnLand(world: WorldMap, land: BooleanArray, reach: Int = 4): Int {
+        val w = world.width
+        val h = world.height
+        return world.rivers.rivers.count { river ->
+            val mouth = river.cells.last()
+            val mx = mouth % w
+            val my = mouth / w
+            (-reach..reach).any { dy ->
+                val y = my + dy
+                y in 0 until h && (-reach..reach).any { dx -> land[y * w + (((mx + dx) % w) + w) % w] }
+            }
+        }
     }
 
     @Test

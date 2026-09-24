@@ -31,8 +31,11 @@ import kotlin.test.Test
  *    different contour of a planar rift shoulder; the shoulder is E4's, and so is the pale bench of
  *    constant width down the valley's west side. Out of E6's scope, and recorded in `TODO.md`.
  *
- * What is asserted here is the two halves E6 owns, each against `gradedAggradation = false`, which
- * is the rule as it was.
+ * Nothing is asserted here. The two halves E6 owns were measured against `gradedAggradation =
+ * false`, the rule as it was, and none of the whole-world measurements discriminates at the grids
+ * this class can afford; the case below says why and prints them. The measurement in the
+ * author's own window at 2048 is `BayHeadDeltaAuditTest`'s, which prints it too and asserts only
+ * that its finder has a subject. Both are in the audit tier.
  */
 class BayHeadDeltaTest {
 
@@ -47,15 +50,6 @@ class BayHeadDeltaTest {
         return if (size == 512) authored else authored.atResolution(size, size)
     }
 
-    /**
-     * **No moat.** Standing water lying in a band about a centre, far longer than it is thick and
-     * well out from that centre, is a moat: a ring the deposition left round something. Counted in
-     * cells over the whole world, it has to be nothing.
-     *
-     * The centre is searched for rather than assumed to be the river mouth, because the author's own
-     * crescents are not concentric with a mouth — measured against the mouth they score zero — but
-     * with the ground they lie on.
-     */
     /**
      * Everything E6 measured on the whole world, reported, and the reason none of it is asserted
      * here.

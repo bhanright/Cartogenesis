@@ -353,14 +353,42 @@ class StraightRunTest : BorrowsSharedWorlds() {
      *
      * Read off the true ground rather than off the fill, the way `OutletIncisionTest` reads it: a
      * basin the enclosure rule converted keeps the level it already stood at, and what puts it in
-     * the other population is that level and not how deeply it was later filled.
+     * the other population is that level and not how deeply it was later filled. The ground is the
+     * eroded height field, which is the field the cut was taken on and the unit
+     * [com.cartogenesis.worldgen.pipeline.SeaLevelResult.shorelineHeight] is in.
      */
-    private fun standsBelowTheSeaLevelCut(world: WorldMap, lakeId: Int): Boolean {
-        val ground = world.sea.relativeElevation.data
-        val cut = world.sea.shorelineHeight
-        return world.rivers.lakes.lakeId.indices.any {
-            world.rivers.lakes.lakeId[it] == lakeId && ground[it] < cut
-        }
+    private fun standsBelowTheSeaLevelCut(world: WorldMap, lakeId: Int): Boolean =
+        standsBelowTheCut(world.rivers.lakes.lakeId, world.erosion.height.data, world.sea.shorelineHeight, lakeId)
+
+    /**
+     * The census's split, on its own: a body counts as below the cut if any of its cells stands on
+     * ground below it. Held by `the census splits water at the cut on the field the cut was taken on`.
+     */
+    internal fun standsBelowTheCut(lakeIds: IntArray, ground: FloatArray, cut: Float, lakeId: Int): Boolean =
+        lakeIds.indices.any { lakeIds[it] == lakeId && ground[it] < cut }
+
+    /**
+     * The split the census rests on, on a map drawn by hand: a ruled lake standing on ground above
+     * the cut is counted, and one on ground below it is not.
+     *
+     * Until Audit III (its B-I1) the split read the shoreline-relative elevation — 0 at the
+     * shoreline, 1 six kilometres above it — against the cut's level in the raw field, about 0.62,
+     * so any lake with a cell lower than some 3,700 m went to the uncounted side, which is nearly
+     * every lake on a map, and the census could not fail. The lake here stands a couple of hundred
+     * metres above the water; read that way it would have been dropped.
+     */
+    @Test
+    fun `the census splits water at the cut on the field the cut was taken on`() {
+        val cut = 0.62f
+        val lakeIds = intArrayOf(0, 0, 0, 1, 1, 1, -1)
+        val ground = floatArrayOf(0.635f, 0.640f, 0.638f, 0.61f, 0.63f, 0.63f, 0.9f)
+        assertTrue(!standsBelowTheCut(lakeIds, ground, cut, 0), "a lake standing above the cut was set aside as drowned")
+        assertTrue(standsBelowTheCut(lakeIds, ground, cut, 1), "a lake with a cell below the cut was counted as ponded")
+        // The same lake on the shoreline-relative ruler the census used to read: 0.635 of the field
+        // is 0.04 above the water on it, far under the 0.62 it was compared with.
+        val landHalf = 0.375f
+        val relative = FloatArray(ground.size) { (ground[it] - cut) / landHalf }
+        assertTrue(standsBelowTheCut(lakeIds, relative, cut, 0), "the old reading was not the defect this is shown against")
     }
 
     private fun assertDrainageIsAForest(world: WorldMap, label: String) {

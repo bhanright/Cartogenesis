@@ -44,11 +44,10 @@ class ChannelInitiationCostTest {
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /**
-         * A 2048 world's generation, in seconds, as `GenerationSpeedTest` last reported it.
-         *
-         * Quoted rather than measured here so this stays a measurement of one piece of arithmetic.
+         * How many times one default generation runs the criterion: once, in `RiverStage`, which
+         * is the only caller of `ChannelInitiation.channelMask` in the pipeline.
          */
-        const val WORLD_AT_2048_SECONDS = 180.0
+        const val CRITERIA_PER_WORLD = 1
     }
 
     @Test
@@ -96,16 +95,13 @@ class ChannelInitiationCostTest {
             repeat(MEASURED_RUNS) { channelCells = run() }
             val millisecondsEach = (System.nanoTime() - started) / 1e6 / MEASURED_RUNS
             println(
-                ("CHANNEL INITIATION COST at %d: %.1f ms over a whole grid of land, %d channel " +
-                    "cells (%.3f%% of a %.0f s world at 2048)")
-                    .format(
-                        side, millisecondsEach, channelCells,
-                        millisecondsEach / 1000.0 / WORLD_AT_2048_SECONDS * 100,
-                        WORLD_AT_2048_SECONDS
-                    )
+                "CHANNEL INITIATION COST at %d: %.1f ms over a whole grid of land, %d channel cells"
+                    .format(side, millisecondsEach, channelCells)
             )
             if (side == 2048) {
-                val share = millisecondsEach / 1000.0 / WORLD_AT_2048_SECONDS
+                val worldSeconds = GenerationTime.secondsAt(2048)
+                val share = millisecondsEach * CRITERIA_PER_WORLD / 1000.0 / worldSeconds
+                println("CHANNEL INITIATION COST: %.3f%% of a %.1f s world at 2048, measured in this run".format(share * 100, worldSeconds))
                 assertTrue(
                     share < WORTH_A_DEVICE_SHARE,
                     "the channel-head criterion is ${"%.3f".format(share * 100)}% of a 2048" +

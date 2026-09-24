@@ -31,8 +31,10 @@ class DesertCauseTest {
             val h = world.height
 
             // How far the air travelled over land before arriving, and the greatest climb it made
-            // on the way. Both are walked along each row's own wind direction, exactly as the
-            // precipitation march does.
+            // on the way. Both are walked along one direction per row, the annual zonal wind read
+            // at the row's first column. That is an approximation of the march and not the march:
+            // since A3 and W2 the march is seasonal, per cell, slanted and swept twice, so these
+            // figures describe a simpler air than the one that made the deserts.
             val fetch = IntArray(w * h)
             val climb = FloatArray(w * h)
             for (y in 0 until h) {

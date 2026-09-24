@@ -102,8 +102,8 @@ tasks.withType<Test>().configureEach {
  *
  * Heavy, whole classes moved to the audit tier: `DebugMapDump` (the render harness, 259s, always
  * run with `--rerun` anyway), `StageProfileTest` (158s), `GenerationSpeedTest`, `DesertCauseTest`,
- * `ColdCapReportTest` and `ErosionConvergenceTest` (55s together — the last of those asserts
- * thread-splitting that fails on CI's small runners). `GlaciationAuditTest` and
+ * `ColdCapReportTest` and `ErosionConvergenceTest` (55s together; the last of those asserts the
+ * thread split only where there is more than one worker to split across). `GlaciationAuditTest` and
  * `RealmIdRangeAuditTest` are new classes holding just the 2048-scale cases split out of
  * `GlaciationTest` and `RealmIdRangeTest`; their 512/1024 siblings stay in the per-merge classes.
  * `LakeWaterBalanceTest` has no 2048-scale case today (only comments describing one), so nothing
@@ -192,7 +192,16 @@ val auditOnlyClasses = listOf(
     // Gradle's filter matches the same way on both sides.
     "com.cartogenesis.worldgen.SeaLevelHistoryTest.report every corner of the pair",
     "com.cartogenesis.worldgen.LakeWaterBalanceTest.report the lake budget",
-    "com.cartogenesis.worldgen.DepositionTest.render the coast around the largest river mouths"
+    "com.cartogenesis.worldgen.DepositionTest.render the coast around the largest river mouths",
+    // Audit III's instruments: the straightness report over every shore, which generates 364673 at
+    // 2048 to print a table and asserts only that it had something to measure; and the three rule-8
+    // cost guards, whose bar is a share of a 2048 world and which now measure that world in the
+    // same run rather than quoting a figure no code produced (`GenerationTime`), a minute or two of
+    // generation the first of them pays for and the others share.
+    "com.cartogenesis.worldgen.StraightRunTest.report how straight every shore is",
+    "com.cartogenesis.worldgen.ChannelInitiationCostTest",
+    "com.cartogenesis.worldgen.PressureWindCostTest",
+    "com.cartogenesis.worldgen.VegetationCostTest"
 )
 
 /*

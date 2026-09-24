@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.Season
@@ -21,8 +22,11 @@ import kotlin.test.assertTrue
  *
  * The control is that blend removed. Every land cell then takes its band's continental column
  * whole, whatever it is standing next to, and a shoreline and an interior at the same latitude
- * swing by the same amount — which is Ireland with Siberia's winter. Measured on the same world
- * and the same cells, so nothing but the blend differs.
+ * swing by the same amount — which is Ireland with Siberia's winter. It is the stage's own
+ * seasonal step, [ClimateStage.seasonalTemperature], run on the same world's annual field with the
+ * marine-air fraction handed to it at zero on land, and the same step with the world's own fraction
+ * is checked to give back the world's own months to the last bit, so nothing but the blend
+ * differs.
  *
  * See docs/DESIGN_LEDGER.md, W1; A2 wrote the version of this guard that had a knob in it.
  */
@@ -73,8 +77,8 @@ class ContinentalityTest : BorrowsSharedWorlds() {
     @Test
     fun `without the marine blend the coast and the interior swing alike`() {
         // The guard above, shown to discriminate. Take the blend away and every land cell reads
-        // its band's continental column, so the only thing left to separate a coast from an
-        // interior at the same latitude is the lapse rate and the weather noise.
+        // its band's continental column, so a coast and an interior at the same latitude are
+        // separated by nothing but which latitudes each set happens to hold.
         val measured = measure()
         println(
             ("CONTINENTALITY seed 42 at %d deg with the marine blend off: coast swing %.1f C, " +
@@ -112,6 +116,24 @@ class ContinentalityTest : BorrowsSharedWorlds() {
         val marine = ClimateStage.marineAirFraction(world.config, world.sea)
         val zonal = ClimateStage.zonalClimate(world.config, world.sea)
 
+        // The stage's own seasonal step, twice: with the world's marine fraction it must give the
+        // world's months back exactly, which is what makes the second run the production code
+        // with one input changed; with the fraction at zero on land it is the blend removed.
+        fun swing(fraction: FloatField): FloatArray {
+            val summer = ClimateStage.seasonalTemperature(world.config, world.climate.temperature, zonal, fraction, Season.SUMMER)
+            val winter = ClimateStage.seasonalTemperature(world.config, world.climate.temperature, zonal, fraction, Season.WINTER)
+            return FloatArray(summer.data.size) { summer.data[it] - winter.data[it] }
+        }
+        val summerAgain = ClimateStage.seasonalTemperature(world.config, world.climate.temperature, zonal, marine, Season.SUMMER)
+        assertTrue(
+            summerAgain.data.contentEquals(world.climate.summerTemperature.data),
+            "the seasonal step run again on the world's own fields is not the world's warmest month"
+        )
+        val noBlend = FloatField(cellsAcross, cellsDown).also { field ->
+            for (cell in field.data.indices) field.data[cell] = if (world.sea.isLand[cell]) 0f else marine.data[cell]
+        }
+        val swingWithoutBlend = swing(noBlend)
+
         var coastSum = 0.0
         var coastCells = 0
         var interiorSum = 0.0
@@ -122,10 +144,6 @@ class ContinentalityTest : BorrowsSharedWorlds() {
         for (row in 0 until cellsDown) {
             val latitude = ClimateStage.latitudeOf(row, cellsDown)
             if (abs(abs(latitude) - SAMPLE_LATITUDE) > SAMPLE_SPAN) continue
-            // With the blend off a land cell takes its band's continental column whole, so its
-            // swing is the same for every cell of the row.
-            val landOnlySwing = (zonal.landC(latitude, Season.SUMMER) -
-                zonal.landC(latitude, Season.WINTER)).toDouble()
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
                 if (!world.sea.isLand[cell]) continue
@@ -133,6 +151,7 @@ class ContinentalityTest : BorrowsSharedWorlds() {
                     (world.climate.summerTemperature.data[cell] -
                         world.climate.winterTemperature.data[cell]).toDouble()
                 )
+                val landOnlySwing = abs(swingWithoutBlend[cell].toDouble())
                 when {
                     distance.data[cell] <= reach -> {
                         coastSum += swing
@@ -170,8 +189,8 @@ class ContinentalityTest : BorrowsSharedWorlds() {
 
     /** The mean marine-air fraction of the cells sitting [cells] from water, for the report. */
     private fun marineFractionAtDistance(
-        marine: com.cartogenesis.worldgen.model.FloatField,
-        distance: com.cartogenesis.worldgen.model.FloatField,
+        marine: FloatField,
+        distance: FloatField,
         cells: Float,
         tolerance: Float
     ): Double {

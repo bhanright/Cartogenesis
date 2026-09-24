@@ -154,6 +154,10 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
          * goes back to main's own figure, less a little for the seeds' spread, and the absolute
          * depth keeps a tenth of slack: a notch is as deep as the ground it is cut into allows,
          * and this ground is 8% smoother.
+         *
+         * All three are regression pins on the tree's own measurement — main's figure at the S2
+         * merge, less an allowance — and not figures of Earth's; they catch a change that shallows
+         * the valleys, not a valley that is the wrong depth.
          */
         const val DEEPENING_RATIO_BAR = 1.9
         const val NOTCH_DEPTH_BEFORE_S2 = 0.0148

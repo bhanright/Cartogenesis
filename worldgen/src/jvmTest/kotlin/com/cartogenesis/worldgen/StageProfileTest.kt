@@ -1,19 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
-import com.cartogenesis.worldgen.pipeline.ClimateStage
-import com.cartogenesis.worldgen.pipeline.ErosionStage
-import com.cartogenesis.worldgen.pipeline.LandmarkStage
-import com.cartogenesis.worldgen.pipeline.NationStage
-import com.cartogenesis.worldgen.pipeline.OceanStage
-import com.cartogenesis.worldgen.pipeline.PlateStage
-import com.cartogenesis.worldgen.pipeline.RiverStage
-import com.cartogenesis.worldgen.pipeline.SeaLevelStage
-import com.cartogenesis.worldgen.pipeline.TerrainStage
-import kotlin.system.measureTimeMillis
 import org.junit.Test
-import kotlinx.coroutines.runBlocking
 
 /**
  * Where the time actually goes, per stage and per resolution.
@@ -22,6 +10,14 @@ import kotlinx.coroutines.runBlocking
  * that touch every cell independently (noise, blur, the FFT) parallelise well, and the ones built
  * on a priority queue walking a graph in order (depression filling, flow accumulation, realm
  * expansion) do not. Knowing the split is what decides whether GPU work is worth doing at all.
+ *
+ * Timed through the engine itself, by the progress callback it calls before each stage: a stage's
+ * time runs from its own call to the next one's, and the last stage's to the world coming back. So
+ * what is timed is the pipeline the app runs — the tectonic uplift under the hydraulic rounds, the
+ * provisional climate and the ice inside the sea-level step, the peoples — and the total is a whole
+ * generation. It used to call the stages one by one beside the engine, without the uplift, without
+ * the ice and its provisional climate and without the peoples, so its total omitted whole stages
+ * and the shares `docs/PERFORMANCE.md` quotes from it were divided by too little.
  */
 class StageProfileTest {
 
@@ -34,48 +30,21 @@ class StageProfileTest {
             val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
                 .atResolution(size, size)
 
-            var terrain: com.cartogenesis.worldgen.pipeline.TerrainResult? = null
-            var plates: com.cartogenesis.worldgen.pipeline.PlateResult? = null
-            var erosion: com.cartogenesis.worldgen.pipeline.ErosionResult? = null
-            var sea: com.cartogenesis.worldgen.pipeline.SeaLevelResult? = null
-            var ocean: com.cartogenesis.worldgen.pipeline.OceanResult? = null
-            var climate: com.cartogenesis.worldgen.pipeline.ClimateResult? = null
-            var rivers: com.cartogenesis.worldgen.pipeline.RiverResult? = null
-            var nations: com.cartogenesis.worldgen.pipeline.NationResult? = null
+            val started = LinkedHashMap<GenerationStage, Long>()
+            val begun = System.nanoTime()
+            WorldGenerationEngine.generateBlocking(config) { stage, _, _ ->
+                started[stage] = System.nanoTime()
+            }
+            val ended = System.nanoTime()
 
+            val stages = started.keys.toList()
             val timings = LinkedHashMap<String, Long>()
-            timings["terrain (noise + FFT)"] = measureTimeMillis {
-                terrain = TerrainStage.generate(config)
+            stages.forEachIndexed { index, stage ->
+                val until = if (index + 1 < stages.size) started.getValue(stages[index + 1]) else ended
+                timings[stage.shortLabel] = (until - started.getValue(stage)) / 1_000_000
             }
-            timings["tectonics"] = measureTimeMillis {
-                plates = PlateStage.generate(config, terrain!!)
-            }
-            timings["erosion"] = measureTimeMillis {
-                erosion = erodeBlocking(config, plates!!.height)
-            }
-            timings["sea level"] = measureTimeMillis {
-                sea = SeaLevelStage.apply(erosion!!.height, config)
-            }
-            timings["ocean currents"] = measureTimeMillis {
-                ocean = OceanStage.generate(config, sea!!)
-            }
-            timings["climate"] = measureTimeMillis {
-                climate = ClimateStage.generate(config, sea!!, ocean!!)
-            }
-            timings["rivers"] = measureTimeMillis {
-                rivers = RiverStage.generate(config, sea!!, climate!!)
-            }
-            timings["realms"] = measureTimeMillis {
-                nations = runBlocking {
-                    NationStage.generate(config, sea!!, climate!!, rivers!!, ocean!!)
-                }
-            }
-            timings["landmarks"] = measureTimeMillis {
-                LandmarkStage.generate(config, sea!!, climate!!, rivers!!, plates!!, nations!!)
-            }
-
-            val total = timings.values.sum().coerceAtLeast(1)
-            println("PROFILE size=$size total=${total}ms")
+            val total = ((ended - begun) / 1_000_000).coerceAtLeast(1)
+            println("PROFILE size=$size total=${total}ms, the whole generation")
             timings.forEach { (name, ms) ->
                 println("PROFILE   %-24s %6d ms  %4.1f%%".format(name, ms, ms * 100.0 / total))
             }

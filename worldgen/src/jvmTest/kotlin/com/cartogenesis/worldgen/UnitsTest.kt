@@ -308,16 +308,11 @@ class UnitsTest : BorrowsSharedWorlds() {
          * How far the sea-level cut may land from the level `WorldScale` declares the shoreline at,
          * in metres.
          *
-         * A thousand. `IsostasyTest.SHORELINE_RESIDUAL_BAR_METRES` carries the same figure and
-         * the derivation, and is where it is shown to bite; in short, this generator's continents
-         * drown a tenth of their own crust where Earth's drown 29%, so the crust puts about half
-         * the world above the datum where the slider asks for 38 and the cut has to come up to
-         * meet it.
-         *
-         * Measured after S2 on these four seeds at 512: +459, +796, +455 and +428 m. Before it the
-         * question could not be asked in metres at all — the field was renormalised to its own
-         * extremes, so this test held a *ratio* inside a factor of 1.7 instead, and the same worlds
-         * read 0.64x to 1.09x of the declared ruler.
+         * A thousand, the same figure as `IsostasyTest.SHORELINE_RESIDUAL_BAR_METRES`, which is
+         * where it is shown to bite and where what it is is set out: a regression pin above the
+         * residuals this generator produces, which the case above prints, and not a derivation.
+         * Before S2 the question could not be asked in metres at all — the field was renormalised
+         * to its own extremes, so this test held a *ratio* inside a factor of 1.7 instead.
          */
         const val SHORELINE_RESIDUAL_METRES = 1_000.0
     }

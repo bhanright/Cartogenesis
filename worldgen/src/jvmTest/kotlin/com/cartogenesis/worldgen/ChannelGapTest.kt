@@ -14,13 +14,20 @@ import org.junit.Assert.assertTrue
  * which has no length in it at all and is not a slope either. So a reach running over a filled flat
  * initiates nothing of its own, and if the mask were the head test alone the map would draw a river
  * in two pieces with the flat between them blank. `ChannelInitiation.channelMask` carries a started
- * channel downstream for exactly that reason, and this is the clause that says the carrying works.
+ * channel downstream for exactly that reason.
  *
  * Two claims. The first is the invariant: no channel cell drains into a land cell that is not
  * channel, open water excepted, because open water is where a channel is *supposed* to stop. The
  * second is that the case is real and the rule is not free — the flats where the true ground does
  * not fall carry channel cells, counted here, and with the downstream rule off every one of them
  * would be a gap.
+ *
+ * What the first can catch is narrower than its wording. The mask is rebuilt here by
+ * `ChannelInitiation.channelMaskOf`, which runs the same carrying rule the invariant restates, so
+ * the clause fails only where that rule missed a cell: where `FlowRouting.drainageOrder` handed it
+ * a cell before one of the cells draining into it. It is a guard on the drainage order the carrying
+ * walks, and on the mask being carried at all, rather than an independent reading of the rivers
+ * the map draws.
  */
 class ChannelGapTest : BorrowsSharedWorlds() {
 

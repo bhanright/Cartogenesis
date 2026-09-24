@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
 import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlin.time.measureTime
 
 /**
@@ -53,7 +54,7 @@ class CoastVarietyAuditTest {
             val shipped = baseConfig(seed, cellsAcross)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
-            val eroded = erodeBlocking(shipped, plates.height)
+            val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
 
             // The rules that live inside the sea stage: same eroded field, one rule off at a time.
             val sameField = listOf(
@@ -71,18 +72,18 @@ class CoastVarietyAuditTest {
 
             // The rules upstream of the cut, each of which needs its own eroded field.
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
-            val lowstandOffField = erodeBlocking(lowstandOff, plates.height)
+            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             report("lowstand off", seed, SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand,
                 cellsAcross, pooled, pooledOctaves, pooledSpread)
 
             val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
-            val erosionOffField = erodeBlocking(erosionOff, plates.height)
+            val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             report("erosion off", seed, SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand,
                 cellsAcross, pooled, pooledOctaves, pooledSpread)
 
             val detailOff = shipped.copy(tectonics = shipped.tectonics.copy(detailAmplitude = 0f))
             val detailOffPlates = PlateStage.generate(detailOff, terrain)
-            val detailOffField = erodeBlocking(detailOff, detailOffPlates.height)
+            val detailOffField = erodeBlocking(detailOff, detailOffPlates.height, upliftRateMmPerYear = detailOffPlates.upliftRateMmPerYear)
             report("plate detail noise off", seed,
                 SeaLevelStage.apply(detailOffField.height, detailOff).isLand,
                 cellsAcross, pooled, pooledOctaves, pooledSpread)
@@ -115,32 +116,49 @@ class CoastVarietyAuditTest {
      * jump flooding, and its run-to-run spread is several hundred milliseconds, so the difference
      * came out at -431 ms on one run and +81 on another. The pass allocates its own arrays and reads
      * nothing but the cut it is handed, so calling it directly measures all of it.
+     *
+     * Each is handed what the stage hands it. The valley fill takes the cut after the enclosure
+     * rule and the drowned-basin drain, which is the stage with the two coast passes and the shelf
+     * switched off; the grading takes what the valley fill leaves. Not the finished cut with only
+     * the grading off, which has already been valley-filled and shelved, so that the fill found its
+     * notches already filled and the grading saw water the shelf had raised. The two passes run in
+     * turn on those inputs are checked to give the stage's own cut without its shelf, cell for cell.
      */
     @Test
     fun `report what the littoral pass costs at 2048`() {
         val cellsAcross = 2048
         val config = baseConfig(718106L, cellsAcross)
-        val control = config.copy(sea = config.sea.copy(littoralGrading = false))
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
-        val eroded = erodeBlocking(config, plates.height)
-        val cut = SeaLevelStage.apply(eroded.height, control)
+        val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+        val drained = SeaLevelStage.apply(
+            eroded.height,
+            config.copy(sea = config.sea.copy(drownedValleyFill = false, littoralGrading = false, shelfWidthKm = 0.0))
+        )
+        val resolved = DrownedValleys.apply(drained, eroded.height, config)
+        val graded = LittoralGrading.apply(resolved, config)
+        val stage = SeaLevelStage.apply(eroded.height, config.copy(sea = config.sea.copy(shelfWidthKm = 0.0)))
+        assertTrue(
+            graded.isLand.contentEquals(stage.isLand) &&
+                graded.relativeElevation.data.contentEquals(stage.relativeElevation.data),
+            "the two passes run on the inputs timed here do not give the stage's own cut"
+        )
 
         repeat(2) {
-            DrownedValleys.apply(cut, eroded.height, config)
-            LittoralGrading.apply(cut, config)
+            DrownedValleys.apply(drained, eroded.height, config)
+            LittoralGrading.apply(resolved, config)
         }
         var valleys = Long.MAX_VALUE
         var littoral = Long.MAX_VALUE
         repeat(5) {
             valleys = minOf(
                 valleys,
-                measureTime { DrownedValleys.apply(cut, eroded.height, config) }
+                measureTime { DrownedValleys.apply(drained, eroded.height, config) }
                     .inWholeMilliseconds
             )
             littoral = minOf(
                 littoral,
-                measureTime { LittoralGrading.apply(cut, config) }
+                measureTime { LittoralGrading.apply(resolved, config) }
                     .inWholeMilliseconds
             )
         }
@@ -169,7 +187,7 @@ class CoastVarietyAuditTest {
             val shipped = baseConfig(seed, cellsAcross)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
-            val eroded = erodeBlocking(shipped, plates.height)
+            val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             val variants = listOf(
                 "shipped" to shipped,
                 "2.0.2 (no coast passes)" to shipped.copy(
@@ -183,7 +201,7 @@ class CoastVarietyAuditTest {
             }
 
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
-            val lowstandOffField = erodeBlocking(lowstandOff, plates.height)
+            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             reportRulers(
                 "lowstand off", seed,
                 SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand, cellsAcross
@@ -202,7 +220,7 @@ class CoastVarietyAuditTest {
             // coast: a curve on a grid is a staircase, and a majority coarsening of a staircase is
             // not the same curve at half the scale.
             val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
-            val erosionOffField = erodeBlocking(erosionOff, plates.height)
+            val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             reportRulers(
                 "erosion off (the floor)", seed,
                 SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand, cellsAcross

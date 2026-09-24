@@ -42,13 +42,17 @@ class PressureWindCostTest {
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /**
-         * A 2048 world's generation, in seconds, as `GenerationSpeedTest` last reported it.
+         * How many pressure fields, each with its wind, one default generation builds.
          *
-         * Quoted rather than measured here so this test stays a measurement of one piece of
-         * arithmetic; the share below is an order-of-magnitude comparison and does not need the
-         * whole pipeline run again to make its point.
+         * Thirteen, counted at the call sites: a climate builds three (the annual field and one
+         * per half-year, `ClimateStage.seasonalFields`), and a default world runs four climates —
+         * the provisional weather the hydraulic rounds cut with, twice (at the first round and
+         * again halfway down, `HydraulicErosion.provisionalWeather`), the glaciation's provisional
+         * snow balance, and the finished climate — which is twelve; and the ocean's wind stress
+         * builds one more (`OceanStage`). The count this replaced was four, the finished climate's
+         * three and the ocean's one.
          */
-        const val WORLD_AT_2048_SECONDS = 180.0
+        const val PRESSURE_FIELDS_PER_WORLD = 13
     }
 
     @Test
@@ -62,24 +66,28 @@ class PressureWindCostTest {
             repeat(MEASURED_RUNS) { run(config, sea, temperature) }
             val millisecondsEach =
                 (System.nanoTime() - started) / 1e6 / MEASURED_RUNS
-            // Three per season plus one for the ocean's stress: what a whole generation pays.
-            val perWorldMs = millisecondsEach * 4
+            val perWorldMs = millisecondsEach * PRESSURE_FIELDS_PER_WORLD
             println(
-                ("PRESSURE WIND COST at %d: %.1f ms for one season's field and wind, %.1f ms for " +
-                    "the four a world builds (%.3f%% of a %.0f s world at 2048)")
-                    .format(
-                        side, millisecondsEach, perWorldMs,
-                        perWorldMs / 1000.0 / WORLD_AT_2048_SECONDS * 100, WORLD_AT_2048_SECONDS
-                    )
+                ("PRESSURE WIND COST at %d: %.1f ms for one field and its wind, %.1f ms for " +
+                    "the $PRESSURE_FIELDS_PER_WORLD a world builds")
+                    .format(side, millisecondsEach, perWorldMs)
             )
             if (side == 2048) {
-                val share = perWorldMs / 1000.0 / WORLD_AT_2048_SECONDS
-                assertTrue(
-                    share < WORTH_A_DEVICE_SHARE,
-                    ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at " +
-                        "which rule 8 asks for a graphics path rather than a measurement")
-                        .format(share * 100, WORTH_A_DEVICE_SHARE * 100)
-                )
+                val worldSeconds = GenerationTime.secondsAt(2048)
+                val share = perWorldMs / 1000.0 / worldSeconds
+                println("PRESSURE WIND COST: %.2f%% of a %.1f s world at 2048, measured in this run".format(share * 100, worldSeconds))
+                // The signature carries no figure, because the figure is a ratio of two timings and
+                // moves from run to run; what is recorded is that the one clause is over its bar.
+                KnownFailures.expect(
+                    "D I-4: the pressure wind is more than a hundredth of a world, so rule 8's exemption is not established",
+                    Signature.unplaced(1, 0.0)
+                ) {
+                    GuardViolation.unless(share < WORTH_A_DEVICE_SHARE, { Signature.unplaced(1, 0.0) }) {
+                        ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at " +
+                            "which rule 8 asks for a graphics path rather than a measurement")
+                            .format(share * 100, WORTH_A_DEVICE_SHARE * 100)
+                    }
+                }
             }
         }
     }

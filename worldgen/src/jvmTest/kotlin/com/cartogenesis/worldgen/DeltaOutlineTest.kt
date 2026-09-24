@@ -73,8 +73,8 @@ class DeltaOutlineTest {
         val isLand: BooleanArray
 
         init {
-            val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
-            height = erodeBlockingLoggingDeposition(config, uplift, log).height
+            val plates = PlateStage.generate(config, TerrainStage.generate(config))
+            height = erodeBlockingLoggingDeposition(config, plates.height, plates.upliftRateMmPerYear, log).height
             isLand = SeaLevelStage.percentileCut(height, config.seaLevel, config.scale).isLand
         }
 
@@ -746,6 +746,12 @@ class DeltaOutlineTest {
          * worst curve. The gap is far wider at the grid the author was looking at, where the square
          * a lacustrine fan takes is forty-nine cells on a side rather than thirteen: see the
          * ledger's 2048 figures.
+         *
+         * So it is a regression pin between a defect and its fix, and not the bar rule 13 asks for,
+         * which is derived from the isotropy of natural outlines; and it reads axis-aligned runs
+         * only, so a straight edge along a diagonal is invisible to it. The derived bar, in every
+         * bearing, is the geometry guard's (`GeometryGuardTest` in `:cartography`, whose layers
+         * include the delta lobes and the lake fans this measures).
          */
         const val STRAIGHT_BAR = 0.012
 
@@ -760,7 +766,8 @@ class DeltaOutlineTest {
          * open water the compass-drawn controls measure at most 3.6% — all of it the rasterising of
          * a smooth curve onto a square grid, since both shapes are exactly symmetric — and the
          * shaped rim measures at least 10.2%. The bar is the geometric midpoint of those two, 1.7
-         * times the worst a compass can manage and 1.7 times under the worst a coast does.
+         * times the worst a compass can manage and 1.7 times under the worst a coast does: a
+         * regression pin between the two populations, not a figure Earth's deltas give.
          */
         const val ASYMMETRY_BAR = 0.06
 

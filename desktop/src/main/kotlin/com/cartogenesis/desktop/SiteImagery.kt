@@ -111,31 +111,29 @@ object SiteImagery {
     /**
      * The band across the top of the page: the hero.
      *
-     * A 2:1 window on the northern continent, which carries in one frame everything the page
-     * claims — a cordillera along its spine, a river system that gathers the whole northern half,
-     * lakes, a coast broken into peninsulas and a long spit, islands offshore, and the west coast
-     * of the next continent with its own lake and snowfield at the right-hand edge.
+     * A 2:1 window on the southern half of the northern continent, which carries in one frame
+     * everything the page claims — the snow-capped range down its middle, rivers draining both
+     * flanks to a south coast of bays and an estuary, lakes in the lowlands either side, and the
+     * continent's east coast turning north at the right-hand edge.
      *
      * Drawn in `MapStyle.NATURAL`, for the colour. The window did not have to move with the style:
-     * what it holds is what that style has most to say about — forest against dry interior, a
-     * rust-coloured range between them, and a cobalt sea around it.
+     * what it holds is what that style has most to say about — forest against a dry belt, a range
+     * between them, and a cobalt sea around it.
      */
-    val BAND = Window(448, 64, 1600, 800)
+    val BAND = Window(1152, 320, 1600, 800)
 
     /**
      * The window the three physical styles are compared in: square, 640 on a side.
      *
-     * The central continent of the 3.0 world, chosen so that the three styles are asked the
-     * questions they answer differently. It holds the north coast and the strait to its south,
-     * the grey range that crosses it, the rivers draining both flanks, and the dry tan interior
-     * on its eastern half — which is where the styles part company, because Atlas and Natural
+     * The northern continent's south-western lowlands, chosen so that the three styles are asked
+     * the questions they answer differently. It holds the dry tan belt that crosses them, the
+     * green country either side of it, the western flank of the range at its right-hand edge and
+     * the south coast below — which is where the styles part company, because Atlas and Natural
      * tint the ground by its climate as well as its height and Schoolroom tints it by height
-     * alone. Three styles agreeing about a green coast would prove nothing. The 2.0 line's window
-     * at (704, 64) sat over the same seed's old northern continent; the 3.0 pipeline redraws the
-     * seed, and that square is now mostly open sea, so the window was re-picked from the contact
-     * sheet before 3.0.0 shipped.
+     * alone. Three styles agreeing about a green coast would prove nothing. Which window each
+     * release has used, and why each moved, is in docs/DESIGN_LEDGER.md.
      */
-    val STYLES_WINDOW = Window(660, 460, 640, 640)
+    val STYLES_WINDOW = Window(1152, 512, 640, 640)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall.
@@ -148,11 +146,12 @@ object SiteImagery {
      *
      * 600 rows of 2048 is a little over fifty degrees of latitude, and these are the fifty that
      * carry the most: the belt where the westerlies give way to the trades runs through the upper
-     * third of the frame, so the Winds panel shows the two blowing opposite ways rather than one of
-     * them filling the panel. Half land and half water, because two of the four layers draw nothing
-     * on land and the other two draw nothing at sea.
+     * half of the frame, so the Winds panel shows the two blowing opposite ways rather than one of
+     * them filling the panel. Land above and water below, the south coast of the northern
+     * continent across the middle, because two of the four layers draw nothing on land and the
+     * other two draw nothing at sea.
      */
-    val LAYERS_WINDOW = Window(200, 500, 480, 600)
+    val LAYERS_WINDOW = Window(2048, 512, 480, 600)
 
     /**
      * The gap between two panels of a strip, in the strip's own pixels.

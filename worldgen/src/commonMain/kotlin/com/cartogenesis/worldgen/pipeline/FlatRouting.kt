@@ -148,6 +148,16 @@ internal object FlatRouting {
      * which keeps the discrete maximum principle the guarantee below rests on, and on square cells
      * they are all one, the stencil this replaced.
      *
+     * The price of an isotropic ground is an anisotropic matrix: on this map's cells a member is
+     * held to the members above and below it 13.6 times as hard as to the ones beside it, and plain
+     * conjugate gradients pay for that in steps: seed 7's largest flat at 512, 1,283 cells, took
+     * 350 of them against the square stencil's 270. So the steps are preconditioned by solving each
+     * column's run of members exactly, its own tridiagonal share of the matrix, which takes the
+     * stiff direction out whole and leaves the solve converging at the pace of the soft one: the
+     * same flat takes 148. The block is symmetric and positive definite, being a principal part of
+     * a matrix that is, so the steps are still conjugate gradients and the answer is the same one
+     * to the tolerance; see [ColumnRuns].
+     *
      * Returns null where the solve produced a non-positive value, which a converged solve cannot
      * (the discrete maximum principle puts every member strictly above the average of its
      * neighbours and so strictly above the entry) and which therefore means it was cut short.
@@ -229,10 +239,17 @@ internal object FlatRouting {
             val cell = members[it]
             1.0 + RAIN_RELIEF * FlowRouting.smoothSeededField(width, cell % width, cell / width, seed xor RAIN_RELIEF_SALT)
         }
-        val direction = residual.copyOf()
+        val runs = ColumnRuns(width, members, memberCount, localIndex, degree, northSouth)
+        val preconditioned = DoubleArray(memberCount)
+        runs.solve(residual, preconditioned)
+        val direction = preconditioned.copyOf()
         val product = DoubleArray(memberCount)
         var residualNorm = 0.0
-        for (member in 0 until memberCount) residualNorm += residual[member] * residual[member]
+        var residualAgainstPreconditioned = 0.0
+        for (member in 0 until memberCount) {
+            residualNorm += residual[member] * residual[member]
+            residualAgainstPreconditioned += residual[member] * preconditioned[member]
+        }
         val stopAt = residualNorm * RESIDUAL_TOLERANCE * RESIDUAL_TOLERANCE
         val mostIterations = MOST_ITERATIONS_FLOOR + (MOST_ITERATIONS_PER_ROOT_CELL * sqrt(memberCount.toDouble())).toInt()
 
@@ -241,24 +258,105 @@ internal object FlatRouting {
             applyLaplacian(direction, product)
             var directionEnergy = 0.0
             for (member in 0 until memberCount) directionEnergy += direction[member] * product[member]
-            if (directionEnergy <= 0.0) break
-            val stepLength = residualNorm / directionEnergy
+            if (directionEnergy <= 0.0 || residualAgainstPreconditioned <= 0.0) break
+            val stepLength = residualAgainstPreconditioned / directionEnergy
             var nextNorm = 0.0
             for (member in 0 until memberCount) {
                 x[member] += stepLength * direction[member]
                 residual[member] -= stepLength * product[member]
                 nextNorm += residual[member] * residual[member]
             }
-            val improvement = nextNorm / residualNorm
+            runs.solve(residual, preconditioned)
+            var nextAgainstPreconditioned = 0.0
+            for (member in 0 until memberCount) nextAgainstPreconditioned += residual[member] * preconditioned[member]
+            val improvement = nextAgainstPreconditioned / residualAgainstPreconditioned
             for (member in 0 until memberCount) {
-                direction[member] = residual[member] + improvement * direction[member]
+                direction[member] = preconditioned[member] + improvement * direction[member]
             }
             residualNorm = nextNorm
+            residualAgainstPreconditioned = nextAgainstPreconditioned
             iteration++
         }
 
         for (member in 0 until memberCount) if (!(x[member] > 0.0)) return null
         return x
+    }
+
+    /**
+     * The preconditioner of [solvePotential]: the flat's matrix with only the north-south couplings
+     * inside each column kept, solved exactly.
+     *
+     * A run is a column's members one under the next, unbroken; each is a tridiagonal system whose
+     * diagonal is the members' own weighted degrees and whose off-diagonal is the north-south
+     * weight, factorised once here by Thomas's elimination and solved once a step. The pivots are
+     * positive because the block is a principal part of a positive definite matrix, and the
+     * elimination is stable on it because every row of it is diagonally dominant: a member's degree
+     * is the sum of all its weights, of which the block holds at most two.
+     */
+    private class ColumnRuns(
+        width: Int,
+        members: IntArray,
+        memberCount: Int,
+        localIndex: IntArray,
+        degree: DoubleArray,
+        private val northSouth: Double
+    ) {
+        /** The members in run order, each run from its northernmost member down. */
+        private val order = IntArray(memberCount)
+
+        /** Where each run starts in [order], and one past the last. */
+        private val runStart: IntArray
+
+        /** Thomas's modified diagonal, per position in [order]. */
+        private val pivot = DoubleArray(memberCount)
+
+        init {
+            fun memberAt(cell: Int): Int {
+                if (cell < 0 || cell >= localIndex.size) return -1
+                val local = localIndex[cell]
+                return if (local in 0 until memberCount) local else -1
+            }
+            val starts = ArrayList<Int>()
+            var placed = 0
+            for (member in 0 until memberCount) {
+                // A run starts at a member with no member directly north of it; a column does not
+                // wrap north-south, so a member in the top row always starts one.
+                if (memberAt(members[member] - width) >= 0) continue
+                starts.add(placed)
+                var here = member
+                while (here >= 0) {
+                    order[placed++] = here
+                    here = memberAt(members[here] + width)
+                }
+            }
+            starts.add(placed)
+            runStart = starts.toIntArray()
+            for (run in 0 until runStart.size - 1) {
+                for (position in runStart[run] until runStart[run + 1]) {
+                    val diagonal = degree[order[position]]
+                    pivot[position] =
+                        if (position == runStart[run]) diagonal
+                        else diagonal - northSouth * northSouth / pivot[position - 1]
+                }
+            }
+        }
+
+        /** Writes the block's answer to [right] into [into]. */
+        fun solve(right: DoubleArray, into: DoubleArray) {
+            for (run in 0 until runStart.size - 1) {
+                val first = runStart[run]
+                val last = runStart[run + 1] - 1
+                // Down the column: each member's equation with the one above it eliminated.
+                for (position in first..last) {
+                    val carried = if (position == first) 0.0 else northSouth * into[order[position - 1]]
+                    into[order[position]] = (right[order[position]] + carried) / pivot[position]
+                }
+                // Back up it: each member's answer with the one below it put back.
+                for (position in last - 1 downTo first) {
+                    into[order[position]] += northSouth / pivot[position] * into[order[position + 1]]
+                }
+            }
+        }
     }
 
     /**

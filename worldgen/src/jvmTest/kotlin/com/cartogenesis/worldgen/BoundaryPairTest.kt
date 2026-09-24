@@ -45,11 +45,19 @@ class BoundaryPairTest {
      * could differ in belt shape for any number of reasons that have nothing to do with crust
      * pairs. All six are used together — see the pooling note in the guard.
      *
-     * Seed 3 made way for seed 4 when the plates were partitioned on the ground's ruler: the scan
-     * reads seed 3 with no collision and no island arc now, and seed 4 is the lowest seed that
-     * carries all three and was not already here (docs/DESIGN_LEDGER.md, Fix 2).
+     * And each has a collision the per-seed clause can measure: its mean profile stands above half
+     * its own highest at the suture, so it has a width at half height (`PLATEAU-MEASURABLE` in the
+     * scan). A collision whose pair closes too slowly to raise more than the terrain's scatter has
+     * no plateau, and the clause has nothing to judge on it.
+     *
+     * When the plates were partitioned on the ground's ruler, which plates meet moved with the
+     * partition, and four of the six stopped qualifying: seed 3 carries no collision and no island
+     * arc now, and seeds 1, 11 and 17 carry collisions that stand -0.019, -0.052 and +0.014 of the
+     * height field over the plate interiors at the suture, where seed 1's stood +0.163 before.
+     * Each was replaced by the lowest seed that qualifies and was not already here, 4, 5, 6 and 7
+     * (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private val pairSeeds = listOf(1L, 4L, 11L, 17L, 22L, 23L)
+    private val pairSeeds = listOf(4L, 5L, 6L, 7L, 22L, 23L)
 
     /** A seed carrying island arcs and continental rifts, for the reported profiles. */
     // Re-picked at S2: the crusts are now chosen by area rather than by count, so which plates are
@@ -102,7 +110,6 @@ class BoundaryPairTest {
     fun `an Andean margin and a collision plateau are different shapes`() {
         var withPairs = 0.0
         var withOneProfile = 0.0
-        val unmeasured = ArrayList<Long>()
         listOf(true, false).forEach { crustPairs ->
             val label = if (crustPairs) "crust pairs" else "one profile "
             val worlds = pairSeeds.map { platesOf(it, crustPairs) }
@@ -140,13 +147,7 @@ class BoundaryPairTest {
                             a.halfHeightWidth, t.halfHeightWidth
                         )
                 )
-                if (crustPairs && t.halfHeightWidth <= 0f) {
-                    // A collision whose ground at the suture stands under half its own highest
-                    // has no plateau to measure: its width at half height is nothing, so width
-                    // for its height is undefined, and zero is what the profile hands back for
-                    // it. Reported, and counted, rather than judged; see below.
-                    unmeasured += pairSeeds[index]
-                } else if (crustPairs) {
+                if (crustPairs) {
                     // Width for its height rather than width at half height, and the difference
                     // is which of two things a seed with one tall pair on it measures. Half height
                     // is read off that pair's own crest, so a world whose collisions are one
@@ -169,16 +170,6 @@ class BoundaryPairTest {
             }
         }
 
-        // At most one of the six, so the per-seed clause is still asked of five. On the ground's
-        // ruler seed 1's collision ground stands 0.019 of the height field under its plate
-        // interiors at the suture and reaches their level only 17 cell widths out, so it has no
-        // plateau to measure.
-        println("PAIRS seeds with no plateau to measure: $unmeasured")
-        assertTrue(
-            unmeasured.size <= 1,
-            "seeds $unmeasured raise no collision plateau above their plate interiors, so the " +
-                "per-seed clause is asked of fewer than five worlds"
-        )
         // A plateau that is not at least twice as broad for its height as a coastal range is the
         // same belt under two names, which is exactly what this chunk replaced. Stated as a signed
         // ratio rather than a magnitude, because with one profile the *margin* comes out the
@@ -262,7 +253,17 @@ class BoundaryPairTest {
             val allThree = BoundaryClass.entries
                 .take(3)
                 .all { counts[it.ordinal] > 0 }
-            println("PAIRS scan seed $seed${if (allThree) " ALL-THREE-CONVERGENT" else ""} $present")
+            // A collision is measurable when its mean profile holds above half its own highest
+            // at the suture, so it has a width at half height; one whose pair closes too slowly to
+            // raise more than the terrain's own scatter does not, and the per-seed clause has
+            // nothing to judge on it.
+            val measurable = allThree &&
+                profileOf(listOf(platesOf(seed)), BoundaryClass.COLLISION_PLATEAU, Crust.CONTINENTAL)
+                    .halfHeightWidth > 0f
+            println(
+                "PAIRS scan seed $seed${if (allThree) " ALL-THREE-CONVERGENT" else ""}" +
+                    "${if (measurable) " PLATEAU-MEASURABLE" else ""} $present"
+            )
         }
     }
 

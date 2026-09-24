@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * A step north or south is half as long on the ground as a step east or west, so a router that
  * weighs every orthogonal step alike reads a north-south slope at half its gradient and sends
  * water toward the rows: on a plane falling at 45 degrees on the ground it routed at 14 (Audit III's
- * B-D2 and Astra's 2.1, and the X1d row in `docs/TODO.md`). Two operators carry that ruler, and each
+ * B-D2 and the X1d row in `docs/TODO.md`). Two operators carry that ruler, and each
  * is read here on ground built so the right answer is known: the facet rule on planes at a dozen
  * bearings, and the potential across a raised flat on a flat round on the ground.
  */

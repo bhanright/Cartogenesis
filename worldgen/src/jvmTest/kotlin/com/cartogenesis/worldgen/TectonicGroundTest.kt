@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * the grid's axes into whatever it shapes. Each case here lays a synthetic feature at several
  * bearings on the ground — a boundary, a crust edge, two seeds, a drift, a rift, an old belt — hands
  * it to the operator the stage itself runs, and reads the answer back in kilometres. Audit III's
- * A-D2, D7 and R13-6 and Astra's 1.1 and 1.3 are the findings; `docs/DESIGN_LEDGER.md` has the row.
+ * A-D2, D7 and R13-6 are the findings; `docs/DESIGN_LEDGER.md` has the row.
  */
 class TectonicGroundTest {
 

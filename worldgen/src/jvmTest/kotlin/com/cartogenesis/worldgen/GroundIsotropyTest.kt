@@ -69,7 +69,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         println("ISOTROPY the four worlds together: ratio %.3f, the log of which may stand %.3f from nothing".format(pooled, pooledBar))
         KnownFailures.expect(
             INCISION_CAPPED_PER_STEP,
-            "seed 7 1.33, seed 42 1.42, seed 1234 1.38, seed 99 1.37, together 1.38"
+            "seed 7 1.32, seed 42 1.41, seed 1234 1.41, seed 99 1.41, together 1.39"
         ) {
             val past = ratios.indices.filter { abs(ln(ratios[it].ratio)) > SPREADS * ratioSpread(ratios[it].lengthKm) }
             if (past.isNotEmpty() || abs(ln(pooled)) > pooledBar) {

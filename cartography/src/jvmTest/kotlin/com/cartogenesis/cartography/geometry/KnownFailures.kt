@@ -102,8 +102,8 @@ internal class InsufficientSample(message: String) : AssertionError(message)
  * about colours, a codec or a scale bar has no place on the grid, so its signature is the text of
  * its finding. A clause throws this only where the assertion it re-arms has failed, and
  * [KnownFailures.expect] catches it the way it catches a [GeometryViolation], and nothing else.
- * `:desktop`'s and `:ui`'s tests, which cannot see this module's, keep twins of it and of the
- * helper that behave the same way to the letter.
+ * `:worldgen`'s, `:desktop`'s and `:ui`'s tests, which cannot see this module's, keep twins of it
+ * and of the helper that behave the same way to the letter; a change here is made in all four.
  */
 internal class RecordedViolation(message: String, val signature: String) : AssertionError(message)
 

@@ -32,7 +32,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # T1: -i (info logging) makes each test's println output — including WorldFingerprintTest's
+      # T1: -i (info logging) makes each test's println output — including CrossPlatformFingerprintTest's
       # `FINGERPRINT` lines — appear in the console of this one run, so the comparison step below
       # can read it back rather than paying for a second `--rerun-tasks` run of the same tests.
       # That took CI from three engine test runs (JVM, Wasm, and a rerun of each for the

@@ -169,12 +169,13 @@ internal object EarthLikeness {
     const val BANDS_EITHER_SIDE_OF_A_MODE = 1
 
     /**
-     * Box sizes the coastline is counted over, in cells: three octaves.
+     * Box sizes the coastline is counted over, in cell widths of ground: three octaves.
      *
      * Not starting at one cell, where every box holding coast is its own box and the count is the
      * coast's length in cells rather than a measure of it, and not going past a sixteenth of the
      * grid, where a whole continent fits in one box. The same three at every resolution, so the
      * number answers "how crinkled is this line on its own grid" and can be compared between them.
+     * A box is square on the ground, as many rows tall as make its width: see [coastlineBoxCount].
      */
     val COASTLINE_BOX_SIZES = intArrayOf(4, 8, 16)
 
@@ -282,7 +283,9 @@ internal object EarthLikeness {
             world.config.scale.squareKilometresPerCell(cellsAcross, cellsDown)
 
         val hypsometry = hypsometryOf(world)
-        val coastline = coastlineBoxCount(world.sea.isLand, cellsAcross, cellsDown)
+        val coastline = coastlineBoxCount(
+            world.sea.isLand, cellsAcross, cellsDown, world.config.cellHeightInCellWidths
+        )
 
         // The drainage area of every cell, in cells: the engine's own accumulation over the
         // engine's own D8 tree, with each cell contributing itself. Hack's law and the channel
@@ -569,15 +572,25 @@ internal object EarthLikeness {
      * shoreline crosses is a box with something on both sides of it, at every size, which is the
      * divider method on a grid. Boxes tile from the left edge; the grid wraps in x and its width is
      * a power of two, so every box size here divides it and no box straddles the seam.
+     *
+     * A box is square on the ground: [boxSizes] cell widths across and as many rows down as make
+     * the same length, twice as many on this project's grids, whose rows are half as tall as their
+     * columns are wide. Mandelbrot's figure is a property of the coast on the ground, and a box
+     * square in cells is twice as wide as it is tall there: counted in those, a coast isotropic on
+     * the ground reads 0.06 smoother pooled over the four standard worlds than the same coast
+     * counted in boxes square on the ground (docs/DESIGN_LEDGER.md, Fix 2).
      */
     fun coastlineBoxCount(
         isLand: BooleanArray,
         cellsAcross: Int,
         cellsDown: Int,
+        /** `cellHeightKm / cellWidthKm`, so a box can be as tall on the ground as it is wide. */
+        cellHeightInCellWidths: Double,
         boxSizes: IntArray = COASTLINE_BOX_SIZES
     ): BoxCount {
         val boxes = LongArray(boxSizes.size)
         boxSizes.forEachIndexed { sizeIndex, size ->
+            val rowsDown = kotlin.math.round(size / cellHeightInCellWidths).toInt().coerceAtLeast(1)
             var crossed = 0L
             var boxTop = 0
             while (boxTop < cellsDown) {
@@ -586,7 +599,7 @@ internal object EarthLikeness {
                     var sawLand = false
                     var sawWater = false
                     var row = boxTop
-                    while (row < min(boxTop + size, cellsDown) && !(sawLand && sawWater)) {
+                    while (row < min(boxTop + rowsDown, cellsDown) && !(sawLand && sawWater)) {
                         var column = boxLeft
                         while (column < min(boxLeft + size, cellsAcross)) {
                             if (isLand[row * cellsAcross + column]) sawLand = true else sawWater = true
@@ -598,7 +611,7 @@ internal object EarthLikeness {
                     if (sawLand && sawWater) crossed++
                     boxLeft += size
                 }
-                boxTop += size
+                boxTop += rowsDown
             }
             boxes[sizeIndex] = crossed
         }

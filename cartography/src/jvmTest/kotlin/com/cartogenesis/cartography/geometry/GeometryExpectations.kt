@@ -48,7 +48,12 @@ internal object GeometryExpectations {
         finding("isotherms", Detector.ISOTROPY, F.ISOTHERMS_ALONG_ROWS)
         finding("isotherms", Detector.FACETS, F.ISOTHERMS_ALONG_ROWS)
         finding("isohyets", Detector.CREASES, F.ISOHYET_CREASE)
-        for (detector in listOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES)) {
+        // The rectangle and the square corners are the same banding seen by two more detectors: on
+        // seed 7 at 512, a band of anomaly 2,232 km long and 132 km deep along a row, its ends
+        // turning square where the band meets the one beside it (docs/DESIGN_LEDGER.md, Fix 2).
+        for (detector in listOf(
+            Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.RECTANGLE, Detector.RIGHT_ANGLES
+        )) {
             finding("sea temperature anomaly", detector, F.ANOMALY_ALONG_ROWS)
         }
     }

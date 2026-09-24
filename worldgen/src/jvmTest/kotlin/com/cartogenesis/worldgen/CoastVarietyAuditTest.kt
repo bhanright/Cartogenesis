@@ -242,10 +242,14 @@ class CoastVarietyAuditTest {
         reportRulers("a plain disc", 0L, disc, cellsAcross)
     }
 
+    /** How tall a row is in cell widths on the square grids this audit draws its worlds at. */
+    private fun rowHeightOf(cellsAcross: Int): Double =
+        WorldGenConfig(width = cellsAcross, height = cellsAcross).cellHeightInCellWidths
+
     private fun reportRulers(name: String, seed: Long, isLand: BooleanArray, cellsAcross: Int) {
         val rulers = listOf(1, 2, 4, 8, 16)
         val lengths = rulers.map {
-            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it)
+            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it, rowHeightOf(cellsAcross))
         }
         val octaves = (0 until 4).map {
             CoastRoughness.richardsonDimension(lengths[it], lengths[it + 1])
@@ -270,7 +274,7 @@ class CoastVarietyAuditTest {
         pooledSpread: MutableMap<String, CoastRoughness.Spread>
     ) {
         val octaves = CoastRoughness.boundaryBoxCount(isLand, cellsAcross, cellsAcross)
-        val three = CoastRoughness.coastlineBoxCount(isLand, cellsAcross, cellsAcross)
+        val three = CoastRoughness.coastlineBoxCount(isLand, cellsAcross, cellsAcross, rowHeightOf(cellsAcross))
         val spread = CoastRoughness.spreadOfCoast(isLand, cellsAcross, cellsAcross)
         val edges = CoastRoughness.shorelineEdges(isLand, cellsAcross, cellsAcross)
         println(

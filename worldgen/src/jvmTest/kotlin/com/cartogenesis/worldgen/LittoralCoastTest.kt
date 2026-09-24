@@ -79,9 +79,9 @@ class LittoralCoastTest {
     }
 
     /** One stretch of the ruler table: the coast measured at one cell and over four to sixteen. */
-    private class Rulers(isLand: BooleanArray, cellsAcross: Int) {
+    private class Rulers(isLand: BooleanArray, cellsAcross: Int, cellHeightInCellWidths: Double) {
         val lengths = RULERS.map {
-            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it)
+            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it, cellHeightInCellWidths)
         }
         val atTheCell = CoastRoughness.richardsonDimension(lengths[0], lengths[1])
         val overTheCoarse =
@@ -124,9 +124,10 @@ class LittoralCoastTest {
         val control = ArrayList<Rulers>()
         val ceiling = ArrayList<Rulers>()
         cuts.forEach { (seed, cut) ->
-            val gradedSeed = Rulers(cut.graded.isLand, cellsAcross)
-            val controlSeed = Rulers(cut.control.isLand, cellsAcross)
-            val ceilingSeed = Rulers(cut.everyNotchFilled.isLand, cellsAcross)
+            val rowHeight = cut.config.cellHeightInCellWidths
+            val gradedSeed = Rulers(cut.graded.isLand, cellsAcross, rowHeight)
+            val controlSeed = Rulers(cut.control.isLand, cellsAcross, rowHeight)
+            val ceilingSeed = Rulers(cut.everyNotchFilled.isLand, cellsAcross, rowHeight)
             println(
                 ("COAST seed %d: at the cell %.3f against %.3f over four to sixteen, excess %.3f; " +
                     "2.0.2 %.3f against %.3f, excess %.3f; every notch filled, excess %.3f")
@@ -215,10 +216,11 @@ class LittoralCoastTest {
         val controlCoarse = ArrayList<Double>()
         val complaints = ArrayList<String>()
         cuts.forEach { (seed, cut) ->
-            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cellsAcross, cellsAcross)
-            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cellsAcross, cellsAcross)
-            val gradedRuler = Rulers(cut.graded.isLand, cellsAcross).overTheCoarse
-            val ungradedRuler = Rulers(cut.control.isLand, cellsAcross).overTheCoarse
+            val rowHeight = cut.config.cellHeightInCellWidths
+            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cellsAcross, cellsAcross, rowHeight)
+            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cellsAcross, cellsAcross, rowHeight)
+            val gradedRuler = Rulers(cut.graded.isLand, cellsAcross, cut.config.cellHeightInCellWidths).overTheCoarse
+            val ungradedRuler = Rulers(cut.control.isLand, cellsAcross, cut.config.cellHeightInCellWidths).overTheCoarse
             println(
                 ("COAST seed %d: over four to sixteen cells, by ruler %.3f graded against %.3f " +
                     "for 2.0.2; by M1's box count %.3f against %.3f")

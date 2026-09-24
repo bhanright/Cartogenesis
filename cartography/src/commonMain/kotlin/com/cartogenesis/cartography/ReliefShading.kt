@@ -393,8 +393,8 @@ internal object ReliefShading {
      * Re-derived rather than argued with, because the figure is defined as that
      * median and for no other reason — and re-derived rather than absorbed into the drift bar,
      * because leaving it stale would draw every map one and a half percent off the tone the lamp
-     * set, which is the one thing this constant exists to hold still. Fix 2 moved it to 0.9362,
-     * with both the ground and the reading of it: the world is shaped on the ground's ruler, and a
+     * set, which is the one thing this constant exists to hold still. It moved to 0.9362 with both
+     * the ground and the reading of it: the world is shaped on the ground's ruler, and a
      * slope facing north or south is lit as steep as it stands rather than as half that, so
      * ordinary country catches less light (docs/DESIGN_LEDGER.md, Fix 2).
      */

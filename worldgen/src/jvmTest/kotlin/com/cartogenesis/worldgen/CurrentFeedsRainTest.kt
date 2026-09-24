@@ -12,32 +12,31 @@ import kotlin.test.assertTrue
  * [com.cartogenesis.worldgen.pipeline.OceanResult.anomaly] rather than by latitude alone, so a
  * cold upwelling current starves the coast it washes and a warm one feeds it.
  *
- * Seed 26 (already used by [AbsoluteRainfallTest]'s monsoon re-measurement) carries a subtropical
- * west coast in the southern hemisphere, roughly 27-32 degrees, whose offshore water sits 0.8-1.8
- * degrees colder than its latitude's own mean — the model's equivalent of the Humboldt or Benguela
- * current, the belt's own descending dry air holding it near the aridity line already (three of
- * its cells, at 152-221mm, are already [Biome.DESERT]). The gyres this world solves turn out to be
- * mirrored about the equator, the way Earth's are: at the same 27-33 degrees north, it is the
- * *east* coasts that carry the warm, poleward-flowing western-boundary current (the Gulf Stream
- * and Kuroshio's role), so that is where the guard's warm-current comparison is drawn from.
+ * The sample is a world with a subtropical west coast in the southern hemisphere, 27 to 33
+ * degrees, whose offshore water sits at least 0.8 degrees colder than its latitude's own mean — the
+ * model's equivalent of the Humboldt or Benguela current — and an east coast at the same latitudes
+ * north of the equator washed by a warm, poleward-flowing western-boundary current (the Gulf Stream
+ * and Kuroshio's role): the gyres this world solves are mirrored about the equator, the way Earth's
+ * are. It is the first seed counting up from 1 whose world carries at least ten cells of the one
+ * coast and five of the other, the two floors the guard itself asserts. That was seed 26, found by
+ * inspection, until the ground's ruler redrew every continent and left seed 26 five cells of cold
+ * coast; the same criterion, run over seeds 1 to 40, now finds seed 1 first (docs/DESIGN_LEDGER.md,
+ * Fix 2).
  */
 class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
     private companion object {
-        const val SEED = 26L
-        // The cold-current stretch: bounds wide enough to catch the whole coastal run found by
-        // inspection (`ScratchCurrentScanTest`, not kept - see the report), narrow enough that it
-        // does not wander into a different current regime.
+        const val SEED = 1L
+        // The cold-current stretch: bounds wide enough to catch a whole subtropical coastal run,
+        // narrow enough that it does not wander into a different current regime.
         const val COLD_LAT_LO = -33f
         const val COLD_LAT_HI = -27f
         const val COLD_ANOMALY_MAX = -0.8f
         // The warm-current stretch, at the same distance from the equator in the opposite
-        // hemisphere: the belts are symmetric about the equator, and this world's gyres turn out
-        // to be too (a northern subtropical gyre's warm western-boundary current sits on its
-        // *east* coast, mirroring the cold eastern-boundary current on the southern gyre's *west*
-        // coast at the same |latitude|) - checked directly rather than assumed, since a scan for a
-        // same-hemisphere warm counterpart a few degrees away found only two cells above 0.1
-        // degrees of anomaly south of the equator in this world.
+        // hemisphere: the belts are symmetric about the equator, and so are the gyres (a northern
+        // subtropical gyre's warm western-boundary current sits on its *east* coast, mirroring the
+        // cold eastern-boundary current on the southern gyre's *west* coast at the same
+        // |latitude|).
         const val WARM_LAT_LO = 27f
         const val WARM_LAT_HI = 33f
         const val WARM_ANOMALY_MIN = 0.15f

@@ -44,8 +44,12 @@ class BoundaryPairTest {
      * the comparison is only honest if both belts come out of the same world, since two worlds
      * could differ in belt shape for any number of reasons that have nothing to do with crust
      * pairs. All six are used together — see the pooling note in the guard.
+     *
+     * Seed 3 made way for seed 4 when the plates were partitioned on the ground's ruler: the scan
+     * reads seed 3 with no collision and no island arc now, and seed 4 is the lowest seed that
+     * carries all three and was not already here (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private val pairSeeds = listOf(1L, 3L, 11L, 17L, 22L, 23L)
+    private val pairSeeds = listOf(1L, 4L, 11L, 17L, 22L, 23L)
 
     /** A seed carrying island arcs and continental rifts, for the reported profiles. */
     // Re-picked at S2: the crusts are now chosen by area rather than by count, so which plates are
@@ -98,6 +102,7 @@ class BoundaryPairTest {
     fun `an Andean margin and a collision plateau are different shapes`() {
         var withPairs = 0.0
         var withOneProfile = 0.0
+        val unmeasured = ArrayList<Long>()
         listOf(true, false).forEach { crustPairs ->
             val label = if (crustPairs) "crust pairs" else "one profile "
             val worlds = pairSeeds.map { platesOf(it, crustPairs) }
@@ -135,7 +140,13 @@ class BoundaryPairTest {
                             a.halfHeightWidth, t.halfHeightWidth
                         )
                 )
-                if (crustPairs) {
+                if (crustPairs && t.peak <= 0f) {
+                    // A collision whose ground stands nowhere above the plate interior has no
+                    // plateau to measure: width for its height is undefined, and zero is what the
+                    // profile hands back for it. Reported, and counted, rather than judged; see
+                    // below.
+                    unmeasured += pairSeeds[index]
+                } else if (crustPairs) {
                     // Width for its height rather than width at half height, and the difference
                     // is which of two things a seed with one tall pair on it measures. Half height
                     // is read off that pair's own crest, so a world whose collisions are one
@@ -158,6 +169,15 @@ class BoundaryPairTest {
             }
         }
 
+        // At most one of the six, so the per-seed clause is still asked of five. On the ground's
+        // ruler seed 1's collision ground stands below its plate interiors at every distance the
+        // profile reads, 0.019 of the height field under them at the suture, so it has no plateau.
+        println("PAIRS seeds with no plateau to measure: $unmeasured")
+        assertTrue(
+            unmeasured.size <= 1,
+            "seeds $unmeasured raise no collision plateau above their plate interiors, so the " +
+                "per-seed clause is asked of fewer than five worlds"
+        )
         // A plateau that is not at least twice as broad for its height as a coastal range is the
         // same belt under two names, which is exactly what this chunk replaced. Stated as a signed
         // ratio rather than a magnitude, because with one profile the *margin* comes out the

@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
@@ -18,9 +19,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.math.ceil
@@ -375,11 +378,74 @@ class ChromeGalleryTest {
         val wide = textsInWideWindow()
         val phone = textsInPhoneSheet()
 
-        val missingFromWide = PANEL_CONTROLS.filterNot { it in wide }
-        val missingFromPhone = PANEL_CONTROLS.filterNot { it in phone }
-        println("CHROME wide window shows ${wide.size} strings, phone sheet ${phone.size}")
-        assertTrue(missingFromWide.isEmpty(), "the wide panel no longer shows: $missingFromWide")
-        assertTrue(missingFromPhone.isEmpty(), "the phone's sheet cannot reach: $missingFromPhone")
+        // Read inside the panel only, and counted: "Realms" is both the Peoples knob and an export
+        // chip, so the panel has to show it twice, and a knob dropped while its word survives
+        // elsewhere is a count one short.
+        val wanted = (PANEL_CONTROLS + EXPORT_CHIPS).groupingBy { it }.eachCount()
+        fun missing(shown: List<String>): Map<String, String> {
+            val counts = shown.groupingBy { it }.eachCount()
+            return wanted.filter { (word, times) -> (counts[word] ?: 0) < times }
+                .mapValues { (word, times) -> "${counts[word] ?: 0} of $times" }
+        }
+        println("CHROME wide panel shows ${wide.size} strings, phone sheet ${phone.size}")
+        assertTrue(missing(wide).isEmpty(), "the wide panel no longer shows: ${missing(wide)}")
+        assertTrue(missing(phone).isEmpty(), "the phone's sheet cannot reach: ${missing(phone)}")
+    }
+
+    /**
+     * The three menus of the strip, folded into one button on a phone, with nothing dropped on the
+     * way: every item File, View and Help offer at 1440x900 is an item of the phone's folded menu.
+     * Read off the menus as they open, by the first text of every item that can be pressed, since
+     * the two arrangements draw the same lists (`Menus`) through two different composables.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `the phone's folded menu offers every item the three menus do`() {
+        val strip = listOf("File", "View", "Help").flatMap { title ->
+            var items: List<String> = emptyList()
+            runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
+                setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
+                waitForIdle()
+                // The strip's title and nothing else: the toolbar's view menu reads "View" too,
+                // with the view it is showing beside it.
+                onNode(SemanticsMatcher("the menu strip's $title") { node ->
+                    node.config.getOrNull(SemanticsProperties.Text)?.map { it.text } == listOf(title)
+                }).performClick()
+                waitForIdle()
+                items = pressableItems(onAllNodes(isRoot()).fetchSemanticsNodes().last())
+            }
+            assertTrue(items.isNotEmpty(), "the $title menu opened with nothing in it")
+            items
+        }
+        var folded: List<String> = emptyList()
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
+            val platform = TouchPlatform()
+            setContent {
+                CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
+                    CartogenesisApp(platform)
+                }
+            }
+            waitForIdle()
+            onNodeWithContentDescription("Menu").performClick()
+            waitForIdle()
+            folded = pressableItems(onAllNodes(isRoot()).fetchSemanticsNodes().last())
+        }
+        val dropped = strip.filterNot { it in folded }
+        println("CHROME the strip's menus offer ${strip.size} items and the folded menu ${folded.size}")
+        assertTrue(dropped.isEmpty(), "the phone's folded menu drops $dropped")
+    }
+
+    /** The first text of every node under [layer] that can be pressed: a menu's items, by name. */
+    private fun pressableItems(layer: SemanticsNode): List<String> {
+        val items = ArrayList<String>()
+        fun walk(node: SemanticsNode) {
+            if (node.config.getOrNull(SemanticsActions.OnClick) != null) {
+                node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.let { items += it }
+            }
+            node.children.forEach(::walk)
+        }
+        walk(layer)
+        return items
     }
 
     /**
@@ -880,23 +946,26 @@ class ChromeGalleryTest {
         return (idle ?: error("no frame")) to (busy ?: error("no frame"))
     }
 
-    /** Every string in the semantics tree of a 1440x900 window with all six sections unrolled. */
+    /**
+     * Every string the panel of a 1440x900 window shows with all six sections unrolled, once for
+     * each time it is shown.
+     */
     @OptIn(ExperimentalTestApi::class)
-    private fun textsInWideWindow(): Set<String> {
-        var found: Set<String> = emptySet()
+    private fun textsInWideWindow(): List<String> {
+        var found: List<String> = emptyList()
         runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
             waitForIdle()
             unrollEverySection()
-            found = allText()
+            found = panelTexts()
         }
         return found
     }
 
     /** The same, at a phone's size, with the sheet pulled up and every section unrolled. */
     @OptIn(ExperimentalTestApi::class)
-    private fun textsInPhoneSheet(): Set<String> {
-        var found: Set<String> = emptySet()
+    private fun textsInPhoneSheet(): List<String> {
+        var found: List<String> = emptyList()
         runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = TouchPlatform()
             setContent {
@@ -908,9 +977,28 @@ class ChromeGalleryTest {
             onNodeWithText("Settings").performClick()
             waitForIdle()
             unrollEverySection()
-            found = allText()
+            found = panelTexts()
         }
         return found
+    }
+
+    /**
+     * Every piece of text inside the panel — the column in a wide window, the sheet on a phone —
+     * with repeats kept: the deepest node that holds both the header's seed field and the last
+     * section's heading, and everything under it. The legend, the toolbar and the canvas are
+     * outside it, so a word they share with a knob cannot stand in for the knob.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.panelTexts(): List<String> {
+        fun texts(node: SemanticsNode): List<String> =
+            (node.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty()) +
+                listOfNotNull(node.config.getOrNull(SemanticsProperties.EditableText)?.text) +
+                node.children.flatMap(::texts)
+        fun holdsBoth(node: SemanticsNode): Boolean = texts(node).let { "Seed" in it && "Cartography" in it }
+        var panel = onRoot().fetchSemanticsNode()
+        assertTrue(holdsBoth(panel), "the window shows no panel with a seed field and a Cartography section")
+        while (true) panel = panel.children.firstOrNull(::holdsBoth) ?: break
+        return texts(panel)
     }
 
     /**
@@ -959,8 +1047,9 @@ class ChromeGalleryTest {
         val bitmap = node.captureToImage().asSkiaBitmap()
         val png = Image.makeFromBitmap(bitmap).encodeToData(EncodedImageFormat.PNG)!!.bytes
         val pixels = bitmap.readPixels()!!
-        var hash = 17
-        for (k in pixels.indices step 997) hash = hash * 31 + pixels[k]
+        // Every byte: a sample of every 997th left a change smaller than the gap between samples,
+        // a label or a chip, able to hash the same as the window without it.
+        val hash = pixels.contentHashCode()
         val colours = HashSet<Int>()
         // Every hundredth pixel, packed: enough to tell a drawn window from a filled one.
         for (k in 0 until pixels.size - 4 step 400) {
@@ -1011,14 +1100,21 @@ class ChromeGalleryTest {
 /**
  * The desktop, told to start small.
  *
- * Everything real — the library on disk, the graphics device, the export dialog — is the desktop's
- * own, so the shot shows the interface a reader actually gets, including whatever the machine says
- * about its graphics card. Only the working resolution is overridden, because 1024 is a slow world
- * to wait for in a test and 512 photographs identically.
+ * The graphics device and the export dialog are the desktop's own, so the shot shows the interface
+ * a reader actually gets, including whatever the machine says about its graphics card. The working
+ * resolution is overridden, because 1024 is a slow world to wait for in a test and 512 photographs
+ * identically; and the two things that belong to the machine rather than to the build are withheld,
+ * so that what a run shows and how long it takes do not depend on whose machine it is: the reader's
+ * own library ([EmptyWorldLibrary]), and the card's ice sheet, which a generation takes whatever the
+ * acceleration switch says (Audit III, G-D1), where with the switch off every other stage runs on
+ * the processor on every machine.
  */
 private class ChromePlatform(private val desktop: Platform = DesktopPlatform()) :
     Platform by desktop {
     override val defaultResolution: Int = 512
+    override val library: WorldLibrary = EmptyWorldLibrary
+    override val libraryLocation: String = EmptyWorldLibrary.LOCATION
+    override val iceAccelerator: IceSheetAccelerator? = null
 }
 
 /**
@@ -1028,10 +1124,14 @@ private class ChromePlatform(private val desktop: Platform = DesktopPlatform()) 
  * targets — which the theme takes from the pointer rather than from the width, so photographing the
  * arrangement without also reporting a coarse pointer would photograph a phone-shaped window drawn
  * with a mouse's 13 dp slider thumbs. A delegating override rather than a second platform, so
- * everything else about the shot is still the real desktop's answers.
+ * everything else about the shot is still the real desktop's answers, less the library and the ice
+ * sheet [ChromePlatform] withholds for the reason it gives.
  */
 private class TouchPlatform(private val desktop: Platform = DesktopPlatform()) :
     Platform by desktop {
     override val defaultResolution: Int = 512
     override val coarsePointer: Boolean = true
+    override val library: WorldLibrary = EmptyWorldLibrary
+    override val libraryLocation: String = EmptyWorldLibrary.LOCATION
+    override val iceAccelerator: IceSheetAccelerator? = null
 }

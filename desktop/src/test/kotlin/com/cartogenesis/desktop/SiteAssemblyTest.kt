@@ -1,8 +1,6 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.ColorVision
-import com.cartogenesis.cartography.MapStyle
-import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,18 +24,6 @@ import kotlin.test.fail
 class SiteAssemblyTest {
 
     private companion object {
-        /**
-         * The counting words the page writes its tallies in, indexed by the number they mean.
-         *
-         * The page says "Seventeen for the window" rather than "17 for the window" because it is
-         * prose, so a guard that wants to compare that with `ThemeChoice.entries.size` has to
-         * spell the numbers somewhere. Here, once, rather than in the assertion.
-         */
-        val NUMBER_WORDS = listOf(
-            "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
-            "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
-            "Eighteen", "Nineteen", "Twenty"
-        )
 
         /**
          * WCAG 2.1 AA for body text (1.4.3), the bar `SitePaletteContrastTest` holds the rest of
@@ -45,7 +31,97 @@ class SiteAssemblyTest {
          * the line under a band's name is small text by any measure.
          */
         const val AA = 4.5
+
+        /**
+         * How far a decoded pixel of a hairline may sit from the divider's brightness, in levels
+         * of Rec. 601 luma.
+         *
+         * Brightness and not colour, because the figures are lossy WebP, which keeps brightness at
+         * every pixel and colour at every second one: a two-pixel line of the divider's brass
+         * between two dark bands decodes as #7C7153, 45 levels bluer than it was drawn, with its
+         * brightness within one level. Measured on the assembled strips, both ways round: within 8
+         * levels every divider line keeps 0.92 of its length or more, and no other line more than
+         * 0.29. A calibration on the figures as built, not a figure of the codec's.
+         */
+        const val DIVIDER_LUMA_TOLERANCE = 8.0
+
+        /**
+         * The share of a line's pixels within [DIVIDER_LUMA_TOLERANCE] of the divider's brightness
+         * for the line to be part of a hairline: most of it, which sits between the 0.92 the
+         * dividers keep and the 0.29 no line of a map or a band reaches.
+         */
+        const val DIVIDER_SHARE = 0.5
+
+        /**
+         * The fewest colours, at five bits a channel, the map in a panel can hold: a panel of one
+         * flat colour decodes to one after lossy compression, and the strips' panels as built to
+         * between six hundred and three and a half thousand.
+         */
+        const val LEAST_COLOURS_IN_A_MAP = 32
     }
+
+    /** A WebP decoded through Skia as ARGB, row after row. */
+    private fun decodedPixels(file: File): IntArray {
+        val image = org.jetbrains.skia.Image.makeFromEncoded(file.readBytes())
+        val bitmap = org.jetbrains.skia.Bitmap()
+        bitmap.allocPixels(
+            org.jetbrains.skia.ImageInfo.makeS32(image.width, image.height, org.jetbrains.skia.ColorAlphaType.UNPREMUL)
+        )
+        check(image.readPixels(bitmap)) { "could not read pixels back from ${file.name}" }
+        val bytes = bitmap.readPixels() ?: error("no pixels in ${file.name}")
+        bitmap.close()
+        image.close()
+        // Skia's S32 is BGRA in memory on this platform.
+        return IntArray(bytes.size / 4) { i ->
+            val at = i * 4
+            (bytes[at + 2].toInt() and 0xFF shl 16) or (bytes[at + 1].toInt() and 0xFF shl 8) or
+                (bytes[at].toInt() and 0xFF)
+        }
+    }
+
+    /** Rec. 601 luma, the brightness lossy WebP stores at every pixel. */
+    private fun luma(argb: Int): Double =
+        0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)
+
+    /**
+     * The hairlines across a strip: runs of whole lines — columns for panels laid across, rows for
+     * panels laid down — most of whose pixels are as bright as [SiteImagery.DIVIDER_COLOUR], each
+     * run one hairline.
+     */
+    private fun dividerRules(pixels: IntArray, width: Int, height: Int, layout: SiteImagery.Layout): List<IntRange> {
+        val across = layout == SiteImagery.Layout.ACROSS
+        val lines = if (across) width else height
+        val length = if (across) height else width
+        val dividerLuma = luma(SiteImagery.DIVIDER_COLOUR)
+        fun near(argb: Int): Boolean = kotlin.math.abs(luma(argb) - dividerLuma) <= DIVIDER_LUMA_TOLERANCE
+        val isRule = BooleanArray(lines) { line ->
+            val matching = (0 until length).count { along ->
+                near(if (across) pixels[along * width + line] else pixels[line * width + along])
+            }
+            matching >= DIVIDER_SHARE * length
+        }
+        val rules = ArrayList<IntRange>()
+        var start = -1
+        for (line in 0..lines) {
+            val rule = line < lines && isRule[line]
+            if (rule && start < 0) start = line
+            if (!rule && start >= 0) { rules.add(start until line); start = -1 }
+        }
+        return rules
+    }
+
+    /** How many colours, at five bits a channel, the map part of each panel holds. */
+    private fun mapColourCounts(pixels: IntArray, width: Int, figure: SiteImagery.Figure, layout: SiteImagery.Layout): List<Int> =
+        figure.panels.indices.map { index ->
+            val left = if (layout == SiteImagery.Layout.ACROSS) index * (figure.window.width + SiteImagery.DIVIDER) else 0
+            val top = if (layout == SiteImagery.Layout.ACROSS) 0 else index * (figure.panelHeight + SiteImagery.DIVIDER)
+            val colours = HashSet<Int>()
+            for (row in top until top + figure.window.height) for (column in left until left + figure.window.width) {
+                val argb = pixels[row * width + column]
+                colours.add((argb shr 3) and 0x1F1F1F)
+            }
+            colours.size
+        }
 
     private val repoRoot: File
         get() {
@@ -274,16 +350,23 @@ class SiteAssemblyTest {
                         "${figure.window.width}x${figure.window.height} come to laid " +
                         layout.name.lowercase()
                 )
-                // How many panels are in the file, counted off the picture rather than taken from
-                // the figure table: along the axis the panels run, a panel and a hairline each.
-                val along = if (layout == SiteImagery.Layout.ACROSS) drawn.first else drawn.second
-                val panel = if (layout == SiteImagery.Layout.ACROSS) figure.window.width
-                else figure.panelHeight
+                // How many panels are in the file, counted off the decoded picture rather than
+                // from its size, which the assertion above has already tied to the figure table:
+                // the hairlines between panels, found where a whole line of pixels is the
+                // divider's colour, and the map inside each panel, which must not be blank.
+                val picture = decodedPixels(file("img/$name"))
+                val rules = dividerRules(picture, drawn.first, drawn.second, layout)
                 assertEquals(
-                    figure.panels.size,
-                    (along + SiteImagery.DIVIDER) / (panel + SiteImagery.DIVIDER),
-                    "img/$name measures $along along its panels, which is not " +
-                        "${figure.panels.size} panels' worth"
+                    figure.panels.size - 1, rules.size,
+                    "img/$name has ${rules.size} hairlines across it where ${figure.panels.size} " +
+                        "panels have ${figure.panels.size - 1}"
+                )
+                val blank = mapColourCounts(picture, drawn.first, figure, layout)
+                    .withIndex().filter { it.value < LEAST_COLOURS_IN_A_MAP }.map { it.index }
+                assertTrue(
+                    blank.isEmpty(),
+                    "img/$name has blank panels at ${blank.map { figure.panels[it].name }}: " +
+                        "fewer than $LEAST_COLOURS_IN_A_MAP colours in the map"
                 )
                 println(
                     "SITE $name ${drawn.first}x${drawn.second}, ${figure.panels.size} panels of " +
@@ -333,56 +416,6 @@ class SiteAssemblyTest {
                     "${"%.2f".format(ratio)}:1"
             )
         }
-    }
-
-    /**
-     * That the Features list still counts the map styles the application offers.
-     *
-     * "Twelve for the map" is the same kind of sentence as the Themes row below it, and goes stale
-     * the same silent way. It matters more now that the page shows three of the twelve in a figure
-     * of their own: a reader who counts three and is told twelve should be told the truth.
-     */
-    @Test
-    fun `the Features list counts the map styles the application offers`() {
-        val page = file("index.html").readText()
-        val sentence = Regex("""<dt>Styles</dt><dd>([^<]*)</dd>""").find(page)?.groupValues?.get(1)
-            ?: fail("the Features list no longer has a Styles row")
-        val counted = NUMBER_WORDS.indexOf(sentence.substringBefore(' '))
-        assertEquals(
-            MapStyle.entries.size,
-            counted,
-            "the page opens the Styles row with \"${sentence.substringBefore(' ')}\" and the " +
-                "application offers ${MapStyle.entries.size} map styles"
-        )
-        println("SITE the Features list counts $counted map styles")
-    }
-
-    /**
-     * That the Features list still counts the chromes the application actually offers.
-     *
-     * "Seventeen interface themes" is a sentence that goes stale the instant a chrome is added, and
-     * nothing else on the page or in the build would notice: the page would go on deploying,
-     * correct in every other respect, quietly one short. So the count is read back out of the page
-     * in words and compared with the enum.
-     *
-     * The sentence used to end "from Nautical to Blacklight" and was also checked against the
-     * newest chrome's name. The copy pass of 2026-09-15 took the run of names off — a list of
-     * seventeen themes is not what a reader is deciding between here — so there is no name left to
-     * check, and the count is the whole of the promise.
-     */
-    @Test
-    fun `the Features list counts the chromes the application offers`() {
-        val page = file("index.html").readText()
-        val sentence = Regex("""<dt>Themes</dt><dd>([^<]*)</dd>""").find(page)?.groupValues?.get(1)
-            ?: fail("the Features list no longer has a Themes row")
-        val counted = NUMBER_WORDS.indexOf(sentence.substringBefore(' '))
-        assertEquals(
-            ThemeChoice.entries.size,
-            counted,
-            "the page opens the Themes row with \"${sentence.substringBefore(' ')}\" and the " +
-                "application offers ${ThemeChoice.entries.size} chromes"
-        )
-        println("SITE the Features list counts $counted chromes")
     }
 
     /**
@@ -767,120 +800,6 @@ class SiteAssemblyTest {
         wasm.forEach {
             assertTrue(it.length() > 1_000_000, "${it.name} is only ${it.length()} bytes")
         }
-    }
-
-    /**
-     * The file names a release carries, with `<version>` where its number goes.
-     *
-     * One list in `site/downloads.txt`, read by the three documents below rather than copied into
-     * each of them. Every one of those three is a reader's first instruction — the page, the
-     * installation document and the notes on the release page itself — and a file name is the one
-     * thing in them that cannot be nearly right: a download link for a name the release does not
-     * carry is a 404 with no explanation on it.
-     */
-    private val releaseFileNames: Set<String> by lazy {
-        val file = File(repoRoot, "site/downloads.txt")
-        assertTrue(file.isFile, "site/downloads.txt is missing; it is the list of release files")
-        val names = file.readLines()
-            .map { it.substringBefore('#').trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
-        assertTrue(names.isNotEmpty(), "site/downloads.txt lists no files")
-        names
-    }
-
-    /** The `<section id="install">` of the assembled page, or a failure. */
-    private fun installSection(page: String): String =
-        Regex("""<section id="install">(.*?)</section>""", RegexOption.DOT_MATCHES_ALL)
-            .find(page)?.groupValues?.get(1)
-            ?: fail("the page has no \"Download and Installation\" section")
-
-    /** HTML as a reader sees it, so a name written `&lt;version&gt;` compares as `<version>`. */
-    private fun unescaped(html: String): String =
-        html.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
-
-    /** Every `Cartogenesis-…` file name in a piece of text, as written. */
-    private fun fileNamesIn(text: String): List<String> =
-        Regex("""Cartogenesis-[A-Za-z0-9.<>-]*\.(?:zip|msi|deb|tar\.gz)""")
-            .findAll(unescaped(text)).map { it.value }.toList()
-
-    /**
-     * The apt source line, as a reader would paste it, out of the one command that carries it.
-     *
-     * Read as the whole line rather than looked for as a substring: what breaks a reader is a
-     * source line that differs from the documented one by a character — a codename, a path under
-     * `/etc/apt/keyrings`, a stray slash — and a substring search for "cartogenesis.com/apt"
-     * would pass on every one of those.
-     */
-    private fun aptSourceLine(text: String, where: String): String =
-        Regex(""""(deb \[signed-by=[^"]*)"""").find(unescaped(text))?.groupValues?.get(1)
-            ?: fail("$where no longer carries an apt source line of the form \"deb [signed-by=…] …\"")
-
-    @Test
-    fun `the page, the instructions and the notes template name only files a release carries`() {
-        val onPage = fileNamesIn(installSection(file("index.html").readText()))
-        assertTrue(onPage.isNotEmpty(), "the Download and Installation section names no files at all")
-
-        val sources = mapOf(
-            "the page's Download and Installation section" to onPage,
-            "docs/INSTALL.md" to fileNamesIn(File(repoRoot, "docs/INSTALL.md").readText()),
-            "docs/RELEASE_NOTES_TEMPLATE.md" to
-                fileNamesIn(File(repoRoot, "docs/RELEASE_NOTES_TEMPLATE.md").readText())
-        )
-        sources.forEach { (where, named) ->
-            assertTrue(named.isNotEmpty(), "$where names no release file")
-            val strangers = named.toSet() - releaseFileNames
-            assertTrue(
-                strangers.isEmpty(),
-                "$where offers " + strangers.joinToString() + ", which no release carries. " +
-                    "site/downloads.txt lists " + releaseFileNames.joinToString()
-            )
-        }
-
-        // And the other way round: a file added to a release that nothing tells a reader about is
-        // a download nobody finds. The page is the one held to it, since it is the page a reader
-        // arrives at.
-        val unmentioned = releaseFileNames - onPage.toSet()
-        assertTrue(
-            unmentioned.isEmpty(),
-            "a release carries " + unmentioned.joinToString() + " and the page's Download and " +
-                "Installation section never names it"
-        )
-        println("SITE the install section offers " + onPage.joinToString())
-    }
-
-    @Test
-    fun `the apt source line is the same on the page as in the instructions`() {
-        val page = file("index.html").readText()
-        val onPage = aptSourceLine(installSection(page), "the page's Linux card")
-        val documented =
-            aptSourceLine(File(repoRoot, "docs/INSTALL.md").readText(), "docs/INSTALL.md")
-        val inNotes = aptSourceLine(
-            File(repoRoot, "docs/RELEASE_NOTES_TEMPLATE.md").readText(),
-            "docs/RELEASE_NOTES_TEMPLATE.md"
-        )
-        assertEquals(documented, onPage, "the page and docs/INSTALL.md give different source lines")
-        assertEquals(
-            documented, inNotes,
-            "docs/RELEASE_NOTES_TEMPLATE.md gives a different source line from docs/INSTALL.md"
-        )
-
-        // The two ends of it that the rest of this chunk has to agree with: the key is published
-        // where the source line says it is, and the codename is the one reprepro builds.
-        assertTrue(
-            onPage.contains("https://cartogenesis.com/apt "),
-            "the source line no longer points at the repository on this site: \"$onPage\""
-        )
-        val codename = File(repoRoot, "site/apt/conf/distributions").readLines()
-            .firstNotNullOfOrNull { line ->
-                line.trim().removePrefix("Codename:").takeIf { it != line.trim() }?.trim()
-            } ?: fail("site/apt/conf/distributions declares no Codename")
-        assertTrue(
-            onPage.trimEnd().endsWith(" $codename main"),
-            "the source line asks for a distribution the repository does not build: it ends " +
-                "\"${onPage.takeLast(24)}\" and reprepro's codename is \"$codename\""
-        )
-        println("SITE the apt source line is \"$onPage\"")
     }
 
     /**

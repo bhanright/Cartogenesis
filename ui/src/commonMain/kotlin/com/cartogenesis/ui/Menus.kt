@@ -249,8 +249,9 @@ internal fun MenuStrip(
  * pixel. So on a phone the strip folds into a single glyph over the map's top-left corner and the
  * three menus become one, in the same order, under their own headings — File, then View's themes,
  * sections and toolbar, then Help. Nothing is dropped: [MenuStrip] and this draw the same
- * [Menus.file], [Menus.themes], [Menus.sections] and [Menus.help], which is what `PanelKnobsTest`
- * compares when it asks whether the compact arrangement can still reach everything.
+ * [Menus.file], [Menus.themes], [Menus.sections] and [Menus.help], and `ChromeGalleryTest` in
+ * `:desktop` opens both on a composed window and holds the folded menu to every item the strip's
+ * three offer.
  *
  * Over the chart it is drawn in [OverMap]'s ink, which is what [tint] defaults to — the menu it
  * opens is a sheet over the application and takes the theme's paper either way, exactly as the

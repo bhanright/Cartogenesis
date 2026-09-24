@@ -1,9 +1,13 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.River
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
@@ -30,7 +34,8 @@ import kotlin.test.assertTrue
  *    itself has changed, and neither have the figures here. See `RiverSelectionTest`.
  *  - **The scale bar measures what the world says it measures.** Against
  *    `WorldScale.cellWidthKm`, which is the same arithmetic the heightmap sidecar
- *    writes, so the bar and the exported metadata cannot drift apart.
+ *    writes, so the bar and the exported metadata cannot drift apart; and against
+ *    `WorldScale.cellHeightKm` along a meridian, where it does not hold today (a known failure).
  *  - **The graticule's spacing is exact.** The map is the whole globe, so ten degrees is exactly a
  *    thirty-sixth of the width and an eighteenth of the height; the control is the same spacing
  *    rounded to whole cells, which puts the equator off the middle row.
@@ -58,6 +63,18 @@ class GeneralisationTest : BorrowsSharedWorlds() {
          * this is only against a float that arrived through arithmetic rather than a literal.
          */
         const val ON_A_CELL_CENTRE = 1e-4f
+
+        /** The four sides a land cell's water can lie on, in the order the counts are kept. */
+        val FACINGS = listOf("east", "south", "west", "north")
+        const val EAST = 0
+        const val SOUTH = 1
+        const val WEST = 2
+        const val NORTH = 3
+
+        /** The known failures these clauses record, by the audit finding each is. */
+        const val COAST_INKED_EAST_AND_SOUTH = "Audit III F-D2: the raster coast inks east- and south-facing shores only"
+        const val SCALE_BAR_EAST_WEST_ONLY =
+            "Audit III F-C1: the scale bar holds east-west only, and a pixel north-south is half the ground"
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(
@@ -105,11 +122,26 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         )
     }
 
+    /**
+     * The traced coast runs between a land cell and a water cell at every vertex, and the raster
+     * inks the land cell of that pair: `Shoreline` says the two "agree wherever both are drawn".
+     *
+     * What the raster inks is read off the rendering, the fantasy view drawn with its coast and
+     * without, rather than off the land mask, which is where the traced line comes from and so
+     * could only agree with it. The raster inks a land cell only where water lies east or south of
+     * it (Audit III, F-D2), so today the landward cell of every west- and north-facing pair is left
+     * bare; the clause is kept running as a known failure under that finding, by the facings the
+     * bare cells face.
+     */
     @Test
     fun `every traced vertex sits on the boundary the raster inks`() {
         val map = world(42L)
         val land = map.sea.isLand
+        val withCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = true))
+        val withoutCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         var checked = 0
+        // How many vertices leave their land cell bare, by where the water lies from it.
+        val bareByFacing = IntArray(FACINGS.size)
         Shoreline.trace(land, map.width, map.height).forEach { line ->
             var at = 0
             while (at < line.size) {
@@ -117,8 +149,9 @@ class GeneralisationTest : BorrowsSharedWorlds() {
                 val vertexY = line[at + 1]
                 // A vertex is halfway along a cell edge: one coordinate lands on a cell centre and
                 // the other between two of them, and those two are the pair the coast divides.
+                val across = abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE
                 val (first, second) =
-                    if (abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE) {
+                    if (across) {
                         cellAt(map, vertexX, vertexY - 0.5f) to
                             cellAt(map, vertexX, vertexY + 0.5f)
                     } else {
@@ -129,11 +162,36 @@ class GeneralisationTest : BorrowsSharedWorlds() {
                     land[first] != land[second],
                     "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it"
                 )
+                val landward = if (land[first]) first else second
+                if (withCoast[landward] == withoutCoast[landward]) {
+                    // `first` is north of `second` across a row edge and west of it across a
+                    // column edge, so the water's side follows from which of the two is land.
+                    val facing = when {
+                        across && landward == first -> SOUTH
+                        across -> NORTH
+                        landward == first -> EAST
+                        else -> WEST
+                    }
+                    bareByFacing[facing]++
+                }
                 checked++
                 at += 2
             }
         }
-        println("SCALE checked $checked coast vertices against the land mask at $SIDE")
+        val bare = FACINGS.indices.filter { bareByFacing[it] > 0 }
+        println(
+            "SCALE checked $checked coast vertices at $SIDE; the land cell left uninked by the raster, " +
+                "by the water's side: " + FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" }
+        )
+        KnownFailures.expect(COAST_INKED_EAST_AND_SOUTH, "uninked where the water lies west and north") {
+            if (bare.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the raster leaves the land cell of ${bareByFacing.sum()} of $checked coast vertices uninked: " +
+                        FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" },
+                    "uninked where the water lies " + bare.joinToString(" and ") { FACINGS[it] }
+                )
+            }
+        }
     }
 
     @Test
@@ -190,23 +248,35 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         )
     }
 
+    /**
+     * Which rivers the sheet at fit draws, against which it drops: the smallest peak among the
+     * drawn has to be at least the largest among the dropped. Read off the rivers the drawing
+     * chooses ([RiverSelection.drawnOn], the call [MapRasterizer.overlay] makes, tied to the
+     * overlay by its count), so a selection that kept the right number of the wrong rivers fails.
+     */
     @Test
     fun `the rivers that survive are the ones carrying the most water`() {
         val map = world(42L)
-        val drawn = MapRasterizer.overlay(
-            map, RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP), MapSheet.onScreen(AT_FIT)
-        )
-        // Every drawn segment's width comes from a ratio, and the smallest ratio still on the map
-        // has to be at least as big as the biggest one that was dropped.
-        val peaks = map.rivers.rivers.map { river -> river.widthRatio.maxOrNull() ?: 0f }
-            .sortedDescending()
-        val cut = peaks[drawn.riversDrawn - 1]
+        val options = RenderOptions(riverInkStep = RiverSelection.EVERY_COURSE_STEP)
+        val sheet = MapSheet.onScreen(AT_FIT)
+        val overlay = MapRasterizer.overlay(map, options, sheet)
+        val drawn = RiverSelection.drawnOn(map, sheet, options.riverInkStep)
+        assertEquals(overlay.riversDrawn, drawn.size, "the overlay drew another selection than the one read here")
+        val drawnSet = drawn.toSet()
+        fun peak(river: River): Float = river.widthRatio.maxOrNull() ?: 0f
+        val dropped = map.rivers.rivers.filterNot { it in drawnSet }
+        assertTrue(dropped.isNotEmpty(), "the sheet at fit dropped no river, so there is no cut to measure")
+        val smallestDrawn = drawn.minOf(::peak)
+        val largestDropped = dropped.maxOf(::peak)
         println(
-            "SCALE the cut at fit falls at a width ratio of ${cut.round()}, " +
-                "between ${peaks.size} rivers running ${peaks.first().round()} down to " +
-                "${peaks.last().round()}"
+            "SCALE at fit ${drawn.size} of ${map.rivers.rivers.size} rivers drawn: the smallest drawn " +
+                "peaks at a width ratio of ${smallestDrawn.round()}, the largest dropped at ${largestDropped.round()}"
         )
-        assertTrue(cut > peaks.last(), "the cut kept every river, so it cut nothing")
+        assertTrue(
+            smallestDrawn >= largestDropped,
+            "a river peaking at ${largestDropped.round()} was dropped while one peaking at " +
+                "${smallestDrawn.round()} was drawn"
+        )
     }
 
     @Test
@@ -254,6 +324,25 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             oneTwoOrFive(bar.kilometres),
             "${bar.kilometres} km is not a 1-2-5 distance"
         )
+
+        // `MapScale` says a kilometre on the bar is a kilometre along the equator and along every
+        // meridian. The sheet draws a cell as one pixel each way, so along a meridian a pixel is a
+        // cell's height of ground, which the world's arithmetic gives separately; the bar holds
+        // there only if the two agree. They do not (Audit III, F-C1), so the clause runs as a known
+        // failure, recorded by how many times the bar overstates a distance laid north-south.
+        val cellsDown = cellsAcross
+        val perPixelNorthSouth = scale.cellHeightKm(cellsDown)
+        val overstates = perPixel / perPixelNorthSouth
+        println("SCALE along a meridian a pixel is ${MapScale.oneDecimal(perPixelNorthSouth)} km; the bar says ${MapScale.oneDecimal(perPixel)}")
+        KnownFailures.expect(SCALE_BAR_EAST_WEST_ONLY, "overstates a distance along a meridian 2.00 times") {
+            if (abs(overstates - 1.0) > 1e-9) {
+                throw RecordedViolation(
+                    "the bar reads ${MapScale.oneDecimal(perPixel)} km a pixel and a pixel along a meridian is " +
+                        "${MapScale.oneDecimal(perPixelNorthSouth)} km on a $cellsAcross by $cellsDown sheet",
+                    String.format(Locale.ROOT, "overstates a distance along a meridian %.2f times", overstates)
+                )
+            }
+        }
     }
 
     @Test

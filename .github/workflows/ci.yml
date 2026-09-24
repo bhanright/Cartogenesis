@@ -43,8 +43,6 @@ jobs:
       - name: WebAssembly tests
         run: ./gradlew :worldgen:wasmJsNodeTest -i --console=plain | tee wasm-test-output.log
 
-      # The renderer is shared, so it has to keep compiling for the web target too even while
-      # only Android and desktop consume it today.
       # The renderer and the save format are shared, so both have to keep working on every
       # target — a save that only round-trips on one platform would be worse than none.
       - name: Cartography tests (JVM + Wasm)
@@ -65,8 +63,15 @@ jobs:
           echo "--- JVM ---";  cat jvm-fingerprint.txt
           echo "--- Wasm ---"; cat wasm-fingerprint.txt
 
-          if [ ! -s jvm-fingerprint.txt ]; then
-            echo "::warning::No fingerprint captured — the test did not run."
+          # Each side is checked for having printed anything before the two are compared: an empty
+          # side is a run that printed nothing, not a platform that generated another world. A
+          # test task restored from the build cache runs nothing and prints nothing, which is the
+          # usual way for a side to come out empty here.
+          if [ ! -s jvm-fingerprint.txt ] || [ ! -s wasm-fingerprint.txt ]; then
+            missing=""
+            [ -s jvm-fingerprint.txt ] || missing="JVM"
+            [ -s wasm-fingerprint.txt ] || missing="${missing:+$missing and }Wasm"
+            echo "::warning::No $missing fingerprint captured: the test did not run on that side, or its result was restored from the build cache and printed nothing. Nothing was compared."
           elif ! diff -u jvm-fingerprint.txt wasm-fingerprint.txt; then
             echo "::warning::JVM and Wasm generate different worlds from the same seed. This is informational; review for unexpected platform drift."
           else

@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.GenerationStage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
@@ -26,8 +27,10 @@ import kotlinx.serialization.json.Json
  *
  * The round-trip case is the one that matters now that a save carries the world rather than the
  * recipe for it: every per-cell array has to come back *identical*, not close, because what comes
- * out of the file is what the user sees and edits from then on. It was shown to fail by dropping
- * a section from the writer, which is also pinned here as a case of its own.
+ * out of the file is what the user sees and edits from then on. Decoding regenerates whatever the
+ * payload cannot rebuild, and regenerates it identically, so identity alone cannot tell a save
+ * that carried a stage from one that dropped it; the case also reads the file's own directory and
+ * rebuilds its payload, and fails on a section dropped from the writer.
  */
 class WorldCodecTest {
 
@@ -108,6 +111,28 @@ class WorldCodecTest {
 
         val bytes = WorldCodec.encode(document().copy(config = worldConfig), world)
         val restored = assertNotNull(WorldCodec.decode(bytes).world, "the save carried no world")
+
+        // What the file itself holds, read as a reader finds it. Decoding regenerates any stage the
+        // payload cannot rebuild, and regeneration is deterministic, so the comparison below would
+        // pass on a save that had dropped a stage; the directory and the payload say whether it did.
+        val header = WorldCodec.decodeHeader(bytes)
+        assertEquals(
+            GenerationStage.entries.toSet(),
+            WorldSections.presentStages(header.sections.map { it.name }.toSet()),
+            "the save's directory is missing a stage's sections, so opening it regenerates that stage"
+        )
+        val headerLength = ByteReader(bytes, position = WorldCodec.HEADER_LENGTH_OFFSET).getInt()
+        val payload = bytes.copyOfRange(WorldCodec.PREFIX_BYTES + headerLength, bytes.size)
+        val rebuilt = WorldSections.rebuild(
+            worldConfig, assertNotNull(header.world), emptyList(), WorldSections.read(payload)
+        )
+        val notRebuilt = listOf(
+            "terrain" to rebuilt.terrain, "plates" to rebuilt.plates, "erosion" to rebuilt.erosion,
+            "sea" to rebuilt.sea, "ocean" to rebuilt.ocean, "climate" to rebuilt.climate,
+            "rivers" to rebuilt.rivers, "nations" to rebuilt.nations, "cultures" to rebuilt.cultures,
+            "landmarks" to rebuilt.landmarks
+        ).filter { it.second == null }.map { it.first }
+        assertTrue(notRebuilt.isEmpty(), "the save's payload does not rebuild $notRebuilt; opening it regenerates them")
 
         assertArraysIdentical(world, restored)
         assertListsEqual(world, restored)

@@ -12,12 +12,14 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.River
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.extension.ExtendWith
 
@@ -46,15 +48,6 @@ class RiverWidthTest {
 
         /** The seeds for the mouth: the author's own, and the four the audit standardised on. */
         val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
-
-        /**
-         * The full pen as a constant, in output pixels, whatever the size of the sheet.
-         *
-         * Kept as the control the pen guard is run against, for the reason [supersededPen] is
-         * kept: a rule that has been replaced is the cheapest proof that its replacement can be
-         * told apart from it.
-         */
-        const val SUPERSEDED_FULL_PIXELS: Float = 5f
 
         /**
          * How closely the drawn pen must track the square root of the discharge, as a Pearson
@@ -138,6 +131,40 @@ class RiverWidthTest {
     private fun pen(ratio: Float, cellsAcross: Int = SIDE): Float =
         RiverPen.widthPixels(ratio, cellsAcross)
 
+    /**
+     * How many drawn steps of [rivers] narrow, how many of those narrow where the water did not
+     * fall, and how many steps there are: the counts the monotone clause holds to zero.
+     */
+    private fun narrowingsDownstream(rivers: List<River>, discharge: FloatArray): Triple<Int, Int, Int> {
+        var narrowings = 0
+        var againstTheWater = 0
+        var steps = 0
+        rivers.forEach { river ->
+            for (k in 1 until river.widthRatio.size) {
+                steps++
+                if (river.widthRatio[k] >= river.widthRatio[k - 1]) continue
+                narrowings++
+                if (discharge[river.cells[k]] >= discharge[river.cells[k - 1]]) againstTheWater++
+            }
+        }
+        return Triple(narrowings, againstTheWater, steps)
+    }
+
+    /**
+     * The count the monotone clause holds to zero, shown counting: a river drawn narrower at its
+     * second step where the water falls, and one drawn narrower where it does not.
+     */
+    @Test
+    fun `the narrowing count sees a river drawn narrower downstream`() {
+        val discharge = floatArrayOf(4f, 2f, 1f, 3f)
+        val intoLess = River(cells = intArrayOf(0, 1), widthRatio = floatArrayOf(0.8f, 0.5f))
+        val againstIt = River(cells = intArrayOf(2, 3), widthRatio = floatArrayOf(0.6f, 0.4f))
+        val monotone = River(cells = intArrayOf(2, 3), widthRatio = floatArrayOf(0.4f, 0.6f))
+        assertEquals(Triple(1, 0, 1), narrowingsDownstream(listOf(intoLess), discharge))
+        assertEquals(Triple(1, 1, 1), narrowingsDownstream(listOf(againstIt), discharge))
+        assertEquals(Triple(0, 0, 1), narrowingsDownstream(listOf(monotone), discharge))
+    }
+
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         SharedWorlds.world(
             WorldGenConfig(seed = seed, width = side, height = side)
@@ -198,6 +225,11 @@ class RiverWidthTest {
      * smallest at the hairline, which is also what says `RiverWidth` normalised against the
      * network and not against something else. The superseded rule's two ends are its own clamps,
      * 0.9 and 2.8 px, and belong to no sheet at all.
+     *
+     * Today it holds by construction: `RiverWidth.sizedByFlow` sets the ratio to 0 at the
+     * network's smallest flow and 1 at its largest, and the pen maps those two to the hairline and
+     * the full pen. It is a pin on that normalisation, and fails the day the ratio is set against
+     * anything but the drawn network.
      */
     @Test
     fun `the rivers on a map use the whole of the pen the sheet allows`() {
@@ -266,28 +298,15 @@ class RiverWidthTest {
 
             // Monotone downstream. A drawn river never crosses standing water — the trace stops at
             // the shore and the outflow below a lake is a channel of its own — so there is no
-            // interruption to make an exception for, and the width must never fall while the water
-            // it stands for does not.
+            // interruption to make an exception for, and the width must never fall.
             //
-            // It can still fall where the water does, and on rare occasions the water does: the
-            // routing hands a handful of cells a downstream neighbour that carries less than they
-            // do, six of the 101415 land cells of seed 1234 among them. That is the flow graph's
-            // own inconsistency and not the pen's — the superseded rule, monotone in the same
-            // quantity, narrows at exactly the same points — so it is counted against the land it
-            // is a property of rather than treated as a width failure.
-            var narrowings = 0
-            var againstTheWater = 0
-            var steps = 0
-            network.world.rivers.rivers.forEach { river ->
-                for (k in 1 until river.widthRatio.size) {
-                    steps++
-                    if (river.widthRatio[k] >= river.widthRatio[k - 1]) continue
-                    narrowings++
-                    val fell = network.discharge[river.cells[k]] <
-                        network.discharge[river.cells[k - 1]]
-                    if (!fell) againstTheWater++
-                }
-            }
+            // Nor can the water: every step of a traced course follows `flowTarget`, and the
+            // accumulation walks the routing's own order and adds every cell's share of the rain,
+            // which is never less than a twentieth, so a cell carries strictly more than any cell
+            // that drains into it (float rounding can only tie). The allowance this clause once made
+            // for a routing that handed a cell a neighbour carrying less has no premise, and the
+            // count is held to zero.
+            val (narrowings, againstTheWater, steps) = narrowingsDownstream(network.world.rivers.rivers, network.discharge)
             assertTrue(
                 againstTheWater == 0,
                 "seed $seed: a drawn river narrowed at $againstTheWater points " +
@@ -298,24 +317,10 @@ class RiverWidthTest {
                 "RIVERWIDTH seed=$seed $steps drawn steps, $narrowings of them into less water, " +
                     "on $landCells land cells"
             )
-            // Against the **land**, not against the drawn course, and W1 is why. What is being
-            // counted is cells where the routing hands a cell a downstream neighbour carrying less
-            // water than it does — a property of the flow graph over the whole world, a handful per
-            // map, and nothing to do with how much of that graph the pen happens to draw.
-            //
-            // Stating it as a share of the drawn steps made it move whenever the drawn network did,
-            // and it moved twice. It was a thousandth until the terrain shortened seed 1234's
-            // course to 2517 steps, which made a thousandth two steps against the graph's own three
-            // inconsistent cells, so it became a five-hundredth; then W1's rainfall moved both the
-            // course and the count again. One in ten thousand land cells is the same claim stated
-            // about the thing it is a property of, and it does not move when the pen draws more or
-            // less of the world. What holds the *pen* to account is `againstTheWater`, which is
-            // zero on every seed.
-            assertTrue(
-                narrowings * 10_000 <= landCells,
-                "seed $seed: $narrowings drawn steps run into less water than the step above, " +
-                    "on $landCells land cells — past one in ten thousand, so the routing is " +
-                    "inconsistent more often than a handful of cells"
+            assertEquals(
+                0, narrowings,
+                "seed $seed: $narrowings drawn steps narrow into less water than the step above, " +
+                    "which the routing's order cannot produce"
             )
 
             // Only the confluences the flow graph agrees are confluences: the same handful of cells
@@ -426,16 +431,22 @@ class RiverWidthTest {
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"
         )
-        // A constant pen is the same stroke on both sheets, so it fails the line above.
-        val supersededAt512 = SUPERSEDED_FULL_PIXELS
-        val supersededAt1024 = SUPERSEDED_FULL_PIXELS
+        // The control: the superseded pen, drawn over the same two worlds, held to the same
+        // doubling. Its widest stroke is its own clamp whatever the sheet, so it fails the line
+        // above, which is what shows the line can fail.
+        val supersededWidest = listOf(512, 1024).map { side ->
+            val network = Network(world(42L, side))
+            network.ratioByCell.keys.filter { network.discharge[it] > 0f }
+                .maxOf { supersededPen(network.discharge[it], network.smallest) }
+        }
         assertTrue(
-            abs(supersededAt1024 - 2f * supersededAt512) > 1e-3f,
-            "the superseded pen now doubles with the sheet, so this guard has stopped discriminating"
+            abs(supersededWidest[1] - 2f * supersededWidest[0]) >= 0.02f,
+            "the superseded pen now doubles with the sheet (%.3f px at 512, %.3f px at 1024), so this guard has stopped discriminating"
+                .format(supersededWidest[0], supersededWidest[1])
         )
         println(
-            "RIVERWIDTH full pen %.2f px at 512, %.2f px at 1024, against a constant %.2f px"
-                .format(spans[0].second, spans[1].second, SUPERSEDED_FULL_PIXELS)
+            "RIVERWIDTH full pen %.2f px at 512, %.2f px at 1024, against the superseded pen's %.2f and %.2f px"
+                .format(spans[0].second, spans[1].second, supersededWidest[0], supersededWidest[1])
         )
     }
 

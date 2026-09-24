@@ -38,10 +38,44 @@ class WebDeploymentContractTest {
             fail("could not find the repository root from ${File(".").absolutePath}")
         }
 
+    /**
+     * The file's code with its comments taken out, so that a name mentioned in a comment — a call
+     * commented out, or a note about one — cannot stand in for the code that uses it.
+     */
     private fun source(path: String): String {
         val file = File(repoRoot, path)
         assertTrue(file.isFile, "expected to find $path at ${file.absolutePath}")
-        return file.readText()
+        return withoutComments(file.readText())
+    }
+
+    /**
+     * [text] with its `//` and `/* */` comments blanked, string literals left whole: the `@JsFun`
+     * bodies this reads are string literals, and a `//` inside one is JavaScript, not a comment.
+     */
+    private fun withoutComments(text: String): String {
+        val out = StringBuilder(text.length)
+        var at = 0
+        var inString: String? = null
+        while (at < text.length) {
+            val rest = text.substring(at, minOf(at + 3, text.length))
+            when {
+                inString != null -> {
+                    if (text.startsWith(inString, at) && (inString == "\"\"\"" || text[at - 1] != '\\')) {
+                        out.append(inString); at += inString.length; inString = null
+                    } else { out.append(text[at]); at++ }
+                }
+                rest.startsWith("\"\"\"") -> { inString = "\"\"\""; out.append(rest); at += 3 }
+                rest.startsWith("\"") -> { inString = "\""; out.append('"'); at++ }
+                rest.startsWith("//") -> { while (at < text.length && text[at] != '\n') at++ }
+                rest.startsWith("/*") -> {
+                    val end = text.indexOf("*/", at + 2)
+                    at = if (end < 0) text.length else end + 2
+                    out.append(' ')
+                }
+                else -> { out.append(text[at]); at++ }
+            }
+        }
+        return out.toString()
     }
 
     @Test
@@ -71,9 +105,11 @@ class WebDeploymentContractTest {
                 "id changes, a working app sits under a permanent loading overlay."
         )
 
+        // A call as a statement of its own, in code: not the name in a comment, and not the
+        // declaration, which lives in Browser.kt.
         val main = source("web/src/wasmJsMain/kotlin/com/cartogenesis/web/Main.kt")
         assertTrue(
-            main.contains("hideLoadingMessage()"),
+            Regex("""(?m)^\s*hideLoadingMessage\(\)\s*;?\s*$""").containsMatchIn(main),
             "hideLoadingMessage() is never called. It exists to be called on startup; unused, the " +
                 "website's loading overlay never lifts."
         )

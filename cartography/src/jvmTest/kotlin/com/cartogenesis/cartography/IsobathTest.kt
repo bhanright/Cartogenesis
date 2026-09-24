@@ -1,9 +1,14 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
+import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -18,11 +23,11 @@ import kotlin.test.assertTrue
  * The floor below is made rather than generated, for the same reason the cone in `ReliefShadingTest`
  * is: the defect is a property of flat ground, and a made floor has exactly as much flat ground as
  * the measurement needs, at any resolution, in a tenth of a second. Half of it is a continental
- * slope falling through nine contours; half is a basin filled level at the depth of one of them.
+ * slope falling through sixteen contours; half is a basin filled level at the depth of one of them.
  * What is measured is how much of each half takes ink, and the control is the same drawing without
  * the flatness rule.
  */
-class IsobathTest {
+class IsobathTest : BorrowsSharedWorlds() {
 
     private companion object {
 
@@ -35,8 +40,8 @@ class IsobathTest {
          *
          * It sits exactly on a contour, which is the worst case and the common one: an abyssal
          * plain is a basin filled level by what settles into it, so its floor is at one depth over
-         * hundreds of kilometres and some plain is always near some level. The rise is 12 m at the
-         * generator's default 6,000 m range and it goes as the fourth power of the distance from
+         * hundreds of kilometres and some plain is always near some level. The rise is 20 m on the
+         * sea's default 10,000 m ruler and it goes as the fourth power of the distance from
          * the middle, which is the shape of a filled basin — dead level in the centre, turning up
          * at the edges.
          */
@@ -46,7 +51,7 @@ class IsobathTest {
         /**
          * How rough the plain is from one cell to the next, on top of that wander.
          *
-         * Two metres at the default range, and it is the whole of the defect: a generated sea floor
+         * Four metres on the sea's ruler, and it is the whole of the defect: a generated sea floor
          * is rough at cell scale, so the gradient measured between two neighbours is that roughness
          * rather than the floor's own fall. A line whose width in depth is set by that gradient is
          * then far wider in depth than the floor's fall over the same distance, and every pixel of
@@ -74,13 +79,31 @@ class IsobathTest {
         /**
          * And how much of the slope must keep it, so the rule cannot pass by drawing nothing.
          *
-         * Nine contours a pixel and a half wide across 256 columns is about 5% of that half, so the
-         * bar is 3%.
+         * The slope falls through 0.8 of the sea's ruler, sixteen contours at the interval's 500 m
+         * of its 10,000 m, and sixteen lines a pixel and a half wide across 256 columns are about
+         * 9% of that half. The bar is a third of that, so the crowding fade may take the most
+         * tightly packed of them and the clause still fails on a rule that took the drawing whole.
          */
         const val MIN_SLOPE_INKED = 0.03
 
         /** The world these figures are read against: the generator's own defaults. */
         val CONFIG = WorldGenConfig(seed = 1L, width = SIDE, height = SIDE)
+
+        /**
+         * A generated world at the same grid, where the raster's own contour arithmetic is read:
+         * the default settings, as the gallery and the census use them.
+         */
+        val WORLD_CONFIG = WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)
+
+        /**
+         * Contour ink a reader sees, on [Isobaths.ink]'s 0-to-1 scale: a tenth of a line's full
+         * weight, the figure the audit sized the shoreline's doubling at.
+         */
+        const val VISIBLE_INK = 0.1f
+
+        /** The known failure the shoreline clause records. */
+        const val SHORELINE_CONTOURED =
+            "Audit III F-C4: the level-0 contour inks the sea beside the coast, doubling the coastline"
     }
 
     /**
@@ -122,7 +145,13 @@ class IsobathTest {
     private fun roughness(column: Int, row: Int): Float =
         (sin(column * 1.1f + row * 0.7f) + sin(column * 0.6f - row * 1.3f)) * 0.5f
 
-    /** The ink each cell of the made floor takes, with the flatness rule on or off. */
+    /**
+     * The ink each cell of the made floor takes, with the flatness rule on or off.
+     *
+     * A copy of the raster's arithmetic, since the made floor is not a world the raster can be
+     * handed; `the made floor is measured the way the raster measures a world` holds the copy to
+     * the raster's own [MapRasterizer.seaContour] on every sea cell of a generated world.
+     */
     private fun contourInk(depth: FloatArray, flatnessRule: Boolean): FloatArray {
         val interval = Isobaths.interval(CONFIG.scale)
         val flattest = if (flatnessRule) Isobaths.flattestSlope(CONFIG, SIDE, SIDE) else 0f
@@ -234,6 +263,85 @@ class IsobathTest {
             "only ${"%.2f".format(slope.inkedShare * 100)}% of the slope kept its contours, short " +
                 "of ${MIN_SLOPE_INKED * 100}% — the rule has taken the drawing with it"
         )
+    }
+
+    /**
+     * The copy above, held to the raster: on every sea cell of a generated world, the ink
+     * [contourInk] works out from the world's depths is the ink [MapRasterizer.seaContour] works
+     * out, to the bit. The made floor's figures are the raster's figures only while this holds.
+     */
+    @Test
+    fun `the made floor is measured the way the raster measures a world`() {
+        val world = SharedWorlds.world(WORLD_CONFIG)
+        assertEquals(SIDE, world.width)
+        val relative = world.sea.relativeElevation.data
+        val depth = FloatArray(relative.size) { -relative[it] }
+        val copied = contourInk(depth, flatnessRule = true)
+        val interval = Isobaths.interval(world.config.scale)
+        val flattest = Isobaths.flattestSlope(world.config, world.width, world.height)
+        val stencil = Isobaths.slopeStencil(world.width)
+        var compared = 0
+        var inked = 0
+        for (cell in relative.indices) {
+            if (world.sea.isLand[cell]) continue
+            val raster = MapRasterizer.seaContour(world, cell, depth[cell], interval, flattest, stencil)
+            assertEquals(
+                raster.toRawBits(), copied[cell].toRawBits(),
+                "the copy draws $cell at ${copied[cell]} and the raster at $raster"
+            )
+            compared++
+            if (raster >= INKED) inked++
+        }
+        println("ISOBATH the copy agrees with the raster on all $compared sea cells of seed ${WORLD_CONFIG.seed}, $inked of them inked")
+        assertTrue(inked > 0, "no sea cell of the world took contour ink, so the agreement says nothing")
+    }
+
+    /**
+     * No contour doubles the coastline: `Isobaths` says the shallowest line sits below the shelf
+     * break. The made floor never reaches the shore, so this is read on a generated world through
+     * the raster's own [MapRasterizer.seaContour]: every sea cell beside land, and how much contour
+     * ink it takes. The level the ink belongs to there is the shoreline's own, depth 0, which the
+     * arithmetic treats as a line like any other (Audit III, F-C4), so the clause runs as a known
+     * failure under that finding.
+     */
+    @Test
+    fun `no contour doubles the coastline`() {
+        val world = SharedWorlds.world(WORLD_CONFIG)
+        val relative = world.sea.relativeElevation.data
+        val interval = Isobaths.interval(world.config.scale)
+        val flattest = Isobaths.flattestSlope(world.config, world.width, world.height)
+        val stencil = Isobaths.slopeStencil(world.width)
+        val width = world.width
+        val land = world.sea.isLand
+        fun besideLand(cell: Int): Boolean {
+            val column = cell % width
+            val row = cell / width
+            return land[row * width + (column + 1) % width] || land[row * width + (column + width - 1) % width] ||
+                (row > 0 && land[cell - width]) || (row + 1 < world.height && land[cell + width])
+        }
+        var coastal = 0
+        var doubled = 0
+        var openSeaInked = 0
+        for (cell in relative.indices) {
+            if (land[cell]) continue
+            val ink = MapRasterizer.seaContour(world, cell, -relative[cell], interval, flattest, stencil)
+            if (besideLand(cell)) {
+                coastal++
+                if (ink > VISIBLE_INK) doubled++
+            } else if (ink >= INKED) {
+                openSeaInked++
+            }
+        }
+        println("ISOBATH seed ${WORLD_CONFIG.seed}: $doubled of $coastal sea cells beside land take contour ink past $VISIBLE_INK; $openSeaInked cells of open sea are inked")
+        assertTrue(openSeaInked > 0, "the world's open sea carries no contour, so the coast's cannot be told apart")
+        KnownFailures.expect(SHORELINE_CONTOURED, "sea cells beside land take contour ink") {
+            if (doubled > 0) {
+                throw RecordedViolation(
+                    "$doubled of $coastal sea cells beside land take contour ink past $VISIBLE_INK",
+                    "sea cells beside land take contour ink"
+                )
+            }
+        }
     }
 
     /** And that the slope half keeps every contour the interval puts on it. */

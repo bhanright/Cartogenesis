@@ -114,9 +114,12 @@ internal enum class LegendPart { CARTOUCHE, SCALE, ZOOM_OUT, ZOOM_IN, FIT }
 /**
  * Everything an arrangement puts within reach, named.
  *
- * Two independently written lists (see [Arrangements.wide] and [Arrangements.compact]), compared by
- * `PanelKnobsTest`. The composables render from these, so a control dropped from the compact
- * arrangement is dropped from this declaration as well and the comparison fails.
+ * Two independently written lists (see [Arrangements.wide] and [Arrangements.compact]). The
+ * composables read the styles, views, export sizes, picture formats, data layers and legend from
+ * these, and `PanelKnobsTest` compares those between the two arrangements. The panel does not read
+ * [knobs] and the menus do not read [commands]: the panel draws [Arrangements.headerKnobs] and
+ * [Arrangements.knobsIn], which `PanelKnobsTest` holds to [Knobs], and the menus draw [Menus]
+ * directly, which `ChromeGalleryTest` in `:desktop` compares on a composed window.
  */
 internal class Reachable(
     /** Every knob the panel draws, header first, then the sections in pipeline order. */

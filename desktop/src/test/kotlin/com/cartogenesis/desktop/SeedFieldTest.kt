@@ -14,9 +14,11 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -126,8 +128,15 @@ class SeedFieldTest {
     }
 }
 
-/** The desktop, told to work at 512, so three generations fit in a test. */
+/**
+ * The desktop, told to work at 512, so three generations fit in a test; with an empty library and
+ * no ice sheet from the card, so the run does not depend on whose machine it is (see
+ * [EmptyWorldLibrary], and `ChromeGalleryTest`'s platform for the ice sheet).
+ */
 private class SmallWorldPlatform(private val desktop: Platform = DesktopPlatform()) :
     Platform by desktop {
     override val defaultResolution: Int = 512
+    override val library: WorldLibrary = EmptyWorldLibrary
+    override val libraryLocation: String = EmptyWorldLibrary.LOCATION
+    override val iceAccelerator: IceSheetAccelerator? = null
 }

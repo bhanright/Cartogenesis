@@ -21,14 +21,19 @@ import kotlin.test.assertTrue
 class ExportSmokeTest {
 
     /**
-     * How far a colour channel may drift, at the 99.9th percentile, before the description of WebP
-     * in the UI stops being honest. Skia exposes no lossless WebP encoder, so this is not zero and
-     * cannot be: the bound records what the encoder actually does today so that a change for the
-     * worse is caught rather than shipped. It measured 58 on the August 2026 worlds; the September
-     * realism work (crust-pair belts, deltas, Koppen biomes) put more sharp edges on the same seed
-     * and it moved to 67; sizing rivers by their discharge made every headwater a sub-pixel thread,
-     * which is the hardest thing a lossy encoder is asked to keep, and it now measures 76. The
-     * picture without any river ink on it drifts 67 of 255 on this world, the pen this replaced 71.
+     * How far a colour channel may drift, at the 99.9th percentile, before the WebP this build
+     * writes is worse than the one it wrote when the bound was last taken.
+     *
+     * A regression pin and not a derivation. The interface says WebP "softens rivers and borders
+     * slightly", which puts no number on the loss, and Skia exposes no lossless WebP encoder, so
+     * there is no figure the drift could be held to; the bound is the measured drift with a few
+     * levels of room, so that a change for the worse is caught and looked at rather than shipped,
+     * and a change of the map that moves the measurement moves the pin with a reason. It measured
+     * 58 on the August 2026 worlds; the September realism work (crust-pair belts, deltas, Koppen
+     * biomes) put more sharp edges on the same seed and it moved to 67; sizing rivers by their
+     * discharge made every headwater a sub-pixel thread, which is the hardest thing a lossy encoder
+     * is asked to keep, and it now measures 76. The picture without any river ink on it drifts 67
+     * of 255 on this world, the pen this replaced 71.
      */
     private companion object {
         const val MAX_CHANNEL_DRIFT = 80

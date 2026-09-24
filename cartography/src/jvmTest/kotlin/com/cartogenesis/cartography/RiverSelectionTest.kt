@@ -306,6 +306,22 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
                 "seed $seed put $fullestSpread courses in its fullest square with the lattice on " +
                     "and $fullestUnspread with it off, so the lattice is doing nothing"
             )
+            // Measured on the lattice the selection enforces, the fullest square is small by
+            // construction: the first pass takes one course a square. Whether the ink is spread
+            // over the map, and not only sorted into those squares, is read on the same lattice
+            // moved by half a pitch, where four enforced squares can meet in one measured one.
+            val offsetSpread = fullestOffsetSquare(map, drawnEnds(map, spread), spread.crowdingPitchKm)
+            val offsetUnspread = fullestOffsetSquare(map, drawnEnds(map, unspread), spread.crowdingPitchKm)
+            println(
+                "X1C $seed crowding on the lattice moved half a pitch: $offsetSpread in the fullest " +
+                    "square with the lattice on, $offsetUnspread with it off"
+            )
+            assertTrue(
+                offsetSpread < offsetUnspread,
+                "seed $seed put $offsetSpread courses in its fullest square half a pitch off the " +
+                    "lattice with the lattice on and $offsetUnspread with it off: the lattice sorts " +
+                    "the ink into its own squares without spreading it"
+            )
 
             // The same on every mark of the density scale, printed: the lattice is not a setting
             // of Earth's mark alone, and turning the scale up spends the extra ink on the rest of
@@ -497,16 +513,28 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             .map { map.rivers.rivers[it].cells.last() }
 
     /** How many of [ends] fall in the fullest square of a [pitchKm] lattice on the ground. */
-    private fun fullestSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int {
+    private fun fullestSquare(
+        map: WorldMap,
+        ends: List<Int>,
+        pitchKm: Double,
+        offsetAcrossKm: Double = 0.0,
+        offsetDownKm: Double = 0.0
+    ): Int {
         val perSquare = HashMap<Long, Int>()
         ends.forEach { end ->
-            val across = (end % map.width * map.config.cellWidthKm / pitchKm).toLong()
-            val down = (end / map.width * map.config.cellHeightKm / pitchKm).toLong()
-            val key = (down shl 32) or across
+            val across = kotlin.math.floor((end % map.width * map.config.cellWidthKm + offsetAcrossKm) / pitchKm).toLong()
+            val down = kotlin.math.floor((end / map.width * map.config.cellHeightKm + offsetDownKm) / pitchKm).toLong()
+            val key = (down shl 32) or (across and 0xFFFFFFFFL)
             perSquare[key] = (perSquare[key] ?: 0) + 1
         }
         return perSquare.values.maxOrNull() ?: 0
     }
+
+    /** The fullest square on the lattice moved by half a pitch across, down, or both. */
+    private fun fullestOffsetSquare(map: WorldMap, ends: List<Int>, pitchKm: Double): Int =
+        listOf(0.5 to 0.0, 0.0 to 0.5, 0.5 to 0.5).maxOf { (across, down) ->
+            fullestSquare(map, ends, pitchKm, across * pitchKm, down * pitchKm)
+        }
 
     private fun disagreement(first: Double, second: Double): Double =
         abs(first - second) / maxOf(first, second)

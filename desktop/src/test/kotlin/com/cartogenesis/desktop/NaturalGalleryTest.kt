@@ -12,7 +12,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
@@ -49,6 +49,9 @@ class NaturalGalleryTest {
     @Test
     fun `both worlds at 2048 in the Natural style, with three details of each`() {
         val dir = File("build/f23-crops").apply { mkdirs() }
+        // This run's pictures only: a count of whatever the directory holds would pass on files an
+        // earlier run left there.
+        dir.listFiles()?.filter { it.name.endsWith(".png") }?.forEach { it.delete() }
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.NATURAL)
 
         WORLDS.forEach { (name, config) ->
@@ -77,8 +80,9 @@ class NaturalGalleryTest {
             bitmap.close()
         }
 
-        val written = dir.listFiles()?.count { it.name.endsWith(".png") } ?: 0
-        assertTrue(written >= 8, "only $written pictures were written to ${dir.absolutePath}")
+        val written = dir.listFiles()?.count { it.name.endsWith(".png") && it.length() > 0 } ?: 0
+        val expected = WORLDS.size * (2 + DETAILS.size)
+        assertEquals(expected, written, "this run wrote $written of the $expected pictures to ${dir.absolutePath}")
         println("F23 wrote $written pictures to ${dir.absolutePath}")
     }
 

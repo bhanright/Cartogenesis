@@ -78,6 +78,20 @@ tasks.withType<Test>().configureEach {
         "cartogenesis.benchmark",
         providers.gradleProperty("benchmark").getOrElse("false")
     )
+
+    // The known failures the tests record (`KnownFailures`, a twin of `:cartography`'s): a file
+    // handed to the tests, cleared before the task runs and printed once it has, pass or fail, as
+    // `:cartography`'s build script does for its own.
+    val report = layout.buildDirectory.file("known-failures/$name.txt").get().asFile
+    systemProperty("cartogenesis.knownFailures", report.absolutePath)
+    doFirst { report.delete() }
+    afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
+        if (suite.parent == null && report.exists()) {
+            val lines = report.readLines()
+            println("Known failures in $name (${lines.count { it.startsWith("KNOWN FAILURE") }}):")
+            lines.forEach { println("  $it") }
+        }
+    }))
 }
 
 // The tests whose 2048 and 4096 work belongs to the on-demand / nightly audit tier rather than to
@@ -247,8 +261,11 @@ tasks.register<Test>("siteTest") {
     // What this test reads is another project's build output. Declaring it as an input here is
     // what Gradle would want, but it also makes Gradle refuse the build for using an output
     // without a producing dependency it can see. Never being up to date costs a few seconds and
-    // is the whole point: the run has to look at the tree that was just assembled.
+    // is the whole point: the run has to look at the tree that was just assembled. Never taken
+    // from the build cache either, for the same reason: a cache key blind to the tree would hand
+    // back an earlier pass over a tree that has since changed.
     outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
 }
 
 compose.desktop {
@@ -323,5 +340,12 @@ tasks.withType<Test>().configureEach {
         rootProject.files("ROADMAP.md"),
         rootProject.fileTree(".github/ISSUE_TEMPLATE")
     ).withPropertyName("roadmapAndIssueFormsReadByTheSiteAssemblyTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `SiteSourcesTest` holds the page's file names and apt source line to the installation
+    // document and the release notes' template: the same trap, the same declaration.
+    inputs.files(
+        rootProject.files("docs/INSTALL.md", "docs/RELEASE_NOTES_TEMPLATE.md")
+    ).withPropertyName("documentsReadByTheSiteSourcesTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

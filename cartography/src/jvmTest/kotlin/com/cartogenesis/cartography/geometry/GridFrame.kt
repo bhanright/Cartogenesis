@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.atan2
+import kotlin.math.floor
 import kotlin.math.hypot
 
 /**
@@ -93,6 +94,12 @@ internal class GridFrame(
         val difference = abs(a - b) % 180.0
         return if (difference > 90.0) 180.0 - difference else difference
     }
+
+    /**
+     * The shorter of the two ways east or west across [dxKm], on a world that wraps at
+     * [worldWidthKm]: between -half and +half its width.
+     */
+    fun wrappedEastwardKm(dxKm: Double): Double = dxKm - worldWidthKm * floor(dxKm / worldWidthKm + 0.5)
 
     /** A copy of this frame at a different grid over the same world. */
     fun atGrid(cellsAcross: Int, cellsDown: Int): GridFrame = GridFrame(

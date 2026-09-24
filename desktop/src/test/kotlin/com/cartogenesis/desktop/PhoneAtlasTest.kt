@@ -23,9 +23,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.CartogenesisApp
 import com.cartogenesis.ui.CartogenesisTheme
 import com.cartogenesis.ui.Platform
+import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.ui.ThemeChoice
 import java.io.File
 import kotlin.math.pow
@@ -514,10 +516,17 @@ private class PhonePlatform(private val desktop: Platform = DesktopPlatform()) :
     Platform by desktop {
     override val defaultResolution: Int = 512
     override val coarsePointer: Boolean = true
+    // Not the machine's: see [EmptyWorldLibrary], and `ChromeGalleryTest`'s platform for the ice.
+    override val library: WorldLibrary = EmptyWorldLibrary
+    override val libraryLocation: String = EmptyWorldLibrary.LOCATION
+    override val iceAccelerator: IceSheetAccelerator? = null
 }
 
 /** The real desktop, started small, for the one test here that is about a wide window. */
 private class DesktopAt512(private val desktop: Platform = DesktopPlatform()) :
     Platform by desktop {
     override val defaultResolution: Int = 512
+    override val library: WorldLibrary = EmptyWorldLibrary
+    override val libraryLocation: String = EmptyWorldLibrary.LOCATION
+    override val iceAccelerator: IceSheetAccelerator? = null
 }

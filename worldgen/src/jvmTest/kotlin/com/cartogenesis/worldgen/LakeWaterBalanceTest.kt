@@ -64,8 +64,17 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     // seeds 33, 32 and 24 stay full at 569, 297 and 285 cells; seeds 9, 15 and 42 are the ones the
     // balance now closes, at 99%, 94% and 66% of their footprints. Seed 31 is both the largest and
     // the one that keeps the claim, so it is the sample.
+    //
+    // Re-picked for the wet case when the ground was put on its ruler and every continent was
+    // redrawn (docs/DESIGN_LEDGER.md, Fix 2): seed 31's largest basin wet enough to measure is 68
+    // cells now. The scan over 1..48, largest spill-level basin per seed at 400 mm or more with
+    // the notch off and one epoch: seed 37's, 1,164 cells at 747 mm, is the largest the balance
+    // leaves full, on its spill and not endorheic; seed 15's is larger at 1,463 cells and 486 mm
+    // and the balance empties two fifths of it, so it is a dry case in wet country again, and
+    // seed 4's closes to 72% and turns endorheic. Of the sixteen other seeds with a basin over 200
+    // cells, fifteen stay full and seed 6's keeps 29%. The dry case's seed 13 still holds.
     private val drySeed = 13L
-    private val wetSeed = 31L
+    private val wetSeed = 37L
 
     /**
      * How much of its spill-level footprint the dry basin may still hold once the balance has

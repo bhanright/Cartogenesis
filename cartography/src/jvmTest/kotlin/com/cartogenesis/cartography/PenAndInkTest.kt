@@ -262,9 +262,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         /** Only ground with real ink on it is asked about: below this the paper is meant to be blank. */
         const val MEASURED_SLOPE_FLOOR = 0.14f
 
-        /** The known failures the two derivation guards record, by the audit finding. */
-        const val SLOPE_FLOOR_STALE =
-            "Audit III F-I9: the engraving's slope floor is not the tenth percentile it was read as"
+        /** The known failure the ink gain's derivation guard records, by the audit finding. */
         const val INK_GAIN_STALE =
             "Audit III F-I9: Pen and ink's widest stroke is not at the seventy-fifth percentile it was set at"
 
@@ -628,8 +626,10 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      * The floor below which the ground is left blank is "the tenth percentile of the land slope of
      * seed 234475 measured at this stencil" ([EngravingPlan.SLOPE_FLOOR]). Held to it at the digit
      * it is stated to: the percentile of the gallery world, which is that seed, rounds to the
-     * floor's hundredth. The world has moved since the floor was read (Audit III, F-I9), so the
-     * clause runs as a known failure recorded by where the percentile now rounds.
+     * floor's hundredth. It ran as a known failure while the world stood moved from the floor
+     * (Audit III, F-I9), the percentile at 0.05, and is asserted again since the slope is read on
+     * the ground, where a hachure now reads it: the tenth percentile is 0.065 there
+     * (docs/DESIGN_LEDGER.md, Fix 2).
      */
     @Test
     fun `the slope floor is the tenth percentile of the land it was read off`() {
@@ -637,21 +637,18 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val tenth = hundredths(percentile(slopes, 0.10))
         val floor = hundredths(EngravingPlan.SLOPE_FLOOR)
         println("PENINK the tenth percentile of the land slope rounds to $tenth; the floor is $floor")
-        KnownFailures.expect(SLOPE_FLOOR_STALE, "the tenth percentile rounds to 0.05, the floor is 0.07") {
-            if (tenth != floor) {
-                throw RecordedViolation(
-                    "the tenth percentile of seed 234475's land slope is ${percentile(slopes, 0.10)}; the floor is ${EngravingPlan.SLOPE_FLOOR}",
-                    "the tenth percentile rounds to $tenth, the floor is $floor"
-                )
-            }
-        }
+        assertEquals(
+            floor, tenth,
+            "the tenth percentile of seed 234475's land slope is ${percentile(slopes, 0.10)}; the floor is ${EngravingPlan.SLOPE_FLOOR}"
+        )
     }
 
     /**
      * Pen and ink's gain puts a stroke at its widest at "a slope of 0.40, which is the
      * seventy-fifth percentile of this world's land" (the style's own comment): the floor plus one
      * over the gain. Held to it at the hundredth the 0.40 is stated to. Stale on the moved world
-     * as the floor is (Audit III, F-I9), and recorded the same way.
+     * (Audit III, F-I9), and recorded by where the percentile rounds: read on the ground, as a
+     * hachure now reads a slope, it stands past the widest stroke rather than short of it.
      */
     @Test
     fun `the ink gain puts the widest stroke at the seventy-fifth percentile of the land`() {
@@ -659,7 +656,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val seventyFifth = hundredths(percentile(slopes, 0.75))
         val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.33, the widest stroke is at 0.40") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.43, the widest stroke is at 0.40") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${percentile(slopes, 0.75)}; " +

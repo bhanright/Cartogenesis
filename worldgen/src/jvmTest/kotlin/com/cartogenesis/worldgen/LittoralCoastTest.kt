@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -215,6 +216,7 @@ class LittoralCoastTest {
         val coarse = ArrayList<Double>()
         val controlCoarse = ArrayList<Double>()
         val complaints = ArrayList<String>()
+        val smoothSeeds = ArrayList<String>()
         cuts.forEach { (seed, cut) ->
             val rowHeight = cut.config.cellHeightInCellWidths
             val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cellsAcross, cellsAcross, rowHeight)
@@ -226,8 +228,9 @@ class LittoralCoastTest {
                     "for 2.0.2; by M1's box count %.3f against %.3f")
                     .format(seed, gradedRuler, ungradedRuler, gradedBoxes.dimension, ungradedBoxes.dimension)
             )
-            CoastRoughness.dimensionComplaint("seed $seed by ruler", gradedRuler)
-                ?.let { complaints.add(it) }
+            if (CoastRoughness.dimensionComplaint("seed $seed by ruler", gradedRuler) != null) {
+                smoothSeeds += String.format(Locale.ROOT, "seed %d at %.3f", seed, gradedRuler)
+            }
             boxes = boxes?.plus(gradedBoxes) ?: gradedBoxes
             controlBoxes = controlBoxes?.plus(ungradedBoxes) ?: ungradedBoxes
             coarse.add(gradedRuler)
@@ -249,6 +252,20 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
         assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
+        // One seed's own coast has read under the floor since the continents were redrawn on the
+        // ground's ruler: 298405's measures 1.092 over four to sixteen cell widths, graded and
+        // ungraded alike, so it is the terrain's coast and not the littoral pass. Measured on the
+        // ground the five coasts pool at 1.182 by ruler and 1.112 by box, inside the band; seed
+        // 298405 read 1.134 here by the old square-cell ruler on the old continents, and its
+        // finished world's coast 1.170 by the ground's (docs/DESIGN_LEDGER.md, Fix 2).
+        KnownFailures.expect(SMOOTH_COAST_ON_ONE_SEED, "seed 298405 at 1.092") {
+            if (smoothSeeds.isNotEmpty()) {
+                throw RecordedViolation(
+                    "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}",
+                    smoothSeeds.joinToString()
+                )
+            }
+        }
     }
 
     /**
@@ -401,7 +418,11 @@ class LittoralCoastTest {
     }
 
     private companion object {
-        /** The rulers the coast is walked with, in cells. */
+        /** The known failure the dimension clause records, per seed. See docs/DESIGN_LEDGER.md, Fix 2. */
+        const val SMOOTH_COAST_ON_ONE_SEED =
+            "the coast: on the ground's ruler seed 298405's coast is smoother than Richardson's floor"
+
+        /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)
 
         /** [cutsAt]'s cuts, by grid, made the first time a guard asks. */

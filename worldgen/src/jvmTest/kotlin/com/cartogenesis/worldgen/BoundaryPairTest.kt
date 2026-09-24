@@ -140,11 +140,11 @@ class BoundaryPairTest {
                             a.halfHeightWidth, t.halfHeightWidth
                         )
                 )
-                if (crustPairs && t.peak <= 0f) {
-                    // A collision whose ground stands nowhere above the plate interior has no
-                    // plateau to measure: width for its height is undefined, and zero is what the
-                    // profile hands back for it. Reported, and counted, rather than judged; see
-                    // below.
+                if (crustPairs && t.halfHeightWidth <= 0f) {
+                    // A collision whose ground at the suture stands under half its own highest
+                    // has no plateau to measure: its width at half height is nothing, so width
+                    // for its height is undefined, and zero is what the profile hands back for
+                    // it. Reported, and counted, rather than judged; see below.
                     unmeasured += pairSeeds[index]
                 } else if (crustPairs) {
                     // Width for its height rather than width at half height, and the difference
@@ -170,8 +170,9 @@ class BoundaryPairTest {
         }
 
         // At most one of the six, so the per-seed clause is still asked of five. On the ground's
-        // ruler seed 1's collision ground stands below its plate interiors at every distance the
-        // profile reads, 0.019 of the height field under them at the suture, so it has no plateau.
+        // ruler seed 1's collision ground stands 0.019 of the height field under its plate
+        // interiors at the suture and reaches their level only 17 cell widths out, so it has no
+        // plateau to measure.
         println("PAIRS seeds with no plateau to measure: $unmeasured")
         assertTrue(
             unmeasured.size <= 1,

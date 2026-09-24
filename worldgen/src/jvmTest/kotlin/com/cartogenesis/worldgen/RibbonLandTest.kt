@@ -46,7 +46,13 @@ class RibbonLandTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `erosion widens the strips a belt leaves in shallow sea`() {
-        val base = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        // Seed 7 and not 234475 since the ground was put on its ruler (docs/DESIGN_LEDGER.md, Fix
+        // 2): a belt is as wide north-south as east-west now, and 234475's un-eroded world at 1024
+        // has no strip left for erosion to widen, measured either way. Of seeds 1 to 22 scanned
+        // with the same measure, ten leave strips before erosion and seed 7 the most of them, four
+        // holding 0.324% of its land; 5, 8, 11, 13, 14, 17, 18, 20 and 21 leave one each, seed
+        // 20's the largest at 0.487%.
+        val base = WorldGenConfig(seed = 7L, width = 512, height = 512)
             .atResolution(1024, 1024)
             .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
         listOf(

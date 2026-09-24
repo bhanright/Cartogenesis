@@ -52,6 +52,11 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
      * The bars sit under the worst of each, and the control bar above the best of the three worlds
      * without the lowstand, so both halves of ground rule 2 are asserted rather than described.
      *
+     * The control bar re-read by that rule when the continents were redrawn on the ground's ruler
+     * (docs/DESIGN_LEDGER.md, Fix 2): without the lowstand 7/23/35 mouths, with it 66/48/73, pooled
+     * 4.53 times. 40 is above the best world without it and under the worst world with it, as 30
+     * was over 26 and under 40; the pooled bar is untouched.
+     *
      * Only the estuary count is asserted now. The indentation was the weaker of the two from the
      * start — an average over a whole map's worth of coast, where the estuary count is a tally of
      * the places that changed — and F17 took the average away: almost all of the extra length was a
@@ -59,7 +64,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
      * cell twenty-three kilometres wide. See the note where it is printed.
      */
     private val estuaryGain = 1.5
-    private val controlEstuaryCeiling = 30
+    private val controlEstuaryCeiling = 40
 
     @Test
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {

@@ -27,6 +27,10 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
     private companion object {
         const val SEED = 1L
+
+        /** The known failure the cold-coast clause records. See docs/DESIGN_LEDGER.md, Fix 2. */
+        const val COLD_COAST_BARELY_MOVES =
+            "the climate: the current coupling moves a cold-current coast's rain by tenths of a percent, either way"
         // The cold-current stretch: bounds wide enough to catch a whole subtropical coastal run,
         // narrow enough that it does not wander into a different current regime.
         const val COLD_LAT_LO = -33f
@@ -176,10 +180,19 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // roughly 10% pickup-rate change over one current's stretch of sea shows up as a few
         // percent of rainfall, not a biome flip. Reported rather than asserted, per rule 5.
 
-        assertTrue(
-            coldOn < coldOff,
-            "cold-current coast should get drier with the coupling on: off=$coldOff, on=$coldOn"
-        )
+        // Seed 1's cold coast comes out 0.66% wetter with the coupling on, where seed 26's came
+        // out 0.41% drier: a few tenths of a percent either way is what the coupling moves a
+        // cold-current coast's rain by, so the sign is the sample's. Recorded rather than
+        // re-picked to a seed that dries: the claim is the coupling's, and at this size it is not
+        // one the march makes (docs/DESIGN_LEDGER.md, Fix 2).
+        KnownFailures.expect(COLD_COAST_BARELY_MOVES, "off 1793 mm, on 1805 mm") {
+            if (coldOn >= coldOff) {
+                throw RecordedViolation(
+                    "cold-current coast should get drier with the coupling on: off=$coldOff, on=$coldOn",
+                    String.format(java.util.Locale.ROOT, "off %.0f mm, on %.0f mm", coldOff, coldOn)
+                )
+            }
+        }
         assertTrue(
             warmOn >= warmOff * 0.999,
             "warm-current coast should not get drier with the coupling on: off=$warmOff, on=$warmOn"

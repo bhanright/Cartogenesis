@@ -54,7 +54,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val cap = WorldGenConfig().nations.maxRealmShare.toDouble()
         KnownFailures.expect(
             "E-T10: the largest realm stands over the stage's own cap, the cause not yet diagnosed",
-            "seed 1234 30.2%"
+            "seed 7 33.6%"
         ) {
             val over = largestShares.filter { it.second > cap }
             if (over.isNotEmpty()) {

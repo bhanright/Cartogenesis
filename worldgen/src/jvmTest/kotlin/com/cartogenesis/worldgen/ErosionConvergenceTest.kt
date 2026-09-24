@@ -2,7 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.concurrent.parallelism
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import com.cartogenesis.worldgen.pipeline.thermalSweepBlocking
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
@@ -18,6 +18,12 @@ import kotlin.test.assertTrue
  * approaches it asymptotically, so the sweep count is a question with a real answer rather than a
  * taste setting. This reports how far from equilibrium the terrain still is at various counts, so
  * the default can be chosen where the curve flattens instead of guessed.
+ *
+ * The thermal sweeps alone, on the plates' terrain, and not the whole stage. The stage runs twelve
+ * hydraulic rounds as well, and the incision cuts slots steeper than the critical slope on purpose,
+ * so "cells still above the critical slope" read off the whole stage measures the rivers as much as
+ * the sweeps' convergence — which is what the figures `ErosionConfig.debrisTravelKm` quotes were
+ * taken before the rounds existed to be confused with.
  */
 class ErosionConvergenceTest {
 
@@ -38,7 +44,8 @@ class ErosionConvergenceTest {
                 erosion = config.erosion.copy(debrisTravelKm = travelKm, enabled = true)
             )
             lateinit var result: com.cartogenesis.worldgen.pipeline.ErosionResult
-            val ms = measureTimeMillis { result = erodeBlocking(cfg, uplift) }
+            val sweeps = ErosionStage.sweepsFor(cfg)
+            val ms = measureTimeMillis { result = thermalSweepBlocking(cfg, uplift, skipSettled = true, sweeps = sweeps) }
             val (over, worst) = disequilibrium(cfg, result.height.data)
             println(
                 "EROSION passes=%3d  %5d ms  %.2f%% of cells still above the critical slope, worst %.1fx over"

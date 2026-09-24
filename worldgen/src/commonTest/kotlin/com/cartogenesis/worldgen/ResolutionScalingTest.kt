@@ -1,88 +1,80 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * What is left of [WorldGenConfig.atResolution]: the tectonics, and the moisture march's rain rate.
+ * What is left of [WorldGenConfig.atResolution]: the tectonics' widths in cells, and nothing else.
  *
  * This class used to assert that a dozen named settings were multiplied by the grid ratio, which
  * was the only way to ask "is this still the same world at export size" while every reach was a
  * count of cells and every depth a fraction of an assumed range. They are lengths in kilometres and
  * depths in metres now, converted where each stage reads them, so there is nothing left to carry
- * for them and nothing here to assert about them — `ScaleFreeTest` asks the question the contracts
- * were standing in for, and asks it of the finished world rather than of the settings.
+ * for them — `ScaleFreeTest` asks the question the contracts were standing in for, and asks it of
+ * the finished world rather than of the settings.
  *
- * Two groups are still carried by hand and both are held here, because a contract that is still a
- * contract still needs a guard. A belt's width could be a kilometre today but its *height* cannot
- * be a metre until the height field has an absolute vertical scale, and the two are read together
- * in one stamping expression; the moisture march's rain rate is one term of a sum whose other term
- * is charged against a per-cell rise in the same unitless field. Both pairs move together in S2 and
- * W3. See [WorldGenConfig.atResolution] for the whole of the reasoning.
+ * One group is still carried by hand, and it is held here because a contract that is still a
+ * contract still needs a guard: the tectonics' belt, arc, rift, drift, blur and hotspot widths,
+ * every one a count of cells named `...Cells`. What is asserted is read off the whole of the
+ * setting rather than off a list of names, through its serialised form: every tectonics setting
+ * whose name ends in `Cells` is scaled by the grid ratio, every other tectonics setting is left
+ * alone, and every other section and the world's own scale are left alone. A width added to the
+ * tectonics and forgotten in `atResolution`, or a setting scaled that carries a unit, fails here by
+ * name. See [WorldGenConfig.atResolution] for the whole of the reasoning.
  */
 class ResolutionScalingTest {
 
     private val base = WorldGenConfig(seed = 1L, width = 512, height = 512)
 
-    @Test
-    fun `the tectonics are still carried by hand and the climate no longer is`() {
-        val scaled = base.atResolution(2048, 2048)
+    private val json = Json { encodeDefaults = true }
 
+    private fun sections(config: WorldGenConfig): JsonObject =
+        json.encodeToJsonElement(WorldGenConfig.serializer(), config).jsonObject
+
+    @Test
+    fun `every tectonic width in cells is carried by hand and nothing else is`() {
+        val ratio = 4f
+        val scaled = base.atResolution(2048, 2048)
         assertEquals(2048, scaled.width)
-        // A belt four times as many cells wide, so it stays the same width on the map.
-        assertEquals(base.tectonics.boundaryFalloffCells * 4f, scaled.tectonics.boundaryFalloffCells)
-        assertEquals(base.tectonics.andeanWidthCells * 4f, scaled.tectonics.andeanWidthCells)
-        assertEquals(base.tectonics.collisionWidthCells * 4f, scaled.tectonics.collisionWidthCells)
-        assertEquals(base.tectonics.epochDriftCells * 4f, scaled.tectonics.epochDriftCells)
-        assertEquals(base.tectonics.hotspotSpacingCells * 4f, scaled.tectonics.hotspotSpacingCells)
-        // The climate's moisture budget used to need a line here, and no longer does: its three
-        // rates are lengths in kilometres now and a length on the ground is not a function of how
-        // many cells the ground is cut into. See W3 in docs/DESIGN_LEDGER.md.
-        assertEquals(base.climate.depletionLengthKm, scaled.climate.depletionLengthKm)
-        assertEquals(base.climate.oceanEvaporationLengthKm, scaled.climate.oceanEvaporationLengthKm)
-        assertEquals(
-            base.climate.evapotranspirationLengthKm, scaled.climate.evapotranspirationLengthKm
-        )
+        assertEquals(2048, scaled.height)
+
+        val before = sections(base).getValue("tectonics").jsonObject
+        val after = sections(scaled).getValue("tectonics").jsonObject
+        val carried = before.keys.filter { it.endsWith("Cells") }
+        assertTrue(carried.isNotEmpty(), "the tectonics carry no width in cells, so this compared nothing")
+        before.forEach { (name, value) ->
+            val moved = after.getValue(name)
+            if (name in carried) {
+                assertEquals(
+                    (value as JsonPrimitive).float * ratio, (moved as JsonPrimitive).float,
+                    "tectonics.$name is a count of cells and was not scaled with the grid"
+                )
+            } else {
+                assertEquals(value, moved, "tectonics.$name carries no cells and was scaled with the grid")
+            }
+        }
     }
 
     @Test
-    fun `everything that carries a unit is left alone`() {
-        val scaled = base.atResolution(2048, 2048)
-
-        // The world's own size and its clock: how many cells the map is cut into says nothing
-        // about how wide the world is, how high its land stands or how long a round lasts.
-        assertEquals(base.scale, scaled.scale)
-        // A reach in kilometres, a depth in metres and an area in square kilometres are the same
-        // reach, depth and area at every grid. The conversion is the stage's, not this function's.
-        assertEquals(base.erosion.deltaReachKm, scaled.erosion.deltaReachKm)
-        assertEquals(base.erosion.outletReachKm, scaled.erosion.outletReachKm)
-        assertEquals(base.erosion.debrisTravelKm, scaled.erosion.debrisTravelKm)
-        assertEquals(base.erosion.criticalFallMetresPerKm, scaled.erosion.criticalFallMetresPerKm)
-        assertEquals(base.sea.shelfWidthKm, scaled.sea.shelfWidthKm)
-        assertEquals(base.sea.lowstandMetres, scaled.sea.lowstandMetres)
-        assertEquals(base.glaciation.valleyWidthKm, scaled.glaciation.valleyWidthKm)
-        assertEquals(base.glaciation.basinDropMetres, scaled.glaciation.basinDropMetres)
-        assertEquals(base.glaciation.maxLakeAreaKm2, scaled.glaciation.maxLakeAreaKm2)
-        assertEquals(base.lakes.minLakeAreaKm2, scaled.lakes.minLakeAreaKm2)
-    }
-
-    @Test
-    fun `anything expressed as a frequency or a fraction is left alone`() {
-        val scaled = base.atResolution(2048, 2048)
-
-        assertEquals(base.seed, scaled.seed)
-        assertEquals(base.seaLevel, scaled.seaLevel)
-        assertEquals(base.tectonics.plateCount, scaled.tectonics.plateCount)
-        assertEquals(base.tectonics.detailFrequency, scaled.tectonics.detailFrequency)
-        assertEquals(base.tectonics.rangeVariationCycles, scaled.tectonics.rangeVariationCycles)
-        assertEquals(
-            base.rivers.channelHeadAreaSlopeKm2,
-            scaled.rivers.channelHeadAreaSlopeKm2
-        )
-        assertEquals(base.rivers.shortestDrawnCourseKm, scaled.rivers.shortestDrawnCourseKm)
-        assertEquals(base.nations.reach, scaled.nations.reach)
+    fun `everything outside the tectonics is left alone`() {
+        val before = sections(base)
+        val after = sections(base.atResolution(2048, 2048))
+        val untouched = before.keys - setOf("tectonics", "width", "height")
+        assertTrue(untouched.contains("rivers") && untouched.contains("scale"), "the sections were not read")
+        untouched.forEach { name ->
+            assertEquals(
+                before.getValue(name), after.getValue(name),
+                "$name moved with the grid: a length, a depth, an area, a frequency or a share is " +
+                    "the same at every grid, and the conversion is the stage's, not this function's"
+            )
+        }
     }
 
     @Test
@@ -96,13 +88,5 @@ class ResolutionScalingTest {
 
         val viaSteps = base.atResolution(1024, 1024).atResolution(2048, 2048)
         assertEquals(base.atResolution(2048, 2048), viaSteps)
-    }
-
-    @Test
-    fun `rescaling actually changes something`() {
-        // Guards against the rescaling being quietly dropped, which is how the bug looked: the
-        // call was there in export, but the UI never made it.
-        val scaled = base.atResolution(1024, 1024)
-        assertTrue(scaled.tectonics.boundaryFalloffCells > base.tectonics.boundaryFalloffCells)
     }
 }

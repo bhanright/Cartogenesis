@@ -81,7 +81,7 @@ object SeaLevelStage {
      * 200 while the break was 1,000; both figures came down to Earth's in S2's second pass, when
      * the sea gained a floor deep enough for a 130 m break to mean something.
      */
-    private const val SHELF_DEPTH_AT_COAST_METRES = -30f
+    internal const val SHELF_DEPTH_AT_COAST_METRES = -30f
 
     /**
      * The most passes [drainDrownedBasins] makes over the drowned basins' outlets.
@@ -115,7 +115,7 @@ object SeaLevelStage {
      * when a pass finds nothing, so sixteen still bounds it.
      * See docs/DESIGN_LEDGER.md, H5b, S1 and F22, for the pass-by-pass figures.
      */
-    private const val MAX_POST_CUT_OUTLET_PASSES = 16
+    internal const val MAX_POST_CUT_OUTLET_PASSES = 16
 
     /**
      * The percentile cut on its own, without the three rules that [apply] runs on top of it.

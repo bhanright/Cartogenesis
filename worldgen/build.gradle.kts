@@ -64,6 +64,27 @@ tasks.withType<Test>().configureEach {
 }
 
 /*
+ * The re-armed guards' known failures: clauses that fail today on a defect an audit found and are
+ * kept running under the name of that finding (`KnownFailures` in the tests, the twin of
+ * `:cartography`'s). Each test task hands the tests a file to append them to,
+ * clears it before it runs and prints it once the whole task has run, pass or fail, as
+ * `:cartography`'s build script does for the geometry guard — so what is known to be wrong is at
+ * the foot of every tier's output.
+ */
+tasks.withType<Test>().configureEach {
+    val report = layout.buildDirectory.file("known-failures/$name.txt").get().asFile
+    systemProperty("cartogenesis.knownFailures", report.absolutePath)
+    doFirst { report.delete() }
+    afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ suite, _ ->
+        if (suite.parent == null && report.exists()) {
+            val lines = report.readLines()
+            println("Known failures in $name (${lines.count { it.startsWith("KNOWN FAILURE") }}):")
+            lines.forEach { println("  $it") }
+        }
+    }))
+}
+
+/*
  * T1: two tiers of test, split by class name rather than by `@Tag`.
  *
  * `jvmTest` runs on the JUnit4 vintage runner (`kotlin("test-junit")` above), which has no `@Tag`
@@ -79,8 +100,8 @@ tasks.withType<Test>().configureEach {
  *
  * Heavy, whole classes moved to the audit tier: `DebugMapDump` (the render harness, 259s, always
  * run with `--rerun` anyway), `StageProfileTest` (158s), `GenerationSpeedTest`, `DesertCauseTest`,
- * `ColdCapReportTest` and `ErosionConvergenceTest` (55s together — the last of those asserts
- * thread-splitting that fails on CI's small runners). `GlaciationAuditTest` and
+ * `ColdCapReportTest` and `ErosionConvergenceTest` (55s together; the last of those asserts the
+ * thread split only where there is more than one worker to split across). `GlaciationAuditTest` and
  * `RealmIdRangeAuditTest` are new classes holding just the 2048-scale cases split out of
  * `GlaciationTest` and `RealmIdRangeTest`; their 512/1024 siblings stay in the per-merge classes.
  * `LakeWaterBalanceTest` has no 2048-scale case today (only comments describing one), so nothing
@@ -169,7 +190,16 @@ val auditOnlyClasses = listOf(
     // Gradle's filter matches the same way on both sides.
     "com.cartogenesis.worldgen.SeaLevelHistoryTest.report every corner of the pair",
     "com.cartogenesis.worldgen.LakeWaterBalanceTest.report the lake budget",
-    "com.cartogenesis.worldgen.DepositionTest.render the coast around the largest river mouths"
+    "com.cartogenesis.worldgen.DepositionTest.render the coast around the largest river mouths",
+    // Audit III's instruments: the straightness report over every shore, which generates 364673 at
+    // 2048 to print a table and asserts only that it had something to measure; and the three rule-8
+    // cost guards, whose bar is a share of a 2048 world and which now measure that world in the
+    // same run rather than quoting a figure no code produced (`GenerationTime`), a minute or two of
+    // generation the first of them pays for and the others share.
+    "com.cartogenesis.worldgen.StraightRunTest.report how straight every shore is",
+    "com.cartogenesis.worldgen.ChannelInitiationCostTest",
+    "com.cartogenesis.worldgen.PressureWindCostTest",
+    "com.cartogenesis.worldgen.VegetationCostTest"
 )
 
 /*

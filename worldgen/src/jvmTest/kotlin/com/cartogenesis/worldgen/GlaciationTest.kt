@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
+import java.util.Locale
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
@@ -138,9 +139,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // the same three lakes from a pass into a failure. Cross-multiplying on longs is the fix
         // for that, and the figures below are cross-multiplied where they are compared.
         //
-        // **Both clauses are findings from W1 rather than assertions, and the reason is upstream of
-        // this stage.** Pooled over the three seeds the ice adds only about a third more lakes to
-        // cold country (0.21 -> 0.28 per 10k) and the zone ratio reaches 1.70 against a bar of 2.5.
+        // **Both clauses have failed since W1, and the reason is upstream of this stage.** Pooled
+        // over the three seeds the ice adds only about a third more lakes to cold country (0.21 ->
+        // 0.28 per 10k) and the zone ratio reaches 1.70 against a bar of 2.5.
         // What the budget line above says is that the valley machinery is not running at all on the
         // seed this case was built around: `trunks=0 cirques=0 moraines=0` on seed 42 at 1024, with
         // nothing even refused — 31,453 cells channelled and not one trunk out of them — so the ice
@@ -159,6 +160,30 @@ class GlaciationTest : BorrowsSharedWorlds() {
                 " ${with.coldLakes.toLong() * without.coldLand} against" +
                 " ${3L * without.coldLakes * with.coldLand}"
         )
+        // Asserted, and failing: the two clauses above are this stage's whole purpose, and a
+        // finding printed where nobody reads it is a guard that cannot fail (Audit III's C I4). So
+        // both are run as a known failure, which goes red the day either the valley machinery or
+        // a change upstream of it brings them back, and says to arm them.
+        KnownFailures.expect(
+            "C I4: glaciated country holds no more lakes than the ice's absence leaves",
+            "cold-country lakes 0.16 to 0.46 per 10k cells, iced zone ratio 1.41"
+        ) {
+            val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
+            val contrasted = with.ratio >= COLD_LAKE_RATIO
+            if (!(tripled && contrasted)) {
+                val found = listOfNotNull(
+                    if (tripled) null else String.format(Locale.ROOT, "cold-country lakes %.2f to %.2f per 10k cells", without.coldDensity, with.coldDensity),
+                    if (contrasted) null else String.format(Locale.ROOT, "iced zone ratio %.2f", with.ratio)
+                ).joinToString()
+                throw RecordedViolation(
+                    ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
+                        "and the iced zone ratio to %.2f, asked %.1f").format(
+                        without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
+                    ),
+                    found
+                )
+            }
+        }
     }
 
     /**

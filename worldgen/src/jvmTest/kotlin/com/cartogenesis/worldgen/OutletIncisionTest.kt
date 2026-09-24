@@ -52,9 +52,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
      * drains past another. Measured at rates of three, four, six and eight on seven seeds at 512
      * and on two of them at 1024, no rate puts every seed under the bar at every grid — three
      * leaves seed 43 at 1.34 times it, four leaves seed 59758 at 1.10, six and eight leave seed
-     * 59758 at 1.67 at 1024. Three is the rate the resolution contract chooses (see
-     * `OutletResolutionTest`), and a tenth of slack is what it needs at 512 on the one seed of the
-     * seven that is over.
+     * 59758 at 1.67 at 1024. That scan was taken when the rate was three; it is
+     * `ErosionConfig.outletIncisionRatio` now, at 1.125, and the allowance was not re-derived when
+     * it moved, so it stands as a regression pin set a tenth over the one seed of the seven that
+     * was over, and not as a figure the rate implies.
      *
      * The slack does not blunt the guard: the same seeds with the notch off are at 1.75 to 2.82
      * times the bar, so the control fails it by a wide margin either way. What the figure means is
@@ -103,13 +104,14 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
     private val SILL_SEEDS = listOf(718106L, 7L, 42L, 1234L, 99L)
 
     /**
-     * The fill gets shallower round by round, and does not without the notch.
+     * The fill gets smaller round by round, and does not without the notch.
      *
-     * Depth rather than area, because depth is what the notch acts on directly and because it is
-     * the measure that discriminates: with the notch off, seed 42's largest basin loses two thirds
-     * of its *area* over the twelve rounds as the ordinary incision eats into its rim, while its
-     * water is as deep at the end as it was at the start. Nothing has drained; the bowl has merely
-     * been sharpened.
+     * Measured and asserted on the largest basin's *area*, against the same basin measure on the
+     * control at the same round — the comment where it is asserted gives the reason, which S2's
+     * fourth pass forced. Written first for depth, because depth is what the notch acts on
+     * directly: with the notch off, seed 42's largest basin lost two thirds of its area over the
+     * twelve rounds as the ordinary incision ate into its rim while its water stayed as deep, so
+     * nothing had drained and the bowl had merely been sharpened. Both are printed.
      *
      * Not asserted monotonically, though it is reported that way and is monotone for nine of the
      * twelve rounds on every seed. Two things break a strict reading. The first rounds of the
@@ -165,6 +167,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
             // under that substitution. `TODO.md` asks for a pooled measure of the drowned water
             // that does not depend on which single body is biggest; this is the half of it that
             // this case can carry.
+            assertTrue(
+                off.last().largestBasinCells > 0,
+                "seed $seed: the control ends with no basin at all, so there is nothing for the notch to be measured against"
+            )
             val shrank = on.last().largestBasinCells.toFloat() / off.last().largestBasinCells
             val control = off.last().largestBasinCells.toFloat() / off.first().largestBasinCells
             println(
@@ -432,9 +438,9 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
     }
 
     private fun roundsOf(config: WorldGenConfig): List<RoundMass> {
-        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val rounds = ArrayList<RoundMass>()
-        erodeBlockingReportingRounds(config, uplift) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, plates.height, plates.upliftRateMmPerYear) { rounds.add(it) }
         return rounds
     }
 

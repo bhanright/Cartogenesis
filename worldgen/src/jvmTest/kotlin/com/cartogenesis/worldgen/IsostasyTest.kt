@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -835,6 +836,19 @@ class IsostasyTest : BorrowsSharedWorlds() {
         val thickest = thickness.max()
         val airyRatio = config.isostasy.iceDensity / config.isostasy.mantleDensity
 
+        // The edge of the load: ground off the sheet within [MOAT_REACH_FLEXURAL_PARAMETERS]
+        // flexural parameters of it on the ground, which is where a load's basin lies. Measured
+        // from the sheet with the row scale, so the reach is kilometres and not cells.
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val fromTheSheet = FloatArray(cellsAcross * cellsDown) { if (onTheSheet[it]) 0f else JumpFloodDistance.INFINITE }
+        JumpFloodDistance.run(
+            cellsAcross, cellsDown, fromTheSheet, IntArray(cellsAcross * cellsDown) { if (onTheSheet[it]) it else -1 },
+            config.cellHeightInCellWidths
+        )
+        val moatReachCells = MOAT_REACH_FLEXURAL_PARAMETERS * Isostasy.Flexure(config).flexuralParameterMetres /
+            1_000.0 / config.cellWidthKm
+
         var deepestMoat = 0.0
         var deepestUnderIce = 0.0
         var thicknessThere = 0f
@@ -855,7 +869,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
                     deepestUnderIce = down
                     thicknessThere = thickness[cell]
                 }
-            } else if (!onTheSheet[cell] && down > deepestMoat) {
+            } else if (!onTheSheet[cell] && fromTheSheet[cell] <= moatReachCells && down > deepestMoat) {
                 deepestMoat = down
             }
         }
@@ -938,12 +952,15 @@ class IsostasyTest : BorrowsSharedWorlds() {
     private fun shorelineResidualMetres(world: WorldMap): Double =
         world.config.scale.altitudeAtField(world.sea.shorelineHeight).toDouble()
 
-    /** The share of the map the crust alone puts above zero metres, before any water is poured. */
+    /**
+     * The share of the map the crust alone puts above zero metres, before any water is poured and
+     * before any river has cut it: the plate stage's field, not the eroded one.
+     */
     private fun isostaticLandShare(world: WorldMap): Double {
         val datum = world.config.scale.shorelineFieldLevel
         var above = 0
-        world.erosion.height.data.forEach { if (it >= datum) above++ }
-        return above.toDouble() / world.erosion.height.data.size
+        world.plates.height.data.forEach { if (it >= datum) above++ }
+        return above.toDouble() / world.plates.height.data.size
     }
 
     private companion object {
@@ -954,17 +971,16 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the sea-level cut may land from the level isostasy puts the shoreline at, in
          * metres.
          *
-         * A thousand, and what it admits is a statement about this generator rather than slack.
-         * The crust puts 45.5 to 55.0% of the world above the isostatic datum where the slider asks
-         * for 38, so the sea-level cut has to come up to meet it — by 428, 796, 455, 428 and 455 m
-         * on the five seeds. The gap is that this generator's continents drown 9 to 13% of their
-         * own crust where Earth's drown 29, for the two reasons
-         * `TectonicsConfig.continentalCrustSubmergedShare` sets out, and closing it is a change to
-         * what a continental interior looks like rather than to the aim.
-         *
-         * A thousand metres covers that with room for the granularity underneath it — the aim is
-         * met by choosing whole plates, so its finest adjustment is a fourteenth of the surface —
-         * and refuses the control below, which misses by three times as much.
+         * A thousand, and it is a regression pin rather than a derivation: set above the residuals
+         * this generator produces, which the case prints, and below the control's, which misses by
+         * about three times as much. What the residual itself is, is a statement about this
+         * generator: the crust puts more of the world above the isostatic datum than the slider
+         * asks for, so the sea-level cut has to come up to meet it, because this generator's
+         * continents drown a smaller share of their own crust than Earth's 29%, for the two reasons
+         * `TectonicsConfig.continentalCrustSubmergedShare` sets out; closing it is a change to what
+         * a continental interior looks like rather than to the aim. The figures each chunk measured
+         * are in docs/DESIGN_LEDGER.md, and four sets of them disagree (Audit III's A-F-DOC-1),
+         * which is why none is quoted here.
          */
         const val SHORELINE_RESIDUAL_BAR_METRES = 1_000.0
 
@@ -993,10 +1009,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the collision rate may sit from Earth's surface uplift plus the measured
          * denudation, in millimetres a year.
          *
-         * A twentieth. The denudation is a mean over five worlds whose own figures span 0.398 to
-         * 0.454, so a tenth of a millimetre either side is the measurement's own spread; half that
-         * is tight enough that the constant cannot drift away from its derivation unnoticed and
-         * loose enough that a seed's chaos cannot fail it.
+         * A twentieth. The denudation is a mean over five worlds whose own figures the case prints,
+         * and they spread over the best part of a tenth of a millimetre; half that is tight enough
+         * that the constant cannot drift away from its derivation unnoticed and loose enough that a
+         * seed's chaos cannot fail it. (The figures this was first written against, 0.398 to 0.454,
+         * were measured before the rounds were re-clocked; `TectonicsConfig.collisionUpliftMmPerYear`
+         * carries today's.)
          */
         const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.05
 
@@ -1011,8 +1029,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
          *
          * A quarter. The relation is exact only for a single channel at a single catchment area,
          * and what is measured here is the mean relief of a band of ground carrying a whole
-         * drainage network whose catchments span three orders of magnitude, over sixty rounds
-         * rather than to convergence. A quarter admits that and still refuses everything the guard
+         * drainage network whose catchments span three orders of magnitude, over the three hundred
+         * rounds `syntheticBelt` runs rather than to convergence. A quarter admits that and still refuses everything the guard
          * is for: an exponent near zero, which is relief that does not answer the rock at all, and
          * an exponent near a half, which is a different `n`.
          */
@@ -1028,8 +1046,9 @@ class IsostasyTest : BorrowsSharedWorlds() {
          *
          * Airy's answer for a kilometre of continental rock is 860 m and a one-row stripe is a
          * fifth of a flexural parameter wide, so the plate holds nearly all of it up; the row below
-         * reads about seventy. Ten metres is well under that and well over nothing, and all this
-         * clause needs of it is that the denominator is a real deflection.
+         * read 73 m before the mirror and reads about 140 under it (the clause's own KDoc). Ten
+         * metres is well under either and well over nothing, and all this clause needs of it is
+         * that the denominator is a real deflection.
          */
         const val MIN_STRIPE_DEFLECTION_METRES = 10.0
 
@@ -1093,18 +1112,24 @@ class IsostasyTest : BorrowsSharedWorlds() {
         const val MIN_FOREBULGE_METRES = 2.0
 
         /**
-         * What the moat round an ice sheet and the ground under it may be, as shares of the Airy
-         * depression a sheet of the stock thickness floats out at.
+         * What the moat round an ice sheet may be, as a share of the Airy depression the thickest
+         * ice on the world floats out at.
          *
          * The moat is a real bend and the whole of it reaches the surface, but it is measured at
          * the edge of the load rather than under the middle of it, where a plate holding the sheet
          * up from both sides carries part of the weight; a fifth is a floor under that with room
-         * for how much ice a given seed happens to grow. The cap's own ground is allowed a tenth,
-         * which is the arithmetic of a ramp: the taper is one minus the ice's thickness profile,
-         * so a cell one cell inside the margin still shows a sliver of the bend, and a tenth is
-         * where that sliver sits at this grid.
+         * for how much ice a given seed happens to grow. The edge is ground off the sheet within
+         * [MOAT_REACH_FLEXURAL_PARAMETERS] of it; until Audit III (its A-I10) the moat was the
+         * deepest bend on any off-sheet land cell on the map, which is not the edge of anything.
          */
         const val MOAT_SHARE_OF_AIRY_FLOOR = 0.2
+
+        /**
+         * How far off a sheet its moat is looked for, in flexural parameters: three, which is where
+         * a load's basin and its peripheral swell lie (Turcotte and Schubert), the same reach
+         * [LAST_FORELAND_BIN] starts from.
+         */
+        const val MOAT_REACH_FLEXURAL_PARAMETERS = 3.0
 
         /**
          * The least of Airy's ratio a plate of this stiffness may let through under a sheet.

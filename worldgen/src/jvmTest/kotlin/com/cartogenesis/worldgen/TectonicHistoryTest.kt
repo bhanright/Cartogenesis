@@ -33,36 +33,29 @@ import kotlin.test.assertTrue
  * interior, the reference level [BoundaryPairTest] reads. Both are then reduced to a peak and a
  * full width at half height by a mean radial profile away from *their own* epoch's boundaries —
  * an old belt cannot be measured against a boundary that has moved — which is why
- * [PlateStage.epochBoundaries] exists. Both are measured with
- * [com.cartogenesis.worldgen.model.TectonicsConfig.plateElevationBias] at zero, for the reason
- * that test gives: the blurred step between plate interiors is the same size as the belts and
- * would be measured as one of them.
+ * [PlateStage.epochBoundaries] exists. Both are measured with isostasy off, for the reason that
+ * test gives: the blurred step between the two crusts is the same size as the belts and would be
+ * measured as one of them.
  *
- * With `historyEpochs = 1` the difference field is identically zero, so the history built nothing
- * anywhere and the "far" guard has nothing to find — see
- * [`the guard finds nothing at all with a single epoch`].
+ * The "far" guard is shown failing on a history whose past boundaries lie where the present ones
+ * do — see [`the guard finds nothing inland when the plates never moved`].
  */
 class TectonicHistoryTest {
 
     private val seeds = listOf(7L, 42L, 1234L)
 
-    /**
-     * The contract H1 made and every chunk since has kept: a one-epoch history is not "close to"
-     * a world with no history, it *is* one. Every ageing factor is exactly 1 on the present epoch,
-     * a multiply by 1f is the identity in IEEE-754, and the widened config copy is never taken, so
-     * `historyEpochs = 0` and `historyEpochs = 1` must give the same bits.
-     *
-     * Until C5 the two were each compared against a checksum recorded from an earlier build, which
-     * pinned the contract to whatever the generator produced on the day and had to be re-taken
-     * four times as S2 and S2b moved every value in the field. The property is the equality
-     * itself, measured on both sides in the same run, so the ground may move under it freely; what
-     * keeps it from passing vacuously is the third column, two epochs, which must differ from the
-     * other two, since a history that built nothing would make all three equal.
-     */
-    private fun platesOf(seed: Long, epochs: Int, flatten: Boolean = true): PlateResult {
+    private fun platesOf(
+        seed: Long,
+        epochs: Int,
+        flatten: Boolean = true,
+        driftCells: Float? = null
+    ): PlateResult {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         val config = base.copy(
-            tectonics = base.tectonics.copy(historyEpochs = epochs),
+            tectonics = base.tectonics.copy(
+                historyEpochs = epochs,
+                epochDriftCells = driftCells ?: base.tectonics.epochDriftCells
+            ),
             // Flattening the plate interiors is switching isostasy off since S2, where before it
             // was setting the step between them to zero: either way what is left is one level for
             // every crust, so a belt's radial profile is the belt and not the crust under it.
@@ -71,11 +64,20 @@ class TectonicHistoryTest {
         return PlateStage.generate(config, TerrainStage.generate(config))
     }
 
+    /**
+     * What `historyEpochs` below one means, and that a second epoch is not a no-op.
+     *
+     * The contract H1 made — that a one-epoch history is the arithmetic of the generator that had
+     * no history at all — has had nothing to be compared with since C5 retired the checksums taken
+     * from that generator, and no run of today's code can produce the reference. What can be held
+     * is narrower and is what this holds: zero epochs is read as one, bit for bit, so the setting's
+     * lower end is the present epoch alone and not a world with no belts; and two epochs give
+     * different bits from one, so the history is doing something and the setting is not dead.
+     */
     @Test
-    fun `a single epoch is no history at all, bit for bit`() {
+    fun `zero epochs is read as one, and a second epoch changes the ground`() {
         // Measured for every seed before anything is asserted, so one run prints all six figures
-        // rather than stopping at the first that has moved. Re-pinning three checksums three
-        // builds running is how S2 found out how much that costs.
+        // rather than stopping at the first that has moved.
         val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
             listOf(0, 1, 2).forEach { epochs ->
@@ -86,8 +88,6 @@ class TectonicHistoryTest {
                 plates.height.data.forEach { checksum = checksum * 31 + it.toRawBits() }
                 println("HISTORY seed $seed epochs=$epochs height checksum $checksum")
                 measured[seed to epochs] = checksum
-                // With nothing but the present epoch there is no old crust: every cell a belt
-                // touched is in the youngest band and everything else is untouched.
                 assertTrue(
                     plates.crustAge.data.all { it in 0f..1f },
                     "seed $seed: crust age left its range"
@@ -100,12 +100,11 @@ class TectonicHistoryTest {
             val two = measured.getValue(seed to 2)
             assertEquals(
                 none, one,
-                "seed $seed: a single epoch is no longer the same bits as no history at all"
+                "seed $seed: zero epochs is no longer read as one"
             )
             assertTrue(
                 two != one,
-                "seed $seed: two epochs give the same bits as one, so the history built nothing " +
-                    "and the equality above proves nothing"
+                "seed $seed: two epochs give the same bits as one, so the history built nothing"
             )
         }
     }
@@ -130,21 +129,26 @@ class TectonicHistoryTest {
     }
 
     /**
-     * The same measurement with the history switched off, which is the "shown failing" half of
-     * rule 2: with one epoch the difference field is identically zero, so there is no ground the
-     * history built anywhere, inland or not.
+     * The same measurement on a history whose plates never moved, which is the case the guard's
+     * own message describes: every past epoch's boundaries lie where today's do, so its belts are
+     * the modern belts again, lower and wider, and "an old belt that never leaves a modern plate
+     * edge is not a scar, it is the same range twice". Three epochs, as the shipped world has, with
+     * `epochDriftCells` at zero and nothing else changed, measured against the same one-epoch world
+     * the guard above differences against.
      */
     @Test
-    fun `the guard finds nothing at all with a single epoch`() {
+    fun `the guard finds nothing inland when the plates never moved`() {
         seeds.forEach { seed ->
-            val inland = inlandRelief(seed, 1)
+            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftCells = 0f)
             println(
-                "HISTORY control seed %d with one epoch: tallest inland relief %+.6f (bar %.2f)"
+                "HISTORY control seed %d, three epochs that never moved: tallest inland relief %+.6f (bar %.4f)"
                     .format(seed, inland.relief, MIN_BELT_PEAK)
             )
             assertTrue(
                 inland.relief < MIN_BELT_PEAK,
-                "seed $seed built inland ground with a single epoch, which cannot happen"
+                "seed $seed: a history whose plates never moved still reads ${inland.relief} of " +
+                    "relief more than $MIN_INLAND_CELLS cells from every present boundary, so the " +
+                    "guard above cannot tell a scar from the modern belt stamped twice"
             )
         }
     }
@@ -248,8 +252,8 @@ class TectonicHistoryTest {
      * epoch's belts at a single age rather than two ages averaged; three against one, for the
      * inland guard, so it measures the world the app ships.
      */
-    private fun oldRelief(seed: Long, epochs: Int): FloatArray {
-        val history = platesOf(seed, epochs)
+    private fun oldRelief(seed: Long, epochs: Int, driftCells: Float? = null): FloatArray {
+        val history = platesOf(seed, epochs, driftCells = driftCells)
         val one = platesOf(seed, 1).height.data
         val many = history.height.data
 
@@ -297,8 +301,8 @@ class TectonicHistoryTest {
      * The tallest thing the history built anywhere further than [MIN_INLAND_CELLS] from a present
      * boundary — a belt whose plate edge is gone, which is the whole claim of this chunk.
      */
-    private fun inlandRelief(seed: Long, epochs: Int): Inland {
-        val relief = oldRelief(seed, epochs)
+    private fun inlandRelief(seed: Long, epochs: Int, driftCells: Float? = null): Inland {
+        val relief = oldRelief(seed, epochs, driftCells)
         val present = platesOf(seed, 1)
         var best = 0f
         var at = 0f
@@ -384,12 +388,6 @@ class TectonicHistoryTest {
 
         /** An old orogen spreads as it falls; a modest bar, since the blur is the mechanism. */
         const val MIN_BROADER = 1.3f
-
-        /** Relief, in normalized elevation, at which ground counts as belonging to a belt. */
-        const val RELIEF_FLOOR = 0.02f
-
-        /** Smaller than this and it is a speck of noise, not a range. */
-        const val MIN_BELT_CELLS = 200
 
         /**
          * Lower than this and it is a swell, not a range — as a share of the height field, which

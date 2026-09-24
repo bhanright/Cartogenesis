@@ -1,6 +1,5 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import java.awt.image.BufferedImage
 import java.io.File
@@ -34,7 +33,7 @@ class S2bRenderDump {
         listOf(718106L, 59758L).forEach { seed ->
             val started = System.currentTimeMillis()
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
+                authorsConfig(seed).atResolution(SIDE, SIDE)
             )
             println(
                 "S2B RENDER seed $seed at $SIDE in ${(System.currentTimeMillis() - started) / 1000}s," +

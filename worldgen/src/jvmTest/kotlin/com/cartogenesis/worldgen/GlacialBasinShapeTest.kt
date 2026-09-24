@@ -61,8 +61,9 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
      * The two regimes draw their outlines from different things, and only one of them is I2's. A
      * valley basin's outline is a contour of the ground it was filled up to; a scour basin's is a
      * threshold on a noise field, clipped to the sheet mask — and the sheet mask's own edges come
-     * off `GlaciationStage.localRelief`, which measures relief over a *square* sliding window, so
-     * they run straight along an axis for as far as one summit stays inside the window. That is a
+     * off `GlaciationStage.localRelief`, which measures relief over a sliding window with straight
+     * facets (an octagon since F30, a square before it), so they run straight along a facet's
+     * bearing for as far as one summit stays inside the window. That is a
      * real grid shape and the scour outlines inherit it: seed 7 at 1024 carries a 20-cell straight
      * edge on a 49-cell basin, 1.68 times what its size explains. It is a different cause in a
      * different function and it is written down in TODO.md rather than quietly absorbed here.
@@ -265,7 +266,13 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
         // The stage run again on the same ground the engine ran it on — the engine's own call is
         // exactly this — purely to be handed the tally. `basinFloor` is an observer and the world
         // it is measured from is untouched.
+        //
+        // Measured on the bed, not on the map's surface. The finished field carries the ice
+        // sheet's surface wherever there is a sheet, so a basin under one read off it is the ice's
+        // slope rather than the bowl's; the tally's own thickness, taken off in the field's units,
+        // gives the ground back, and is zero everywhere there is no sheet.
         var basins = emptyList<Basin>()
+        var bed = world.relativeElevation.data
         runBlocking {
             GlaciationStage.apply(config, sea, balance, null) { mass ->
                 println(
@@ -274,12 +281,15 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
                         " budget ${mass.lakeBudget}, refused ${mass.basinsWithNoFloor}/" +
                         "${mass.basinsTooStraight}/${mass.basinsTooSmall}/${mass.basinsOverBudget}"
                 )
-                basins = readBasins(
-                    seed, config, mass.basinFloor, mass.basins, world.relativeElevation.data
-                )
+                val metresPerUnit = config.scale.highestLandMetres
+                val surface = world.relativeElevation.data
+                bed = FloatArray(surface.size) { surface[it] - mass.iceThicknessMetres[it] / metresPerUnit }
+                val underIce = mass.iceThicknessMetres.count { it > 0f }
+                println("I2 BED seed $seed at $side: $underIce cells under the sheet read at the bed")
+                basins = readBasins(seed, config, mass.basinFloor, mass.basins, bed)
             }
         }
-        val level = largestLevelSurface(config, world.relativeElevation.data, world.sea.isLand)
+        val level = largestLevelSurface(config, bed, world.sea.isLand)
         Measurement(
             squareKilometresPerCell = config.squareKilometresPerCell,
             levelSurfaceCells = level.size,

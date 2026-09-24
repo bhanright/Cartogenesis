@@ -153,27 +153,34 @@ class UnitsTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The control: a constant that keeps its own number does not move when the ruler does.
+     * The control: a figure the pipeline reads off no vertical ruler does not move when the land's
+     * ceiling does, and the comparison the first test makes refuses it.
      *
-     * `ErosionConfig.rate` is a share of the excess and `TectonicsConfig.mountainHeight` is a share
-     * of `TectonicsConfig.beltReliefMetres`, which is a metre figure of its own and not one of
-     * `WorldScale`'s; neither should move when the world's own ruler does. They are here so the
-     * three tests above cannot pass vacuously — if the ruler were not actually reaching the
-     * constants, they would look exactly like these.
+     * The stream-power coefficient is `K` times the round's length times the land's area over the
+     * world's width ([HydraulicErosion.Rates.incisionCoefficient]): a rate on the whole field's
+     * span, with no metre of land relief in it. So read at the stock ruler and at one twice as tall
+     * it has to be the same float, and it has to fail the halving the first test asks of every
+     * land-relief constant — which is what keeps the three tests above from passing vacuously: if
+     * the ruler were not actually reaching the constants, they would look exactly like this one.
+     * Both readings are the pipeline's own, taken through `Rates` at each ruler.
      */
     @Test
     fun `a constant with no unit does not move when the ruler does`() {
         val taller = stock.copy(
             scale = stock.scale.copy(highestLandMetres = stock.scale.highestLandMetres * 2f)
         )
-        assertEquals(stock.erosion.rate, taller.erosion.rate, 0f)
-        assertEquals(stock.tectonics.mountainHeight, taller.tectonics.mountainHeight, 0f)
-        assertEquals(stock.glaciation.floorShare, taller.glaciation.floorShare, 0f)
-        // And the pipeline's own reading of them is unmoved too, which is the thing that matters.
+        val here = HydraulicErosion.Rates(stock).incisionCoefficient.toDouble()
+        val there = HydraulicErosion.Rates(taller).incisionCoefficient.toDouble()
+        println("UNITS control incisionCoefficient %.6g, %.6g at twice the ceiling".format(here, there))
         assertEquals(
-            HydraulicErosion.Rates(stock).incisionCoefficient.toDouble(),
-            HydraulicErosion.Rates(stock).incisionCoefficient.toDouble(),
-            0.0
+            "the stream-power coefficient moved when only the land's ceiling did, so it is reading" +
+                " a ruler it has no business with",
+            here, there, 0.0
+        )
+        assertTrue(
+            "the stream-power coefficient halved with the land's ceiling, so the first test's" +
+                " comparison cannot tell a constant with no unit from one read through the ruler",
+            here / 2.0 != there
         )
     }
 
@@ -301,16 +308,11 @@ class UnitsTest : BorrowsSharedWorlds() {
          * How far the sea-level cut may land from the level `WorldScale` declares the shoreline at,
          * in metres.
          *
-         * A thousand. `IsostasyTest.SHORELINE_RESIDUAL_BAR_METRES` carries the same figure and
-         * the derivation, and is where it is shown to bite; in short, this generator's continents
-         * drown a tenth of their own crust where Earth's drown 29%, so the crust puts about half
-         * the world above the datum where the slider asks for 38 and the cut has to come up to
-         * meet it.
-         *
-         * Measured after S2 on these four seeds at 512: +459, +796, +455 and +428 m. Before it the
-         * question could not be asked in metres at all — the field was renormalised to its own
-         * extremes, so this test held a *ratio* inside a factor of 1.7 instead, and the same worlds
-         * read 0.64x to 1.09x of the declared ruler.
+         * A thousand, the same figure as `IsostasyTest.SHORELINE_RESIDUAL_BAR_METRES`, which is
+         * where it is shown to bite and where what it is is set out: a regression pin above the
+         * residuals this generator produces, which the case above prints, and not a derivation.
+         * Before S2 the question could not be asked in metres at all — the field was renormalised
+         * to its own extremes, so this test held a *ratio* inside a factor of 1.7 instead.
          */
         const val SHORELINE_RESIDUAL_METRES = 1_000.0
     }

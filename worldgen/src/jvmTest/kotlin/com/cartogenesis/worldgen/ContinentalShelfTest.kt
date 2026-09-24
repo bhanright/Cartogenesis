@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -28,31 +29,80 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
 
     private val seeds = listOf(7L, 42L, 1234L)
 
+    private companion object {
+        /** The share of the water within a shelf's width of land that has to read shallow. */
+        const val NEAR_SHALLOW_SHARE = 0.90
+
+        /** A plateau cell at the break itself, read back through a float, in relative units. */
+        const val BREAK_ROUNDING = 1e-6f
+    }
+
+    /**
+     * Within a shelf's width of the coast, on the ground, the water is shallow; twice that out over
+     * oceanic crust, it is deep.
+     *
+     * The distance is measured in kilometres — a row is half as tall as a column is wide — because
+     * the shelf's width is a length on the ground and the question is whether the ground has one.
+     * Measured in cells, with a row as tall as a column, the near clause was the remap restated in
+     * the remap's own metric (Audit III's C I6): every cell within the shelf's width in cells is
+     * written shallower than the cut by construction, whatever the shelf is off a northern coast.
+     *
+     * Two depths are asked of that band. The map's: water the climate draws as shallow sea
+     * (`relativeElevation > -0.12`, 1,200 m), which holds on the ground too, because what lies past
+     * a short plateau is the upper slope and still shallower than that. And the shelf's own: water
+     * no deeper than its break, `SeaConfig.shelfDepthMetres`, which is what the plateau promises out
+     * to the shelf's width. That one fails on the ground: the stage measures its distance with a row
+     * as tall as a column, so off a coast facing north or south the plateau reaches half the width
+     * and the slope begins inside the band. That is Audit III's C7, kept running here as a known
+     * failure until the chunk that gives the stage the row scale.
+     */
     @Test
     fun `shallow water hugs the coast and the open ocean is deep`() {
-        seeds.forEach { seed ->
+        val measured = seeds.map { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
             val world = SharedWorlds.world(config)
             val (near, far) = shallowShares(world, shelfWidthCells)
+            val breakDepth = -config.scale.depthShareOfMetres(config.sea.shelfDepthMetres)
+            val (onTheShelf, _) = shallowShares(world, shelfWidthCells, shallowerThan = breakDepth - BREAK_ROUNDING)
             println(
-                "SHELF seed $seed: shelfWidthCells=%.0f near-coast shallow=%.1f%% far-from-coast shallow=%.1f%%"
-                    .format(shelfWidthCells, near * 100, far * 100)
+                ("SHELF seed $seed: shelfWidthCells=%.1f (%.0f km) near-coast shallow=%.1f%% " +
+                    "(no deeper than the %.0f m break %.1f%%) far-from-coast shallow=%.1f%%, distances on the ground")
+                    .format(
+                        shelfWidthCells, config.sea.shelfWidthKm, near * 100,
+                        config.sea.shelfDepthMetres, onTheShelf * 100, far * 100
+                    )
             )
-            // The remap guarantees the whole plateau (-0.02 at the coast to -shelfDepth at the
-            // outer edge, both shallower than the -0.12 cut) reads as shallow, so this should sit
-            // near 100% -- 90% leaves room for the handful of cells right at 2x shelfWidthCells where
-            // the smoothstep has already blended most of the way back to the natural floor.
             assertTrue(
-                near > 0.90,
+                near > NEAR_SHALLOW_SHARE,
                 "seed $seed: only ${(near * 100).toInt()}% of ocean within $shelfWidthCells cells of " +
-                    "the coast is shallow"
+                    "the coast on the ground is shallow"
             )
+            // Beyond twice the shelf's width over oceanic crust the floor is the isostasy's and the
+            // shelf has no business there, in any metric.
             assertTrue(
                 far < 0.10,
                 "seed $seed: ${(far * 100).toInt()}% of ocean beyond ${2 * shelfWidthCells} cells from " +
                     "the coast is still shallow"
             )
+            seed to onTheShelf
+        }
+        // The plateau runs from 30 m at the coast to the break at the shelf's width, so on the
+        // ground the band should stand no deeper than the break nearly throughout; the same tenth
+        // is room for the fjords the ice cuts across it.
+        KnownFailures.expect(
+            "C7: the shelf is measured with a row as tall as a column, so it is half as wide north-south",
+            "seed 7 80.4%, seed 42 76.2%, seed 1234 85.4%"
+        ) {
+            val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
+            if (short.isNotEmpty()) {
+                val found = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
+                throw RecordedViolation(
+                    "within a shelf's width of the coast on the ground, only $found of the water stands no " +
+                        "deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%",
+                    found
+                )
+            }
         }
     }
 
@@ -70,7 +120,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
                 .format(near * 100, far * 100)
         )
         assertTrue(
-            near <= 0.90,
+            near <= NEAR_SHALLOW_SHARE,
             "expected the shelfWidthCells=0 control to fail the near-coast guard, but got " +
                 "${(near * 100).toInt()}% shallow"
         )
@@ -145,16 +195,20 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
      * @return (share of ocean within [shelfWidthCells] cells of the coast that is shallow, share of
      *   ocean beyond `2 * shelfWidthCells` cells that is shallow)
      */
-    private fun shallowShares(world: WorldMap, shelfWidthCells: Float): Pair<Double, Double> {
+    private fun shallowShares(
+        world: WorldMap,
+        shelfWidthCells: Float,
+        /** What counts as shallow, in relative elevation: by default the climate's shallow sea. */
+        shallowerThan: Float = -0.12f
+    ): Pair<Double, Double> {
         val w = world.width
         val h = world.height
         val land = world.sea.isLand
 
-        // Distance in cells from every ocean cell to the nearest land — the same measure, by the
-        // same transform, SeaLevelStage's shelf remap is keyed on. It has to be the same one: the
-        // chamfer metric this used before G4 reads up to 8.2% further than Euclid at the bearings
-        // between an axis and a diagonal, so measuring one field against a shelf cut from the
-        // other would put a ring of genuinely shallow cells outside the "near" band.
+        // Distance from every ocean cell to the nearest land on the ground, in cell widths: a row
+        // counts for its own height, a half, which is what makes this a length and not a count of
+        // cells. Euclidean, by the flood the stage uses, so the only difference between this and
+        // the stage's own field is the row scale.
         val dist = FloatArray(w * h) { JumpFloodDistance.INFINITE }
         val label = IntArray(w * h) { -1 }
         for (i in 0 until w * h) {
@@ -163,7 +217,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
                 label[i] = i
             }
         }
-        JumpFloodDistance.run(w, h, dist, label)
+        JumpFloodDistance.run(w, h, dist, label, world.config.cellHeightInCellWidths)
 
         var nearShallow = 0
         var nearTotal = 0
@@ -171,7 +225,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         var farTotal = 0
         for (i in 0 until w * h) {
             if (land[i]) continue
-            val shallow = world.sea.relativeElevation.data[i] > -0.12f
+            val shallow = world.sea.relativeElevation.data[i] > shallowerThan
             val d = dist[i]
             if (d <= shelfWidthCells) {
                 nearTotal++

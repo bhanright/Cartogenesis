@@ -407,7 +407,7 @@ object OceanStage {
      * Every accelerator is held to this answer within rounding. Land is pinned at zero, columns
      * wrap and rows clamp.
      */
-    private fun solveOnCpu(
+    internal fun solveOnCpu(
         coarseAcross: Int,
         coarseDown: Int,
         coarseIsWater: BooleanArray,

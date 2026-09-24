@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.NationResult
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -17,6 +18,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every landmass is settled, and no realm swallows the world`() {
+        val largestShares = ArrayList<Pair<Long, Double>>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
@@ -43,11 +45,23 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
                 claimed >= land * 0.999,
                 "seed $seed left ${land - claimed} of $land land cells unclaimed"
             )
-            // And no realm should be a world empire. The runaway version of this hit 60%.
-            assertTrue(
-                largest <= land * 0.40,
-                "seed $seed: one realm holds ${largest * 100 / land}% of all land"
-            )
+            // And no realm should be a world empire. The runaway version of this hit 60%; the bar
+            // is the stage's own cap, `NationsConfig.maxRealmShare`, since a realm over it is split
+            // until it is not. It was 40% until Audit III (its E-T10), which could not see the cap
+            // failing anywhere between the two.
+            largestShares += seed to largest.toDouble() / land
+        }
+        val cap = WorldGenConfig().nations.maxRealmShare.toDouble()
+        KnownFailures.expect(
+            "E-T10: the largest realm stands over the stage's own cap, the cause not yet diagnosed",
+            "seed 1234 30.2%"
+        ) {
+            val over = largestShares.filter { it.second > cap }
+            if (over.isNotEmpty()) {
+                val found = over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
+                val capPercent = String.format(Locale.ROOT, "%.0f%%", cap * 100)
+                throw RecordedViolation("one realm holds more of the land than the stage's own cap of $capPercent: $found", found)
+            }
         }
     }
 

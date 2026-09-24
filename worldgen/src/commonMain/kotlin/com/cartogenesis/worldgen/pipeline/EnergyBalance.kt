@@ -499,7 +499,7 @@ object EnergyBalance {
      * The air that sits on it is [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] and is a separate reservoir,
      * which is the whole point: twenty times less memory, so it swings while the water does not.
      */
-    private const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6
+    internal const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6
 
     /**
      * Heat stored per square metre of **marine air** for each degree it warms, in joules: the
@@ -701,10 +701,18 @@ object EnergyBalance {
          * against: a world with no feedback cools nearly uniformly under a forcing and grows no
          * cap of its own.
          */
-        iceAlbedoFeedback: Boolean = true
+        iceAlbedoFeedback: Boolean = true,
+        /**
+         * The land column's heat capacity, in joules per square metre per degree. The default is
+         * [LAND_HEAT_CAPACITY_J_PER_M2_C] and nothing in the pipeline passes anything else; the
+         * seasonal-contrast guard passes the mixed layer's own, which is the planet with one heat
+         * capacity for both surfaces that its control is about.
+         */
+        landHeatCapacityJPerM2C: Double = LAND_HEAT_CAPACITY_J_PER_M2_C
     ): ZonalClimate {
         val geometry = Geometry(
-            transportTropicsW.toDouble(), transportPolarW.toDouble(), iceAlbedoFeedback
+            transportTropicsW.toDouble(), transportPolarW.toDouble(), iceAlbedoFeedback,
+            landHeatCapacityJPerM2C
         )
         val insolation = insolationByBandAndStep(geometry, obliquityDegrees, solarScale.toDouble())
         val annualInsolation = DoubleArray(BANDS) { band ->
@@ -861,7 +869,8 @@ object EnergyBalance {
         /** See `solve`'s own parameters of the same names. */
         transportTropicsW: Double,
         transportPolarW: Double,
-        val iceAlbedoFeedback: Boolean
+        val iceAlbedoFeedback: Boolean,
+        val landHeatCapacity: Double
     ) {
         /**
          * The diffusivity on each edge between bands, which is where the flux is evaluated.
@@ -1080,7 +1089,7 @@ object EnergyBalance {
         waterC: DoubleArray
     ) {
         val stepSeconds = SECONDS_PER_YEAR / STEPS_PER_YEAR
-        val landHeat = LAND_HEAT_CAPACITY_J_PER_M2_C
+        val landHeat = geometry.landHeatCapacity
         val marineAirHeat = MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
         val bandMean = geometry.rightHandSide
 
@@ -1178,7 +1187,7 @@ object EnergyBalance {
             // imported heat through the surface flux, a step later and much attenuated, which is
             // exactly how an ocean receives what the atmosphere brings.
             geometry.meanHeatCapacity[band] = 1.0 / (
-                landShare / LAND_HEAT_CAPACITY_J_PER_M2_C +
+                landShare / geometry.landHeatCapacity +
                     (1.0 - landShare) / MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
                 )
         }

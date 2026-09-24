@@ -11,15 +11,13 @@ import kotlin.test.assertTrue
  * E2. A closed basin holds as much water as its catchment can keep wet, not as much as its rim
  * could contain.
  *
- * The two seeds were found by searching 1..120 at 512 for the largest spill-level basins and
- * reading off their rainfall (`ScratchLakeSearch`, not kept):
- *
- *  - **seed 43** carries the largest basin in dry country anywhere in that range — 1775 cells at
- *    (416,384), averaging 172 mm of rain a year against 577 mm of potential evaporation. It is this
- *    world's Lake Eyre, and filling it to the brim was always the wrong answer.
- *  - **seed 99** carries a large basin in wet country — 433 cells at (356,247), 730 mm of rain — and
- *    is one of the four seeds `GeographyAuditTest` already watches. Its catchment can keep the
- *    whole basin wet, so the water balance must leave it exactly where it was.
+ * Two samples, one basin in dry country and one in wet, each found by scanning seeds for the
+ * largest spill-level basin of its kind and re-picked by the same scan whenever the terrain under
+ * them moved; the seeds the class uses now are [drySeed] and [wetSeed], and each case prints the
+ * basin it found and its rainfall. The first were seed 43, the largest basin in dry country in
+ * 1..120, this world's Lake Eyre, which filling to the brim was always the wrong answer; and seed
+ * 99, a large basin in wet country whose catchment keeps it wet, which the water balance must leave
+ * exactly where it was.
  *
  * Both directions matter. A change that shrank every lake would pass the first of these and fail
  * the second, and a world with no lakes in it is not more realistic than one with too many.
@@ -192,10 +190,10 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // the balance settles at falls on a terrace or between two, and a small change in the
         // terrain moves it a whole terrace.
         //
-        // E4 (segmented rifts) took it from 30% to 45%. Seed 43's dry basin holds no rift cells at
-        // all — the guard prints that above — so nothing about it is a rift; what moved it is that
-        // `PlateStage` normalizes the whole height field over its own range, so any change to the
-        // deepest ground on the map rescales the relief everywhere. The basin went from 1,775
+        // E4 (segmented rifts) took it from 30% to 45%. Seed 43's dry basin held no rift cells at
+        // all, so nothing about it was a rift; what moved it was that `PlateStage` then normalised
+        // the whole height field over its own range (it has not since S2), so any change to the
+        // deepest ground on the map rescaled the relief everywhere. The basin went from 1,775
         // cells at spill to 1,630 and the level settled one terrace higher, 40% against 18%.
         //
         // S3 takes it to 50%, and this time the cause is the water rather than the rock. The
@@ -207,6 +205,10 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // them still wet, 47%. Recorded at 50 for the same reason the previous figure was recorded
         // at 45 rather than at 40: the terrace below is a long way down and a bar on the terrace
         // itself would be re-taken by the next chunk that moves a metre of rock.
+        //
+        // So the figure is a regression pin on this one hollow, moved three times, and the claim
+        // it serves is carried by the control above; "far below its spill level" in the class's
+        // own words now reads "under half its footprint".
         assertTrue(
             share < DRY_BASIN_SHARE_OF_SPILL_AREA,
             "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
@@ -234,9 +236,10 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // had to re-read it — which is why `basinOf` prints the five largest basins and their
         // rainfall. W3 gave the moisture budget lengths in kilometres instead of rates per cell,
         // and the ground's own return now depends on how wet the ground already is, so an interior
-        // catchment keeps less of its rain: this basin reads 431 mm over 778 cells where it read
-        // 698 over 383. Nothing at 650 mm is large enough to measure any more, and the claim below
-        // is unchanged — a catchment that can keep its basin wet leaves it at the brim.
+        // catchment keeps less of its rain: the basin W3 measured, on the seed this case used
+        // then, read 431 mm over 778 cells where it had read 698 over 383. Nothing at 650 mm was
+        // large enough to measure any more, and the claim below is unchanged — a catchment that
+        // can keep its basin wet leaves it at the brim. What today's basin reads is printed.
         val basin = basinOf(off, 400f, Float.MAX_VALUE)
         assertTrue(basin.size >= 200, "seed $wetSeed has no large wet basin any more (${basin.size} cells)")
 

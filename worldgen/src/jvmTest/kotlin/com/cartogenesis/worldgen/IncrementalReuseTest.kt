@@ -146,8 +146,10 @@ class IncrementalReuseTest {
             "permafrost" to base.copy(
                 vegetation = base.vegetation.copy(permafrost = false)
             ),
+            // Flipped from the default, which is off: set to the value it already had, this case
+            // compared two identical configs until Audit III (its E-T5).
             "vegetationRecycling" to base.copy(
-                climate = base.climate.copy(vegetationRecycling = false)
+                climate = base.climate.copy(vegetationRecycling = !base.climate.vegetationRecycling)
             ),
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
@@ -183,7 +185,9 @@ class IncrementalReuseTest {
             "wilderness" to base.copy(
                 nations = base.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)
             ),
-            "landmarks" to base.copy(landmarks = base.landmarks.copy(count = base.landmarks.count + 7))
+            "landmarks" to base.copy(landmarks = base.landmarks.copy(count = base.landmarks.count + 7)),
+            // The cultures section, which rule 12 asks for and this list did not have.
+            "cultures" to base.copy(cultures = base.cultures.copy(cultureCount = base.cultures.cultureCount + 3))
         )
 
         val disagreed = ArrayList<String>()
@@ -399,41 +403,17 @@ class IncrementalReuseTest {
     }
 
     /**
-     * A number per stage rather than one for the whole world, so a disagreement says which stage
-     * went stale instead of merely that something did.
+     * Every field reachable from the world, digested branch by branch, so a disagreement says which
+     * stage's field went stale instead of merely that something did.
+     *
+     * By reflection ([ReachableState]) rather than a list written here. The list this replaced
+     * checksummed one or two fields a stage and left the cultures out entirely, and every field it
+     * did not name was a field a stale stage could hide in: the `lakes` case once passed while
+     * reusing a stale river stage because the lakes were not in it. A field added to any stage is
+     * in this the day it is added.
      */
-    private fun fingerprint(world: WorldMap): String {
-        fun sum(values: FloatArray): Long {
-            var checksum = 0L
-            values.forEach { checksum = checksum * 31 + it.toRawBits() }
-            return checksum
+    private fun fingerprint(world: WorldMap): String =
+        ReachableState.digestsByBranch(world).entries.joinToString("\n         ") { (branch, digest) ->
+            "$branch=%016x".format(digest)
         }
-        return listOf(
-            "terrain=${sum(world.terrain.height.data)}",
-            "plates=${sum(world.plates.height.data)}",
-            "erosion=${sum(world.erosion.height.data)}",
-            "sea=${sum(world.sea.relativeElevation.data)}",
-            "ocean=${sum(world.ocean.velocityX.data)},${sum(world.ocean.velocityY.data)}",
-            "climate=${sum(world.climate.temperature.data)},${sum(world.climate.precipitation.data)}",
-            // The seasonal fields separately: they are what a seasonal setting moves, and a
-            // checksum of the annual mean alone would be blind to a season going stale.
-            "vegetation=${sum(world.climate.vegetationDensity.data)}," +
-                "${world.climate.permafrost.sumOf { it.toInt() }}",
-            "seasons=${sum(world.climate.summerTemperature.data)}," +
-                "${sum(world.climate.winterTemperature.data)}," +
-                "${sum(world.climate.summerPrecipitation.data)}," +
-                "${sum(world.climate.winterPrecipitation.data)}",
-            "rivers=${world.rivers.rivers.size},${sum(world.rivers.flowAccumulation.data)}",
-            // Lakes are their own result hanging off the river stage. Leaving them out made
-            // the `lakes` case pass while reusing a stale river stage — the check went
-            // through the motions without ever looking at what the setting changes.
-            "lakes=${world.rivers.lakes.lakes.size},${world.rivers.lakes.lakeId.sum()}," +
-                // E2's endorheic basins and playas: a stale river stage would keep the old
-                // brim-full lakes, and the cell count alone would not say so.
-                "${world.rivers.lakes.lakes.count { it.endorheic }}," +
-                "${world.rivers.lakes.playa.count { it }}",
-            "nations=${world.nations.nations.size},${world.nations.nationId.sum()}",
-            "landmarks=${world.landmarks.landmarks.size}"
-        ).joinToString("\n         ")
-    }
 }

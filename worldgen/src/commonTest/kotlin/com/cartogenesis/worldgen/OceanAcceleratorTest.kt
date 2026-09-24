@@ -68,6 +68,30 @@ class OceanAcceleratorTest {
         assertTrue(problem.forcing.any { it != 0f }, "a forcing of nothing would spin nothing")
     }
 
+    /**
+     * The problem the device is handed is the CPU's own, array for array: a device that answers
+     * with the reference solve of whatever it was handed gives back the reference ocean to the last
+     * bit only if the mask, the forcing, the passes and the relaxation it was handed are the ones
+     * the CPU would have solved. The case above checks the sizes and that the forcing is not
+     * nothing; this is what says it is the right forcing on the right mask.
+     */
+    @Test
+    fun `the device is handed exactly the problem the CPU solves`() = runTest {
+        val reference = OceanStage.generate(config, sea)
+        val answeringLikeTheCpu = object : OceanAccelerator {
+            override val name = "reference-solving test device"
+            override suspend fun solve(
+                cellsAcross: Int,
+                cellsDown: Int,
+                isWater: BooleanArray,
+                forcing: FloatArray,
+                passes: Int,
+                overRelaxation: Float
+            ): FloatArray = OceanStage.solveOnCpu(cellsAcross, cellsDown, isWater, forcing, passes, overRelaxation)
+        }
+        assertSameOcean(reference, OceanStage.generate(acceleratedConfig, sea, answeringLikeTheCpu))
+    }
+
     @Test
     fun `a decline leaves the reference answer exactly`() = runTest {
         val reference = OceanStage.generate(config, sea)

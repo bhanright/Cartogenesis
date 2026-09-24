@@ -25,13 +25,15 @@ class GlaciationAuditTest {
      * **No narrow straight water.** A *bar* is a body of standing water at most two cells across
      * and at least four cells long along one of the four grid bearings, measured over the whole
      * body. That is the artefact by its own description — the comb of parallel gullies, the fan of
-     * troughs radiating from a confluence — and the guard's tolerance is zero, because after the
-     * fix no basin *can* be one: a basin is a region opened by a cell and dilated back, so it is a
-     * union of three-by-three blocks and three cells wide everywhere. A guard that can only be
-     * satisfied by construction is the only kind worth having here, since the last two attempts
-     * both set a threshold and both left the author looking at bars one level down.
+     * troughs radiating from a confluence. What is asserted is the ice's own share of it: the bar
+     * cells this world carries beyond the ones the same world carries with the glaciation off must
+     * be under a fiftieth of its standing water. The fiftieth is a regression pin and not a figure
+     * of Earth's: the guard was written with a tolerance of zero while a cut basin was three cells
+     * wide at its narrowest and so could not be a bar, and H1's worn belts put two bars of the ice's
+     * on this world, 0.8% of its standing water, which is where the pin was set (the comment in the
+     * case says more).
      *
-     * Measured on this seed and config, main against the fix:
+     * Measured on this seed and config when the guard was written, main against the fix:
      *
      * | | bars | lakes | lake cells | share of land | largest lake |
      * |---|---|---|---|---|---|
@@ -47,8 +49,8 @@ class GlaciationAuditTest {
      * The third row is why the lake *counts* are asserted only against the ice's own contribution.
      * Most of this world's standing water at 2048 is not glacial at all — it is in tectonic and
      * erosional basins that exist with the stage switched off — and the largest body on the map is
-     * one of those, at seven times [com.cartogenesis.worldgen.model.GlaciationConfig
-     * .maxLakeShareOfMap]. This stage can cap what it cuts and does; it cannot cap what it did not
+     * one of those, larger than [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeAreaKm2]
+     * lets the ice cut. This stage can cap what it cuts and does; it cannot cap what it did not
      * make, and a guard that pretended otherwise would be measuring the erosion stage.
      */
     @Test

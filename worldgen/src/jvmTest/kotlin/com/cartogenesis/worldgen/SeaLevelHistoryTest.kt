@@ -45,7 +45,8 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
      *
      * At 512 on seeds 7/42/1234, with the sea held at today's level for every round: 26/24/15 river
      * mouths more than three cells inside an inlet, and an ocean shoreline 5.41/7.02/7.76 times the
-     * perimeter of a square holding the same land area. With the lowstand at its default of 0.015:
+     * perimeter of a square holding the same land area. With the lowstand at its default, which
+     * was 0.015 of the land's relief when these were taken and is `SeaConfig.lowstandMetres` now:
      * 40/50/73 mouths — 1.54, 2.08 and 4.87 times — and 5.99/8.64/12.06 — 1.11, 1.23 and 1.55.
      *
      * The bars sit under the worst of each, and the control bar above the best of the three worlds
@@ -327,9 +328,9 @@ internal class Coast(world: WorldMap, label: String) {
                 ocean = id
             }
         }
-        // The same cap the rule itself uses, so what this counts is exactly what it should have
-        // taken and did not.
-        val cap = WorldGenConfig().let {
+        // The same cap the rule itself uses, on this world's own cells, so what this counts is
+        // exactly what it should have taken and did not at whatever grid it was generated on.
+        val cap = world.config.let {
             (it.sea.enclosedSeaMaxKm2 / it.squareKilometresPerCell).toInt()
         }
         var pocketBodies = 0

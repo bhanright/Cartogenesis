@@ -598,8 +598,8 @@ class PressureWindTest : BorrowsSharedWorlds() {
                 val cell = row * cellsAcross + column
                 if (world.sea.isLand[cell]) continue
                 if (world.climate.winterSeaIce[cell]) continue
-                // The first open water going poleward to equatorward is the edge; keep going, so
-                // what is left is the most equatorward open water, and the ice edge sits at it.
+                // The first open water met walking equatorward from the pole is the edge, and the
+                // walk stops there: the ice edge is the poleward limit of the open sea.
                 edgeLatitude = latitude.toDouble()
                 break
             }

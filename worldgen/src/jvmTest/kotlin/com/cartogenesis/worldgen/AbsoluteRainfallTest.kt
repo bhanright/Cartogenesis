@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -31,14 +32,27 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         /** How far out to sea a coast may look, and how far the land must run behind it. */
         const val SEA_REACH = 30
         const val LAND_BEHIND = 8
+
+        /** The windward coast `ClimateStage.MM_SCALE` was calibrated to, Earth's wettest coasts. */
+        const val CALIBRATED_COAST_MM = 3_000f
+
+        /** "Within a few hundred millimetres", as `ClimateStage.MM_SCALE` states its own reach. */
+        const val FEW_HUNDRED_MM = 500f
+
+        /** Koppen's desert line in these units, the core `ClimateStage.MM_SCALE` puts under it. */
+        const val DESERT_LINE_MM = 250f
     }
 
     /**
-     * The figures the report asks for: seed 42's calibration targets, and every audited seed's
-     * desert share and in-band placement, before and after A4.
+     * The calibration holds on every audited seed, as `ClimateStage.MM_SCALE` says it does: the
+     * windward coast (the 99.5th land percentile) within a few hundred millimetres of the 3,000 it
+     * was set to on the calibration seed, and the desert core (the 10th percentile of land at 25 to
+     * 35 degrees) under the 250 mm desert line. "A few hundred" is taken as five hundred, the most
+     * the phrase can mean. Each seed's desert share and in-band placement is printed beside them.
      */
     @Test
-    fun `report calibration and desert-share figures per seed`() {
+    fun `the calibration lands every audited seed's coast near 3000 mm and its desert core under 250`() {
+        val misses = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
                 WorldGenConfig(seed = seed, width = 512, height = 512)
@@ -83,6 +97,19 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
                     "desert core (p10 @ 25-35deg) %.0fmm, ".format(core) +
                     "desert %.2f%% of land, %.0f%% of it in the 15-45deg band".format(desertShare, inBand)
             )
+            if (abs(coast - CALIBRATED_COAST_MM) > FEW_HUNDRED_MM) {
+                misses += String.format(Locale.ROOT, "seed %d's windward coast at %.0f mm", seed, coast)
+            }
+            if (core >= DESERT_LINE_MM) misses += String.format(Locale.ROOT, "seed %d's desert core at %.0f mm", seed, core)
+        }
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 1234's windward coast at 3574 mm") {
+            if (misses.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +
+                        "coast of $CALIBRATED_COAST_MM +/- $FEW_HUNDRED_MM mm and a desert core under $DESERT_LINE_MM",
+                    misses.joinToString()
+                )
+            }
         }
     }
 

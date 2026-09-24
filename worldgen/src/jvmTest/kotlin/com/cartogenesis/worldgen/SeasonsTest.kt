@@ -78,7 +78,8 @@ class SeasonsTest : BorrowsSharedWorlds() {
          *
          * Set from what the three seeds actually produce (see the printed figures), well clear of
          * both zero and the counts observed, since the guard has to discriminate "there is a
-         * Mediterranean coast on this map" from "there are four cells of it".
+         * Mediterranean coast on this map" from "there are four cells of it". A sample-size floor
+         * chosen off this tree's worlds, then, and not a figure of Earth's.
          */
         const val BAND_CELLS = 40
     }

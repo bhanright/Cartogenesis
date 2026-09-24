@@ -174,17 +174,13 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         val controlHighest = ArrayList<Double>()
         SEEDS.forEach { seed ->
             val here = textureByElevation(world(seed))
+            // The texture corner alone, and nothing else. The control used to flatten the craton
+            // and even out its relief beside it, so a lowest quarter reading rough there could have
+            // been the flat crust's doing rather than the stationary texture's (Audit III's A-I8).
             val control = textureByElevation(
                 SharedWorlds.world(
                     standard(seed).let {
-                        it.copy(
-                            isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
-                            tectonics = it.tectonics.copy(
-                                textureCornerKm = TEXTURE_OFF,
-                                cratonReliefStandardDeviationMetres =
-                                    it.tectonics.marginReliefStandardDeviationMetres
-                            )
-                        )
+                        it.copy(tectonics = it.tectonics.copy(textureCornerKm = TEXTURE_OFF))
                     }
                 )
             )

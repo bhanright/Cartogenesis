@@ -428,6 +428,29 @@ internal object HydraulicErosion {
      * it and the other divisor the same weight is taken against — `ChannelInitiation` divides it
      * by Earth's land mean, for reasons that are the mirror image of the ones above.
      */
+    /**
+     * What a routing pass hands its accumulation, summed over the land it routes on, and that
+     * land's cell count: the figure the weight guard holds to one per cell. Taken from the arrays
+     * the accumulation is given rather than from [normaliseOverLand]'s own return, which is that
+     * function's arithmetic read back and could not differ from one; this can, if a pass
+     * normalises over one mask and routes over another. Only called when a guard is listening.
+     */
+    private fun reportRoutedWeight(
+        report: (String, Double, Int) -> Unit,
+        pass: String,
+        weights: FloatArray,
+        routedLand: BooleanArray
+    ) {
+        var summed = 0.0
+        var landCells = 0
+        for (cell in weights.indices) {
+            if (!routedLand[cell]) continue
+            summed += weights[cell].toDouble()
+            landCells++
+        }
+        report(pass, summed, landCells)
+    }
+
     private fun normaliseOverLand(
         rainfallMm: FloatArray,
         isLand: BooleanArray,
@@ -487,10 +510,11 @@ internal object HydraulicErosion {
         log: DepositionLog? = null,
         receiverClamp: Boolean = true,
         /**
-         * Handed every routing pass's name, the weight it summed over its own land, and how many
-         * land cells that was. Diagnostics only, on the same terms as [onRound]: the two agree to
-         * the last few bits when the normalisation is doing its job, and a guard reads them back
-         * rather than taking the invariant on trust.
+         * Handed every routing pass's name, the weights that pass's accumulation is given summed
+         * over the land it routes on, and how many land cells that is (see [reportRoutedWeight]).
+         * Diagnostics only, on the same terms as [onRound]: the two agree to the last few bits when
+         * the normalisation is doing its job, and a guard reads them back rather than taking the
+         * invariant on trust.
          */
         weightSums: ((String, Double, Int) -> Unit)? = null,
         /** Whether [cut] takes the cover's factor. Only ever false in the cover's own guard. */
@@ -750,14 +774,13 @@ internal object HydraulicErosion {
             // This round's shoreline is now known, so both fields are taken against this round's
             // land. See [normaliseOverLand] for why that is where the mean has to come from, and
             // [VEGETATION_SHIELDING] for why the cover is spent relatively too.
-            val roundWeight =
-                normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
+            normaliseOverLand(rainfallMm, sea.isLand, sea.landCellCount, runoff)
             if (shieldCut) {
                 shieldingOverLand(vegetationDensity, sea.isLand, sea.landCellCount, erodibility)
             } else {
                 erodibility.fill(1f)
             }
-            weightSums?.invoke("round $round", roundWeight, sea.landCellCount)
+            weightSums?.let { reportRoutedWeight(it, "round $round", runoff, sea.isLand) }
 
             val filled = FlowRouting.fillDepressions(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation
@@ -1302,10 +1325,8 @@ internal object HydraulicErosion {
                     // what it has to cut with is the discharge behind that sill. Weighted as the
                     // rounds weight it — but renormalised here, because this pass routes over the
                     // spoil-laid surface and that surface has a shoreline of its own.
-                    val spoilWeight = normaliseOverLand(
-                        rainfallMm, after.isLand, after.landCellCount, spoilRunoff
-                    )
-                    weightSums?.invoke("breach $round", spoilWeight, after.landCellCount)
+                    normaliseOverLand(rainfallMm, after.isLand, after.landCellCount, spoilRunoff)
+                    weightSums?.let { reportRoutedWeight(it, "breach $round", spoilRunoff, after.isLand) }
                     val spoilArea = FlowRouting.accumulate(
                         cellsAcross, cellsDown, after.isLand, spoilFilled, spoilFlow, after.landCellCount
                     ) { cell -> spoilRunoff[cell] }
@@ -1709,8 +1730,8 @@ internal object HydraulicErosion {
         // merely where a lot of ground drains — and normalised over this pass's own land, which is
         // the finished terrain's and not any round's.
         val runoff = FloatArray(cellCount)
-        val outletWeight = normaliseOverLand(rainfallMm, isLand, sea.landCellCount, runoff)
-        weightSums?.invoke("outlet", outletWeight, sea.landCellCount)
+        normaliseOverLand(rainfallMm, isLand, sea.landCellCount, runoff)
+        weightSums?.let { reportRoutedWeight(it, "outlet", runoff, isLand) }
         val area = FlowRouting.accumulate(
             cellsAcross, cellsDown, isLand, filled, flow, sea.landCellCount
         ) { cell -> runoff[cell] }

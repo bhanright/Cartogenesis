@@ -15,6 +15,12 @@ import kotlinx.coroutines.runBlocking
  * separate names rather than overloading one: two of them once took a `Boolean` third argument
  * meaning entirely different things, and a positional call resolved to whichever needed no default
  * — quietly running a different piece of the pipeline than the caller asked for.
+ *
+ * The internal variants take the tectonic uplift with no default, for the same reason. The engine
+ * always hands the stage `PlateResult.upliftRateMmPerYear`, and the flexure only answers an uplift
+ * it is given; a guard that let the rate default to null ran a stage the map is never made by, and
+ * every one of them did (Audit III's B-I2). So each caller says which it is running: the plates'
+ * own rate, which is production, or null, which is a control and says so where it is passed.
  */
 fun erodeBlocking(
     config: WorldGenConfig,
@@ -38,7 +44,7 @@ internal fun thermalSweepBlocking(
 internal fun erodeBlockingReportingRounds(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField? = null,
+    upliftRateMmPerYear: FloatField?,
     onRound: (RoundMass) -> Unit
 ): ErosionResult =
     runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound) }
@@ -47,8 +53,9 @@ internal fun erodeBlockingReportingRounds(
 internal fun erodeBlockingLoggingDeposition(
     config: WorldGenConfig,
     height: FloatField,
+    upliftRateMmPerYear: FloatField?,
     log: DepositionLog
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, null, null, null, log) }
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, null, log) }
 
 /**
  * The whole stage, with the receiver clamp switchable — the control `ReceiverClampTest` needs.
@@ -61,10 +68,11 @@ internal fun erodeBlockingLoggingDeposition(
 internal fun erodeBlockingWithReceiverClamp(
     config: WorldGenConfig,
     height: FloatField,
+    upliftRateMmPerYear: FloatField?,
     receiverClamp: Boolean,
     onRound: ((RoundMass) -> Unit)? = null
 ): ErosionResult = runBlocking {
-    ErosionStage.apply(config, height, null, null, onRound, receiverClamp = receiverClamp)
+    ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound, receiverClamp = receiverClamp)
 }
 
 /**
@@ -80,6 +88,7 @@ internal fun erodeBlockingWithReceiverClamp(
 internal fun erodeBlockingObservingCover(
     config: WorldGenConfig,
     height: FloatField,
+    upliftRateMmPerYear: FloatField?,
     shieldCut: Boolean = true,
     /**
      * The clamp is switched off for the cover's own guard, and only there. It bounds a cell's cut
@@ -93,7 +102,7 @@ internal fun erodeBlockingObservingCover(
     weightSums: ((String, Double, Int) -> Unit)? = null
 ): ErosionResult = runBlocking {
     ErosionStage.apply(
-        config, height, null, null, null, null, receiverClamp = receiverClamp,
+        config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
         weightSums = weightSums, shieldCut = shieldCut
     )
 }

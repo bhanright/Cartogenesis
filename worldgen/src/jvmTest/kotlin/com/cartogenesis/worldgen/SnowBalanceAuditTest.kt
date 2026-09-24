@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.OceanResult
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
+import com.cartogenesis.worldgen.pipeline.Season
 import com.cartogenesis.worldgen.pipeline.SnowBalance
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
@@ -35,7 +36,7 @@ class SnowBalanceAuditTest {
             val cfg = WorldGenConfig(seed = 42L, width = 128, height = 128).atResolution(size, size)
             val terrain = TerrainStage.generate(cfg)
             val plates = PlateStage.generate(cfg, terrain)
-            val erosion = erodeBlocking(cfg, plates.height)
+            val erosion = erodeBlocking(cfg, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             val sea = SeaLevelStage.apply(erosion.height, cfg)
 
             var ocean: OceanResult? = null
@@ -44,17 +45,21 @@ class SnowBalanceAuditTest {
                 ClimateStage.provisionalSnowBalance(cfg, sea, ocean!!)
             }
 
-            // The balance on its own, out of the four fields the climate stage already has. Best of
-            // five, because what rule 8 is asking is what the work costs, not what the slowest
-            // scheduling of it costs.
+            // The balance on its own, out of the four fields the climate stage already has, and the
+            // four it is handed there: the half-years' temperatures, which the stage integrates the
+            // degree-days over, and not the warmest and coldest months the result keeps for Koppen.
+            // Best of five, because what rule 8 is asking is what the work costs, not what the
+            // slowest scheduling of it costs.
             val generated = ClimateStage.generateWithSeasonalMm(cfg, sea, ocean!!)
+            val warmHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.WARM_HALF)
+            val coldHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.COLD_HALF)
             var balanceMs = Long.MAX_VALUE
             repeat(5) {
                 val ms = measureTimeMillis {
                     SnowBalance.field(
                         sea.isLand,
-                        generated.result.summerTemperature,
-                        generated.result.winterTemperature,
+                        warmHalf,
+                        coldHalf,
                         generated.summerPrecipitationMm,
                         generated.winterPrecipitationMm
                     )

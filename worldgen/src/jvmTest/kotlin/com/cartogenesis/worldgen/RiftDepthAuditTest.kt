@@ -12,7 +12,11 @@ import kotlin.test.assertTrue
  * begins at 512, in the audit tier for the reason `BayHeadDeltaAuditTest` is: two 2048 worlds are
  * not something the per-merge tier can afford, and the artefact lives nowhere else.
  *
- * What this settles, with figures:
+ * What this settled, with figures read on the world before S1 and S2 moved the crust. Both windows
+ * were drawn round that world, and today's no longer puts the same things in them (Audit III's
+ * A-I5): the trough's floor and the southern window's rift share are printed on every run, and
+ * the windows want drawing again on a render of the current world before these readings are
+ * quoted as its own. Only the rift-lake envelope is asserted, and it reads the whole map.
  *
  *  - **How much of the trough is under water, and why.** Its flat floor is 7,397 cells inside the
  *    window and 29% of them are wet. The post-cut outlet does exactly what it is meant to: it cuts
@@ -38,23 +42,24 @@ class RiftDepthAuditTest {
     private val valleyWindow = intArrayOf(1010, 1650, 1165, 1900)
 
     /**
-     * Earth's envelope for the deepest rift lake a world holds, as a share of the land's relief.
+     * Earth's envelope for the deepest rift lake a world holds, in metres of water.
      *
-     * Water depth, not the depth of the stamp: what the reader sees is the lake. Baikal's 1.64 km
-     * against 8 km of relief is 20%, Tanganyika's 1.47 km 18%, Malawi's 0.71 km 9%, Issyk-Kul's
-     * 0.67 km 8%, the Dead Sea's 0.30 km 4%, Turkana's 0.11 km 1.4%. So a world's deepest rift lake
-     * belongs above Malawi's share and no deeper than Baikal's, the upper end left generous because
-     * a generator that made one lake deeper than Baikal would be wrong about an extreme rather than
-     * about the landform.
+     * Water depth, not the depth of the stamp: what the reader sees is the lake. Baikal is 1,642 m
+     * deep, Tanganyika 1,470, Malawi 706, Issyk-Kul 668, the Dead Sea about 300 and Turkana 109. So
+     * a world's deepest rift lake belongs at least as deep as Malawi and no deeper than Baikal.
      *
-     * A standing bound rather than a chunk's guard, and said plainly because rule 2 asks: it has
-     * never been red. E7 measured it precisely to find out whether the floors wanted deepening, and
-     * the answer at 24.2% was no. What it is here for is the next chunk that moves
-     * [TectonicsConfig.riftDepth] or puts subsidence under a rift, either of which could take a
-     * rift lake past Baikal without anything else on the map noticing.
+     * In metres, and read in metres: until Audit III (its A-I5) the bar was a share of "8 km of
+     * relief" and the depth it was held against a share of `WorldScale.highestLandMetres`, 6 km,
+     * so the envelope admitted 480 to 1,800 m where Malawi to Baikal was meant.
+     *
+     * A standing bound rather than a chunk's guard, and said plainly because rule 2 asks: E7
+     * measured it to find out whether the floors wanted deepening, and the answer was no. What it is
+     * here for is the next chunk that moves [TectonicsConfig.riftDepth] or puts subsidence under a
+     * rift, either of which could take a rift lake past Baikal without anything else on the map
+     * noticing.
      */
-    private val deepestRiftLakeMin = 0.08
-    private val deepestRiftLakeMax = 0.30
+    private val deepestRiftLakeMinMetres = 706.0
+    private val deepestRiftLakeMaxMetres = 1_642.0
 
     private fun config(): WorldGenConfig {
         val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
@@ -75,16 +80,14 @@ class RiftDepthAuditTest {
         valley(world)
         val deepest = deepestRiftLake(world)
         println(
-            ("E7 AUDIT 718106 at 2048: deepest rift lake %.1f%% of relief, Earth %.0f-%.0f%% " +
+            ("E7 AUDIT 718106 at 2048: deepest rift lake %.0f m of water, Earth %.0f-%.0f m " +
                 "(Malawi to Baikal); generation %.1f s")
-                .format(
-                    deepest * 100, deepestRiftLakeMin * 100, deepestRiftLakeMax * 100, seconds
-                )
+                .format(deepest, deepestRiftLakeMinMetres, deepestRiftLakeMaxMetres, seconds)
         )
         assertTrue(
-            deepest in deepestRiftLakeMin..deepestRiftLakeMax,
-            "the deepest rift lake stands ${deepest * 100}% of the land's relief deep, outside " +
-                "Earth's ${deepestRiftLakeMin * 100}-${deepestRiftLakeMax * 100}%"
+            deepest in deepestRiftLakeMinMetres..deepestRiftLakeMaxMetres,
+            "the deepest rift lake stands ${"%.0f".format(deepest)} m deep, outside Earth's " +
+                "${deepestRiftLakeMinMetres.toInt()}-${deepestRiftLakeMaxMetres.toInt()} m"
         )
     }
 
@@ -172,7 +175,7 @@ class RiftDepthAuditTest {
         )
     }
 
-    /** The deepest lake lying in a rift trough, as a share of the land's relief. */
+    /** The deepest lake lying in a rift trough, in metres of water from its surface to its floor. */
     private fun deepestRiftLake(world: WorldMap): Double {
         val w = world.width
         val lakes = world.rivers.lakes
@@ -184,6 +187,8 @@ class RiftDepthAuditTest {
         for (i in 0 until w * world.height) {
             val id = lakes.lakeId[i]
             if (id < 0) continue
+            // A lake lies on land, which is what lets both its ends be read on one ruler below.
+            assertTrue(world.sea.isLand[i], "lake $id holds cell $i, which is not land")
             cells[id]++
             if (inRiftTrough(world, i)) riftCells[id]++
             if (relative[i] < floor[id]) floor[id] = relative[i]
@@ -195,7 +200,12 @@ class RiftDepthAuditTest {
             if (riftCells[lake.id] * 2 <= cells[lake.id]) return@forEach
             bodies++
             water += lake.cellCount
-            val depth = (lake.surfaceElevation - floor[lake.id]).toDouble()
+            // Both ends on the land's half of the ruler, a floor below the shoreline included: the
+            // enclosure rule rewrites the ground it makes land on that half
+            // (`SeaLevelStage.markUnreachableWaterAsLand`), and `WorldScale.metresAboveShoreline`
+            // says a land cell keeps it whichever side of the waterline it stands.
+            val depth = world.config.scale
+                .metresAboveShoreline(lake.surfaceElevation - floor[lake.id]).toDouble()
             if (depth > deepest) deepest = depth
         }
         println("E7 AUDIT: $bodies rift lakes, $water cells of water in them")

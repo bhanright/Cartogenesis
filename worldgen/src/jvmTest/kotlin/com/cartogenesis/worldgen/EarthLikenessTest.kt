@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import org.junit.Assert.assertTrue
 
 /**
@@ -78,22 +79,40 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
      * The metrics Earth has a figure for that this generator does *not* reach, printed in the order
      * the chunks after M1 should take them up: farthest from Earth first.
      *
-     * Not an assertion. The plan's rule 5 forbids a bar moved to fit and M1's job is to measure, so
-     * a metric the generator misses is written down with Earth's figure beside it and left for the
-     * chunk that owns its cause. The one thing asserted is that the list is not *empty*, which
-     * would mean either that the generator had become Earth or — far likelier — that the findings
-     * had stopped being measured.
+     * Not an assertion of the figures. The plan's rule 5 forbids a bar moved to fit and M1's job is
+     * to measure, so a metric the generator misses is written down with Earth's figure beside it
+     * and left for the chunk that owns its cause. What is asserted is that each figure was read
+     * off something: land, lakes and islands counted, a network fitted and a course drawn. A finding
+     * over an empty sample reads zero and ranks like any other, so a list that is never empty — and
+     * `EarthLikeness.findings` always adds its entries — says nothing about whether the suite is
+     * still measuring; the samples do.
      */
     @Test
     fun `the findings, ranked by how far they sit from Earth`() {
-        val findings = EarthLikeness.findings(suite().pooled)
+        val pooled = suite().pooled
+        val findings = EarthLikeness.findings(pooled)
         findings.forEachIndexed { rank, finding -> println("EARTH FINDING ${rank + 1}. $finding") }
+        val empty = emptySamples(pooled)
         assertTrue(
-            "no findings at all, which means the suite has stopped measuring them rather than" +
-                " that the generator has become Earth",
-            findings.isNotEmpty()
+            "the findings were ranked over empty samples, so the suite has stopped measuring them:" +
+                " ${empty.joinToString()}",
+            empty.isEmpty()
         )
+        // The control: a pool that measured no world at all still yields a list of findings, which
+        // is why a non-empty list could not fail, and this check refuses it on every sample.
+        val nothing = EarthLikeness.Pool().pooled("nothing measured")
+        assertTrue("findings over no world at all came back empty", EarthLikeness.findings(nothing).isNotEmpty())
+        assertEquals(5, emptySamples(nothing).size, "a pool that measured nothing passed the sample check")
     }
+
+    /** The samples the findings are read off that hold nothing, by name. */
+    private fun emptySamples(metrics: EarthLikeness.Metrics): List<String> = listOf(
+        "land" to metrics.landCells,
+        "lakes" to metrics.lakeCells,
+        "islands" to metrics.islandSizes.count.toLong(),
+        "the terrain's network" to metrics.hackFullNetwork.points.toLong(),
+        "the drawn courses, in km" to metrics.drawnKilometres.toLong()
+    ).filter { it.second <= 0L }.map { it.first }
 
     private class Suite(
         val perSeed: List<EarthLikeness.Metrics>,

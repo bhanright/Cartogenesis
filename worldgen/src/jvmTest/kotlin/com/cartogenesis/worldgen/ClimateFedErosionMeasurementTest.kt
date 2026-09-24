@@ -53,7 +53,8 @@ class ClimateFedErosionMeasurementTest {
     }
 
     private fun drift(config: WorldGenConfig) {
-        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val plates = PlateStage.generate(config, TerrainStage.generate(config))
+        val uplift = plates.height
 
         // The terrain the first round is handed: the uplift with the opening thermal budget spent
         // on it, which is what `HydraulicErosion.apply` receives.
@@ -61,13 +62,14 @@ class ClimateFedErosionMeasurementTest {
         val flatRain = config.copy(erosion = config.erosion.copy(climateFeed = false))
 
         for ((label, rounds) in listOf("fed" to config, "flat" to flatRain)) {
-            val carved = erodeBlocking(rounds, uplift).height
+            val carved = erodeBlocking(rounds, uplift, upliftRateMmPerYear = plates.upliftRateMmPerYear).height
             // The ground halfway down, which is what the second march is taken on. Six of the
             // twelve rather than the twelfth round's own terrain: the lowstand schedule is written
             // against the configured round count, so a six-round world's sea stands a little
             // differently, and this is the midpoint to within that.
             val halfway = erodeBlocking(
-                rounds.copy(erosion = rounds.erosion.copy(hydraulicRounds = 6)), uplift
+                rounds.copy(erosion = rounds.erosion.copy(hydraulicRounds = 6)), uplift,
+                upliftRateMmPerYear = plates.upliftRateMmPerYear
             ).height
 
             val atTheTop = weightsOver(config, weathered)
@@ -128,7 +130,8 @@ class ClimateFedErosionMeasurementTest {
     @Test
     fun `report what the still ocean costs the provisional rainfall`() {
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
+        val plates = PlateStage.generate(config, TerrainStage.generate(config))
+        val uplift = plates.height
         val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
         val cut = SeaLevelStage.percentileCut(weathered, config.seaLevel, config.scale)
 

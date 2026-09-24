@@ -547,19 +547,47 @@ class EnergyBalanceTest {
         )
     }
 
+    /**
+     * The guard above, shown to discriminate: the same planet with the land given the ocean mixed
+     * layer's heat capacity, so both surfaces store heat alike, and the land column has to swing
+     * no further than the water for the ratio the guard asks of to fall short.
+     */
     @Test
     fun `with one heat capacity for both surfaces there is no land-sea contrast to find`() {
-        // The guard above, shown to discriminate. There is no switch for this: the contrast *is*
-        // the two heat capacities, so the control is a planet that is all sea, whose land column
-        // then carries the same year as its sea column would. Measured as the ratio between the
-        // land column of an all-ocean world and its sea column — which is not 1, because the land
-        // column still has the land's capacity, but which shows what the ratio would be if the two
-        // capacities were the same: exactly 1.
-        //
-        // What this case actually proves is the other half of the claim — that the contrast comes
-        // from the capacities and not from the geography. An all-ocean world's land column swings
-        // just as far as a continent's does on the real Earth, because it is the capacity and not
-        // the neighbours that decides.
+        val land = earthLandFraction()
+        val solved = EnergyBalance.solve(
+            land, EARTH_OBLIQUITY,
+            landHeatCapacityJPerM2C = EnergyBalance.MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C
+        )
+        var landSwing = 0.0
+        var waterSwing = 0.0
+        var bands = 0
+        for (band in 0 until EnergyBalance.BANDS) {
+            val latitude = abs(EnergyBalance.latitudeOfBand(band))
+            if (latitude < 50f || latitude > 60f) continue
+            landSwing += solved.land.warmestMonthC[band] - solved.land.coldestMonthC[band]
+            waterSwing += solved.water.warmestMonthC[band] - solved.water.coldestMonthC[band]
+            bands++
+        }
+        println(
+            ("EBM one heat capacity at 50-60 deg: land column %.1f C, water %.1f C, ratio %.2f")
+                .format(landSwing / bands, waterSwing / bands, landSwing / waterSwing)
+        )
+        assertTrue(
+            landSwing / waterSwing < LAND_TO_SEA_SWING_RATIO,
+            "with the land given the mixed layer's heat capacity it still swings %.2f times the water, so the guard above cannot tell the two capacities from one"
+                .format(landSwing / waterSwing)
+        )
+    }
+
+    /**
+     * The other half of the claim: the contrast comes from the capacities and not from the
+     * geography. A planet that is all sea still carries a land column, and it swings as far against
+     * its water as a continent's does, because it is the capacity and not the neighbours that
+     * decides.
+     */
+    @Test
+    fun `an all-ocean world's land column swings as a continent's does`() {
         val allSea = FloatArray(EnergyBalance.BANDS)
         val solved = EnergyBalance.solve(allSea, EARTH_OBLIQUITY)
         var landSwing = 0.0

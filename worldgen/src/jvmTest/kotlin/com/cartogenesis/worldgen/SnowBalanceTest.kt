@@ -236,7 +236,14 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             // measured 0% of 42,925. What the parameter permits is a trough continuing past the
             // mask, and that is what this excludes.
             val runOut = uncarved.config.cellsFor(uncarved.config.glaciation.runOutKm)
-            val fromTheIce = distanceFromFrozen(carving)
+            // The frozen mask the carving was read off, rebuilt: land at or under freezing on the
+            // uncarved terrain's own temperature, which is the mask the stage strikes with the
+            // balance off. Not the finished world's ice-sheet biome, which is an annual mean under
+            // -8 C and takes in summer sea ice, so it is a different set of cells on both sides.
+            val frozenWhenCarved = BooleanArray(provisional.data.size) {
+                uncarved.sea.isLand[it] && provisional.data[it] <= freezing
+            }
+            val fromTheIce = distanceFrom(frozenWhenCarved, uncarved.width, uncarved.height)
             var carvedCells = 0
             var aboveFreezing = 0
             var maxExceedanceC = 0f
@@ -633,7 +640,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * How far every cell stands from the nearest cell of ice, in cells, by a two-pass chamfer
+     * How far every cell stands from the nearest cell of [frozen], in cells, by a two-pass chamfer
      * sweep. Frozen cells read zero.
      *
      * A chamfer rather than a jump flood because what is read off it is a *threshold* at eight
@@ -641,12 +648,10 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
      * is half a cell here and moves no cell across the line that a rounder metric would keep on
      * its own side.
      */
-    private fun distanceFromFrozen(world: WorldMap): FloatArray {
-        val cellsAcross = world.width
-        val cellsDown = world.height
+    private fun distanceFrom(frozen: BooleanArray, cellsAcross: Int, cellsDown: Int): FloatArray {
         val far = (cellsAcross + cellsDown).toFloat()
         val distance = FloatArray(cellsAcross * cellsDown) {
-            if (world.climate.biome[it] == Biome.ICE_SHEET) 0f else far
+            if (frozen[it]) 0f else far
         }
         val diagonal = 1.41421356f
         for (pass in 0..1) {

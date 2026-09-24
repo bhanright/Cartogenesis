@@ -425,8 +425,11 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     fun `a tropical coast has a wet season and a dry one`() {
         val base = WorldGenConfig(seed = MONSOON_SEED, width = SIZE, height = SIZE)
         val figures = listOf(0f, 0.3f).map { slant ->
+            // With the pressure departure off, as the class holds every world it builds: left on,
+            // the "zonal" world carried the pressure wind's meridional component, and the two
+            // worlds differed by more than the slant (Audit III's I-10).
             val world = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(meridionalWind = slant))
+                base.copy(climate = base.climate.copy(meridionalWind = slant, pressureWinds = false))
             )
             largestRegion(world, monsoonMask(world)) / world.sea.landCellCount.toDouble()
         }

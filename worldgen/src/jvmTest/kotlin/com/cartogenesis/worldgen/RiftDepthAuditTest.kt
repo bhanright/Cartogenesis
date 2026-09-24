@@ -12,7 +12,11 @@ import kotlin.test.assertTrue
  * begins at 512, in the audit tier for the reason `BayHeadDeltaAuditTest` is: two 2048 worlds are
  * not something the per-merge tier can afford, and the artefact lives nowhere else.
  *
- * What this settles, with figures:
+ * What this settled, with figures read on the world before S1 and S2 moved the crust. Both windows
+ * were drawn round that world, and today's no longer puts the same things in them (Audit III's
+ * A-I5): the trough's floor and the southern window's rift share are printed on every run, and
+ * the windows want drawing again on a render of the current world before these readings are
+ * quoted as its own. Only the rift-lake envelope is asserted, and it reads the whole map.
  *
  *  - **How much of the trough is under water, and why.** Its flat floor is 7,397 cells inside the
  *    window and 29% of them are wet. The post-cut outlet does exactly what it is meant to: it cuts
@@ -183,6 +187,8 @@ class RiftDepthAuditTest {
         for (i in 0 until w * world.height) {
             val id = lakes.lakeId[i]
             if (id < 0) continue
+            // A lake lies on land, which is what lets both its ends be read on one ruler below.
+            assertTrue(world.sea.isLand[i], "lake $id holds cell $i, which is not land")
             cells[id]++
             if (inRiftTrough(world, i)) riftCells[id]++
             if (relative[i] < floor[id]) floor[id] = relative[i]
@@ -194,13 +200,12 @@ class RiftDepthAuditTest {
             if (riftCells[lake.id] * 2 <= cells[lake.id]) return@forEach
             bodies++
             water += lake.cellCount
-            // Each end on its own half of the ruler: a floor below the shoreline stands on ground
-            // the enclosure rule made land at the level it already had, which is in the sea's
-            // units, and a surface above it in the land's.
-            val scale = world.config.scale
-            fun metres(relative: Float) =
-                if (relative >= 0f) scale.metresAboveShoreline(relative) else scale.metresBelowShoreline(relative)
-            val depth = (metres(lake.surfaceElevation) - metres(floor[lake.id])).toDouble()
+            // Both ends on the land's half of the ruler, a floor below the shoreline included: the
+            // enclosure rule rewrites the ground it makes land on that half
+            // (`SeaLevelStage.markUnreachableWaterAsLand`), and `WorldScale.metresAboveShoreline`
+            // says a land cell keeps it whichever side of the waterline it stands.
+            val depth = world.config.scale
+                .metresAboveShoreline(lake.surfaceElevation - floor[lake.id]).toDouble()
             if (depth > deepest) deepest = depth
         }
         println("E7 AUDIT: $bodies rift lakes, $water cells of water in them")

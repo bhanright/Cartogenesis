@@ -144,7 +144,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
      * the halving schedule cannot reach is counted here and the clause fails on the first cell off
      * by more than float rounding.
      *
-     * It fails today, and that is Audit III's finding A-I11 (with the second reading's Astra 1.2):
+     * It fails today, and that is Audit III's finding A-I11:
      * the flood is wrong on a few cells in several thousand, by a fraction of a cell width. It is
      * kept running as a known failure rather than loosened, and the fix that makes the flood exact —
      * or the change that states it as approximate with a bound — turns it back on.

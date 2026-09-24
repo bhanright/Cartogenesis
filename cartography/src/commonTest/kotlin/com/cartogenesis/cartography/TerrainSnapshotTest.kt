@@ -11,6 +11,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * A stored terrain has to come back exactly, and has to rebuild exactly the world it came from.
@@ -86,25 +89,15 @@ class TerrainSnapshotTest {
         assertNull(stored.erode(8, 8, FloatArray(64), limits, 1, 0.25f))
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     @Test
-    fun `a snapshot travels through a header and comes back exactly`() = runTest {
-        // The field is dead weight on the wire now (see WorldDocument.terrain), but while it is
-        // still on the wire it has to survive it: base64 of raw float bits, through JSON, intact.
-        val heights = FloatArray(16) { it * 0.001f }
-        val document = WorldDocument(
-            id = "stored",
-            title = "Stored",
-            config = WorldGenConfig(seed = 7L, width = 4, height = 4),
-            terrain = TerrainSnapshot.of(4, 4, heights),
-            savedAt = 1L
-        )
-
-        val save = assertNotNull(WorldCodec.decodeOrNull(WorldCodec.encode(document, null)))
-        val terrain = assertNotNull(save.document.terrain)
-        assertEquals(4, terrain.width)
-        val values = terrain.decode()
-        for (i in values.indices) {
-            assertEquals(heights[i].toRawBits(), values[i].toRawBits())
-        }
+    fun `a snapshot that disagrees with its own grid is refused`() {
+        // Four bytes where sixty-four were due: the old decode handed back a single height for a
+        // sixteen-cell grid, and the stage that took it failed somewhere else entirely.
+        assertFailsWith<IllegalArgumentException> { TerrainSnapshot(4, 4, Base64.encode(ByteArray(4))).decode() }
+        // And one stray byte past the last height, which the old decode dropped without a word.
+        assertFailsWith<IllegalArgumentException> { TerrainSnapshot(2, 2, Base64.encode(ByteArray(17))).decode() }
+        assertFailsWith<IllegalArgumentException> { TerrainSnapshot(0, 4, "").decode() }
+        assertEquals(4, TerrainSnapshot(2, 2, Base64.encode(ByteArray(16))).decode().size)
     }
 }

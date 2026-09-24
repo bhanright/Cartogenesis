@@ -2,34 +2,42 @@ package com.cartogenesis.web
 
 import com.cartogenesis.cartography.ByteWorldLibrary
 import com.cartogenesis.cartography.Compressor
-import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.SaveSink
+import com.cartogenesis.cartography.SaveSource
 import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldFormatException
+import com.cartogenesis.ui.randomId
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * Saved worlds in IndexedDB, and real gzip on this platform at last.
+ * Saved worlds in IndexedDB, and real gzip on this platform.
  *
- * Local storage caps out at a few megabytes per origin, and a save now carries the world, which
- * is tens of megabytes at 512 and more at 1024 - it never had a chance. IndexedDB's quota is a
- * share of the disk, and its API is asynchronous throughout, which used to be the reason web
- * compression was deferred: `CompressionStream` is a promise too, and there was nowhere for one to
- * go in a library that saved and loaded in a single call. Now that [com.cartogenesis.cartography.WorldLibrary]
- * suspends for IndexedDB's sake, it suspends for `CompressionStream`'s for free.
+ * Local storage caps out at a few megabytes per origin, and a save carries the world, which is tens
+ * of megabytes at 512 and more at 1024 - it never had a chance. IndexedDB's quota is a share of the
+ * disk, and its API is asynchronous throughout, as `CompressionStream` is; [com.cartogenesis.cartography.WorldLibrary]
+ * suspends for both.
+ *
+ * A save in the library never sits whole in the tab. The codec hands the library its bytes a chunk
+ * at a time, and each mebibyte is put in IndexedDB as a record of its own the moment it is full;
+ * reading one back fetches the records one at a time in the same way. What the tab holds for a
+ * save beyond the world itself is a part or two. A download is the exception: a browser hands a
+ * page no way to write a file a piece at a time that works in every browser, so a downloaded save
+ * is gathered whole, outside the WebAssembly heap, and handed over as one `Blob`.
  */
 
 // ---- IndexedDB, wrapped as promises the native callback API does not otherwise offer. ----
 
 @JsFun(
     """() => new Promise((resolve, reject) => {
-        const req = indexedDB.open('cartogenesis-worlds', 1);
+        const req = indexedDB.open('cartogenesis-worlds', 2);
         req.onupgradeneeded = (event) => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains('headers')) db.createObjectStore('headers');
             if (!db.objectStoreNames.contains('payloads')) db.createObjectStore('payloads');
+            if (!db.objectStoreNames.contains('parts')) db.createObjectStore('parts');
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -57,33 +65,121 @@ private external fun idbGetAllKeys(db: JsHandle, store: String): JsHandle
 )
 private external fun idbGet(db: JsHandle, store: String, key: String): JsHandle
 
+/**
+ * What the library holds for a save: a manifest naming its parts (`{ token, count }`), or, from a
+ * build before saves were stored in parts, the whole save as a `Blob` or a byte array — wrapped as
+ * a `Blob` so it is read the same way, and refused by its format version. Null when there is none.
+ */
 @JsFun(
-    """(db, store, key, value) => new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).put(value, key);
+    """(db, key) => new Promise((resolve, reject) => {
+        const tx = db.transaction('payloads', 'readonly');
+        const req = tx.objectStore('payloads').get(key);
+        req.onsuccess = () => {
+            const value = req.result;
+            if (value === undefined || value === null) resolve(null);
+            else if (value instanceof Blob || typeof value.token === 'string') resolve(value);
+            else resolve(new Blob([value]));
+        };
+        req.onerror = () => reject(req.error);
+    })"""
+)
+private external fun idbGetPayload(db: JsHandle, key: String): JsHandle
+
+@JsFun("(value) => !(value instanceof Blob) && typeof value.token === 'string'")
+private external fun isManifest(value: JsHandle): Boolean
+
+@JsFun("(value) => value.token")
+private external fun manifestToken(value: JsHandle): String
+
+@JsFun("(value) => value.count")
+private external fun manifestCount(value: JsHandle): Int
+
+/** One part of a save, in its own transaction, so a part is on disk before the next is made. */
+@JsFun(
+    """(db, key, bytes) => new Promise((resolve, reject) => {
+        const tx = db.transaction('parts', 'readwrite');
+        tx.objectStore('parts').put(bytes, key);
         tx.oncomplete = () => resolve(null);
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
     })"""
 )
-private external fun idbPut(db: JsHandle, store: String, key: String, value: JsHandle): JsHandle
+private external fun idbPutPart(db: JsHandle, key: String, bytes: JsHandle): JsHandle
 
 @JsFun(
-    """(db, store, key) => new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).delete(key);
+    """(db, key) => new Promise((resolve, reject) => {
+        const tx = db.transaction('parts', 'readonly');
+        const req = tx.objectStore('parts').get(key);
+        req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+        req.onerror = () => reject(req.error);
+    })"""
+)
+private external fun idbGetPart(db: JsHandle, key: String): JsHandle
+
+/**
+ * The save's manifest and its header prefix, written in one transaction once every part is in:
+ * the moment the new save replaces the old one, which is whole on either side of it. Resolves with
+ * the token of the parts the old manifest named, for them to be cleared, or null.
+ */
+@JsFun(
+    """(db, key, header, token, count) => new Promise((resolve, reject) => {
+        const tx = db.transaction(['headers', 'payloads'], 'readwrite');
+        const payloads = tx.objectStore('payloads');
+        let old = null;
+        const req = payloads.get(key);
+        req.onsuccess = () => {
+            const value = req.result;
+            if (value && !(value instanceof Blob) && typeof value.token === 'string') old = value.token;
+            payloads.put({ token: token, count: count }, key);
+            tx.objectStore('headers').put(header, key);
+        };
+        tx.oncomplete = () => resolve(old);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+    })"""
+)
+private external fun idbCommitSave(db: JsHandle, key: String, header: JsHandle, token: String, count: Int): JsHandle
+
+/** Removes a save's header and manifest together, resolving with the token of its parts, or null. */
+@JsFun(
+    """(db, key) => new Promise((resolve, reject) => {
+        const tx = db.transaction(['headers', 'payloads'], 'readwrite');
+        const payloads = tx.objectStore('payloads');
+        let old = null;
+        const req = payloads.get(key);
+        req.onsuccess = () => {
+            const value = req.result;
+            if (value && !(value instanceof Blob) && typeof value.token === 'string') old = value.token;
+            payloads.delete(key);
+            tx.objectStore('headers').delete(key);
+        };
+        tx.oncomplete = () => resolve(old);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+    })"""
+)
+private external fun idbDeleteSave(db: JsHandle, key: String): JsHandle
+
+/** Every part whose key begins with [prefix]: one save's parts, by the token they were written under. */
+@JsFun(
+    """(db, prefix) => new Promise((resolve, reject) => {
+        const tx = db.transaction('parts', 'readwrite');
+        tx.objectStore('parts').delete(IDBKeyRange.bound(prefix, prefix + '\uffff'));
         tx.oncomplete = () => resolve(null);
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
     })"""
 )
-private external fun idbDelete(db: JsHandle, store: String, key: String): JsHandle
+private external fun idbDeleteParts(db: JsHandle, prefix: String): JsHandle
+
+@JsFun("(value) => typeof value === 'string' ? value : null")
+private external fun asString(value: JsHandle?): String?
 
 @JsFun("(db) => { db.close(); }")
 private external fun idbClose(db: JsHandle)
 
-// ---- Byte-array crossings. A second, generic set alongside Browser.kt's `ByteBuffer` ones,
-// since an external interface is a type of its own in Kotlin/Wasm even when, as here, it is
+// ---- Byte-array and blob crossings. A second, generic set alongside Browser.kt's `ByteBuffer`
+// ones, since an external interface is a type of its own in Kotlin/Wasm even when, as here, it is
 // really the same Uint8Array on the JavaScript side. ----
 
 @JsFun("(size) => new Uint8Array(size)")
@@ -98,9 +194,21 @@ private external fun byteAt(array: JsHandle, index: Int): Int
 @JsFun("(array) => array.length")
 private external fun byteArrayLength(array: JsHandle): Int
 
-private fun ByteArray.toJs(): JsHandle {
-    val buffer = newByteArray(size)
-    for (i in indices) setByteAt(buffer, i, this[i].toInt() and 0xFF)
+@JsFun("() => []")
+internal external fun newParts(): JsHandle
+
+@JsFun("(parts, part) => { parts.push(part); }")
+private external fun appendPart(parts: JsHandle, part: JsHandle)
+
+@JsFun("(blob) => blob.size")
+private external fun blobSize(blob: JsHandle): Double
+
+@JsFun("(blob, start, end) => blob.slice(start, end).arrayBuffer().then((buffer) => new Uint8Array(buffer))")
+private external fun blobSlice(blob: JsHandle, start: Double, end: Double): JsHandle
+
+private fun ByteArray.toJs(offset: Int = 0, length: Int = size): JsHandle {
+    val buffer = newByteArray(length)
+    for (index in 0 until length) setByteAt(buffer, index, this[offset + index].toInt() and 0xFF)
     return buffer
 }
 
@@ -125,7 +233,7 @@ private external fun thenStoragePromise(
  *
  * [awaitPromise] fits the GPU path, where a failure and "nothing to report" are the same answer.
  * A write that silently did not happen is a worse failure than one that throws, so IndexedDB's
- * writes use this instead and let the caller's `runCatching` turn it into a message.
+ * calls use this instead and let the caller turn it into a message.
  */
 private suspend fun awaitPromiseOrThrow(promise: JsHandle): JsHandle? =
     suspendCoroutine { continuation ->
@@ -135,6 +243,102 @@ private suspend fun awaitPromiseOrThrow(promise: JsHandle): JsHandle? =
             reject = { continuation.resumeWithException(IllegalStateException(it)) }
         )
     }
+
+
+/**
+ * The front of a save as it goes past — magic, version, header length, checksum and header — which
+ * is what a listing reads, and all it reads. Kept from the first writes until the header is whole.
+ */
+private class HeaderPrefix {
+    private var prefix = ByteArray(0)
+    private var wanted = WorldCodec.PREFIX_BYTES
+
+    fun take(bytes: ByteArray, offset: Int, length: Int) {
+        var from = offset
+        val end = offset + length
+        while (prefix.size < wanted && from < end) {
+            val taken = minOf(end - from, wanted - prefix.size)
+            prefix += bytes.copyOfRange(from, from + taken)
+            from += taken
+            if (prefix.size == WorldCodec.PREFIX_BYTES && wanted == WorldCodec.PREFIX_BYTES) {
+                wanted = WorldCodec.PREFIX_BYTES + readInt(prefix, WorldCodec.HEADER_LENGTH_OFFSET)
+            }
+        }
+    }
+
+    fun bytes(): ByteArray = prefix
+}
+
+/**
+ * A sink for a download: each piece is copied out to a JavaScript array of byte arrays, from which
+ * one `Blob` is made once the save is whole. The whole save is held in the tab until it is handed
+ * over, outside the WebAssembly heap; see the note at the top of this file for why a download is
+ * the one place that happens.
+ */
+internal class DownloadSink : SaveSink {
+    val parts: JsHandle = newParts()
+
+    override suspend fun write(bytes: ByteArray, offset: Int, length: Int) {
+        appendPart(parts, bytes.toJs(offset, length))
+    }
+}
+
+private fun readInt(bytes: ByteArray, at: Int): Int =
+    (bytes[at].toInt() and 0xFF) or ((bytes[at + 1].toInt() and 0xFF) shl 8) or
+        ((bytes[at + 2].toInt() and 0xFF) shl 16) or ((bytes[at + 3].toInt() and 0xFF) shl 24)
+
+/**
+ * A save read back out of a `Blob` — stored by an older build, or a file the reader picked — a
+ * slice at a time. Slices of [SLICE_BYTES] are fetched and served from, so a frame's sixteen-byte
+ * header does not cost a promise of its own.
+ */
+internal class BlobSource(private val blob: JsHandle) : SaveSource {
+    private val size = blobSize(blob)
+    private var fetchedTo = 0.0
+    private var buffer = ByteArray(0)
+    private var position = 0
+
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+        if (position == buffer.size) {
+            if (fetchedTo >= size) return -1
+            val end = minOf(size, fetchedTo + SLICE_BYTES)
+            buffer = awaitPromiseOrThrow(blobSlice(blob, fetchedTo, end))?.toKotlinBytes()
+                ?: throw WorldFormatException(SaveProblem.UNREADABLE, "the browser returned nothing for part of the file")
+            fetchedTo = end
+            position = 0
+            if (buffer.isEmpty()) return -1
+        }
+        val count = minOf(length, buffer.size - position)
+        buffer.copyInto(into, offset, position, position + count)
+        position += count
+        return count
+    }
+
+    private companion object {
+        /** A mebibyte a slice: the codec's own chunk, so a chunk is one or two promises. */
+        const val SLICE_BYTES = (1 shl 20).toDouble()
+    }
+}
+
+/** The key a save's [index]th part is stored under, among the parts written under [token]. */
+private fun partKey(name: String, token: String, index: Int): String = partPrefix(name, token) + index
+
+/** What every key of the parts written for [name] under [token] begins with, and nothing else's. */
+private fun partPrefix(name: String, token: String): String = "$name$PART_SEPARATOR$token$PART_SEPARATOR"
+
+/** A character no library key and no token holds, so one save's parts never share a prefix with another's. */
+private const val PART_SEPARATOR = '\u0000'
+
+/**
+ * How much of a save goes in one stored part: a mebibyte, the codec's own chunk, so a part is a
+ * chunk or so and the tab holds one while it is put.
+ */
+private const val PART_BYTES = 1 shl 20
+
+/** Watches a save's parts go in and come out, for the self-test that measures the tab. */
+internal fun interface PartObserver {
+    suspend fun onPart(writing: Boolean, index: Int)
+}
 
 /** One IndexedDB connection, open just long enough for the call that needed it. */
 private class IndexedDbConnection private constructor(private val handle: JsHandle) {
@@ -153,12 +357,30 @@ private class IndexedDbConnection private constructor(private val handle: JsHand
         return value.toKotlinBytes()
     }
 
-    suspend fun put(store: String, key: String, bytes: ByteArray) {
-        awaitPromiseOrThrow(idbPut(handle, store, key, bytes.toJs()))
+    suspend fun payload(key: String): JsHandle? {
+        val value = awaitPromiseOrThrow(idbGetPayload(handle, key))
+        return if (value == null || isNullish(value)) null else value
     }
 
-    suspend fun delete(store: String, key: String) {
-        awaitPromiseOrThrow(idbDelete(handle, store, key))
+    suspend fun putPart(key: String, bytes: ByteArray, length: Int) {
+        awaitPromiseOrThrow(idbPutPart(handle, key, bytes.toJs(0, length)))
+    }
+
+    suspend fun part(key: String): ByteArray? {
+        val value = awaitPromiseOrThrow(idbGetPart(handle, key))
+        if (value == null || isNullish(value)) return null
+        return value.toKotlinBytes()
+    }
+
+    /** Makes the save whole and returns the token of the parts it replaced, if any. */
+    suspend fun commit(key: String, header: ByteArray, token: String, count: Int): String? =
+        asString(awaitPromiseOrThrow(idbCommitSave(handle, key, header.toJs(), token, count)))
+
+    /** Removes a save and returns the token of its parts, if any. */
+    suspend fun deleteSave(key: String): String? = asString(awaitPromiseOrThrow(idbDeleteSave(handle, key)))
+
+    suspend fun deleteParts(name: String, token: String) {
+        awaitPromiseOrThrow(idbDeleteParts(handle, partPrefix(name, token)))
     }
 
     fun close() = idbClose(handle)
@@ -176,27 +398,103 @@ private class IndexedDbConnection private constructor(private val handle: JsHand
 private external fun jsArrayGetString(array: JsHandle, index: Int): String
 
 /**
- * Saved worlds in IndexedDB, keyed by the same `<id>.cgw` / `<id>.json` names [ByteWorldLibrary]
- * already uses for the desktop's files.
+ * A sink that puts each [PART_BYTES] of a save in IndexedDB as its own record the moment it is
+ * full, under [token], and keeps the header prefix for the listing's record.
+ */
+private class StoredPartsSink(
+    private val db: IndexedDbConnection,
+    private val name: String,
+    private val token: String,
+    private val observer: PartObserver?
+) : SaveSink {
+    private val buffer = ByteArray(PART_BYTES)
+    private var filled = 0
+    val header = HeaderPrefix()
+
+    /** How many parts have been put. */
+    var count = 0
+        private set
+
+    override suspend fun write(bytes: ByteArray, offset: Int, length: Int) {
+        header.take(bytes, offset, length)
+        var from = offset
+        val end = offset + length
+        while (from < end) {
+            val taken = minOf(end - from, buffer.size - filled)
+            bytes.copyInto(buffer, filled, from, from + taken)
+            filled += taken
+            from += taken
+            if (filled == buffer.size) flush()
+        }
+    }
+
+    suspend fun flush() {
+        if (filled == 0) return
+        db.putPart(partKey(name, token, count), buffer, filled)
+        filled = 0
+        observer?.onPart(writing = true, index = count)
+        count++
+    }
+}
+
+/** A save read back out of its stored parts, one record at a time. */
+private class StoredPartsSource(
+    private val db: IndexedDbConnection,
+    private val name: String,
+    private val token: String,
+    private val count: Int,
+    private val observer: PartObserver?
+) : SaveSource {
+    private var next = 0
+    private var buffer = ByteArray(0)
+    private var position = 0
+
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+        if (position == buffer.size) {
+            if (next == count) return -1
+            buffer = db.part(partKey(name, token, next))
+                ?: throw WorldFormatException(SaveProblem.INCOMPLETE, "part $next of $count is missing from the browser's storage")
+            observer?.onPart(writing = false, index = next)
+            next++
+            position = 0
+        }
+        val taken = minOf(length, buffer.size - position)
+        buffer.copyInto(into, offset, position, position + taken)
+        position += taken
+        return taken
+    }
+}
+
+/**
+ * Saved worlds in IndexedDB, under the library's keys — `<id>.cgw` for a save made here.
  *
- * Two object stores rather than one, because IndexedDB has no way to read part of a stored value
- * — the whole record comes back or none of it does. `headers` holds just the container's header
- * prefix (magic, version, header length, the header JSON itself — kilobytes, whatever the world's
- * resolution) and `payloads` holds the whole thing. [readPrefix] only ever touches the first, so
- * listing a shelf of 1024 saves never reads an array back from the browser's storage, let alone
- * copies one across the wasm/JavaScript boundary.
+ * Three object stores, because a listing wants only the headers and a save must never be held
+ * whole. `headers` holds each container's header prefix (kilobytes, whatever the world's
+ * resolution); `parts` holds the save itself in records of [PART_BYTES], keyed by the save's name,
+ * a token fresh for every write and the part's place; and `payloads` holds, for each save, a
+ * manifest naming its token and how many parts it has. A write puts every part first and then the
+ * manifest and the header in one transaction, which is the moment the new save replaces the old;
+ * only then are the old parts cleared, so a write that fails or is abandoned leaves the save that
+ * was there, and at worst some parts nobody names.
  *
- * A connection is opened and closed for each call rather than held open. That costs a little time
- * on a library with many entries, but it is also what makes the self-test's round trip a real one:
- * every read here is through a connection that did not write the bytes it is reading.
+ * A connection is opened and closed for each call rather than held open between them. That costs
+ * a little time on a library with many entries, but it is also what makes the self-test's round
+ * trip a real one: every read here is through a connection that did not write the bytes it reads.
  */
 internal class IndexedDbLibrary(
     compressor: Compressor,
     writtenBy: String
 ) : ByteWorldLibrary(compressor, writtenBy) {
 
+    /** Told of every part as it goes in or comes out; the self-test measures the tab with it. */
+    var partObserver: PartObserver? = null
+
     private suspend fun <T> withDb(block: suspend (IndexedDbConnection) -> T): T {
-        val db = IndexedDbConnection.open()
+        val db = try {
+            IndexedDbConnection.open()
+        } catch (refused: IllegalStateException) {
+            throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
+        }
         try {
             return block(db)
         } finally {
@@ -206,83 +504,54 @@ internal class IndexedDbLibrary(
 
     override suspend fun names(): List<String> = withDb { it.keys(STORE_HEADERS) }
 
-    override suspend fun read(name: String): ByteArray? = withDb { it.get(STORE_PAYLOADS, name) }
+    override suspend fun <T> reading(name: String, block: suspend (SaveSource) -> T): T? = withDb { db ->
+        val payload = try {
+            db.payload(name)
+        } catch (refused: IllegalStateException) {
+            throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
+        } ?: return@withDb null
+        val source = if (isManifest(payload)) {
+            StoredPartsSource(db, name, manifestToken(payload), manifestCount(payload), partObserver)
+        } else {
+            BlobSource(payload)
+        }
+        block(source)
+    }
 
     override suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? =
-        withDb { it.get(STORE_HEADERS, name) }
+        try {
+            withDb { it.get(STORE_HEADERS, name) }
+        } catch (refused: IllegalStateException) {
+            throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
+        }
 
-    override suspend fun write(name: String, bytes: ByteArray) = withDb { db ->
-        db.put(STORE_PAYLOADS, name, bytes)
-        db.put(STORE_HEADERS, name, headerPrefixOf(bytes))
+    override suspend fun replacing(name: String, contents: suspend (SaveSink) -> Unit) = withDb { db ->
+        val token = randomId()
+        var committed = false
+        try {
+            val sink = StoredPartsSink(db, name, token, partObserver)
+            contents(sink)
+            sink.flush()
+            val replaced = db.commit(name, sink.header.bytes(), token, sink.count)
+            committed = true
+            if (replaced != null) db.deleteParts(name, replaced)
+        } finally {
+            // A write that did not finish leaves its parts behind unnamed; they are cleared here
+            // rather than left to fill the browser's quota.
+            if (!committed) runCatching { db.deleteParts(name, token) }
+        }
     }
 
     override suspend fun remove(name: String) = withDb { db ->
-        db.delete(STORE_PAYLOADS, name)
-        db.delete(STORE_HEADERS, name)
-    }
-
-    /**
-     * A one-time move from the local-storage library that came before this one, base64 and all:
-     * read every entry, write it into IndexedDB under the same name, and remove the local-storage
-     * copy. Runs at most once per page load, from [list] — the first thing anything does with the
-     * library — and costs nothing on every load after the first, once local storage is empty.
-     */
-    private var migrated = false
-
-    override suspend fun list(): List<LibraryEntry> {
-        migrateFromLocalStorageOnce()
-        return super.list()
-    }
-
-    private suspend fun migrateFromLocalStorageOnce() {
-        if (migrated) return
-        migrated = true
-        val keys = (0 until storageLength()).mapNotNull { storageKeyAt(it) }
-            .filter { it.startsWith(LEGACY_KEY_PREFIX) }
-        for (key in keys) {
-            val name = key.removePrefix(LEGACY_KEY_PREFIX)
-            val bytes = storageGet(key)?.let(::decodeLegacyStorageValue) ?: continue
-            write(name, bytes)
-            storageRemove(key)
-        }
+        val token = db.deleteSave(name)
+        if (token != null) db.deleteParts(name, token)
     }
 
     companion object {
         private const val STORE_HEADERS = "headers"
-        private const val STORE_PAYLOADS = "payloads"
-
-        /** What the local-storage library keyed its saves under, before IndexedDB. */
-        private const val LEGACY_KEY_PREFIX = "cartogenesis/"
     }
 }
 
-/**
- * The header-only prefix of a container: magic, version, header length, and the header JSON, with
- * none of the payload behind it. A version-2 save has no such split, being JSON straight through
- * with nothing else in the file, so its "header" is simply the whole (small) thing.
- */
-private fun headerPrefixOf(bytes: ByteArray): ByteArray {
-    if (!WorldCodec.isContainer(bytes)) return bytes
-    // The header length is a little-endian int at [HEADER_LENGTH_AT], behind the magic and the
-    // format version. Read by hand rather than through the codec because this runs on the listing
-    // path, where the point is not to have read the payload at all.
-    val headerLength = (bytes[HEADER_LENGTH_AT].toInt() and 0xFF) or
-        ((bytes[HEADER_LENGTH_AT + 1].toInt() and 0xFF) shl 8) or
-        ((bytes[HEADER_LENGTH_AT + 2].toInt() and 0xFF) shl 16) or
-        ((bytes[HEADER_LENGTH_AT + 3].toInt() and 0xFF) shl 24)
-    val end = (WorldCodec.PREFIX_BYTES + headerLength).coerceAtMost(bytes.size)
-    return bytes.copyOfRange(0, end)
-}
-
-/** Where the header length sits in a container: after four bytes of magic and a four-byte version. */
-private const val HEADER_LENGTH_AT = 8
-
-/** What a `LocalStorageLibrary` entry from before this build used to look like. */
-@OptIn(ExperimentalEncodingApi::class)
-private fun decodeLegacyStorageValue(text: String): ByteArray? {
-    if (text.startsWith("{")) return text.encodeToByteArray()
-    return runCatching { Base64.decode(text) }.getOrNull()
-}
 
 // ---- Moving a save in or out of the browser as an ordinary file. ----
 
@@ -290,7 +559,7 @@ private fun decodeLegacyStorageValue(text: String): ByteArray? {
     """() => new Promise((resolve) => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.cgw,.json';
+        input.accept = '.cgw';
         input.style.display = 'none';
         document.body.appendChild(input);
         let settled = false;
@@ -302,10 +571,7 @@ private fun decodeLegacyStorageValue(text: String): ByteArray? {
         };
         input.addEventListener('change', () => {
             const file = input.files && input.files[0];
-            if (!file) { finish(null); return; }
-            file.arrayBuffer()
-                .then((buffer) => finish(new Uint8Array(buffer)))
-                .catch(() => finish(null));
+            finish(file ? file : null);
         });
         // Not every browser fires this - there is no fully reliable "the user cancelled" signal
         // on a file input - but where it does, it saves waiting on a promise that will now never
@@ -314,15 +580,33 @@ private fun decodeLegacyStorageValue(text: String): ByteArray? {
         input.click();
     })"""
 )
-private external fun pickFileBytes(): JsHandle
+private external fun pickFileBlob(): JsHandle
 
-/** Opens the browser's file picker and returns the chosen file's bytes, or null if it was
- *  cancelled, empty, or could not be read. */
-internal suspend fun pickFile(): ByteArray? {
-    val result = awaitPromise(pickFileBytes())
+/**
+ * Opens the browser's file picker and returns the chosen file, to be read a slice at a time, or
+ * null if the picker was cancelled.
+ */
+internal suspend fun pickFile(): SaveSource? {
+    val result = awaitPromise(pickFileBlob())
     if (result == null || isNullish(result)) return null
-    return result.toKotlinBytes()
+    return BlobSource(result)
 }
+
+@JsFun(
+    """(name, parts, mime) => {
+        const blob = new Blob(parts, { type: mime });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        // Revoking immediately can cancel the download in some browsers, so give it a moment.
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }"""
+)
+internal external fun downloadParts(name: String, parts: JsHandle, mime: String)
 
 // ---- Real gzip, via the browser's own streams. ----
 
@@ -345,21 +629,43 @@ internal external fun compressionStreamsAvailable(): Boolean
 )
 private external fun gzipCompress(bytes: JsHandle): JsHandle
 
+/**
+ * Expands [bytes], reading no further than one byte past [limit], so a chunk that would expand to
+ * gigabytes is stopped at a mebibyte and one. A stream that is not gzip rejects, which the caller
+ * reads as damage rather than as a platform that cannot expand.
+ *
+ * Resolves with the answer and how many expanded bytes were pulled from the stream to get it, which
+ * the self-test reads to show that the stream was left unread past the limit.
+ */
 @JsFun(
-    """(bytes) => (async () => {
-        try {
-            const stream = new DecompressionStream('gzip');
-            const writer = stream.writable.getWriter();
-            writer.write(bytes);
-            writer.close();
-            const buffer = await new Response(stream.readable).arrayBuffer();
-            return new Uint8Array(buffer);
-        } catch (e) {
-            return null;
+    """(bytes, limit) => (async () => {
+        const stream = new DecompressionStream('gzip');
+        const writer = stream.writable.getWriter();
+        writer.write(bytes).catch(() => {});
+        writer.close().catch(() => {});
+        const reader = stream.readable.getReader();
+        const parts = [];
+        let total = 0;
+        while (total <= limit) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parts.push(value);
+            total += value.length;
         }
+        if (total > limit) reader.cancel().catch(() => {});
+        const kept = Math.min(total, limit + 1);
+        const out = new Uint8Array(kept);
+        let at = 0;
+        for (const part of parts) {
+            if (at >= kept) break;
+            const count = Math.min(part.length, kept - at);
+            out.set(part.subarray(0, count), at);
+            at += count;
+        }
+        return [out, total];
     })()"""
 )
-private external fun gzipDecompress(bytes: JsHandle): JsHandle
+private external fun gzipDecompress(bytes: JsHandle, limit: Int): JsHandle
 
 /**
  * Gzip via `CompressionStream`/`DecompressionStream`, so a save this browser writes and one the
@@ -380,10 +686,39 @@ internal object WebGzipCompressor : Compressor {
         return result.toKotlinBytes()
     }
 
-    override suspend fun decompress(data: ByteArray): ByteArray? {
+    override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? {
         if (!compressionStreamsAvailable()) return null
-        val result = awaitPromise(gzipDecompress(data.toJs()))
+        val result = awaitPromiseOrThrow(gzipDecompress(data.toJs(), limitBytes))
         if (result == null || isNullish(result)) return null
-        return result.toKotlinBytes()
+        lastPulledBytes = pairSecond(result)
+        return pairFirst(result).toKotlinBytes()
     }
+
+    /** Expanded bytes the last [decompress] pulled from its stream, for the self-test. */
+    var lastPulledBytes: Double = 0.0
+        private set
+}
+
+@JsFun("(pair) => pair[0]")
+private external fun pairFirst(pair: JsHandle): JsHandle
+
+@JsFun("(pair) => pair[1]")
+private external fun pairSecond(pair: JsHandle): Double
+
+/** Gzip of [size] zero bytes: a stream that expands to far more than its own length, for the self-test. */
+@JsFun(
+    """(size) => (async () => {
+        const stream = new CompressionStream('gzip');
+        const writer = stream.writable.getWriter();
+        writer.write(new Uint8Array(size));
+        writer.close();
+        return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+    })()"""
+)
+private external fun gzipOfZerosPromise(size: Int): JsHandle
+
+internal suspend fun gzipOfZeros(size: Int): ByteArray? {
+    val result = awaitPromise(gzipOfZerosPromise(size))
+    if (result == null || isNullish(result)) return null
+    return result.toKotlinBytes()
 }

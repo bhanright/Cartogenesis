@@ -9,12 +9,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.cartogenesis.cartography.Compressor
-import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
-import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
-import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.ui.AppSettings
 import com.cartogenesis.ui.CartogenesisRoot
 import com.cartogenesis.ui.ExportFormat
@@ -23,7 +20,6 @@ import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsCodec
 import com.cartogenesis.ui.SettingsStore
 import com.cartogenesis.ui.ThemeChoice
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import kotlin.test.Test
@@ -123,26 +119,62 @@ class SettingsEffectTest {
      * The stored library folder is where the library is, from the moment the window opens.
      *
      * The folder is the one setting whose effect is not a default for next time but a move: the
-     * platform is told to use it ([Platform.useLibraryFolder]), and the listing follows. Nothing
-     * does that at launch today (Audit III, G-D3) — only a change made in the dialog moves the
-     * library — so after a restart the dialog names the reader's folder and the library lists the
-     * default one. Kept running as a known failure recorded by what the platform was asked.
+     * platform is told to use it ([Platform.useLibraryFolder]), and the listing follows. Until
+     * Audit III's G-D3 was fixed nothing did that at launch — only a change made in the dialog
+     * moved the library — so after a restart the dialog named the reader's folder and the library
+     * listed the default one; this clause ran as a known failure recording `[]` until then.
      */
     @Test
     fun `the stored library folder is where the library is at launch`() {
         val host = FakeHost(AppSettings(libraryFolder = "D:/atlas/worlds"))
         compose(host, AppSettings(libraryFolder = "D:/atlas/worlds"))
-        KnownFailures.expect(
-            "Audit III G-D3: the stored library folder is never applied at launch",
-            "the platform was asked to use []"
-        ) {
-            if (host.libraryFolders != listOf("D:/atlas/worlds")) {
-                throw RecordedViolation(
-                    "a window opened with the library folder set to D:/atlas/worlds asked the platform to use ${host.libraryFolders}",
-                    "the platform was asked to use ${host.libraryFolders}"
-                )
-            }
+        assertEquals(
+            listOf("D:/atlas/worlds"), host.libraryFolders,
+            "a window opened with the library folder set to D:/atlas/worlds asked the platform to use ${host.libraryFolders}"
+        )
+    }
+
+    /**
+     * Reset puts the library back in the default folder as well as blanking the preference, and a
+     * folder the platform refuses is not stored: the dialog never names a folder the library is not
+     * in. Before G-D3's fix a blank folder moved nothing, and a refused one was stored anyway.
+     */
+    @Test
+    fun `the library folder is stored only once the library has moved there`() {
+        val host = FakeHost(AppSettings(libraryFolder = "D:/atlas/worlds"))
+        @OptIn(ExperimentalTestApi::class)
+        runDesktopComposeUiTest(width = 1440, height = 900) {
+            setContent { CartogenesisRoot(host) }
+            waitForIdle()
+            onNodeWithText("File").performClick()
+            waitForIdle()
+            onNodeWithText("Settings…").performClick()
+            waitForIdle()
+            onNodeWithText("Reset to defaults").performClick()
+            waitForIdle()
         }
+        assertEquals(listOf("D:/atlas/worlds", ""), host.libraryFolders, "Reset did not move the library back")
+        assertEquals("", SettingsCodec.decode(host.written.last()).libraryFolder)
+
+        // A platform that will not move — the default folder unreachable, say — keeps the folder
+        // the library is in, and the store keeps naming it.
+        val refusing = FakeHost(AppSettings(libraryFolder = "D:/atlas/worlds"), acceptsFolders = false)
+        @OptIn(ExperimentalTestApi::class)
+        runDesktopComposeUiTest(width = 1440, height = 900) {
+            setContent { CartogenesisRoot(refusing) }
+            waitForIdle()
+            onNodeWithText("File").performClick()
+            waitForIdle()
+            onNodeWithText("Settings…").performClick()
+            waitForIdle()
+            onNodeWithText("Reset to defaults").performClick()
+            waitForIdle()
+        }
+        assertTrue(refusing.written.isNotEmpty(), "Reset wrote nothing at all")
+        assertTrue(
+            refusing.written.all { SettingsCodec.decode(it).libraryFolder == "D:/atlas/worlds" },
+            "the default folder was stored though the platform refused to move there: ${refusing.written}"
+        )
     }
 
     /**
@@ -223,7 +255,11 @@ class SettingsEffectTest {
  * document, and the real platform would open a GL context, read the user's own library and — the
  * point of one of these cases — actually reach GitHub.
  */
-private class FakeHost(settings: AppSettings = AppSettings()) : Platform {
+private class FakeHost(
+    settings: AppSettings = AppSettings(),
+    /** Whether [useLibraryFolder] takes a folder, or refuses it as a missing drive would. */
+    private val acceptsFolders: Boolean = true
+) : Platform {
 
     private var stored: String = SettingsCodec.encode(settings)
 
@@ -239,11 +275,11 @@ private class FakeHost(settings: AppSettings = AppSettings()) : Platform {
 
     override suspend fun useLibraryFolder(path: String): Boolean {
         libraryFolders += path
-        return true
+        return acceptsFolders
     }
 
     override val defaultResolution: Int = 512
-    override val library: WorldLibrary = Empty
+    override val library: WorldLibrary = EmptyWorldLibrary
     override val compressor: Compressor = NoCompression
     override val libraryLocation: String = "a test"
     override val accelerator: ErosionAccelerator? = null
@@ -265,16 +301,9 @@ private class FakeHost(settings: AppSettings = AppSettings()) : Platform {
     }
 
     override suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
         size: Int,
         format: ExportFormat
     ): ExportOutcome? = null
-
-    private object Empty : WorldLibrary {
-        override suspend fun list(): List<LibraryEntry> = emptyList()
-        override suspend fun save(document: WorldDocument, world: WorldMap?) = Unit
-        override suspend fun load(id: String): WorldSave? = null
-        override suspend fun delete(id: String) = Unit
-    }
 }

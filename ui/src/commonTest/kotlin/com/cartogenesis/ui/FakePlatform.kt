@@ -2,12 +2,13 @@ package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.LibraryEntry
+import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.SaveRefusal
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
-import com.cartogenesis.cartography.WorldSave
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ThermalLimits
@@ -100,7 +101,7 @@ internal open class FakePlatform(
     }
 
     override suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
         size: Int,
         format: ExportFormat
@@ -108,9 +109,11 @@ internal open class FakePlatform(
 
     private object EmptyLibrary : WorldLibrary {
         override suspend fun list(): List<LibraryEntry> = emptyList()
-        override suspend fun save(document: WorldDocument, world: WorldMap?) = Unit
-        override suspend fun load(id: String): WorldSave? = null
-        override suspend fun delete(id: String) = Unit
+        override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String =
+            key ?: "${document.id}.cgw"
+        override suspend fun load(key: String): LoadOutcome =
+            LoadOutcome.Refused(SaveRefusal(SaveProblem.UNREADABLE, "this library is empty"))
+        override suspend fun delete(key: String) = Unit
     }
 }
 

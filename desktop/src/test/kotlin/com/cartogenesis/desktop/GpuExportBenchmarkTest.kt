@@ -50,7 +50,10 @@ class GpuExportBenchmarkTest {
         val file = destination("4096-cpu")
         val heap = PeakHeap()
         val millis = measureTimeMillis {
-            runBlocking { Exporter.export(CONFIG, RenderOptions(), SIZE, file, ExportFormat.PNG) }
+            runBlocking {
+                val world = WorldGenerationEngine.generate(CONFIG.atResolution(SIZE, SIZE))
+                Exporter.export(world, RenderOptions(), file, ExportFormat.PNG)
+            }
         }
         report("4096 whole export on the processor", millis, file, heap)
     }
@@ -66,7 +69,8 @@ class GpuExportBenchmarkTest {
         val heap = PeakHeap()
         val millis = measureTimeMillis {
             runBlocking {
-                Exporter.export(CONFIG, RenderOptions(), SIZE, file, ExportFormat.PNG, gpu)
+                val world = WorldGenerationEngine.generate(CONFIG.atResolution(SIZE, SIZE))
+                Exporter.export(world, RenderOptions(), file, ExportFormat.PNG, gpu)
             }
         }
         report("4096 whole export on the graphics card", millis, file, heap)

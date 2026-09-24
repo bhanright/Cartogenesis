@@ -1,7 +1,5 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.worldgen.GenerationStage
-import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Culture
 import com.cartogenesis.worldgen.pipeline.Lake
@@ -14,11 +12,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Everything about a world that is small enough to read as text.
+ * Everything about a world that is not a value per cell.
  *
- * Rivers, lakes, realms, peoples and landmarks are lists of a few hundred entries between them,
- * not a value per cell, so they live in the header with the settings rather than in the binary
- * payload — which also means a tool can look at what a save contains without knowing the layout.
+ * Rivers, lakes, realms, peoples and landmarks are lists of a few hundred entries between them, not
+ * a value per cell, so they travel as JSON — but as the payload's first record rather than in the
+ * header, because a river is a list of cells and at 2048 the rivers alone run to megabytes. In the
+ * payload they are compressed with everything else, and a library listing, which reads only the
+ * header, never reads them at all.
  */
 @Serializable
 data class WorldLists(
@@ -62,44 +62,30 @@ data class WorldLists(
  * The text part of a container, which sits at the front uncompressed.
  *
  * A reader that only wants a title and a date — the library listing does — stops here, which is
- * why the section directory is repeated in it: sizes and names are answerable without expanding
- * ninety megabytes of arrays.
+ * why the section directory is in it: what a file holds, and how large each part is, is
+ * answerable without expanding a byte of the payload. Every field is required. A save carries its
+ * whole world or it is not a save, so there is no header that stands on its own.
  */
 @Serializable
 data class SaveHeader(
     val formatVersion: Int,
     val document: WorldDocument,
-    /** `gzip`, or `none` from a platform that cannot compress. */
+    /** How the payload's compressed chunks were squeezed: `gzip`, or `none` from a platform that cannot. */
     val compression: String,
     /** Which front end, on which version, produced these bytes. */
     val writtenBy: String,
-    val world: WorldLists? = null,
-    val sections: List<SectionInfo> = emptyList(),
-    /** Length of the payload as stored, so a truncated file is obvious before it is parsed. */
-    val payloadBytes: Int = 0
+    /** The lists' record and then every per-cell array, in the order the payload holds them. */
+    val sections: List<SectionInfo>,
+    /** The payload's length once expanded: every record, prefixes and all. */
+    val payloadBytes: Long
 )
 
-/** A save as it comes off the shelf: the document, and the world itself if the file carried one. */
-class WorldSave(val document: WorldDocument, val world: WorldMap?)
+/** A save as it comes off the shelf: the document, and the world it carried. */
+class WorldSave(val document: WorldDocument, val world: WorldMap)
 
 /**
- * One line for the library listing: "complete", or which stage opening this save will have to
- * recompute first (everything after it follows, by the same reuse-chain rule that makes opening
- * one at all safe rather than a refusal).
- *
- * Reads only [SaveHeader.sections] — names already sitting in the header — never the payload, so a
- * listing of any number of saves costs nothing more than it already did.
- */
-val SaveHeader.openStatus: String
-    get() {
-        if (world == null) return "regenerates everything"
-        val present = WorldSections.presentStages(sections.mapTo(HashSet()) { it.name })
-        val firstMissing = GenerationStage.entries.firstOrNull { it !in present }
-        return if (firstMissing == null) "complete" else "regenerates ${firstMissing.shortLabel}…"
-    }
-
-/**
- * The save format: a JSON header, then one binary section per per-cell array.
+ * The save format: a JSON header, then the world's lists and one binary section per per-cell
+ * array, in compressed chunks.
  *
  * It used to be a seed and a config, and the world was rebuilt on open. That made a save a few
  * kilobytes and made bit-identical generation on every platform a hard requirement — a world
@@ -107,9 +93,10 @@ val SaveHeader.openStatus: String
  * pipeline was followed by an afternoon of proving the two agreed. The GPU toggle broke the rule
  * outright and had to carry its terrain in the file to get round it.
  *
- * So a save now carries the world. Opening one is deserialisation followed by a generation pass
- * that reuses every stage and computes none, which is the same reuse chain live editing already
- * runs on: edit a setting after opening and only what lies downstream of it recomputes.
+ * So a save carries the world, and opening one is deserialisation and nothing else: no stage is
+ * run, so nothing about the world depends on this machine or this build agreeing with the one
+ * that wrote it. A file that does not hold a complete world, whole and consistent, is refused with
+ * the reason — see [SaveProblem] — and never opened as whatever its settings would regenerate.
  *
  * The layout, all little-endian:
  *
@@ -117,11 +104,19 @@ val SaveHeader.openStatus: String
  * "CGWD"                 4 bytes of magic
  * int32                  format version
  * int32                  header length in bytes
- * header                 UTF-8 JSON: settings, overrides, labels, lists, section directory
- * payload                gzip of, or raw, a run of sections:
- *                          int32 name length, ASCII name,
- *                          int32 element type, int32 element count, int32 byte length, elements
+ * int32                  CRC-32 of the header's bytes
+ * header                 UTF-8 JSON: the document (settings, overrides, labels, title), the
+ *                        compression, the writer, and the directory of the payload's records
+ * frames                 one per chunk of the expanded payload, each:
+ *                          int32 raw length, int32 stored length, int32 checksum of the raw
+ *                          bytes bound to the header and to the chunk's place (see
+ *                          [chunkChecksum]), int32 method (0 stored, 1 compressed), the stored bytes
+ *                        and then a frame of sixteen zero bytes, and nothing after it
  * ```
+ *
+ * The expanded payload is a run of records, each an int32 name length, the ASCII name, an int32
+ * element type, an int32 element count, an int64 byte length and the elements: first the lists as
+ * JSON, then every array of [WorldSections.SECTIONS].
  *
  * Only the current version opens. Anything older is refused by name rather than read, because a
  * header is JSON decoded with unknown keys ignored: a file whose settings were written under the
@@ -134,6 +129,16 @@ object WorldCodec {
 
     /**
      * The only version this build reads or writes.
+     *
+     * 14 because a save became a stream. The payload is cut into chunks, each compressed and
+     * checksummed on its own, with every length counted in 64 bits, so a 4096 world — 2.45 GB of
+     * arrays — saves and opens without any array its size existing in between. The lists moved out
+     * of the header into the payload's first record, the header lost its header-only form and its
+     * optional fields, and [WorldDocument] lost the terrain snapshot it had carried, empty, since
+     * the container format. A format-13 file has its payload as one gzip stream and its lists in
+     * its header, and this reader does not read either. The header is checksummed too, and every
+     * chunk's checksum is bound to it, so one changed digit of a seed is found rather than opened
+     * as the same arrays under another world's settings.
      *
      * 13 because a channel begins where the ground can cut one and the rounds that cut it read
      * the rain. Two chunks landed on this version and neither shipped without the other, so the
@@ -225,12 +230,12 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 13
+    const val FORMAT_VERSION = 14
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 
-    /** Magic, version and header length, before the header itself starts. */
-    const val PREFIX_BYTES = 12
+    /** Magic, version, header length and the header's checksum, before the header itself starts. */
+    const val PREFIX_BYTES = 16
 
     /** Where the format version sits in that prefix: straight after the magic. */
     const val VERSION_OFFSET = 4
@@ -238,50 +243,124 @@ object WorldCodec {
     /** Where the header's own length sits: after the magic and the version. */
     const val HEADER_LENGTH_OFFSET = 8
 
+    /** Where the header's checksum sits: after its length. */
+    const val HEADER_CHECKSUM_OFFSET = 12
+
+    /**
+     * How much of the expanded payload is compressed, checksummed and handed on at a time: one
+     * mebibyte.
+     *
+     * What a save costs beyond the world itself is about three of these — the chunk being filled,
+     * its compressed copy and the compressor's own buffers — so a mebibyte keeps that under 1% of
+     * even a 512 world's 38 MB of arrays. Smaller costs more than it saves: each chunk is a frame's
+     * sixteen bytes and a gzip header and trailer of eighteen, and in a browser a promise round trip
+     * through `CompressionStream`, which at 2048 is already 586 of them.
+     */
+    const val CHUNK_BYTES = 1 shl 20
+
+    /**
+     * The most cells a save may have: 4096 by 4096, the largest working resolution the interface
+     * offers (`Knobs.RESOLUTIONS` in `:ui`, whose test holds it to this).
+     *
+     * A file claiming more is refused before anything is allocated for it. The 8192 export is
+     * made and drawn without ever being saved, so it does not need this raised.
+     */
+    const val LARGEST_GRID_CELLS = 4096 * 4096
+
+    /**
+     * The longest header this reads, in bytes: sixteen mebibytes.
+     *
+     * The header is the document and the directory. The directory is forty-two entries whatever
+     * the grid, and the document is the settings, the title and the reader's own edits and labels:
+     * 10.4 to 10.6 KB on every world measured at 512, 1024 and 2048 and a synthetic 4096, none of
+     * them edited. What could make one long is a reader's edits and labels, so the bound leaves
+     * room for a hundred thousand of them and is still a size a browser tab can hold twice over.
+     */
+    const val LARGEST_HEADER_BYTES = 16 shl 20
+
+    /**
+     * The longest the lists' JSON may be, in bytes: 64 mebibytes.
+     *
+     * Rivers are most of it, each a list of cells, so it grows about twofold with each doubling of
+     * the grid: 0.26 to 0.39 MB over twelve seeds at 512, 0.73 and 0.77 MB over two at 1024, and
+     * 1.8 MB for seed 42 at 2048, which puts a 4096 world near 4 MB. Sixteen times that is room for
+     * a world with far more rivers than any measured, and still a string a browser tab can parse.
+     */
+    const val LARGEST_LISTS_BYTES = 64 shl 20
+
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
     /**
-     * Writes a container. A null [world] writes a header-only save, which opens by regenerating.
+     * Writes [world] to [sink] as a container, filed under [document].
+     *
+     * [document]'s settings must be the ones [world] was made with, and its id one this build
+     * writes: a save that files one world under another's settings would reopen as a world nobody
+     * made, and a bad id would name a file that is not in the library. Either is a mistake in the
+     * caller, so it throws rather than writing.
      *
      * [writtenBy] names the front end and its version, which is the sort of thing that is only
      * ever wanted when a file will not open and nobody can remember where it came from.
      */
-    suspend fun encode(
+    suspend fun write(
         document: WorldDocument,
-        world: WorldMap?,
+        world: WorldMap,
+        sink: SaveSink,
         compressor: Compressor = NoCompression,
         writtenBy: String = "unknown"
-    ): ByteArray {
-        val sections = world?.let { WorldSections.of(it) }.orEmpty()
-        val (raw, directory) = if (sections.isEmpty()) {
-            ByteArray(0) to emptyList()
-        } else {
-            WorldSections.write(sections)
+    ) {
+        require(document.config == world.config) {
+            "the document's settings are not the settings its world was made with"
         }
-        val compressed = if (raw.isEmpty()) null else compressor.compress(raw)
-        val payload = compressed ?: raw
+        require(WorldDocument.isValidId(document.id)) { "'${document.id}' is not a save id" }
+        val cells = world.width.toLong() * world.height
+        require(cells <= LARGEST_GRID_CELLS) { "a ${world.width} by ${world.height} world is larger than a save holds" }
 
+        val listsJson = json.encodeToString(WorldLists.of(world)).encodeToByteArray()
+        require(listsJson.size <= LARGEST_LISTS_BYTES) {
+            "this world's lists are ${listsJson.size} bytes, more than a save holds"
+        }
+        val directory = WorldSections.directory(cells.toInt(), listsJson.size)
         val header = SaveHeader(
             formatVersion = FORMAT_VERSION,
             document = document,
-            compression = if (compressed != null) compressor.name else NoCompression.name,
+            compression = compressor.name,
             writtenBy = writtenBy,
-            world = world?.let { WorldLists.of(it) },
             sections = directory,
-            payloadBytes = payload.size
+            payloadBytes = WorldSections.payloadBytes(directory)
         )
         val headerBytes = json.encodeToString(header).encodeToByteArray()
+        require(headerBytes.size <= LARGEST_HEADER_BYTES) { "the header is ${headerBytes.size} bytes, more than a save holds" }
 
-        val writer = ByteWriter(PREFIX_BYTES + headerBytes.size + payload.size)
-        writer.putBytes(MAGIC)
-        writer.putInt(FORMAT_VERSION)
-        writer.putInt(headerBytes.size)
-        writer.putBytes(headerBytes)
-        writer.putBytes(payload)
-        return writer.bytes
+        val headerChecksum = Crc32.of(headerBytes)
+        val prefix = ByteArray(PREFIX_BYTES)
+        MAGIC.copyInto(prefix)
+        putInt(prefix, VERSION_OFFSET, FORMAT_VERSION)
+        putInt(prefix, HEADER_LENGTH_OFFSET, headerBytes.size)
+        putInt(prefix, HEADER_CHECKSUM_OFFSET, headerChecksum)
+        sink.write(prefix)
+        sink.write(headerBytes)
+
+        val writer = PayloadWriter(sink, compressor, headerChecksum)
+        WorldSections.write(world, listsJson, writer)
+        check(writer.written == header.payloadBytes) {
+            "wrote ${writer.written} payload bytes where the directory promised ${header.payloadBytes}"
+        }
+        writer.finish()
+    }
+
+    /** The whole container as one array: for a small world, a test or a fixture, never a library save. */
+    suspend fun encode(
+        document: WorldDocument,
+        world: WorldMap,
+        compressor: Compressor = NoCompression,
+        writtenBy: String = "unknown"
+    ): ByteArray {
+        val sink = ByteArraySink()
+        write(document, world, sink, compressor, writtenBy)
+        return sink.toByteArray()
     }
 
     /** True when these bytes start with the container magic rather than being something else. */
@@ -289,89 +368,172 @@ object WorldCodec {
         bytes.size >= PREFIX_BYTES && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 
     /**
-     * The header alone — no payload touched, so this stays cheap on a file of any size.
+     * The header alone, from the front of a file — no payload touched, so this stays cheap on a
+     * file of any size. [bytes] may be the whole file or any prefix long enough to hold the header.
      *
-     * Refuses anything that is not this build's format, in both directions. See the note above on
+     * Throws [WorldFormatException] for anything that is not this build's format, in both
+     * directions, and for a header that disagrees with this build's layout. See the note above on
      * why an older file is turned away rather than read with the keys it happens to share.
      */
     fun decodeHeader(bytes: ByteArray): SaveHeader {
-        if (!isContainer(bytes)) {
+        val headerLength = headerLengthFrom(bytes, minOf(bytes.size, PREFIX_BYTES))
+        if (bytes.size - PREFIX_BYTES < headerLength) {
             throw WorldFormatException(
-                "this is not a Cartogenesis save, or it is one from before format $FORMAT_VERSION " +
-                    "(plain JSON, with no world in it); this build reads format $FORMAT_VERSION only"
+                SaveProblem.INCOMPLETE,
+                "it ends inside its header, after ${bytes.size} bytes of ${PREFIX_BYTES + headerLength}"
             )
         }
-        val reader = ByteReader(bytes, position = MAGIC.size)
-        val version = reader.getInt()
+        return headerFrom(
+            bytes.copyOfRange(PREFIX_BYTES, PREFIX_BYTES + headerLength), getInt(bytes, HEADER_CHECKSUM_OFFSET)
+        )
+    }
+
+    /**
+     * The whole save from [source], checked from its first byte to its last.
+     *
+     * Throws [WorldFormatException] with the reason for anything short of a complete, consistent
+     * world of this format; [open] is the same with the reason handed back instead.
+     */
+    suspend fun read(source: SaveSource, compressor: Compressor = NoCompression): WorldSave {
+        val prefix = ByteArray(PREFIX_BYTES)
+        val arrived = source.readFully(prefix, 0, PREFIX_BYTES)
+        val headerLength = headerLengthFrom(prefix, arrived)
+        val headerBytes = ByteArray(headerLength)
+        if (source.readFully(headerBytes, 0, headerLength) < headerLength) {
+            throw WorldFormatException(SaveProblem.INCOMPLETE, "it ends inside its header")
+        }
+        val headerChecksum = getInt(prefix, HEADER_CHECKSUM_OFFSET)
+        val header = headerFrom(headerBytes, headerChecksum)
+        val reader = PayloadReader(source, header.compression, compressor, header.payloadBytes, headerChecksum)
+        val world = WorldSections.read(reader, header.document.config, header.sections, header.document.labels) {
+            listsFrom(it)
+        }
+        reader.finish()
+        return WorldSave(header.document, world)
+    }
+
+    /**
+     * The world in [source], or the reason it will not open.
+     *
+     * Only refusals are caught. A cancelled load is not one, and leaves as the cancellation it is;
+     * a failure of the storage itself is the platform's to turn into [SaveProblem.UNREADABLE].
+     */
+    suspend fun open(source: SaveSource, compressor: Compressor = NoCompression): LoadOutcome =
+        try {
+            LoadOutcome.Loaded(read(source, compressor))
+        } catch (refused: WorldFormatException) {
+            LoadOutcome.Refused(SaveRefusal(refused.problem, refused.detail))
+        }
+
+    /** [read] over an array already in memory. */
+    suspend fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave =
+        read(ByteArraySource(bytes), compressor)
+
+    /**
+     * The header's length, from the sixteen bytes in front of it, of which [available] arrived.
+     *
+     * The first question is whether this is a save at all, and a file of zeros is answered as an
+     * incomplete one rather than as a stranger: zeros where a save begins are what a copy that has
+     * not finished arriving looks like, and a sync client's placeholder is often exactly that.
+     */
+    private fun headerLengthFrom(prefix: ByteArray, available: Int): Int {
+        if (available == 0) throw WorldFormatException(SaveProblem.INCOMPLETE, "the file is empty")
+        if ((0 until available).all { prefix[it].toInt() == 0 }) {
+            throw WorldFormatException(SaveProblem.INCOMPLETE, "it holds nothing but zeros where a save begins")
+        }
+        if ((0 until minOf(available, MAGIC.size)).any { prefix[it] != MAGIC[it] }) {
+            if (prefix[0] == '{'.code.toByte()) {
+                throw WorldFormatException(
+                    SaveProblem.WRONG_VERSION,
+                    "it is a plain JSON save from before format 3, with no world in it; this build reads format $FORMAT_VERSION"
+                )
+            }
+            throw WorldFormatException(SaveProblem.NOT_A_SAVE, "")
+        }
+        if (available < PREFIX_BYTES) {
+            throw WorldFormatException(SaveProblem.INCOMPLETE, "it ends after $available bytes")
+        }
+        val version = getInt(prefix, VERSION_OFFSET)
         if (version > FORMAT_VERSION) {
             throw WorldFormatException(
-                "this save was written by a newer build (format $version, this one reads $FORMAT_VERSION)"
+                SaveProblem.WRONG_VERSION,
+                "a newer build wrote it, in format $version; this one reads $FORMAT_VERSION"
             )
         }
         if (version < FORMAT_VERSION) {
             throw WorldFormatException(
-                "this save is format $version and this build reads $FORMAT_VERSION; the settings in " +
-                    "an older header are written under names this build no longer knows, so it " +
-                    "would open as a different world rather than as the one that was saved"
+                SaveProblem.WRONG_VERSION,
+                "it is format $version and this build reads $FORMAT_VERSION; the settings in an older " +
+                    "header are written under names this build no longer knows, so it would open as a " +
+                    "different world rather than as the one that was saved"
             )
         }
-        val headerLength = reader.getInt()
-        return json.decodeFromString(reader.getBytes(headerLength).decodeToString())
+        val headerLength = getInt(prefix, HEADER_LENGTH_OFFSET)
+        if (headerLength <= 0) throw WorldFormatException(SaveProblem.DAMAGED, "its header is $headerLength bytes long")
+        if (headerLength > LARGEST_HEADER_BYTES) {
+            throw WorldFormatException(SaveProblem.TOO_LARGE, "its header claims $headerLength bytes")
+        }
+        return headerLength
     }
-
-    fun decodeHeaderOrNull(bytes: ByteArray): SaveHeader? =
-        runCatching { decodeHeader(bytes) }.getOrNull()
 
     /**
-     * The whole thing.
-     *
-     * A header-only save comes back with a null world, which the caller regenerates from the
-     * config. A container missing a *whole stage's* sections does not throw:
-     * [WorldSections.rebuild] hands back the stages it could build and `null` for the rest, and
-     * the reuse chain in [WorldGenerationEngine.generate] regenerates a missing stage and
-     * everything downstream of it, the same way it already regenerates anything whose settings
-     * changed. So this always hands the caller a complete [WorldMap] — never a partial one — with
-     * such a save simply costing the recompute of whatever it could not carry forward, once, here,
-     * rather than every place that ever asks for `save.world` having to know the difference. A
-     * corrupt section (wrong length, bad magic) still throws — see [WorldSections.rebuild].
+     * The header parsed and held to this build's layout: its id, its grid, and a directory that is
+     * this build's own for that grid, entry for entry. What the directory promises the payload is
+     * then held to as it is read.
      */
-    suspend fun decode(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave {
-        val header = decodeHeader(bytes)
-        if (header.world == null || header.sections.isEmpty()) {
-            return WorldSave(header.document, null)
+    private fun headerFrom(bytes: ByteArray, checksum: Int): SaveHeader {
+        if (Crc32.of(bytes) != checksum) {
+            throw WorldFormatException(SaveProblem.DAMAGED, "its header fails its checksum")
+        }
+        val header = try {
+            json.decodeFromString<SaveHeader>(bytes.decodeToString())
+        } catch (refused: WorldFormatException) {
+            throw refused
+        } catch (unparsed: IllegalArgumentException) {
+            throw WorldFormatException(SaveProblem.DAMAGED, "its header does not parse: ${unparsed.message?.lineSequence()?.first()}")
+        }
+        fun damaged(detail: String): Nothing = throw WorldFormatException(SaveProblem.DAMAGED, detail)
+
+        if (header.formatVersion != FORMAT_VERSION) {
+            damaged("its header says format ${header.formatVersion} where its prefix says $FORMAT_VERSION")
+        }
+        val document = header.document
+        if (!WorldDocument.isValidId(document.id)) damaged("its id '${document.id}' is not one this build writes")
+        document.labels.forEach {
+            if (!it.x.isFinite() || !it.y.isFinite()) damaged("the label '${it.text}' has no position")
+        }
+        val config = document.config
+        val cells = config.width.toLong() * config.height
+        if (config.width <= 0 || config.height <= 0) damaged("its grid is ${config.width} by ${config.height}")
+        if (cells > LARGEST_GRID_CELLS) {
+            throw WorldFormatException(SaveProblem.TOO_LARGE, "its grid is ${config.width} by ${config.height}")
         }
 
-        // Where the payload starts comes from the prefix rather than from re-encoding the
-        // header: a second encoding need not be byte-identical to the one in the file.
-        val reader = ByteReader(bytes, position = HEADER_LENGTH_OFFSET)
-        val headerLength = reader.getInt()
-        val stored = bytes.copyOfRange(PREFIX_BYTES + headerLength, bytes.size)
-        if (header.payloadBytes != stored.size) {
-            throw WorldFormatException(
-                "payload is ${stored.size} bytes, header says ${header.payloadBytes}"
-            )
+        val lists = header.sections.firstOrNull() ?: damaged("its directory is empty")
+        if (lists.name == WorldSections.LISTS && lists.count > LARGEST_LISTS_BYTES) {
+            throw WorldFormatException(SaveProblem.TOO_LARGE, "its lists claim ${lists.count} bytes")
         }
-
-        val payload = when (header.compression) {
-            NoCompression.name -> stored
-            compressor.name -> compressor.decompress(stored)
-                ?: throw WorldFormatException("this platform cannot expand ${header.compression} saves")
-            else -> throw WorldFormatException(
-                "save is compressed with '${header.compression}', which this platform cannot expand"
-            )
+        val expected = WorldSections.directory(cells.toInt(), lists.count.coerceAtLeast(0))
+        if (header.sections.size != expected.size) {
+            damaged("its directory lists ${header.sections.size} sections where this build's format has ${expected.size}")
         }
-
-        val partial = WorldSections.rebuild(
-            config = header.document.config,
-            lists = header.world,
-            labels = header.document.labels,
-            sections = WorldSections.read(payload)
-        )
-        val world = WorldGenerationEngine.generate(header.document.config, previous = partial)
-        return WorldSave(header.document, world)
+        header.sections.zip(expected).forEachIndexed { index, (found, wanted) ->
+            if (found != wanted) damaged("entry $index of its directory is ${describe(found)} where this build's format has ${describe(wanted)}")
+        }
+        val payloadBytes = WorldSections.payloadBytes(expected)
+        if (header.payloadBytes != payloadBytes) {
+            damaged("its header promises ${header.payloadBytes} payload bytes where its directory adds up to $payloadBytes")
+        }
+        return header
     }
 
-    /** Null rather than throwing, so one unreadable file cannot take the whole library down. */
-    suspend fun decodeOrNull(bytes: ByteArray, compressor: Compressor = NoCompression): WorldSave? =
-        runCatching { decode(bytes, compressor) }.getOrNull()
+    private fun describe(entry: SectionInfo): String =
+        "'${entry.name}' (${entry.type}, ${entry.count} elements, ${entry.bytes} bytes at ${entry.offset})"
+
+    private fun listsFrom(bytes: ByteArray): WorldLists =
+        try {
+            json.decodeFromString<WorldLists>(bytes.decodeToString())
+        } catch (unparsed: IllegalArgumentException) {
+            throw WorldFormatException(SaveProblem.DAMAGED, "its lists do not parse: ${unparsed.message?.lineSequence()?.first()}")
+        }
 }

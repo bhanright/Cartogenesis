@@ -3,21 +3,20 @@ package com.cartogenesis.web
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
-import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
+import com.cartogenesis.ui.ExportSubjects
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
@@ -135,38 +134,38 @@ class WebPlatform(
      */
     override suspend fun fetchText(url: String): String? = fetchTextOrNull(url)
 
-    override suspend fun downloadWorld(document: WorldDocument, world: WorldMap?) {
-        val bytes = WorldCodec.encode(document, world, compressor, "web")
-        downloadBytes("cartogenesis-${document.id}.cgw", bytes, "application/octet-stream")
+    /**
+     * The save written a chunk at a time into pieces the browser holds, and handed over as one file.
+     * The name is the reader's to change: the desktop's library lists and opens a save by its file
+     * name, whatever that is.
+     */
+    override suspend fun downloadWorld(document: WorldDocument, world: WorldMap) {
+        val sink = DownloadSink()
+        WorldCodec.write(document, world, sink, compressor, "web")
+        downloadParts("cartogenesis-${document.id}.cgw", sink.parts, "application/octet-stream")
     }
 
-    override suspend fun uploadWorld(): WorldSave? {
-        val bytes = pickFile() ?: return null
-        return WorldCodec.decodeOrNull(bytes, compressor)
+    override suspend fun uploadWorld(): LoadOutcome? {
+        val source = pickFile() ?: return null
+        return WorldCodec.open(source, compressor)
     }
 
     override suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
         size: Int,
         format: ExportFormat
     ): ExportOutcome? {
         val started = epochMillisNow()
 
-        // As on the desktop, the whole pipeline re-runs at the target size rather than upscaling
-        // the preview, so the detail is real.
-        val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(
-            exportConfig,
-            accelerator = accelerator,
-            oceanAccelerator = oceanAccelerator,
-            iceAccelerator = iceAccelerator
-        )
+        // As on the desktop: the world on screen at its own size, and at any other one made again
+        // at that size rather than stretched, so the detail is real.
+        val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
 
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
         // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
         // A printed sheet, as on the desktop: nothing generalised away, and its own scale bar.
-        val bitmap = MapImage.toBitmap(world, options, MapSheet.PRINTED)
+        val bitmap = MapImage.toBitmap(subject.world, options, MapSheet.PRINTED)
         // Quality is ignored by the PNG encoder and lossless for WebP at 100; JPEG is the one
         // format with a real quality to choose, and it is chosen once, in [ExportFormat].
         val quality =
@@ -177,10 +176,10 @@ class WebPlatform(
         val bytes = encoded.bytes
         bitmap.close()
 
-        val name = "cartogenesis-${config.seed}-$size.${format.extension}"
+        val name = "cartogenesis-${world.config.seed}-$size.${format.extension}"
         downloadBytes(name, bytes, mimeType(format))
 
-        return ExportOutcome(name, epochMillisNow() - started, bytes.size.toLong())
+        return ExportOutcome(name, epochMillisNow() - started, bytes.size.toLong(), subject.source)
     }
 
     /**
@@ -196,29 +195,24 @@ class WebPlatform(
      * one thread. See [com.cartogenesis.cartography.DataFiles.asZip].
      */
     override suspend fun exportData(
-        config: WorldGenConfig,
+        world: WorldMap,
         size: Int,
         layer: DataLayer
     ): ExportOutcome? {
         val started = epochMillisNow()
 
-        val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generate(
-            exportConfig,
-            accelerator = accelerator,
-            oceanAccelerator = oceanAccelerator,
-            iceAccelerator = iceAccelerator
-        )
-        val files = DataExports.write(world, layer, compressor, BuildInfo.VERSION)
+        val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
+        val files = DataExports.write(subject.world, layer, compressor, BuildInfo.VERSION, subject.source)
 
         val bytes = files.asZip()
-        val name = "${DataExports.baseName(config, size, layer)}.zip"
+        val name = "${DataExports.baseName(world.config, size, layer)}.zip"
         downloadBytes(name, bytes, "application/zip")
 
         return ExportOutcome(
             "$name (${files.imageName} and ${files.sidecarName})",
             epochMillisNow() - started,
-            bytes.size.toLong()
+            bytes.size.toLong(),
+            subject.source
         )
     }
 

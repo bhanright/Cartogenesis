@@ -6,9 +6,10 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
+import com.cartogenesis.ui.ExportSubjects
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
-import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
@@ -54,7 +55,8 @@ class DesktopPlatform(
      * Where saved worlds live, which the reader can move — see [useLibraryFolder].
      *
      * A `var` behind a getter rather than a `val`, because the library folder is a setting now and
-     * a setting that could only be applied by restarting is a setting nobody trusts.
+     * a setting that could only be applied by restarting is a setting nobody trusts. It starts on
+     * the default folder; the application moves it to the reader's own before it lists anything.
      */
     private var store: DesktopWorldStore = DesktopWorldStore()
 
@@ -64,12 +66,21 @@ class DesktopPlatform(
 
     override val libraryLocation: String get() = store.location
 
-    override suspend fun useLibraryFolder(path: String): Boolean {
+    /**
+     * Moves the library to [path], or back to the default folder when [path] is blank — which is
+     * what "Reset to defaults" asks for. False, and the library left where it was, when the folder
+     * cannot be made or written to.
+     */
+    override suspend fun useLibraryFolder(path: String): Boolean = withContext(Dispatchers.IO) {
+        if (path.isBlank()) {
+            store = DesktopWorldStore()
+            return@withContext true
+        }
         val directory = File(path)
-        if (!directory.isDirectory && !directory.mkdirs()) return false
-        if (!directory.canWrite()) return false
+        if (!directory.isDirectory && !directory.mkdirs()) return@withContext false
+        if (!directory.canWrite()) return@withContext false
         store = DesktopWorldStore(directory)
-        return true
+        true
     }
 
     /**
@@ -165,18 +176,20 @@ class DesktopPlatform(
     override val accelerationUnavailableBecause: String? get() = erosionProbe.unavailableBecause
 
     override suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
         size: Int,
         format: ExportFormat
     ): ExportOutcome? {
         // The dialog is native and has to run on the caller's thread; the rendering behind it must
         // not, or the window stops answering for the best part of a minute.
-        val destination = chooseSaveFile(Exporter.defaultName(config, size, format)) ?: return null
-        val result = withContext(Dispatchers.Default) {
-            Exporter.export(config, options, size, destination, format, rasterProbe.accelerator)
+        val destination = chooseSaveFile(Exporter.defaultName(world.config, size, format)) ?: return null
+        val started = System.currentTimeMillis()
+        return withContext(Dispatchers.Default) {
+            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
+            val result = Exporter.export(subject.world, options, destination, format, rasterProbe.accelerator)
+            ExportOutcome(result.file.name, System.currentTimeMillis() - started, result.bytes, subject.source)
         }
-        return ExportOutcome(result.file.name, result.millis, result.bytes)
     }
 
     /**
@@ -188,16 +201,21 @@ class DesktopPlatform(
      * both so nobody is surprised by a file they did not ask for.
      */
     override suspend fun exportData(
-        config: WorldGenConfig,
+        world: WorldMap,
         size: Int,
         layer: DataLayer
     ): ExportOutcome? {
-        val destination = chooseSaveFile(Exporter.defaultDataName(config, size, layer)) ?: return null
-        val result = withContext(Dispatchers.Default) {
-            Exporter.exportData(config, size, destination, layer)
+        val destination = chooseSaveFile(Exporter.defaultDataName(world.config, size, layer)) ?: return null
+        val started = System.currentTimeMillis()
+        return withContext(Dispatchers.Default) {
+            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
+            val result = Exporter.exportData(subject.world, destination, layer, subject.source)
+            val sidecar = Exporter.sidecarNameFor(result.file.name)
+            ExportOutcome(
+                "${result.file.name} and $sidecar", System.currentTimeMillis() - started, result.bytes,
+                subject.source
+            )
         }
-        val sidecar = Exporter.sidecarNameFor(result.file.name)
-        return ExportOutcome("${result.file.name} and $sidecar", result.millis, result.bytes)
     }
 
     private companion object {
@@ -236,10 +254,12 @@ internal fun configDirectory(): File {
 /**
  * One JSON file, read and written whole.
  *
- * Written to a sibling `.tmp` and moved into place, so a crash halfway through a write leaves the
- * previous settings rather than half a document — a settings file is small enough that this costs
- * nothing, and it is the difference between "your preferences are as they were" and "the
- * application opens with everything reset".
+ * Written to a temporary file beside it and renamed over it in one step, so a crash halfway
+ * through a write leaves the previous settings rather than half a document, and a sync client
+ * keeping the folder in step never uploads half of one either. The rename is the only way the file
+ * is ever changed: where it cannot be made — another program holding the file past
+ * [replaceAtomically]'s retries — the write fails and the old settings stay, rather than the file
+ * being rewritten in place.
  *
  * Writes are taken one at a time and the newest asked for wins. The river density slider writes on
  * every mark it passes, so a quick drag is a burst of writes, and unordered they raced through the
@@ -285,16 +305,19 @@ internal class FileSettings(private val file: File) : SettingsStore {
     /** A write asked for: its place in line and the whole document it asked to store. */
     private class Asked(val number: Long, val text: String)
 
-    private fun replaceWhole(text: String) {
-        runCatching {
+    private suspend fun replaceWhole(text: String) {
+        try {
             file.parentFile?.mkdirs()
-            val temporary = File(file.parentFile, file.name + ".tmp")
-            temporary.writeText(text)
-            if (!temporary.renameTo(file)) {
-                // Windows refuses a rename onto an existing file, so fall back to the obvious.
-                file.writeText(text)
+            val temporary = temporaryBeside(file)
+            try {
+                temporary.writeText(text)
+                replaceAtomically(temporary, file)
+            } finally {
                 temporary.delete()
             }
+        } catch (failed: java.io.IOException) {
+            // A preference that could not be written is not a reason to stop the application;
+            // the one on disk is still whole.
         }
     }
 }

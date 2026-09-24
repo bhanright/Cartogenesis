@@ -3,11 +3,12 @@ package com.cartogenesis.web
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataFiles
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldComparison
 import com.cartogenesis.cartography.WorldDocument
-import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.MapImage
@@ -46,7 +47,8 @@ internal suspend fun runSelfTest(accelerator: WebGpuErosion?): String {
     val gpu = if (accelerator == null) "no WebGPU device available" else runGpuSelfTest(accelerator)
     val storage = runStorageSelfTest()
     val exports = runExportSelfTest()
-    return "SELFTEST $gpu $storage $exports"
+    val bomb = runDecompressionSelfTest()
+    return "SELFTEST $gpu $storage $exports $bomb"
 }
 
 private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
@@ -117,18 +119,23 @@ private suspend fun runStorageSelfTest(): String {
     val bytes = WorldCodec.encode(document, world, compressor, "web-selftest")
 
     val library = IndexedDbLibrary(compressor, "web-selftest")
-    val writeElapsed = measureTime { library.save(document, world) }
+    var key = ""
+    val writeElapsed = measureTime { key = library.save(document, world) }
 
-    var restored: WorldSave? = null
-    val readElapsed = measureTime { restored = library.load(document.id) }
-    library.delete(document.id)
+    var restored: LoadOutcome? = null
+    val readElapsed = measureTime { restored = library.load(key) }
+    val listed = library.list().any { it.key == key && it.document?.title == document.title }
+    library.delete(key)
 
-    val restoredHeights = restored?.world?.terrain?.height?.data
-    val identical = restoredHeights != null && restoredHeights.contentEquals(world.terrain.height.data)
+    // Every field a save carries, as the JVM's round trip compares them, not the heights alone.
+    val opened = restored as? LoadOutcome.Loaded
+    val difference = opened?.let { WorldComparison.firstDifference(world, it.save.world) }
+    val refusal = (restored as? LoadOutcome.Refused)?.refusal?.message
 
     return "storage compression=${compressor.name} bytes=${bytes.size} " +
         "writeMs=${writeElapsed.inWholeMilliseconds} readMs=${readElapsed.inWholeMilliseconds} " +
-        "heightIdentical=$identical"
+        "listed=$listed everyFieldIdentical=${opened != null && difference == null}" +
+        (difference?.let { " differs=\"$it\"" } ?: "") + (refusal?.let { " refused=\"$it\"" } ?: "")
 }
 
 /**
@@ -180,6 +187,28 @@ private suspend fun runExportSelfTest(): String {
         "zipBytes=${written?.asZip()?.size ?: ENCODER_DECLINED} " +
         "heightmapMs=${heightmapElapsed.inWholeMilliseconds}"
 }
+
+/**
+ * Whether the browser's gunzip stops at the limit it is given: a stream of [BOMB_BYTES] of zeros,
+ * which gzip holds in a few tens of kilobytes, expanded to a limit of [BOMB_LIMIT_BYTES]. The
+ * answer has to be the limit and one byte over, and the bytes pulled from the stream to get it a
+ * small step past the limit rather than the whole stream.
+ */
+private suspend fun runDecompressionSelfTest(): String {
+    if (!compressionStreamsAvailable()) return "gunzip unavailable"
+    val bomb = gzipOfZeros(BOMB_BYTES) ?: return "gunzip no-stream"
+    val answer = WebGzipCompressor.decompress(bomb, BOMB_LIMIT_BYTES)
+    val pulled = WebGzipCompressor.lastPulledBytes.toLong()
+    val stopped = answer?.size == BOMB_LIMIT_BYTES + 1 && pulled < BOMB_BYTES / 4
+    return "gunzip streamBytes=${bomb.size} expandsTo=$BOMB_BYTES limit=$BOMB_LIMIT_BYTES " +
+        "answerBytes=${answer?.size} pulledBytes=$pulled stoppedAtLimit=$stopped"
+}
+
+/** 64 MiB: sixty-four times the limit, so a gunzip that read it all would show it plainly. */
+private const val BOMB_BYTES = 64 shl 20
+
+/** A chunk, the most any frame may promise. */
+private const val BOMB_LIMIT_BYTES = 1 shl 20
 
 /** Lossless for PNG and WebP, so a null back is the encoder missing rather than the setting. */
 private const val BEST_QUALITY = 100

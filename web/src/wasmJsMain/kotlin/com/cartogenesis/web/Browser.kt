@@ -14,12 +14,6 @@ private external fun jsNow(): Double
 
 internal fun epochMillisNow(): Long = jsNow().toLong()
 
-@JsFun("() => localStorage.length")
-internal external fun storageLength(): Int
-
-@JsFun("(index) => localStorage.key(index)")
-internal external fun storageKeyAt(index: Int): String?
-
 @JsFun("(key) => localStorage.getItem(key)")
 internal external fun storageGet(key: String): String?
 
@@ -30,9 +24,6 @@ internal external fun storageGet(key: String): String?
     }"""
 )
 internal external fun storageSet(key: String, value: String): Boolean
-
-@JsFun("(key) => { localStorage.removeItem(key); }")
-internal external fun storageRemove(key: String)
 
 /** An opaque handle to a JavaScript `Uint8Array`, only ever passed straight back to JavaScript. */
 internal external interface ByteBuffer : JsAny

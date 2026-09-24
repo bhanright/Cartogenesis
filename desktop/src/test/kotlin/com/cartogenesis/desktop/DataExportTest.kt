@@ -487,7 +487,7 @@ class DataExportTest {
         sidecar.delete()
 
         val result = runBlocking {
-            Exporter.exportData(config, 512, destination, DataLayer.BIOMES)
+            Exporter.exportData(world, destination, DataLayer.BIOMES)
         }
 
         assertTrue(destination.isFile, "no image at ${destination.absolutePath}")

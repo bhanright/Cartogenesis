@@ -2,15 +2,15 @@ package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.DataExports
 import com.cartogenesis.cartography.DataLayer
+import com.cartogenesis.cartography.ExportedWorld
 import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.MapImage
-import com.cartogenesis.worldgen.WorldGenerationEngine
-import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldMap
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.IIOImage
@@ -20,13 +20,15 @@ import com.cartogenesis.ui.ExportFormat
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
- * Renders a world at export resolution and writes it out.
+ * Draws a world and writes it out.
  *
- * The whole pipeline is re-run at the target size rather than upscaling the preview, so the detail
- * is real rather than interpolated, and there is enough heap to actually finish: 4096 wants roughly
- * 2GB.
+ * Which world is the caller's decision — the one on screen at its own size, or one made again at
+ * another size, so the detail is real rather than interpolated; see `ExportSubjects` in `:ui`.
+ * This draws what it is given, at the size it was generated at.
  *
  * Nothing about the drawing is scaled to the size. Every mark the renderer makes — the engraving's
  * strokes, the river pen, a landmark's glyph — is either a fixed count of output pixels or a share
@@ -47,18 +49,20 @@ object Exporter {
         val format: ExportFormat
     )
 
+    /**
+     * [world] drawn with [options] on a printed sheet and written to [destination] as [format].
+     *
+     * Checks for cancellation before it writes, so an export superseded while it was drawing leaves
+     * no file behind it.
+     */
     suspend fun export(
-        config: WorldGenConfig,
+        world: WorldMap,
         options: RenderOptions,
-        size: Int,
         destination: File,
         format: ExportFormat = ExportFormat.PNG,
         raster: RasterAccelerator? = null
     ): Result {
         val started = System.currentTimeMillis()
-
-        val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generateBlocking(exportConfig)
 
         val pixels = MapRasterizer.rasterize(world, options, raster)
         // A printed sheet: drawn cell for pixel, so nothing is generalised away, and carrying its
@@ -73,6 +77,7 @@ object Exporter {
             Image.makeFromBitmap(bitmap)
                 .encodeToData(skiaFormat(format), quality = LOSSLESS_QUALITY)?.bytes
         } ?: error("Could not encode the map as ${format.label}")
+        currentCoroutineContext().ensureActive()
         destination.writeBytes(encoded)
 
         // The bitmap holds size*size*4 bytes; let it go before the caller renders anything else.
@@ -82,8 +87,9 @@ object Exporter {
     }
 
     /**
-     * The world's own numbers at [size]: a sixteen-bit heightmap, or a biome or realm index map,
-     * with the sidecar JSON that says what its values mean written beside it.
+     * [world]'s own numbers: a sixteen-bit heightmap, or a biome or realm index map, with the
+     * sidecar JSON that says what its values mean — and, from [source], which world it was —
+     * written beside it.
      *
      * The two files come back from one call and land in one directory, named alike, because a
      * heightmap and its metre scale are one artefact in two files and separating them is how a
@@ -91,17 +97,16 @@ object Exporter {
      * takes the same name with a `.json` on it, and the reader chose the directory once.
      */
     suspend fun exportData(
-        config: WorldGenConfig,
-        size: Int,
+        world: WorldMap,
         destination: File,
-        layer: DataLayer
+        layer: DataLayer,
+        source: ExportedWorld = ExportedWorld.OnScreen
     ): Result {
         val started = System.currentTimeMillis()
 
-        val exportConfig = config.atResolution(size, size)
-        val world = WorldGenerationEngine.generateBlocking(exportConfig)
-        val files = DataExports.write(world, layer, GzipCompressor, BuildInfo.VERSION)
+        val files = DataExports.write(world, layer, GzipCompressor, BuildInfo.VERSION, source)
 
+        currentCoroutineContext().ensureActive()
         destination.writeBytes(files.image)
         val sidecar = File(destination.parentFile, sidecarNameFor(destination.name))
         sidecar.writeBytes(files.sidecar)

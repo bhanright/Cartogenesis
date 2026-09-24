@@ -45,6 +45,10 @@ fun main() {
                 // a browser's device cannot be reached from an ordinary test.
                 publishSelfTest(runSelfTest(gpu.accelerator))
             }
+            if (saveTestRequested()) {
+                // ?savetest measures what saving and opening a 2048 world costs the tab; minutes.
+                publishSelfTest(runSaveMemoryTest())
+            }
             platform = WebPlatform(
                 gpu.accelerator,
                 gpu.unavailableBecause,

@@ -38,10 +38,13 @@ fun LibraryPane(
     worlds: List<LibraryEntry>,
     location: String,
     supportsFileTransfer: Boolean,
+    /** Whether there is a world on screen to save or download. */
+    hasWorld: Boolean,
     onTitleChange: (String) -> Unit,
     onSave: () -> Unit,
     onDownload: () -> Unit,
     onUpload: () -> Unit,
+    /** Opens the entry with this key. See [LibraryEntry.key]. */
     onOpen: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -70,9 +73,9 @@ fun LibraryPane(
                 )
             }
             val actions: @Composable () -> Unit = {
-                Button(onClick = onSave) { Text("Save") }
+                Button(onClick = onSave, enabled = hasWorld) { Text("Save") }
                 if (supportsFileTransfer) {
-                    TextButton(onClick = onDownload) { Text("Download") }
+                    TextButton(onClick = onDownload, enabled = hasWorld) { Text("Download") }
                     TextButton(onClick = onUpload) { Text("Upload a file") }
                 }
             }
@@ -119,18 +122,32 @@ fun LibraryPane(
             )
         }
 
-        items(worlds, key = { it.document.id }) { entry ->
+        // Keyed by the file, not by the world's id: two copies of one world — the pair a sync
+        // client leaves when two machines edit it — are two entries, and a list keyed by id would
+        // have been handed the same key twice.
+        items(worlds, key = { it.key }) { entry ->
             val world = entry.document
-            Card(Modifier.fillMaxWidth().clickable { onOpen(world.id) }) {
+            Card(Modifier.fillMaxWidth().clickable { onOpen(entry.key) }) {
                 Row(
                     Modifier.padding(16.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
+                        if (world == null) {
+                            // A file that will not open is listed, with the reason, rather than left
+                            // out: the reader can see it is there, and delete it.
+                            Text(entry.key, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Will not open: ${entry.refusal?.message.orEmpty()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            return@Column
+                        }
                         Text(world.title, style = MaterialTheme.typography.titleSmall)
                         Text(
                             "seed ${world.config.seed} · ${world.config.width}px · " +
-                                "${formatTimestamp(world.savedAt)} · ${entry.status}",
+                                "${formatTimestamp(world.savedAt)} · ${entry.key}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -151,7 +168,7 @@ fun LibraryPane(
                             )
                         }
                     }
-                    TextButton(onClick = { onDelete(world.id) }) { Text("Delete") }
+                    TextButton(onClick = { onDelete(entry.key) }) { Text("Delete") }
                 }
             }
         }

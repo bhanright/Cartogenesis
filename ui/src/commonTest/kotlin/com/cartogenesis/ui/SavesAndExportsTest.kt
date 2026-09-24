@@ -1,6 +1,9 @@
 package com.cartogenesis.ui
 
+import com.cartogenesis.cartography.DataExports
+import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.ExportedWorld
+import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -76,6 +79,18 @@ class SavesAndExportsTest {
         assertEquals(ExportedWorld.MadeAgain(32, 32), larger.source)
         assertTrue("made again" in ExportRunner.notice(ExportOutcome("x.png", 1L, 1L, larger.source)))
         assertTrue("made again" !in ExportRunner.notice(ExportOutcome("x.png", 1L, 1L, same.source)))
+    }
+
+    @Test
+    fun `a data sidecar says whether its world was the one on screen`() = runTest {
+        val world = WorldGenerationEngine.generate(WorldGenConfig(seed = 13L, width = 32, height = 32))
+        val onScreen = DataExports.write(world, DataLayer.BIOMES, NoCompression, "a test").sidecar.decodeToString()
+        assertTrue("\"worldSource\": \"on screen\"" in onScreen, onScreen)
+        val madeAgain = DataExports.write(world, DataLayer.BIOMES, NoCompression, "a test", ExportedWorld.MadeAgain(16, 16))
+            .sidecar.decodeToString()
+        assertTrue("\"worldSource\": \"regenerated\"" in madeAgain, madeAgain)
+        assertTrue("\"regeneratedFromWidthPixels\": 16" in madeAgain, madeAgain)
+        assertTrue("not the same world cell for cell" in madeAgain, madeAgain)
     }
 
     @Test

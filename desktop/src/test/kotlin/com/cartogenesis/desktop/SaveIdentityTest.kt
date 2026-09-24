@@ -65,12 +65,22 @@ class SaveIdentityTest {
             assertEquals(during.world.config, during.document.config, "Save filed a world under settings it was not made with")
             assertEquals(saved.document.id, during.document.id, "the same world at the same seed is the same document")
             assertEquals(LibraryKeys.of(saved.document), during.key, "the second Save did not write where the first did")
-            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { onAllStop().isEmpty() }
 
+            // Stopped: the panel keeps 1024 and the map keeps the 512 world, which is the pair the
+            // old Save filed together and could then never open.
+            onNodeWithText("Stop").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { onAllStop().isEmpty() }
+            save(library, 3)
+            val stopped = library.saves[2]
+            assertEquals(stopped.world.config, stopped.document.config, "Save after Stop filed the world under the panel's settings")
+
+            // Back to 512, which reuses the world on screen, and then a new world.
+            onNodeWithText("512").performClick()
+            waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { onAllStop().isEmpty() }
             onNodeWithText("Random world").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { seedOnTheMap().let { it != null && it != first } && onAllStop().isEmpty() }
-            save(library, 3)
-            val random = library.saves[2]
+            save(library, 4)
+            val random = library.saves[3]
             assertNotEquals(saved.document.id, random.document.id, "Save after Random world wrote over the last world's document")
             assertNull(random.key, "Save after Random world wrote to the last world's file")
         }
@@ -107,7 +117,7 @@ class SaveIdentityTest {
         const val HEIGHT = 900
         val CARTOUCHE_FACTS = Regex("""seed (-?\d+) · \d+ × \d+""")
 
-        /** Two 512 worlds and a 1024 one on whatever machine is running the tests. */
+        /** Two 512 worlds, and a 1024 one stopped early, on whatever machine is running the tests. */
         const val GENERATION_TIMEOUT_MS = 300_000L
         const val SAVE_TIMEOUT_MS = 30_000L
     }

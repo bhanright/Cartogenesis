@@ -355,7 +355,10 @@ front end wrote it, and a directory of the payload's sections) followed by the p
 lists (rivers, lakes, realms, peoples, landmarks) as JSON, then one little-endian binary section per
 per-cell array, 146 bytes a cell in all. The payload is cut into one-mebibyte chunks, each gzipped
 and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 2.45 GB
-of arrays, saves and opens without any array its size existing in between. `WorldCodec` in
+of arrays, saves and opens without any array its size existing in between. The header is
+checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
+edited header, or a header put in front of another save's chunks, is found. The browser keeps its
+library in IndexedDB the same way, a mebibyte to a record. `WorldCodec` in
 `:cartography` is the whole format, shared by both front ends, with serializers generated from the
 config classes so a new setting cannot go missing from a save.
 
@@ -373,7 +376,9 @@ override path and a line in `WorldSections` or it will not survive a save.
 The desktop keeps saves as ordinary `.cgw` files in `~/.cartogenesis/worlds`, or in the folder
 chosen under Settings ▸ Library folder. Any `.cgw` file in that folder is listed under its own name
 and opens as itself, whatever it is called, so a save downloaded from the browser can simply be
-dropped in. A file that will not open is listed with the reason.
+dropped in. A file that will not open is listed with the reason. A world brought in from a file is
+a new document, so its first Save lands beside any copy already in the library rather than over
+it, and two Saves of one world always leave the later one on disk.
 
 To keep your worlds in the cloud, choose a folder that a file-sync client already keeps in step
 across your machines as the library folder. Cartogenesis never talks to the service itself; it only

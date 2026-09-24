@@ -145,6 +145,24 @@ class WorldCodecTest {
     }
 
     @Test
+    fun `the comparison the browser's self-test uses finds a difference in any field`() = runTest {
+        // The browser's round trip compared the heights alone; it asks this now, which has to
+        // see a change anywhere a save carries one.
+        // Filed with no labels: a saved world's labels are its document's, and the synthetic world has none.
+        val plain = WorldDocument(id = "plain", title = "Plain", config = synthetic.config, savedAt = 1L)
+        val restored = WorldCodec.decode(WorldCodec.encode(plain, synthetic)).world
+        assertNull(WorldComparison.firstDifference(synthetic, restored))
+        restored.climate.permafrost[9] = 2
+        assertEquals("'climate.permafrost' at cell 9", WorldComparison.firstDifference(synthetic, restored))
+        restored.climate.permafrost[9] = synthetic.climate.permafrost[9]
+        restored.ocean.anomaly.data[3] = -0f
+        assertEquals("'ocean.anomaly' at cell 3", WorldComparison.firstDifference(synthetic, restored))
+        restored.ocean.anomaly.data[3] = synthetic.ocean.anomaly.data[3]
+        restored.rivers.rivers.single().cells[1] = 13
+        assertEquals("the lists", WorldComparison.firstDifference(synthetic, restored))
+    }
+
+    @Test
     fun `a payload stored raw and one stored compressed both read back`() = runTest {
         val raw = rawSave()
         assertEquals("none", WorldCodec.decodeHeader(raw).compression)

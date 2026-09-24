@@ -543,6 +543,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float BRIGHTEST = 1.35;
             const int HORIZON_BEARINGS = 8;
             const int HORIZON_STEPS = 3;
+            // ReliefShading's central difference spans two cell widths, so the horizon, which
+            // reads a rise over its run, takes twice the scale the differences are read at: the
+            // one vertical exaggeration, ReliefShading.verticalExaggeration.
+            const float CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2.0;
 
             // The eight compass bearings of the ground, as unit vectors for the lamps, with the
             // brightness of the sky along each: east, south-east, south, south-west, west,
@@ -636,8 +640,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     for (int further = 0; further < HORIZON_STEPS; further++) {
                         int reading = bearing * HORIZON_STEPS + further;
                         ivec2 offset = uHorizonOffset[reading];
-                        precise float rise =
-                            (elevationAt(x + offset.x, y + offset.y) - here) * uSlopeScale;
+                        precise float rise = (elevationAt(x + offset.x, y + offset.y) - here) *
+                            (uSlopeScale * CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS);
                         precise float tangent = rise / uHorizonStride[reading];
                         if (tangent > steepest) steepest = tangent;
                     }

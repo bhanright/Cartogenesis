@@ -235,6 +235,13 @@ class PenAndInkTest : BorrowsSharedWorlds() {
          * land on this tree and still finds the recorded figure, because a gentler uplift and a
          * different set of drawn rivers move the belts and the valleys rather than the roughness
          * of ordinary country. Re-taken last, after the two module suites had settled.
+         *
+         * Fix 2 moved all twelve twice. First the ground: every operator that shaped it was put on
+         * the ground's ruler, so every continent is new, and the relief was drawn for the ground.
+         * Then the light: the sky's horizon had read the ground half as steep as the lamps did, and
+         * reads the one exaggeration now, so ordinary country sees less of the sky and
+         * `ReliefShading.ORDINARY_GROUND` is re-derived with it, 0.9526 to 0.9362 to 0.9225
+         * (docs/DESIGN_LEDGER.md, Fix 2). Re-taken last each time.
          */
         /** The twelve records live in [RecordedRenders], with the one script that re-takes them. */
         val RECORDED_STYLES: Map<MapStyle, Int> get() = RecordedRenders.STYLES_AT_512

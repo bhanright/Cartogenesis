@@ -236,7 +236,7 @@ class WorldCodecTest {
 
     @Test
     fun `a section renamed in the payload is refused, not regenerated`() = runTest {
-        // Astra's case: the directory still advertises erosion.height and the payload's record is
+        // Audit III's case: the directory still advertises erosion.height and the payload's record is
         // called something else. The old reader took the stage as missing and regenerated erosion
         // and everything after it on the processor.
         val apart = TakenApart.of(rawSave())

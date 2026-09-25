@@ -130,7 +130,7 @@ class SitePaletteContrastTest {
             Triple("name, the + control, other pills, links", "card-ink", "card-ground"),
             Triple("summary line, instructions and notes", "card-ink-dim", "card-ground"),
             Triple("the For your system tag, the Copy button", "card-ink", "card-chip"),
-            Triple("the apt commands", "card-ink", "card-well"),
+            Triple("the apt commands, on a card that carries commands", "card-ink", "card-well"),
             Triple("the first pill, filled", "card-ground", "card-ink")
         )
 
@@ -363,7 +363,11 @@ class SitePaletteContrastTest {
         cards.forEach { card ->
             val own = declarationsOf(".dl-card.$card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
             val custom = defaults + own
-            CARD_PAIRS.forEach { (where, ink, ground) ->
+            // The command well is measured on the cards that have one.
+            val markup = Regex("""<div class="dl-card $card"[\s\S]*?(?=<div class="dl-card |<a class="dl-all")""").find(page)?.value
+                ?: fail("the page has no $card card")
+            val pairs = CARD_PAIRS.filter { (_, _, ground) -> ground != "card-well" || markup.contains("""class="dl-cmd""") }
+            pairs.forEach { (where, ink, ground) ->
                 val inkValue = resolve("var(--$ink)", custom)
                 val groundValue = resolve("var(--$ground)", custom)
                 checkValues("$card card, $where", "--$ink", inkValue, "--$ground", groundValue, AA)

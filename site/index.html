@@ -626,7 +626,8 @@
     font-family:var(--mono);font-size:13px;line-height:1.55;color:var(--card-ink);
     overflow-x:auto;white-space:pre;
   }
-  .live .dl-cmd{padding-right:76px}
+  .dl-cmd-box{position:relative}
+  .live .dl-cmd{padding-top:40px}
   .dl-copy{
     position:absolute;right:8px;top:8px;font-family:var(--mono);font-size:12px;line-height:1;
     color:var(--card-ink);background:var(--card-chip);border:0;border-radius:999px;padding:6px 10px;cursor:pointer;
@@ -1096,9 +1097,9 @@
           </button>
           <div class="dl-body" id="dl-linux">
             <p>The apt repository is recommended, so later releases arrive with <code>apt upgrade</code>. These three commands fetch the signing key, add the source line and install:</p>
-            <pre class="dl-cmd"><code id="dl-apt">sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
+            <div class="dl-cmd-box"><pre class="dl-cmd"><code id="dl-apt">sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
 echo "deb [signed-by=/etc/apt/keyrings/cartogenesis.asc] https://cartogenesis.com/apt stable main" | sudo tee /etc/apt/sources.list.d/cartogenesis.list
-sudo apt update &amp;&amp; sudo apt install cartogenesis</code><button type="button" class="dl-copy" data-copy="dl-apt" hidden>Copy</button></pre>
+sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button type="button" class="dl-copy" data-copy="dl-apt" hidden>Copy</button></div>
             <div class="dl-files">
               <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-amd64.deb">.deb package</a>
               <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-portable.tar.gz">Portable tarball</a>

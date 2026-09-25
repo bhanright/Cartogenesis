@@ -7,7 +7,6 @@ import com.cartogenesis.cartography.WorldDocument
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -61,7 +60,7 @@ class FolderInteropTest {
             val key = library.save(document, world)
             assertEquals(LibraryKeys.of(document), key, "not the name the desktop's store gives a new save")
             val written = folder.readRaw(key)
-            assertContentEquals(WorldCodec.encode(document, world, WebGzipCompressor, "web"), written)
+            assertSameBytes(WorldCodec.encode(document, world, WebGzipCompressor, "web"), written)
             // In numbered pieces of [PRINTED_LINE] characters, which `RegenerateInteropFixtures`
             // reads back by number and length: the test reporter runs printed lines together.
             if (regeneratingInteropFixtures()) {

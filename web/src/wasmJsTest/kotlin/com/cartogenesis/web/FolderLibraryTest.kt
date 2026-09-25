@@ -8,7 +8,6 @@ import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
@@ -83,7 +82,7 @@ class FolderLibraryTest {
 
             val here = folder.readRaw("w1.cgw")
             library.save(document(title = "There, mended", world = world), world, "w1 (1).cgw")
-            assertContentEquals(here, folder.readRaw("w1.cgw"), "saving one copy wrote over another")
+            assertSameBytes(here, folder.readRaw("w1.cgw"), "saving one copy wrote over another")
             assertEquals("There, mended", titleIn(library.load("w1 (1).cgw")))
 
             library.delete("cartogenesis-w1.cgw")
@@ -101,7 +100,7 @@ class FolderLibraryTest {
 
             assertEquals("w1 (2).cgw", library.save(document(title = "Brought in", world = world), world))
             assertEquals("w1 (3).cgw", library.save(document(title = "Brought in again", world = world), world))
-            assertContentEquals(original, folder.readRaw("w1.cgw"))
+            assertSameBytes(original, folder.readRaw("w1.cgw"))
             assertEquals("Brought in", titleIn(library.load("w1 (2).cgw")))
             assertEquals(listOf("w1 (2).cgw", "w1 (3).cgw", "w1.cgw"), folder.entries())
         }
@@ -151,7 +150,7 @@ class FolderLibraryTest {
             assertEquals(SaveProblem.UNREADABLE, listed.getValue("online-only.cgw").refusal?.problem)
             assertEquals(SaveProblem.INCOMPLETE, assertIs<LoadOutcome.Refused>(library.load("half.cgw")).refusal.problem)
             assertEquals(SaveProblem.UNREADABLE, assertIs<LoadOutcome.Refused>(library.load("online-only.cgw")).refusal.problem)
-            assertContentEquals(bytes.copyOf(bytes.size / 2), folder.readRaw("half.cgw"))
+            assertSameBytes(bytes.copyOf(bytes.size / 2), folder.readRaw("half.cgw"))
         }
     }
 
@@ -164,7 +163,7 @@ class FolderLibraryTest {
 
             val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
             assertFailsWith<IllegalStateException> { failing.save(document(title = "Lost", world = world), world, "w1.cgw") }
-            assertContentEquals(kept, folder.readRaw("w1.cgw"))
+            assertSameBytes(kept, folder.readRaw("w1.cgw"))
             assertEquals(listOf("w1.cgw"), folder.entries(), "the failed save left its swap file behind")
         }
     }
@@ -217,7 +216,7 @@ class FolderLibraryTest {
             val library = FolderWorldLibrary(folder.handle, interloper, "a test")
 
             assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
-            assertContentEquals(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
+            assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
             assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
             assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
         }

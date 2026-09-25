@@ -101,6 +101,22 @@ internal suspend fun <T> withTestFolder(purpose: String, block: suspend (TestFol
     }
 }
 
+/**
+ * Fails unless [actual] is [expected], byte for byte, saying where they part. Not
+ * `assertContentEquals`, whose message prints both arrays whole: a save's hundred and eighty
+ * thousand numbers overran the test reporter between the browser and Gradle, which then lost the
+ * results of the tests around it.
+ */
+internal fun assertSameBytes(expected: ByteArray, actual: ByteArray, message: String? = null) {
+    if (expected.contentEquals(actual)) return
+    val firstDifference = (0 until minOf(expected.size, actual.size)).firstOrNull { expected[it] != actual[it] }
+        ?: minOf(expected.size, actual.size)
+    kotlin.test.fail(
+        (message?.let { "$it: " } ?: "") +
+            "expected ${expected.size} bytes, found ${actual.size}, first differing at byte $firstDifference"
+    )
+}
+
 /** A 32 world, made once for every test that needs one: it is the same world each time. */
 internal object TestWorlds {
     private var small: WorldMap? = null

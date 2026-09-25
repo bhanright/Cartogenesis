@@ -98,9 +98,9 @@ object ErosionStage {
      *   except that the round's pit census is only counted when someone asked for it.
      * @param log handed which mechanism laid sediment on which cell, for the guards that ask what
      *   shape each of them makes. An observer on the same terms.
-     * @param receiverClamp whether the incision is bounded below by the receiver's new elevation.
-     *   Only ever false in `ReceiverClampTest`, which is where the guard is shown to fail without
-     *   it; nothing outside the tests can reach this.
+     * @param receiverClamp whether the incision leaves a cell at or below the level it grades to
+     *   alone rather than moving it toward that level. Only ever false in the guards shown failing
+     *   without it; nothing outside the tests can reach this. See `HydraulicErosion.incise`.
      */
     internal suspend fun apply(
         config: WorldGenConfig,
@@ -121,7 +121,7 @@ object ErosionStage {
          * not a world anybody wants, only a control.
          */
         shieldCut: Boolean = true,
-        /** See `HydraulicErosion.apply`: every cell's cut before the clamp, for the unit guards. */
+        /** See `HydraulicErosion.incise`: every cell the incision reached, for its guards. */
         incisionWatch: IncisionWatch? = null
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)

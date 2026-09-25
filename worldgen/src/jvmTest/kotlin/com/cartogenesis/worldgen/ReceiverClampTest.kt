@@ -66,21 +66,16 @@ import kotlin.test.assertTrue
  * field seeded in shoreline-relative units and updated in height units — was closed at E6 (see
  * `HydraulicErosion`'s `settled` and docs/DESIGN_LEDGER.md, E6); the table above predates it.
  *
- * **What the control rests on, since the cap has had one unit.** The table above was taken while
- * the incision's half-drop cap was worked out in shoreline-relative units and spent on the raw
- * field, where it let a cell be cut by 1.33 times its own drop to its receiver (Audit III's B-D1),
- * and that is where the holes the clamp closed came from. Spent in the field's own unit, the cap
- * holds a cell above its receiver's old height and so above its new one, and the incision makes
- * no hole with the clamp off either: none on any of the three seeds (docs/DESIGN_LEDGER.md, Fix 3).
- * So the census is still asserted with the clamp on, and it no longer tells the two runs apart.
- *
- * What does is the other half of the clamp, which the cap does not reach: a cell already standing
- * below its receiver, the floor of a basin the routing crosses on the fill, is not cut at all.
- * The cap lets it lose half of the fill's drop, which is the drop of the water surface and not of
- * the ground, so without the clamp the floors of basins are cut deeper round after round and more
- * of the channels end under standing water. That is the control: pooled over the three seeds, the
- * world without the clamp draws more channel cells under water than the world with it — 1,369
- * against 1,237 when Fix 3 restated this, and more on every seed.
+ * **What the control rests on, since the implicit update (Fix 3b).** The incision is Braun and
+ * Willett's implicit update itself now (`HydraulicErosion.incise`), which carries half of the bound
+ * by construction: a cell above its receiver's new height is moved to a weighted mean of its own
+ * height and that one, never below it. The other half is a rule: a cell standing at or below the
+ * level it grades to, the floor of a basin the routing crosses on the fill, is left alone, where the
+ * weighted mean would move it toward its receiver. The switch takes that rule out, and without it
+ * the incision's slot of the census is no longer empty: 530, 1,157 and 1,015 channel cells on
+ * 718106, 42 and 7 at 512 over the rounds, against none with it (docs/DESIGN_LEDGER.md, Fix 3b).
+ * The channel cells drawn under water, which the control rested on under the explicit update, are
+ * printed and no longer asserted: raising basin floors makes fewer of them, not more.
  */
 class ReceiverClampTest {
 
@@ -93,6 +88,7 @@ class ReceiverClampTest {
         val tight = ArrayList<String>()
         var pondedWith = 0
         var pondedWithout = 0
+        var holesWithout = 0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
@@ -117,13 +113,7 @@ class ReceiverClampTest {
                 // in a tectonic bowl is a channel cell below its receiver by definition — so this
                 // is reported and the by-construction claim is asserted on the census above.
                 val ponded = pondedChannelCells(config, eroded.height)
-                // What the clamp costs, reported rather than asserted. The cap beside it, still in
-                // `HydraulicErosion.cut`, is `drop * 0.5` in the shoreline-relative units the drop
-                // is measured in, spent on a height field whose land range is 0.375 of it — so it
-                // allows a cell to be cut by 1.33 times the height it actually stands above its
-                // receiver, every round, on every well-fed channel. That is where the holes come
-                // from (Audit III's B-D1), and the clamp closing them takes real material out of
-                // the budget.
+                // What the rule costs the budget, reported rather than asserted.
                 println(
                     "CLAMP seed $seed clamp=$clamp: $ponded channel cells drawn under water; " +
                         "incised %.2f, deposited %.2f, lost %.2f over the rounds".format(
@@ -133,6 +123,7 @@ class ReceiverClampTest {
                 )
                 into.add("$seed $ponded ponded, ${totals[PitStage.INCISION]} cut into a hole")
                 if (clamp) pondedWith += ponded else pondedWithout += ponded
+                if (!clamp) holesWithout += totals[PitStage.INCISION]
                 if (clamp) {
                     assertTrue(
                         totals[PitStage.INCISION] == 0,
@@ -143,11 +134,14 @@ class ReceiverClampTest {
                 }
             }
         }
-        println("CLAMP with the clamp off: $loose; with it on: $tight")
+        println(
+            "CLAMP with the rule off: $loose; with it on: $tight; channel cells drawn under water " +
+                "$pondedWithout without it and $pondedWith with it, pooled"
+        )
         assertTrue(
-            pondedWithout > pondedWith,
-            "without the clamp $pondedWithout channel cells were drawn under water against $pondedWith " +
-                "with it, pooled over the seeds, so the clamp was not seen doing anything: $loose against $tight"
+            holesWithout > 0,
+            "without the rule the incision left no channel cell below its receiver, pooled over the seeds, so " +
+                "the rule was not seen doing anything: $loose against $tight"
         )
     }
 

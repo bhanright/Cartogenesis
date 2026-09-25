@@ -524,25 +524,16 @@ class IsostasyTest : BorrowsSharedWorlds() {
             // A small world and a short round, because the relation being tested is about one
             // channel and this map's own are the wrong size for it. Steady-state relief is
             // `(U / K) / sqrt(A)` along a channel, and on a 12,000 km world a mid-belt catchment
-            // is 10^12 m² — so the relief a millimetre a year would hold up is a few centimetres,
-            // and every round's cut runs into the half-the-drop cap long before the rock has any
-            // say in it. Two hundred kilometres across puts the catchments where a real orogen's
-            // are and the relief in hundreds of metres; a short round keeps each round's bite well
-            // inside the cap, so what limits the cut is the stream power and not the arithmetic
-            // that guards it.
+            // is 10^12 m², so the relief a millimetre a year would hold up is a few centimetres.
+            // Two hundred kilometres across puts the catchments where a real orogen's are and the
+            // relief in hundreds of metres.
             //
-            // Twenty thousand years and sixteen hundred rounds, 32 million years. The cap at half the
-            // drop is spent in the height field's own unit since Fix 3, three eighths of what it was
-            // spent as, so the round that kept each bite inside it is three eighths as long and the
-            // run keeps its years; at the old 53,333-year round the cap set the cut on the softest
-            // rock and relief went as K^-0.64. The uplift rates are Fix 2's restated on the honest
-            // clock (docs/DESIGN_LEDGER.md, Fix 3). The round was halved at Fix 2 too, and why: the belt's rivers
-            // run down columns, and a step down a column is a row's height, half a cell width, now
-            // that the incision measures it on the ground: the same slope falls half as far in a
-            // step, and a round's bite, which is in proportion to the slope, is twice as large a
-            // share of the drop the cap is read off. The forty-thousand-year round was sized on
-            // the step the cut used to assume, and on the true one it reached the cap on the softest
-            // rock: relief went as K^-0.74. Half the round is the same share of the cap it was.
+            // Twenty thousand years and sixteen hundred rounds, 32 million years. The round was
+            // sized while an explicit update capped each round's bite at half the drop and had to
+            // stay inside that cap for the law to be what was read (docs/DESIGN_LEDGER.md, Fix 2
+            // and Fix 3). The implicit update has no cap and its steady state is the law's at any
+            // round, so the length now matters only for how finely the approach to balance is
+            // resolved, and the run keeps the years it was given.
             scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = BELT_ROUND_YEARS),
             isostasy = base.isostasy.copy(flexure = false),
             erosion = base.erosion.copy(
@@ -632,17 +623,20 @@ class IsostasyTest : BorrowsSharedWorlds() {
      * The uplift rate against the erosion it is racing, which is where the rate came from.
      *
      * England and Molnar (*Surface uplift, uplift of rocks, and exhumation of rocks*, Geology 18,
-     * 1990) exist to insist that rock uplift and surface uplift are different quantities and that
-     * exhumation is the difference: the Himalaya's rock rises five millimetres a year and its
-     * surface gains about half of one, because the rest comes off as sediment. A model can only
-     * copy the *surface* figure — the rock rate it needs is that plus whatever its own rivers
-     * remove, which is a property of this grid and this erodibility and has to be measured.
+     * 1990) exist to insist that rock uplift, surface uplift and exhumation are three quantities:
+     * rock uplift is surface uplift plus exhumation. The Himalaya's rock rises five millimetres a
+     * year and its surface gains about half of one, because the rest comes off as sediment. A model
+     * can only copy the *surface* figure; the rock rate it needs is that plus whatever its own
+     * rivers and hillslopes remove, which is a property of this grid and this erodibility and has
+     * to be measured.
      *
-     * So this runs the standard worlds with every uplift rate at zero, measures what the rounds
-     * take off a present belt, and holds `collisionUpliftMmPerYear` to Earth's surface uplift plus
-     * that. It is the derivation of the constant, run rather than remembered — which matters,
-     * because S2's first pass took the same measurement against a round four times too long and a
-     * terrain with a quarter of the mid-band relief, and reached a rate a third of this one.
+     * So this runs the standard worlds with every uplift rate at zero and the flexure off, and
+     * measures what the rounds take off the present belts: the mean lowering of the ground over the
+     * collisional and Andean belts' land, over the twelve rounds' years. With the flexure off that
+     * lowering is the net denudation and nothing else; with it on, the plate's rebound under the
+     * unloading would hide part of it, and the rebound is the third quantity, the flexural response,
+     * which the rounds apply to the uplift the setting feeds them and which this derivation keeps
+     * out. The rate held is Earth's surface uplift plus that denudation, run rather than remembered.
      */
     @Test
     fun `the collision rate is Earth's surface uplift plus this model's own denudation`() {
@@ -654,7 +648,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
                     andeanUpliftMmPerYear = 0f,
                     islandArcUpliftMmPerYear = 0f,
                     riftShoulderUpliftMmPerYear = 0f
-                )
+                ),
+                isostasy = base.isostasy.copy(flexure = false)
             )
             val world = SharedWorlds.world(still)
             val rate = beltDenudationMmPerYear(world)
@@ -1081,9 +1076,9 @@ class IsostasyTest : BorrowsSharedWorlds() {
         const val METRES_TO_MILLIMETRES = 1_000.0
 
         /**
-         * The synthetic belt's round, in years, and how many of them it runs: short enough that
-         * each round's bite stays inside the cap at half the drop, so the stream power and not the
-         * cap sets the cut, and long enough in all for the belt to reach its balance.
+         * The synthetic belt's round, in years, and how many of them it runs: 32 million years in
+         * all, long enough for the belt to reach its balance. The round was sized under the
+         * explicit update's cap; see [syntheticBelt].
          */
         const val BELT_ROUND_YEARS = 20_000.0
         const val BELT_ROUNDS = 1_600

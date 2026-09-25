@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
+import com.cartogenesis.worldgen.pipeline.IncisionWatch
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
@@ -170,68 +171,46 @@ class ClimateFedErosionTest {
             for (cell in weights.indices) weights[cell] = bareWeather.rainfallMm[cell] / mean
         }
 
-        private val observed = HashMap<Triple<Boolean, Boolean, Boolean>, FloatArray>()
-
-        /** Metres the real stage took off each cell in one round, under the three switches. */
-        fun observedIncision(
-            climateFeed: Boolean,
-            shieldCut: Boolean,
-            receiverClamp: Boolean = true
-        ): FloatArray =
-            observed.getOrPut(Triple(climateFeed, shieldCut, receiverClamp)) {
-                val after = erodeBlockingObservingCover(
-                    once.copy(erosion = once.erosion.copy(climateFeed = climateFeed)),
-                    bare, upliftRateMmPerYear = null, shieldCut = shieldCut, receiverClamp = receiverClamp
-                )
-                val metresPerUnit = once.scale.reliefSpanMetres
-                FloatArray(bare.data.size) {
-                    (bare.data[it] - after.height.data[it]) * metresPerUnit
-                }
-            }
+        private val observed = HashMap<Pair<Boolean, Boolean>, Observed>()
 
         /**
-         * Where neither of the round's two caps bit on either run, so the quotient of two observed
-         * incisions is the cover's factor and nothing else.
+         * What the real stage's one round did to each cell under the two switches, read through
+         * its watch: the law's rate, `F` times the drop to the receiver as the pass found it, in
+         * metres; `F` itself; and the share of the drop to the receiver's new height the cell
+         * lost, NaN where the pass left the cell alone.
          *
-         * Both runs, and that matters now the factor is relative: it runs from about 0.58 on
-         * closed canopy to about 1.3 on bare ground, so the shielded cut is the *larger* of the
-         * two wherever the ground is barer than the land's mean, and it can reach a cap the
-         * unshielded one does not.
+         * The law's rate and not the realised cut is what carries the rain and the cover in
+         * proportion. The implicit update realises `F / (1 + F)` of the drop, so a factor on `F`
+         * reaches the cut in full only where `F` is small and less and less as it grows; the
+         * realised cut responds to an erodibility factor `e` as `e (1 + F) / (1 + e F)`.
          */
-        val bareUnclamped: BooleanArray by lazy {
-            val filledBare = FlowRouting.fillDepressions(
-                once.width, once.height, bareCut.isLand, bareCut.relativeElevation
-            )
-            val receiversBare = FlowRouting.flowDirections(
-                once.width, once.height, bareCut.isLand, bareCut.relativeElevation, filledBare,
-                once.seed, once.cellHeightInCellWidths, once.facetRouting, once.flatPotential
-            )
-            val area = FlowRouting.accumulate(
-                config.width, config.height, bareCut.isLand, filledBare, receiversBare,
-                bareCut.landCellCount
-            ) { cell -> bareRunoff[cell] }
-            val landCells = bareCut.landCellCount.toFloat()
-            val coefficient = HydraulicErosion.Rates(once).incisionCoefficient
-            val relative = bareCut.relativeElevation.data
-            val floor = filledBare.data
-            // The caps in the height field's unit, which is what the stage spends them in since
-            // Fix 3: the drop and the height above the shoreline are read on the relative field,
-            // whose unit is this share of it, and a drop to the sea is to the shoreline.
-            val landHalfOfField = once.scale.landHalfOfField
-            BooleanArray(area.data.size) { cell ->
-                val receiver = receiversBare[cell]
-                if (receiver < 0 || !bareCut.isLand[cell]) return@BooleanArray false
-                val toSea = !bareCut.isLand[receiver]
-                val drop = floor[cell] - if (toSea) 0f else floor[receiver]
-                if (drop <= 0f) return@BooleanArray false
-                // The step on the ground, as the stage's own cut measures it.
-                val slope = drop / config.groundSteps.between(cell, receiver, config.width) * config.width
-                val unshielded = coefficient * sqrt(area.data[cell] / landCells) * slope
-                val larger = unshielded * maxOf(1f, bareErodibility[cell])
-                unshielded > 0f && larger < drop * 0.5f * landHalfOfField &&
-                    larger < relative[cell].coerceAtLeast(0f) * landHalfOfField
+        fun observed(climateFeed: Boolean, shieldCut: Boolean): Observed =
+            observed.getOrPut(climateFeed to shieldCut) {
+                val cells = bare.data.size
+                val spanMetres = once.scale.reliefSpanMetres
+                val result = Observed(FloatArray(cells), FloatArray(cells), FloatArray(cells) { Float.NaN })
+                val watch = object : IncisionWatch {
+                    override fun cut(
+                        round: Int, cell: Int, receiver: Int, courantNumber: Float, before: Float,
+                        baseBefore: Float, baseAfter: Float, after: Float
+                    ) {
+                        result.courant[cell] = courantNumber
+                        if (before > baseBefore) result.lawMetres[cell] = courantNumber * (before - baseBefore) * spanMetres
+                        if (before > baseAfter) result.shareOfDrop[cell] = (before - after) / (before - baseAfter)
+                    }
+
+                    override fun incised(
+                        round: Int, isLand: BooleanArray, directions: IntArray, ground: FloatArray,
+                        relative: FloatArray, discharge: FloatArray, landCells: Float, landRange: Float,
+                        shorelineHeight: Float, surface: FloatArray
+                    ) = Unit
+                }
+                erodeBlockingObservingCover(
+                    once.copy(erosion = once.erosion.copy(climateFeed = climateFeed)),
+                    bare, upliftRateMmPerYear = null, shieldCut = shieldCut, incisionWatch = watch
+                )
+                result
             }
-        }
 
         private val carved = HashMap<Boolean, FloatField>()
 
@@ -260,6 +239,15 @@ class ClimateFedErosionTest {
      * The bar is `sqrt(P_windward / P_leeward) * 0.8` — the law's own prediction at m = 0.5, with a
      * fifth off it because the two flanks are not equal in area, do not carry equal catchments and
      * do not stand at equal gradients, and none of that is the rain's doing.
+     *
+     * Read on the law's rate, and on the rain alone: the fed run with the cover's factor taken out,
+     * against the control with neither. Turning the feed on also turns on the cover, and the wet
+     * flank is the better wooded, so the fed run's figure carries the cover's factor as well as the
+     * rain and the bar above is the rain's only; the cover's own factor is held exactly by
+     * `cover on the ground holds the incision back`. The fed figure, cover and all, is printed.
+     * Until Fix 3b this read the realised first-round cut with the cover in, and seed 1234 ran as a
+     * known failure, 1.12 under 1.49 under the capped explicit update; on the law's rate with the
+     * cover it reads 1.42, and with the rain alone 1.67 (docs/DESIGN_LEDGER.md, Fix 3b).
      */
     @Test
     fun `the wet flank of a range is cut harder than the dry one`() {
@@ -273,26 +261,32 @@ class ClimateFedErosionTest {
             val windwardRain = meanOver(rainfall, belt.windward)
             val leewardRain = meanOver(rainfall, belt.leeward)
 
-            // The forcing, read off what the stage actually did. One round each way on the same
+            // The forcing, read off what the stage actually asked. One round each way on the same
             // terrain, so the receivers and the gradients are shared and the only thing that
             // differs is whether the water and the cover are the world's own or flat and absent.
-            val fed = ground.observedIncision(climateFeed = true, shieldCut = true)
-            val flat = ground.observedIncision(climateFeed = false, shieldCut = true)
+            // The law's rate and not the realised cut, which the implicit update saturates as
+            // `F / (1 + F)`; see [Ground.observed].
+            val fed = ground.observed(climateFeed = true, shieldCut = true).lawMetres
+            val flat = ground.observed(climateFeed = false, shieldCut = true).lawMetres
+            // The rain alone, the cover's factor taken out of the fed run: see the KDoc.
+            val rainOnly = ground.observed(climateFeed = true, shieldCut = false).lawMetres
             val figures = Flank(
                 seed = seed,
                 rainRatio = windwardRain / leewardRain,
-                fedRatio = meanOver(fed, belt.windward) / meanOver(fed, belt.leeward),
+                fedRatio = meanOver(rainOnly, belt.windward) / meanOver(rainOnly, belt.leeward),
                 flatRatio = meanOver(flat, belt.windward) / meanOver(flat, belt.leeward),
                 windwardCells = belt.windwardCells,
                 leewardCells = belt.leewardCells
             )
             println(
-                ("S3 FLANK seed=%d  rain %.0f/%.0f mm = %.2fx; first-round incision windward " +
+                ("S3 FLANK seed=%d  rain %.0f/%.0f mm = %.2fx; first-round law's rate, rain alone, windward " +
                     "over leeward fed %.3fx, flat %.3fx, so the feed multiplies it by %.2fx; " +
                     "law asks %.2f; %d windward and %d leeward cells").format(
                     seed, windwardRain, leewardRain, figures.rainRatio, figures.fedRatio,
                     figures.flatRatio, figures.forcing, figures.bar,
                     figures.windwardCells, figures.leewardCells
+                ) + "; with the cover's factor in as well, %.2fx".format(
+                    (meanOver(fed, belt.windward) / meanOver(fed, belt.leeward)) / figures.flatRatio
                 )
             )
             figures
@@ -301,24 +295,13 @@ class ClimateFedErosionTest {
             measurements.size >= 2,
             "only ${measurements.size} of ${SEEDS.size} seeds offered a belt to measure"
         )
-        // Seed 1234 has fallen short since the ground was put on its ruler, and runs as a known
-        // failure rather than under a smaller slack. Its new belt takes three and a half times the
-        // rain on its windward flank, and the feed buys 1.26 of the law's 1.87 where the bar is
-        // 1.49; with the erodibility a tenth of itself, so that the half-the-drop cap binds on
-        // fewer cells, it buys 1.41. The cap, which a north-south step reaches twice as soon now
-        // that its drop is read on the ground (Audit III's B-D1, the erosion's units), takes some
-        // of the difference and not all of it (docs/DESIGN_LEDGER.md, Fix 2).
         val short = measurements.filter { it.forcing < it.bar }
-        KnownFailures.expect(WET_FLANK_UNDER_THE_LAW, "seed 1234: 1.12 under 1.49") {
-            if (short.isNotEmpty()) {
-                val found = short.joinToString { String.format(Locale.ROOT, "seed %d: %.2f under %.2f", it.seed, it.forcing, it.bar) }
-                throw RecordedViolation(
-                    "the windward flank takes more of the rain and turning the feed on multiplies its " +
-                        "share of the first round's incision by less than the stream-power law asks for: $found",
-                    found
-                )
-            }
-        }
+        assertTrue(
+            short.isEmpty(),
+            "the windward flank takes more of the rain and turning the rain on multiplies its share of the law's " +
+                "rate by less than the stream-power law asks for: " +
+                short.joinToString { String.format(Locale.ROOT, "seed %d: %.2f under %.2f", it.seed, it.forcing, it.bar) }
+        )
     }
 
     /**
@@ -418,7 +401,6 @@ class ClimateFedErosionTest {
         val uncontrolled = ArrayList<Pair<Long, Double>>()
         // Every seed measured before any is judged, so one run prints all four.
         val complaints = ArrayList<String>()
-        val shortfalls = ArrayList<String>()
         for (seed in SEEDS) {
             val ground = ground(seed)
             val land = ground.cut.isLand
@@ -435,17 +417,12 @@ class ClimateFedErosionTest {
                 continue
             }
             if (fed < flat * DISSECTION_OVER_CONTROL) {
-                shortfalls += String.format(Locale.ROOT, "seed %d fed %.3f flat %.3f", seed, fed, flat)
                 complaints += "seed $seed: flat rain already correlates at ${"%.3f".format(flat)} against the " +
                     "fed ${"%.3f".format(fed)}, so the fed figure says little about the rain"
             }
         }
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "seed 42 fed 0.203 flat 0.144; seed 1234 fed 0.180 flat 0.126") {
-            if (complaints.isNotEmpty()) {
-                val found = shortfalls.joinToString("; ")
-                throw RecordedViolation(complaints.joinToString("; "), found)
-            }
-        }
+        // Armed at Fix 3b: under the capped explicit update seeds 42 and 1234 fell short of it.
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
         // The pin was taken on rounds run without the tectonic uplift, which no world is made by;
         // on the uplift path, which is the path this measures since Audit III (its B-I2), a seed
         // can read under it. Not re-set to fit: kept running as a known failure until the pin is
@@ -456,7 +433,7 @@ class ClimateFedErosionTest {
         // Fix 2). Taking the erosion itself, the uplift added back, is the re-derivation B-I2 asks.
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at 0.014, seed 1234 at 0.180, seed 99 at 0.134; seed 7's flat-rain control at -0.057"
+            "seed 7 at 0.135; seed 7's flat-rain control at -0.050"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
@@ -473,27 +450,31 @@ class ClimateFedErosionTest {
     }
 
     /**
-     * The cover multiplies the incision by exactly what the constant says, cell by cell — and
-     * takes no rock off the world in the aggregate.
+     * The cover multiplies the law's rate by exactly what the constant says, cell by cell; and
+     * where `F` is small the realised cut follows it too, departing only by what the implicit
+     * update's own arithmetic says.
      *
-     * Two clauses, and the second is the one that was learned the hard way. The multiplier is
-     * relative: `1 - 0.5 * density` over its own mean across the land, so the land's mean
-     * erodibility is exactly 1 and the term redistributes the cutting rather than reducing it.
-     * `bedrockErodibilityPerYear` was calibrated on real bedrock rivers, which ran through
-     * forests, so an absolute multiplier counts the cover twice — it was built that way first and
-     * it cost a third of the world's erosion. So the mean of the factor over land is asserted to
-     * be 1, and that is what makes the calibration survive the feature.
+     * The multiplier is relative: `1 - 0.5 * density` over its own mean across the land, so the
+     * land's mean erodibility is exactly 1 and the term redistributes the cutting rather than
+     * reducing it. `bedrockErodibilityPerYear` was calibrated on real bedrock rivers, which ran
+     * through forests, so an absolute multiplier counts the cover twice; the factor this checks the
+     * stage against is normalised over the land, so a stage that spent an unnormalised one would
+     * miss it on every cell.
      *
-     * The per-cell clause is asserted per cell and not as a ratio between two bands, because a
-     * band ratio cannot test it: `1 - 0.5 * density` over cells at density >= 0.6 against cells at
-     * density <= 0.1 can land anywhere from about 0.50 to 0.74 depending on how the density is
-     * distributed inside each band, so a bar drawn at Istanbulluoglu and Bras's half would fail a
-     * correct implementation as readily as a wrong one. Take the first round's incision with the
-     * cover and without it on the same terrain and the same receivers, keep the cells where
-     * neither of the two caps bit — a capped cut is the cap's figure and not the law's — and the
-     * quotient must be the factor to the last few bits of a float. The band ratio is printed
-     * beside it, and being a ratio of two relative factors it is the same figure the absolute form
-     * gave: the mean divides out of it.
+     * Asserted per cell and not as a ratio between two bands, because a band ratio cannot test it:
+     * `1 - 0.5 * density` over cells at density >= 0.6 against cells at density <= 0.1 can land
+     * anywhere from about 0.50 to 0.74 depending on how the density is distributed inside each band.
+     *
+     * **The law's rate.** One production round with the cover and one without, on the same terrain
+     * and the same receivers, read through the watch: `F` times the drop as the pass found it. The
+     * drop is the same in both runs, so the quotient is the factor to the last few bits of a float,
+     * on every cell.
+     *
+     * **The realised cut, where `F` is small.** Under the implicit update a cell loses `F / (1 + F)`
+     * of its drop to its receiver's new height, so a factor `e` on `F` moves that share by
+     * `e (1 + F) / (1 + e F)`, not by `e`. Read as that share, so the receiver's own cut in each run
+     * divides out, the quotient must be exactly this on cells under [SMALL_COURANT], where it is
+     * within `e |1 - e| F` of the factor, the proportional law the clause used to assert.
      */
     @Test
     fun `cover on the ground holds the incision back`() {
@@ -501,14 +482,9 @@ class ClimateFedErosionTest {
             val ground = ground(seed)
             // Both from the stage, on the same terrain, with one switch between them: the second
             // run is the production cut with its shielding taken out. Nothing here recomputes the
-            // incision, so a shielding term deleted from `cut` fails this rather than passing it.
-            val shielded = ground.observedIncision(
-                climateFeed = true, shieldCut = true, receiverClamp = false
-            )
-            val unshielded = ground.observedIncision(
-                climateFeed = true, shieldCut = false, receiverClamp = false
-            )
-            val unclamped = ground.bareUnclamped
+            // incision, so a shielding term deleted from the pass fails this rather than passing it.
+            val shielded = ground.observed(climateFeed = true, shieldCut = true)
+            val unshielded = ground.observed(climateFeed = true, shieldCut = false)
             val density = ground.bareDensity
             val factor = ground.bareErodibility
 
@@ -517,14 +493,12 @@ class ClimateFedErosionTest {
             var worstCell = -1
             var control = 0.0
             var outliers = 0
-            for (cell in shielded.indices) {
-                // A floor on the cut itself, and not fussiness. The two incisions are differences
-                // of a float height field whose own resolution is about a millimetre of ground, so
-                // a cell the round barely touched carries a quotient made mostly of rounding. A
-                // metre of cut leaves three decimal places of signal in it.
-                if (!unclamped[cell] || unshielded[cell] < OBSERVED_FLOOR_METRES) continue
+            for (cell in factor.indices) {
+                // A floor on the rate itself: a metre leaves three decimal places of signal in a
+                // quotient of two floats read off a height field of millimetre resolution.
+                if (unshielded.lawMetres[cell] < OBSERVED_FLOOR_METRES) continue
                 checked++
-                val measured = shielded[cell].toDouble() / unshielded[cell].toDouble()
+                val measured = shielded.lawMetres[cell].toDouble() / unshielded.lawMetres[cell].toDouble()
                 val off = abs(measured - factor[cell])
                 if (off > OBSERVED_TOLERANCE) outliers++
                 if (off > worst) {
@@ -537,58 +511,60 @@ class ClimateFedErosionTest {
                 if (flat > control) control = flat
             }
 
-            val wooded = BooleanArray(density.size) { unclamped[it] && density[it] >= WOODED_DENSITY }
-            val bareBand = BooleanArray(density.size) { unclamped[it] && density[it] <= BARE_DENSITY }
+            var smallChecked = 0
+            var smallWorst = 0.0
+            var smallFromFactor = 0.0
+            for (cell in factor.indices) {
+                val courant = unshielded.courant[cell].toDouble()
+                if (courant <= 0.0 || courant >= SMALL_COURANT) continue
+                val bareShare = unshielded.shareOfDrop[cell]
+                val coveredShare = shielded.shareOfDrop[cell]
+                if (bareShare.isNaN() || coveredShare.isNaN() || unshielded.lawMetres[cell] < OBSERVED_FLOOR_METRES) continue
+                smallChecked++
+                val e = factor[cell].toDouble()
+                val measured = coveredShare.toDouble() / bareShare.toDouble()
+                smallWorst = maxOf(smallWorst, abs(measured - e * (1.0 + courant) / (1.0 + e * courant)))
+                smallFromFactor = maxOf(smallFromFactor, abs(measured - e))
+            }
+
+            val wooded = BooleanArray(density.size) { unshielded.lawMetres[it] >= OBSERVED_FLOOR_METRES && density[it] >= WOODED_DENSITY }
+            val bareBand = BooleanArray(density.size) { unshielded.lawMetres[it] >= OBSERVED_FLOOR_METRES && density[it] <= BARE_DENSITY }
             val bandRatio =
-                perUnitPower(shielded, unshielded, wooded) / perUnitPower(shielded, unshielded, bareBand)
+                perUnitPower(shielded.lawMetres, unshielded.lawMetres, wooded) /
+                    perUnitPower(shielded.lawMetres, unshielded.lawMetres, bareBand)
             println(
-                ("S3 COVER seed=%d  observed on %d unclamped cells of one production round: the " +
-                    "factor is right within %.0e on all but %d of them, worst %.2e, where the " +
-                    "same measurement on the unshielded control is out by %.2f; the factor runs " +
-                    "%.3f to %.3f; the band ratio (density >= %.1f " +
-                    "against <= %.1f) is %.2f over %d and %d cells, where the cover means %.2f " +
-                    "and %.2f").format(
+                ("S3 COVER seed=%d  the law's rate on %d cells of one production round: the factor is " +
+                    "right within %.0e on all but %d, worst %.2e, where the unshielded control is out by " +
+                    "%.2f; the factor runs %.3f to %.3f; the band ratio (density >= %.1f against <= %.1f) is " +
+                    "%.2f. The realised share on %d cells under F %.1f: within %.1e of e(1+F)/(1+eF), and " +
+                    "at most %.3f from the factor itself").format(
                     seed, checked, OBSERVED_TOLERANCE, outliers, worst, control,
                     factor.filterIndexed { cell, _ -> ground.bareCut.isLand[cell] }.min(),
                     factor.filterIndexed { cell, _ -> ground.bareCut.isLand[cell] }.max(),
-                    WOODED_DENSITY, BARE_DENSITY, bandRatio,
-                    wooded.count { it }, bareBand.count { it },
-                    meanOver(density, wooded), meanOver(density, bareBand)
+                    WOODED_DENSITY, BARE_DENSITY, bandRatio, smallChecked, SMALL_COURANT, smallWorst, smallFromFactor
                 )
             )
 
-            assertTrue(checked > MIN_FLANK_CELLS, "seed $seed: only $checked unclamped cells")
-            // All but a handful, rather than all. The two runs are whole passes of the stage,
-            // and a few cells in a hundred thousand diverge in ways this cap model does not
-            // reproduce exactly - a cell whose receiver was cut to a different depth in the two
-            // runs meets a different drop, and both caps are read off that drop. The tail is what
-            // is bounded, and tightly enough that a shielding term deleted from `cut` could not
-            // hide in it: that would put *every* cell out by the factor's own spread, which the
-            // control clause below measures.
+            assertTrue(checked > MIN_FLANK_CELLS, "seed $seed: only $checked cells with a law's rate to read")
             assertTrue(
                 outliers <= checked / OBSERVED_OUTLIER_SHARE,
-                "seed $seed: $outliers of $checked unclamped cells are out by more than " +
-                    "$OBSERVED_TOLERANCE, worst cell $worstCell shielded by " +
-                    "${"%.6f".format(shielded[worstCell] / unshielded[worstCell])} where its " +
-                    "cover of ${"%.3f".format(density[worstCell])} asks for " +
-                    "${"%.6f".format(factor[worstCell])}"
+                "seed $seed: $outliers of $checked cells are out by more than $OBSERVED_TOLERANCE, worst cell " +
+                    "$worstCell shielded by ${"%.6f".format(shielded.lawMetres[worstCell] / unshielded.lawMetres[worstCell])} " +
+                    "where its cover of ${"%.3f".format(density[worstCell])} asks for ${"%.6f".format(factor[worstCell])}"
             )
-            // And the control is shown to fail the same clause: with the shielding taken out of
-            // the production cut the quotient is 1 everywhere, which is wrong by the width of the
-            // factor's own spread. Without this the clause above would pass a stage that had lost
-            // its shielding term, because it would be comparing 1 against 1.
+            // The control fails the same clause: with the shielding taken out the quotient is 1
+            // everywhere, wrong by the width of the factor's own spread.
             assertTrue(
                 control > OBSERVED_CONTROL_MARGIN,
-                "seed $seed: the factor never departs from 1 by more than " +
-                    "${"%.3f".format(control)}, so a stage with no shielding at all would pass " +
-                    "the clause above and this measurement proves nothing"
+                "seed $seed: the factor never departs from 1 by more than ${"%.3f".format(control)}, so a stage " +
+                    "with no shielding at all would pass the clause above and this measurement proves nothing"
             )
-            // The calibration, that the factor averages 1 over the land so a world of uniform
-            // cover erodes as a bare one did, is held by the per-cell clause above and not asked
-            // again here: the factor that clause checks the stage against is normalised over the
-            // land, so a stage that spent an unnormalised one would miss it on every cell. The
-            // mean of the test's own normalised factor, which this used to assert, is one by the
-            // test's own arithmetic and could not fail.
+            assertTrue(smallChecked > 0, "seed $seed: no cell under F $SMALL_COURANT to read the realised cut on")
+            assertTrue(
+                smallWorst <= OBSERVED_TOLERANCE,
+                "seed $seed: where F is under $SMALL_COURANT the realised share moved by up to " +
+                    "${"%.2e".format(smallWorst)} off e(1+F)/(1+eF)"
+            )
         }
     }
 
@@ -613,9 +589,9 @@ class ClimateFedErosionTest {
         val config = WorldGenConfig(seed = 42L, width = 256, height = 256)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val passes = mutableListOf<Triple<String, Double, Int>>()
-        erodeBlockingObservingCover(config, plates.height, plates.upliftRateMmPerYear) { name, summed, landCells ->
+        erodeBlockingObservingCover(config, plates.height, plates.upliftRateMmPerYear, weightSums = { name, summed, landCells ->
             passes += Triple(name, summed, landCells)
-        }
+        })
         val names = passes.map { it.first }.toSet()
         val missing = (0 until config.erosion.hydraulicRounds).map { "round $it" }.filter { it !in names } +
             listOf("outlet").filter { config.erosion.deltaLobe && it !in names }
@@ -833,16 +809,6 @@ class ClimateFedErosionTest {
     }
 
     private companion object {
-        /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
-         */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
-
         /** `GeographyAuditTest`'s seeds, which is what "the standard seeds" means in this suite. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
 
@@ -859,38 +825,35 @@ class ClimateFedErosionTest {
         /** See the class KDoc: a fifth off the law's prediction, for everything but the rain. */
         const val STREAM_POWER_SLACK = 0.8
 
-        /** The known failure the wet-flank clause records. See docs/DESIGN_LEDGER.md, Fix 2. */
-        const val WET_FLANK_UNDER_THE_LAW =
-            "the erosion: seed 1234's windward flank is cut less for its rain than the stream-power law asks"
-
-
-
-
         /** A rise smaller than this is crest or bench, not flank. See [beltFlanks]. */
         const val CREST_SHARE_OF_CRITICAL_SLOPE = 0.1f
 
         /** Catchment a cell needs before the network counts it as channel, in cells. */
         const val CHANNEL_SUPPORT_CELLS = 16f
 
+        /**
+         * Below this `F` the realised cut is read: a tenth, where `e (1 + F) / (1 + e F)` is within
+         * a tenth of `e |1 - e|` of the factor, the proportional law's own reading.
+         */
+        const val SMALL_COURANT = 0.1
+
         const val WOODED_DENSITY = 0.6f
         const val BARE_DENSITY = 0.1f
 
         /**
-         * How far the observed quotient of two production height fields may sit from the factor.
-         *
-         * Not one expression compared with itself but two runs of a whole stage differenced through
-         * a float height field, where the cut is subtracted from an elevation of order 1 and the
-         * difference is of order 1e-4. A part in ten thousand of the factor is what that arithmetic
-         * can carry.
+         * How far an observed quotient may sit from what it is held to: a thousandth. The rates are
+         * products of floats read off a height field of order 1 against drops of order 1e-4, and the
+         * realised shares differences of that field, so a part in a thousand is what the
+         * arithmetic can carry.
          */
         const val OBSERVED_TOLERANCE = 1e-3
 
         /**
-         * The least a cell must have been cut for its quotient to carry the factor.
+         * The least law's rate a cell must carry for its quotient to carry the factor.
          *
          * The height field is a float on a 16 km relief span, so its own resolution is of order a
-         * millimetre of ground; below a metre of cut the quotient of two of them is mostly the
-         * subtraction's rounding. See [OBSERVED_TOLERANCE], which is what a metre leaves.
+         * millimetre of ground; below a metre the quotient of two of them is mostly rounding. See
+         * [OBSERVED_TOLERANCE], which is what a metre leaves.
          */
         const val OBSERVED_FLOOR_METRES = 1f
 

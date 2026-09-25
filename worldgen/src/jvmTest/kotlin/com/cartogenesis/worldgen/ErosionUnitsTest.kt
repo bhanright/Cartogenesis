@@ -20,16 +20,17 @@ import kotlinx.coroutines.runBlocking
  *
  * The drop to a cell's receiver and its height above the shoreline are measured on the
  * shoreline-relative field, whose unit is the land's half of the ruler, `highestLandMetres`; the
- * cut is spent on the height field, whose unit is the whole `reliefSpanMetres`. Spending a cap
- * measured in the first on the second let a cell lose 1.33 times its drop where it was capped at
- * half of it, and 2.67 times its height above the sea where it was capped at that height, so river
- * mouths were cut below the sea in every round (Audit III's B-D1). And the stream-power
- * coefficient's KDoc cancelled the ratio of the two rulers between the slope's rise and the cut,
- * so the years a round was labelled with were 2.67 times too few (B-F1).
+ * cut is spent on the height field, whose unit is the whole `reliefSpanMetres`. Spending a limit
+ * measured in the first on the second let river mouths be cut below the sea in every round
+ * (Audit III's B-D1). And the stream-power coefficient's KDoc cancelled the ratio of the two
+ * rulers between the slope's rise and the cut, so the years a round was labelled with were 2.67
+ * times too few (B-F1).
  *
- * The two production cases watch the ordered incision pass through [IncisionWatch], because the
- * receiver clamp and the finished heights both hide what the cut asked for. The clock's case runs
- * one round of production on ground whose every term is known. See docs/DESIGN_LEDGER.md, Fix 3.
+ * Since the implicit update (`HydraulicErosion.incise`) the shoreline is the base level a mouth
+ * grades to rather than a cap, and the half-the-drop cap is gone; the bounds the update keeps are
+ * guarded in `ImplicitIncisionTest`. The mouth case watches production's pass through
+ * [IncisionWatch], and the clock's case reads the law's rate the pass was handed on ground whose
+ * every term is known. See docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b.
  */
 class ErosionUnitsTest {
 
@@ -37,7 +38,7 @@ class ErosionUnitsTest {
         const val SEED = 42L
         const val SIDE = 512
 
-        /** Seed 42's rounds, watched once and read by both production cases. */
+        /** Seed 42's rounds, watched once. */
         val watched: Watched by lazy {
             val config = WorldGenConfig(seed = SEED, width = SIDE, height = SIDE)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
@@ -46,17 +47,10 @@ class ErosionUnitsTest {
             watch
         }
 
-        /**
-         * How far a cut may stand past its bound and still be the bound, as a share of it: the
-         * cap is a float product of the drop and the ruler, and the guard reads the drop and the
-         * ruler again on its own.
-         */
-        const val ROUNDING_SHARE = 1e-5f
-
         /** Metres in a kilometre, for the plane's slope. */
         const val METRES_PER_KM = 1_000.0
 
-        /** The plane's fall, in metres per kilometre: gentle enough that three cells stay under the cap. */
+        /** The plane's fall, in metres per kilometre. */
         const val SLOPE_METRES_PER_KM = 1.0
 
         /** How deep the sea around the plane lies, well below anything the cut can reach. */
@@ -69,73 +63,53 @@ class ErosionUnitsTest {
         const val SEA_CELLS_READ_AS_LAND = 1
 
         /**
-         * How many cells below the crest are read. At `K T` the law's cut over one cell of drop runs
-         * `0.24 sqrt(A)` in cells of catchment on every grid, so four cells reach the cap at half the
-         * drop and three stay under it.
+         * How many cells below the crest are read: every cell of the plane but the one at its foot,
+         * whose receiver is the sea. No cap limits the reading any more; the law's rate is read
+         * from the pass whatever `F` it comes to, 0.24 at one cell of catchment and 1.3 at thirty.
          */
-        const val LAW_SET_CATCHMENT_CELLS = 3
+        const val CELLS_READ_BELOW_THE_CREST = 30
 
         /**
-         * How far one round's cut may sit from the law's: a thousandth. The slope is read off floats of
-         * the shoreline-relative field and the cut off floats of the height field, a few parts in a
+         * How far the law's rate may sit from `K T sqrt(A) S`: a thousandth. The slope is read off
+         * floats of the height field and the catchment off a float accumulation, a few parts in a
          * hundred thousand between them.
          */
         const val LAW_TOLERANCE = 1e-3
     }
 
-    /** What the rounds asked of every cell and where they left it, tallied for the two cases. */
+    /** What the rounds did to every cell, tallied for the mouth case. */
     private class Watched(private val config: WorldGenConfig) : IncisionWatch {
-        private val cellCount = config.width * config.height
-        private val streamPower = FloatArray(cellCount) { Float.NaN }
-        private val halfDropCap = FloatArray(cellCount)
-        private val shorelineCap = FloatArray(cellCount)
-
-        /** Land cells draining straight into the sea that the pass asked to cut by something. */
+        /** Land cells draining straight into the sea that the pass cut. */
         var mouthsCut = 0
         /** Every land cell draining into the sea that a round left below its shoreline, by any mechanism. */
         val mouthsBelowShoreline = ArrayList<String>()
-        /** Cells whose cut was the half-the-drop cap rather than the stream-power law. */
-        var capped = 0
-        /** Cells asked to cut more than half the drop to their receiver, in the height field. */
-        val pastHalfTheDrop = ArrayList<String>()
 
-        override fun asked(round: Int, cell: Int, receiver: Int, streamPower: Float, halfDropCap: Float, shorelineCap: Float) {
-            this.streamPower[cell] = streamPower
-            this.halfDropCap[cell] = halfDropCap
-            this.shorelineCap[cell] = shorelineCap
+        /** The cells the pass lowered this round, read back once the round has been cut. */
+        private val lowered = BooleanArray(config.width * config.height)
+
+        override fun cut(
+            round: Int, cell: Int, receiver: Int, courantNumber: Float, before: Float, baseBefore: Float,
+            baseAfter: Float, after: Float
+        ) {
+            lowered[cell] = after < before
         }
 
         override fun incised(
             round: Int, isLand: BooleanArray, directions: IntArray, ground: FloatArray, relative: FloatArray,
             discharge: FloatArray, landCells: Float, landRange: Float, shorelineHeight: Float, surface: FloatArray
         ) {
-            // The ruler read here and not taken from the pass: the land's half of the height field
-            // is the declared figure, `WorldScale.landHalfOfField`.
-            val landHalfOfField = config.scale.landHalfOfField
             val spanMetres = config.scale.reliefSpanMetres
-            for (cell in 0 until cellCount) {
+            for (cell in surface.indices) {
+                val wasLowered = lowered[cell]
+                lowered[cell] = false
                 val receiver = directions[cell]
-                if (isLand[cell] && receiver >= 0 && !isLand[receiver] && surface[cell] < shorelineHeight) {
+                if (!isLand[cell] || receiver < 0 || isLand[receiver]) continue
+                if (wasLowered) mouthsCut++
+                if (surface[cell] < shorelineHeight) {
                     mouthsBelowShoreline.add(
                         "round $round cell $cell %.2f m under".format((shorelineHeight - surface[cell]) * spanMetres)
                     )
                 }
-                val asked = streamPower[cell]
-                if (asked.isNaN()) continue
-                streamPower[cell] = Float.NaN
-                val toSea = !isLand[receiver]
-                val requested = minOf(asked, halfDropCap[cell], shorelineCap[cell])
-                if (halfDropCap[cell] < asked && halfDropCap[cell] <= shorelineCap[cell]) capped++
-                // A drop to the sea is to its surface, the shoreline, which is zero on this field.
-                val dropInField = (ground[cell] - if (toSea) 0f else ground[receiver]) * landHalfOfField
-                if (requested > 0.5f * dropInField * (1f + ROUNDING_SHARE)) {
-                    pastHalfTheDrop.add(
-                        "round $round cell $cell asked %.2f m of a %.2f m drop".format(
-                            requested * spanMetres, dropInField * spanMetres
-                        )
-                    )
-                }
-                if (toSea && requested > 0f) mouthsCut++
             }
         }
     }
@@ -144,11 +118,10 @@ class ErosionUnitsTest {
      * No land cell draining into the sea is cut below the sea in the round that cuts it.
      *
      * The shoreline is the base level every river grades to, so a river mouth's floor can reach it
-     * and not pass it; the ordered pass skips the receiver clamp where the receiver is water, and
-     * the cap at the shoreline is all that holds a mouth up. Every mouth is read, not only those the
-     * pass cut, so a notch run earlier in the round is held to the same base level. Shown failing
-     * on the tree before Fix 3, where that cap was a height above the sea in the land's unit spent
-     * on the field.
+     * and not pass it. Every mouth is read, not only those the pass cut, so a notch run earlier in
+     * the round is held to the same base level. Shown failing on the tree before Fix 3, where the
+     * cap at the shoreline was a height above the sea in the land's unit spent on the field; the
+     * implicit update carries it as the mouth's boundary condition.
      */
     @Test
     fun `no river mouth is cut below the shoreline`() {
@@ -163,43 +136,26 @@ class ErosionUnitsTest {
     }
 
     /**
-     * No cell is asked to cut more than half the drop to its receiver, measured in the height field
-     * the cut is spent on.
-     *
-     * Read before the receiver clamp, because the clamp refuses a cut past the receiver's new height
-     * and the finished heights would hide the request. Shown failing on the tree before Fix 3, where
-     * half the drop in the land's unit was 1.33 times the drop in the field's.
-     */
-    @Test
-    fun `no cell is asked to cut more than half its drop`() {
-        val watch = watched
-        println("UNITS seed $SEED@$SIDE: ${watch.capped} cuts set by the half-the-drop cap, ${watch.pastHalfTheDrop.size} past half the drop")
-        assertTrue(watch.capped > 0, "the half-the-drop cap never set a cut, so this case saw nothing to test")
-        assertTrue(
-            watch.pastHalfTheDrop.isEmpty(),
-            "${watch.pastHalfTheDrop.size} cuts asked for more than half the drop in the height field, " +
-                "the first ${watch.pastHalfTheDrop.take(5)}"
-        )
-    }
-
-    /**
-     * One round of production removes `K * T * sqrt(A) * S` metres from a channel whose every term
-     * is known: the stream-power law with the clock's years, the cover's factor at one and the
+     * One round of production asks `K * T * sqrt(A) * S` metres of a channel whose every term is
+     * known: the stream-power law with the clock's years, the cover's factor at one and the
      * catchment the rain weights to.
      *
      * The ground is a plane of land 32 cells wide falling due west at [SLOPE_METRES_PER_KM] into a
      * deep sea, on a map a quarter land, so the percentile cut puts the shoreline at its foot. Every
-     * cell of it drains due west, so a cell
-     * [cellsUpslope] from the eastern crest gathers that many cells' water: the crest drains east
-     * into the sea behind it. Only the first few cells below the crest are read, because further
-     * down the cut reaches the cap at half the drop and the law no longer sets it. The climate is
-     * off, so the rain weights are one and the cover shields nothing; deposition, the notch, the
-     * uplift and the flexure are off, so the stream-power incision is the only thing that moves the
-     * ground; the relaxation is the identity. Shown failing on the tree before Fix 3, whose clock
-     * read 126,179 years a round where the cut spent 336,476 years' worth.
+     * cell of it drains due west, so a cell [cellsUpslope] from the eastern crest gathers that many
+     * cells' water: the crest drains east into the sea behind it. The climate is off, so the rain
+     * weights are one and the cover shields nothing; deposition, the notch, the uplift and the
+     * flexure are off; the relaxation is the identity.
+     *
+     * What is read is the law's rate the pass was handed, `F` times the drop to the receiver as the
+     * pass found it (`IncisionWatch.cut`), against the law computed here from metres. Since the
+     * implicit update no cap stands between the two, so every cell of the plane is read, at `F`
+     * from 0.24 to 1.3; what the pass realises from that rate is `ImplicitIncisionTest`'s. Shown
+     * failing on the tree before Fix 3, whose clock read 126,179 years a round where the cut spent
+     * 336,476 years' worth.
      */
     @Test
-    fun `one round removes what the stream-power law and the clock say`() {
+    fun `one round asks what the stream-power law and the clock say`() {
         val cellsAcross = 128
         val base = WorldGenConfig(seed = 7L, width = cellsAcross, height = cellsAcross)
         val landColumns = cellsAcross / 4
@@ -237,9 +193,22 @@ class ErosionUnitsTest {
             landCells - landColumns * config.height in 0..SEA_CELLS_READ_AS_LAND,
             "the sea-level cut did not put the shoreline at the plane's foot: $landCells land cells"
         )
-        val before = ground.data.copyOf()
-        val after = runBlocking {
-            HydraulicErosion.apply(config, ground.copy(), config.seaLevel) { it }
+        val askedMetres = DoubleArray(ground.data.size) { Double.NaN }
+        val watch = object : IncisionWatch {
+            override fun cut(
+                round: Int, cell: Int, receiver: Int, courantNumber: Float, before: Float, baseBefore: Float,
+                baseAfter: Float, after: Float
+            ) {
+                askedMetres[cell] = courantNumber.toDouble() * (before - baseBefore) * scale.reliefSpanMetres
+            }
+
+            override fun incised(
+                round: Int, isLand: BooleanArray, directions: IntArray, ground: FloatArray, relative: FloatArray,
+                discharge: FloatArray, landCells: Float, landRange: Float, shorelineHeight: Float, surface: FloatArray
+            ) = Unit
+        }
+        runBlocking {
+            HydraulicErosion.apply(config, ground.copy(), config.seaLevel, incisionWatch = watch) { it }
         }
 
         val crest = firstLandColumn + landColumns - 1
@@ -250,27 +219,25 @@ class ErosionUnitsTest {
         val erodibility = config.erosion.bedrockErodibilityPerYear.toDouble()
         val readings = ArrayList<String>()
         var worst = 0.0
-        for (cellsUpslope in 1..LAW_SET_CATCHMENT_CELLS) {
+        var read = 0
+        for (cellsUpslope in 1..CELLS_READ_BELOW_THE_CREST) {
             val column = crest - cellsUpslope
             val lawMetres = erodibility * years * sqrt(cellsUpslope * cellAreaSquareMetres) * slope
-            // The cap the law has to stay under for the law to be what is read.
-            assertTrue(
-                lawMetres < 0.5 * fallPerColumnMetres,
-                "a cell $cellsUpslope below the crest would be cut %.1f m by the law, past the cap at half its %.1f m drop"
-                    .format(lawMetres, fallPerColumnMetres)
-            )
             for (row in listOf(config.height / 4, config.height / 2, config.height * 3 / 4)) {
                 val cell = row * cellsAcross + column
-                val removedMetres = (before[cell] - after.data[cell]).toDouble() * scale.reliefSpanMetres
-                val share = removedMetres / lawMetres
-                worst = maxOf(worst, abs(share - 1.0))
-                readings.add("%d upslope, row %d: %.2f m of %.2f m".format(cellsUpslope, row, removedMetres, lawMetres))
+                val asked = askedMetres[cell]
+                assertTrue(!asked.isNaN(), "the pass never reached the cell $cellsUpslope below the crest on row $row")
+                read++
+                worst = maxOf(worst, abs(asked / lawMetres - 1.0))
+                if (cellsUpslope in listOf(1, 2, 3, 10, CELLS_READ_BELOW_THE_CREST)) {
+                    readings.add("%d upslope, row %d: %.2f m of %.2f m".format(cellsUpslope, row, asked, lawMetres))
+                }
             }
         }
-        println("UNITS clock: one round of $years years, " + readings.joinToString("; "))
+        println("UNITS clock: one round of $years years, $read cells read, worst %.2e off; ".format(worst) + readings.joinToString("; "))
         assertTrue(
             worst <= LAW_TOLERANCE,
-            "one round removed %.3f times what K T sqrt(A) S says at worst: %s".format(1.0 + worst, readings)
+            "one round asked %.4f times what K T sqrt(A) S says at worst: %s".format(1.0 + worst, readings)
         )
     }
 }

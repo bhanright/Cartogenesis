@@ -720,13 +720,19 @@ with ten endorheic basins and 132 playa cells.
 **A closed basin keeps its rain.** The catchment rainfall the balance reads is accumulated once, over
 the routing as the fill left it, when every basin still spills into the next; so a lake below a
 closed basin was fed the rain its neighbour upstream had already evaporated. Since chunk 6 the
-basins are solved upstream first, in the order their exits take in the drainage, and the moment the
-balance closes one its whole catchment is taken out of every cell below its old spill before
-anything further down is solved. A basin's inflow is also the rain leaving it at *every* cell where
+basins are solved upstream first — in a topological order of the basins' own graph, each basin
+pointing at the basin its exits' water reaches next on the routing the fill left — and the moment
+the balance closes one its whole catchment is taken out of every cell below its old spill, along
+that same routing, before anything further down is solved. Ordering by where a basin's last exit
+falls in the drainage is not enough once a basin has two exits, which is common: its early exit can
+feed a lower basin that its late one comes after. A basin's inflow is also the rain leaving it at *every* cell where
 its water leaves, not the largest of them: a rim level for several cells lets a filled flat drain
 across more than one, and the largest alone under-fed it. `WaterReceivedTest` builds two chained
 basins with a desert playa above a steppe basin and holds the lower one's inflow to the rain that
-reaches it; without the subtraction it is over by exactly the playa's rain. Over seeds 7/42/1234/99
+reaches it; without the subtraction it is over by exactly the playa's rain. A second case, drawn by
+hand, gives a closed basin two exits and a path that leaves it and comes back: its inflow counts
+that path once, and the basin its early exit feeds is given 450 mm-cells where the exit-rank order
+gave it 700. Over seeds 7/42/1234/99
 at 512 and 969495 at 2048 the lakes went from 19/24/4/16/32 to 19/24/4/17/32, the closed ones from
 6/2/1/4/5 to 5/1/0/5/2, the playa cells from 8/34/10/23/902 to 11/34/15/7/1,133 and the share of land
 under lakes from 1.028/1.887/0.129/1.966/2.681% to 1.010/1.893/0.148/1.994/2.727%.
@@ -778,8 +784,16 @@ schism. (Recorded here by C2, which found both figures in a code comment and now
 Held since chunk 6. The cap was enforced on the catchments and the enclave pass then gave a realm the
 stranded pieces of its neighbours: seed 7's largest realm held 24.2% of the land when the cap had
 run and 33.6% on the finished map. A piece is now given only to a neighbour it leaves within the cap,
-and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/23.8/19.9/20.6/21.0%
-(33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it.
+and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/26.6/19.9/24.8/21.0%
+(33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it. Where no neighbour can take a
+piece within the cap, the piece is not left behind as an exclave of a realm it no longer touches:
+one the size of the smallest realm becomes a realm of its own with its capital on its best ground,
+and a smaller one goes to the neighbour holding most of its edge, which can put that neighbour over
+the cap by less than the smallest realm. A schism's breakaway also takes any run of the rest it
+would cut off from the rest's main body. Counted over seeds 7/42/1234/99 at 512, no piece of any
+realm is stranded inside another's land (none on origin/main either), and one realm is landlocked
+inside a single neighbour against origin/main's three; realms on a coast with one land neighbour,
+Portugal's case, are 17 against origin/main's 15.
 
 **The pieces are catchments, and each is one piece of ground.** A realm's borders are only as good
 as the units it is built from, and chunk 6 found four faults in them. They were labelled in order of
@@ -789,15 +803,16 @@ closed lake opened a unit per cell of its water; the size bound compared rain-we
 count of cells, so on the standard seeds the largest unit ran 3.0 to 4.2 times the configured share; and
 the merge of small units could take one across a strait and join two landmasses. Units are now
 labelled receivers first, down the drainage order reversed; each closed lake and each playa is one
-sink; the bound is an area on the ground, cut at confluences, which no merge may pass; and a small
+sink, whose water is never cut and whose land is cut at the bound like any other tributary's; the
+bound is an area on the ground, cut at confluences, which no merge may pass; and a small
 unit merges only into a neighbour on its own landmass, the one it shares the longest border with. On
 seeds 7/42/1234 at 512 the largest realm unit went from 4.2/3.8/3.0 times the share to within it, and
 on seed 7 the merge had left 14 units spanning two landmasses and now leaves none. `CatchmentUnitsTest`
 guards each rule on a hand-made world. On 718106 at 2048 the realm borders' straight runs along a
-row or column of 50 km or more went from 10 to 8 and the longest from 123 km to 67, and the one of
-100 km or more went. The run at cell (981,505) is the realm border following the ice sheet's own
-ruled edge, which is the ice's finding and not the partition's; the peoples' borders, whose longest
-runs lie at the same cells before and after, follow the ice and biome edges the same way.
+row or column of 50 km or more went from 10 to 12 and the longest from 123 km to 76, and the one of
+100 km or more went: the realms are laid differently, so the borders fall on different ground, and
+none of the runs reaches the guard's bar. The peoples' borders, whose longest runs lie at the same
+cells before and after, follow the ice and biome edges the partition does not draw.
 
 ## The units these rules are stated in
 
@@ -1173,11 +1188,11 @@ After: 6–8 of 12 coastal, 6–9 of 12 on a river. A mix rather than a rule.
 Chunk 6 asked whether the defensibility term still pulls capitals to the coast: it compares a
 cell's height with a mean over land and sea together, so near a coast the sea floor pulls the mean
 down and a low coastal cell reads as standing high. Measured against a mean over the land alone on
-seeds 7/42/1234/99 at 512 and 969495 at 2048, the coastal capitals were 15/18, 7/14, 8/16, 7/15 and
-3/14 with the term as it is and the same with the land-only mean except 969495, which went to 4/14.
-The pull is real in the arithmetic and does not decide where capitals go, so the term was left. With
-the realms re-laid by chunk 6 the coastal share is 40 of 77 capitals over those five worlds, against
-36 of 77 before.
+seeds 7/42/1234/99 at 512 and 969495 at 2048, on the realms chunk 6 first laid, the coastal
+capitals were 15/18, 7/14, 8/16, 7/15 and 3/14 with the term as it is and the same with the land-only
+mean except 969495, which went to 4/14. The pull is real in the arithmetic and does not decide where
+capitals go, so the term was left. On the realms as chunk 6 finally lays them the coastal capitals
+are 14/18, 8/14, 8/16, 6/14 and 3/14, 39 of 76, against 36 of 77 on origin/main.
 
 ## Where the deserts are
 

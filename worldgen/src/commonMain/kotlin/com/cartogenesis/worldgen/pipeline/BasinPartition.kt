@@ -77,8 +77,9 @@ internal object BasinPartition {
      * whatever of its tributaries' it keeps; walking sources first, a cell keeps its tributaries
      * smallest first while the total stays within [maxUnitAreaKm2] and cuts the rest at their
      * mouths, where each becomes a unit of its own. So a unit is cut at a confluence, as before, and
-     * no unit holds more ground than the limit (a lake's own water is never cut, so a lake larger
-     * than the limit is the one exception). What it replaced compared the rain-weighted flow with a
+     * no unit holds more ground than the limit. A closed lake's own water is never cut and the land
+     * draining to it is cut at the limit like any other tributary, so the one unit that can exceed
+     * the limit is a body of water larger than it on its own. What it replaced compared the rain-weighted flow with a
      * count of cells, so a dry catchment, whose cells weigh a fraction of a wet one's, ran several
      * times the configured share before anything cut it (docs/DESIGN_LEDGER.md, chunk 6).
      *
@@ -95,28 +96,48 @@ internal object BasinPartition {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val cellAreaKm2 = config.squareKilometresPerCell
-        val receiver = receiversWithClosedBasinsWhole(cellsAcross, cellsDown, sea, rivers)
-        val mustKeep = BooleanArray(cellCount)
-        for (cell in 0 until cellCount) {
-            val downstream = receiver[cell]
-            if (downstream >= 0 && rivers.flowTarget[cell] < 0) mustKeep[cell] = true
+        val sinkOf = closedWaterSinks(cellsAcross, cellsDown, sea, rivers)
+        val receiver = IntArray(cellCount) { cell ->
+            val downstream = rivers.flowTarget[cell]
+            when {
+                !sea.isLand[cell] -> -1
+                sinkOf[cell] >= 0 && sinkOf[cell] != cell -> sinkOf[cell]
+                downstream >= 0 && sea.isLand[downstream] -> downstream
+                else -> -1
+            }
         }
         val sourcesFirst = FlowRouting.drainageOrder(
             cellsAcross, cellsDown, sea.isLand, receiver, sea.landCellCount
         )
 
-        // Tributaries of each cell, in cell-index order, as one flat table: the cells draining into
+        // Whose area each cell's is counted into. A body of closed water is one node: its own
+        // cells are counted at its sink and never cut, and the land draining to any cell of it is
+        // a tributary of the sink, kept or cut at the limit like any other. Counted cell by cell
+        // instead, each water cell kept its own slopes up to the limit and the sink then kept them
+        // all, so a lake's unit could be many times the limit.
+        val mustKeep = BooleanArray(cellCount)
+        val countedInto = IntArray(cellCount) { cell ->
+            val downstream = receiver[cell]
+            when {
+                downstream < 0 -> -1
+                sinkOf[cell] >= 0 -> { mustKeep[cell] = true; downstream }
+                sinkOf[downstream] >= 0 -> sinkOf[downstream]
+                else -> downstream
+            }
+        }
+
+        // Tributaries of each cell, in cell-index order, as one flat table: the cells counted into
         // `cell` are tributary[firstTributary[cell] until firstTributary[cell + 1]].
         val firstTributary = IntArray(cellCount + 1)
         for (cell in 0 until cellCount) {
-            val downstream = receiver[cell]
+            val downstream = countedInto[cell]
             if (sea.isLand[cell] && downstream >= 0) firstTributary[downstream + 1]++
         }
         for (cell in 0 until cellCount) firstTributary[cell + 1] += firstTributary[cell]
         val tributary = IntArray(firstTributary[cellCount])
         val written = firstTributary.copyOf(cellCount)
         for (cell in 0 until cellCount) {
-            val downstream = receiver[cell]
+            val downstream = countedInto[cell]
             if (sea.isLand[cell] && downstream >= 0) tributary[written[downstream]++] = cell
         }
 
@@ -166,13 +187,12 @@ internal object BasinPartition {
     }
 
     /**
-     * [RiverResult.flowTarget] with each closed basin's water gathered into one sink: every cell of
-     * one endorheic lake, or of one connected stretch of playa, drains to the lowest-indexed cell
-     * of it, which drains nowhere. Water cells are sinks in the routing itself (see
-     * [LakeWaterBalance.routeIntoWater]), so this adds edges only between cells that had none, and
-     * the result is still a forest. -1 wherever the water leaves the land.
+     * Each closed basin's water as one sink: for every cell of one endorheic lake, or of one
+     * connected stretch of playa, the lowest-indexed cell of it; -1 everywhere else. Water cells
+     * are sinks in the routing itself (see [LakeWaterBalance.routeIntoWater]), so pointing each at
+     * its sink adds edges only between cells that had none, and the routing stays a forest.
      */
-    private fun receiversWithClosedBasinsWhole(
+    private fun closedWaterSinks(
         cellsAcross: Int,
         cellsDown: Int,
         sea: SeaLevelResult,
@@ -180,14 +200,14 @@ internal object BasinPartition {
     ): IntArray {
         val cellCount = cellsAcross * cellsDown
         val lakes = rivers.lakes
-        val receiver = IntArray(cellCount) { cell ->
+        fun drainsNowhere(cell: Int): Boolean {
             val downstream = rivers.flowTarget[cell]
-            if (sea.isLand[cell] && downstream >= 0 && sea.isLand[downstream]) downstream else -1
+            return sea.isLand[cell] && (downstream < 0 || !sea.isLand[downstream])
         }
         val sinkOf = IntArray(cellCount) { -1 }
         val stack = ArrayDeque<Int>()
         for (start in 0 until cellCount) {
-            if (!sea.isLand[start] || receiver[start] >= 0 || sinkOf[start] >= 0) continue
+            if (!drainsNowhere(start) || sinkOf[start] >= 0) continue
             val closedLake = lakes.isLake(start) && lakes.lakes[lakes.lakeId[start]].endorheic
             if (!closedLake && !lakes.isPlaya(start)) continue
             sinkOf[start] = start
@@ -197,19 +217,17 @@ internal object BasinPartition {
                 FlowRouting.forEachNeighbour(
                     cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
                 ) { neighbour ->
-                    val sameWater = sinkOf[neighbour] < 0 && receiver[neighbour] < 0 &&
-                        sea.isLand[neighbour] &&
+                    val sameWater = sinkOf[neighbour] < 0 && drainsNowhere(neighbour) &&
                         (if (closedLake) lakes.lakeId[neighbour] == lakes.lakeId[start]
                         else lakes.isPlaya(neighbour))
                     if (sameWater) {
                         sinkOf[neighbour] = start
-                        receiver[neighbour] = start
                         stack.addLast(neighbour)
                     }
                 }
             }
         }
-        return receiver
+        return sinkOf
     }
 
     /**

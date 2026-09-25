@@ -155,6 +155,64 @@ class WaterReceivedTest {
         assertTrue(solved.basins.indexOf(a) < solved.basins.indexOf(b), "B was solved before A, which feeds it")
     }
 
+    /**
+     * Two closed basins that feed each other, each by a different exit, in a forest of cells: A's
+     * western exit runs down into B and on out of B's western exit to the edge of the world, and
+     * B's eastern exit runs up into A and on out of A's eastern exit. Neither is upstream of the
+     * other, so there is no order to solve them in; both lie in hot desert and both close.
+     *
+     * The graph's leftovers were appended in index order, so A was solved first on rain that
+     * still counted B's eastern cells, which B, once closed, keeps. Solved together to a fixed
+     * point, each is given the rain that reaches it once the other has closed: its own cells and
+     * the chain of ground running into it.
+     */
+    @Test
+    fun `two basins that feed each other are solved together`() {
+        val config = HandMadeWorlds.config()
+        fun cell(x: Int, y: Int) = HandMadeWorlds.cellAt(config, x, y)
+        val sea = HandMadeWorlds.sea(config, { x, _ -> x != 63 }) { x, _ -> if (x != 63) 0.1f else -0.1f }
+        val basinA = (10..14).map { cell(it, 30) }
+        val basinB = (10..14).map { cell(it, 35) }
+        val filled = FloatField(config.width, config.height)
+        for (index in filled.data.indices) filled.data[index] = sea.relativeElevation.data[index]
+        for (index in basinA + basinB) filled.data[index] += 0.1f
+        val receiver = IntArray(config.width * config.height) { -1 }
+        fun route(from: Int, to: Int) { receiver[from] = to }
+        // A: its west drains to (10,30), which leaves south down column 10 into B at (10,35); its
+        // east drains to (14,30), which leaves east at (15,30) and off the world.
+        route(cell(11, 30), cell(10, 30)); route(cell(12, 30), cell(11, 30)); route(cell(13, 30), cell(14, 30))
+        route(cell(10, 30), cell(10, 31))
+        for (y in 31..34) route(cell(10, y), cell(10, y + 1))
+        route(cell(14, 30), cell(15, 30))
+        // B: its west drains to (10,35), which leaves west at (9,35) and off the world; its east
+        // drains to (14,35), which leaves north up column 14 into A at (14,30).
+        route(cell(11, 35), cell(10, 35)); route(cell(12, 35), cell(11, 35)); route(cell(13, 35), cell(14, 35))
+        route(cell(10, 35), cell(9, 35))
+        route(cell(14, 35), cell(14, 34))
+        for (y in 34 downTo 32) route(cell(14, y), cell(14, y - 1))
+        route(cell(14, 31), cell(14, 30))
+        val climate = HandMadeWorlds.climate(config, rainMm = { _, _ -> 50f }, summerC = { _, _ -> 40f }, winterC = { _, _ -> 25f })
+
+        val solved = RiverStage.solvedBasinsOn(config, sea, climate, filled, receiver)
+        val a = solved.basins.single { cell(12, 30) in it.cells }
+        val b = solved.basins.single { cell(12, 35) in it.cells }
+        assertEquals(setOf(cell(10, 30), cell(14, 30)), a.exits.toSet(), "A's exits")
+        assertEquals(setOf(cell(10, 35), cell(14, 35)), b.exits.toSet(), "B's exits")
+        assertTrue(reaches(solved.routingBeforeClosing, sea.isLand, cell(10, 30), b.cells.toHashSet()), "A does not feed B")
+        assertTrue(reaches(solved.routingBeforeClosing, sea.isLand, cell(14, 35), a.cells.toHashSet()), "B does not feed A")
+        assertTrue(a.endorheic && b.endorheic, "both basins were meant to close")
+        val rain = climate.precipitationMm.data
+        val intoA = rainReaching(solved.routingAfterClosing, sea.isLand, rain, a.cells.toHashSet())
+        val intoB = rainReaching(solved.routingAfterClosing, sea.isLand, rain, b.cells.toHashSet())
+        println(
+            "FEEDING EACH OTHER %d group(s) solved together; A given %.0f against %.0f reaching it, B given %.0f against %.0f"
+                .format(solved.groupsSolvedTogether, a.catchmentRainMm, intoA, b.catchmentRainMm, intoB)
+        )
+        assertEquals(intoA, a.catchmentRainMm.toDouble(), 1e-3, "A was given rain that stops in B")
+        assertEquals(intoB, b.catchmentRainMm.toDouble(), 1e-3, "B was given rain that stops in A")
+        assertEquals(1, solved.groupsSolvedTogether, "the two basins were not found feeding each other")
+    }
+
     /** Whether the water from [start] enters [cells] on [routing]. */
     private fun reaches(routing: IntArray, isLand: BooleanArray, start: Int, cells: Set<Int>): Boolean {
         var cell = routing[start]

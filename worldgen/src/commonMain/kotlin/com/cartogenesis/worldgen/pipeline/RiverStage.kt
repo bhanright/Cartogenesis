@@ -213,7 +213,7 @@ object RiverStage {
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult,
-        solved: MutableList<SolvedBasin>?
+        solved: SolvedBasins?
     ): Routed {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -228,28 +228,63 @@ object RiverStage {
             ) { cell -> climate.precipitationMm.data[cell] }
         } else null
         val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm, solved)
+        solved?.routingAfterClosing = flowTarget
         return Routed(filled, flowTarget, lakes)
     }
 
     /**
-     * One closed basin as the water balance was handed it: its cells at spill level, the catchment
-     * rainfall in millimetre-cells that fed it, and whether the balance closed it.
+     * One closed basin as the water balance was handed it: its cells at spill level, the cells its
+     * water leaves by, the catchment rainfall in millimetre-cells that fed it, and whether the
+     * balance closed it.
      */
-    internal class SolvedBasin(val cells: IntArray, val catchmentRainMm: Float, val endorheic: Boolean)
+    internal class SolvedBasin(
+        val cells: IntArray,
+        val exits: IntArray,
+        val catchmentRainMm: Float,
+        val endorheic: Boolean
+    )
 
     /**
-     * Every closed basin of the world [sea] and [climate] describe, in the order the balance solved
-     * them, with the inflow each was given — the one figure the water balance takes from outside
-     * the basin, and the one a basin upstream can wrongly add to. For the guard that reads it;
+     * Every closed basin of a world in the order the balance solved them, the routing as the fill
+     * left it before any basin was closed, and the routing after. For the guards that read them;
      * the stage itself never needs the list.
      */
+    internal class SolvedBasins {
+        val basins = ArrayList<SolvedBasin>()
+        var routingBeforeClosing = IntArray(0)
+        var routingAfterClosing = IntArray(0)
+    }
+
+    /** [SolvedBasins] for the world [sea] and [climate] describe, routed as [generate] routes it. */
     internal fun solvedBasins(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult
-    ): List<SolvedBasin> {
-        val solved = ArrayList<SolvedBasin>()
+    ): SolvedBasins {
+        val solved = SolvedBasins()
         routeAndSizeLakes(config, sea, climate, solved)
+        return solved
+    }
+
+    /**
+     * [SolvedBasins] over a routing given by hand: [filled] decides which cells lie under water at
+     * spill level and [flowTarget] where each cell drains, so a guard can draw a basin whose exits
+     * and paths the terrain would take a whole world to produce. [flowTarget] is not modified.
+     */
+    internal fun solvedBasinsOn(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        climate: ClimateResult,
+        filled: FloatField,
+        flowTarget: IntArray
+    ): SolvedBasins {
+        val routing = flowTarget.copyOf()
+        val catchmentRainMm = FlowRouting.accumulate(
+            config.width, config.height, sea.isLand, filled, routing, sea.landCellCount
+        ) { cell -> climate.precipitationMm.data[cell] }
+        val solved = SolvedBasins()
+        findLakes(config, sea, climate, filled, routing, catchmentRainMm, solved)
+        solved.routingAfterClosing = routing
         return solved
     }
 
@@ -273,9 +308,9 @@ object RiverStage {
      * a lower basin's pour point it counts the rain of every basin above it. A basin the balance
      * closes never sends that rain on, so the moment one is closed its catchment is taken out of
      * every cell below its old spill, before any basin further down is solved. That needs the
-     * basins in drainage order, sources first, which is the order of their last exits in
-     * [FlowRouting.drainageOrder]: a basin that spills into another passes its water through that
-     * one's exits, so its own come earlier. Solved in cell-index order with the field left
+     * basins upstream first, which is a topological order of the graph whose edges run from each
+     * basin to the basin its exits' water reaches next on the routing the fill left; see
+     * [basinsUpstreamFirst]. Solved in cell-index order with the field left
      * as it was, a playa upstream of a lake fed the lake rain it had already evaporated. The lakes
      * are still numbered in cell-index order, as they always were.
      *
@@ -288,7 +323,7 @@ object RiverStage {
         filled: FloatField,
         flowTarget: IntArray,
         catchmentRainMm: FloatField?,
-        solved: MutableList<SolvedBasin>?
+        solved: SolvedBasins?
     ): LakeResult {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -391,14 +426,16 @@ object RiverStage {
                 (target < 0 || inBasin[target] != basin) && leavesForGood(cell, basin)
             }.toIntArray()
         }
-        val drainageRank = IntArray(cellCount)
-        FlowRouting.drainageOrder(cellsAcross, cellsDown, sea.isLand, flowTarget, sea.landCellCount)
-            .forEachIndexed { rank, cell -> drainageRank[cell] = rank }
-        // A basin spilling into another passes its water through that one's exits, so its own
-        // last exit comes earlier in the drainage order.
-        val upstreamFirst = basins.indices.sortedWith(
-            compareBy<Int> { basin -> exitsOf[basin].maxOfOrNull { drainageRank[it] } ?: 0 }.thenBy { it }
+        // Upstream first: the basins as a graph, an edge from each to the basin the water from each
+        // of its exits reaches next, read off the routing as the fill left it, and walked in
+        // topological order. Ordering by where a basin's exits fall in the drainage order is not
+        // enough once a basin has two: its exit into a lower basin can come early and its other
+        // exit late, and the lower basin would then be solved first on rain that is still stale.
+        val routingBeforeClosing = flowTarget.copyOf()
+        val upstreamFirst = basinsUpstreamFirst(
+            basins.size, exitsOf, inBasin, routingBeforeClosing, sea.isLand
         )
+        solved?.routingBeforeClosing = routingBeforeClosing
 
         // What the balance made of each basin: its water cells, or null where it overflows, and
         // whether that water is a lake or a playa.
@@ -449,7 +486,9 @@ object RiverStage {
                 sortedGround, rainPrefixMm, evaporationPrefixMm,
                 catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
             )
-            solved?.add(SolvedBasin(cells.copyOf(), catchmentMm, endorheic = !balance.atSpill))
+            solved?.basins?.add(
+                SolvedBasin(cells.copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !balance.atSpill)
+            )
             if (balance.atSpill) continue
 
             // Endorheic. Take the water back to the balance level, hand the rest of the basin
@@ -479,15 +518,17 @@ object RiverStage {
             waterOf[basin] = waterCells
 
             // The catchment stops at this basin, so nothing below its old spill receives it —
-            // taken out along the path the water used to leave by, before that path is re-pointed.
+            // taken out along the path the water used to leave by, which is the routing before any
+            // basin was closed: a closed basin below has re-pointed its own cells at its water, and
+            // the rain being taken out was counted along the way the fill sent it.
             for (exit in exitsOf[basin]) {
                 val leaving = catchmentRainMm.data[exit]
-                var below = flowTarget[exit]
+                var below = routingBeforeClosing[exit]
                 var steps = 0
                 while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
                     catchmentRainMm.data[below] =
                         (catchmentRainMm.data[below] - leaving).coerceAtLeast(0f)
-                    below = flowTarget[below]
+                    below = routingBeforeClosing[below]
                 }
             }
 
@@ -518,6 +559,52 @@ object RiverStage {
             }
         }
         return LakeResult(lakeId, lakes, playa, cellsAcross)
+    }
+
+    /**
+     * The basins in an order where every basin comes before any basin its water reaches: each
+     * exit's path is followed down [routing] to the first cell of another basin, which is an edge
+     * of the graph, or to the sea, which is none; the graph is then walked by Kahn's algorithm,
+     * basins with nothing above them first and in index order. [routing] is a forest, so the graph
+     * has no cycle; anything a cycle left over would still be solved, last.
+     */
+    private fun basinsUpstreamFirst(
+        basinCount: Int,
+        exitsOf: Array<IntArray>,
+        inBasin: IntArray,
+        routing: IntArray,
+        isLand: BooleanArray
+    ): IntArray {
+        val below = Array(basinCount) { ArrayList<Int>() }
+        val feeding = IntArray(basinCount)
+        for (basin in 0 until basinCount) {
+            for (exit in exitsOf[basin]) {
+                var cell = routing[exit]
+                var steps = 0
+                while (cell >= 0 && isLand[cell] && steps++ < routing.size) {
+                    val reached = inBasin[cell]
+                    if (reached >= 0 && reached != basin) {
+                        if (reached !in below[basin]) {
+                            below[basin].add(reached)
+                            feeding[reached]++
+                        }
+                        break
+                    }
+                    cell = routing[cell]
+                }
+            }
+        }
+        val order = IntArray(basinCount)
+        var tail = 0
+        for (basin in 0 until basinCount) if (feeding[basin] == 0) order[tail++] = basin
+        var head = 0
+        while (head < tail) {
+            for (next in below[order[head++]]) if (--feeding[next] == 0) order[tail++] = next
+        }
+        if (tail < basinCount) {
+            for (basin in 0 until basinCount) if (feeding[basin] > 0) order[tail++] = basin
+        }
+        return order
     }
 
     /** The right answer wherever the basin overflows: water to the brim over every basin cell. */

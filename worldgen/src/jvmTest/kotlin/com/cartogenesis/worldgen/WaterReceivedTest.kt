@@ -1,5 +1,7 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.RiverStage
 import com.cartogenesis.worldgen.pipeline.Runoff
 import kotlin.math.abs
@@ -59,37 +61,119 @@ class WaterReceivedTest {
             winterC = { x, y -> if (desert(x, y)) 25f else 2f }
         )
 
-        val basins = RiverStage.solvedBasins(config, sea, climate)
-        val upper = basins.single { HandMadeWorlds.cellAt(config, 12, 32) in it.cells }
-        val lower = basins.single { HandMadeWorlds.cellAt(config, 34, 32) in it.cells }
+        val solved = RiverStage.solvedBasins(config, sea, climate)
+        val upper = solved.basins.single { HandMadeWorlds.cellAt(config, 12, 32) in it.cells }
+        val lower = solved.basins.single { HandMadeWorlds.cellAt(config, 34, 32) in it.cells }
         assertTrue(upper.endorheic, "the upper basin was meant to close; it overflows, so the fixture asks nothing")
         assertTrue(upper.catchmentRainMm > 0f, "the upper basin has no rain on it, and with none the old order passes too")
+        assertTrue(upper.exits.isNotEmpty() && lower.exits.isNotEmpty(), "a basin with no exit")
+        assertTrue(
+            reaches(solved.routingBeforeClosing, sea.isLand, upper.exits.first(), lower.cells.toHashSet()),
+            "the upper basin's water does not reach the lower one on the routing the fill left, so the fixture asks nothing"
+        )
 
-        // What reaches the lower basin once everything is routed: every land cell whose path
-        // enters it, and the rain on each.
-        val world = RiverStage.generate(config, sea, climate)
         val lowerCells = lower.cells.toHashSet()
-        val exits = lower.cells.count { val target = world.flowTarget[it]; target >= 0 && target !in lowerCells }
-        println("CLOSED BASIN the lower basin's water leaves it at $exits cells once routed")
-        var reachingMm = 0.0
-        for (start in sea.isLand.indices) {
-            if (!sea.isLand[start]) continue
-            var cell = start
-            var steps = 0
-            while (cell >= 0 && sea.isLand[cell] && cell !in lowerCells && steps++ < sea.isLand.size) {
-                cell = world.flowTarget[cell]
-            }
-            if (cell in lowerCells) reachingMm += climate.precipitationMm.data[start]
-        }
+        val reachingMm = rainReaching(solved.routingAfterClosing, sea.isLand, climate.precipitationMm.data, lowerCells)
         println(
-            "CLOSED BASIN upper %d cells, %.0f mm of rain, closed; lower %d cells, inflow %.0f against %.0f reaching it"
-                .format(upper.cells.size, upper.catchmentRainMm, lower.cells.size, lower.catchmentRainMm, reachingMm)
+            "CLOSED BASIN upper %d cells, %d exits, %.0f mm of rain, closed; lower %d cells, %d exits, inflow %.0f against %.0f reaching it"
+                .format(upper.cells.size, upper.exits.size, upper.catchmentRainMm, lower.cells.size, lower.exits.size, lower.catchmentRainMm, reachingMm)
         )
         assertEquals(
             reachingMm, lower.catchmentRainMm.toDouble(), reachingMm * 1e-5,
             "the lower basin was given %.0f mm of rain where %.0f reaches it: %.0f too many, against the %.0f the closed basin above it keeps"
                 .format(lower.catchmentRainMm, reachingMm, lower.catchmentRainMm - reachingMm, upper.catchmentRainMm)
         )
+    }
+
+    /**
+     * The same question on a routing drawn by hand, where a basin has two exits and a path that
+     * leaves it and comes back. Basin A, five cells of a row, is closed by the desert heat; one of
+     * its exits drains into basin B below it early in the drainage, and the other drains away from
+     * B late in it, at the end of a long chain of ground that feeds A. One more cell of A drains out
+     * of it and straight back in.
+     *
+     * Ordered by where its last exit falls in the drainage, A came after B, and B was solved on the
+     * stale rain with A's still in it. Solved in a topological order of the basins' own graph, B is
+     * given the rain that reaches it and no more. A's inflow is the rain of every cell whose water
+     * enters A, counted once: the path that leaves and returns is not an exit.
+     */
+    @Test
+    fun `a basin with two exits is solved before the basin one of them feeds`() {
+        val config = HandMadeWorlds.config()
+        fun cell(x: Int, y: Int) = HandMadeWorlds.cellAt(config, x, y)
+        val sea = HandMadeWorlds.sea(config, { x, _ -> x != 63 }) { x, _ -> if (x != 63) 0.1f else -0.1f }
+        val basinA = (10..14).map { cell(it, 30) }
+        val basinB = (10..14).map { cell(it, 35) }
+        val filled = FloatField(config.width, config.height)
+        for (index in filled.data.indices) filled.data[index] = sea.relativeElevation.data[index]
+        for (index in basinA + basinB) filled.data[index] += 0.1f
+        val receiver = IntArray(config.width * config.height) { -1 }
+        fun route(from: Int, to: Int) { receiver[from] = to }
+        // A: (10,30) to (11,30), which leaves by (11,29) and (12,29) and comes back in at (12,30),
+        // the early exit, whose water runs down column 12 into B at (12,35).
+        route(cell(10, 30), cell(11, 30))
+        route(cell(11, 30), cell(11, 29))
+        route(cell(11, 29), cell(12, 29))
+        route(cell(12, 29), cell(12, 30))
+        route(cell(12, 30), cell(12, 31))
+        for (y in 31..34) route(cell(12, y), cell(12, y + 1))
+        // The late exit, (13,30), at the end of a chain along row 25 that turns down column 14 into
+        // (14,30); it leaves the world northward at (13,29).
+        for (x in 16..55) route(cell(x, 25), cell(x - 1, 25))
+        route(cell(15, 25), cell(14, 25))
+        for (y in 25..29) route(cell(14, y), cell(14, y + 1))
+        route(cell(14, 30), cell(13, 30))
+        route(cell(13, 30), cell(13, 29))
+        // B drains east along its row and on to the sea.
+        for (x in 10..62) route(cell(x, 35), cell(x + 1, 35))
+        val climate = HandMadeWorlds.climate(config, rainMm = { _, _ -> 50f }, summerC = { _, _ -> 40f }, winterC = { _, _ -> 25f })
+
+        val rank = IntArray(receiver.size)
+        FlowRouting.drainageOrder(config.width, config.height, sea.isLand, receiver, sea.landCellCount)
+            .forEachIndexed { order, index -> rank[index] = order }
+        assertTrue(
+            rank[cell(13, 30)] > rank[cell(14, 35)] && rank[cell(12, 30)] < rank[cell(14, 35)],
+            "the fixture's ranks are not the defect's: A's exits at %d and %d, B's at %d"
+                .format(rank[cell(12, 30)], rank[cell(13, 30)], rank[cell(14, 35)])
+        )
+
+        val solved = RiverStage.solvedBasinsOn(config, sea, climate, filled, receiver)
+        val a = solved.basins.single { cell(10, 30) in it.cells }
+        val b = solved.basins.single { cell(10, 35) in it.cells }
+        assertEquals(setOf(cell(12, 30), cell(13, 30)), a.exits.toSet(), "A's exits")
+        assertTrue(a.endorheic, "A was meant to close")
+        assertTrue(
+            reaches(solved.routingBeforeClosing, sea.isLand, cell(12, 30), b.cells.toHashSet()),
+            "A's water does not reach B on the routing the fill left"
+        )
+        val rain = climate.precipitationMm.data
+        val intoA = rainReaching(solved.routingBeforeClosing, sea.isLand, rain, a.cells.toHashSet())
+        val intoB = rainReaching(solved.routingAfterClosing, sea.isLand, rain, b.cells.toHashSet())
+        println("TWO EXITS A given %.0f against %.0f entering it; B given %.0f against %.0f reaching it".format(a.catchmentRainMm, intoA, b.catchmentRainMm, intoB))
+        assertEquals(intoA, a.catchmentRainMm.toDouble(), 1e-3, "A's inflow counted the path that leaves and returns twice, or missed an exit")
+        assertEquals(intoB, b.catchmentRainMm.toDouble(), 1e-3, "B was given rain that stops in A")
+        assertTrue(solved.basins.indexOf(a) < solved.basins.indexOf(b), "B was solved before A, which feeds it")
+    }
+
+    /** Whether the water from [start] enters [cells] on [routing]. */
+    private fun reaches(routing: IntArray, isLand: BooleanArray, start: Int, cells: Set<Int>): Boolean {
+        var cell = routing[start]
+        var steps = 0
+        while (cell >= 0 && isLand[cell] && steps++ < routing.size) {
+            if (cell in cells) return true
+            cell = routing[cell]
+        }
+        return false
+    }
+
+    /** The rain on every land cell whose water enters [cells] on [routing], the cells' own included. */
+    private fun rainReaching(routing: IntArray, isLand: BooleanArray, rainMm: FloatArray, cells: Set<Int>): Double {
+        var total = 0.0
+        for (start in isLand.indices) {
+            if (!isLand[start]) continue
+            if (start in cells || reaches(routing, isLand, start, cells)) total += rainMm[start]
+        }
+        return total
     }
 
     /**

@@ -132,13 +132,18 @@
   a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
   graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
   the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
-- **Nobody has drawn a 4096 world's sheet in a real browser.** Fix A made it 8192 by 4096 pixels,
-  twice the width it was, and the pane hands it to Skia on a WebGL canvas, whose largest texture is
-  the device's `MAX_TEXTURE_SIZE`: 16,384 on most desktop graphics cards, as little as 4,096 on some
-  phones and older integrated ones. Whether Skia tiles an image over that limit or draws nothing
-  has not been seen, and no wasm test draws on a real canvas. The exports do not depend on it: they
-  are encoded from the bitmap in memory. Before the next release, generate a 4096 world on screen in
-  a browser and look; if it fails, cap the pane's picture or draw it in tiles. 2026-09-24, Fix A.
+- **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
+  there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
+  `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
+  generation and 2.7 GB at seven, still wearing down the mountains, and the tab then died before
+  anything was drawn. A 2048 world in the same tab generated in about four minutes (heap peaking
+  near 2.3 GB) and drew its 4096 by 2048 sheet correctly, at 2.9 km a pixel. So the question Fix A
+  left, whether Skia draws an image wider than a device's texture limit (as little as 4,096 on some
+  phones and older integrated graphics), is untested only for the 4096 world, and that world does
+  not get as far as drawing. The browser still offers 4096 on screen and as an export (which
+  regenerates at 4096), and both can be expected to end the same way. Not known whether this is new
+  since the ground's ruler or as old as the 4096 chip. Either cap the browser at 2048 until a
+  4096 generation fits a tab's memory, or make it fit. 2026-09-25, after Fix A.
 - **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
   Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
   - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;

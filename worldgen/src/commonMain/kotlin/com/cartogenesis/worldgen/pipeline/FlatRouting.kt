@@ -21,9 +21,10 @@ import kotlin.math.sqrt
  * evenly on the flat is the source, the entry the flood came through is the sink, and the rim the
  * flat cannot cross lets nothing through. Its level sets are smooth curves closing on the entry, so
  * the facet rule sees a bearing that turns as the course goes and the draw has a share to spend.
- * Solved here per flat, in double precision, and laid into a band one flat-gradient step high just
- * above the entry, so every rim cell that drained into the flat still stands above all of it and
- * the entry still stands below: the network stays a forest and nothing downstream has to know.
+ * Solved here per flat, in double precision, and laid into the band between the entry's own height
+ * and the flat's lowest raised level, so every rim cell that drained into the flat still stands
+ * above all of it and the entry still stands below: the network stays a forest and nothing
+ * downstream has to know.
  *
  * The staircase itself is kept on the filled field for everything that reads it as a level — the
  * outlet walk in [HydraulicErosion] tells a real gradient from the fill's by that step, and the
@@ -38,7 +39,7 @@ internal object FlatRouting {
      * Land cells the fill left alone keep their filled value, and ocean cells their true elevation,
      * which is what the routing has always read for them. A flat whose potential cannot be laid
      * without leaving one of its cells with no lower neighbour — which a converged solve cannot do,
-     * and a solve cut short by [MOST_ITERATIONS] might — keeps the staircase, and
+     * and a solve cut short by [MOST_ITERATIONS_FLOOR] might — keeps the staircase, and
      * [Surface.flatsKept] counts how many did.
      */
     class Surface(val heights: DoubleArray, val flats: Int, val flatsKept: Int, val raisedCells: Int)
@@ -110,11 +111,14 @@ internal object FlatRouting {
             // because the lowest cell of a flat was raised from something lower that was not raised
             // itself — had it been, it would be in this flat and lower still.
             val entryLevel = lowestLevel.toDouble()
+            val entryHeight = highestEntryOf(width, height, members, memberCount, localIndex, surface, entryLevel)
             val potential = solvePotential(
                 width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths
             )
 
-            if (potential != null && layInBand(width, height, members, memberCount, localIndex, surface, potential, entryLevel)) {
+            if (potential != null &&
+                layInBand(width, height, members, memberCount, surface, potential, entryHeight, entryLevel)
+            ) {
                 // laid
             } else {
                 flatsKept++
@@ -405,27 +409,61 @@ internal object FlatRouting {
     }
 
     /**
-     * Lays the potential into the band between the entry and one flat-gradient step above it,
-     * highest potential highest, and confirms every member still has a strictly lower neighbour.
-     * Returns false, leaving the staircase in place, where one does not.
+     * The height of the highest of a flat's entries: the cells outside it, and not raised, that
+     * stand below its lowest raised level [entryLevel] and so take its water.
+     *
+     * Read off the ground rather than worked out from [entryLevel]. The flood raised the flat's
+     * first cell to its entry's height plus one [FlowRouting.FLAT_GRADIENT_STEP] in float, so that
+     * level less the nominal step is the entry's height only to the flood's rounding, and where the
+     * rounding went down the band laid on it stood below the entry and the member beside the entry
+     * with it: a converged potential refused, and the flat back on its staircase. See
+     * docs/DESIGN_LEDGER.md, Fix 3.
      */
-    private fun layInBand(
+    private fun highestEntryOf(
         width: Int,
         height: Int,
         members: IntArray,
         memberCount: Int,
         localIndex: IntArray,
         surface: DoubleArray,
+        entryLevel: Double
+    ): Double {
+        var highest = Double.NEGATIVE_INFINITY
+        for (member in 0 until memberCount) {
+            val cell = members[member]
+            FlowRouting.forEachNeighbour(width, height, cell % width, cell / width) { neighbour ->
+                val there = surface[neighbour]
+                if (localIndex[neighbour] < 0 && there < entryLevel && there > highest) highest = there
+            }
+        }
+        return highest
+    }
+
+    /**
+     * Lays the potential into the band between the highest entry, [entryHeight], and the flat's
+     * lowest raised level, [entryLevel], highest potential highest, and confirms every member still
+     * has a strictly lower neighbour. Returns false, leaving the staircase in place, where one does
+     * not, which on a converged potential it cannot: a member beside an entry stands above the
+     * highest entry by its own positive share of the band, every other member has a neighbour of
+     * lower potential, and the band's top is under every cell outside the flat that is not an entry.
+     */
+    private fun layInBand(
+        width: Int,
+        height: Int,
+        members: IntArray,
+        memberCount: Int,
+        surface: DoubleArray,
         potential: DoubleArray,
+        entryHeight: Double,
         entryLevel: Double
     ): Boolean {
         var highest = 0.0
         for (member in 0 until memberCount) if (potential[member] > highest) highest = potential[member]
-        if (highest <= 0.0) return false
+        if (highest <= 0.0 || entryHeight >= entryLevel) return false
 
         val staircase = DoubleArray(memberCount) { surface[members[it]] }
-        val bandFloor = entryLevel - FlowRouting.FLAT_GRADIENT_STEP
-        val bandHeight = FlowRouting.FLAT_GRADIENT_STEP * BAND_SHARE_OF_A_STEP
+        val bandFloor = entryHeight
+        val bandHeight = (entryLevel - entryHeight) * BAND_SHARE_OF_THE_GAP
         for (member in 0 until memberCount) {
             surface[members[member]] = bandFloor + bandHeight * (potential[member] / highest)
         }
@@ -466,9 +504,10 @@ internal object FlatRouting {
     private const val MOST_ITERATIONS_PER_ROOT_CELL = 8.0
 
     /**
-     * How much of one flat-gradient step the band takes. Less than the whole of it, so the highest
-     * cell of the flat stands strictly below any rim cell that was raised from it, which the
-     * staircase put exactly one step higher.
+     * How much of the gap between the highest entry and the flat's lowest raised level the band
+     * takes: about one flat-gradient step's worth, the flood's rounding either way. Less than the
+     * whole of it, so the highest cell of the flat stands strictly below any rim cell that was
+     * raised from it, which the staircase put at least one step higher.
      */
-    private const val BAND_SHARE_OF_A_STEP = 0.9
+    private const val BAND_SHARE_OF_THE_GAP = 0.9
 }
